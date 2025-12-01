@@ -1,0 +1,35 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## NuGet
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+
+## IDE
+.vs/
+.idea/
+*.DotSettings.user
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Claude Code
+.claude/
+
+## Database
+*.db
+*.db-shm
+*.db-wal
+
+## Environment
+.env
+*.local
+appsettings.*.json
+!appsettings.json
