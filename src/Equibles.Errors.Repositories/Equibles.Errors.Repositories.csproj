@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+      <ProjectReference Include="..\Equibles.Errors.Data\Equibles.Errors.Data.csproj" />
+    </ItemGroup>
+
+</Project>
