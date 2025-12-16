@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+      <PackageReference Include="Equibles.ParadeDB.EntityFrameworkCore" />
+      <PackageReference Include="Pgvector.EntityFrameworkCore" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Equibles.CommonStocks.Data\Equibles.CommonStocks.Data.csproj" />
+      <ProjectReference Include="..\Equibles.Media.Data\Equibles.Media.Data.csproj" />
+    </ItemGroup>
+
+</Project>
