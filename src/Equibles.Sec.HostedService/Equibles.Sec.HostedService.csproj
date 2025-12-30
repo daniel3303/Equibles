@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+      <PackageReference Include="Equibles.Core.AutoWiring" />
+      <PackageReference Include="HtmlAgilityPack" />
+      <PackageReference Include="Microsoft.Extensions.Hosting" />
+      <PackageReference Include="PdfPig" />
+      <PackageReference Include="Polly" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
+      <ProjectReference Include="..\Equibles.Sec.BusinessLogic\Equibles.Sec.BusinessLogic.csproj" />
+      <ProjectReference Include="..\Equibles.Integrations.Sec\Equibles.Integrations.Sec.csproj" />
+      <ProjectReference Include="..\Equibles.CommonStocks.BusinessLogic\Equibles.CommonStocks.BusinessLogic.csproj" />
+      <ProjectReference Include="..\Equibles.InsiderTrading.Repositories\Equibles.InsiderTrading.Repositories.csproj" />
+      <ProjectReference Include="..\Equibles.Media.BusinessLogic\Equibles.Media.BusinessLogic.csproj" />
+      <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
+    </ItemGroup>
+
+</Project>
