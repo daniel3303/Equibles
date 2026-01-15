@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+      <ProjectReference Include="..\Equibles.InsiderTrading.Data\Equibles.InsiderTrading.Data.csproj" />
+    </ItemGroup>
+
+</Project>
