@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+      <PackageReference Include="Equibles.Core.AutoWiring" />
+      <PackageReference Include="FlexLabs.EntityFrameworkCore.Upsert" />
+      <PackageReference Include="HtmlAgilityPack" />
+      <PackageReference Include="Microsoft.Extensions.Hosting" />
+      <PackageReference Include="Newtonsoft.Json" />
+      <PackageReference Include="PdfPig" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
+      <ProjectReference Include="..\Equibles.Congress.Repositories\Equibles.Congress.Repositories.csproj" />
+      <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
+      <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
+      <ProjectReference Include="..\Equibles.Integrations.Common\Equibles.Integrations.Common.csproj" />
+    </ItemGroup>
+
+</Project>
