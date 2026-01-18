@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+      <ProjectReference Include="..\Equibles.Congress.Data\Equibles.Congress.Data.csproj" />
+    </ItemGroup>
+
+</Project>
