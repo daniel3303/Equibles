@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+      <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+      <PackageReference Include="Microsoft.Extensions.Configuration" />
+      <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Equibles.Data\Equibles.Data.csproj" />
+      <ProjectReference Include="..\Equibles.CommonStocks.Data\Equibles.CommonStocks.Data.csproj" />
+      <ProjectReference Include="..\Equibles.Holdings.Data\Equibles.Holdings.Data.csproj" />
+      <ProjectReference Include="..\Equibles.InsiderTrading.Data\Equibles.InsiderTrading.Data.csproj" />
+      <ProjectReference Include="..\Equibles.Congress.Data\Equibles.Congress.Data.csproj" />
+      <ProjectReference Include="..\Equibles.ShortData.Data\Equibles.ShortData.Data.csproj" />
+      <ProjectReference Include="..\Equibles.Sec.Data\Equibles.Sec.Data.csproj" />
+      <ProjectReference Include="..\Equibles.Media.Data\Equibles.Media.Data.csproj" />
+      <ProjectReference Include="..\Equibles.Errors.Data\Equibles.Errors.Data.csproj" />
+    </ItemGroup>
+
+</Project>
