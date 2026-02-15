@@ -1,0 +1,72 @@
+@{
+    var body = RenderBody();
+}
+
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" data-theme="equibles">
+<head lang="en">
+    <partial name="_Head" />
+    @await RenderSectionAsync("Styles", false)
+</head>
+<body class="bg-base-200 min-h-screen flex flex-col">
+    <!-- Navbar -->
+    <div class="navbar bg-base-100 border-b border-base-200 min-h-0 h-14 sticky top-0 z-40">
+        <div class="max-w-6xl mx-auto w-full px-6 flex items-center">
+            <div class="flex-1 flex items-center gap-6">
+                <a asp-action="Index" asp-controller="Home" class="flex items-center gap-2">
+                    <img src="/favicon/favicon/android-chrome-512x512.png" alt="Equibles" class="h-7 w-auto" />
+                </a>
+                <nav class="hidden md:flex items-center gap-6" aria-label="Main navigation">
+                    <a asp-action="Index" asp-controller="Home" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Home</a>
+                    <a asp-action="Index" asp-controller="Stocks" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Explore Data</a>
+                    <a asp-action="Index" asp-controller="Status" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Status</a>
+                </nav>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="https://github.com/daniel3303/Equibles" target="_blank" class="btn btn-ghost btn-sm" title="GitHub">
+                    <svg class="size-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+                </a>
+                <!-- Mobile nav menu -->
+                <div class="dropdown dropdown-end md:hidden">
+                    <div tabindex="0" role="button" class="btn btn-ghost btn-sm">
+                        <icon name="bars-3" size="5" />
+                    </div>
+                    <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-50 w-48 p-2 shadow-lg border border-base-200 mt-2">
+                        <li>
+                            <a asp-action="Index" asp-controller="Home">
+                                <icon name="home" size="4" /> Home
+                            </a>
+                        </li>
+                        <li>
+                            <a asp-action="Index" asp-controller="Stocks">
+                                <icon name="chart-bar" size="4" /> Explore Data
+                            </a>
+                        </li>
+                        <li>
+                            <a asp-action="Index" asp-controller="Status">
+                                <icon name="signal" size="4" /> Status
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="flex-1 relative">
+        @body
+    </main>
+
+    <!-- Footer -->
+    <partial name="_Footer" />
+
+    @Html.AntiForgeryToken()
+
+    <partial name="_Modals" />
+    <partial name="_Scripts" />
+    <partial name="_FlashMessages" />
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

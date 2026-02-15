@@ -1,0 +1,11 @@
+<!-- Reusable ajax modal container -->
+<dialog id="ajax-modal" class="modal">
+    <div class="modal-box w-11/12 max-w-lg max-h-[90vh] flex flex-col relative">
+        <button type="button" class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 modal-close">✕</button>
+        <h3 class="modal-title text-lg font-medium mb-4 title-text"></h3>
+        <div class="modal-body flex-1 overflow-y-auto"></div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>

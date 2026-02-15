@@ -1,0 +1,52 @@
+@using Equibles.Web.FlashMessage.Contracts
+@inject IFlashMessage FlashMessage
+
+@{
+    var messages = FlashMessage.Retrieve();
+    if (messages.Any()) {
+        <div id="flash-messages" class="toast toast-top toast-end z-50">
+            @foreach (var message in messages) {
+                var alertClass = message.Type switch {
+                    FlashMessageType.Success => "alert-success",
+                    FlashMessageType.Error => "alert-error",
+                    FlashMessageType.Warning => "alert-warning",
+                    FlashMessageType.Info => "alert-info",
+                    _ => "alert-info"
+                };
+                var iconName = message.Type switch {
+                    FlashMessageType.Success => "check-circle",
+                    FlashMessageType.Error => "exclamation-circle",
+                    FlashMessageType.Warning => "exclamation-triangle",
+                    FlashMessageType.Info => "information-circle",
+                    _ => "information-circle"
+                };
+                <div class="alert @alertClass shadow-lg flash-message">
+                    <icon name="@iconName" size="5" />
+                    <div>
+                        @if (!string.IsNullOrEmpty(message.Title)) {
+                            <h3 class="font-bold">@message.Title</h3>
+                        }
+                        @if (message.IsHtml) {
+                            @Html.Raw(message.Message)
+                        } else {
+                            <span>@message.Message</span>
+                        }
+                    </div>
+                    <button type="button" class="btn btn-ghost btn-sm btn-square" onclick="this.closest('.flash-message').remove()">
+                        <icon name="x-mark" size="4" />
+                    </button>
+                </div>
+            }
+        </div>
+        <script>
+            // Auto-hide flash messages after 5 seconds
+            setTimeout(function() {
+                document.querySelectorAll('.flash-message').forEach(function(el) {
+                    el.style.transition = 'opacity 0.5s';
+                    el.style.opacity = '0';
+                    setTimeout(function() { el.remove(); }, 500);
+                });
+            }, 5000);
+        </script>
+    }
+}
