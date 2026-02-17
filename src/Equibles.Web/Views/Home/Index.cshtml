@@ -1,0 +1,59 @@
+@{
+    ViewData["Title"] = "Equibles — Open-Source Financial Data Platform";
+}
+
+<div class="max-w-4xl mx-auto px-6 py-16 text-center">
+    <h1 class="text-4xl font-bold mb-4">Equibles</h1>
+    <p class="text-lg text-base-content/70 mb-8">
+        Open-source platform for US stock market financial data.
+        SEC filings, institutional holdings, insider trading, congressional trades, and short data — all self-hosted.
+    </p>
+
+    <div class="flex justify-center gap-4 mb-16">
+        <a asp-action="Index" asp-controller="Stocks" class="btn btn-primary">
+            <icon name="chart-bar" size="5" /> Explore Stocks
+        </a>
+        <a href="https://github.com/daniel3303/Equibles" class="btn btn-ghost border border-base-300" target="_blank">
+            <icon name="code-bracket" size="5" /> GitHub
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title text-lg">SEC Filings</h2>
+                <p class="text-sm text-base-content/70">10-K, 10-Q, 8-K annual and quarterly reports with full-text search via ParadeDB.</p>
+            </div>
+        </div>
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title text-lg">Institutional Holdings</h2>
+                <p class="text-sm text-base-content/70">Who owns what from SEC 13F-HR filings. Top holders, ownership history, and portfolio views.</p>
+            </div>
+        </div>
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title text-lg">Insider Trading</h2>
+                <p class="text-sm text-base-content/70">Director, officer, and 10% owner transactions from SEC Form 3 and Form 4 filings.</p>
+            </div>
+        </div>
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title text-lg">Congressional Trades</h2>
+                <p class="text-sm text-base-content/70">Stock trades by members of Congress from House and Senate financial disclosures.</p>
+            </div>
+        </div>
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title text-lg">Short Data</h2>
+                <p class="text-sm text-base-content/70">Daily short volume, short interest, and fails-to-deliver from FINRA.</p>
+            </div>
+        </div>
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title text-lg">MCP Server</h2>
+                <p class="text-sm text-base-content/70">Model Context Protocol server for AI assistants — give Claude or ChatGPT access to financial data.</p>
+            </div>
+        </div>
+    </div>
+</div>
