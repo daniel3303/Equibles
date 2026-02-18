@@ -1,0 +1,79 @@
+@using Equibles.Errors.Data.Models
+@model Error
+
+@{
+    ViewData["Title"] = "Error Details";
+}
+
+<div class="max-w-4xl mx-auto px-6 py-8">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold">Error Details</h1>
+        <div class="flex items-center gap-2">
+            @if (!Model.Seen) {
+                <form asp-action="MarkAsSeen" asp-route-id="@Model.Id">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <icon name="check" size="4" /> Mark as Seen
+                    </button>
+                </form>
+            }
+            <form asp-action="Delete" asp-route-id="@Model.Id" class="form-confirm" data-message="Delete this error?">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-error btn-sm">
+                    <icon name="trash" size="4" /> Delete
+                </button>
+            </form>
+            <a class="btn btn-ghost btn-sm" asp-action="Index">
+                <icon name="arrow-left" size="4" /> Back
+            </a>
+        </div>
+    </div>
+
+<div class="card bg-base-100 shadow-sm"><div class="card-body space-y-6">
+    <!-- Status -->
+    <div class="flex items-center gap-3">
+        @if (Model.Seen) {
+            <span class="badge badge-success">Seen</span>
+        } else {
+            <span class="badge badge-warning">New</span>
+        }
+        <span class="badge badge-primary">@Model.Source.Value</span>
+    </div>
+
+    <!-- Error Details -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+            <h3 class="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-1">Created</h3>
+            <p>@Model.CreationTime.ToString("yyyy-MM-dd HH:mm:ss")</p>
+        </div>
+        <div>
+            <h3 class="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-1">Context</h3>
+            <p>@Model.Context</p>
+        </div>
+        @if (!string.IsNullOrEmpty(Model.RequestSummary)) {
+            <div>
+                <h3 class="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-1">Request Summary</h3>
+                <p class="text-sm break-all">@Model.RequestSummary</p>
+            </div>
+        }
+    </div>
+
+    <!-- Message -->
+    <div>
+        <h3 class="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-2">Message</h3>
+        <div class="bg-base-200 rounded-lg p-4">
+            <p class="whitespace-pre-wrap">@Model.Message</p>
+        </div>
+    </div>
+
+    <!-- Stack Trace -->
+    @if (!string.IsNullOrEmpty(Model.StackTrace)) {
+        <div>
+            <h3 class="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-2">Stack Trace</h3>
+            <div class="bg-base-200 rounded-lg p-4 overflow-x-auto">
+                <pre><code class="text-xs">@Model.StackTrace</code></pre>
+            </div>
+        </div>
+    }
+</div>
+</div></div>
