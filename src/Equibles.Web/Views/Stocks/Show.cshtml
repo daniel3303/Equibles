@@ -1,0 +1,108 @@
+@using Equibles.Web.ViewModels.Stocks
+@model StockDetailViewModel
+
+@{
+    ViewData["Title"] = $"{Model.Stock.Ticker} - {Model.Stock.Name}";
+    ViewData["Description"] = $"{Model.Stock.Ticker} - {Model.Stock.Name}. View institutional holdings, short volume, short interest, and SEC filings for {Model.Stock.Ticker}.";
+    var stock = Model.Stock;
+    var activeTab = Model.ActiveTab;
+}
+
+<div class="max-w-6xl mx-auto px-6 py-8">
+    <!-- Breadcrumb -->
+    <div class="flex items-center justify-between mb-2">
+        <div class="breadcrumbs text-sm text-base-content/60">
+            <ul>
+                <li><a asp-controller="Stocks" asp-action="Index">Stocks</a></li>
+                <li>
+                    <span class="font-semibold text-base-content">@stock.Ticker</span>
+                    <span class="text-base-content/50 ml-1">@stock.Name</span>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Stock Header -->
+    <div class="card bg-base-100 shadow-sm mb-6">
+        <div class="card-body p-4 lg:p-6">
+            <div class="flex flex-col lg:flex-row lg:justify-between gap-4">
+                <!-- Left: Ticker, Name, Description -->
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-baseline gap-3 mb-1">
+                        <h1 class="text-2xl font-bold">@stock.Ticker</h1>
+                        <span class="text-base text-base-content/70">@stock.Name</span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(stock.Description)) {
+                        <p class="text-base text-base-content/60">@stock.Description</p>
+                    }
+                </div>
+
+                <!-- Right: Info Grid -->
+                <div class="grid grid-cols-2 gap-x-6 gap-y-3 lg:gap-x-8 lg:border-l lg:border-base-200 lg:pl-6 border-t lg:border-t-0 pt-4 lg:pt-0 shrink-0">
+                    @if (!string.IsNullOrEmpty(stock.Cik)) {
+                        <div>
+                            <div class="text-xs text-base-content/50 uppercase tracking-wider">CIK</div>
+                            <div class="font-mono text-sm">@stock.Cik</div>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(stock.Cusip)) {
+                        <div>
+                            <div class="text-xs text-base-content/50 uppercase tracking-wider">CUSIP</div>
+                            <div class="font-mono text-sm">@stock.Cusip</div>
+                        </div>
+                    }
+                    @if (stock.SharesOutStanding > 0) {
+                        <div>
+                            <div class="text-xs text-base-content/50 uppercase tracking-wider">Shares Outstanding</div>
+                            <div class="font-semibold">@stock.SharesOutStanding.ToString("N0")</div>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(stock.Website)) {
+                        <div>
+                            <div class="text-xs text-base-content/50 uppercase tracking-wider">Website</div>
+                            <a href="@stock.Website" target="_blank" rel="noopener" class="text-sm text-primary hover:underline truncate block">@stock.Website</a>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div role="tablist" class="flex flex-wrap gap-2 mb-6">
+        <a role="tab" class="btn btn-sm @(activeTab == "holdings" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Holdings" asp-route-ticker="@stock.Ticker">Holdings</a>
+        <a role="tab" class="btn btn-sm @(activeTab == "short-volume" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="ShortVolume" asp-route-ticker="@stock.Ticker">Short Volume</a>
+        <a role="tab" class="btn btn-sm @(activeTab == "short-interest" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="ShortInterest" asp-route-ticker="@stock.Ticker">Short Interest</a>
+        <a role="tab" class="btn btn-sm @(activeTab == "ftd" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Ftd" asp-route-ticker="@stock.Ticker">Fails to Deliver</a>
+        <a role="tab" class="btn btn-sm @(activeTab == "documents" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Documents" asp-route-ticker="@stock.Ticker">SEC Filings</a>
+        <a role="tab" class="btn btn-sm @(activeTab == "insider-trading" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="InsiderTrading" asp-route-ticker="@stock.Ticker">Insider Trading</a>
+        <a role="tab" class="btn btn-sm @(activeTab == "congressional-trades" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="CongressionalTrades" asp-route-ticker="@stock.Ticker">Congress Trades</a>
+    </div>
+
+    <!-- Tab Content (server-rendered) -->
+    <div>
+        @switch (activeTab) {
+            case "holdings":
+                @await Html.PartialAsync("_HoldingsTab", (HoldingsTabViewModel)ViewData["TabViewModel"])
+                break;
+            case "short-volume":
+                @await Html.PartialAsync("_ShortVolumeTab", (ShortVolumeTabViewModel)ViewData["TabViewModel"])
+                break;
+            case "short-interest":
+                @await Html.PartialAsync("_ShortInterestTab", (ShortInterestTabViewModel)ViewData["TabViewModel"])
+                break;
+            case "ftd":
+                @await Html.PartialAsync("_FtdTab", (FtdTabViewModel)ViewData["TabViewModel"])
+                break;
+            case "documents":
+                @await Html.PartialAsync("_DocumentsTab", (DocumentsTabViewModel)ViewData["TabViewModel"])
+                break;
+            case "insider-trading":
+                @await Html.PartialAsync("_InsiderTradingTab", (InsiderTradingTabViewModel)ViewData["TabViewModel"])
+                break;
+            case "congressional-trades":
+                @await Html.PartialAsync("_CongressionalTradesTab", (CongressionalTradesTabViewModel)ViewData["TabViewModel"])
+                break;
+        }
+    </div>
+</div>

@@ -1,0 +1,61 @@
+@using Equibles.Congress.Data.Models
+@model Equibles.Web.ViewModels.Stocks.CongressionalTradesTabViewModel
+
+@if (Model.Trades.Count == 0) {
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body text-center py-12">
+            <div class="text-base-content/30 mb-3">
+                <icon name="building-library" size="12" />
+            </div>
+            <h3 class="text-base-content/60 mb-2">No Congressional Trades</h3>
+            <p class="text-base-content/40 text-sm">No congressional trading data is available for this stock yet.</p>
+        </div>
+    </div>
+} else {
+    <div class="card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table table-zebra table-sm">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Member</th>
+                        <th class="hidden md:table-cell">Position</th>
+                        <th>Type</th>
+                        <th class="hidden md:table-cell">Owner</th>
+                        <th class="text-right">Amount</th>
+                        <th class="hidden lg:table-cell">Filed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in Model.Trades) {
+                        var badgeClass = t.TransactionType == CongressTransactionType.Purchase ? "badge-success" : "badge-error";
+                        var typeLabel = t.TransactionType == CongressTransactionType.Purchase ? "Buy" : "Sell";
+                        var position = t.CongressMember?.Position == CongressPosition.Senator ? "Senator" : "Representative";
+                        <tr>
+                            <td>@t.TransactionDate.ToString("yyyy-MM-dd")</td>
+                            <td class="max-w-xs truncate">@(t.CongressMember?.Name ?? "Unknown")</td>
+                            <td class="hidden md:table-cell text-sm text-base-content/60">@position</td>
+                            <td><span class="badge @badgeClass badge-sm">@typeLabel</span></td>
+                            <td class="hidden md:table-cell text-sm text-base-content/60">@(t.OwnerType ?? "—")</td>
+                            <td class="text-right font-mono">@FormatAmount(t.AmountFrom, t.AmountTo)</td>
+                            <td class="hidden lg:table-cell text-sm text-base-content/60">@t.FilingDate.ToString("yyyy-MM-dd")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@functions {
+    // Formats dollar amount ranges as compact strings (e.g., "$1K - $15K")
+    static string FormatAmount(long from, long to) {
+        return $"${FormatCompact(from)} - ${FormatCompact(to)}";
+    }
+
+    static string FormatCompact(long value) {
+        if (value >= 1_000_000) return $"{value / 1_000_000M:0.#}M";
+        if (value >= 1_000) return $"{value / 1_000M:0.#}K";
+        return value.ToString("N0");
+    }
+}

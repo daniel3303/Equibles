@@ -1,0 +1,90 @@
+@model Equibles.Web.ViewModels.Stocks.HoldingsTabViewModel
+
+@if (Model.AvailableDates.Count == 0) {
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body text-center py-12">
+            <div class="text-base-content/30 mb-3">
+                <icon name="building-office" size="12" />
+            </div>
+            <h3 class="text-base-content/60 mb-2">No Holdings Data</h3>
+            <p class="text-base-content/40 text-sm">No institutional holdings data is available for this stock yet.</p>
+        </div>
+    </div>
+} else {
+    <!-- Date Selector + Stats -->
+    <div class="mb-4 text-sm">
+        <div class="flex flex-wrap lg:flex-nowrap items-center gap-x-5 gap-y-2 mb-1">
+            <div class="flex items-center gap-2 shrink-0">
+                <span class="text-base-content/60 whitespace-nowrap">Report Date:</span>
+                <select id="holdings-date" class="select select-bordered select-sm"
+                    onchange="window.location.href='Holdings?date=' + this.value">
+                    @foreach (var date in Model.AvailableDates) {
+                        var isSelected = date == Model.SelectedDate;
+                        if (isSelected) {
+                            <option value="@date.ToString("yyyy-MM-dd")" selected>@date.ToString("MMM dd, yyyy")</option>
+                        } else {
+                            <option value="@date.ToString("yyyy-MM-dd")">@date.ToString("MMM dd, yyyy")</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Holders:</span> <strong>@Model.HolderCount.ToString("N0")</strong></div>
+            <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Value:</span> <strong>$@Model.TotalValue.ToString("N0")</strong></div>
+            <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Shares:</span> <strong>@Model.TotalShares.ToString("N0")</strong></div>
+        </div>
+        @if (Model.DisplayedCount < Model.HolderCount) {
+            <div class="text-xs text-base-content/50">Showing top @Model.DisplayedCount of @Model.HolderCount.ToString("N0") holders by value</div>
+        }
+    </div>
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table table-zebra table-sm">
+                <thead>
+                    <tr>
+                        <th>Holder</th>
+                        <th class="text-right">Value (USD)</th>
+                        <th class="text-right">Shares</th>
+                        <th class="text-right hidden md:table-cell">Change</th>
+                        <th class="hidden lg:table-cell">Type</th>
+                        <th class="hidden lg:table-cell">Discretion</th>
+                        <th class="hidden lg:table-cell">Filed</th>
+                        <th class="text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var h in Model.Holdings) {
+                        var hasPrevious = Model.PreviousSharesByHolder.TryGetValue(h.InstitutionalHolderId, out var previousShares);
+                        var changePercent = hasPrevious && previousShares > 0
+                            ? (double)(h.Shares - previousShares) / previousShares * 100
+                            : (double?)null;
+                        <tr>
+                            <td class="max-w-xs truncate">@(h.InstitutionalHolder?.Name ?? "Unknown")</td>
+                            <td class="text-right font-mono">$@h.Value.ToString("N0")</td>
+                            <td class="text-right font-mono">@h.Shares.ToString("N0")</td>
+                            <td class="text-right font-mono hidden md:table-cell">
+                                @if (changePercent.HasValue) {
+                                    var css = changePercent.Value > 0 ? "text-success" : changePercent.Value < 0 ? "text-error" : "";
+                                    var sign = changePercent.Value > 0 ? "+" : "";
+                                    <span class="@css">@sign@changePercent.Value.ToString("F1")%</span>
+                                } else if (!hasPrevious) {
+                                    <span class="badge badge-success badge-xs">New</span>
+                                } else {
+                                    <span>—</span>
+                                }
+                            </td>
+                            <td class="hidden lg:table-cell">@h.ShareType</td>
+                            <td class="hidden lg:table-cell">@h.InvestmentDiscretion</td>
+                            <td class="hidden lg:table-cell text-base-content/60">@h.FilingDate.ToString("yyyy-MM-dd")</td>
+                            <td class="text-right">
+                                <a asp-controller="Stocks" asp-action="ShowHolder"
+                                   asp-route-ticker="@Model.Ticker" asp-route-cik="@h.InstitutionalHolder?.Cik"
+                                   class="btn btn-ghost btn-sm">View</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}

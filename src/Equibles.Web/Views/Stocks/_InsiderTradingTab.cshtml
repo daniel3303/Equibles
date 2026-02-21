@@ -1,0 +1,69 @@
+@using Equibles.InsiderTrading.Data.Models
+@model Equibles.Web.ViewModels.Stocks.InsiderTradingTabViewModel
+
+@if (Model.Transactions.Count == 0) {
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body text-center py-12">
+            <div class="text-base-content/30 mb-3">
+                <icon name="user" size="12" />
+            </div>
+            <h3 class="text-base-content/60 mb-2">No Insider Trading Data</h3>
+            <p class="text-base-content/40 text-sm">No insider transactions are available for this stock yet.</p>
+        </div>
+    </div>
+} else {
+    <div class="card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table table-zebra table-sm">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Insider</th>
+                        <th class="hidden md:table-cell">Role</th>
+                        <th>Type</th>
+                        <th class="text-right">Shares</th>
+                        <th class="text-right hidden md:table-cell">Price</th>
+                        <th class="text-right hidden lg:table-cell">Value</th>
+                        <th class="text-right hidden lg:table-cell"><span class="tooltip tooltip-left cursor-help" data-tip="Total shares owned by the insider after this transaction">After</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in Model.Transactions) {
+                        var badgeClass = t.AcquiredDisposed == AcquiredDisposed.Acquired ? "badge-success" : "badge-error";
+                        var (typeLabel, typeTooltip) = t.TransactionCode switch {
+                            TransactionCode.Purchase => ("Buy", "Open-market or private purchase of shares"),
+                            TransactionCode.Sale => ("Sell", "Open-market or private sale of shares"),
+                            TransactionCode.Award => ("Award", "Shares granted by the company as compensation"),
+                            TransactionCode.Gift => ("Gift", "Shares given or received as a gift"),
+                            TransactionCode.Exercise => ("Exercise", "Stock options exercised into shares"),
+                            TransactionCode.TaxPayment => ("Tax", "Shares withheld or sold to cover tax obligations"),
+                            TransactionCode.Conversion => ("Convert", "Conversion of derivative securities into shares"),
+                            TransactionCode.Inheritance => ("Inheritance", "Shares acquired through inheritance"),
+                            TransactionCode.Expiration => ("Expiration", "Derivative securities that expired unexercised"),
+                            TransactionCode.Discretionary => ("Discretionary", "Transaction by a discretionary account or trust"),
+                            _ => (t.TransactionCode.ToString(), "Other transaction type")
+                        };
+                        var role = "";
+                        if (t.InsiderOwner != null) {
+                            var roles = new List<string>();
+                            if (t.InsiderOwner.IsDirector) roles.Add("Director");
+                            if (t.InsiderOwner.IsOfficer) roles.Add(t.InsiderOwner.OfficerTitle ?? "Officer");
+                            if (t.InsiderOwner.IsTenPercentOwner) roles.Add("10% Owner");
+                            role = roles.Count > 0 ? string.Join(", ", roles) : "Insider";
+                        }
+                        <tr>
+                            <td>@t.TransactionDate.ToString("yyyy-MM-dd")</td>
+                            <td class="max-w-xs truncate">@(t.InsiderOwner?.Name ?? "Unknown")</td>
+                            <td class="hidden md:table-cell text-sm text-base-content/60">@role</td>
+                            <td><span class="badge @badgeClass badge-sm tooltip tooltip-right cursor-help" data-tip="@typeTooltip">@typeLabel</span></td>
+                            <td class="text-right font-mono">@t.Shares.ToString("N0")</td>
+                            <td class="text-right font-mono hidden md:table-cell">@(t.PricePerShare > 0 ? $"${t.PricePerShare:N2}" : "—")</td>
+                            <td class="text-right font-mono hidden lg:table-cell">@(t.PricePerShare > 0 ? $"${(t.Shares * t.PricePerShare):N0}" : "—")</td>
+                            <td class="text-right font-mono hidden lg:table-cell">@t.SharesOwnedAfter.ToString("N0")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
