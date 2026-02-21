@@ -1,0 +1,95 @@
+@model Equibles.Web.ViewModels.Stocks.StockBrowserViewModel
+
+@{
+    ViewData["Title"] = "Stocks";
+    ViewData["Description"] = "Browse and search US common stocks with institutional holdings, short volume, short interest, and fails-to-deliver data.";
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">Stocks</h1>
+        <p class="text-base-content/60">Browse @Model.TotalCount.ToString("N0") US common stocks</p>
+    </div>
+
+    <!-- Search -->
+    <form method="get" class="mb-6">
+        <div class="flex gap-3">
+            <input type="text" name="search" value="@Model.Search"
+                   class="input input-bordered flex-1 max-w-md"
+                   placeholder="Search by ticker or name..." />
+            <button type="submit" class="btn btn-primary">Search</button>
+            @if (!string.IsNullOrEmpty(Model.Search)) {
+                <a asp-action="Index" class="btn btn-ghost">Clear</a>
+            }
+        </div>
+    </form>
+
+    <!-- Results Table -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table table-zebra">
+                <thead>
+                    <tr>
+                        <th>Ticker</th>
+                        <th>Name</th>
+                        <th class="hidden lg:table-cell">CUSIP</th>
+                        <th class="text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var stock in Model.Stocks) {
+                        <tr class="hover">
+                            <td class="font-semibold">@stock.Ticker</td>
+                            <td class="max-w-xs truncate">@stock.Name</td>
+                            <td class="hidden lg:table-cell font-mono text-sm text-base-content/60">@(stock.Cusip ?? "—")</td>
+                            <td class="text-right">
+                                <a asp-action="Show" asp-controller="Stocks" asp-route-ticker="@stock.Ticker"
+                                   class="btn btn-ghost btn-sm">View</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    @if (Model.TotalPages > 1) {
+        <div class="flex justify-center mt-6">
+            <div class="join">
+                @if (Model.Page > 1) {
+                    <a asp-action="Index" asp-route-search="@Model.Search" asp-route-page="@(Model.Page - 1)" class="join-item btn btn-sm">Previous</a>
+                }
+
+                @{
+                    var startPage = Math.Max(1, Model.Page - 2);
+                    var endPage = Math.Min(Model.TotalPages, Model.Page + 2);
+                }
+
+                @if (startPage > 1) {
+                    <a asp-action="Index" asp-route-search="@Model.Search" asp-route-page="1" class="join-item btn btn-sm">1</a>
+                    @if (startPage > 2) {
+                        <span class="join-item btn btn-sm btn-disabled">...</span>
+                    }
+                }
+
+                @for (var i = startPage; i <= endPage; i++) {
+                    <a asp-action="Index" asp-route-search="@Model.Search" asp-route-page="@i"
+                       class="join-item btn btn-sm @(i == Model.Page ? "btn-active" : "")">@i</a>
+                }
+
+                @if (endPage < Model.TotalPages) {
+                    @if (endPage < Model.TotalPages - 1) {
+                        <span class="join-item btn btn-sm btn-disabled">...</span>
+                    }
+                    <a asp-action="Index" asp-route-search="@Model.Search" asp-route-page="@Model.TotalPages" class="join-item btn btn-sm">@Model.TotalPages</a>
+                }
+
+                @if (Model.Page < Model.TotalPages) {
+                    <a asp-action="Index" asp-route-search="@Model.Search" asp-route-page="@(Model.Page + 1)" class="join-item btn btn-sm">Next</a>
+                }
+            </div>
+        </div>
+    }
+</div>
+
