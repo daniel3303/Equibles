@@ -1,0 +1,84 @@
+@model Equibles.Web.ViewModels.Stocks.ShortVolumeTabViewModel
+
+@if (Model.ShortVolumes.Count == 0) {
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body text-center py-12">
+            <div class="text-base-content/30 mb-3">
+                <icon name="arrow-trending-down" size="12" />
+            </div>
+            <h3 class="text-base-content/60 mb-2">No Short Volume Data</h3>
+            <p class="text-base-content/40 text-sm">No daily short volume data is available for this stock yet.</p>
+        </div>
+    </div>
+} else {
+    <!-- Chart -->
+    <div class="card bg-base-100 shadow-sm mb-4">
+        <div class="card-body p-4 lg:p-6">
+            <h3 class="font-semibold text-sm mb-3">Short Volume (Last 90 Days)</h3>
+            <div class="h-[200px]">
+                <canvas id="short-volume-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table table-zebra table-sm">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th class="text-right">Short Volume</th>
+                        <th class="text-right">Short Exempt</th>
+                        <th class="text-right">Total Volume</th>
+                        <th class="text-right">Short %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var sv in Model.ShortVolumes.OrderByDescending(v => v.Date)) {
+                        var shortPct = sv.TotalVolume > 0 ? (double)sv.ShortVolume / sv.TotalVolume * 100 : 0;
+                        <tr>
+                            <td>@sv.Date.ToString("yyyy-MM-dd")</td>
+                            <td class="text-right font-mono">@sv.ShortVolume.ToString("N0")</td>
+                            <td class="text-right font-mono">@sv.ShortExemptVolume.ToString("N0")</td>
+                            <td class="text-right font-mono">@sv.TotalVolume.ToString("N0")</td>
+                            <td class="text-right font-mono">@shortPct.ToString("F1")%</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+    // Render short volume bar chart (waits for Chart.js bundle)
+    document.addEventListener('DOMContentLoaded', function() {
+        const ctx = document.getElementById('short-volume-chart');
+        if (!ctx || typeof Chart === 'undefined') return;
+
+        const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ShortVolumes.Select(v => v.Date.ToString("yyyy-MM-dd")).ToList()));
+        const shortVol = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ShortVolumes.Select(v => v.ShortVolume).ToList()));
+        const totalVol = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ShortVolumes.Select(v => v.TotalVolume).ToList()));
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Short Volume', data: shortVol, backgroundColor: 'oklch(50% 0.2 145 / 0.7)', borderRadius: 2 },
+                    { label: 'Total Volume', data: totalVol, backgroundColor: 'oklch(0.929 0.013 255.508)', borderRadius: 2 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { ticks: { maxTicksLimit: 12, font: { size: 10 } } },
+                    y: { ticks: { callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v } }
+                },
+                plugins: { legend: { position: 'top', labels: { boxWidth: 12 } } }
+            }
+        });
+    });
+    </script>
+}

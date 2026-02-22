@@ -1,0 +1,82 @@
+@model Equibles.Web.ViewModels.Stocks.FtdTabViewModel
+
+@if (Model.FailsToDeliver.Count == 0) {
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body text-center py-12">
+            <div class="text-base-content/30 mb-3">
+                <icon name="exclamation-triangle" size="12" />
+            </div>
+            <h3 class="text-base-content/60 mb-2">No Fails to Deliver Data</h3>
+            <p class="text-base-content/40 text-sm">No fails-to-deliver data is available for this stock yet.</p>
+        </div>
+    </div>
+} else {
+    <!-- Chart -->
+    <div class="card bg-base-100 shadow-sm mb-4">
+        <div class="card-body p-4 lg:p-6">
+            <h3 class="font-semibold text-sm mb-3">Fails to Deliver History</h3>
+            <div class="h-[200px]">
+                <canvas id="ftd-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table table-zebra table-sm">
+                <thead>
+                    <tr>
+                        <th>Settlement Date</th>
+                        <th class="text-right">Quantity</th>
+                        <th class="text-right">Price</th>
+                        <th class="text-right">Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var ftd in Model.FailsToDeliver.OrderByDescending(f => f.SettlementDate)) {
+                        <tr>
+                            <td>@ftd.SettlementDate.ToString("yyyy-MM-dd")</td>
+                            <td class="text-right font-mono">@ftd.Quantity.ToString("N0")</td>
+                            <td class="text-right font-mono">$@ftd.Price.ToString("F2")</td>
+                            <td class="text-right font-mono">$@((ftd.Quantity * ftd.Price).ToString("N0"))</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+    // Render fails-to-deliver bar chart (waits for Chart.js bundle)
+    document.addEventListener('DOMContentLoaded', function() {
+        const ctx = document.getElementById('ftd-chart');
+        if (!ctx || typeof Chart === 'undefined') return;
+
+        const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.FailsToDeliver.Select(f => f.SettlementDate.ToString("yyyy-MM-dd")).ToList()));
+        const quantities = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.FailsToDeliver.Select(f => f.Quantity).ToList()));
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'FTD Quantity',
+                    data: quantities,
+                    backgroundColor: 'oklch(80% 0.18 85 / 0.7)',
+                    borderRadius: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { ticks: { maxTicksLimit: 12, font: { size: 10 } } },
+                    y: { ticks: { callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v } }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+    });
+    </script>
+}

@@ -1,0 +1,90 @@
+@model Equibles.Web.ViewModels.Stocks.ShortInterestTabViewModel
+
+@if (Model.ShortInterests.Count == 0) {
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body text-center py-12">
+            <div class="text-base-content/30 mb-3">
+                <icon name="chart-bar" size="12" />
+            </div>
+            <h3 class="text-base-content/60 mb-2">No Short Interest Data</h3>
+            <p class="text-base-content/40 text-sm">No short interest data is available for this stock yet.</p>
+        </div>
+    </div>
+} else {
+    <!-- Chart -->
+    <div class="card bg-base-100 shadow-sm mb-4">
+        <div class="card-body p-4 lg:p-6">
+            <h3 class="font-semibold text-sm mb-3">Short Interest History</h3>
+            <div class="h-[200px]">
+                <canvas id="short-interest-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table table-zebra table-sm">
+                <thead>
+                    <tr>
+                        <th>Settlement Date</th>
+                        <th class="text-right">Current Position</th>
+                        <th class="text-right">Previous Position</th>
+                        <th class="text-right">Change</th>
+                        <th class="text-right hidden md:table-cell">Avg Daily Volume</th>
+                        <th class="text-right">Days to Cover</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var si in Model.ShortInterests.OrderByDescending(s => s.SettlementDate)) {
+                        <tr>
+                            <td>@si.SettlementDate.ToString("yyyy-MM-dd")</td>
+                            <td class="text-right font-mono">@si.CurrentShortPosition.ToString("N0")</td>
+                            <td class="text-right font-mono">@si.PreviousShortPosition.ToString("N0")</td>
+                            <td class="text-right font-mono @(si.ChangeInShortPosition > 0 ? "text-error" : si.ChangeInShortPosition < 0 ? "text-success" : "")">
+                                @(si.ChangeInShortPosition > 0 ? "+" : "")@si.ChangeInShortPosition.ToString("N0")
+                            </td>
+                            <td class="text-right font-mono hidden md:table-cell">@(si.AverageDailyVolume?.ToString("N0") ?? "—")</td>
+                            <td class="text-right font-mono">@(si.DaysToCover?.ToString("F2") ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+    // Render short interest line chart (waits for Chart.js bundle)
+    document.addEventListener('DOMContentLoaded', function() {
+        const ctx = document.getElementById('short-interest-chart');
+        if (!ctx || typeof Chart === 'undefined') return;
+
+        const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ShortInterests.Select(s => s.SettlementDate.ToString("yyyy-MM-dd")).ToList()));
+        const positions = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ShortInterests.Select(s => s.CurrentShortPosition).ToList()));
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Short Interest',
+                    data: positions,
+                    borderColor: 'oklch(35% 0.12 195)',
+                    backgroundColor: 'oklch(35% 0.12 195 / 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { ticks: { callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v } }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+    });
+    </script>
+}
