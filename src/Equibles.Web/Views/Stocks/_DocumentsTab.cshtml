@@ -1,0 +1,43 @@
+@using Equibles.Core.Extensions
+@model Equibles.Web.ViewModels.Stocks.DocumentsTabViewModel
+
+@if (Model.Documents.Count == 0) {
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body text-center py-12">
+            <div class="text-base-content/30 mb-3">
+                <icon name="document-text" size="12" />
+            </div>
+            <h3 class="text-base-content/60 mb-2">No Documents Available</h3>
+            <p class="text-base-content/40 text-sm">No SEC filings or earnings transcripts are available for this stock yet.</p>
+        </div>
+    </div>
+} else {
+    <div class="card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table table-zebra table-sm">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Filing Date</th>
+                        <th>Period</th>
+                        <th class="text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var doc in Model.Documents) {
+                        <tr>
+                            <td><span class="badge badge-primary badge-sm">@doc.DocumentType.DisplayName</span></td>
+                            <td>@doc.ReportingDate.ToString("yyyy-MM-dd")</td>
+                            <td>@(doc.ReportingForDate != doc.ReportingDate ? doc.ReportingForDate.ToString("yyyy-MM-dd") : "")</td>
+                            <td class="text-right">
+                                <a asp-controller="Stocks" asp-action="ShowDocument"
+                                   asp-route-ticker="@Model.Ticker" asp-route-id="@doc.Id"
+                                   class="btn btn-ghost btn-sm">View</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
