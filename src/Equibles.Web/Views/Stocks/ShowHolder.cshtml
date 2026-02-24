@@ -1,0 +1,160 @@
+@model Equibles.Web.ViewModels.Stocks.HolderDetailViewModel
+
+@{
+    ViewData["Title"] = $"{Model.Holder.Name} - {Model.Stock.Ticker}";
+    ViewData["Description"] = $"{Model.Holder.Name} institutional holdings in {Model.Stock.Ticker}. View holding history, share counts, and filing dates.";
+    var stock = Model.Stock;
+    var holder = Model.Holder;
+}
+
+<div class="max-w-6xl mx-auto px-6 py-8">
+    <!-- Breadcrumb -->
+    <div class="flex items-center justify-between mb-2">
+        <div class="breadcrumbs text-sm text-base-content/60">
+            <ul>
+                <li><a asp-controller="Stocks" asp-action="Index">Stocks</a></li>
+                <li><a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@stock.Ticker">@stock.Ticker</a></li>
+                <li><span class="font-semibold text-base-content">@holder.Name</span></li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Holder Info -->
+    <div class="card bg-base-100 shadow-sm mb-8">
+        <div class="card-body p-4 lg:p-6">
+            <div class="flex items-baseline gap-3 mb-1">
+                <h1 class="text-2xl font-bold">@holder.Name</h1>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-base-200">
+                <div>
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">CIK</div>
+                    <div class="font-mono text-sm">@holder.Cik</div>
+                </div>
+                @if (!string.IsNullOrEmpty(holder.City)) {
+                    <div>
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider">City</div>
+                        <div class="text-sm">@holder.City</div>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(holder.StateOrCountry)) {
+                    <div>
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider">State / Country</div>
+                        <div class="text-sm">@holder.StateOrCountry</div>
+                    </div>
+                }
+                <div>
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Stock</div>
+                    <a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@stock.Ticker" class="text-sm text-primary hover:underline">@stock.Ticker — @stock.Name</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Holdings History -->
+    @if (Model.Holdings.Count == 0) {
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body text-center py-12">
+                <h3 class="text-base-content/60 mb-2">No Holdings History</h3>
+                <p class="text-base-content/40 text-sm">No holdings records found for this institution in @stock.Ticker.</p>
+            </div>
+        </div>
+    } else {
+        var chartHoldings = Model.Holdings.OrderBy(h => h.ReportDate).ToList();
+
+        <h2 class="text-lg font-semibold mb-3">Holdings in @stock.Ticker</h2>
+
+        <!-- Position Over Time Chart -->
+        @if (chartHoldings.Count >= 2) {
+            <div class="card bg-base-100 shadow-sm mb-4">
+                <div class="card-body p-4 lg:p-6">
+                    <h3 class="font-semibold text-sm mb-3">Position Over Time</h3>
+                    <div class="h-[200px]">
+                        <canvas id="holder-position-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div class="card bg-base-100 shadow-sm">
+            <div class="overflow-x-auto">
+                <table class="table table-zebra table-sm">
+                    <thead>
+                        <tr>
+                            <th>Report Date</th>
+                            <th class="text-right">Value (USD)</th>
+                            <th class="text-right">Shares</th>
+                            <th class="text-right hidden md:table-cell">Change</th>
+                            <th class="hidden lg:table-cell">Type</th>
+                            <th class="hidden lg:table-cell">Discretion</th>
+                            <th class="hidden lg:table-cell">Filed</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (var i = 0; i < Model.Holdings.Count; i++) {
+                            var h = Model.Holdings[i];
+                            var olderQuarter = i + 1 < Model.Holdings.Count ? Model.Holdings[i + 1] : null;
+                            var changePercent = olderQuarter != null && olderQuarter.Shares > 0
+                                ? (double)(h.Shares - olderQuarter.Shares) / olderQuarter.Shares * 100
+                                : (double?)null;
+                            <tr>
+                                <td>@h.ReportDate.ToString("yyyy-MM-dd")</td>
+                                <td class="text-right font-mono">$@h.Value.ToString("N0")</td>
+                                <td class="text-right font-mono">@h.Shares.ToString("N0")</td>
+                                <td class="text-right font-mono hidden md:table-cell">
+                                    @if (changePercent.HasValue) {
+                                        var css = changePercent.Value > 0 ? "text-success" : changePercent.Value < 0 ? "text-error" : "";
+                                        var sign = changePercent.Value > 0 ? "+" : "";
+                                        <span class="@css">@sign@changePercent.Value.ToString("F1")%</span>
+                                    } else {
+                                        <span>—</span>
+                                    }
+                                </td>
+                                <td class="hidden lg:table-cell">@h.ShareType</td>
+                                <td class="hidden lg:table-cell">@h.InvestmentDiscretion</td>
+                                <td class="hidden lg:table-cell text-base-content/60">@h.FilingDate.ToString("yyyy-MM-dd")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (chartHoldings.Count >= 2) {
+            <script>
+            // Render holder position line chart showing shares over time
+            document.addEventListener('DOMContentLoaded', function() {
+                const ctx = document.getElementById('holder-position-chart');
+                if (!ctx || typeof Chart === 'undefined') return;
+
+                const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chartHoldings.Select(h => h.ReportDate.ToString("yyyy-MM-dd")).ToList()));
+                const shares = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chartHoldings.Select(h => h.Shares).ToList()));
+
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Shares Held',
+                            data: shares,
+                            borderColor: 'oklch(55% 0.15 250)',
+                            backgroundColor: 'oklch(55% 0.15 250 / 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { ticks: { callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v } }
+                        },
+                        plugins: { legend: { display: false } }
+                    }
+                });
+            });
+            </script>
+        }
+    }
+</div>
