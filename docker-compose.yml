@@ -1,0 +1,101 @@
+services:
+  db:
+    image: paradedb/paradedb:latest
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: equibles
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mcp:
+    build:
+      context: .
+      dockerfile: src/Equibles.Mcp.Server/Dockerfile
+    ports:
+      - "8081:8080"
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
+    depends_on:
+      web:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: src/Equibles.Web/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: src/Equibles.Worker.Host/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
+      Embedding__Enabled: "false"
+    depends_on:
+      web:
+        condition: service_healthy
+
+  # Embedding server (opt-in): docker compose --profile embedding up
+  embedding:
+    image: ollama/ollama:latest
+    profiles: ["embedding"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  embedding-pull:
+    image: ollama/ollama:latest
+    profiles: ["embedding"]
+    depends_on:
+      embedding:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["ollama", "pull", "bge-m3"]
+    environment:
+      OLLAMA_HOST: http://embedding:11434
+
+  # Worker with embeddings enabled (use --profile embedding)
+  worker-embedding:
+    build:
+      context: .
+      dockerfile: src/Equibles.Worker.Host/Dockerfile
+    profiles: ["embedding"]
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
+      Embedding__Enabled: "true"
+      Embedding__BaseUrl: "http://embedding:11434"
+      Embedding__ModelName: "bge-m3"
+      Embedding__BatchSize: "10"
+    depends_on:
+      web:
+        condition: service_healthy
+      embedding:
+        condition: service_healthy
+
+volumes:
+  db-data:
+  ollama-data:
