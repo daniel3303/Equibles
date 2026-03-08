@@ -74,18 +74,13 @@ ConnectionStrings__DefaultConnection="Host=localhost;Database=equibles;Username=
 
 ### Configuration
 
-To override settings locally without modifying `appsettings.json`, create an `appsettings.Development.json` in the host project (it's gitignored). .NET loads it automatically when `DOTNET_ENVIRONMENT=Development` (the default when using `dotnet run`):
+All settings can be configured via a `.env` file in the project root (recommended for Docker) or environment variables:
 
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Database=equibles;Username=myuser;Password=mypassword"
-  },
-  "Finra": {
-    "ClientId": "your-client-id",
-    "ClientSecret": "your-client-secret"
-  }
-}
+```env
+# .env
+ConnectionStrings__DefaultConnection=Host=localhost;Database=equibles;Username=myuser;Password=mypassword
+Finra__ClientId=your-client-id
+Finra__ClientSecret=your-client-secret
 ```
 
 **FINRA Short Data (free API key required):**
@@ -96,7 +91,7 @@ To get a key:
 1. Create a free account at [developer.finra.org](https://developer.finra.org/)
 2. Go to **Teams & Apps** and create a new application
 3. Copy the **Client ID** and **Client Secret**
-4. Set `Finra__ClientId` and `Finra__ClientSecret` via environment variables or `appsettings.json`
+4. Set `Finra__ClientId` and `Finra__ClientSecret` in your `.env` file or environment variables
 
 **Ticker Filtering (optional):**
 
@@ -128,6 +123,8 @@ Each scraper's ticker list is independent — you can sync SEC filings for 500 s
 | `Embedding__BaseUrl` | — | Ollama or OpenAI-compatible endpoint (e.g., `http://localhost:11434`) |
 | `Embedding__ModelName` | — | Model name (e.g., `bge-m3`) |
 | `Embedding__BatchSize` | `10` | Texts per embedding batch |
+
+> **How configuration works:** Environment variables and `.env` override values defined in `appsettings.json` and `appsettings.Development.json`. For Docker, `.env` is the recommended approach. When running from source with `dotnet run`, you can also create an `appsettings.Development.json` in the host project (it's gitignored) for local overrides.
 
 ## MCP Server
 
