@@ -100,33 +100,22 @@ To get a key:
 
 **Ticker Filtering (optional):**
 
-By default, all tickers are synced. To limit data syncing to specific stocks, configure `TickersToSync` on each scraper's options. When the list is empty (default), all stocks are synced.
+By default, all tickers are synced. To limit data syncing to specific stocks, add ticker lists to your `.env` file or Docker Compose environment. When not set, all stocks are synced.
 
-```json
-{
-  "DocumentScraperOptions": {
-    "TickersToSync": ["AAPL", "MSFT", "GOOGL"]
-  },
-  "HoldingsScraperOptions": {
-    "TickersToSync": ["AAPL", "MSFT", "GOOGL"]
-  },
-  "CongressScraperOptions": {
-    "TickersToSync": ["AAPL", "MSFT", "GOOGL"]
-  },
-  "FinraScraperOptions": {
-    "TickersToSync": ["AAPL", "MSFT", "GOOGL"]
-  }
-}
-```
-
-Or via environment variables / Docker Compose:
-
-```yaml
-environment:
-  DocumentScraperOptions__TickersToSync__0: "AAPL"
-  DocumentScraperOptions__TickersToSync__1: "MSFT"
-  HoldingsScraperOptions__TickersToSync__0: "AAPL"
-  HoldingsScraperOptions__TickersToSync__1: "MSFT"
+```env
+# .env — sync only these tickers (applies to all scrapers)
+DocumentScraperOptions__TickersToSync__0=AAPL
+DocumentScraperOptions__TickersToSync__1=MSFT
+DocumentScraperOptions__TickersToSync__2=GOOGL
+HoldingsScraperOptions__TickersToSync__0=AAPL
+HoldingsScraperOptions__TickersToSync__1=MSFT
+HoldingsScraperOptions__TickersToSync__2=GOOGL
+CongressScraperOptions__TickersToSync__0=AAPL
+CongressScraperOptions__TickersToSync__1=MSFT
+CongressScraperOptions__TickersToSync__2=GOOGL
+FinraScraperOptions__TickersToSync__0=AAPL
+FinraScraperOptions__TickersToSync__1=MSFT
+FinraScraperOptions__TickersToSync__2=GOOGL
 ```
 
 Each scraper's ticker list is independent — you can sync SEC filings for 500 stocks but short data for only 10.
@@ -242,57 +231,6 @@ The architecture is designed for extension. To add a new domain module:
 3. Register with `modules.AddYourModule()` in the host's `Program.cs`
 
 Smart enums (`DocumentType`, `ErrorSource`) can be extended by calling their `Register()` method — no need to modify the open-source packages.
-
-## Project Structure
-
-```
-src/
-  Equibles.Core/                  Shared utilities
-  Equibles.Data/                  Foundation: EquiblesDbContext, BaseRepository<T>
-  Equibles.Mcp/                   MCP abstractions (module + middleware)
-
-  Equibles.CommonStocks.Data/     Common stock entities
-  Equibles.CommonStocks.Repositories/
-  Equibles.CommonStocks.BusinessLogic/
-
-  Equibles.Holdings.Data/         Institutional holdings
-  Equibles.Holdings.Repositories/
-  Equibles.Holdings.Mcp/
-  Equibles.Holdings.HostedService/
-
-  Equibles.InsiderTrading.Data/   Insider transactions
-  Equibles.InsiderTrading.Repositories/
-  Equibles.InsiderTrading.Mcp/
-
-  Equibles.Congress.Data/         Congressional trades
-  Equibles.Congress.Repositories/
-  Equibles.Congress.HostedService/
-
-  Equibles.ShortData.Data/        Short volume, interest, FTDs
-  Equibles.ShortData.Repositories/
-  Equibles.ShortData.HostedService/
-
-  Equibles.Sec.Data/              SEC documents + chunks + embeddings
-  Equibles.Sec.Repositories/
-  Equibles.Sec.BusinessLogic/
-  Equibles.Sec.Mcp/
-  Equibles.Sec.HostedService/
-
-  Equibles.Media.Data/            File + Image storage
-  Equibles.Media.Repositories/
-  Equibles.Media.BusinessLogic/
-
-  Equibles.Errors.Data/           Error tracking
-  Equibles.Errors.Repositories/
-  Equibles.Errors.BusinessLogic/
-
-  Equibles.Scrapers.SecEdgar/     SEC EDGAR API client
-  Equibles.Scrapers.Finra/        FINRA API client
-  Equibles.Scrapers.Common/       Shared scraper utilities
-
-  Equibles.Mcp.Server/            MCP server host
-  Equibles.Worker.Host/           Background worker host
-```
 
 ## License
 
