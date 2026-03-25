@@ -124,6 +124,16 @@ Each scraper's ticker list is independent — you can sync SEC filings for 500 s
 | `Embedding__ModelName` | — | Model name (e.g., `bge-m3`) |
 | `Embedding__BatchSize` | `10` | Texts per embedding batch |
 
+**Authentication (optional):**
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `AUTH_USERNAME` | — | Web portal username (auth disabled if empty) |
+| `AUTH_PASSWORD` | — | Web portal password (auth disabled if empty) |
+| `MCP_API_KEY` | — | MCP server API key (auth disabled if empty) |
+
+When set, the web portal requires login and the MCP server requires `Authorization: Bearer <key>` header. When unset, everything is open access (default).
+
 > **How configuration works:** Environment variables and `.env` override values defined in `appsettings.json` and `appsettings.Development.json`. For Docker, `.env` is the recommended approach. When running from source with `dotnet run`, you can also create an `appsettings.Development.json` in the host project (it's gitignored) for local overrides.
 
 ## MCP Server
@@ -160,6 +170,29 @@ Add the MCP server to Claude Code:
 ```bash
 claude mcp add equibles --transport http http://localhost:8081/mcp
 ```
+
+### Connecting to ChatGPT Desktop
+
+Add this to your ChatGPT Desktop config file:
+
+**macOS**: `~/Library/Application Support/com.openai.chat/mcp.json`
+**Windows**: `%APPDATA%\com.openai.chat\mcp.json`
+
+```json
+{
+  "servers": {
+    "equibles": {
+      "url": "http://localhost:8081/mcp"
+    }
+  }
+}
+```
+
+Restart ChatGPT Desktop and the Equibles tools will be available.
+
+### Connecting to OpenClaw
+
+In OpenClaw, add an MCP server with the URL `http://localhost:8081/mcp` (HTTP transport).
 
 ### Other MCP Clients
 
