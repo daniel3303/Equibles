@@ -15,11 +15,17 @@ using Equibles.Sec.Data.Extensions;
 using Equibles.Sec.Mcp.Extensions;
 using ModelContextProtocol.AspNetCore;
 using Serilog;
+using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddSerilog(config => config
-    .ReadFrom.Configuration(builder.Configuration));
+builder.Services.AddSerilog(config => {
+    config.ReadFrom.Configuration(builder.Configuration);
+    var minLevel = builder.Configuration["MinimumLogLevel"];
+    if (!string.IsNullOrEmpty(minLevel) && Enum.TryParse<LogEventLevel>(minLevel, true, out var level)) {
+        config.MinimumLevel.Is(level);
+    }
+});
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddEquiblesDbContext(connectionString, modules => {
