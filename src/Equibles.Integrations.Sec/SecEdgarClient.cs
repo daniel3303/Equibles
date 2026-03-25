@@ -149,7 +149,12 @@ public class SecEdgarClient : ISecEdgarClient {
         for (var attempt = 0; attempt <= MaxRetries; attempt++) {
             await RateLimiter.WaitAsync();
 
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             var response = await _httpClient.GetAsync(url);
+            sw.Stop();
+
+            _logger.LogDebug("SEC request {StatusCode} {Elapsed}ms {Url}",
+                (int)response.StatusCode, sw.ElapsedMilliseconds, url);
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests) {
                 var delay = GetRetryDelay(response, attempt);
