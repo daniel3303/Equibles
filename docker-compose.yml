@@ -41,6 +41,8 @@ services:
       Auth__Password: ${AUTH_PASSWORD:-}
       McpApiKey: ${MCP_API_KEY:-}
       MinimumLogLevel: ${MINIMUM_LOG_LEVEL:-Warning}
+    volumes:
+      - web-keys:/app/keys
     depends_on:
       db:
         condition: service_healthy
@@ -106,4 +108,5 @@ services:
 
 volumes:
   db-data:
+  web-keys:
   ollama-data:

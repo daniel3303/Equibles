@@ -69,6 +69,10 @@ if (authSettings.IsEnabled) {
     builder.Services.AddAuthorization();
 }
 
+builder.Services.Configure<RouteOptions>(options => {
+    options.LowercaseUrls = true;
+});
+
 builder.Services.AddScoped<Equibles.Web.Filters.StatusBadgeFilter>();
 builder.Services.AddControllersWithViews(options => {
         options.Filters.AddService<Equibles.Web.Filters.StatusBadgeFilter>();
