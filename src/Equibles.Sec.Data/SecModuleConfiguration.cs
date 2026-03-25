@@ -5,8 +5,6 @@ namespace Equibles.Sec.Data;
 
 public class SecModuleConfiguration : Equibles.Data.IModuleConfiguration {
     public void ConfigureEntities(ModelBuilder builder) {
-        builder.ApplyConfigurationsFromAssembly(typeof(SecModuleConfiguration).Assembly);
-
         var docTypeConversion = new Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DocumentType, string>(
             v => v.Value,
             v => DocumentType.FromValue(v) ?? new DocumentType(v));
