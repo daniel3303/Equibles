@@ -13,6 +13,7 @@ using Equibles.Web.Authentication;
 using Equibles.Web.FlashMessage;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Serilog.Events;
@@ -68,8 +69,14 @@ if (authSettings.IsEnabled) {
     builder.Services.AddAuthorization();
 }
 
-builder.Services.AddControllersWithViews()
+builder.Services.AddScoped<Equibles.Web.Filters.StatusBadgeFilter>();
+builder.Services.AddControllersWithViews(options => {
+        options.Filters.AddService<Equibles.Web.Filters.StatusBadgeFilter>();
+    })
     .AddRazorRuntimeCompilation();
+
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo("/app/keys"));
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSession();

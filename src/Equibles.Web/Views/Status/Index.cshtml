@@ -5,150 +5,180 @@
     ViewData["Title"] = "Status";
     var search = ViewData["Search"] as string;
     var sourceFilter = ViewData["SourceFilter"] as string;
+    var activeWorkers = Model.Workers.Count(w => w.Active);
+    var totalWorkers = Model.Workers.Count;
 }
 
 <div class="max-w-6xl mx-auto px-6 py-8 space-y-8">
 
-    <!-- System Status -->
-    <div>
-        <h1 class="text-2xl font-bold mb-6">System Status</h1>
+    <h1 class="text-2xl font-bold">System Status</h1>
 
-        <!-- Database -->
-        <div class="card bg-base-100 shadow-sm mb-6">
-            <div class="card-body py-4">
-                <div class="flex items-center gap-3">
+    <!-- Services Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        <!-- Database Service -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-base-200 rounded-lg p-2">
+                            <icon name="circle-stack" size="5" class="text-base-content/70" />
+                        </div>
+                        <div>
+                            <h2 class="font-semibold">Database</h2>
+                            <p class="text-sm text-base-content/50">PostgreSQL + ParadeDB</p>
+                        </div>
+                    </div>
                     @if (Model.DatabaseConnected) {
-                        <span class="badge badge-success gap-1">Connected</span>
+                        <span class="badge badge-success">Connected</span>
                     } else {
-                        <span class="badge badge-error gap-1">Disconnected</span>
+                        <span class="badge badge-error">Disconnected</span>
                     }
-                    <span class="font-medium">Database</span>
-                    <span class="text-base-content/50 text-sm">PostgreSQL + ParadeDB</span>
                 </div>
             </div>
         </div>
 
-        <!-- Workers -->
+        <!-- Workers Overview Service -->
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body">
-                <h2 class="card-title text-lg mb-4">Workers</h2>
-                <div class="overflow-x-auto">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Worker</th>
-                                <th>Description</th>
-                                <th>Status</th>
-                                <th>Details</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var worker in Model.Workers) {
-                                <tr>
-                                    <td class="font-medium whitespace-nowrap">@worker.Name</td>
-                                    <td class="text-sm text-base-content/60">@worker.Description</td>
-                                    <td>
-                                        @if (worker.Active) {
-                                            <span class="badge badge-success badge-sm">Active</span>
-                                        } else {
-                                            <span class="badge badge-warning badge-sm">Inactive</span>
-                                        }
-                                    </td>
-                                    <td class="text-sm text-base-content/50">@worker.Reason</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-base-200 rounded-lg p-2">
+                            <icon name="cog-6-tooth" size="5" class="text-base-content/70" />
+                        </div>
+                        <div>
+                            <h2 class="font-semibold">Workers</h2>
+                            <p class="text-sm text-base-content/50">Background scrapers &amp; processors</p>
+                        </div>
+                    </div>
+                    @if (activeWorkers == totalWorkers) {
+                        <span class="badge badge-success">@activeWorkers/@totalWorkers active</span>
+                    } else {
+                        <span class="badge badge-warning">@activeWorkers/@totalWorkers active</span>
+                    }
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Errors Section -->
-    <div>
-        <div class="flex items-center justify-between mb-6">
-            <div class="flex items-center gap-4">
-                <h2 class="text-xl font-bold">Errors</h2>
-                @if (Model.UnseenErrorCount > 0) {
-                    <span class="badge badge-warning">@Model.UnseenErrorCount new</span>
+    <!-- Workers Detail -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="card-title text-lg mb-2">Workers</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                @foreach (var worker in Model.Workers) {
+                    <div class="flex items-start gap-3 p-3 rounded-lg bg-base-200/50">
+                        <div class="mt-0.5">
+                            @if (worker.Active) {
+                                <span class="inline-block w-2 h-2 rounded-full bg-success"></span>
+                            } else {
+                                <span class="inline-block w-2 h-2 rounded-full bg-warning"></span>
+                            }
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">@worker.Name</span>
+                                @if (!worker.Active) {
+                                    <span class="badge badge-warning badge-xs">Inactive</span>
+                                }
+                            </div>
+                            <p class="text-xs text-base-content/50 mt-0.5">@worker.Reason</p>
+                        </div>
+                    </div>
                 }
-                <span class="text-sm text-base-content/50">@Model.TotalErrorCount total</span>
             </div>
-            <form asp-action="DeleteAll" class="form-confirm" data-message="Delete ALL errors? This cannot be undone.">
-                @Html.AntiForgeryToken()
-                <button type="submit" class="btn btn-error btn-sm">
-                    <icon name="trash" size="4" /> Delete All
-                </button>
-            </form>
         </div>
+    </div>
 
-        <!-- Source filter buttons -->
-        <div class="flex flex-wrap items-center gap-2 mb-4">
-            <a asp-action="Index" asp-route-search="@search"
-               class="btn btn-sm @(string.IsNullOrEmpty(sourceFilter) ? "btn-primary" : "btn-ghost")">All</a>
-            @foreach (var source in ErrorSource.GetAll()) {
-                <a asp-action="Index" asp-route-source="@source.Value" asp-route-search="@search"
-                   class="btn btn-sm @(sourceFilter == source.Value ? "btn-primary" : "btn-ghost")">@source.Value</a>
+    <!-- Errors -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    <h2 class="card-title text-lg">Errors</h2>
+                    @if (Model.UnseenErrorCount > 0) {
+                        <span class="badge badge-warning">@Model.UnseenErrorCount new</span>
+                    }
+                    <span class="text-sm text-base-content/50">@Model.TotalErrorCount total</span>
+                </div>
+                @if (Model.TotalErrorCount > 0) {
+                    <form asp-action="DeleteAll" class="form-confirm" data-message="Delete ALL errors? This cannot be undone.">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-error btn-sm">
+                            <icon name="trash" size="4" /> Delete All
+                        </button>
+                    </form>
+                }
+            </div>
+
+            <!-- Source filter buttons -->
+            <div class="flex flex-wrap items-center gap-2 mb-4">
+                <a asp-action="Index" asp-route-search="@search"
+                   class="btn btn-xs @(string.IsNullOrEmpty(sourceFilter) ? "btn-primary" : "btn-ghost")">All</a>
+                @foreach (var source in ErrorSource.GetAll()) {
+                    <a asp-action="Index" asp-route-source="@source.Value" asp-route-search="@search"
+                       class="btn btn-xs @(sourceFilter == source.Value ? "btn-primary" : "btn-ghost")">@source.Value</a>
+                }
+            </div>
+
+            <!-- Search -->
+            <form asp-action="Index" class="mb-4">
+                <input type="hidden" name="source" value="@sourceFilter" />
+                <input type="text" name="search" value="@search" placeholder="Search errors..."
+                       class="input input-bordered input-sm w-full max-w-md" />
+            </form>
+
+            @if (Model.RecentErrors.Count == 0) {
+                <div class="text-center py-8 text-base-content/50">
+                    <icon name="check-circle" size="10" class="mx-auto mb-2 opacity-50" />
+                    <p class="text-sm">No errors found</p>
+                </div>
+            } else {
+                <div class="overflow-x-auto">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Source</th>
+                                <th>Context</th>
+                                <th>Message</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th class="w-1"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var error in Model.RecentErrors) {
+                                <tr>
+                                    <td><span class="badge badge-primary badge-xs">@error.Source</span></td>
+                                    <td class="text-sm">@error.Context</td>
+                                    <td class="text-sm">@(error.Message != null && error.Message.Length > 80 ? error.Message[..80] + "..." : error.Message)</td>
+                                    <td>
+                                        @if (error.Seen) {
+                                            <span class="badge badge-ghost badge-xs">Seen</span>
+                                        } else {
+                                            <span class="badge badge-warning badge-xs">New</span>
+                                        }
+                                    </td>
+                                    <td class="whitespace-nowrap text-sm text-base-content/50">@error.CreationTime.ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td>
+                                        <div class="flex items-center gap-1">
+                                            <a asp-action="Show" asp-route-id="@error.Id" class="btn btn-ghost btn-xs">
+                                                <icon name="eye" size="4" />
+                                            </a>
+                                            <form asp-action="Delete" asp-route-id="@error.Id" class="form-confirm" data-message="Delete this error?">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-ghost btn-xs text-error">
+                                                    <icon name="trash" size="4" />
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
             }
         </div>
-
-        <!-- Search -->
-        <form asp-action="Index" class="mb-4">
-            <input type="hidden" name="source" value="@sourceFilter" />
-            <input type="text" name="search" value="@search" placeholder="Search errors..."
-                   class="input input-bordered w-full max-w-md" />
-        </form>
-
-        @if (Model.RecentErrors.Count == 0) {
-            <div class="text-center py-12 text-base-content/50">
-                <icon name="check-circle" size="12" class="mx-auto mb-3" />
-                <p>No errors found</p>
-            </div>
-        } else {
-            <div class="overflow-x-auto">
-                <table class="table table-zebra">
-                    <thead>
-                        <tr>
-                            <th>Source</th>
-                            <th>Context</th>
-                            <th>Message</th>
-                            <th>Status</th>
-                            <th>Created</th>
-                            <th class="w-1"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var error in Model.RecentErrors) {
-                            <tr>
-                                <td><span class="badge badge-primary badge-sm">@error.Source</span></td>
-                                <td>@error.Context</td>
-                                <td>@(error.Message != null && error.Message.Length > 80 ? error.Message[..80] + "..." : error.Message)</td>
-                                <td>
-                                    @if (error.Seen) {
-                                        <span class="badge badge-success badge-sm">Seen</span>
-                                    } else {
-                                        <span class="badge badge-warning badge-sm">New</span>
-                                    }
-                                </td>
-                                <td class="whitespace-nowrap">@error.CreationTime.ToString("yyyy-MM-dd HH:mm")</td>
-                                <td>
-                                    <div class="flex items-center gap-1">
-                                        <a asp-action="Show" asp-route-id="@error.Id" class="btn btn-ghost btn-xs">
-                                            <icon name="eye" size="4" />
-                                        </a>
-                                        <form asp-action="Delete" asp-route-id="@error.Id" class="form-confirm" data-message="Delete this error?">
-                                            @Html.AntiForgeryToken()
-                                            <button type="submit" class="btn btn-ghost btn-xs text-error">
-                                                <icon name="trash" size="4" />
-                                            </button>
-                                        </form>
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
     </div>
 </div>
