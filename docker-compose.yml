@@ -38,6 +38,7 @@ services:
       ConnectionStrings__DefaultConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
       Auth__Username: ${AUTH_USERNAME:-}
       Auth__Password: ${AUTH_PASSWORD:-}
+      McpApiKey: ${MCP_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy

@@ -21,6 +21,7 @@
                     <a asp-action="Index" asp-controller="Home" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Home</a>
                     <a asp-action="Index" asp-controller="Stocks" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Explore Data</a>
                     <a asp-action="Index" asp-controller="Status" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Status</a>
+                    <a asp-action="Connect" asp-controller="Home" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Connect</a>
                 </nav>
             </div>
             <div class="flex items-center gap-2">
@@ -54,6 +55,11 @@
                         <li>
                             <a asp-action="Index" asp-controller="Status">
                                 <icon name="signal" size="4" /> Status
+                            </a>
+                        </li>
+                        <li>
+                            <a asp-action="Connect" asp-controller="Home">
+                                <icon name="link" size="4" /> Connect
                             </a>
                         </li>
                     </ul>

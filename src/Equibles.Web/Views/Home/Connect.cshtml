@@ -1,0 +1,176 @@
+@{
+    ViewData["Title"] = "Connect AI Assistant";
+    var mcpUrl = ViewData["McpUrl"] as string;
+    var apiKey = ViewData["ApiKey"] as string;
+    var hasApiKey = !string.IsNullOrEmpty(apiKey);
+}
+
+<div class="max-w-3xl mx-auto px-6 py-12">
+    <h1 class="text-3xl font-bold mb-2">Connect Your AI Assistant</h1>
+    <p class="text-base-content/70 mb-8">
+        Connect your AI assistant to Equibles via MCP (Model Context Protocol) to query SEC filings, institutional holdings, insider trading, congressional trades, and short data.
+    </p>
+
+    <!-- MCP URL -->
+    <div class="card bg-base-100 shadow-sm mb-6">
+        <div class="card-body p-5">
+            <h2 class="text-lg font-semibold mb-2">MCP Endpoint</h2>
+            <div class="flex items-center gap-2">
+                <code class="bg-base-200 px-3 py-2 rounded text-sm flex-1 select-all overflow-x-auto">@mcpUrl</code>
+                <button class="btn btn-ghost btn-sm btn-copy" data-value="@mcpUrl" title="Copy URL">
+                    <icon name="clipboard-document" size="5" />
+                </button>
+            </div>
+            @if (hasApiKey) {
+                <div class="mt-3">
+                    <span class="text-sm font-medium">API Key</span>
+                    <div class="flex items-center gap-2 mt-1">
+                        <code class="bg-base-200 px-3 py-2 rounded text-sm flex-1 select-all overflow-x-auto">@apiKey</code>
+                        <button class="btn btn-ghost btn-sm btn-copy" data-value="@apiKey" title="Copy API Key">
+                            <icon name="clipboard-document" size="5" />
+                        </button>
+                    </div>
+                </div>
+            } else {
+                <p class="text-sm text-base-content/50 mt-2">No API key required — open access.</p>
+            }
+        </div>
+    </div>
+
+    <!-- Claude Desktop -->
+    <div class="collapse collapse-arrow bg-base-100 shadow-sm mb-3">
+        <input type="radio" name="client-accordion" checked="checked" />
+        <div class="collapse-title font-semibold">Claude Desktop</div>
+        <div class="collapse-content text-sm">
+            <p class="mb-2">Add this to your Claude Desktop config file:</p>
+            <ul class="list-disc list-inside text-base-content/70 mb-3 text-xs">
+                <li><strong>macOS:</strong> <code>~/Library/Application Support/Claude/claude_desktop_config.json</code></li>
+                <li><strong>Windows:</strong> <code>%APPDATA%\Claude\claude_desktop_config.json</code></li>
+            </ul>
+            @{
+                var claudeConfig = hasApiKey
+                    ? "{\n  \"mcpServers\": {\n    \"equibles\": {\n      \"url\": \"" + mcpUrl + "\",\n      \"headers\": {\n        \"Authorization\": \"Bearer " + apiKey + "\"\n      }\n    }\n  }\n}"
+                    : "{\n  \"mcpServers\": {\n    \"equibles\": {\n      \"url\": \"" + mcpUrl + "\"\n    }\n  }\n}";
+            }
+            <div class="relative">
+                <pre class="bg-base-200 p-4 rounded text-xs overflow-x-auto"><code>@claudeConfig</code></pre>
+                <button class="btn btn-ghost btn-xs absolute top-2 right-2 btn-copy" data-value="@claudeConfig" title="Copy">
+                    <icon name="clipboard-document" size="4" />
+                </button>
+            </div>
+            <p class="text-base-content/50 mt-2">Restart Claude Desktop after saving.</p>
+        </div>
+    </div>
+
+    <!-- Claude Code -->
+    <div class="collapse collapse-arrow bg-base-100 shadow-sm mb-3">
+        <input type="radio" name="client-accordion" />
+        <div class="collapse-title font-semibold">Claude Code</div>
+        <div class="collapse-content text-sm">
+            <p class="mb-2">Run this command in your terminal:</p>
+            @{
+                var claudeCodeCmd = hasApiKey
+                    ? "claude mcp add equibles --transport http --header \"Authorization: Bearer " + apiKey + "\" " + mcpUrl
+                    : "claude mcp add equibles --transport http " + mcpUrl;
+            }
+            <div class="relative">
+                <pre class="bg-base-200 p-4 rounded text-xs overflow-x-auto"><code>@claudeCodeCmd</code></pre>
+                <button class="btn btn-ghost btn-xs absolute top-2 right-2 btn-copy" data-value="@claudeCodeCmd" title="Copy">
+                    <icon name="clipboard-document" size="4" />
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ChatGPT Desktop -->
+    <div class="collapse collapse-arrow bg-base-100 shadow-sm mb-3">
+        <input type="radio" name="client-accordion" />
+        <div class="collapse-title font-semibold">ChatGPT Desktop</div>
+        <div class="collapse-content text-sm">
+            <p class="mb-2">Add this to your ChatGPT Desktop config file:</p>
+            <ul class="list-disc list-inside text-base-content/70 mb-3 text-xs">
+                <li><strong>macOS:</strong> <code>~/Library/Application Support/com.openai.chat/mcp.json</code></li>
+                <li><strong>Windows:</strong> <code>%APPDATA%\com.openai.chat\mcp.json</code></li>
+            </ul>
+            @{
+                var chatgptConfig = hasApiKey
+                    ? "{\n  \"servers\": {\n    \"equibles\": {\n      \"url\": \"" + mcpUrl + "\",\n      \"headers\": {\n        \"Authorization\": \"Bearer " + apiKey + "\"\n      }\n    }\n  }\n}"
+                    : "{\n  \"servers\": {\n    \"equibles\": {\n      \"url\": \"" + mcpUrl + "\"\n    }\n  }\n}";
+            }
+            <div class="relative">
+                <pre class="bg-base-200 p-4 rounded text-xs overflow-x-auto"><code>@chatgptConfig</code></pre>
+                <button class="btn btn-ghost btn-xs absolute top-2 right-2 btn-copy" data-value="@chatgptConfig" title="Copy">
+                    <icon name="clipboard-document" size="4" />
+                </button>
+            </div>
+            <p class="text-base-content/50 mt-2">Restart ChatGPT Desktop after saving.</p>
+        </div>
+    </div>
+
+    <!-- Other MCP Clients -->
+    <div class="collapse collapse-arrow bg-base-100 shadow-sm mb-3">
+        <input type="radio" name="client-accordion" />
+        <div class="collapse-title font-semibold">Other MCP Clients</div>
+        <div class="collapse-content text-sm">
+            <p class="mb-3">Any MCP-compatible client can connect using HTTP transport:</p>
+            <table class="table table-sm">
+                <tbody>
+                    <tr>
+                        <td class="font-medium w-32">URL</td>
+                        <td><code class="text-xs">@mcpUrl</code></td>
+                    </tr>
+                    <tr>
+                        <td class="font-medium">Transport</td>
+                        <td><code class="text-xs">HTTP</code></td>
+                    </tr>
+                    @if (hasApiKey) {
+                        <tr>
+                            <td class="font-medium">Auth Header</td>
+                            <td><code class="text-xs">Authorization: Bearer @apiKey</code></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Available Tools -->
+    <div class="mt-8">
+        <h2 class="text-lg font-semibold mb-3">Available Tools</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-4">
+                    <h3 class="font-medium text-sm">SEC Documents</h3>
+                    <p class="text-xs text-base-content/60">Full-text search, semantic search, document browsing, keyword search within filings.</p>
+                </div>
+            </div>
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-4">
+                    <h3 class="font-medium text-sm">Institutional Holdings</h3>
+                    <p class="text-xs text-base-content/60">Top holders, ownership history, institution portfolios, institution search.</p>
+                </div>
+            </div>
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-4">
+                    <h3 class="font-medium text-sm">Insider Trading</h3>
+                    <p class="text-xs text-base-content/60">Insider transactions, ownership summary, insider search.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- Copy-to-clipboard handler -->
+    <script>
+        document.querySelectorAll('.btn-copy').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const value = btn.getAttribute('data-value');
+                navigator.clipboard.writeText(value).then(() => {
+                    btn.classList.add('text-success');
+                    setTimeout(() => btn.classList.remove('text-success'), 1500);
+                });
+            });
+        });
+    </script>
+}
