@@ -7,7 +7,10 @@ using Equibles.Holdings.Mcp.Extensions;
 using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.InsiderTrading.Mcp.Extensions;
 using Equibles.Media.Data.Extensions;
+using Equibles.Mcp.Contracts;
 using Equibles.Mcp.Extensions;
+using Equibles.Mcp.Middleware;
+using Equibles.Mcp.Server;
 using Equibles.Sec.Data.Extensions;
 using Equibles.Sec.Mcp.Extensions;
 using ModelContextProtocol.AspNetCore;
@@ -46,7 +49,13 @@ builder.Services.AddEquiblesMcp(mcp => {
     mcp.AddSec();
 });
 
+builder.Services.AddSingleton<IApiKeyValidator, SimpleApiKeyValidator>();
+
 var app = builder.Build();
+
+app.UseWhen(ctx => ctx.Request.Path.StartsWithSegments("/mcp"), branch => {
+    branch.UseMiddleware<ApiKeyMiddleware>();
+});
 
 app.MapMcp("/mcp");
 

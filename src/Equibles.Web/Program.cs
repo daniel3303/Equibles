@@ -9,7 +9,10 @@ using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.Media.Data.Extensions;
 using Equibles.Sec.Data.Extensions;
 using Equibles.ShortData.Data.Extensions;
+using Equibles.Web.Authentication;
 using Equibles.Web.FlashMessage;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -43,6 +46,22 @@ builder.Services.AddRepositoriesFrom(
 
 builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();
 
+var authSettings = builder.Configuration.GetSection("Auth").Get<AuthSettings>() ?? new AuthSettings();
+builder.Services.Configure<AuthSettings>(builder.Configuration.GetSection("Auth"));
+
+builder.Services.AddAuthentication(EnvAuthHandler.SchemeName)
+    .AddScheme<AuthenticationSchemeOptions, EnvAuthHandler>(EnvAuthHandler.SchemeName, null);
+
+if (authSettings.IsEnabled) {
+    builder.Services.AddAuthorization(options => {
+        options.FallbackPolicy = new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .Build();
+    });
+} else {
+    builder.Services.AddAuthorization();
+}
+
 builder.Services.AddControllersWithViews()
     .AddRazorRuntimeCompilation();
 
@@ -67,8 +86,10 @@ if (!app.Environment.IsDevelopment()) {
 app.UseStaticFiles();
 app.UseRouting();
 app.UseSession();
+app.UseAuthentication();
+app.UseAuthorization();
 
-app.MapHealthChecks("/healthz");
+app.MapHealthChecks("/healthz").AllowAnonymous();
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");

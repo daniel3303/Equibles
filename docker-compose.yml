@@ -23,6 +23,7 @@ services:
       - "8081:8080"
     environment:
       ConnectionStrings__DefaultConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
+      McpApiKey: ${MCP_API_KEY:-}
     depends_on:
       web:
         condition: service_healthy
@@ -35,6 +36,8 @@ services:
       - "8080:8080"
     environment:
       ConnectionStrings__DefaultConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
+      Auth__Username: ${AUTH_USERNAME:-}
+      Auth__Password: ${AUTH_PASSWORD:-}
     depends_on:
       db:
         condition: service_healthy
