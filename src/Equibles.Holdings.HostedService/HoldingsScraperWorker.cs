@@ -1,8 +1,8 @@
 using Equibles.Errors.BusinessLogic;
-
 using Equibles.Errors.Data.Models;
 using Equibles.Holdings.HostedService.Configuration;
 using Equibles.Holdings.HostedService.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
 namespace Equibles.Holdings.HostedService;
@@ -20,17 +20,26 @@ public class HoldingsScraperWorker : BackgroundService {
     private readonly HoldingsScraperOptions _options;
     private readonly TimeSpan _sleepInterval = TimeSpan.FromHours(24);
 
+    private readonly IConfiguration _configuration;
+
     public HoldingsScraperWorker(
         ILogger<HoldingsScraperWorker> logger,
         IServiceScopeFactory scopeFactory,
-        IOptions<HoldingsScraperOptions> options
+        IOptions<HoldingsScraperOptions> options,
+        IConfiguration configuration
     ) {
         _logger = logger;
         _scopeFactory = scopeFactory;
         _options = options.Value;
+        _configuration = configuration;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
+        if (string.IsNullOrEmpty(_configuration["Sec:ContactEmail"])) {
+            _logger.LogWarning("Holdings Scraper stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file.");
+            return;
+        }
+
         while (!stoppingToken.IsCancellationRequested) {
             _logger.LogInformation("Holdings scraper worker running at: {Time}", DateTimeOffset.Now);
             await DoWork(stoppingToken);

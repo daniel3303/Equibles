@@ -6,6 +6,7 @@ using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Extensions;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Integrations.Sec.Models.Responses;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -13,8 +14,8 @@ namespace Equibles.Integrations.Sec;
 
 [Service(ServiceLifetime.Scoped, typeof(ISecEdgarClient))]
 public class SecEdgarClient : ISecEdgarClient {
-    // SEC enforces 10 requests/second per User-Agent; use 8 to leave headroom for browser usage
-    private static readonly IRateLimiter RateLimiter = new RateLimiter(maxRequests: 8, timeWindow: TimeSpan.FromSeconds(1));
+    // SEC has undocumented rolling-window rate limits beyond the 10 req/s rule; use 3 req/s for sustained scraping
+    private static readonly IRateLimiter RateLimiter = new RateLimiter(maxRequests: 3, timeWindow: TimeSpan.FromSeconds(1));
     private const int MaxRetries = 10;
     private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(5);
 
@@ -24,13 +25,19 @@ public class SecEdgarClient : ISecEdgarClient {
     private const string BaseUrl = "https://data.sec.gov";
     private const string FilesBaseUrl = "https://www.sec.gov";
 
-    public SecEdgarClient(HttpClient httpClient, ILogger<SecEdgarClient> logger) {
+    public SecEdgarClient(HttpClient httpClient, ILogger<SecEdgarClient> logger, IConfiguration configuration) {
         _httpClient = httpClient;
         _logger = logger;
 
-        _httpClient.DefaultRequestHeaders.Add("User-Agent", "Equibles Open Source/1.0 (https://github.com/daniel3303/Equibles)");
-        _httpClient.Timeout = TimeSpan.FromMinutes(2);
+        var contactEmail = configuration["Sec:ContactEmail"];
+        if (!string.IsNullOrEmpty(contactEmail)) {
+            _httpClient.DefaultRequestHeaders.Add("User-Agent", $"Equibles Open Source/1.0 ({contactEmail})");
+        } else {
+            _logger.LogWarning("Sec:ContactEmail not configured — SEC EDGAR requests will be blocked (403). " +
+                               "Set SEC_CONTACT_EMAIL in your .env file.");
+        }
 
+        _httpClient.Timeout = TimeSpan.FromMinutes(2);
     }
 
     public async Task<List<CompanyInfo>> GetActiveCompanies() {

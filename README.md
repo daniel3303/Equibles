@@ -23,6 +23,8 @@ The fastest way to get everything running. Requires Docker.
 ```bash
 git clone https://github.com/equibles/equibles.git
 cd equibles
+cp .env.example .env
+# Edit .env and set SEC_CONTACT_EMAIL (required by SEC EDGAR fair access policy)
 docker compose up
 ```
 

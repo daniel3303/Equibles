@@ -129,6 +129,8 @@ public class StatusController : BaseController {
     }
 
     private List<WorkerStatus> BuildWorkerStatuses() {
+        var secContactEmail = _configuration["Sec:ContactEmail"];
+        var secConfigured = !string.IsNullOrEmpty(secContactEmail);
         var finraClientId = _configuration["Finra:ClientId"];
         var embeddingEnabled = _configuration.GetValue<bool>("Embedding:Enabled");
         var embeddingBaseUrl = _configuration["Embedding:BaseUrl"];
@@ -138,34 +140,42 @@ public class StatusController : BaseController {
             new WorkerStatus {
                 Name = "SEC Filing Scraper",
                 Description = "Scrapes 10-K, 10-Q, 8-K filings and Form 3/4 from SEC EDGAR",
-                Active = true,
-                Reason = "Always active"
+                Active = secConfigured,
+                Reason = secConfigured
+                    ? "SEC contact email configured"
+                    : "SEC_CONTACT_EMAIL not set — required by SEC EDGAR fair access policy. Set it in your .env file."
             },
             new WorkerStatus {
                 Name = "Document Processor",
                 Description = "Parses and chunks SEC filings for full-text search",
-                Active = true,
-                Reason = "Always active"
+                Active = secConfigured,
+                Reason = secConfigured
+                    ? "SEC contact email configured"
+                    : "Depends on SEC Filing Scraper (SEC_CONTACT_EMAIL not set)"
             },
             new WorkerStatus {
                 Name = "Holdings Scraper",
                 Description = "Imports institutional ownership from SEC 13F-HR quarterly datasets",
-                Active = true,
-                Reason = "Always active"
+                Active = secConfigured,
+                Reason = secConfigured
+                    ? "SEC contact email configured"
+                    : "SEC_CONTACT_EMAIL not set — required by SEC EDGAR fair access policy. Set it in your .env file."
             },
             new WorkerStatus {
                 Name = "Congressional Trade Scraper",
                 Description = "Syncs House and Senate stock trade disclosures",
                 Active = true,
-                Reason = "Always active"
+                Reason = "Always active — does not use SEC EDGAR"
             },
             new WorkerStatus {
                 Name = "Short Data Scraper",
-                Description = "Imports daily short volume, short interest, and fails-to-deliver from FINRA",
-                Active = !string.IsNullOrEmpty(finraClientId),
-                Reason = string.IsNullOrEmpty(finraClientId)
-                    ? "FINRA API key not configured (Finra:ClientId)"
-                    : "FINRA API key configured"
+                Description = "Imports daily short volume, short interest, and fails-to-deliver from SEC and FINRA",
+                Active = secConfigured,
+                Reason = !secConfigured
+                    ? "SEC_CONTACT_EMAIL not set — required by SEC EDGAR fair access policy. Set it in your .env file."
+                    : string.IsNullOrEmpty(finraClientId)
+                        ? "FTD active, FINRA short volume/interest disabled (Finra:ClientId not configured)"
+                        : "SEC and FINRA configured"
             },
             new WorkerStatus {
                 Name = "Embedding Generator",

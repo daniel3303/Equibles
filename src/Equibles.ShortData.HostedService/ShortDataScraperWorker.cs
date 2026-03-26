@@ -4,6 +4,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Finra.Contracts;
 using Equibles.ShortData.HostedService.Configuration;
 using Equibles.ShortData.HostedService.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
 namespace Equibles.ShortData.HostedService;
@@ -13,17 +14,26 @@ public class ShortDataScraperWorker : BackgroundService {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly TimeSpan _sleepInterval;
 
+    private readonly IConfiguration _configuration;
+
     public ShortDataScraperWorker(
         ILogger<ShortDataScraperWorker> logger,
         IServiceScopeFactory scopeFactory,
-        IOptions<FinraScraperOptions> options
+        IOptions<FinraScraperOptions> options,
+        IConfiguration configuration
     ) {
         _logger = logger;
         _scopeFactory = scopeFactory;
         _sleepInterval = TimeSpan.FromHours(options.Value.SleepIntervalHours);
+        _configuration = configuration;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
+        if (string.IsNullOrEmpty(_configuration["Sec:ContactEmail"])) {
+            _logger.LogWarning("Short Data Scraper stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file.");
+            return;
+        }
+
         while (!stoppingToken.IsCancellationRequested) {
             _logger.LogInformation("Short data scraper worker running at: {Time}", DateTimeOffset.Now);
             await DoWork(stoppingToken);

@@ -1,21 +1,28 @@
 using Equibles.Errors.BusinessLogic;
-
 using Equibles.Errors.Data.Models;
+using Microsoft.Extensions.Configuration;
 
 namespace Equibles.Sec.HostedService;
 
 public class SecScraperWorker : BackgroundService {
     private readonly ILogger<SecScraperWorker> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IConfiguration _configuration;
     private readonly TimeSpan _intervalBetweenExecutions;
 
-    public SecScraperWorker(ILogger<SecScraperWorker> logger, IServiceScopeFactory scopeFactory) {
+    public SecScraperWorker(ILogger<SecScraperWorker> logger, IServiceScopeFactory scopeFactory, IConfiguration configuration) {
         _logger = logger;
         _scopeFactory = scopeFactory;
+        _configuration = configuration;
         _intervalBetweenExecutions = TimeSpan.FromSeconds(15);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
+        if (string.IsNullOrEmpty(_configuration["Sec:ContactEmail"])) {
+            _logger.LogWarning("SEC Filing Scraper stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file.");
+            return;
+        }
+
         while (!stoppingToken.IsCancellationRequested) {
             _logger.LogInformation("Document scraper worker running at: {Time}", DateTimeOffset.Now);
             await DoWork(stoppingToken);
