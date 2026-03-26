@@ -21,12 +21,13 @@ public class StatusBadgeFilter : IAsyncActionFilter {
         if (context.Controller is Controller controller) {
             var unseenErrors = await _errorRepository.GetAll().CountAsync(e => !e.Seen);
 
-            var inactiveWorkers = 0;
-            if (string.IsNullOrEmpty(_configuration["Finra:ClientId"])) inactiveWorkers++;
+            var warnings = 0;
+            if (string.IsNullOrEmpty(_configuration["McpApiKey"])) warnings++;
+            if (string.IsNullOrEmpty(_configuration["Finra:ClientId"])) warnings++;
             var embeddingEnabled = _configuration.GetValue<bool>("Embedding:Enabled");
-            if (!embeddingEnabled || string.IsNullOrEmpty(_configuration["Embedding:BaseUrl"])) inactiveWorkers++;
+            if (!embeddingEnabled || string.IsNullOrEmpty(_configuration["Embedding:BaseUrl"])) warnings++;
 
-            controller.ViewData["StatusBadgeCount"] = unseenErrors + inactiveWorkers;
+            controller.ViewData["StatusBadgeCount"] = unseenErrors + warnings;
         }
 
         await next();

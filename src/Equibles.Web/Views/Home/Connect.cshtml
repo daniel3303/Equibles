@@ -32,7 +32,13 @@
                     </div>
                 </div>
             } else {
-                <p class="text-sm text-base-content/50 mt-2">No API key required — open access.</p>
+                <div class="alert alert-warning mt-3">
+                    <icon name="exclamation-triangle" size="5" />
+                    <div>
+                        <p class="font-semibold text-sm">MCP server is open to everyone</p>
+                        <p class="text-xs">No API key is configured. Anyone with network access can use the MCP server. Set the <code>McpApiKey</code> environment variable to restrict access.</p>
+                    </div>
+                </div>
             }
         </div>
     </div>
@@ -51,6 +57,9 @@
                 var claudeConfig = hasApiKey
                     ? "{\n  \"mcpServers\": {\n    \"equibles\": {\n      \"url\": \"" + mcpUrl + "\",\n      \"headers\": {\n        \"Authorization\": \"Bearer " + apiKey + "\"\n      }\n    }\n  }\n}"
                     : "{\n  \"mcpServers\": {\n    \"equibles\": {\n      \"url\": \"" + mcpUrl + "\"\n    }\n  }\n}";
+            }
+            @if (!hasApiKey) {
+                <p class="text-xs text-base-content/50 mb-2">To enable authentication, set the <code>McpApiKey</code> environment variable and add the <code>headers</code> block to the config below.</p>
             }
             <div class="relative">
                 <pre class="bg-base-200 p-4 rounded text-xs overflow-x-auto"><code>@claudeConfig</code></pre>
@@ -73,6 +82,9 @@
                     ? "claude mcp add equibles --transport http --header \"Authorization: Bearer " + apiKey + "\" " + mcpUrl
                     : "claude mcp add equibles --transport http " + mcpUrl;
             }
+            @if (!hasApiKey) {
+                <p class="text-xs text-base-content/50 mb-2">To enable authentication, set the <code>McpApiKey</code> environment variable and add <code>--header "Authorization: Bearer YOUR_KEY"</code> to the command below.</p>
+            }
             <div class="relative">
                 <pre class="bg-base-200 p-4 rounded text-xs overflow-x-auto"><code>@claudeCodeCmd</code></pre>
                 <button class="btn btn-ghost btn-xs absolute top-2 right-2 btn-copy" data-value="@claudeCodeCmd" title="Copy">
@@ -92,6 +104,9 @@
                 <li><strong>macOS:</strong> <code>~/Library/Application Support/com.openai.chat/mcp.json</code></li>
                 <li><strong>Windows:</strong> <code>%APPDATA%\com.openai.chat\mcp.json</code></li>
             </ul>
+            @if (!hasApiKey) {
+                <p class="text-xs text-base-content/50 mb-2">To enable authentication, set the <code>McpApiKey</code> environment variable and add the <code>headers</code> block to the config below.</p>
+            }
             @{
                 var chatgptConfig = hasApiKey
                     ? "{\n  \"servers\": {\n    \"equibles\": {\n      \"url\": \"" + mcpUrl + "\",\n      \"headers\": {\n        \"Authorization\": \"Bearer " + apiKey + "\"\n      }\n    }\n  }\n}"
@@ -131,31 +146,6 @@
                     }
                 </tbody>
             </table>
-        </div>
-    </div>
-
-    <!-- Available Tools -->
-    <div class="mt-8">
-        <h2 class="text-lg font-semibold mb-3">Available Tools</h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="card bg-base-100 shadow-sm">
-                <div class="card-body p-4">
-                    <h3 class="font-medium text-sm">SEC Documents</h3>
-                    <p class="text-xs text-base-content/60">Full-text search, semantic search, document browsing, keyword search within filings.</p>
-                </div>
-            </div>
-            <div class="card bg-base-100 shadow-sm">
-                <div class="card-body p-4">
-                    <h3 class="font-medium text-sm">Institutional Holdings</h3>
-                    <p class="text-xs text-base-content/60">Top holders, ownership history, institution portfolios, institution search.</p>
-                </div>
-            </div>
-            <div class="card bg-base-100 shadow-sm">
-                <div class="card-body p-4">
-                    <h3 class="font-medium text-sm">Insider Trading</h3>
-                    <p class="text-xs text-base-content/60">Insider transactions, ownership summary, insider search.</p>
-                </div>
-            </div>
         </div>
     </div>
 </div>

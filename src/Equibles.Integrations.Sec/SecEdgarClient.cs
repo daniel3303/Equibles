@@ -13,10 +13,10 @@ namespace Equibles.Integrations.Sec;
 
 [Service(ServiceLifetime.Scoped, typeof(ISecEdgarClient))]
 public class SecEdgarClient : ISecEdgarClient {
-    // SEC enforces 10 requests/second per User-Agent; use 9 for headroom
-    private static readonly IRateLimiter RateLimiter = new RateLimiter(maxRequests: 9, timeWindow: TimeSpan.FromSeconds(1));
-    private const int MaxRetries = 5;
-    private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(1);
+    // SEC enforces 10 requests/second per User-Agent; use 8 to leave headroom for browser usage
+    private static readonly IRateLimiter RateLimiter = new RateLimiter(maxRequests: 8, timeWindow: TimeSpan.FromSeconds(1));
+    private const int MaxRetries = 10;
+    private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(5);
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<SecEdgarClient> _logger;

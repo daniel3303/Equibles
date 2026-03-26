@@ -4,6 +4,7 @@ namespace Equibles.Web.Models;
 
 public class SystemStatusViewModel {
     public bool DatabaseConnected { get; set; }
+    public bool McpApiKeyConfigured { get; set; }
     public List<WorkerStatus> Workers { get; set; } = [];
     public List<Error> RecentErrors { get; set; } = [];
     public int TotalErrorCount { get; set; }

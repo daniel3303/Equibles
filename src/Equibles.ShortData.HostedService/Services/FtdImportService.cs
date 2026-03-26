@@ -83,7 +83,7 @@ public class FtdImportService {
                 if (IsRecentFtdFile(fileName)) {
                     _logger.LogInformation("FTD file {File} not yet available (404), skipping", fileName);
                 } else {
-                    _logger.LogWarning(ex, "FTD file {File} returned 404 but is older than 3 months — possible URL change", fileName);
+                    _logger.LogWarning(ex, "FTD file {File} returned 404 but is older than 2 months — possible URL change", fileName);
                 }
             } catch (HttpRequestException ex) {
                 _logger.LogWarning(ex, "Failed to download FTD file {File}, skipping", fileName);
@@ -280,10 +280,10 @@ public class FtdImportService {
     /// Returns true if the FTD file is for a month within the last 2 months (404 is expected — SEC has 45 days to publish).
     /// </summary>
     private static bool IsRecentFtdFile(string fileName) {
-        // Format: cnsfails{YYYYMM}{a|b}.zip
-        if (fileName.Length >= 18
-            && int.TryParse(fileName.AsSpan(9, 4), out var year)
-            && int.TryParse(fileName.AsSpan(13, 2), out var month)
+        // Format: cnsfails{YYYYMM}{a|b}.zip — "cnsfails" is 8 chars
+        if (fileName.Length >= 17
+            && int.TryParse(fileName.AsSpan(8, 4), out var year)
+            && int.TryParse(fileName.AsSpan(12, 2), out var month)
             && month is >= 1 and <= 12) {
             var fileMonth = new DateOnly(year, month, 1);
             var twoMonthsAgo = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(-2);

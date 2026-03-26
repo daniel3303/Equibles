@@ -54,27 +54,9 @@ This adds:
 
 Without the embedding profile, BM25 full-text search via ParadeDB still works out of the box — vector search is purely additive.
 
-### From Source
+## Configuration
 
-Requires .NET 10 SDK and a PostgreSQL database with pgvector and ParadeDB extensions.
-
-```bash
-# Build
-dotnet build Equibles.sln
-
-# Run the worker (starts all scrapers)
-dotnet run --project src/Equibles.Worker.Host
-
-# Run the MCP server
-dotnet run --project src/Equibles.Mcp.Server
-
-# Connection string (appsettings.json or environment variable)
-ConnectionStrings__DefaultConnection="Host=localhost;Database=equibles;Username=postgres;Password=postgres"
-```
-
-### Configuration
-
-All settings can be configured via a `.env` file in the project root (recommended for Docker) or environment variables:
+All settings can be configured via a `.env` file in the project root (recommended for Docker) or environment variables.
 
 ```env
 # .env
@@ -133,8 +115,6 @@ Each scraper's ticker list is independent — you can sync SEC filings for 500 s
 | `MCP_API_KEY` | — | MCP server API key (auth disabled if empty) |
 
 When set, the web portal requires login and the MCP server requires `Authorization: Bearer <key>` header. When unset, everything is open access (default).
-
-> **How configuration works:** Environment variables and `.env` override values defined in `appsettings.json` and `appsettings.Development.json`. For Docker, `.env` is the recommended approach. When running from source with `dotnet run`, you can also create an `appsettings.Development.json` in the host project (it's gitignored) for local overrides.
 
 ## MCP Server
 
@@ -198,69 +178,9 @@ In OpenClaw, add an MCP server with the URL `http://localhost:8081/mcp` (HTTP tr
 
 Any MCP-compatible client can connect to `http://localhost:8081/mcp` (HTTP transport).
 
-## Architecture
+## Contributing
 
-Each domain is a self-contained module distributed as NuGet packages. A shared `EquiblesDbContext` is composed from modules at startup — you register only what you need:
-
-```csharp
-builder.Services.AddEquiblesDbContext(connectionString, modules => {
-    modules.AddCommonStocks();
-    modules.AddHoldings();
-    modules.AddInsiderTrading();
-    modules.AddCongress();
-    modules.AddShortData();
-    modules.AddSec();
-    modules.AddMedia();
-    modules.AddErrors();
-});
-```
-
-Every module follows the same structure:
-
-```
-Equibles.{Module}.Data            Models + EF configuration
-Equibles.{Module}.Repositories    Data access (BaseRepository<T>)
-Equibles.{Module}.BusinessLogic   Business logic (when needed)
-Equibles.{Module}.Mcp             MCP tools (when applicable)
-Equibles.{Module}.HostedService   Background scrapers (when applicable)
-```
-
-### Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Runtime | .NET 10 |
-| Database | PostgreSQL + pgvector + ParadeDB (BM25 full-text search) |
-| ORM | EF Core 10 with lazy loading proxies |
-| Search | ParadeDB BM25 (built-in) + pgvector semantic search (opt-in) |
-| Embeddings | Ollama with BGE-M3 (opt-in, not required) |
-| MCP | Model Context Protocol server for AI tool integration |
-
-### Module Dependency Graph
-
-```
-Equibles.Data (foundation)
-  Equibles.CommonStocks.Data (foundational — most modules depend on this)
-    Equibles.Holdings.Data
-    Equibles.InsiderTrading.Data
-    Equibles.Congress.Data
-    Equibles.ShortData.Data
-    Equibles.Sec.Data (also depends on Media.Data)
-  Equibles.Media.Data (foundational — file/image storage)
-  Equibles.Errors.Data (standalone)
-```
-
-Modules declare their dependencies automatically. Calling `modules.AddSec()` auto-registers `AddCommonStocks()` and `AddMedia()` if not already added.
-
-## Extending with Custom Modules
-
-The architecture is designed for extension. To add a new domain module:
-
-1. Create `Equibles.YourModule.Data` with models and `IModuleConfiguration`
-2. Create `Equibles.YourModule.Repositories` with `BaseRepository<T>` subclasses
-3. Register with `modules.AddYourModule()` in the host's `Program.cs`
-
-Smart enums (`DocumentType`, `ErrorSource`) can be extended by calling their `Register()` method — no need to modify the open-source packages.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, project architecture, and how to extend the platform.
 
 ## License
 

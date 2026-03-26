@@ -13,6 +13,17 @@
 
     <h1 class="text-2xl font-bold">System Status</h1>
 
+    <!-- Security Warning -->
+    @if (!Model.McpApiKeyConfigured) {
+        <div class="alert alert-warning">
+            <icon name="exclamation-triangle" size="5" />
+            <div>
+                <p class="font-semibold text-sm">MCP server is open to everyone</p>
+                <p class="text-xs">No API key is configured. Anyone with network access can use the MCP server. Set the <code>McpApiKey</code> environment variable to restrict access.</p>
+            </div>
+        </div>
+    }
+
     <!-- Services Grid -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 

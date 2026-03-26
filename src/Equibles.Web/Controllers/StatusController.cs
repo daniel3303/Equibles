@@ -51,6 +51,9 @@ public class StatusController : BaseController {
             status.DatabaseConnected = false;
         }
 
+        // MCP API key
+        status.McpApiKeyConfigured = !string.IsNullOrEmpty(_configuration["McpApiKey"]);
+
         // Worker statuses based on configuration
         status.Workers = BuildWorkerStatuses();
 
