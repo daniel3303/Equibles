@@ -14,8 +14,8 @@ namespace Equibles.Integrations.Sec;
 
 [Service(ServiceLifetime.Scoped, typeof(ISecEdgarClient))]
 public class SecEdgarClient : ISecEdgarClient {
-    // SEC has undocumented rolling-window rate limits beyond the 10 req/s rule; use 3 req/s for sustained scraping
-    private static readonly IRateLimiter RateLimiter = new RateLimiter(maxRequests: 3, timeWindow: TimeSpan.FromSeconds(1));
+    // SEC has undocumented rolling-window rate limits beyond the 10 req/s rule; use 4 req/s for sustained scraping
+    private static readonly IRateLimiter RateLimiter = new RateLimiter(maxRequests: 4, timeWindow: TimeSpan.FromSeconds(1));
     private const int MaxRetries = 10;
     private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(5);
 
