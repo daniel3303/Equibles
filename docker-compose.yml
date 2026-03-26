@@ -40,6 +40,7 @@ services:
       Auth__Username: ${AUTH_USERNAME:-}
       Auth__Password: ${AUTH_PASSWORD:-}
       McpApiKey: ${MCP_API_KEY:-}
+      Sec__ContactEmail: ${SEC_CONTACT_EMAIL:-}
       MinimumLogLevel: ${MINIMUM_LOG_LEVEL:-Warning}
     volumes:
       - web-keys:/app/keys
