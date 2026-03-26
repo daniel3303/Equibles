@@ -28,7 +28,7 @@ public class SecEdgarClient : ISecEdgarClient {
         _httpClient = httpClient;
         _logger = logger;
 
-        _httpClient.DefaultRequestHeaders.Add("User-Agent", "Equibles Integration API/1.0 (contact@equibles.com)");
+        _httpClient.DefaultRequestHeaders.Add("User-Agent", "Equibles Open Source/1.0 (https://github.com/daniel3303/Equibles)");
         _httpClient.Timeout = TimeSpan.FromMinutes(2);
 
     }
@@ -153,7 +153,7 @@ public class SecEdgarClient : ISecEdgarClient {
             var response = await _httpClient.GetAsync(url);
             sw.Stop();
 
-            _logger.LogDebug("SEC request {StatusCode} {Elapsed}ms {Url}",
+            _logger.LogCritical("SEC request {StatusCode} {Elapsed}ms {Url}",
                 (int)response.StatusCode, sw.ElapsedMilliseconds, url);
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests) {
