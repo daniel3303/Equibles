@@ -165,7 +165,7 @@ public class StatusController : BaseController {
                 Name = "Congressional Trade Scraper",
                 Description = "Syncs House and Senate stock trade disclosures",
                 Active = true,
-                Reason = "Always active — does not use SEC EDGAR"
+                Reason = "Always active"
             },
             new WorkerStatus {
                 Name = "Short Data Scraper",
