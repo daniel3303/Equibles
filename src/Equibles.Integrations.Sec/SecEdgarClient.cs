@@ -160,7 +160,7 @@ public class SecEdgarClient : ISecEdgarClient {
             var response = await _httpClient.GetAsync(url);
             sw.Stop();
 
-            _logger.LogCritical("SEC request {StatusCode} {Elapsed}ms {Url}",
+            _logger.LogDebug("SEC request {StatusCode} {Elapsed}ms {Url}",
                 (int)response.StatusCode, sw.ElapsedMilliseconds, url);
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests) {

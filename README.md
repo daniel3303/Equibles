@@ -99,6 +99,18 @@ FinraScraperOptions__TickersToSync__2=GOOGL
 
 Each scraper's ticker list is independent — you can sync SEC filings for 500 stocks but short data for only 10.
 
+**Minimum Scraping Date (optional):**
+
+By default, all scrapers start from January 2020. Set a more recent date for faster initial sync, or go as far back as 2000-01-01 for more historical data:
+
+```env
+# .env — start scraping from 2024 instead of 2020
+DocumentScraperOptions__MinScrapingDate=2024-01-01
+HoldingsScraperOptions__MinScrapingDate=2024-01-01
+CongressScraperOptions__MinScrapingDate=2024-01-01
+FinraScraperOptions__MinScrapingDate=2024-01-01
+```
+
 **Embedding (opt-in):**
 
 | Setting | Default | Description |

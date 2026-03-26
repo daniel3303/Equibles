@@ -9,6 +9,14 @@ public class SystemStatusViewModel {
     public List<Error> RecentErrors { get; set; } = [];
     public int TotalErrorCount { get; set; }
     public int UnseenErrorCount { get; set; }
+
+    // Data counts
+    public int StockCount { get; set; }
+    public int DocumentCount { get; set; }
+    public int InsiderTransactionCount { get; set; }
+    public int CongressionalTradeCount { get; set; }
+    public int InstitutionalHoldingCount { get; set; }
+    public int FailToDeliverCount { get; set; }
 }
 
 public class WorkerStatus {

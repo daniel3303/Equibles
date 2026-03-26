@@ -72,6 +72,41 @@
         </div>
     </div>
 
+    <!-- Data Statistics -->
+    @if (Model.DatabaseConnected) {
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title text-lg mb-2">Data</h2>
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <div class="text-center">
+                        <div class="text-2xl font-bold">@Model.StockCount.ToString("N0")</div>
+                        <div class="text-xs text-base-content/50">Stocks</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold">@Model.DocumentCount.ToString("N0")</div>
+                        <div class="text-xs text-base-content/50">SEC Filings</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold">@Model.InsiderTransactionCount.ToString("N0")</div>
+                        <div class="text-xs text-base-content/50">Insider Transactions</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold">@Model.CongressionalTradeCount.ToString("N0")</div>
+                        <div class="text-xs text-base-content/50">Congressional Trades</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold">@Model.InstitutionalHoldingCount.ToString("N0")</div>
+                        <div class="text-xs text-base-content/50">Institutional Holdings</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold">@Model.FailToDeliverCount.ToString("N0")</div>
+                        <div class="text-xs text-base-content/50">Fails to Deliver</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     <!-- Workers Detail -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body">

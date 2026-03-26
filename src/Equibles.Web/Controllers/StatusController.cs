@@ -1,7 +1,13 @@
+using Equibles.CommonStocks.Data.Models;
+using Equibles.Congress.Data.Models;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Errors.Repositories;
+using Equibles.Holdings.Data.Models;
+using Equibles.InsiderTrading.Data.Models;
+using Equibles.Sec.Data.Models;
+using Equibles.ShortData.Data.Models;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.FlashMessage.Contracts;
 using Equibles.Web.Models;
@@ -49,6 +55,16 @@ public class StatusController : BaseController {
             status.DatabaseConnected = true;
         } catch {
             status.DatabaseConnected = false;
+        }
+
+        // Data counts (only if DB is connected)
+        if (status.DatabaseConnected) {
+            status.StockCount = await _dbContext.Set<CommonStock>().CountAsync();
+            status.DocumentCount = await _dbContext.Set<Document>().CountAsync();
+            status.InsiderTransactionCount = await _dbContext.Set<InsiderTransaction>().CountAsync();
+            status.CongressionalTradeCount = await _dbContext.Set<CongressionalTrade>().CountAsync();
+            status.InstitutionalHoldingCount = await _dbContext.Set<InstitutionalHolding>().CountAsync();
+            status.FailToDeliverCount = await _dbContext.Set<FailToDeliver>().CountAsync();
         }
 
         // MCP API key
