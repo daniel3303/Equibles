@@ -78,6 +78,7 @@ builder.Services.AddScoped<ICompanySyncService, CompanySyncService>();
 builder.Services.AddScoped<IDocumentScraper, DocumentScraper>();
 
 builder.Services.AddHostedService<SecScraperWorker>();
+builder.Services.AddHostedService<DocumentProcessorWorker>();
 builder.Services.AddHostedService<HoldingsScraperWorker>();
 builder.Services.AddHostedService<CongressionalTradeScraperWorker>();
 builder.Services.AddHostedService<ShortDataScraperWorker>();
