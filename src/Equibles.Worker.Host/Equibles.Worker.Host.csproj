@@ -16,6 +16,7 @@
       <ProjectReference Include="..\Equibles.Holdings.HostedService\Equibles.Holdings.HostedService.csproj" />
       <ProjectReference Include="..\Equibles.Congress.HostedService\Equibles.Congress.HostedService.csproj" />
       <ProjectReference Include="..\Equibles.ShortData.HostedService\Equibles.ShortData.HostedService.csproj" />
+      <ProjectReference Include="..\Equibles.Fred.HostedService\Equibles.Fred.HostedService.csproj" />
     </ItemGroup>
 
 </Project>

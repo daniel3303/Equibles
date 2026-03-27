@@ -7,6 +7,7 @@ using Equibles.Errors.Repositories;
 using Equibles.Holdings.Data.Models;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.Sec.Data.Models;
+using Equibles.Fred.Data.Models;
 using Equibles.ShortData.Data.Models;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.FlashMessage.Contracts;
@@ -65,6 +66,7 @@ public class StatusController : BaseController {
             status.CongressionalTradeCount = await _dbContext.Set<CongressionalTrade>().CountAsync();
             status.InstitutionalHoldingCount = await _dbContext.Set<InstitutionalHolding>().CountAsync();
             status.FailToDeliverCount = await _dbContext.Set<FailToDeliver>().CountAsync();
+            status.FredObservationCount = await _dbContext.Set<FredObservation>().CountAsync();
         }
 
         // MCP API key
@@ -148,6 +150,7 @@ public class StatusController : BaseController {
         var secContactEmail = _configuration["Sec:ContactEmail"];
         var secConfigured = !string.IsNullOrEmpty(secContactEmail);
         var finraClientId = _configuration["Finra:ClientId"];
+        var fredApiKey = _configuration["Fred:ApiKey"];
         var embeddingEnabled = _configuration.GetValue<bool>("Embedding:Enabled");
         var embeddingBaseUrl = _configuration["Embedding:BaseUrl"];
         var embeddingModel = _configuration["Embedding:ModelName"];
@@ -192,6 +195,14 @@ public class StatusController : BaseController {
                     : string.IsNullOrEmpty(finraClientId)
                         ? "FTD active, FINRA short volume/interest disabled (Finra:ClientId not configured)"
                         : "SEC and FINRA configured"
+            },
+            new WorkerStatus {
+                Name = "FRED Economic Data Scraper",
+                Description = "Imports economic indicators (interest rates, inflation, employment, GDP, etc.) from the Federal Reserve",
+                Active = !string.IsNullOrEmpty(fredApiKey),
+                Reason = !string.IsNullOrEmpty(fredApiKey)
+                    ? "FRED API key configured"
+                    : "Fred:ApiKey not set — get a free key at fred.stlouisfed.org/docs/api/api_key.html"
             },
             new WorkerStatus {
                 Name = "Embedding Generator",

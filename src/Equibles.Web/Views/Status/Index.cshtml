@@ -77,7 +77,7 @@
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body">
                 <h2 class="card-title text-lg mb-2">Data</h2>
-                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
                     <div class="text-center">
                         <div class="text-2xl font-bold">@Model.StockCount.ToString("N0")</div>
                         <div class="text-xs text-base-content/50">Stocks</div>
@@ -101,6 +101,10 @@
                     <div class="text-center">
                         <div class="text-2xl font-bold">@Model.FailToDeliverCount.ToString("N0")</div>
                         <div class="text-xs text-base-content/50">Fails to Deliver</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold">@Model.FredObservationCount.ToString("N0")</div>
+                        <div class="text-xs text-base-content/50">Economic Indicators</div>
                     </div>
                 </div>
             </div>

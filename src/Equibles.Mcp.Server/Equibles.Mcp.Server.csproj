@@ -13,6 +13,7 @@
       <ProjectReference Include="..\Equibles.Holdings.Mcp\Equibles.Holdings.Mcp.csproj" />
       <ProjectReference Include="..\Equibles.InsiderTrading.Mcp\Equibles.InsiderTrading.Mcp.csproj" />
       <ProjectReference Include="..\Equibles.Sec.Mcp\Equibles.Sec.Mcp.csproj" />
+      <ProjectReference Include="..\Equibles.Fred.Mcp\Equibles.Fred.Mcp.csproj" />
       <ProjectReference Include="..\Equibles.Media.Repositories\Equibles.Media.Repositories.csproj" />
     </ItemGroup>
 

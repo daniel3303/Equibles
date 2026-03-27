@@ -13,6 +13,8 @@ using Equibles.Sec.HostedService;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Services;
+using Equibles.Fred.Data.Extensions;
+using Equibles.Fred.HostedService;
 using Equibles.ShortData.Data.Extensions;
 using Equibles.ShortData.HostedService;
 using Serilog;
@@ -35,6 +37,7 @@ builder.Services.AddEquiblesDbContext(connectionString, modules => {
     modules.AddInsiderTrading();
     modules.AddCongress();
     modules.AddShortData();
+    modules.AddFred();
     modules.AddSec();
     modules.AddMedia();
     modules.AddErrors();
@@ -46,6 +49,7 @@ builder.Services.AddRepositoriesFrom(
     typeof(Equibles.InsiderTrading.Repositories.InsiderOwnerRepository).Assembly,
     typeof(Equibles.Congress.Repositories.CongressMemberRepository).Assembly,
     typeof(Equibles.ShortData.Repositories.DailyShortVolumeRepository).Assembly,
+    typeof(Equibles.Fred.Repositories.FredSeriesRepository).Assembly,
     typeof(Equibles.Sec.Repositories.DocumentRepository).Assembly,
     typeof(Equibles.Media.Repositories.FileRepository).Assembly,
     typeof(Equibles.Errors.Repositories.ErrorRepository).Assembly
@@ -57,6 +61,10 @@ builder.Services.Configure<Equibles.Congress.HostedService.Configuration.Congres
     builder.Configuration.GetSection("CongressScraper"));
 builder.Services.Configure<Equibles.Integrations.Finra.Configuration.FinraOptions>(
     builder.Configuration.GetSection("Finra"));
+builder.Services.Configure<Equibles.Fred.HostedService.Configuration.FredScraperOptions>(
+    builder.Configuration.GetSection("FredScraper"));
+builder.Services.Configure<Equibles.Integrations.Fred.Configuration.FredOptions>(
+    builder.Configuration.GetSection("Fred"));
 
 builder.Services.AddHttpClient();
 
@@ -66,6 +74,8 @@ builder.Services.AutoWireServicesFrom<Equibles.Media.BusinessLogic.FileManager>(
 builder.Services.AutoWireServicesFrom<Equibles.Sec.BusinessLogic.SecDocumentHtmlNormalizer>();
 builder.Services.AutoWireServicesFrom<Equibles.Integrations.Sec.SecEdgarClient>();
 builder.Services.AutoWireServicesFrom<Equibles.Integrations.Finra.FinraClient>();
+builder.Services.AutoWireServicesFrom<Equibles.Integrations.Fred.FredClient>();
+builder.Services.AutoWireServicesFrom<Equibles.Fred.HostedService.Services.FredImportService>();
 builder.Services.AutoWireServicesFrom<Equibles.Sec.HostedService.Services.DocumentManager>();
 builder.Services.AutoWireServicesFrom<Equibles.Congress.HostedService.Services.CongressionalTradeSyncService>();
 builder.Services.AutoWireServicesFrom<Equibles.Holdings.HostedService.Services.HoldingsDataSetClient>();
@@ -82,6 +92,7 @@ builder.Services.AddHostedService<DocumentProcessorWorker>();
 builder.Services.AddHostedService<HoldingsScraperWorker>();
 builder.Services.AddHostedService<CongressionalTradeScraperWorker>();
 builder.Services.AddHostedService<ShortDataScraperWorker>();
+builder.Services.AddHostedService<FredScraperWorker>();
 
 var host = builder.Build();
 host.Run();

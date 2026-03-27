@@ -8,6 +8,7 @@ using Equibles.Holdings.Data.Extensions;
 using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.Media.Data.Extensions;
 using Equibles.Sec.Data.Extensions;
+using Equibles.Fred.Data.Extensions;
 using Equibles.ShortData.Data.Extensions;
 using Equibles.Web.Authentication;
 using Equibles.Web.FlashMessage;
@@ -35,6 +36,7 @@ builder.Services.AddEquiblesDbContext(connectionString, modules => {
     modules.AddInsiderTrading();
     modules.AddCongress();
     modules.AddShortData();
+    modules.AddFred();
     modules.AddSec();
     modules.AddMedia();
     modules.AddErrors();
@@ -46,6 +48,7 @@ builder.Services.AddRepositoriesFrom(
     typeof(Equibles.InsiderTrading.Repositories.InsiderOwnerRepository).Assembly,
     typeof(Equibles.Congress.Repositories.CongressMemberRepository).Assembly,
     typeof(Equibles.ShortData.Repositories.DailyShortVolumeRepository).Assembly,
+    typeof(Equibles.Fred.Repositories.FredSeriesRepository).Assembly,
     typeof(Equibles.Sec.Repositories.DocumentRepository).Assembly,
     typeof(Equibles.Media.Repositories.FileRepository).Assembly,
     typeof(Equibles.Errors.Repositories.ErrorRepository).Assembly

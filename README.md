@@ -13,6 +13,7 @@ Powers [equibles.com](https://equibles.com).
 | **Insider Trading** | SEC Form 3/4 | Director, officer, and 10% owner transactions |
 | **Congressional Trading** | House/Senate disclosures | Stock trades by members of Congress |
 | **Short Data** | FINRA | Daily short volume, short interest, and fails-to-deliver |
+| **Economic Indicators** | FRED (Federal Reserve) | Interest rates, inflation, employment, GDP, yield spreads, and more |
 
 ## Quick Start
 
@@ -35,7 +36,7 @@ This starts:
 | **db** | 5432 | ParadeDB (PostgreSQL + pgvector + pg_search) |
 | **web** | 8080 | Web portal for browsing data |
 | **mcp** | 8081 | MCP server for AI assistants |
-| **worker** | — | Scrapers (SEC, Holdings, Congress, Short Data) |
+| **worker** | — | Scrapers (SEC, Holdings, Congress, Short Data, FRED) |
 
 Data scraping starts automatically. SEC filings, holdings, insider trades, and congressional trades will begin populating within minutes.
 
@@ -76,6 +77,15 @@ To get a key:
 2. Go to **Teams & Apps** and create a new application
 3. Copy the **Client ID** and **Client Secret**
 4. Set `Finra__ClientId` and `Finra__ClientSecret` in your `.env` file or environment variables
+
+**FRED Economic Data (free API key required):**
+
+The FRED scraper requires a free API key from the Federal Reserve Bank of St. Louis. Without it, the scraper skips gracefully and all other scrapers run normally.
+
+To get a key:
+1. Register at [fred.stlouisfed.org/docs/api/api_key.html](https://fred.stlouisfed.org/docs/api/api_key.html)
+2. Copy the 32-character API key
+3. Set `Fred__ApiKey` in your `.env` file or environment variables
 
 **Ticker Filtering (optional):**
 
@@ -137,6 +147,7 @@ The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, 
 - **Institutional Holdings** — Top holders, ownership history, institution portfolios, institution search
 - **Insider Trading** — Insider transactions, ownership summary, insider search
 - **SEC Documents** — Full-text search, semantic search, document browsing, keyword search within filings
+- **Economic Indicators** — FRED data lookup, latest macro snapshot, indicator search across categories
 
 ### Connecting to Claude Desktop
 
@@ -191,6 +202,20 @@ In OpenClaw, add an MCP server with the URL `http://localhost:8081/mcp` (HTTP tr
 ### Other MCP Clients
 
 Any MCP-compatible client can connect to `http://localhost:8081/mcp` (HTTP transport).
+
+## Data Sources
+
+| Data | Source |
+|------|--------|
+| Company Filings (10-K, 10-Q, 8-K) | SEC EDGAR |
+| Institutional Holdings (13F-HR) | SEC EDGAR |
+| Insider Trading (Form 3/4) | SEC EDGAR |
+| Fails-to-Deliver | SEC |
+| Congressional Trading (House) | US House of Representatives Financial Disclosures |
+| Congressional Trading (Senate) | US Senate Electronic Financial Disclosures |
+| Daily Short Volume | FINRA |
+| Short Interest | FINRA |
+| Economic Indicators (interest rates, inflation, employment, GDP, etc.) | FRED (Federal Reserve) |
 
 ## Contributing
 

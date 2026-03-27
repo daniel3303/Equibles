@@ -25,6 +25,7 @@ public class StatusBadgeFilter : IAsyncActionFilter {
             if (string.IsNullOrEmpty(_configuration["Sec:ContactEmail"])) warnings++;
             if (string.IsNullOrEmpty(_configuration["McpApiKey"])) warnings++;
             if (string.IsNullOrEmpty(_configuration["Finra:ClientId"])) warnings++;
+            if (string.IsNullOrEmpty(_configuration["Fred:ApiKey"])) warnings++;
             var embeddingEnabled = _configuration.GetValue<bool>("Embedding:Enabled");
             if (!embeddingEnabled || string.IsNullOrEmpty(_configuration["Embedding:BaseUrl"])) warnings++;
 

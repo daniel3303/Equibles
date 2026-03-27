@@ -2,6 +2,8 @@ using Equibles.CommonStocks.Data.Extensions;
 using Equibles.Core.AutoWiring;
 using Equibles.Data.Extensions;
 using Equibles.Errors.Data.Extensions;
+using Equibles.Fred.Data.Extensions;
+using Equibles.Fred.Mcp.Extensions;
 using Equibles.Holdings.Data.Extensions;
 using Equibles.Holdings.Mcp.Extensions;
 using Equibles.InsiderTrading.Data.Extensions;
@@ -32,6 +34,7 @@ builder.Services.AddEquiblesDbContext(connectionString, modules => {
     modules.AddCommonStocks();
     modules.AddHoldings();
     modules.AddInsiderTrading();
+    modules.AddFred();
     modules.AddSec();
     modules.AddMedia();
     modules.AddErrors();
@@ -41,6 +44,7 @@ builder.Services.AddRepositoriesFrom(
     typeof(Equibles.CommonStocks.Repositories.CommonStockRepository).Assembly,
     typeof(Equibles.Holdings.Repositories.InstitutionalHolderRepository).Assembly,
     typeof(Equibles.InsiderTrading.Repositories.InsiderOwnerRepository).Assembly,
+    typeof(Equibles.Fred.Repositories.FredSeriesRepository).Assembly,
     typeof(Equibles.Sec.Repositories.DocumentRepository).Assembly,
     typeof(Equibles.Media.Repositories.FileRepository).Assembly,
     typeof(Equibles.Errors.Repositories.ErrorRepository).Assembly
@@ -52,6 +56,7 @@ builder.Services.AutoWireServicesFrom<Equibles.Sec.BusinessLogic.Search.RagManag
 builder.Services.AddEquiblesMcp(mcp => {
     mcp.AddHoldings();
     mcp.AddInsiderTrading();
+    mcp.AddFred();
     mcp.AddSec();
 });
 

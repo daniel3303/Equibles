@@ -17,6 +17,7 @@ public class SystemStatusViewModel {
     public int CongressionalTradeCount { get; set; }
     public int InstitutionalHoldingCount { get; set; }
     public int FailToDeliverCount { get; set; }
+    public int FredObservationCount { get; set; }
 }
 
 public class WorkerStatus {

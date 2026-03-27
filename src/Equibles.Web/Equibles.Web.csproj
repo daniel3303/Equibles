@@ -18,6 +18,7 @@
       <ProjectReference Include="..\Equibles.InsiderTrading.Repositories\Equibles.InsiderTrading.Repositories.csproj" />
       <ProjectReference Include="..\Equibles.Congress.Repositories\Equibles.Congress.Repositories.csproj" />
       <ProjectReference Include="..\Equibles.ShortData.Repositories\Equibles.ShortData.Repositories.csproj" />
+      <ProjectReference Include="..\Equibles.Fred.Repositories\Equibles.Fred.Repositories.csproj" />
       <ProjectReference Include="..\Equibles.Sec.Repositories\Equibles.Sec.Repositories.csproj" />
       <ProjectReference Include="..\Equibles.Sec.BusinessLogic\Equibles.Sec.BusinessLogic.csproj" />
       <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
