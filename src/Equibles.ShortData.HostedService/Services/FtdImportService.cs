@@ -5,8 +5,9 @@ using Equibles.Errors.Data.Models;
 using Equibles.ShortData.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.ShortData.Repositories;
-using Equibles.ShortData.HostedService.Configuration;
 using Equibles.Core.AutoWiring;
+using Equibles.Core.Configuration;
+using Equibles.ShortData.HostedService.Configuration;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.ShortData.HostedService.Models;
 using FlexLabs.EntityFrameworkCore.Upsert;
@@ -24,17 +25,20 @@ public class FtdImportService {
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly ILogger<FtdImportService> _logger;
     private readonly FinraScraperOptions _options;
+    private readonly WorkerOptions _workerOptions;
 
     public FtdImportService(
         IServiceScopeFactory scopeFactory,
         ISecEdgarClient secEdgarClient,
         ILogger<FtdImportService> logger,
-        IOptions<FinraScraperOptions> options
+        IOptions<FinraScraperOptions> options,
+        IOptions<WorkerOptions> workerOptions
     ) {
         _scopeFactory = scopeFactory;
         _secEdgarClient = secEdgarClient;
         _logger = logger;
         _options = options.Value;
+        _workerOptions = workerOptions.Value;
     }
 
     public async Task Import(CancellationToken cancellationToken) {
@@ -47,7 +51,7 @@ public class FtdImportService {
             if (latestDate != default) {
                 startDate = latestDate.AddDays(1);
             } else {
-                var minDate = _options.MinScrapingDate ?? new DateTime(2020, 1, 1);
+                var minDate = _workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1);
                 startDate = DateOnly.FromDateTime(minDate);
             }
         }

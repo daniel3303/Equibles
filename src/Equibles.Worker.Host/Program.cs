@@ -2,6 +2,7 @@ using Equibles.CommonStocks.Data.Extensions;
 using Equibles.Congress.Data.Extensions;
 using Equibles.Congress.HostedService;
 using Equibles.Core.AutoWiring;
+using Equibles.Core.Configuration;
 using Equibles.Data.Extensions;
 using Equibles.Errors.Data.Extensions;
 using Equibles.Holdings.Data.Extensions;
@@ -55,12 +56,18 @@ builder.Services.AddRepositoriesFrom(
     typeof(Equibles.Errors.Repositories.ErrorRepository).Assembly
 );
 
+builder.Services.Configure<WorkerOptions>(
+    builder.Configuration.GetSection("Worker"));
 builder.Services.Configure<DocumentScraperOptions>(
     builder.Configuration.GetSection("DocumentScraper"));
+builder.Services.Configure<Equibles.Holdings.HostedService.Configuration.HoldingsScraperOptions>(
+    builder.Configuration.GetSection("HoldingsScraper"));
 builder.Services.Configure<Equibles.Congress.HostedService.Configuration.CongressScraperOptions>(
     builder.Configuration.GetSection("CongressScraper"));
 builder.Services.Configure<Equibles.Integrations.Finra.Configuration.FinraOptions>(
     builder.Configuration.GetSection("Finra"));
+builder.Services.Configure<Equibles.ShortData.HostedService.Configuration.FinraScraperOptions>(
+    builder.Configuration.GetSection("FinraScraper"));
 builder.Services.Configure<Equibles.Fred.HostedService.Configuration.FredScraperOptions>(
     builder.Configuration.GetSection("FredScraper"));
 builder.Services.Configure<Equibles.Integrations.Fred.Configuration.FredOptions>(

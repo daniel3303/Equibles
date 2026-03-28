@@ -1,8 +1,8 @@
 using Equibles.Core.AutoWiring;
+using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Fred.Data.Models;
-using Equibles.Fred.HostedService.Configuration;
 using Equibles.Fred.Repositories;
 using Equibles.Integrations.Fred.Contracts;
 using Microsoft.EntityFrameworkCore;
@@ -19,18 +19,18 @@ public class FredImportService {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<FredImportService> _logger;
     private readonly IFredClient _fredClient;
-    private readonly FredScraperOptions _options;
+    private readonly WorkerOptions _workerOptions;
 
     public FredImportService(
         IServiceScopeFactory scopeFactory,
         ILogger<FredImportService> logger,
         IFredClient fredClient,
-        IOptions<FredScraperOptions> options
+        IOptions<WorkerOptions> workerOptions
     ) {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _fredClient = fredClient;
-        _options = options.Value;
+        _workerOptions = workerOptions.Value;
     }
 
     public async Task Import(CancellationToken cancellationToken) {
@@ -86,8 +86,8 @@ public class FredImportService {
             var obsRepo = scope.ServiceProvider.GetRequiredService<FredObservationRepository>();
             var latestDate = await obsRepo.GetLatestDate(series).FirstOrDefaultAsync(cancellationToken);
 
-            var minDate = _options.MinScrapingDate != null
-                ? DateOnly.FromDateTime(_options.MinScrapingDate.Value)
+            var minDate = _workerOptions.MinSyncDate != null
+                ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
                 : new DateOnly(2020, 1, 1);
 
             // Start from the day after the latest observation, or minDate

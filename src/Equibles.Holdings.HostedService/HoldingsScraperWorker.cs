@@ -1,6 +1,6 @@
+using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
-using Equibles.Holdings.HostedService.Configuration;
 using Equibles.Holdings.HostedService.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
@@ -17,7 +17,7 @@ public class HoldingsScraperWorker : BackgroundService {
 
     private readonly ILogger<HoldingsScraperWorker> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly HoldingsScraperOptions _options;
+    private readonly WorkerOptions _workerOptions;
     private readonly TimeSpan _sleepInterval = TimeSpan.FromHours(24);
 
     private readonly IConfiguration _configuration;
@@ -25,12 +25,12 @@ public class HoldingsScraperWorker : BackgroundService {
     public HoldingsScraperWorker(
         ILogger<HoldingsScraperWorker> logger,
         IServiceScopeFactory scopeFactory,
-        IOptions<HoldingsScraperOptions> options,
+        IOptions<WorkerOptions> workerOptions,
         IConfiguration configuration
     ) {
         _logger = logger;
         _scopeFactory = scopeFactory;
-        _options = options.Value;
+        _workerOptions = workerOptions.Value;
         _configuration = configuration;
     }
 
@@ -53,7 +53,7 @@ public class HoldingsScraperWorker : BackgroundService {
 
     private async Task DoWork(CancellationToken cancellationToken) {
         try {
-            var startDate = _options.MinScrapingDate ?? new DateTime(2020, 1, 1);
+            var startDate = _workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1);
             var minReportDate = DateOnly.FromDateTime(startDate);
             var fileNames = HoldingsDataSetClient.GetDataSetFileNames(startDate);
 

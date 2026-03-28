@@ -4,11 +4,12 @@ using Equibles.Congress.Data.Models;
 using Equibles.Errors.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Repositories;
+using Equibles.Core.AutoWiring;
+using Equibles.Core.Configuration;
 using Equibles.Congress.HostedService.Configuration;
 using Equibles.Congress.HostedService.Models;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
-using Equibles.Core.AutoWiring;
 using Microsoft.Extensions.Options;
 
 namespace Equibles.Congress.HostedService.Services;
@@ -18,20 +19,23 @@ public class CongressionalTradeSyncService {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<CongressionalTradeSyncService> _logger;
     private readonly CongressScraperOptions _options;
+    private readonly WorkerOptions _workerOptions;
 
     public CongressionalTradeSyncService(
         IServiceScopeFactory scopeFactory,
         IOptions<CongressScraperOptions> options,
+        IOptions<WorkerOptions> workerOptions,
         ILogger<CongressionalTradeSyncService> logger
     ) {
         _scopeFactory = scopeFactory;
         _options = options.Value;
+        _workerOptions = workerOptions.Value;
         _logger = logger;
     }
 
     public async Task SyncAll(CancellationToken ct) {
-        var fromDate = _options.MinScrapingDate.HasValue
-            ? DateOnly.FromDateTime(_options.MinScrapingDate.Value)
+        var fromDate = _workerOptions.MinSyncDate.HasValue
+            ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
             : DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
         var toDate = DateOnly.FromDateTime(DateTime.UtcNow);
 

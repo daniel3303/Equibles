@@ -93,32 +93,29 @@ By default, all tickers are synced. To limit data syncing to specific stocks, ad
 
 ```env
 # .env — sync only these tickers (applies to all scrapers)
-DocumentScraperOptions__TickersToSync__0=AAPL
-DocumentScraperOptions__TickersToSync__1=MSFT
-DocumentScraperOptions__TickersToSync__2=GOOGL
-HoldingsScraperOptions__TickersToSync__0=AAPL
-HoldingsScraperOptions__TickersToSync__1=MSFT
-HoldingsScraperOptions__TickersToSync__2=GOOGL
-CongressScraperOptions__TickersToSync__0=AAPL
-CongressScraperOptions__TickersToSync__1=MSFT
-CongressScraperOptions__TickersToSync__2=GOOGL
-FinraScraperOptions__TickersToSync__0=AAPL
-FinraScraperOptions__TickersToSync__1=MSFT
-FinraScraperOptions__TickersToSync__2=GOOGL
+DocumentScraper__TickersToSync__0=AAPL
+DocumentScraper__TickersToSync__1=MSFT
+DocumentScraper__TickersToSync__2=GOOGL
+HoldingsScraper__TickersToSync__0=AAPL
+HoldingsScraper__TickersToSync__1=MSFT
+HoldingsScraper__TickersToSync__2=GOOGL
+CongressScraper__TickersToSync__0=AAPL
+CongressScraper__TickersToSync__1=MSFT
+CongressScraper__TickersToSync__2=GOOGL
+FinraScraper__TickersToSync__0=AAPL
+FinraScraper__TickersToSync__1=MSFT
+FinraScraper__TickersToSync__2=GOOGL
 ```
 
 Each scraper's ticker list is independent — you can sync SEC filings for 500 stocks but short data for only 10.
 
-**Minimum Scraping Date (optional):**
+**Minimum Sync Date (optional):**
 
 By default, all scrapers start from January 2020. Set a more recent date for faster initial sync, or go as far back as 2000-01-01 for more historical data:
 
 ```env
-# .env — start scraping from 2024 instead of 2020
-DocumentScraperOptions__MinScrapingDate=2024-01-01
-HoldingsScraperOptions__MinScrapingDate=2024-01-01
-CongressScraperOptions__MinScrapingDate=2024-01-01
-FinraScraperOptions__MinScrapingDate=2024-01-01
+# .env — start syncing from 2024 instead of 2020
+Worker__MinSyncDate=2024-01-01
 ```
 
 **Embedding (opt-in):**

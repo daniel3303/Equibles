@@ -3,9 +3,10 @@ using Equibles.Errors.Data.Models;
 using Equibles.ShortData.Data.Models;
 using Equibles.ShortData.Repositories;
 using Equibles.Integrations.Finra.Contracts;
+using Equibles.Core.AutoWiring;
+using Equibles.Core.Configuration;
 using Equibles.ShortData.HostedService.Configuration;
 using Microsoft.EntityFrameworkCore;
-using Equibles.Core.AutoWiring;
 using Microsoft.Extensions.Options;
 
 namespace Equibles.ShortData.HostedService.Services;
@@ -19,19 +20,22 @@ public class ShortVolumeImportService {
     private readonly IFinraClient _finraClient;
     private readonly TickerMapService _tickerMapService;
     private readonly FinraScraperOptions _options;
+    private readonly WorkerOptions _workerOptions;
 
     public ShortVolumeImportService(
         IServiceScopeFactory scopeFactory,
         ILogger<ShortVolumeImportService> logger,
         IFinraClient finraClient,
         TickerMapService tickerMapService,
-        IOptions<FinraScraperOptions> options
+        IOptions<FinraScraperOptions> options,
+        IOptions<WorkerOptions> workerOptions
     ) {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _finraClient = finraClient;
         _tickerMapService = tickerMapService;
         _options = options.Value;
+        _workerOptions = workerOptions.Value;
     }
 
     public async Task Import(CancellationToken cancellationToken) {
@@ -44,7 +48,7 @@ public class ShortVolumeImportService {
             if (latestDate != default) {
                 startDate = latestDate.AddDays(1);
             } else {
-                var minDate = _options.MinScrapingDate ?? new DateTime(2020, 1, 1);
+                var minDate = _workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1);
                 startDate = DateOnly.FromDateTime(minDate);
             }
         }

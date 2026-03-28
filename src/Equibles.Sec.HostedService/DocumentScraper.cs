@@ -8,6 +8,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Sec.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
+using Equibles.Core.Configuration;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Extensions;
@@ -25,6 +26,7 @@ public class DocumentScraper : IDocumentScraper {
     private readonly ICompanySyncService _companySyncService;
     private readonly IEnumerable<IFilingProcessor> _filingProcessors;
     private readonly DocumentScraperOptions _options;
+    private readonly WorkerOptions _workerOptions;
     private readonly ILogger<DocumentScraper> _logger;
     private readonly ResiliencePipeline _retryPipeline;
 
@@ -32,12 +34,14 @@ public class DocumentScraper : IDocumentScraper {
         ICompanySyncService companySyncService,
         IEnumerable<IFilingProcessor> filingProcessors,
         IOptions<DocumentScraperOptions> options,
+        IOptions<WorkerOptions> workerOptions,
         ILogger<DocumentScraper> logger
     ) {
         _serviceScopeFactory = serviceScopeFactory;
         _companySyncService = companySyncService;
         _filingProcessors = filingProcessors;
         _options = options.Value;
+        _workerOptions = workerOptions.Value;
         _logger = logger;
         _retryPipeline = BuildRetryPipeline();
     }
@@ -169,7 +173,7 @@ public class DocumentScraper : IDocumentScraper {
             var filings = await secEdgarClient.GetCompanyFilings(
                 company.Cik,
                 secFilter,
-                _options.MinScrapingDate != null ? DateOnly.FromDateTime(_options.MinScrapingDate.Value) : null);
+                _workerOptions.MinSyncDate != null ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value) : null);
 
             _logger.LogDebug("Found {FilingCount} {DocumentType} filings for {Ticker}",
                 filings.Count, documentType, company.Ticker);
