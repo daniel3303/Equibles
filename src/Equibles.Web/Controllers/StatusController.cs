@@ -172,36 +172,53 @@ public class StatusController : BaseController {
         var secContactEmail = _configuration["Sec:ContactEmail"];
         var secConfigured = !string.IsNullOrEmpty(secContactEmail);
         var finraClientId = _configuration["Finra:ClientId"];
+        var finraConfigured = !string.IsNullOrEmpty(finraClientId);
         var fredApiKey = _configuration["Fred:ApiKey"];
+        var fredConfigured = !string.IsNullOrEmpty(fredApiKey);
         var embeddingEnabled = _configuration.GetValue<bool>("Embedding:Enabled");
         var embeddingBaseUrl = _configuration["Embedding:BaseUrl"];
         var embeddingModel = _configuration["Embedding:ModelName"];
 
+        const string secMissing = "SEC_CONTACT_EMAIL not set — required by SEC EDGAR fair access policy";
+
         return [
+            // SEC workers
             new WorkerStatus {
                 Name = "SEC Filing Scraper",
                 Description = "Scrapes 10-K, 10-Q, 8-K filings and Form 3/4 from SEC EDGAR",
                 Active = secConfigured,
-                Reason = secConfigured
-                    ? "SEC contact email configured"
-                    : "SEC_CONTACT_EMAIL not set — required by SEC EDGAR fair access policy. Set it in your .env file."
+                Reason = secConfigured ? "SEC contact email configured" : secMissing
             },
             new WorkerStatus {
                 Name = "Document Processor",
                 Description = "Parses and chunks SEC filings for full-text search",
                 Active = secConfigured,
-                Reason = secConfigured
-                    ? "SEC contact email configured"
-                    : "Depends on SEC Filing Scraper (SEC_CONTACT_EMAIL not set)"
+                Reason = secConfigured ? "SEC contact email configured" : secMissing
             },
             new WorkerStatus {
                 Name = "Holdings Scraper",
                 Description = "Imports institutional ownership from SEC 13F-HR quarterly datasets",
                 Active = secConfigured,
-                Reason = secConfigured
-                    ? "SEC contact email configured"
-                    : "SEC_CONTACT_EMAIL not set — required by SEC EDGAR fair access policy. Set it in your .env file."
+                Reason = secConfigured ? "SEC contact email configured" : secMissing
             },
+            new WorkerStatus {
+                Name = "Fails-to-Deliver Scraper",
+                Description = "Imports FTD data from SEC EDGAR",
+                Active = secConfigured,
+                Reason = secConfigured ? "SEC contact email configured" : secMissing
+            },
+
+            // FINRA worker
+            new WorkerStatus {
+                Name = "FINRA Scraper",
+                Description = "Imports daily short volume and short interest from FINRA",
+                Active = finraConfigured,
+                Reason = finraConfigured
+                    ? "FINRA API credentials configured"
+                    : "Finra:ClientId not set — get a free key at developer.finra.org"
+            },
+
+            // Other workers
             new WorkerStatus {
                 Name = "Congressional Trade Scraper",
                 Description = "Syncs House and Senate stock trade disclosures",
@@ -209,20 +226,10 @@ public class StatusController : BaseController {
                 Reason = "Always active"
             },
             new WorkerStatus {
-                Name = "Short Data Scraper",
-                Description = "Imports daily short volume, short interest, and fails-to-deliver from SEC and FINRA",
-                Active = secConfigured,
-                Reason = !secConfigured
-                    ? "SEC_CONTACT_EMAIL not set — required by SEC EDGAR fair access policy. Set it in your .env file."
-                    : string.IsNullOrEmpty(finraClientId)
-                        ? "FTD active, FINRA short volume/interest disabled (Finra:ClientId not configured)"
-                        : "SEC and FINRA configured"
-            },
-            new WorkerStatus {
                 Name = "FRED Economic Data Scraper",
-                Description = "Imports economic indicators (interest rates, inflation, employment, GDP, etc.) from the Federal Reserve",
-                Active = !string.IsNullOrEmpty(fredApiKey),
-                Reason = !string.IsNullOrEmpty(fredApiKey)
+                Description = "Imports economic indicators from the Federal Reserve (interest rates, inflation, employment, GDP)",
+                Active = fredConfigured,
+                Reason = fredConfigured
                     ? "FRED API key configured"
                     : "Fred:ApiKey not set — get a free key at fred.stlouisfed.org/docs/api/api_key.html"
             },
