@@ -28,6 +28,7 @@ public class DocumentScraper : IDocumentScraper {
     private readonly DocumentScraperOptions _options;
     private readonly WorkerOptions _workerOptions;
     private readonly ILogger<DocumentScraper> _logger;
+    private readonly ErrorReporter _errorReporter;
     private readonly ResiliencePipeline _retryPipeline;
 
     public DocumentScraper(IServiceScopeFactory serviceScopeFactory,
@@ -35,7 +36,8 @@ public class DocumentScraper : IDocumentScraper {
         IEnumerable<IFilingProcessor> filingProcessors,
         IOptions<DocumentScraperOptions> options,
         IOptions<WorkerOptions> workerOptions,
-        ILogger<DocumentScraper> logger
+        ILogger<DocumentScraper> logger,
+        ErrorReporter errorReporter
     ) {
         _serviceScopeFactory = serviceScopeFactory;
         _companySyncService = companySyncService;
@@ -43,6 +45,7 @@ public class DocumentScraper : IDocumentScraper {
         _options = options.Value;
         _workerOptions = workerOptions.Value;
         _logger = logger;
+        _errorReporter = errorReporter;
         _retryPipeline = BuildRetryPipeline();
     }
 
@@ -109,7 +112,7 @@ public class DocumentScraper : IDocumentScraper {
             _logger.LogError(ex, "Error during document scraping process");
             result.Errors++;
             result.ErrorMessages.Add($"General error: {ex.Message}");
-            await ReportError("DocumentScraper.ScrapeDocuments", ex.Message, ex.StackTrace);
+            await _errorReporter.Report(ErrorSource.DocumentScraper, "DocumentScraper.ScrapeDocuments", ex.Message, ex.StackTrace);
         }
 
         return result;
@@ -156,7 +159,7 @@ public class DocumentScraper : IDocumentScraper {
             _logger.LogError(ex, "Error processing documents for company {Ticker}", company.Ticker);
             result.Errors++;
             result.ErrorMessages.Add($"Company {company.Ticker}: {ex.Message}");
-            await ReportError("DocumentScraper.ProcessCompany", ex.Message, ex.StackTrace, $"ticker: {company.Ticker}");
+            await _errorReporter.Report(ErrorSource.DocumentScraper, "DocumentScraper.ProcessCompany", ex.Message, ex.StackTrace, $"ticker: {company.Ticker}");
         }
     }
 
@@ -193,7 +196,7 @@ public class DocumentScraper : IDocumentScraper {
                 documentType, company.Ticker);
             result.Errors++;
             result.ErrorMessages.Add($"Company {company.Ticker} - {documentType}: {ex.Message}");
-            await ReportError("DocumentScraper.ProcessDocType", ex.Message, ex.StackTrace, $"ticker: {company.Ticker}, type: {documentType}");
+            await _errorReporter.Report(ErrorSource.DocumentScraper, "DocumentScraper.ProcessDocType", ex.Message, ex.StackTrace, $"ticker: {company.Ticker}, type: {documentType}");
         }
     }
 
@@ -249,7 +252,7 @@ public class DocumentScraper : IDocumentScraper {
                 company.Ticker, filing.AccessionNumber);
             result.Errors++;
             result.ErrorMessages.Add($"Filing {company.Ticker}/{filing.AccessionNumber}: {ex.Message}");
-            await ReportError("DocumentScraper.ProcessFiling", ex.Message, ex.StackTrace, $"ticker: {company.Ticker}, accession: {filing.AccessionNumber}");
+            await _errorReporter.Report(ErrorSource.DocumentScraper, "DocumentScraper.ProcessFiling", ex.Message, ex.StackTrace, $"ticker: {company.Ticker}, accession: {filing.AccessionNumber}");
         }
     }
 
@@ -314,11 +317,4 @@ public class DocumentScraper : IDocumentScraper {
             .Build();
     }
 
-    private async Task ReportError(string context, string message, string stackTrace, string requestSummary = null) {
-        try {
-            await using var scope = _serviceScopeFactory.CreateAsyncScope();
-            var errorManager = scope.ServiceProvider.GetRequiredService<ErrorManager>();
-            await errorManager.Create(ErrorSource.DocumentScraper, context, message, stackTrace, requestSummary);
-        } catch { }
-    }
 }

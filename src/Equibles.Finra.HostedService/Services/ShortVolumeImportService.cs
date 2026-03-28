@@ -19,6 +19,7 @@ public class ShortVolumeImportService {
     private readonly ILogger<ShortVolumeImportService> _logger;
     private readonly IFinraClient _finraClient;
     private readonly TickerMapService _tickerMapService;
+    private readonly ErrorReporter _errorReporter;
     private readonly FinraScraperOptions _options;
     private readonly WorkerOptions _workerOptions;
 
@@ -27,6 +28,7 @@ public class ShortVolumeImportService {
         ILogger<ShortVolumeImportService> logger,
         IFinraClient finraClient,
         TickerMapService tickerMapService,
+        ErrorReporter errorReporter,
         IOptions<FinraScraperOptions> options,
         IOptions<WorkerOptions> workerOptions
     ) {
@@ -34,6 +36,7 @@ public class ShortVolumeImportService {
         _logger = logger;
         _finraClient = finraClient;
         _tickerMapService = tickerMapService;
+        _errorReporter = errorReporter;
         _options = options.Value;
         _workerOptions = workerOptions.Value;
     }
@@ -131,7 +134,7 @@ public class ShortVolumeImportService {
                 _logger.LogWarning(ex, "Failed to fetch short volume for {Date}, skipping", currentDate);
             } catch (Exception ex) {
                 _logger.LogError(ex, "Error importing short volume for {Date}", currentDate);
-                await ReportError("ShortVolume.ImportDate", ex.Message, ex.StackTrace, $"date: {currentDate}");
+                await _errorReporter.Report(ErrorSource.FinraScraper, "ShortVolume.ImportDate", ex.Message, ex.StackTrace, $"date: {currentDate}");
             }
 
             currentDate = currentDate.AddDays(1);
@@ -145,11 +148,4 @@ public class ShortVolumeImportService {
         await repo.SaveChanges();
     }
 
-    private async Task ReportError(string context, string message, string stackTrace, string requestSummary = null) {
-        try {
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var errorManager = scope.ServiceProvider.GetRequiredService<ErrorManager>();
-            await errorManager.Create(ErrorSource.FinraScraper, context, message, stackTrace, requestSummary);
-        } catch { }
-    }
 }

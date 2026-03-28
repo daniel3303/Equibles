@@ -21,11 +21,14 @@ namespace Equibles.Sec.HostedService.Services;
 public class InsiderTradingFilingProcessor : IFilingProcessor {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<InsiderTradingFilingProcessor> _logger;
+    private readonly ErrorReporter _errorReporter;
 
     public InsiderTradingFilingProcessor(IServiceScopeFactory scopeFactory,
-        ILogger<InsiderTradingFilingProcessor> logger) {
+        ILogger<InsiderTradingFilingProcessor> logger,
+        ErrorReporter errorReporter) {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _errorReporter = errorReporter;
     }
 
     public bool CanProcess(DocumentType documentType) {
@@ -61,7 +64,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         } catch (Exception ex) {
             _logger.LogWarning(ex, "Failed to parse XML for {Ticker} - {AccessionNumber}",
                 companyTicker, filing.AccessionNumber);
-            await ReportError("InsiderTrading.ParseXml", ex.Message, ex.StackTrace, $"ticker: {companyTicker}, accession: {filing.AccessionNumber}");
+            await _errorReporter.Report(ErrorSource.DocumentScraper, "InsiderTrading.ParseXml", ex.Message, ex.StackTrace, $"ticker: {companyTicker}, accession: {filing.AccessionNumber}");
             return false;
         }
 
@@ -285,11 +288,4 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
             System.Globalization.CultureInfo.InvariantCulture, out var result) ? result : 0;
     }
 
-    private async Task ReportError(string context, string message, string stackTrace, string requestSummary = null) {
-        try {
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var errorManager = scope.ServiceProvider.GetRequiredService<ErrorManager>();
-            await errorManager.Create(ErrorSource.DocumentScraper, context, message, stackTrace, requestSummary);
-        } catch { }
-    }
 }

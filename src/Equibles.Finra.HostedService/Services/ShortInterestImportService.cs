@@ -19,6 +19,7 @@ public class ShortInterestImportService {
     private readonly ILogger<ShortInterestImportService> _logger;
     private readonly IFinraClient _finraClient;
     private readonly TickerMapService _tickerMapService;
+    private readonly ErrorReporter _errorReporter;
     private readonly FinraScraperOptions _options;
     private readonly WorkerOptions _workerOptions;
 
@@ -27,6 +28,7 @@ public class ShortInterestImportService {
         ILogger<ShortInterestImportService> logger,
         IFinraClient finraClient,
         TickerMapService tickerMapService,
+        ErrorReporter errorReporter,
         IOptions<FinraScraperOptions> options,
         IOptions<WorkerOptions> workerOptions
     ) {
@@ -34,6 +36,7 @@ public class ShortInterestImportService {
         _logger = logger;
         _finraClient = finraClient;
         _tickerMapService = tickerMapService;
+        _errorReporter = errorReporter;
         _options = options.Value;
         _workerOptions = workerOptions.Value;
     }
@@ -56,7 +59,7 @@ public class ShortInterestImportService {
             settlementDates = await _finraClient.GetShortInterestSettlementDates();
         } catch (Exception ex) {
             _logger.LogError(ex, "Failed to fetch short interest settlement dates");
-            await ReportError("ShortInterest.FetchDates", ex.Message, ex.StackTrace);
+            await _errorReporter.Report(ErrorSource.FinraScraper, "ShortInterest.FetchDates", ex.Message, ex.StackTrace);
             return;
         }
 
@@ -125,7 +128,7 @@ public class ShortInterestImportService {
                 _logger.LogWarning(ex, "Failed to fetch short interest for {Date}, skipping", settlementDate);
             } catch (Exception ex) {
                 _logger.LogError(ex, "Error importing short interest for {Date}", settlementDate);
-                await ReportError("ShortInterest.ImportDate", ex.Message, ex.StackTrace, $"date: {settlementDate}");
+                await _errorReporter.Report(ErrorSource.FinraScraper, "ShortInterest.ImportDate", ex.Message, ex.StackTrace, $"date: {settlementDate}");
             }
         }
     }
@@ -137,11 +140,4 @@ public class ShortInterestImportService {
         await repo.SaveChanges();
     }
 
-    private async Task ReportError(string context, string message, string stackTrace, string requestSummary = null) {
-        try {
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var errorManager = scope.ServiceProvider.GetRequiredService<ErrorManager>();
-            await errorManager.Create(ErrorSource.FinraScraper, context, message, stackTrace, requestSummary);
-        } catch { }
-    }
 }

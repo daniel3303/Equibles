@@ -1,7 +1,6 @@
 using System.IO.Compression;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Data;
-using Equibles.Errors.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Repositories;
@@ -25,15 +24,18 @@ public class HoldingsImportService {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<HoldingsImportService> _logger;
     private readonly HoldingsScraperOptions _options;
+    private readonly ErrorReporter _errorReporter;
 
     public HoldingsImportService(
         IServiceScopeFactory scopeFactory,
         ILogger<HoldingsImportService> logger,
-        IOptions<HoldingsScraperOptions> options
+        IOptions<HoldingsScraperOptions> options,
+        ErrorReporter errorReporter
     ) {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _options = options.Value;
+        _errorReporter = errorReporter;
     }
 
     /// <param name="valueInThousands">
@@ -644,11 +646,4 @@ public class HoldingsImportService {
         };
     }
 
-    private async Task ReportError(string context, string message, string stackTrace, string requestSummary = null) {
-        try {
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var errorManager = scope.ServiceProvider.GetRequiredService<ErrorManager>();
-            await errorManager.Create(ErrorSource.HoldingsScraper, context, message, stackTrace, requestSummary);
-        } catch { }
-    }
 }

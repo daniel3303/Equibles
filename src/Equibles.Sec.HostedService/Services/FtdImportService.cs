@@ -24,6 +24,7 @@ public class FtdImportService {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly ILogger<FtdImportService> _logger;
+    private readonly ErrorReporter _errorReporter;
     private readonly FtdScraperOptions _options;
     private readonly WorkerOptions _workerOptions;
 
@@ -31,12 +32,14 @@ public class FtdImportService {
         IServiceScopeFactory scopeFactory,
         ISecEdgarClient secEdgarClient,
         ILogger<FtdImportService> logger,
+        ErrorReporter errorReporter,
         IOptions<FtdScraperOptions> options,
         IOptions<WorkerOptions> workerOptions
     ) {
         _scopeFactory = scopeFactory;
         _secEdgarClient = secEdgarClient;
         _logger = logger;
+        _errorReporter = errorReporter;
         _options = options.Value;
         _workerOptions = workerOptions.Value;
     }
@@ -93,7 +96,7 @@ public class FtdImportService {
                 _logger.LogWarning(ex, "Failed to download FTD file {File}, skipping", fileName);
             } catch (Exception ex) {
                 _logger.LogError(ex, "Error processing FTD file {File}", fileName);
-                await ReportError("FtdImport.ProcessFile", ex.Message, ex.StackTrace, $"file: {fileName}");
+                await _errorReporter.Report(ErrorSource.FtdScraper, "FtdImport.ProcessFile", ex.Message, ex.StackTrace, $"file: {fileName}");
             }
         }
 
@@ -217,7 +220,7 @@ public class FtdImportService {
         var entry = archive.Entries.FirstOrDefault();
         if (entry == null) {
             _logger.LogError("Empty zip archive for FTD file {File} — SEC format may have changed", fileName);
-            await ReportError("FtdImport.EmptyArchive",
+            await _errorReporter.Report(ErrorSource.FtdScraper, "FtdImport.EmptyArchive",
                 $"Zip archive for {fileName} contains no entries — SEC format may have changed",
                 null, $"file: {fileName}");
             return [];
@@ -296,11 +299,4 @@ public class FtdImportService {
         return false;
     }
 
-    private async Task ReportError(string context, string message, string stackTrace, string requestSummary = null) {
-        try {
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var errorManager = scope.ServiceProvider.GetRequiredService<ErrorManager>();
-            await errorManager.Create(ErrorSource.FtdScraper, context, message, stackTrace, requestSummary);
-        } catch { }
-    }
 }

@@ -20,17 +20,20 @@ public class FredImportService {
     private readonly ILogger<FredImportService> _logger;
     private readonly IFredClient _fredClient;
     private readonly WorkerOptions _workerOptions;
+    private readonly ErrorReporter _errorReporter;
 
     public FredImportService(
         IServiceScopeFactory scopeFactory,
         ILogger<FredImportService> logger,
         IFredClient fredClient,
-        IOptions<WorkerOptions> workerOptions
+        IOptions<WorkerOptions> workerOptions,
+        ErrorReporter errorReporter
     ) {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _fredClient = fredClient;
         _workerOptions = workerOptions.Value;
+        _errorReporter = errorReporter;
     }
 
     public async Task Import(CancellationToken cancellationToken) {
@@ -43,7 +46,7 @@ public class FredImportService {
                 _logger.LogWarning(ex, "Failed to fetch FRED series {SeriesId}, skipping", curated.SeriesId);
             } catch (Exception ex) {
                 _logger.LogError(ex, "Error importing FRED series {SeriesId}", curated.SeriesId);
-                await ReportError("FredImport.ImportSeries", ex.Message, ex.StackTrace, $"seriesId: {curated.SeriesId}");
+                await _errorReporter.Report(ErrorSource.FredScraper, "FredImport.ImportSeries", ex.Message, ex.StackTrace, $"seriesId: {curated.SeriesId}");
             }
         }
     }
@@ -210,13 +213,5 @@ public class FredImportService {
 
     private static DateOnly? ParseDate(string value) {
         return DateOnly.TryParse(value, out var date) ? date : null;
-    }
-
-    private async Task ReportError(string context, string message, string stackTrace, string requestSummary = null) {
-        try {
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var errorManager = scope.ServiceProvider.GetRequiredService<ErrorManager>();
-            await errorManager.Create(ErrorSource.FredScraper, context, message, stackTrace, requestSummary);
-        } catch { }
     }
 }

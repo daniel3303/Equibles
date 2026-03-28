@@ -20,17 +20,20 @@ public class CongressionalTradeSyncService {
     private readonly ILogger<CongressionalTradeSyncService> _logger;
     private readonly CongressScraperOptions _options;
     private readonly WorkerOptions _workerOptions;
+    private readonly ErrorReporter _errorReporter;
 
     public CongressionalTradeSyncService(
         IServiceScopeFactory scopeFactory,
         IOptions<CongressScraperOptions> options,
         IOptions<WorkerOptions> workerOptions,
-        ILogger<CongressionalTradeSyncService> logger
+        ILogger<CongressionalTradeSyncService> logger,
+        ErrorReporter errorReporter
     ) {
         _scopeFactory = scopeFactory;
         _options = options.Value;
         _workerOptions = workerOptions.Value;
         _logger = logger;
+        _errorReporter = errorReporter;
     }
 
     public async Task SyncAll(CancellationToken ct) {
@@ -69,7 +72,7 @@ public class CongressionalTradeSyncService {
             throw;
         } catch (Exception ex) {
             _logger.LogWarning(ex, "Failed to fetch Senate disclosure data");
-            await ReportError("CongressTrades.SyncSenate", ex.Message, ex.StackTrace);
+            await _errorReporter.Report(ErrorSource.CongressScraper, "CongressTrades.SyncSenate", ex.Message, ex.StackTrace);
         }
     }
 
@@ -85,7 +88,7 @@ public class CongressionalTradeSyncService {
             throw;
         } catch (Exception ex) {
             _logger.LogWarning(ex, "Failed to fetch House disclosure data");
-            await ReportError("CongressTrades.SyncHouse", ex.Message, ex.StackTrace);
+            await _errorReporter.Report(ErrorSource.CongressScraper, "CongressTrades.SyncHouse", ex.Message, ex.StackTrace);
         }
     }
 
@@ -182,13 +185,4 @@ public class CongressionalTradeSyncService {
         _logger.LogInformation("Upserted {Count} congressional trades (duplicates skipped)", trades.Count);
     }
 
-    private async Task ReportError(string context, string message, string stackTrace, string requestSummary = null) {
-        try {
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var errorManager = scope.ServiceProvider.GetRequiredService<ErrorManager>();
-            await errorManager.Create(ErrorSource.CongressScraper, context, message, stackTrace, requestSummary);
-        } catch (Exception ex) {
-            _logger.LogWarning(ex, "Failed to report error for {Context}", context);
-        }
-    }
 }
