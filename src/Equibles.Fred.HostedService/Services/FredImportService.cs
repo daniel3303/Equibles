@@ -115,17 +115,32 @@ public class FredImportService {
             return;
         }
 
-        // Load existing dates from startDate onward to filter out duplicates before insert
+        // Parse all dates from API response to determine the range we need to check
+        var apiDates = records
+            .Select(r => DateOnly.TryParse(r.Date, out var d) ? d : (DateOnly?)null)
+            .Where(d => d.HasValue)
+            .Select(d => d.Value)
+            .ToList();
+
+        if (apiDates.Count == 0) {
+            _logger.LogDebug("No parseable dates in FRED API response for {SeriesId}", curated.SeriesId);
+            return;
+        }
+
+        var minApiDate = apiDates.Min();
+        var maxApiDate = apiDates.Max();
+
+        // Load existing dates that overlap with the API response range
         HashSet<DateOnly> existingDates;
         using (var scope = _scopeFactory.CreateScope()) {
             var obsRepo = scope.ServiceProvider.GetRequiredService<FredObservationRepository>();
-            existingDates = (await obsRepo.GetBySeries(series, startDate, DateOnly.FromDateTime(DateTime.UtcNow))
+            existingDates = (await obsRepo.GetBySeries(series, minApiDate, maxApiDate)
                 .Select(o => o.Date)
                 .ToListAsync(cancellationToken)).ToHashSet();
         }
 
-        _logger.LogDebug("FRED series {SeriesId}: found {Count} existing observations from {StartDate}",
-            curated.SeriesId, existingDates.Count, startDate);
+        _logger.LogDebug("FRED series {SeriesId}: API returned {ApiCount} observations ({MinDate} to {MaxDate}), {ExistingCount} already in DB",
+            curated.SeriesId, records.Count, minApiDate, maxApiDate, existingDates.Count);
 
         // Build new observations, skipping any that already exist
         var batch = new List<FredObservation>(InsertBatchSize);
