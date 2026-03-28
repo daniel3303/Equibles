@@ -169,65 +169,39 @@ public class StatusController : BaseController {
     }
 
     private List<WorkerStatus> BuildWorkerStatuses() {
-        var secContactEmail = _configuration["Sec:ContactEmail"];
-        var secConfigured = !string.IsNullOrEmpty(secContactEmail);
-        var finraClientId = _configuration["Finra:ClientId"];
-        var finraConfigured = !string.IsNullOrEmpty(finraClientId);
-        var fredApiKey = _configuration["Fred:ApiKey"];
-        var fredConfigured = !string.IsNullOrEmpty(fredApiKey);
+        var secConfigured = !string.IsNullOrEmpty(_configuration["Sec:ContactEmail"]);
+        var finraConfigured = !string.IsNullOrEmpty(_configuration["Finra:ClientId"]);
+        var fredConfigured = !string.IsNullOrEmpty(_configuration["Fred:ApiKey"]);
         var embeddingEnabled = _configuration.GetValue<bool>("Embedding:Enabled");
         var embeddingBaseUrl = _configuration["Embedding:BaseUrl"];
         var embeddingModel = _configuration["Embedding:ModelName"];
 
-        const string secMissing = "SEC_CONTACT_EMAIL not set — required by SEC EDGAR fair access policy";
-
         return [
-            // SEC workers
             new WorkerStatus {
-                Name = "SEC Filing Scraper",
-                Description = "Scrapes 10-K, 10-Q, 8-K filings and Form 3/4 from SEC EDGAR",
+                Name = "SEC Scraper",
+                Description = "Filings (10-K, 10-Q, 8-K, Form 3/4), document processing, institutional holdings (13F-HR), and fails-to-deliver",
                 Active = secConfigured,
-                Reason = secConfigured ? "SEC contact email configured" : secMissing
+                Reason = secConfigured
+                    ? "SEC contact email configured"
+                    : "SEC_CONTACT_EMAIL not set — required by SEC EDGAR fair access policy"
             },
-            new WorkerStatus {
-                Name = "Document Processor",
-                Description = "Parses and chunks SEC filings for full-text search",
-                Active = secConfigured,
-                Reason = secConfigured ? "SEC contact email configured" : secMissing
-            },
-            new WorkerStatus {
-                Name = "Holdings Scraper",
-                Description = "Imports institutional ownership from SEC 13F-HR quarterly datasets",
-                Active = secConfigured,
-                Reason = secConfigured ? "SEC contact email configured" : secMissing
-            },
-            new WorkerStatus {
-                Name = "Fails-to-Deliver Scraper",
-                Description = "Imports FTD data from SEC EDGAR",
-                Active = secConfigured,
-                Reason = secConfigured ? "SEC contact email configured" : secMissing
-            },
-
-            // FINRA worker
             new WorkerStatus {
                 Name = "FINRA Scraper",
-                Description = "Imports daily short volume and short interest from FINRA",
+                Description = "Daily short volume and short interest",
                 Active = finraConfigured,
                 Reason = finraConfigured
                     ? "FINRA API credentials configured"
                     : "Finra:ClientId not set — get a free key at developer.finra.org"
             },
-
-            // Other workers
             new WorkerStatus {
                 Name = "Congressional Trade Scraper",
-                Description = "Syncs House and Senate stock trade disclosures",
+                Description = "House and Senate stock trade disclosures",
                 Active = true,
                 Reason = "Always active"
             },
             new WorkerStatus {
-                Name = "FRED Economic Data Scraper",
-                Description = "Imports economic indicators from the Federal Reserve (interest rates, inflation, employment, GDP)",
+                Name = "FRED Scraper",
+                Description = "Economic indicators from the Federal Reserve (interest rates, inflation, employment, GDP)",
                 Active = fredConfigured,
                 Reason = fredConfigured
                     ? "FRED API key configured"
@@ -235,7 +209,7 @@ public class StatusController : BaseController {
             },
             new WorkerStatus {
                 Name = "Embedding Generator",
-                Description = "Generates vector embeddings for semantic search over SEC filings",
+                Description = "Vector embeddings for semantic search over SEC filings",
                 Active = embeddingEnabled && !string.IsNullOrEmpty(embeddingBaseUrl),
                 Reason = !embeddingEnabled
                     ? "Disabled (Embedding:Enabled = false)"
