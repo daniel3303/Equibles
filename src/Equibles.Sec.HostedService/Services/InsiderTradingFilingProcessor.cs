@@ -244,7 +244,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         };
     }
 
-    private static string SanitizeXml(string xml) {
+    internal static string SanitizeXml(string xml) {
         // SEC filings wrap the actual XML inside an SGML envelope.
         // Extract the XML content from within <XML>...</XML> tags.
         var xmlStart = xml.IndexOf("<XML>", StringComparison.OrdinalIgnoreCase);
@@ -257,7 +257,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         return Regex.Replace(xml, @"&(?!(amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)", "&amp;");
     }
 
-    private static TransactionCode ParseTransactionCode(string code) {
+    internal static TransactionCode ParseTransactionCode(string code) {
         return code?.ToUpperInvariant() switch {
             "P" => TransactionCode.Purchase,
             "S" => TransactionCode.Sale,
@@ -273,16 +273,16 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         };
     }
 
-    private static bool ParseBool(string value) {
+    internal static bool ParseBool(string value) {
         return value is "1" or "true" or "True" or "TRUE";
     }
 
-    private static long ParseLong(string value) {
+    internal static long ParseLong(string value) {
         if (string.IsNullOrEmpty(value)) return 0;
         return long.TryParse(value, out var result) ? result : (long)ParseDecimal(value);
     }
 
-    private static decimal ParseDecimal(string value) {
+    internal static decimal ParseDecimal(string value) {
         if (string.IsNullOrEmpty(value)) return 0;
         return decimal.TryParse(value, System.Globalization.NumberStyles.Any,
             System.Globalization.CultureInfo.InvariantCulture, out var result) ? result : 0;
