@@ -10,9 +10,9 @@ public class TsvParserTests {
     [Fact]
     public async Task ParseEntry_ValidTsv_ReturnsRows() {
         var tsv = "NAME\tAGE\tCITY\nAlice\t30\tNew York\nBob\t25\tBoston";
-        var entry = CreateZipEntry(tsv);
+        using var archive = CreateZipArchive(tsv);
 
-        var rows = await CollectRows(entry);
+        var rows = await CollectRows(archive.Entries[0]);
 
         rows.Should().HaveCount(2);
         rows[0]["NAME"].Should().Be("Alice");
@@ -23,10 +23,10 @@ public class TsvParserTests {
 
     [Fact]
     public async Task ParseEntry_HeadersAreCaseInsensitive() {
-        var tsv = "Name\tAge\n Alice\t30";
-        var entry = CreateZipEntry(tsv);
+        var tsv = "Name\tAge\nAlice\t30";
+        using var archive = CreateZipArchive(tsv);
 
-        var rows = await CollectRows(entry);
+        var rows = await CollectRows(archive.Entries[0]);
 
         rows[0]["name"].Should().Be("Alice");
         rows[0]["NAME"].Should().Be("Alice");
@@ -36,9 +36,9 @@ public class TsvParserTests {
     [Fact]
     public async Task ParseEntry_EmptyLinesAreSkipped() {
         var tsv = "COL\nA\n\n  \nB";
-        var entry = CreateZipEntry(tsv);
+        using var archive = CreateZipArchive(tsv);
 
-        var rows = await CollectRows(entry);
+        var rows = await CollectRows(archive.Entries[0]);
 
         rows.Should().HaveCount(2);
         rows[0]["COL"].Should().Be("A");
@@ -48,17 +48,18 @@ public class TsvParserTests {
     [Fact]
     public async Task ParseEntry_HeaderOnly_ReturnsNoRows() {
         var tsv = "COL1\tCOL2";
-        var entry = CreateZipEntry(tsv);
+        using var archive = CreateZipArchive(tsv);
 
-        var rows = await CollectRows(entry);
+        var rows = await CollectRows(archive.Entries[0]);
 
         rows.Should().BeEmpty();
     }
 
     [Fact]
     public async Task ParseEntry_EmptyFile_ReturnsNoRows() {
-        var entry = CreateZipEntry("");
-        var rows = await CollectRows(entry);
+        using var archive = CreateZipArchive("");
+
+        var rows = await CollectRows(archive.Entries[0]);
 
         rows.Should().BeEmpty();
     }
@@ -66,9 +67,9 @@ public class TsvParserTests {
     [Fact]
     public async Task ParseEntry_FewerValuesThanHeaders_MapsAvailableColumns() {
         var tsv = "A\tB\tC\n1\t2";
-        var entry = CreateZipEntry(tsv);
+        using var archive = CreateZipArchive(tsv);
 
-        var rows = await CollectRows(entry);
+        var rows = await CollectRows(archive.Entries[0]);
 
         rows.Should().ContainSingle();
         rows[0].Should().ContainKey("A");
@@ -79,26 +80,24 @@ public class TsvParserTests {
     [Fact]
     public async Task ParseEntry_TrimsWhitespace() {
         var tsv = " NAME \t AGE \n Alice \t 30 ";
-        var entry = CreateZipEntry(tsv);
+        using var archive = CreateZipArchive(tsv);
 
-        var rows = await CollectRows(entry);
+        var rows = await CollectRows(archive.Entries[0]);
 
         rows[0]["NAME"].Should().Be("Alice");
         rows[0]["AGE"].Should().Be("30");
     }
 
-    private ZipArchiveEntry CreateZipEntry(string content) {
+    private static ZipArchive CreateZipArchive(string content) {
         var stream = new MemoryStream();
-        var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
-        var entry = archive.CreateEntry("data.tsv");
-        using (var writer = new StreamWriter(entry.Open(), Encoding.UTF8)) {
+        using (var writeArchive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true)) {
+            var entry = writeArchive.CreateEntry("data.tsv");
+            using var writer = new StreamWriter(entry.Open(), Encoding.UTF8);
             writer.Write(content);
         }
-        archive.Dispose();
 
         stream.Position = 0;
-        var readArchive = new ZipArchive(stream, ZipArchiveMode.Read);
-        return readArchive.Entries[0];
+        return new ZipArchive(stream, ZipArchiveMode.Read);
     }
 
     private async Task<List<Dictionary<string, string>>> CollectRows(ZipArchiveEntry entry) {
