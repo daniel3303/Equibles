@@ -11,7 +11,13 @@
 
 <div class="max-w-6xl mx-auto px-6 py-8 space-y-8">
 
-    <h1 class="text-2xl font-bold">System Status</h1>
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold">System Status</h1>
+        <div class="flex items-center gap-2 text-sm text-base-content/50" data-status-refresh-indicator>
+            <span class="loading loading-ring loading-xs hidden" data-status-spinner></span>
+            <span data-status-countdown></span>
+        </div>
+    </div>
 
     <!-- Security Warning -->
     @if (!Model.McpApiKeyConfigured) {
@@ -41,9 +47,9 @@
                         </div>
                     </div>
                     @if (Model.DatabaseConnected) {
-                        <span class="badge badge-success">Connected</span>
+                        <span class="badge badge-success" data-status-db>Connected</span>
                     } else {
-                        <span class="badge badge-error">Disconnected</span>
+                        <span class="badge badge-error" data-status-db>Disconnected</span>
                     }
                 </div>
             </div>
@@ -63,9 +69,9 @@
                         </div>
                     </div>
                     @if (activeWorkers == totalWorkers) {
-                        <span class="badge badge-success">@activeWorkers/@totalWorkers active</span>
+                        <span class="badge badge-success" data-status-workers>@activeWorkers/@totalWorkers active</span>
                     } else {
-                        <span class="badge badge-warning">@activeWorkers/@totalWorkers active</span>
+                        <span class="badge badge-warning" data-status-workers>@activeWorkers/@totalWorkers active</span>
                     }
                 </div>
             </div>
@@ -73,66 +79,66 @@
     </div>
 
     <!-- Data Statistics -->
-    @if (Model.DatabaseConnected) {
-        <div class="card bg-base-100 shadow-sm">
-            <div class="card-body">
-                <h2 class="card-title text-lg mb-2">Data</h2>
-                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-                    <div class="text-center">
-                        <div class="text-2xl font-bold">@Model.StockCount.ToString("N0")</div>
-                        <div class="text-xs text-base-content/50">Stocks</div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-2xl font-bold">@Model.DocumentCount.ToString("N0")</div>
-                        <div class="text-xs text-base-content/50">SEC Filings</div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-2xl font-bold">@Model.InsiderTransactionCount.ToString("N0")</div>
-                        <div class="text-xs text-base-content/50">Insider Transactions</div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-2xl font-bold">@Model.CongressionalTradeCount.ToString("N0")</div>
-                        <div class="text-xs text-base-content/50">Congressional Trades</div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-2xl font-bold">@Model.InstitutionalHoldingCount.ToString("N0")</div>
-                        <div class="text-xs text-base-content/50">Institutional Holdings</div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-2xl font-bold">@Model.FailToDeliverCount.ToString("N0")</div>
-                        <div class="text-xs text-base-content/50">Fails to Deliver</div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-2xl font-bold">@Model.FredObservationCount.ToString("N0")</div>
-                        <div class="text-xs text-base-content/50">Economic Indicators</div>
-                    </div>
+    <div class="card bg-base-100 shadow-sm @(!Model.DatabaseConnected ? "hidden" : "")" data-status-data-card>
+        <div class="card-body">
+            <h2 class="card-title text-lg mb-2">Data</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                <div class="text-center">
+                    <div class="text-2xl font-bold" data-status-count="StockCount">@Model.StockCount.ToString("N0")</div>
+                    <div class="text-xs text-base-content/50">Stocks</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold" data-status-count="DocumentCount">@Model.DocumentCount.ToString("N0")</div>
+                    <div class="text-xs text-base-content/50">SEC Filings</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold" data-status-count="InsiderTransactionCount">@Model.InsiderTransactionCount.ToString("N0")</div>
+                    <div class="text-xs text-base-content/50">Insider Transactions</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold" data-status-count="CongressionalTradeCount">@Model.CongressionalTradeCount.ToString("N0")</div>
+                    <div class="text-xs text-base-content/50">Congressional Trades</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold" data-status-count="InstitutionalHoldingCount">@Model.InstitutionalHoldingCount.ToString("N0")</div>
+                    <div class="text-xs text-base-content/50">Institutional Holdings</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold" data-status-count="FailToDeliverCount">@Model.FailToDeliverCount.ToString("N0")</div>
+                    <div class="text-xs text-base-content/50">Fails to Deliver</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold" data-status-count="FredObservationCount">@Model.FredObservationCount.ToString("N0")</div>
+                    <div class="text-xs text-base-content/50">Economic Indicators</div>
                 </div>
             </div>
         </div>
-    }
+    </div>
 
     <!-- Workers Detail -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body">
             <h2 class="card-title text-lg mb-2">Workers</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3" data-status-worker-grid>
                 @foreach (var worker in Model.Workers) {
-                    <div class="flex items-start gap-3 p-3 rounded-lg bg-base-200/50">
+                    <div class="flex items-start gap-3 p-3 rounded-lg bg-base-200/50" data-status-worker="@worker.Name">
                         <div class="mt-0.5">
                             @if (worker.Active) {
-                                <span class="inline-block w-2 h-2 rounded-full bg-success"></span>
+                                <span class="inline-block w-2 h-2 rounded-full bg-success" data-status-worker-dot></span>
                             } else {
-                                <span class="inline-block w-2 h-2 rounded-full bg-warning"></span>
+                                <span class="inline-block w-2 h-2 rounded-full bg-warning" data-status-worker-dot></span>
                             }
                         </div>
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center gap-2">
                                 <span class="font-medium text-sm">@worker.Name</span>
                                 @if (!worker.Active) {
-                                    <span class="badge badge-warning badge-xs">Inactive</span>
+                                    <span class="badge badge-warning badge-xs" data-status-worker-badge>Inactive</span>
+                                } else {
+                                    <span class="badge badge-warning badge-xs hidden" data-status-worker-badge>Inactive</span>
                                 }
                             </div>
-                            <p class="text-xs text-base-content/50 mt-0.5">@worker.Reason</p>
+                            <p class="text-xs text-base-content/50 mt-0.5" data-status-worker-reason>@worker.Reason</p>
                         </div>
                     </div>
                 }
@@ -147,9 +153,11 @@
                 <div class="flex items-center gap-3">
                     <h2 class="card-title text-lg">Errors</h2>
                     @if (Model.UnseenErrorCount > 0) {
-                        <span class="badge badge-warning">@Model.UnseenErrorCount new</span>
+                        <span class="badge badge-warning" data-status-unseen-errors>@Model.UnseenErrorCount new</span>
+                    } else {
+                        <span class="badge badge-warning hidden" data-status-unseen-errors>0 new</span>
                     }
-                    <span class="text-sm text-base-content/50">@Model.TotalErrorCount total</span>
+                    <span class="text-sm text-base-content/50" data-status-total-errors>@Model.TotalErrorCount total</span>
                 </div>
                 @if (Model.TotalErrorCount > 0) {
                     <form asp-action="DeleteAll" class="form-confirm" data-message="Delete ALL errors? This cannot be undone.">
@@ -232,3 +240,136 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        // Live refresh — polls /Status/Data every 30s and updates dynamic elements in-place
+        (function () {
+            const INTERVAL = 30; // seconds between refreshes
+            const DATA_URL = '@Url.Action("Data", "Status")';
+
+            const spinner = document.querySelector('[data-status-spinner]');
+            const countdown = document.querySelector('[data-status-countdown]');
+            let remaining = INTERVAL;
+            let refreshing = false;
+            let timer = null;
+
+            // Format a number with locale-aware thousand separators
+            function formatNumber(n) {
+                return n.toLocaleString();
+            }
+
+            // Update the database connection badge
+            function updateDatabase(connected) {
+                const badge = document.querySelector('[data-status-db]');
+                if (!badge) return;
+                badge.textContent = connected ? 'Connected' : 'Disconnected';
+                badge.className = connected ? 'badge badge-success' : 'badge badge-error';
+
+                // Show/hide data card when DB state changes
+                const dataCard = document.querySelector('[data-status-data-card]');
+                if (dataCard) dataCard.classList.toggle('hidden', !connected);
+            }
+
+            // Update the workers overview badge
+            function updateWorkersBadge(active, total) {
+                const badge = document.querySelector('[data-status-workers]');
+                if (!badge) return;
+                badge.textContent = active + '/' + total + ' active';
+                badge.className = active === total ? 'badge badge-success' : 'badge badge-warning';
+            }
+
+            // Update individual data count elements
+            function updateDataCounts(counts) {
+                for (const key in counts) {
+                    const el = document.querySelector('[data-status-count="' + key + '"]');
+                    if (el) el.textContent = formatNumber(counts[key]);
+                }
+            }
+
+            // Update worker detail cards (dot color, badge visibility, reason text)
+            function updateWorkers(workers) {
+                for (const w of workers) {
+                    const card = document.querySelector('[data-status-worker="' + w.name + '"]');
+                    if (!card) continue;
+
+                    const dot = card.querySelector('[data-status-worker-dot]');
+                    if (dot) {
+                        dot.className = 'inline-block w-2 h-2 rounded-full ' + (w.active ? 'bg-success' : 'bg-warning');
+                    }
+
+                    const badge = card.querySelector('[data-status-worker-badge]');
+                    if (badge) badge.classList.toggle('hidden', w.active);
+
+                    const reason = card.querySelector('[data-status-worker-reason]');
+                    if (reason) reason.textContent = w.reason;
+                }
+            }
+
+            // Update error count badges
+            function updateErrors(totalCount, unseenCount) {
+                const unseenBadge = document.querySelector('[data-status-unseen-errors]');
+                if (unseenBadge) {
+                    unseenBadge.textContent = unseenCount + ' new';
+                    unseenBadge.classList.toggle('hidden', unseenCount === 0);
+                }
+
+                const totalEl = document.querySelector('[data-status-total-errors]');
+                if (totalEl) totalEl.textContent = totalCount + ' total';
+            }
+
+            // Fetch fresh status data and update the page
+            function refresh() {
+                if (refreshing) return;
+                refreshing = true;
+                spinner.classList.remove('hidden');
+                fetch(DATA_URL)
+                    .then(function (r) {
+                        if (!r.ok) throw new Error('HTTP ' + r.status);
+                        return r.json();
+                    })
+                    .then(function (data) {
+                        updateDatabase(data.databaseConnected);
+                        updateWorkersBadge(data.activeWorkerCount, data.totalWorkerCount);
+                        updateDataCounts(data.dataCounts);
+                        updateWorkers(data.workers);
+                        updateErrors(data.totalErrorCount, data.unseenErrorCount);
+                    })
+                    .catch(function () {
+                        // Will retry on next tick
+                    })
+                    .finally(function () {
+                        spinner.classList.add('hidden');
+                        refreshing = false;
+                        remaining = INTERVAL;
+                    });
+            }
+
+            // Countdown ticker — runs every second, triggers refresh at zero
+            function tick() {
+                remaining--;
+                if (remaining <= 0) {
+                    countdown.textContent = 'Refreshing…';
+                    refresh();
+                } else {
+                    countdown.textContent = remaining + 's';
+                }
+            }
+
+            // Initialize countdown and start polling
+            countdown.textContent = INTERVAL + 's';
+            timer = setInterval(tick, 1000);
+
+            // Pause refresh when the tab is hidden to save resources
+            document.addEventListener('visibilitychange', function () {
+                if (document.hidden) {
+                    clearInterval(timer);
+                    timer = null;
+                } else {
+                    remaining = 1; // refresh on next tick
+                    timer = setInterval(tick, 1000);
+                }
+            });
+        })();
+    </script>
+}

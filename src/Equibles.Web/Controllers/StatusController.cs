@@ -45,36 +45,10 @@ public class StatusController : BaseController {
 
     [HttpGet]
     public async Task<IActionResult> Index(string search, string source) {
-        var status = new SystemStatusViewModel();
-
-        // Database connection
-        try {
-            await _dbContext.Database.CanConnectAsync();
-            status.DatabaseConnected = true;
-        } catch {
-            status.DatabaseConnected = false;
-        }
-
-        // Data counts (only if DB is connected)
-        if (status.DatabaseConnected) {
-            status.StockCount = await _dataCountService.GetStockCount();
-            status.DocumentCount = await _dataCountService.GetDocumentCount();
-            status.InsiderTransactionCount = await _dataCountService.GetInsiderTransactionCount();
-            status.CongressionalTradeCount = await _dataCountService.GetCongressionalTradeCount();
-            status.InstitutionalHoldingCount = await _dataCountService.GetInstitutionalHoldingCount();
-            status.FailToDeliverCount = await _dataCountService.GetFailToDeliverCount();
-            status.FredObservationCount = await _dataCountService.GetFredObservationCount();
-        }
+        var status = await BuildStatus();
 
         // MCP API key
         status.McpApiKeyConfigured = !string.IsNullOrEmpty(_configuration["McpApiKey"]);
-
-        // Worker statuses based on configuration
-        status.Workers = BuildWorkerStatuses();
-
-        // Error summary
-        status.TotalErrorCount = await _errorRepository.GetAll().CountAsync();
-        status.UnseenErrorCount = await _errorRepository.GetAll().CountAsync(e => !e.Seen);
 
         // Filtered errors for the table
         var query = _errorRepository.Search(search);
@@ -134,6 +108,30 @@ public class StatusController : BaseController {
         return RedirectToAction(nameof(Index));
     }
 
+    [HttpGet]
+    public async Task<IActionResult> Data() {
+        var status = await BuildStatus();
+        var workers = status.Workers;
+
+        return Json(new {
+            status.DatabaseConnected,
+            DataCounts = new Dictionary<string, int> {
+                ["StockCount"] = status.StockCount,
+                ["DocumentCount"] = status.DocumentCount,
+                ["InsiderTransactionCount"] = status.InsiderTransactionCount,
+                ["CongressionalTradeCount"] = status.CongressionalTradeCount,
+                ["InstitutionalHoldingCount"] = status.InstitutionalHoldingCount,
+                ["FailToDeliverCount"] = status.FailToDeliverCount,
+                ["FredObservationCount"] = status.FredObservationCount
+            },
+            Workers = workers.Select(w => new { w.Name, w.Active, w.Reason }),
+            status.TotalErrorCount,
+            status.UnseenErrorCount,
+            ActiveWorkerCount = workers.Count(w => w.Active),
+            TotalWorkerCount = workers.Count
+        });
+    }
+
     [HttpPost("DeleteAll")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteAll() {
@@ -141,6 +139,33 @@ public class StatusController : BaseController {
 
         _flashMessage.Success("All errors deleted.");
         return RedirectToAction(nameof(Index));
+    }
+
+    private async Task<SystemStatusViewModel> BuildStatus() {
+        var status = new SystemStatusViewModel();
+
+        try {
+            await _dbContext.Database.CanConnectAsync();
+            status.DatabaseConnected = true;
+        } catch {
+            status.DatabaseConnected = false;
+        }
+
+        if (status.DatabaseConnected) {
+            status.StockCount = await _dataCountService.GetStockCount();
+            status.DocumentCount = await _dataCountService.GetDocumentCount();
+            status.InsiderTransactionCount = await _dataCountService.GetInsiderTransactionCount();
+            status.CongressionalTradeCount = await _dataCountService.GetCongressionalTradeCount();
+            status.InstitutionalHoldingCount = await _dataCountService.GetInstitutionalHoldingCount();
+            status.FailToDeliverCount = await _dataCountService.GetFailToDeliverCount();
+            status.FredObservationCount = await _dataCountService.GetFredObservationCount();
+        }
+
+        status.Workers = BuildWorkerStatuses();
+        status.TotalErrorCount = await _errorRepository.GetAll().CountAsync();
+        status.UnseenErrorCount = await _errorRepository.GetAll().CountAsync(e => !e.Seen);
+
+        return status;
     }
 
     private List<WorkerStatus> BuildWorkerStatuses() {
