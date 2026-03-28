@@ -20,13 +20,13 @@
                 <nav class="hidden md:flex items-center gap-6" aria-label="Main navigation">
                     <a asp-action="Index" asp-controller="Home" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Home</a>
                     <a asp-action="Index" asp-controller="Stocks" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Explore Data</a>
+                    <a asp-action="Connect" asp-controller="Home" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Connect</a>
                     <a asp-action="Index" asp-controller="Status" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors flex items-center gap-1">
                         Status
                         @if (ViewData["StatusBadgeCount"] is int badgeCount && badgeCount > 0) {
                             <span class="badge badge-warning badge-xs">@badgeCount</span>
                         }
                     </a>
-                    <a asp-action="Connect" asp-controller="Home" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Connect</a>
                 </nav>
             </div>
             <div class="flex items-center gap-2">
@@ -58,16 +58,16 @@
                             </a>
                         </li>
                         <li>
+                            <a asp-action="Connect" asp-controller="Home">
+                                <icon name="link" size="4" /> Connect
+                            </a>
+                        </li>
+                        <li>
                             <a asp-action="Index" asp-controller="Status" class="flex items-center gap-2">
                                 <icon name="signal" size="4" /> Status
                                 @if (ViewData["StatusBadgeCount"] is int mobileBadge && mobileBadge > 0) {
                                     <span class="badge badge-warning badge-xs">@mobileBadge</span>
                                 }
-                            </a>
-                        </li>
-                        <li>
-                            <a asp-action="Connect" asp-controller="Home">
-                                <icon name="link" size="4" /> Connect
                             </a>
                         </li>
                     </ul>

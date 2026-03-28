@@ -13,9 +13,16 @@
 
     <div class="flex items-center justify-between">
         <h1 class="text-2xl font-bold">System Status</h1>
-        <div class="flex items-center gap-2 text-sm text-base-content/50" data-status-refresh-indicator>
+        <!-- Auto-refresh controls -->
+        <div class="flex items-center gap-2">
             <span class="loading loading-ring loading-xs hidden" data-status-spinner></span>
-            <span data-status-countdown></span>
+            <span class="text-sm text-base-content/50" data-status-countdown></span>
+            <div class="join">
+                <button class="btn btn-xs join-item" data-status-interval="1">1s</button>
+                <button class="btn btn-xs join-item btn-active" data-status-interval="5">5s</button>
+                <button class="btn btn-xs join-item" data-status-interval="30">30s</button>
+            </div>
+            <input type="checkbox" class="toggle toggle-sm toggle-success" checked data-status-toggle title="Auto-refresh" />
         </div>
     </div>
 
@@ -243,15 +250,18 @@
 
 @section Scripts {
     <script>
-        // Live refresh — polls /Status/Data every 30s and updates dynamic elements in-place
+        // Live refresh — polls /Status/Data at a configurable interval and updates dynamic elements in-place
         (function () {
-            const INTERVAL = 5; // seconds between refreshes
             const DATA_URL = '@Url.Action("Data", "Status")';
-
             const spinner = document.querySelector('[data-status-spinner]');
             const countdown = document.querySelector('[data-status-countdown]');
-            let remaining = INTERVAL;
+            const toggle = document.querySelector('[data-status-toggle]');
+            const intervalButtons = document.querySelectorAll('[data-status-interval]');
+
+            let interval = 5;
+            let remaining = interval;
             let refreshing = false;
+            let enabled = true;
             let timer = null;
 
             // Format a number with locale-aware thousand separators
@@ -259,14 +269,13 @@
                 return n.toLocaleString();
             }
 
-            // Update the database connection badge
+            // Update the database connection badge and data card visibility
             function updateDatabase(connected) {
                 const badge = document.querySelector('[data-status-db]');
                 if (!badge) return;
                 badge.textContent = connected ? 'Connected' : 'Disconnected';
                 badge.className = connected ? 'badge badge-success' : 'badge badge-error';
 
-                // Show/hide data card when DB state changes
                 const dataCard = document.querySelector('[data-status-data-card]');
                 if (dataCard) dataCard.classList.toggle('hidden', !connected);
             }
@@ -294,9 +303,7 @@
                     if (!card) continue;
 
                     const dot = card.querySelector('[data-status-worker-dot]');
-                    if (dot) {
-                        dot.className = 'inline-block w-2 h-2 rounded-full ' + (w.active ? 'bg-success' : 'bg-warning');
-                    }
+                    if (dot) dot.className = 'inline-block w-2 h-2 rounded-full ' + (w.active ? 'bg-success' : 'bg-warning');
 
                     const badge = card.querySelector('[data-status-worker-badge]');
                     if (badge) badge.classList.toggle('hidden', w.active);
@@ -341,8 +348,20 @@
                     .finally(function () {
                         spinner.classList.add('hidden');
                         refreshing = false;
-                        remaining = INTERVAL;
+                        remaining = interval;
                     });
+            }
+
+            // Start the 1-second ticker
+            function startTimer() {
+                if (timer) return;
+                timer = setInterval(tick, 1000);
+            }
+
+            // Stop the ticker
+            function stopTimer() {
+                clearInterval(timer);
+                timer = null;
             }
 
             // Countdown ticker — runs every second, triggers refresh at zero
@@ -356,18 +375,60 @@
                 }
             }
 
-            // Initialize countdown and start polling
-            countdown.textContent = INTERVAL + 's';
-            timer = setInterval(tick, 1000);
-
-            // Pause refresh when the tab is hidden to save resources
-            document.addEventListener('visibilitychange', function () {
-                if (document.hidden) {
-                    clearInterval(timer);
-                    timer = null;
+            // Update countdown display based on enabled state
+            function updateCountdownDisplay() {
+                if (enabled) {
+                    countdown.textContent = remaining + 's';
                 } else {
-                    remaining = 1; // refresh on next tick
-                    timer = setInterval(tick, 1000);
+                    countdown.textContent = 'Paused';
+                }
+            }
+
+            // Toggle auto-refresh on/off
+            toggle.addEventListener('change', function () {
+                enabled = toggle.checked;
+                if (enabled) {
+                    remaining = 1;
+                    startTimer();
+                } else {
+                    stopTimer();
+                }
+                updateCountdownDisplay();
+            });
+
+            // Interval selection buttons
+            intervalButtons.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    // Update active button style
+                    intervalButtons.forEach(function (b) { b.classList.remove('btn-active'); });
+                    btn.classList.add('btn-active');
+
+                    // Set new interval and reset countdown
+                    interval = parseInt(btn.dataset.statusInterval, 10);
+                    remaining = 1;
+                    updateCountdownDisplay();
+
+                    // Auto-enable if currently paused
+                    if (!enabled) {
+                        enabled = true;
+                        toggle.checked = true;
+                        startTimer();
+                    }
+                });
+            });
+
+            // Initialize
+            countdown.textContent = interval + 's';
+            startTimer();
+
+            // Pause when the tab is hidden, resume when visible
+            document.addEventListener('visibilitychange', function () {
+                if (!enabled) return;
+                if (document.hidden) {
+                    stopTimer();
+                } else {
+                    remaining = 1;
+                    startTimer();
                 }
             });
         })();
