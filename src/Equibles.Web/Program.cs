@@ -55,6 +55,7 @@ builder.Services.AddRepositoriesFrom(
 );
 
 builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();
+builder.Services.AutoWireServicesFrom<Equibles.Web.Services.StockTabService>();
 
 var authSettings = builder.Configuration.GetSection("Auth").Get<AuthSettings>() ?? new AuthSettings();
 builder.Services.Configure<AuthSettings>(builder.Configuration.GetSection("Auth"));

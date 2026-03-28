@@ -1,16 +1,11 @@
-using Equibles.CommonStocks.Data.Models;
-using Equibles.Congress.Data.Models;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Errors.Repositories;
-using Equibles.Holdings.Data.Models;
-using Equibles.InsiderTrading.Data.Models;
-using Equibles.Sec.Data.Models;
-using Equibles.Fred.Data.Models;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.FlashMessage.Contracts;
 using Equibles.Web.Models;
+using Equibles.Web.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
@@ -23,6 +18,7 @@ public class StatusController : BaseController {
     private readonly IFlashMessage _flashMessage;
     private readonly IConfiguration _configuration;
     private readonly EquiblesDbContext _dbContext;
+    private readonly DataCountService _dataCountService;
 
     public StatusController(
         ErrorRepository errorRepository,
@@ -30,6 +26,7 @@ public class StatusController : BaseController {
         IFlashMessage flashMessage,
         IConfiguration configuration,
         EquiblesDbContext dbContext,
+        DataCountService dataCountService,
         ILogger<StatusController> logger
     ) : base(logger) {
         _errorRepository = errorRepository;
@@ -37,6 +34,7 @@ public class StatusController : BaseController {
         _flashMessage = flashMessage;
         _configuration = configuration;
         _dbContext = dbContext;
+        _dataCountService = dataCountService;
     }
 
     public override void OnActionExecuting(ActionExecutingContext context) {
@@ -59,13 +57,13 @@ public class StatusController : BaseController {
 
         // Data counts (only if DB is connected)
         if (status.DatabaseConnected) {
-            status.StockCount = await _dbContext.Set<CommonStock>().CountAsync();
-            status.DocumentCount = await _dbContext.Set<Document>().CountAsync();
-            status.InsiderTransactionCount = await _dbContext.Set<InsiderTransaction>().CountAsync();
-            status.CongressionalTradeCount = await _dbContext.Set<CongressionalTrade>().CountAsync();
-            status.InstitutionalHoldingCount = await _dbContext.Set<InstitutionalHolding>().CountAsync();
-            status.FailToDeliverCount = await _dbContext.Set<FailToDeliver>().CountAsync();
-            status.FredObservationCount = await _dbContext.Set<FredObservation>().CountAsync();
+            status.StockCount = await _dataCountService.GetStockCount();
+            status.DocumentCount = await _dataCountService.GetDocumentCount();
+            status.InsiderTransactionCount = await _dataCountService.GetInsiderTransactionCount();
+            status.CongressionalTradeCount = await _dataCountService.GetCongressionalTradeCount();
+            status.InstitutionalHoldingCount = await _dataCountService.GetInstitutionalHoldingCount();
+            status.FailToDeliverCount = await _dataCountService.GetFailToDeliverCount();
+            status.FredObservationCount = await _dataCountService.GetFredObservationCount();
         }
 
         // MCP API key
