@@ -19,7 +19,11 @@ FROM base AS final
 # Install runtime dependencies: Kerberos + Playwright Firefox system libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgssapi-krb5-2 \
+    # Playwright Firefox runtime dependencies
     libgtk-3-0 libdbus-glib-1-2 libxt6 libasound2t64 \
+    libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 \
+    libpango-1.0-0 libcairo2 libatk1.0-0 libatk-bridge2.0-0 \
+    libgbm1 fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Playwright Firefox browser from build stage

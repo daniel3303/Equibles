@@ -1,38 +1,66 @@
-using System.Net;
+using System.Text.Json;
 using Equibles.Congress.Data.Models;
 using Equibles.Integrations.Common.RateLimiter;
 using Equibles.Congress.HostedService.Models;
 using Newtonsoft.Json;
 using static Equibles.Congress.HostedService.Services.DisclosureParsingHelper;
-
+using Microsoft.Playwright;
 using Equibles.Core.AutoWiring;
 
 namespace Equibles.Congress.HostedService.Services;
 
 [Service]
-public class SenateDisclosureClient : IDisposable {
+public class SenateDisclosureClient : IAsyncDisposable {
     private static readonly IRateLimiter RateLimiter = new RateLimiter(maxRequests: 5, timeWindow: TimeSpan.FromSeconds(1));
     private const int MaxRetries = 3;
-
-    private readonly HttpClient _httpClient;
-    private readonly CookieContainer _cookieContainer;
-    private readonly ILogger<SenateDisclosureClient> _logger;
-    private bool _authenticated;
 
     private const string BaseUrl = "https://efdsearch.senate.gov";
     private const string HomeUrl = BaseUrl + "/search/home/";
     private const string SearchDataUrl = BaseUrl + "/search/report/data/";
     private const string PtrReportTypeFilter = "[11]"; // Periodic Transaction Report
+    private const int BrowserFetchTimeoutMs = 30_000;
+
+    private readonly ILogger<SenateDisclosureClient> _logger;
+    private readonly SemaphoreSlim _initLock = new(1, 1);
+
+    private IPlaywright _playwright;
+    private IBrowser _browser;
+    private IPage _page;
+    private bool _authenticated;
+
+    // JavaScript executed in the browser context to make HTTP requests.
+    // Reuses the browser's TLS fingerprint and session cookies to bypass Akamai bot detection.
+    // For POST requests, extracts the CSRF token from cookies and includes it in headers and form data.
+    private const string BrowserFetchScript = """
+        async ({url, formFields}) => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+            try {
+                const options = { signal: controller.signal };
+                if (formFields) {
+                    const csrfToken = document.cookie.split(';')
+                        .map(c => c.trim())
+                        .find(c => c.startsWith('csrftoken='))
+                        ?.split('=')[1] ?? '';
+                    formFields['csrftoken'] = csrfToken;
+                    options.method = 'POST';
+                    options.headers = {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRFToken': csrfToken,
+                        'Referer': location.origin + '/search/',
+                    };
+                    options.body = new URLSearchParams(formFields).toString();
+                }
+                const resp = await fetch(url, options);
+                return { status: resp.status, body: await resp.text() };
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        }
+        """;
 
     public SenateDisclosureClient(ILogger<SenateDisclosureClient> logger) {
         _logger = logger;
-        _cookieContainer = new CookieContainer();
-        var handler = new HttpClientHandler {
-            CookieContainer = _cookieContainer,
-            AllowAutoRedirect = true
-        };
-        _httpClient = new HttpClient(handler, disposeHandler: true) { Timeout = TimeSpan.FromSeconds(60) };
-        _httpClient.DefaultRequestHeaders.Add("User-Agent", "Equibles/1.0 (contact@equibles.com)");
     }
 
     public async Task<List<DisclosureTransaction>> GetRecentTransactions(DateOnly fromDate, DateOnly toDate, CancellationToken ct) {
@@ -64,34 +92,45 @@ public class SenateDisclosureClient : IDisposable {
     private async Task EnsureAuthenticated(CancellationToken ct) {
         if (_authenticated) return;
 
-        await RateLimiter.WaitAsync();
-        using var homeResponse = await _httpClient.GetAsync(HomeUrl, ct);
-        homeResponse.EnsureSuccessStatusCode();
+        await _initLock.WaitAsync(ct);
+        try {
+            if (_authenticated) return;
 
-        var csrfToken = GetCsrfToken();
-        if (string.IsNullOrEmpty(csrfToken))
-            throw new InvalidOperationException("Failed to obtain CSRF token from Senate eFD");
+            _playwright = await Playwright.CreateAsync();
+            _browser = await _playwright.Firefox.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
 
-        await RateLimiter.WaitAsync();
-        var request = new HttpRequestMessage(HttpMethod.Post, HomeUrl) {
-            Content = new FormUrlEncodedContent(new Dictionary<string, string> {
-                ["prohibition_agreement"] = "1",
-                ["csrfmiddlewaretoken"] = csrfToken
-            })
-        };
-        request.Headers.Add("Referer", HomeUrl);
-        request.Headers.Add("X-CSRFToken", csrfToken);
+            // Register cancellation to force-close the browser on shutdown
+            ct.Register(() => {
+                _browser?.CloseAsync().ConfigureAwait(false);
+            });
 
-        using var response = await _httpClient.SendAsync(request, ct);
-        response.EnsureSuccessStatusCode();
+            var context = await _browser.NewContextAsync();
+            context.SetDefaultTimeout(BrowserFetchTimeoutMs);
+            _page = await context.NewPageAsync();
 
-        _authenticated = true;
-        _logger.LogDebug("Senate eFD disclaimer accepted");
-    }
+            _logger.LogDebug("Navigating to Senate eFD via Playwright Firefox");
 
-    private string GetCsrfToken() {
-        var cookies = _cookieContainer.GetCookies(new Uri(BaseUrl));
-        return cookies["csrftoken"]?.Value ?? "";
+            var response = await _page.GotoAsync(HomeUrl, new PageGotoOptions {
+                WaitUntil = WaitUntilState.NetworkIdle,
+                Timeout = 30_000
+            });
+
+            if (response?.Status != 200)
+                throw new HttpRequestException($"Senate eFD home page returned HTTP {response?.Status}");
+
+            // Accept the prohibition agreement disclaimer
+            var checkbox = _page.Locator("#agree_statement");
+            if (await checkbox.IsVisibleAsync()) {
+                await checkbox.CheckAsync();
+                await _page.Locator("button[type='submit'], input[type='submit']").ClickAsync();
+                await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+            }
+
+            _authenticated = true;
+            _logger.LogDebug("Senate eFD disclaimer accepted via Playwright Firefox");
+        } finally {
+            _initLock.Release();
+        }
     }
 
     private async Task<List<SenateReport>> SearchPtrReports(DateOnly from, DateOnly to, CancellationToken ct) {
@@ -101,30 +140,20 @@ public class SenateDisclosureClient : IDisposable {
 
         while (true) {
             ct.ThrowIfCancellationRequested();
-            await RateLimiter.WaitAsync();
 
-            var csrfToken = GetCsrfToken();
-            var request = new HttpRequestMessage(HttpMethod.Post, SearchDataUrl) {
-                Content = new FormUrlEncodedContent(new Dictionary<string, string> {
-                    ["report_types"] = PtrReportTypeFilter,
-                    ["filer_types"] = "[]",
-                    ["submitted_start_date"] = $"{from:MM/dd/yyyy} 00:00:00",
-                    ["submitted_end_date"] = $"{to:MM/dd/yyyy} 23:59:59",
-                    ["first_name"] = "",
-                    ["last_name"] = "",
-                    ["senator_state"] = "",
-                    ["start"] = start.ToString(),
-                    ["length"] = pageSize.ToString(),
-                    ["csrftoken"] = csrfToken
-                })
+            var formFields = new Dictionary<string, string> {
+                ["report_types"] = PtrReportTypeFilter,
+                ["filer_types"] = "[]",
+                ["submitted_start_date"] = $"{from:MM/dd/yyyy} 00:00:00",
+                ["submitted_end_date"] = $"{to:MM/dd/yyyy} 23:59:59",
+                ["first_name"] = "",
+                ["last_name"] = "",
+                ["senator_state"] = "",
+                ["start"] = start.ToString(),
+                ["length"] = pageSize.ToString(),
             };
-            request.Headers.Add("Referer", BaseUrl + "/search/");
-            request.Headers.Add("X-CSRFToken", csrfToken);
 
-            using var response = await _httpClient.SendAsync(request, ct);
-            response.EnsureSuccessStatusCode();
-
-            var json = await response.Content.ReadAsStringAsync(ct);
+            var json = await FetchWithRetry(SearchDataUrl, formFields, ct);
             var result = JsonConvert.DeserializeObject<SenateSearchResponse>(json);
 
             if (result?.Data == null || result.Data.Count == 0) break;
@@ -173,47 +202,62 @@ public class SenateDisclosureClient : IDisposable {
     }
 
     private async Task<List<DisclosureTransaction>> FetchAndParseReport(SenateReport report, CancellationToken ct) {
-        using var response = await SendWithRetryAsync(report.ReportUrl, ct);
-        response.EnsureSuccessStatusCode();
-
-        var html = await response.Content.ReadAsStringAsync(ct);
+        var html = await FetchWithRetry(report.ReportUrl, ct: ct);
         return ParseTransactionsFromHtml(html, report.MemberName, CongressPosition.Senator, report.DateSubmitted, _logger);
     }
 
-    private async Task<HttpResponseMessage> SendWithRetryAsync(string url, CancellationToken ct) {
+    /// <summary>
+    /// Makes an HTTP request via the Playwright browser's fetch() API with retry logic.
+    /// Bypasses Akamai bot detection by reusing the browser's TLS fingerprint and session cookies.
+    /// Pass formFields for POST, or null for GET.
+    /// </summary>
+    private async Task<string> FetchWithRetry(string url, Dictionary<string, string> formFields = null, CancellationToken ct = default) {
         for (var attempt = 0; attempt <= MaxRetries; attempt++) {
+            ct.ThrowIfCancellationRequested();
             await RateLimiter.WaitAsync();
-            var response = await _httpClient.GetAsync(url, ct);
 
-            if (response.StatusCode == HttpStatusCode.TooManyRequests) {
+            var result = await _page.EvaluateAsync<JsonElement>(BrowserFetchScript, new { url, formFields });
+            var status = result.GetProperty("status").GetInt32();
+            var body = result.GetProperty("body").GetString();
+
+            var isRetryable = status == 429 || status >= 500;
+            if (isRetryable && attempt < MaxRetries) {
                 var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
-                _logger.LogWarning("Senate eFD rate limited (429) for {Url}, retrying in {Delay}s",
-                    url, delay.TotalSeconds);
-                RateLimiter.PauseFor(delay);
+                _logger.LogWarning("Senate eFD returned {Status} for {Url}, retrying in {Delay}s (attempt {Attempt}/{MaxRetries})",
+                    status, url, delay.TotalSeconds, attempt + 1, MaxRetries);
 
-                if (attempt < MaxRetries) {
-                    response.Dispose();
-                    await Task.Delay(delay, ct);
-                    continue;
-                }
-            }
+                if (status == 429) RateLimiter.PauseFor(delay);
 
-            if ((int)response.StatusCode >= 500 && attempt < MaxRetries) {
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
-                _logger.LogWarning("Senate eFD server error ({StatusCode}) for {Url}, retrying in {Delay}s",
-                    (int)response.StatusCode, url, delay.TotalSeconds);
-                response.Dispose();
                 await Task.Delay(delay, ct);
                 continue;
             }
 
-            return response;
+            if (status is < 200 or >= 300)
+                throw new HttpRequestException($"Senate eFD returned HTTP {status} for {url} (after {attempt + 1} attempt(s))");
+
+            return body;
         }
 
         throw new HttpRequestException($"Max retries ({MaxRetries}) exceeded for Senate eFD request: {url}");
     }
 
-    public void Dispose() => _httpClient.Dispose();
+    public async ValueTask DisposeAsync() {
+        GC.SuppressFinalize(this);
+
+        if (_page != null) {
+            await _page.Context.CloseAsync();
+            _page = null;
+        }
+
+        if (_browser != null) {
+            await _browser.CloseAsync();
+            _browser = null;
+        }
+
+        _playwright?.Dispose();
+        _playwright = null;
+        _initLock.Dispose();
+    }
 
     private record SenateReport(string MemberName, string ReportUrl, DateOnly DateSubmitted);
 

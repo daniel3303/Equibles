@@ -5,6 +5,8 @@
   <ItemGroup>
     <!-- AutoWiring -->
     <PackageVersion Include="Equibles.Core.AutoWiring" Version="1.0.1" />
+    <!-- Browser Automation -->
+    <PackageVersion Include="Microsoft.Playwright" Version="1.58.0" />
     <!-- HTML / Markdown -->
     <PackageVersion Include="AngleSharp" Version="1.4.0" />
     <PackageVersion Include="FlexLabs.EntityFrameworkCore.Upsert" Version="10.0.0" />
