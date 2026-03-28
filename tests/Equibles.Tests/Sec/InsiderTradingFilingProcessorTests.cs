@@ -180,6 +180,7 @@ public class InsiderTradingFilingProcessorTests {
         processor.CanProcess(DocumentType.EightK).Should().BeFalse();
     }
 
+    // ErrorReporter not needed — only testing CanProcess and static helpers
     private static InsiderTradingFilingProcessor CreateProcessor() {
         return new InsiderTradingFilingProcessor(
             NSubstitute.Substitute.For<IServiceScopeFactory>(),

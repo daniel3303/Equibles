@@ -270,6 +270,22 @@ public class HoldingsImportServiceTests {
     }
 
     [Fact]
+    public void DeduplicateSubmissions_IdenticalFilingDates_KeepsOnePerGroup() {
+        var context = new ImportContext {
+            Submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase) {
+                ["ACC-001"] = new() { AccessionNumber = "ACC-001", Cik = "CIK1", PeriodOfReport = "2024-03-31", FilingDate = "2024-04-15" },
+                ["ACC-002"] = new() { AccessionNumber = "ACC-002", Cik = "CIK1", PeriodOfReport = "2024-03-31", FilingDate = "2024-04-15" },
+            }
+        };
+
+        HoldingsImportService.DeduplicateSubmissions(context);
+
+        // When filing dates are identical, OrderByDescending picks one deterministically;
+        // the important guarantee is that exactly one survives per (CIK, PeriodOfReport) group
+        context.Submissions.Should().HaveCount(1);
+    }
+
+    [Fact]
     public void DeduplicateSubmissions_MissingCikOrPeriod_SkippedFromGrouping() {
         var context = new ImportContext {
             Submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase) {

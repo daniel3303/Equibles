@@ -22,12 +22,27 @@ public class FileModelTests {
     }
 
     [Fact]
-    public void Id_DefaultsToUniqueGuid() {
+    public void NameWithExtension_NullExtension_AppendsNullLiteral() {
+        var file = new Equibles.Media.Data.Models.File {
+            Name = "document",
+            Extension = null
+        };
+
+        file.NameWithExtension.Should().Be("document.");
+    }
+
+    [Fact]
+    public void NewInstance_HasNonEmptyGuid() {
+        var file = new Equibles.Media.Data.Models.File();
+
+        file.Id.Should().NotBe(Guid.Empty);
+    }
+
+    [Fact]
+    public void TwoInstances_HaveDifferentGuids() {
         var file1 = new Equibles.Media.Data.Models.File();
         var file2 = new Equibles.Media.Data.Models.File();
 
-        file1.Id.Should().NotBe(Guid.Empty);
-        file2.Id.Should().NotBe(Guid.Empty);
         file1.Id.Should().NotBe(file2.Id);
     }
 
