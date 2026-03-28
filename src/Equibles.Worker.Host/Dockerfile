@@ -10,7 +10,10 @@ RUN dotnet publish src/Equibles.Worker.Host/Equibles.Worker.Host.csproj -c Relea
 
 # Install Playwright Firefox browser binary (used by Senate disclosure scraper to bypass Akamai)
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN dotnet exec /app/publish/Microsoft.Playwright.dll install firefox
+RUN dotnet exec \
+    --runtimeconfig /app/publish/Equibles.Worker.Host.runtimeconfig.json \
+    --depsfile /app/publish/Equibles.Worker.Host.deps.json \
+    /app/publish/Microsoft.Playwright.dll install firefox
 
 FROM base AS final
 # Install runtime dependencies: Kerberos + Playwright Firefox system libraries
