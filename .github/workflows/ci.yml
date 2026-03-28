@@ -27,13 +27,6 @@ jobs:
       - name: Test
         run: dotnet test Equibles.sln --no-build -c Release --logger "trx;LogFileName=results.trx" --collect:"XPlat Code Coverage" --results-directory ./coverage
 
-      - name: Generate coverage report
-        uses: danielpalber/ReportGenerator-GitHub-Action@5
-        with:
-          reports: coverage/**/coverage.cobertura.xml
-          targetdir: coverage/report
-          reporttypes: Cobertura;TextSummary
-
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
