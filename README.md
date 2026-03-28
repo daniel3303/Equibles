@@ -1,6 +1,6 @@
 # Equibles
 
-An open-source, self-hosted mini Bloomberg Terminal for AI agents. Scrapes, stores, and serves SEC filings, institutional holdings, insider trading, congressional trades, and short data — and exposes it all via MCP so your AI assistant can query it directly.
+An open-source, self-hosted mini Bloomberg Terminal for AI agents. Scrapes, stores, and serves SEC filings, institutional holdings, insider trading, congressional trades, short data, and economic indicators — and exposes it all via MCP so your AI assistant can query it directly.
 
 Powers [equibles.com](https://equibles.com).
 
@@ -12,7 +12,7 @@ Powers [equibles.com](https://equibles.com).
 | **Holdings** | SEC 13F-HR | Institutional ownership — who owns what, how much, and trend over time |
 | **Insider Trading** | SEC Form 3/4 | Director, officer, and 10% owner transactions |
 | **Congressional Trading** | House/Senate disclosures | Stock trades by members of Congress |
-| **Short Data** | FINRA | Daily short volume, short interest, and fails-to-deliver |
+| **Short Data** | SEC / FINRA | Fails-to-deliver (SEC), daily short volume and short interest (FINRA) |
 | **Economic Indicators** | FRED (Federal Reserve) | Interest rates, inflation, employment, GDP, yield spreads, and more |
 
 ## Quick Start
@@ -22,8 +22,8 @@ Powers [equibles.com](https://equibles.com).
 The fastest way to get everything running. Requires Docker.
 
 ```bash
-git clone https://github.com/equibles/equibles.git
-cd equibles
+git clone https://github.com/daniel3303/Equibles.git
+cd Equibles
 cp .env.example .env
 # Edit .env and set SEC_CONTACT_EMAIL (required by SEC EDGAR fair access policy)
 docker compose up
@@ -36,7 +36,7 @@ This starts:
 | **db** | 5432 | ParadeDB (PostgreSQL + pgvector + pg_search) |
 | **web** | 8080 | Web portal for browsing data |
 | **mcp** | 8081 | MCP server for AI assistants |
-| **worker** | — | Scrapers (SEC, Holdings, Congress, Short Data, FRED) |
+| **worker** | — | Scrapers (SEC, FINRA, Congress, FRED) |
 
 Data scraping starts automatically. SEC filings, holdings, insider trades, and congressional trades will begin populating within minutes.
 
@@ -61,16 +61,9 @@ Without the embedding profile, BM25 full-text search via ParadeDB still works ou
 
 All settings can be configured via a `.env` file in the project root (recommended for Docker) or environment variables.
 
-```env
-# .env
-ConnectionStrings__DefaultConnection=Host=localhost;Database=equibles;Username=myuser;Password=mypassword
-Finra__ClientId=your-client-id
-Finra__ClientSecret=your-client-secret
-```
-
 **FINRA Short Data (free API key required):**
 
-The short data scraper requires a free FINRA API key. Without it, the scraper skips gracefully and all other scrapers run normally.
+The FINRA scraper (short volume and short interest) requires a free API key. Without it, the scraper skips gracefully and all other scrapers run normally. Fails-to-deliver data comes from SEC and works without FINRA credentials.
 
 To get a key:
 1. Create a free account at [developer.finra.org](https://developer.finra.org/)
@@ -127,6 +120,14 @@ Worker__MinSyncDate=2024-01-01
 | `MCP_API_KEY` | — | MCP server API key (auth disabled if empty) |
 
 When set, the web portal requires login and the MCP server requires `Authorization: Bearer <key>` header. When unset, everything is open access (default).
+
+## Web Portal
+
+The web portal at `http://localhost:8080` provides a browser-based interface for exploring data:
+
+- **Stocks** — Browse and search all tracked companies, view institutional holdings, short data, SEC filings, insider trading, and congressional trades per stock
+- **Economy** — Browse FRED economic indicators grouped by category (interest rates, inflation, employment, GDP, etc.) with charts and statistics
+- **Status** — System health, worker status, data counts, and error log
 
 ## MCP Server
 
