@@ -40,23 +40,6 @@ This starts:
 
 Data scraping starts automatically. SEC filings, holdings, insider trades, and congressional trades will begin populating within minutes.
 
-### With Vector Embeddings (opt-in)
-
-Vector embeddings enable semantic search over SEC filings (e.g., "find revenue growth discussion in Apple's 10-K"). This requires downloading the Ollama runtime (~2GB) and the BGE-M3 model (~1.2GB).
-
-```bash
-docker compose --profile embedding up
-```
-
-This adds:
-
-| Service | Port | Description |
-|---------|------|-------------|
-| **embedding** | 11434 | Ollama server with BGE-M3 model |
-| **worker-embedding** | — | Worker with embedding generation enabled |
-
-Without the embedding profile, BM25 full-text search via ParadeDB still works out of the box — vector search is purely additive.
-
 ## Configuration
 
 All settings can be configured via a `.env` file in the project root (recommended for Docker) or environment variables.
@@ -191,6 +174,23 @@ In OpenClaw, add an MCP server with the URL `http://localhost:8081/mcp` (HTTP tr
 ### Other MCP Clients
 
 Any MCP-compatible client can connect to `http://localhost:8081/mcp` (HTTP transport).
+
+## Vector Embeddings (advanced, opt-in)
+
+Vector embeddings enable semantic search over SEC filings (e.g., "find revenue growth discussion in Apple's 10-K"). This requires downloading the Ollama runtime (~2GB) and the BGE-M3 model (~1.2GB).
+
+```bash
+docker compose --profile embedding up
+```
+
+This adds:
+
+| Service | Port | Description |
+|---------|------|-------------|
+| **embedding** | 11434 | Ollama server with BGE-M3 model |
+| **worker-embedding** | — | Worker with embedding generation enabled |
+
+Without the embedding profile, BM25 full-text search via ParadeDB still works out of the box — vector search is purely additive.
 
 ## Data Sources
 
