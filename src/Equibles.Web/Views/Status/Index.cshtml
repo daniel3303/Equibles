@@ -245,7 +245,7 @@
     <script>
         // Live refresh — polls /Status/Data every 30s and updates dynamic elements in-place
         (function () {
-            const INTERVAL = 30; // seconds between refreshes
+            const INTERVAL = 5; // seconds between refreshes
             const DATA_URL = '@Url.Action("Data", "Status")';
 
             const spinner = document.querySelector('[data-status-spinner]');
