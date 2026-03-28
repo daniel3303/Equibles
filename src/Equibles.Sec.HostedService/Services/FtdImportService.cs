@@ -261,7 +261,7 @@ public class FtdImportService {
     /// Generates FTD file names from a start date to now.
     /// Format: cnsfails{YYYYMM}{a|b}.zip (a = first half, b = second half)
     /// </summary>
-    private static List<string> GetFileNames(DateOnly startDate) {
+    internal static List<string> GetFileNames(DateOnly startDate) {
         var fileNames = new List<string>();
         var now = DateOnly.FromDateTime(DateTime.UtcNow);
 
@@ -282,7 +282,7 @@ public class FtdImportService {
     /// <summary>
     /// Returns true if the FTD file is for a month within the last 2 months (404 is expected — SEC has 45 days to publish).
     /// </summary>
-    private static bool IsRecentFtdFile(string fileName) {
+    internal static bool IsRecentFtdFile(string fileName) {
         // Format: cnsfails{YYYYMM}{a|b}.zip — "cnsfails" is 8 chars
         if (fileName.Length >= 17
             && int.TryParse(fileName.AsSpan(8, 4), out var year)
