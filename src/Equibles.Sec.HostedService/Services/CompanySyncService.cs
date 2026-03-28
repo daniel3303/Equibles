@@ -1,11 +1,11 @@
 using Equibles.Errors.BusinessLogic;
 using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Data.Models;
-using Equibles.Core.Configuration;
 using Equibles.Errors.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
+using Equibles.Core.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -16,18 +16,15 @@ public class CompanySyncService : ICompanySyncService {
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly WorkerOptions _workerOptions;
     private readonly ILogger<CompanySyncService> _logger;
-    private readonly ErrorReporter _errorReporter;
 
     public CompanySyncService(IServiceScopeFactory serviceScopeFactory,
         ISecEdgarClient secEdgarClient,
         IOptions<WorkerOptions> workerOptions,
-        ILogger<CompanySyncService> logger,
-        ErrorReporter errorReporter) {
+        ILogger<CompanySyncService> logger) {
         _serviceScopeFactory = serviceScopeFactory;
         _secEdgarClient = secEdgarClient;
         _workerOptions = workerOptions.Value;
         _logger = logger;
-        _errorReporter = errorReporter;
     }
 
     public async Task SyncCompaniesFromSecApi() {
@@ -38,7 +35,7 @@ public class CompanySyncService : ICompanySyncService {
             _logger.LogInformation("Retrieved {CompanyCount} companies from SEC API", secCompanies.Count);
 
             // Filter by configured tickers if specified
-            if (_workerOptions.TickersToSync?.Any() == true) {
+            if (_workerOptions.TickersToSync?.Count > 0) {
                 secCompanies = secCompanies
                     .Where(c => c.Tickers.Any(ticker => _workerOptions.TickersToSync.Contains(ticker)))
                     .ToList();
@@ -130,7 +127,7 @@ public class CompanySyncService : ICompanySyncService {
                         tickerHolder.Name, tickerHolder.Cik, primaryTicker);
                 } catch (Exception ex) {
                     _logger.LogError(ex, "Error removing obsolete company for ticker {Ticker}", primaryTicker);
-                    await _errorReporter.Report(ErrorSource.DocumentScraper, "CompanySync.RemoveObsolete", ex.Message, ex.StackTrace, $"ticker: {primaryTicker}");
+                    await ReportError("CompanySync.RemoveObsolete", ex.Message, ex.StackTrace, $"ticker: {primaryTicker}");
                     return;
                 }
             } else {
@@ -170,7 +167,7 @@ public class CompanySyncService : ICompanySyncService {
             state.DbContext.Entry(existingStock).State = EntityState.Unchanged;
             _logger.LogError(ex, "Error updating company {Ticker} - {Name} (CIK: {Cik})",
                 primaryTicker, secCompany.Name, secCompany.Cik);
-            await _errorReporter.Report(ErrorSource.DocumentScraper, "CompanySync.UpdateStock", ex.Message, ex.StackTrace, $"ticker: {primaryTicker}, cik: {secCompany.Cik}");
+            await ReportError("CompanySync.UpdateStock", ex.Message, ex.StackTrace, $"ticker: {primaryTicker}, cik: {secCompany.Cik}");
         }
     }
 
@@ -216,7 +213,7 @@ public class CompanySyncService : ICompanySyncService {
                 obsoleteStock.Name, obsoleteStock.Cik, secCompany.Name, secCompany.Cik, primaryTicker);
         } catch (Exception ex) {
             _logger.LogError(ex, "Error replacing company for ticker {Ticker}", primaryTicker);
-            await _errorReporter.Report(ErrorSource.DocumentScraper, "CompanySync.ReplaceStock", ex.Message, ex.StackTrace, $"ticker: {primaryTicker}, cik: {secCompany.Cik}");
+            await ReportError("CompanySync.ReplaceStock", ex.Message, ex.StackTrace, $"ticker: {primaryTicker}, cik: {secCompany.Cik}");
         }
     }
 
@@ -248,7 +245,7 @@ public class CompanySyncService : ICompanySyncService {
             }
             _logger.LogError(ex, "Error creating company {Ticker} - {Name} (CIK: {Cik})",
                 primaryTicker, secCompany.Name, secCompany.Cik);
-            await _errorReporter.Report(ErrorSource.DocumentScraper, "CompanySync.CreateStock", ex.Message, ex.StackTrace, $"ticker: {primaryTicker}, cik: {secCompany.Cik}");
+            await ReportError("CompanySync.CreateStock", ex.Message, ex.StackTrace, $"ticker: {primaryTicker}, cik: {secCompany.Cik}");
         }
     }
 
@@ -277,4 +274,11 @@ public class CompanySyncService : ICompanySyncService {
         public DbContext DbContext { get; init; }
     }
 
+    private async Task ReportError(string context, string message, string stackTrace, string requestSummary = null) {
+        try {
+            await using var scope = _serviceScopeFactory.CreateAsyncScope();
+            var errorManager = scope.ServiceProvider.GetRequiredService<ErrorManager>();
+            await errorManager.Create(ErrorSource.DocumentScraper, context, message, stackTrace, requestSummary);
+        } catch { }
+    }
 }
