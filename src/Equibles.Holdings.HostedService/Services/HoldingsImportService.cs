@@ -20,6 +20,8 @@ public class HoldingsImportService {
     private const int InsertBatchSize = 1000;
     private const int MaxConsecutiveEmptyBatches = 5;
     private const int MinHoldersForConsensus = 5;
+    // Thousands-vs-dollars gap is 1000×; 100× gives a safe margin for price variance across filers
+    private const decimal OutlierThreshold = 100m;
     private static readonly DateOnly CutoffDate = new(2023, 1, 1);
 
     private readonly IServiceScopeFactory _scopeFactory;
@@ -53,6 +55,7 @@ public class HoldingsImportService {
         if (await IsAlreadyImported(context, cancellationToken)) return;
         if (!await ParseCoverPages(context, cancellationToken)) return;
         if (!await BuildCusipMapping(context, cancellationToken)) return;
+        if (context.DataSetValueInThousands) await BuildRawPriceConsensus(context);
         await ParseOtherManagers(context, cancellationToken);
         await UpsertInstitutionalHolders(context, cancellationToken);
         await HandleAmendments(context, cancellationToken);
@@ -225,6 +228,63 @@ public class HoldingsImportService {
 
         context.CusipMapping = cusipMapping;
         return true;
+    }
+
+    /// <summary>
+    /// Pre-computes median raw VALUE/SHARES for each (stock, reportDate) from the dataset.
+    /// Some filers in pre-2023 data report VALUE in actual dollars instead of thousands;
+    /// the median lets SelectNormalizer detect and skip the ×1000 multiplication for those outliers.
+    /// </summary>
+    /// <remarks>
+    /// This adds a third parse of INFOTABLE.tsv (after BuildCusipMapping and before
+    /// StreamAndInsertHoldings). Could be merged into BuildCusipMapping to avoid the extra
+    /// decompression, but kept separate for clarity.
+    /// </remarks>
+    internal async Task BuildRawPriceConsensus(ImportContext context) {
+        var infoTableEntry = FindEntry(context.Archive, "INFOTABLE.tsv");
+        if (infoTableEntry == null) return;
+
+        // Collect raw price-per-share for each (stockId, reportDate)
+        var rawPrices = new Dictionary<(Guid, DateOnly), List<decimal>>();
+
+        await foreach (var row in context.TsvParser.ParseEntry(infoTableEntry)) {
+            var accession = GetValue(row, "ACCESSION_NUMBER");
+            if (!context.Submissions.TryGetValue(accession, out var submission)) continue;
+
+            var cusip = GetValue(row, "CUSIP");
+            if (!context.CusipMapping.TryGetValue(cusip, out var commonStockId)) continue;
+
+            var shares = ParseLong(GetValue(row, "SSHPRNAMT"));
+            var rawValue = ParseLong(GetValue(row, "VALUE"));
+            if (shares <= 0 || rawValue <= 0) continue;
+
+            if (!TryParseDateOnly(submission.PeriodOfReport, out var reportDate)) continue;
+
+            var key = (commonStockId, reportDate);
+            if (!rawPrices.TryGetValue(key, out var list)) {
+                list = [];
+                rawPrices[key] = list;
+            }
+
+            list.Add((decimal)rawValue / shares);
+        }
+
+        // Compute median for each group with enough data points
+        foreach (var (key, prices) in rawPrices) {
+            if (prices.Count < MinHoldersForConsensus) continue;
+
+            prices.Sort();
+            var mid = prices.Count / 2;
+            var median = prices.Count % 2 == 0
+                ? (prices[mid - 1] + prices[mid]) / 2m
+                : prices[mid];
+
+            context.RawPriceConsensus[key] = median;
+        }
+
+        _logger.LogInformation(
+            "Built raw price consensus for {Count} (stock, date) pairs from {Total} groups",
+            context.RawPriceConsensus.Count, rawPrices.Count);
     }
 
     private async Task UpsertInstitutionalHolders(ImportContext context, CancellationToken cancellationToken) {
@@ -451,9 +511,15 @@ public class HoldingsImportService {
         long shares,
         CancellationToken cancellationToken
     ) {
-        // Pre-2023 data set → always thousands
-        if (context.DataSetValueInThousands)
-            return ThousandsValueNormalizer.Instance;
+        // Pre-2023 data set → thousands by default, but detect filers who report in dollars
+        if (context.DataSetValueInThousands) {
+            if (!TryParseDateOnly(submission.PeriodOfReport, out var preReportDate))
+                return ThousandsValueNormalizer.Instance;
+
+            return IsValueAlreadyInDollars(context.RawPriceConsensus, commonStockId, preReportDate, rawValue, shares)
+                ? PassthroughValueNormalizer.Instance
+                : ThousandsValueNormalizer.Instance;
+        }
 
         // 2023+ non-amendment → dollars
         if (!isAmendment)
@@ -633,6 +699,32 @@ public class HoldingsImportService {
             return name;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Returns true when a pre-2023 raw VALUE appears to already be in dollars (not thousands).
+    /// Compares the entry's raw price-per-share against the dataset median; a ratio above
+    /// <see cref="OutlierThreshold"/> indicates the filer used dollars.
+    /// </summary>
+    /// <remarks>
+    /// Known limitation: if dollar-reporting filers outnumber thousands-reporting filers for
+    /// a thinly-held stock, the median shifts toward dollar-scale pricing and detection inverts.
+    /// In that case no outliers are detected and all entries are multiplied by 1000 — same as
+    /// today's behavior, so no regression, but the fix is ineffective for that stock.
+    /// </remarks>
+    internal static bool IsValueAlreadyInDollars(
+        Dictionary<(Guid, DateOnly), decimal> rawPriceConsensus,
+        Guid commonStockId,
+        DateOnly reportDate,
+        long rawValue,
+        long shares
+    ) {
+        if (shares <= 0 || rawValue <= 0) return false;
+
+        var rawPrice = (decimal)rawValue / shares;
+        return rawPriceConsensus.TryGetValue((commonStockId, reportDate), out var medianRawPrice)
+            && medianRawPrice > 0
+            && rawPrice > medianRawPrice * OutlierThreshold;
     }
 
     internal static InvestmentDiscretion ParseInvestmentDiscretion(string value) {

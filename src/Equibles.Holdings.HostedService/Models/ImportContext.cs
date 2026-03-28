@@ -21,4 +21,8 @@ public class ImportContext {
 
     // Consensus price cache: (CommonStockId, ReportDate) → median price (null = not enough data)
     public Dictionary<(Guid, DateOnly), decimal?> ConsensusCache { get; } = [];
+
+    // Raw price consensus: (CommonStockId, ReportDate) → median raw VALUE/SHARES from the dataset.
+    // Used for pre-2023 data to detect filers who report VALUE in dollars instead of thousands.
+    public Dictionary<(Guid, DateOnly), decimal> RawPriceConsensus { get; set; } = [];
 }
