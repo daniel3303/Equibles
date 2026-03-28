@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" data-theme="equibles">
+<head lang="en">
+    <partial name="_Head" />
+</head>
+<body class="bg-base-200 min-h-screen flex items-center justify-center">
+    @RenderBody()
+
+    @Html.AntiForgeryToken()
+
+    <partial name="_Scripts" />
+    <partial name="_FlashMessages" />
+</body>
+</html>

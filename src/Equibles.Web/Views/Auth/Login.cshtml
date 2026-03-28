@@ -1,36 +1,34 @@
 @{
     ViewData["Title"] = "Login";
-    Layout = "_Layout";
+    Layout = "_LayoutAuth";
     var returnUrl = ViewData["ReturnUrl"] as string;
 }
 
-<div class="flex items-center justify-center min-h-[60vh]">
-    <div class="card bg-base-100 shadow-lg w-full max-w-sm">
-        <div class="card-body">
-            <div class="flex flex-col items-center gap-2 mb-4">
-                <img src="/favicon/favicon/android-chrome-512x512.png" alt="Equibles" class="h-12 w-auto" />
-                <h2 class="card-title text-lg">Sign in to Equibles</h2>
-            </div>
-
-            <form asp-action="Login" asp-controller="Auth" method="post">
-                <input type="hidden" name="ReturnUrl" value="@returnUrl" />
-
-                <fieldset class="fieldset pb-0">
-                    <legend class="fieldset-legend">Username</legend>
-                    <input type="text" name="username" class="input w-full" placeholder="Username"
-                           autocomplete="username" required autofocus />
-                </fieldset>
-
-                <fieldset class="fieldset pb-0">
-                    <legend class="fieldset-legend">Password</legend>
-                    <input type="password" name="password" class="input w-full" placeholder="Password"
-                           autocomplete="current-password" required />
-                </fieldset>
-
-                <div class="mt-6">
-                    <button type="submit" class="btn btn-primary w-full">Sign in</button>
-                </div>
-            </form>
+<div class="card bg-base-100 shadow-lg w-full max-w-sm">
+    <div class="card-body">
+        <div class="flex flex-col items-center gap-2 mb-4">
+            <img src="/favicon/favicon/android-chrome-512x512.png" alt="Equibles" class="h-12 w-auto" />
+            <h2 class="card-title text-lg">Sign in to Equibles</h2>
         </div>
+
+        <form asp-action="Login" asp-controller="Auth">
+            <input type="hidden" name="ReturnUrl" value="@returnUrl" />
+
+            <fieldset class="fieldset pb-0">
+                <legend class="fieldset-legend">Username</legend>
+                <input type="text" name="username" class="input w-full" placeholder="Username"
+                       autocomplete="username" required autofocus />
+            </fieldset>
+
+            <fieldset class="fieldset pb-0">
+                <legend class="fieldset-legend">Password</legend>
+                <input type="password" name="password" class="input w-full" placeholder="Password"
+                       autocomplete="current-password" required />
+            </fieldset>
+
+            <div class="mt-6">
+                <button type="submit" class="btn btn-primary w-full">Sign in</button>
+            </div>
+        </form>
     </div>
 </div>
