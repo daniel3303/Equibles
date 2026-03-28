@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using Equibles.CommonStocks.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace Equibles.ShortData.Data.Models;
+namespace Equibles.Sec.Data.Models;
 
 [Index(nameof(CommonStockId), nameof(SettlementDate), IsUnique = true)]
 [Index(nameof(SettlementDate))]

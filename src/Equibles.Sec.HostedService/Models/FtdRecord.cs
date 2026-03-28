@@ -1,4 +1,4 @@
-namespace Equibles.ShortData.HostedService.Models;
+namespace Equibles.Sec.HostedService.Models;
 
 internal class FtdRecord {
     public DateOnly SettlementDate { get; set; }

@@ -1,8 +1,8 @@
 using Equibles.Data;
 using Equibles.CommonStocks.Data.Models;
-using Equibles.ShortData.Data.Models;
+using Equibles.Finra.Data.Models;
 
-namespace Equibles.ShortData.Repositories;
+namespace Equibles.Finra.Repositories;
 
 public class ShortInterestRepository : BaseRepository<ShortInterest> {
     public ShortInterestRepository(EquiblesDbContext dbContext) : base(dbContext) {

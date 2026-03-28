@@ -5,7 +5,7 @@ using Equibles.Holdings.Repositories;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
-using Equibles.ShortData.Repositories;
+using Equibles.Finra.Repositories;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.Extensions;
 using Equibles.Web.ViewModels.Stocks;

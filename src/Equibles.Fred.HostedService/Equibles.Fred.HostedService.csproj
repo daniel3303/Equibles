@@ -13,6 +13,7 @@
       <ProjectReference Include="..\Equibles.Fred.Repositories\Equibles.Fred.Repositories.csproj" />
       <ProjectReference Include="..\Equibles.Integrations.Fred\Equibles.Integrations.Fred.csproj" />
       <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
+      <ProjectReference Include="..\Equibles.Worker\Equibles.Worker.csproj" />
     </ItemGroup>
 
 </Project>

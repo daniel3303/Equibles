@@ -729,7 +729,7 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("Document");
                 });
 
-            modelBuilder.Entity("Equibles.ShortData.Data.Models.DailyShortVolume", b =>
+            modelBuilder.Entity("Equibles.Finra.Data.Models.DailyShortVolume", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -767,7 +767,7 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("DailyShortVolume");
                 });
 
-            modelBuilder.Entity("Equibles.ShortData.Data.Models.FailToDeliver", b =>
+            modelBuilder.Entity("Equibles.Sec.Data.Models.FailToDeliver", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
@@ -797,7 +797,7 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("FailToDeliver");
                 });
 
-            modelBuilder.Entity("Equibles.ShortData.Data.Models.ShortInterest", b =>
+            modelBuilder.Entity("Equibles.Finra.Data.Models.ShortInterest", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1016,7 +1016,7 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("Content");
                 });
 
-            modelBuilder.Entity("Equibles.ShortData.Data.Models.DailyShortVolume", b =>
+            modelBuilder.Entity("Equibles.Finra.Data.Models.DailyShortVolume", b =>
                 {
                     b.HasOne("Equibles.CommonStocks.Data.Models.CommonStock", "CommonStock")
                         .WithMany()
@@ -1027,7 +1027,7 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("CommonStock");
                 });
 
-            modelBuilder.Entity("Equibles.ShortData.Data.Models.FailToDeliver", b =>
+            modelBuilder.Entity("Equibles.Sec.Data.Models.FailToDeliver", b =>
                 {
                     b.HasOne("Equibles.CommonStocks.Data.Models.CommonStock", "CommonStock")
                         .WithMany()
@@ -1038,7 +1038,7 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("CommonStock");
                 });
 
-            modelBuilder.Entity("Equibles.ShortData.Data.Models.ShortInterest", b =>
+            modelBuilder.Entity("Equibles.Finra.Data.Models.ShortInterest", b =>
                 {
                     b.HasOne("Equibles.CommonStocks.Data.Models.CommonStock", "CommonStock")
                         .WithMany()

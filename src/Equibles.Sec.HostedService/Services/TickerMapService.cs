@@ -2,7 +2,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Microsoft.EntityFrameworkCore;
 
-namespace Equibles.Finra.HostedService.Services;
+namespace Equibles.Sec.HostedService.Services;
 
 [Service]
 public class TickerMapService {

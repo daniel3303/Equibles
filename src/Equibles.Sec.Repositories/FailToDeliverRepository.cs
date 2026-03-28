@@ -1,8 +1,8 @@
 using Equibles.Data;
 using Equibles.CommonStocks.Data.Models;
-using Equibles.ShortData.Data.Models;
+using Equibles.Sec.Data.Models;
 
-namespace Equibles.ShortData.Repositories;
+namespace Equibles.Sec.Repositories;
 
 public class FailToDeliverRepository : BaseRepository<FailToDeliver> {
     public FailToDeliverRepository(EquiblesDbContext dbContext) : base(dbContext) {

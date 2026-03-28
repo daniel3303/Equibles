@@ -1,15 +1,15 @@
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
-using Equibles.ShortData.Data.Models;
-using Equibles.ShortData.Repositories;
+using Equibles.Finra.Data.Models;
+using Equibles.Finra.Repositories;
 using Equibles.Integrations.Finra.Contracts;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
-using Equibles.ShortData.HostedService.Configuration;
+using Equibles.Finra.HostedService.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
-namespace Equibles.ShortData.HostedService.Services;
+namespace Equibles.Finra.HostedService.Services;
 
 [Service]
 public class ShortInterestImportService {
@@ -141,7 +141,7 @@ public class ShortInterestImportService {
         try {
             await using var scope = _scopeFactory.CreateAsyncScope();
             var errorManager = scope.ServiceProvider.GetRequiredService<ErrorManager>();
-            await errorManager.Create(ErrorSource.ShortDataScraper, context, message, stackTrace, requestSummary);
+            await errorManager.Create(ErrorSource.FinraScraper, context, message, stackTrace, requestSummary);
         } catch { }
     }
 }

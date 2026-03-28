@@ -8,13 +8,14 @@ public class ErrorSource {
     public static readonly ErrorSource McpTool = new("McpTool");
     public static readonly ErrorSource DocumentScraper = new("DocumentScraper");
     public static readonly ErrorSource HoldingsScraper = new("HoldingsScraper");
-    public static readonly ErrorSource ShortDataScraper = new("ShortDataScraper");
+    public static readonly ErrorSource FinraScraper = new("FinraScraper");
+    public static readonly ErrorSource FtdScraper = new("FtdScraper");
     public static readonly ErrorSource DocumentProcessor = new("DocumentProcessor");
     public static readonly ErrorSource CongressScraper = new("CongressScraper");
     public static readonly ErrorSource FredScraper = new("FredScraper");
     public static readonly ErrorSource Other = new("Other");
 
-    public static IEnumerable<ErrorSource> GetAll() => [McpTool, DocumentScraper, HoldingsScraper, ShortDataScraper, DocumentProcessor, CongressScraper, FredScraper, Other];
+    public static IEnumerable<ErrorSource> GetAll() => [McpTool, DocumentScraper, HoldingsScraper, FinraScraper, FtdScraper, DocumentProcessor, CongressScraper, FredScraper, Other];
 
     public override string ToString() => Value;
     public override bool Equals(object obj) => obj is ErrorSource other && Value == other.Value;

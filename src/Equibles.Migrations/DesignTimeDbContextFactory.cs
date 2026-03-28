@@ -7,7 +7,8 @@ using Equibles.InsiderTrading.Data;
 using Equibles.Media.Data;
 using Equibles.ParadeDB.EntityFrameworkCore;
 using Equibles.Sec.Data;
-using Equibles.ShortData.Data;
+using Equibles.Finra.Data;
+using Equibles.Fred.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
@@ -36,7 +37,8 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<EquiblesDb
             new HoldingsModuleConfiguration(),
             new InsiderTradingModuleConfiguration(),
             new CongressModuleConfiguration(),
-            new ShortDataModuleConfiguration(),
+            new FinraModuleConfiguration(),
+            new FredModuleConfiguration(),
             new SecModuleConfiguration(),
             new MediaModuleConfiguration(),
             new ErrorsModuleConfiguration(),

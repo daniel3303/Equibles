@@ -2,19 +2,19 @@ using System.Globalization;
 using System.IO.Compression;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
-using Equibles.ShortData.Data.Models;
+using Equibles.Sec.Data.Models;
 using Equibles.CommonStocks.Repositories;
-using Equibles.ShortData.Repositories;
+using Equibles.Sec.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
-using Equibles.ShortData.HostedService.Configuration;
+using Equibles.Sec.HostedService.Configuration;
 using Equibles.Integrations.Sec.Contracts;
-using Equibles.ShortData.HostedService.Models;
+using Equibles.Sec.HostedService.Models;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
-namespace Equibles.ShortData.HostedService.Services;
+namespace Equibles.Sec.HostedService.Services;
 
 [Service]
 public class FtdImportService {
@@ -24,14 +24,14 @@ public class FtdImportService {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly ILogger<FtdImportService> _logger;
-    private readonly FinraScraperOptions _options;
+    private readonly FtdScraperOptions _options;
     private readonly WorkerOptions _workerOptions;
 
     public FtdImportService(
         IServiceScopeFactory scopeFactory,
         ISecEdgarClient secEdgarClient,
         ILogger<FtdImportService> logger,
-        IOptions<FinraScraperOptions> options,
+        IOptions<FtdScraperOptions> options,
         IOptions<WorkerOptions> workerOptions
     ) {
         _scopeFactory = scopeFactory;
@@ -300,7 +300,7 @@ public class FtdImportService {
         try {
             await using var scope = _scopeFactory.CreateAsyncScope();
             var errorManager = scope.ServiceProvider.GetRequiredService<ErrorManager>();
-            await errorManager.Create(ErrorSource.ShortDataScraper, context, message, stackTrace, requestSummary);
+            await errorManager.Create(ErrorSource.FtdScraper, context, message, stackTrace, requestSummary);
         } catch { }
     }
 }

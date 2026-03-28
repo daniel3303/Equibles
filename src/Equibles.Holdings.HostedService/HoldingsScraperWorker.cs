@@ -1,13 +1,15 @@
+using Equibles.Core;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Holdings.HostedService.Services;
+using Equibles.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
 namespace Equibles.Holdings.HostedService;
 
-public class HoldingsScraperWorker : BackgroundService {
+public class HoldingsScraperWorker : BaseScraperWorker {
     private const int MaxRetries = 3;
     private static readonly TimeSpan[] RetryDelays = [
         TimeSpan.FromSeconds(30),
@@ -15,87 +17,70 @@ public class HoldingsScraperWorker : BackgroundService {
         TimeSpan.FromMinutes(10),
     ];
 
-    private readonly ILogger<HoldingsScraperWorker> _logger;
-    private readonly IServiceScopeFactory _scopeFactory;
     private readonly WorkerOptions _workerOptions;
-    private readonly TimeSpan _sleepInterval = TimeSpan.FromHours(24);
-
     private readonly IConfiguration _configuration;
+
+    protected override string WorkerName => "Holdings scraper";
+    protected override TimeSpan SleepInterval => TimeSpan.FromHours(24);
+    protected override ErrorSource ErrorSource => ErrorSource.HoldingsScraper;
 
     public HoldingsScraperWorker(
         ILogger<HoldingsScraperWorker> logger,
         IServiceScopeFactory scopeFactory,
+        ErrorReporter errorReporter,
         IOptions<WorkerOptions> workerOptions,
         IConfiguration configuration
-    ) {
-        _logger = logger;
-        _scopeFactory = scopeFactory;
+    ) : base(logger, scopeFactory, errorReporter) {
         _workerOptions = workerOptions.Value;
         _configuration = configuration;
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
+    protected override bool ValidateConfiguration() {
         if (string.IsNullOrEmpty(_configuration["Sec:ContactEmail"])) {
-            _logger.LogWarning("Holdings Scraper stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file.");
-            return;
+            Logger.LogWarning("Holdings Scraper stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file.");
+            return false;
         }
-
-        while (!stoppingToken.IsCancellationRequested) {
-            _logger.LogInformation("Holdings scraper worker running at: {Time}", DateTimeOffset.Now);
-            await DoWork(stoppingToken);
-
-            GarbageCollectorUtil.ForceAggressiveCollection();
-
-            _logger.LogInformation("Holdings import cycle complete. Sleeping for {Hours}h", _sleepInterval.TotalHours);
-            await Task.Delay(_sleepInterval, stoppingToken);
-        }
+        return true;
     }
 
-    private async Task DoWork(CancellationToken cancellationToken) {
-        try {
-            var startDate = _workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1);
-            var minReportDate = DateOnly.FromDateTime(startDate);
-            var fileNames = HoldingsDataSetClient.GetDataSetFileNames(startDate);
+    protected override async Task DoWork(CancellationToken stoppingToken) {
+        var startDate = _workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1);
+        var minReportDate = DateOnly.FromDateTime(startDate);
+        var fileNames = HoldingsDataSetClient.GetDataSetFileNames(startDate);
 
-            _logger.LogInformation(
-                "Processing {Count} quarterly data sets from {Start:yyyy-MM-dd}",
-                fileNames.Count, startDate);
+        Logger.LogInformation(
+            "Processing {Count} quarterly data sets from {Start:yyyy-MM-dd}",
+            fileNames.Count, startDate);
 
-            var failedDataSets = new List<string>();
+        var failedDataSets = new List<string>();
 
-            foreach (var fileName in fileNames) {
-                cancellationToken.ThrowIfCancellationRequested();
+        foreach (var fileName in fileNames) {
+            stoppingToken.ThrowIfCancellationRequested();
 
-                if (!await TryProcessDataSet(fileName, minReportDate, cancellationToken)) {
-                    failedDataSets.Add(fileName);
-                    // Cool down before next file to avoid cascading rate limits
-                    await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
+            if (!await TryProcessDataSet(fileName, minReportDate, stoppingToken)) {
+                failedDataSets.Add(fileName);
+                await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+            }
+        }
+
+        if (failedDataSets.Count > 0) {
+            Logger.LogWarning(
+                "Retrying {Count} failed data sets at end of cycle: {FileNames}",
+                failedDataSets.Count, string.Join(", ", failedDataSets));
+
+            foreach (var fileName in failedDataSets) {
+                stoppingToken.ThrowIfCancellationRequested();
+
+                if (!await TryProcessDataSet(fileName, minReportDate, stoppingToken)) {
+                    Logger.LogError(
+                        "Data set {FileName} permanently failed after all retry attempts in this cycle",
+                        fileName);
+                    await ErrorReporter.Report(ErrorSource, "Holdings.ProcessDataSet",
+                        "Permanently failed after all retry attempts", null,
+                        $"file: {fileName}, permanently failed");
+                    await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
                 }
             }
-
-            if (failedDataSets.Count > 0) {
-                _logger.LogWarning(
-                    "Retrying {Count} failed data sets at end of cycle: {FileNames}",
-                    failedDataSets.Count, string.Join(", ", failedDataSets));
-
-                foreach (var fileName in failedDataSets) {
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    if (!await TryProcessDataSet(fileName, minReportDate, cancellationToken)) {
-                        _logger.LogError(
-                            "Data set {FileName} permanently failed after all retry attempts in this cycle",
-                            fileName);
-                        await ReportError("Holdings.ProcessDataSet", "Permanently failed after all retry attempts", null, $"file: {fileName}, permanently failed");
-                        // Cool down before next retry to avoid cascading rate limits
-                        await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
-                    }
-                }
-            }
-        } catch (OperationCanceledException) {
-            _logger.LogInformation("Holdings scraper worker cancelled");
-        } catch (Exception ex) {
-            _logger.LogCritical(ex, "Critical error in holdings scraper worker");
-            await ReportError("HoldingsScraperWorker.DoWork", ex.Message, ex.StackTrace);
         }
     }
 
@@ -108,15 +93,15 @@ public class HoldingsScraperWorker : BackgroundService {
             try {
                 if (attempt > 1) {
                     var delay = RetryDelays[Math.Min(attempt - 2, RetryDelays.Length - 1)];
-                    _logger.LogInformation(
+                    Logger.LogInformation(
                         "Retry attempt {Attempt}/{MaxRetries} for {FileName} after {Delay}s",
                         attempt, MaxRetries, fileName, delay.TotalSeconds);
                     await Task.Delay(delay, cancellationToken);
                 }
 
-                _logger.LogInformation("Processing data set: {FileName}", fileName);
+                Logger.LogInformation("Processing data set: {FileName}", fileName);
 
-                using var scope = _scopeFactory.CreateScope();
+                using var scope = ScopeFactory.CreateScope();
                 var dataSetClient = scope.ServiceProvider.GetRequiredService<HoldingsDataSetClient>();
                 var importService = scope.ServiceProvider.GetRequiredService<HoldingsImportService>();
 
@@ -126,43 +111,34 @@ public class HoldingsScraperWorker : BackgroundService {
 
                 GarbageCollectorUtil.ForceAggressiveCollection();
 
-                // SEC rate limiting: wait between downloads
                 await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
                 return true;
             } catch (HttpRequestException ex) {
-                _logger.LogError(
+                Logger.LogError(
                     ex,
                     "Failed to download data set {FileName} (attempt {Attempt}/{MaxRetries})",
                     fileName, attempt, MaxRetries);
             } catch (IOException ex) {
-                _logger.LogError(
+                Logger.LogError(
                     ex,
                     "IO error processing data set {FileName} (attempt {Attempt}/{MaxRetries})",
                     fileName, attempt, MaxRetries);
             } catch (OperationCanceledException) {
                 throw;
             } catch (Exception ex) {
-                // Non-transient error — no point retrying
-                _logger.LogError(
+                Logger.LogError(
                     ex,
                     "Non-transient error processing data set {FileName}, skipping",
                     fileName);
-                await ReportError("Holdings.ProcessDataSet", ex.Message, ex.StackTrace, $"file: {fileName}");
+                await ErrorReporter.Report(ErrorSource, "Holdings.ProcessDataSet",
+                    ex.Message, ex.StackTrace, $"file: {fileName}");
                 return false;
             }
         }
 
-        _logger.LogWarning(
+        Logger.LogWarning(
             "Data set {FileName} failed all {MaxRetries} attempts — will retry at end of cycle",
             fileName, MaxRetries);
         return false;
-    }
-
-    private async Task ReportError(string context, string message, string stackTrace, string requestSummary = null) {
-        try {
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var errorManager = scope.ServiceProvider.GetRequiredService<ErrorManager>();
-            await errorManager.Create(ErrorSource.HoldingsScraper, context, message, stackTrace, requestSummary);
-        } catch { }
     }
 }

@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Equibles.CommonStocks.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace Equibles.ShortData.Data.Models;
+namespace Equibles.Finra.Data.Models;
 
 [Index(nameof(CommonStockId), nameof(Date), IsUnique = true)]
 [Index(nameof(Date))]

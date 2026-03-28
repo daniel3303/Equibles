@@ -16,5 +16,7 @@ public class SecModuleConfiguration : Equibles.Data.IModuleConfiguration {
         builder.Entity<Models.Chunks.Chunk>(b => {
             b.Property(e => e.DocumentType).HasConversion(docTypeConversion);
         });
+
+        builder.Entity<FailToDeliver>();
     }
 }

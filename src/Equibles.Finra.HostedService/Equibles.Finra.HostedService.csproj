@@ -6,16 +6,15 @@
       <PackageReference Include="Microsoft.Extensions.Http" />
       <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
       <PackageReference Include="Newtonsoft.Json" />
-      <PackageReference Include="FlexLabs.EntityFrameworkCore.Upsert" />
     </ItemGroup>
 
     <ItemGroup>
       <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
-      <ProjectReference Include="..\Equibles.Integrations.Sec\Equibles.Integrations.Sec.csproj" />
-      <ProjectReference Include="..\Equibles.ShortData.Repositories\Equibles.ShortData.Repositories.csproj" />
+      <ProjectReference Include="..\Equibles.Finra.Repositories\Equibles.Finra.Repositories.csproj" />
       <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
       <ProjectReference Include="..\Equibles.Integrations.Finra\Equibles.Integrations.Finra.csproj" />
       <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
+      <ProjectReference Include="..\Equibles.Worker\Equibles.Worker.csproj" />
     </ItemGroup>
 
 </Project>

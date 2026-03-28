@@ -8,7 +8,6 @@ using Equibles.Holdings.Data.Models;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Fred.Data.Models;
-using Equibles.ShortData.Data.Models;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.FlashMessage.Contracts;
 using Equibles.Web.Models;

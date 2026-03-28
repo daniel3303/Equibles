@@ -1,12 +1,11 @@
-using Equibles.ShortData.Data.Models;
+using Equibles.Finra.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace Equibles.ShortData.Data;
+namespace Equibles.Finra.Data;
 
-public class ShortDataModuleConfiguration : Equibles.Data.IModuleConfiguration {
+public class FinraModuleConfiguration : Equibles.Data.IModuleConfiguration {
     public void ConfigureEntities(ModelBuilder builder) {
         builder.Entity<DailyShortVolume>();
-        builder.Entity<FailToDeliver>();
         builder.Entity<ShortInterest>();
     }
 }

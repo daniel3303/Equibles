@@ -12,7 +12,8 @@
       <ProjectReference Include="..\Equibles.Holdings.Data\Equibles.Holdings.Data.csproj" />
       <ProjectReference Include="..\Equibles.InsiderTrading.Data\Equibles.InsiderTrading.Data.csproj" />
       <ProjectReference Include="..\Equibles.Congress.Data\Equibles.Congress.Data.csproj" />
-      <ProjectReference Include="..\Equibles.ShortData.Data\Equibles.ShortData.Data.csproj" />
+      <ProjectReference Include="..\Equibles.Finra.Data\Equibles.Finra.Data.csproj" />
+      <ProjectReference Include="..\Equibles.Fred.Data\Equibles.Fred.Data.csproj" />
       <ProjectReference Include="..\Equibles.Sec.Data\Equibles.Sec.Data.csproj" />
       <ProjectReference Include="..\Equibles.Media.Data\Equibles.Media.Data.csproj" />
       <ProjectReference Include="..\Equibles.Errors.Data\Equibles.Errors.Data.csproj" />

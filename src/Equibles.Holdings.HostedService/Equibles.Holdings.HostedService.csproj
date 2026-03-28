@@ -14,6 +14,7 @@
       <ProjectReference Include="..\Equibles.Holdings.Repositories\Equibles.Holdings.Repositories.csproj" />
       <ProjectReference Include="..\Equibles.CommonStocks.BusinessLogic\Equibles.CommonStocks.BusinessLogic.csproj" />
       <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
+      <ProjectReference Include="..\Equibles.Worker\Equibles.Worker.csproj" />
     </ItemGroup>
 
 </Project>

@@ -1,4 +1,4 @@
-using Equibles.ShortData.Data.Models;
+using Equibles.Finra.Data.Models;
 
 namespace Equibles.Web.ViewModels.Stocks;
 
