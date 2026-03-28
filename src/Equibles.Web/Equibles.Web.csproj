@@ -3,6 +3,7 @@
     <ItemGroup>
       <PackageReference Include="Equibles.Core.AutoWiring" />
       <PackageReference Include="Markdig" />
+      <PackageReference Include="MathNet.Numerics" />
       <PackageReference Include="Microsoft.AspNetCore.Mvc.Razor.RuntimeCompilation" />
       <PackageReference Include="Newtonsoft.Json" />
       <PackageReference Include="Serilog" />

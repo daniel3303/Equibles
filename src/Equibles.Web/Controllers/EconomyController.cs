@@ -3,6 +3,7 @@ using Equibles.Fred.Data.Models;
 using Equibles.Fred.Repositories;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.ViewModels.Economy;
+using MathNet.Numerics.Statistics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,9 +24,6 @@ public class EconomyController : BaseController {
 
     [HttpGet]
     public async Task<IActionResult> Index() {
-        ViewData["Title"] = "Economic Indicators";
-        ViewData["Description"] = "Browse FRED economic indicators — interest rates, inflation, employment, GDP, and more.";
-
         var allSeries = await _seriesRepository.GetAll()
             .OrderBy(s => s.Category)
             .ThenBy(s => s.Title)
@@ -82,8 +80,36 @@ public class EconomyController : BaseController {
             Observations = observations
         };
 
+        // Compute statistics using MathNet.Numerics
+        var values = observations.Where(o => o.Value.HasValue).Select(o => (double)o.Value.Value).ToArray();
+        if (values.Length > 0) {
+            var stats = new DescriptiveStatistics(values);
+            viewModel.Mean = (decimal)Math.Round(stats.Mean, 4);
+            viewModel.Min = (decimal)stats.Minimum;
+            viewModel.Max = (decimal)stats.Maximum;
+            viewModel.Median = (decimal)Math.Round(values.Median(), 4);
+            viewModel.StdDev = (decimal)Math.Round(stats.StandardDeviation, 4);
+            viewModel.LatestValue = observations[0].Value; // observations are desc by date
+            if (observations.Count > 1) viewModel.PreviousValue = observations[1].Value;
+
+            // Moving averages (computed on chronological order)
+            var chronological = observations
+                .Where(o => o.Value.HasValue)
+                .OrderBy(o => o.Date)
+                .Select(o => (double)o.Value.Value)
+                .ToArray();
+
+            viewModel.Sma20 = ComputeSma(chronological, 20);
+            viewModel.Sma50 = ComputeSma(chronological, 50);
+        }
+
         ViewData["Title"] = $"{series.SeriesId} — {series.Title}";
         ViewData["Description"] = $"{series.Title} ({series.SeriesId}) — {series.Units}. FRED economic data.";
         return View(viewModel);
+    }
+
+    private static List<decimal?> ComputeSma(double[] values, int period) {
+        var sma = values.MovingAverage(period);
+        return sma.Select((v, i) => i < period - 1 ? (decimal?)null : (decimal?)Math.Round(v, 4)).ToList();
     }
 }

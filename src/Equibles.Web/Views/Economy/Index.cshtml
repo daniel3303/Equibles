@@ -1,13 +1,13 @@
 @model Equibles.Web.ViewModels.Economy.EconomyIndexViewModel
 
 @{
-    ViewData["Title"] = "Economic Indicators";
+    ViewData["Title"] = "Economic Data";
     ViewData["Description"] = "Browse FRED economic indicators — interest rates, inflation, employment, GDP, and more.";
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
     <div class="mb-8">
-        <h1 class="text-3xl font-bold mb-2">Economic Indicators</h1>
+        <h1 class="text-3xl font-bold mb-2">Economic Data</h1>
         <p class="text-base-content/60">
             @Model.Categories.Sum(c => c.Series.Count) indicators from
             <a href="https://fred.stlouisfed.org" target="_blank" rel="noopener" class="link link-primary">FRED</a>
@@ -33,7 +33,8 @@
                             </thead>
                             <tbody>
                                 @foreach (var series in category.Series) {
-                                    <tr class="hover">
+                                    <tr class="hover cursor-pointer economy-row"
+                                        data-href="@Url.Action("Show", "Economy", new { seriesId = series.SeriesId })">
                                         <td>
                                             <a asp-action="Show" asp-route-seriesId="@series.SeriesId"
                                                class="font-mono text-sm link link-primary">@series.SeriesId</a>
@@ -44,7 +45,7 @@
                                             @if (series.LatestValue.HasValue) {
                                                 @series.LatestValue.Value.ToString("N2")
                                             } else {
-                                                <span class="text-base-content/30">—</span>
+                                                <span class="text-base-content/30">&mdash;</span>
                                             }
                                         </td>
                                         <td class="text-right text-sm text-base-content/60 hidden sm:table-cell">
@@ -62,3 +63,15 @@
         }
     </div>
 </div>
+
+@section Scripts {
+    <script>
+    // Make table rows clickable to navigate to the series detail page
+    document.querySelectorAll('.economy-row').forEach(function(row) {
+        row.addEventListener('click', function(e) {
+            if (e.target.closest('a')) return; // let native link clicks through
+            window.location.href = this.dataset.href;
+        });
+    });
+    </script>
+}
