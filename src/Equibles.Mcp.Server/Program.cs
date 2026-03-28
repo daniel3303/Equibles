@@ -13,6 +13,8 @@ using Equibles.Mcp.Contracts;
 using Equibles.Mcp.Extensions;
 using Equibles.Mcp.Middleware;
 using Equibles.Mcp.Server;
+using Equibles.Congress.Data.Extensions;
+using Equibles.Finra.Data.Extensions;
 using Equibles.Sec.Data.Extensions;
 using Equibles.Sec.Mcp.Extensions;
 using ModelContextProtocol.AspNetCore;
@@ -36,6 +38,8 @@ builder.Services.AddEquiblesDbContext(connectionString, modules => {
     modules.AddInsiderTrading();
     modules.AddFred();
     modules.AddSec();
+    modules.AddCongress();
+    modules.AddFinra();
     modules.AddMedia();
     modules.AddErrors();
 });
@@ -46,6 +50,8 @@ builder.Services.AddRepositoriesFrom(
     typeof(Equibles.InsiderTrading.Repositories.InsiderOwnerRepository).Assembly,
     typeof(Equibles.Fred.Repositories.FredSeriesRepository).Assembly,
     typeof(Equibles.Sec.Repositories.DocumentRepository).Assembly,
+    typeof(Equibles.Congress.Repositories.CongressMemberRepository).Assembly,
+    typeof(Equibles.Finra.Repositories.DailyShortVolumeRepository).Assembly,
     typeof(Equibles.Media.Repositories.FileRepository).Assembly,
     typeof(Equibles.Errors.Repositories.ErrorRepository).Assembly
 );
