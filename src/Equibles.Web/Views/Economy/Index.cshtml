@@ -1,0 +1,64 @@
+@model Equibles.Web.ViewModels.Economy.EconomyIndexViewModel
+
+@{
+    ViewData["Title"] = "Economic Indicators";
+    ViewData["Description"] = "Browse FRED economic indicators — interest rates, inflation, employment, GDP, and more.";
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">Economic Indicators</h1>
+        <p class="text-base-content/60">
+            @Model.Categories.Sum(c => c.Series.Count) indicators from
+            <a href="https://fred.stlouisfed.org" target="_blank" rel="noopener" class="link link-primary">FRED</a>
+            across @Model.Categories.Count categories
+        </p>
+    </div>
+
+    <div class="space-y-6">
+        @foreach (var category in Model.Categories) {
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-4 lg:p-6">
+                    <h2 class="card-title text-lg mb-3">@category.DisplayName</h2>
+                    <div class="overflow-x-auto">
+                        <table class="table table-zebra table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Series</th>
+                                    <th>Name</th>
+                                    <th class="hidden md:table-cell">Frequency</th>
+                                    <th class="text-right">Latest Value</th>
+                                    <th class="text-right hidden sm:table-cell">Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var series in category.Series) {
+                                    <tr class="hover">
+                                        <td>
+                                            <a asp-action="Show" asp-route-seriesId="@series.SeriesId"
+                                               class="font-mono text-sm link link-primary">@series.SeriesId</a>
+                                        </td>
+                                        <td class="max-w-xs truncate">@series.Title</td>
+                                        <td class="hidden md:table-cell text-base-content/60 text-sm">@series.Frequency</td>
+                                        <td class="text-right font-semibold tabular-nums">
+                                            @if (series.LatestValue.HasValue) {
+                                                @series.LatestValue.Value.ToString("N2")
+                                            } else {
+                                                <span class="text-base-content/30">—</span>
+                                            }
+                                        </td>
+                                        <td class="text-right text-sm text-base-content/60 hidden sm:table-cell">
+                                            @if (series.LatestDate.HasValue) {
+                                                @series.LatestDate.Value.ToString("yyyy-MM-dd")
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>

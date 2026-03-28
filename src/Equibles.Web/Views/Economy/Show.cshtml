@@ -1,0 +1,91 @@
+@model Equibles.Web.ViewModels.Economy.EconomySeriesViewModel
+
+<div class="max-w-6xl mx-auto px-6 py-8">
+    <!-- Breadcrumb -->
+    <div class="breadcrumbs text-sm text-base-content/60 mb-2">
+        <ul>
+            <li><a asp-controller="Economy" asp-action="Index">Economic Indicators</a></li>
+            <li>
+                <span class="font-semibold text-base-content">@Model.SeriesId</span>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Series Header -->
+    <div class="card bg-base-100 shadow-sm mb-6">
+        <div class="card-body p-4 lg:p-6">
+            <div class="flex flex-col lg:flex-row lg:justify-between gap-4">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-baseline gap-3 mb-1">
+                        <h1 class="text-2xl font-bold">@Model.SeriesId</h1>
+                        <span class="badge badge-ghost">@Model.CategoryDisplayName</span>
+                    </div>
+                    <p class="text-base text-base-content/70">@Model.Title</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-x-6 gap-y-3 lg:gap-x-8 lg:border-l lg:border-base-200 lg:pl-6 border-t lg:border-t-0 pt-4 lg:pt-0 shrink-0">
+                    <div>
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider">Units</div>
+                        <div class="text-sm">@Model.Units</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider">Frequency</div>
+                        <div class="text-sm">@Model.Frequency</div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(Model.SeasonalAdjustment)) {
+                        <div>
+                            <div class="text-xs text-base-content/50 uppercase tracking-wider">Seasonal Adj.</div>
+                            <div class="text-sm">@Model.SeasonalAdjustment</div>
+                        </div>
+                    }
+                    <div>
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider">FRED</div>
+                        <a href="https://fred.stlouisfed.org/series/@Model.SeriesId" target="_blank" rel="noopener"
+                           class="text-sm link link-primary">View on FRED</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Observations Table -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 lg:p-6">
+            <h2 class="card-title text-lg mb-3">
+                Observations
+                <span class="text-sm font-normal text-base-content/50">(@Model.Observations.Count most recent)</span>
+            </h2>
+
+            @if (Model.Observations.Count == 0) {
+                <div class="text-center py-8 text-base-content/50">
+                    <p class="text-sm">No observations yet</p>
+                </div>
+            } else {
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra table-sm">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th class="text-right">Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var obs in Model.Observations) {
+                                <tr>
+                                    <td class="font-mono text-sm">@obs.Date.ToString("yyyy-MM-dd")</td>
+                                    <td class="text-right font-semibold tabular-nums">
+                                        @if (obs.Value.HasValue) {
+                                            @obs.Value.Value.ToString("N2")
+                                        } else {
+                                            <span class="text-base-content/30">—</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>

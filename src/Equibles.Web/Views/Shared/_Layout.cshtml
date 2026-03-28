@@ -19,7 +19,8 @@
                 </a>
                 <nav class="hidden md:flex items-center gap-6" aria-label="Main navigation">
                     <a asp-action="Index" asp-controller="Home" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Home</a>
-                    <a asp-action="Index" asp-controller="Stocks" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Explore Data</a>
+                    <a asp-action="Index" asp-controller="Stocks" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Stocks</a>
+                    <a asp-action="Index" asp-controller="Economy" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Economy</a>
                     <a asp-action="Connect" asp-controller="Home" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Connect</a>
                     <a asp-action="Index" asp-controller="Status" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors flex items-center gap-1">
                         Status
@@ -54,7 +55,12 @@
                         </li>
                         <li>
                             <a asp-action="Index" asp-controller="Stocks">
-                                <icon name="chart-bar" size="4" /> Explore Data
+                                <icon name="chart-bar" size="4" /> Stocks
+                            </a>
+                        </li>
+                        <li>
+                            <a asp-action="Index" asp-controller="Economy">
+                                <icon name="chart-bar-square" size="4" /> Economy
                             </a>
                         </li>
                         <li>
