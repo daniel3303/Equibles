@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <ItemGroup>
+      <InternalsVisibleTo Include="Equibles.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
       <PackageReference Include="Microsoft.EntityFrameworkCore" />
       <PackageReference Include="Microsoft.EntityFrameworkCore.Proxies" />
       <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
