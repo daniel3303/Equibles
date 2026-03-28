@@ -11,7 +11,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.InsiderTrading.Rep
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.Media.Repositories", "src\Equibles.Media.Repositories\Equibles.Media.Repositories.csproj", "{A9A7BBA5-E63B-3BA7-109A-30A89BAA1F99}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.ShortData.Repositories", "src\Equibles.ShortData.Repositories\Equibles.ShortData.Repositories.csproj", "{5E763A2E-8F39-FC21-52CF-92C84A64D472}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.Finra.Repositories", "src\Equibles.Finra.Repositories\Equibles.Finra.Repositories.csproj", "{5E763A2E-8F39-FC21-52CF-92C84A64D472}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.Sec.Data", "src\Equibles.Sec.Data\Equibles.Sec.Data.csproj", "{90361E89-9AD3-605E-9CC1-B0030E209C53}"
 EndProject
@@ -33,7 +33,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.Errors.Data", "src
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.Congress.Data", "src\Equibles.Congress.Data\Equibles.Congress.Data.csproj", "{32F9EC66-5142-E06B-EFE7-FB15F1C9012C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.ShortData.Data", "src\Equibles.ShortData.Data\Equibles.ShortData.Data.csproj", "{83120A07-6A8A-8494-FE1C-08DD44868A5A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.Finra.Data", "src\Equibles.Finra.Data\Equibles.Finra.Data.csproj", "{83120A07-6A8A-8494-FE1C-08DD44868A5A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.CommonStocks.Data", "src\Equibles.CommonStocks.Data\Equibles.CommonStocks.Data.csproj", "{5B77FC02-6E25-34B6-B2E9-E865B58943C7}"
 EndProject
@@ -61,7 +61,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.Sec.BusinessLogic"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.Sec.HostedService", "src\Equibles.Sec.HostedService\Equibles.Sec.HostedService.csproj", "{5120B41F-8CF3-43A1-AD29-3D3F39BF2D73}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.ShortData.HostedService", "src\Equibles.ShortData.HostedService\Equibles.ShortData.HostedService.csproj", "{DCE314E0-2EB8-45FC-92BE-270078BC7F30}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.Finra.HostedService", "src\Equibles.Finra.HostedService\Equibles.Finra.HostedService.csproj", "{DCE314E0-2EB8-45FC-92BE-270078BC7F30}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.Worker.Host", "src\Equibles.Worker.Host\Equibles.Worker.Host.csproj", "{60675BBF-7F62-45DD-A335-EFDADDDFB794}"
 EndProject
@@ -88,6 +88,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.Fred.HostedService", "src\Equibles.Fred.HostedService\Equibles.Fred.HostedService.csproj", "{F8EB20B2-56EB-4151-9A81-C8F9F46B1AF4}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.Fred.Mcp", "src\Equibles.Fred.Mcp\Equibles.Fred.Mcp.csproj", "{5922D51B-C3D6-406E-B122-030D9F9ED784}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Equibles.Tests", "tests\Equibles.Tests\Equibles.Tests.csproj", "{85F7D223-20AB-4A37-9BAF-9F3788E13F53}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -603,6 +607,18 @@ Global
 		{5922D51B-C3D6-406E-B122-030D9F9ED784}.Release|x64.Build.0 = Release|Any CPU
 		{5922D51B-C3D6-406E-B122-030D9F9ED784}.Release|x86.ActiveCfg = Release|Any CPU
 		{5922D51B-C3D6-406E-B122-030D9F9ED784}.Release|x86.Build.0 = Release|Any CPU
+		{85F7D223-20AB-4A37-9BAF-9F3788E13F53}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{85F7D223-20AB-4A37-9BAF-9F3788E13F53}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{85F7D223-20AB-4A37-9BAF-9F3788E13F53}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{85F7D223-20AB-4A37-9BAF-9F3788E13F53}.Debug|x64.Build.0 = Debug|Any CPU
+		{85F7D223-20AB-4A37-9BAF-9F3788E13F53}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{85F7D223-20AB-4A37-9BAF-9F3788E13F53}.Debug|x86.Build.0 = Debug|Any CPU
+		{85F7D223-20AB-4A37-9BAF-9F3788E13F53}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{85F7D223-20AB-4A37-9BAF-9F3788E13F53}.Release|Any CPU.Build.0 = Release|Any CPU
+		{85F7D223-20AB-4A37-9BAF-9F3788E13F53}.Release|x64.ActiveCfg = Release|Any CPU
+		{85F7D223-20AB-4A37-9BAF-9F3788E13F53}.Release|x64.Build.0 = Release|Any CPU
+		{85F7D223-20AB-4A37-9BAF-9F3788E13F53}.Release|x86.ActiveCfg = Release|Any CPU
+		{85F7D223-20AB-4A37-9BAF-9F3788E13F53}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -650,6 +666,7 @@ Global
 		{25322A8C-7507-4476-A6C3-4A851DD8E081} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{F8EB20B2-56EB-4151-9A81-C8F9F46B1AF4} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{5922D51B-C3D6-406E-B122-030D9F9ED784} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{85F7D223-20AB-4A37-9BAF-9F3788E13F53} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {7473574D-5C8B-494E-9E90-98F9FC10518C}
