@@ -192,20 +192,6 @@ This adds:
 
 Without the embedding profile, BM25 full-text search via ParadeDB still works out of the box — vector search is purely additive.
 
-## Data Sources
-
-| Data | Source |
-|------|--------|
-| Company Filings (10-K, 10-Q, 8-K) | SEC EDGAR |
-| Institutional Holdings (13F-HR) | SEC EDGAR |
-| Insider Trading (Form 3/4) | SEC EDGAR |
-| Fails-to-Deliver | SEC |
-| Congressional Trading (House) | US House of Representatives Financial Disclosures |
-| Congressional Trading (Senate) | US Senate Electronic Financial Disclosures |
-| Daily Short Volume | FINRA |
-| Short Interest | FINRA |
-| Economic Indicators (interest rates, inflation, employment, GDP, etc.) | FRED (Federal Reserve) |
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, project architecture, and how to extend the platform.
