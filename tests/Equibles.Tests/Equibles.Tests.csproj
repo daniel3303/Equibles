@@ -28,6 +28,7 @@
     <ProjectReference Include="..\..\src\Equibles.Fred.Data\Equibles.Fred.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Errors.Data\Equibles.Errors.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Sec.HostedService\Equibles.Sec.HostedService.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Media.Data\Equibles.Media.Data.csproj" />
   </ItemGroup>
 
 </Project>
