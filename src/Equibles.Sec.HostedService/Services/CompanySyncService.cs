@@ -1,11 +1,11 @@
 using Equibles.Errors.BusinessLogic;
 using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.Core.Configuration;
 using Equibles.Errors.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
-using Equibles.Sec.HostedService.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -14,18 +14,18 @@ namespace Equibles.Sec.HostedService.Services;
 public class CompanySyncService : ICompanySyncService {
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ISecEdgarClient _secEdgarClient;
-    private readonly DocumentScraperOptions _options;
+    private readonly WorkerOptions _workerOptions;
     private readonly ILogger<CompanySyncService> _logger;
     private readonly ErrorReporter _errorReporter;
 
     public CompanySyncService(IServiceScopeFactory serviceScopeFactory,
         ISecEdgarClient secEdgarClient,
-        IOptions<DocumentScraperOptions> options,
+        IOptions<WorkerOptions> workerOptions,
         ILogger<CompanySyncService> logger,
         ErrorReporter errorReporter) {
         _serviceScopeFactory = serviceScopeFactory;
         _secEdgarClient = secEdgarClient;
-        _options = options.Value;
+        _workerOptions = workerOptions.Value;
         _logger = logger;
         _errorReporter = errorReporter;
     }
@@ -38,9 +38,9 @@ public class CompanySyncService : ICompanySyncService {
             _logger.LogInformation("Retrieved {CompanyCount} companies from SEC API", secCompanies.Count);
 
             // Filter by configured tickers if specified
-            if (_options.TickersToSync?.Any() == true) {
+            if (_workerOptions.TickersToSync?.Any() == true) {
                 secCompanies = secCompanies
-                    .Where(c => c.Tickers.Any(ticker => _options.TickersToSync.Contains(ticker)))
+                    .Where(c => c.Tickers.Any(ticker => _workerOptions.TickersToSync.Contains(ticker)))
                     .ToList();
                 _logger.LogInformation("Filtered to {CompanyCount} companies based on configured tickers",
                     secCompanies.Count);

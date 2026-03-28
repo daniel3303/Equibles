@@ -5,7 +5,6 @@ using Equibles.Finra.Repositories;
 using Equibles.Integrations.Finra.Contracts;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
-using Equibles.Finra.HostedService.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -20,7 +19,6 @@ public class ShortVolumeImportService {
     private readonly IFinraClient _finraClient;
     private readonly TickerMapService _tickerMapService;
     private readonly ErrorReporter _errorReporter;
-    private readonly FinraScraperOptions _options;
     private readonly WorkerOptions _workerOptions;
 
     public ShortVolumeImportService(
@@ -29,7 +27,6 @@ public class ShortVolumeImportService {
         IFinraClient finraClient,
         TickerMapService tickerMapService,
         ErrorReporter errorReporter,
-        IOptions<FinraScraperOptions> options,
         IOptions<WorkerOptions> workerOptions
     ) {
         _scopeFactory = scopeFactory;
@@ -37,7 +34,6 @@ public class ShortVolumeImportService {
         _finraClient = finraClient;
         _tickerMapService = tickerMapService;
         _errorReporter = errorReporter;
-        _options = options.Value;
         _workerOptions = workerOptions.Value;
     }
 
@@ -65,7 +61,7 @@ public class ShortVolumeImportService {
 
         _logger.LogInformation("Importing short volume from {Start} to {End}", startDate, endDate);
 
-        var tickerMap = await _tickerMapService.Build(_options.TickersToSync, cancellationToken);
+        var tickerMap = await _tickerMapService.Build(_workerOptions.TickersToSync, cancellationToken);
 
         var currentDate = startDate;
         while (currentDate <= endDate) {

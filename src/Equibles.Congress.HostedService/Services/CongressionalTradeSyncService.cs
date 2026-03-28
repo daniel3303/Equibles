@@ -6,7 +6,6 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
-using Equibles.Congress.HostedService.Configuration;
 using Equibles.Congress.HostedService.Models;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
@@ -18,19 +17,16 @@ namespace Equibles.Congress.HostedService.Services;
 public class CongressionalTradeSyncService {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<CongressionalTradeSyncService> _logger;
-    private readonly CongressScraperOptions _options;
     private readonly WorkerOptions _workerOptions;
     private readonly ErrorReporter _errorReporter;
 
     public CongressionalTradeSyncService(
         IServiceScopeFactory scopeFactory,
-        IOptions<CongressScraperOptions> options,
         IOptions<WorkerOptions> workerOptions,
         ILogger<CongressionalTradeSyncService> logger,
         ErrorReporter errorReporter
     ) {
         _scopeFactory = scopeFactory;
-        _options = options.Value;
         _workerOptions = workerOptions.Value;
         _logger = logger;
         _errorReporter = errorReporter;
@@ -98,8 +94,8 @@ public class CongressionalTradeSyncService {
         var tradeRepository = scope.ServiceProvider.GetRequiredService<CongressionalTradeRepository>();
         var commonStockRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
 
-        var stockQuery = _options.TickersToSync?.Count > 0
-            ? commonStockRepository.GetByTickers(_options.TickersToSync)
+        var stockQuery = _workerOptions.TickersToSync?.Count > 0
+            ? commonStockRepository.GetByTickers(_workerOptions.TickersToSync)
             : commonStockRepository.GetAll();
 
         var stocks = await stockQuery.AsNoTracking()

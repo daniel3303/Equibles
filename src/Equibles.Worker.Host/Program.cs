@@ -60,10 +60,6 @@ builder.Services.Configure<WorkerOptions>(
     builder.Configuration.GetSection("Worker"));
 builder.Services.Configure<DocumentScraperOptions>(
     builder.Configuration.GetSection("DocumentScraper"));
-builder.Services.Configure<Equibles.Holdings.HostedService.Configuration.HoldingsScraperOptions>(
-    builder.Configuration.GetSection("HoldingsScraper"));
-builder.Services.Configure<Equibles.Congress.HostedService.Configuration.CongressScraperOptions>(
-    builder.Configuration.GetSection("CongressScraper"));
 builder.Services.Configure<Equibles.Integrations.Finra.Configuration.FinraOptions>(
     builder.Configuration.GetSection("Finra"));
 builder.Services.Configure<Equibles.Finra.HostedService.Configuration.FinraScraperOptions>(

@@ -7,7 +7,7 @@ using Equibles.Holdings.Repositories;
 using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.HostedService.Services.ValueNormalizers;
 using Equibles.Core.AutoWiring;
-using Equibles.Holdings.HostedService.Configuration;
+using Equibles.Core.Configuration;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -23,18 +23,18 @@ public class HoldingsImportService {
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<HoldingsImportService> _logger;
-    private readonly HoldingsScraperOptions _options;
+    private readonly WorkerOptions _workerOptions;
     private readonly ErrorReporter _errorReporter;
 
     public HoldingsImportService(
         IServiceScopeFactory scopeFactory,
         ILogger<HoldingsImportService> logger,
-        IOptions<HoldingsScraperOptions> options,
+        IOptions<WorkerOptions> workerOptions,
         ErrorReporter errorReporter
     ) {
         _scopeFactory = scopeFactory;
         _logger = logger;
-        _options = options.Value;
+        _workerOptions = workerOptions.Value;
         _errorReporter = errorReporter;
     }
 
@@ -203,8 +203,8 @@ public class HoldingsImportService {
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var uniqueCusipsList = uniqueCusips.ToList();
 
-        var query = _options.TickersToSync?.Count > 0
-            ? stockRepo.GetByTickers(_options.TickersToSync)
+        var query = _workerOptions.TickersToSync?.Count > 0
+            ? stockRepo.GetByTickers(_workerOptions.TickersToSync)
             : stockRepo.GetAll();
 
         var stocksWithCusip = await query

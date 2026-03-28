@@ -89,25 +89,16 @@ To get a key:
 
 **Ticker Filtering (optional):**
 
-By default, all tickers are synced. To limit data syncing to specific stocks, add ticker lists to your `.env` file or Docker Compose environment. When not set, all stocks are synced.
+By default, all tickers are synced. To limit data syncing to specific stocks, set a single ticker list that applies to all scrapers:
 
 ```env
 # .env — sync only these tickers (applies to all scrapers)
-DocumentScraper__TickersToSync__0=AAPL
-DocumentScraper__TickersToSync__1=MSFT
-DocumentScraper__TickersToSync__2=GOOGL
-HoldingsScraper__TickersToSync__0=AAPL
-HoldingsScraper__TickersToSync__1=MSFT
-HoldingsScraper__TickersToSync__2=GOOGL
-CongressScraper__TickersToSync__0=AAPL
-CongressScraper__TickersToSync__1=MSFT
-CongressScraper__TickersToSync__2=GOOGL
-FinraScraper__TickersToSync__0=AAPL
-FinraScraper__TickersToSync__1=MSFT
-FinraScraper__TickersToSync__2=GOOGL
+Worker__TickersToSync__0=AAPL
+Worker__TickersToSync__1=MSFT
+Worker__TickersToSync__2=GOOGL
 ```
 
-Each scraper's ticker list is independent — you can sync SEC filings for 500 stocks but short data for only 10.
+When not set, all stocks are synced.
 
 **Minimum Sync Date (optional):**
 

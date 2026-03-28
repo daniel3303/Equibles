@@ -5,7 +5,6 @@ using Equibles.Finra.Repositories;
 using Equibles.Integrations.Finra.Contracts;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
-using Equibles.Finra.HostedService.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -20,7 +19,6 @@ public class ShortInterestImportService {
     private readonly IFinraClient _finraClient;
     private readonly TickerMapService _tickerMapService;
     private readonly ErrorReporter _errorReporter;
-    private readonly FinraScraperOptions _options;
     private readonly WorkerOptions _workerOptions;
 
     public ShortInterestImportService(
@@ -29,7 +27,6 @@ public class ShortInterestImportService {
         IFinraClient finraClient,
         TickerMapService tickerMapService,
         ErrorReporter errorReporter,
-        IOptions<FinraScraperOptions> options,
         IOptions<WorkerOptions> workerOptions
     ) {
         _scopeFactory = scopeFactory;
@@ -37,7 +34,6 @@ public class ShortInterestImportService {
         _finraClient = finraClient;
         _tickerMapService = tickerMapService;
         _errorReporter = errorReporter;
-        _options = options.Value;
         _workerOptions = workerOptions.Value;
     }
 
@@ -76,7 +72,7 @@ public class ShortInterestImportService {
 
         _logger.LogInformation("Importing short interest for {Count} settlement dates", datesToImport.Count);
 
-        var tickerMap = await _tickerMapService.Build(_options.TickersToSync, cancellationToken);
+        var tickerMap = await _tickerMapService.Build(_workerOptions.TickersToSync, cancellationToken);
 
         foreach (var settlementDate in datesToImport) {
             cancellationToken.ThrowIfCancellationRequested();

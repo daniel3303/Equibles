@@ -7,7 +7,6 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Sec.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
-using Equibles.Sec.HostedService.Configuration;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Sec.HostedService.Models;
 using FlexLabs.EntityFrameworkCore.Upsert;
@@ -25,7 +24,6 @@ public class FtdImportService {
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly ILogger<FtdImportService> _logger;
     private readonly ErrorReporter _errorReporter;
-    private readonly FtdScraperOptions _options;
     private readonly WorkerOptions _workerOptions;
 
     public FtdImportService(
@@ -33,14 +31,12 @@ public class FtdImportService {
         ISecEdgarClient secEdgarClient,
         ILogger<FtdImportService> logger,
         ErrorReporter errorReporter,
-        IOptions<FtdScraperOptions> options,
         IOptions<WorkerOptions> workerOptions
     ) {
         _scopeFactory = scopeFactory;
         _secEdgarClient = secEdgarClient;
         _logger = logger;
         _errorReporter = errorReporter;
-        _options = options.Value;
         _workerOptions = workerOptions.Value;
     }
 
@@ -209,7 +205,7 @@ public class FtdImportService {
     private async Task<Dictionary<string, Guid>> BuildTickerMap(CancellationToken cancellationToken) {
         using var scope = _scopeFactory.CreateScope();
         var tickerMapService = scope.ServiceProvider.GetRequiredService<TickerMapService>();
-        return await tickerMapService.Build(_options.TickersToSync, cancellationToken);
+        return await tickerMapService.Build(_workerOptions.TickersToSync, cancellationToken);
     }
 
     private async Task<List<FtdRecord>> DownloadAndParse(string fileName, CancellationToken cancellationToken) {

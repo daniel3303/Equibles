@@ -122,8 +122,8 @@ public class DocumentScraper : IDocumentScraper {
         using var scope = _serviceScopeFactory.CreateScope();
         var commonStockRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
 
-        if (_options.TickersToSync?.Any() == true) {
-            return await commonStockRepository.GetByTickers(_options.TickersToSync).ToListAsync();
+        if (_workerOptions.TickersToSync?.Count > 0) {
+            return await commonStockRepository.GetByTickers(_workerOptions.TickersToSync).ToListAsync();
         }
 
         return await commonStockRepository.GetAll().AsNoTracking().ToListAsync();

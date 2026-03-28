@@ -43,7 +43,7 @@ For local development, create an `appsettings.Development.json` in whichever hos
     "ClientId": "your-client-id",
     "ClientSecret": "your-client-secret"
   },
-  "DocumentScraperOptions": {
+  "Worker": {
     "TickersToSync": ["AAPL", "MSFT"]
   }
 }
