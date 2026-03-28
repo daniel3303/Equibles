@@ -98,7 +98,7 @@ public class HoldingsImportService {
         return true;
     }
 
-    private static void DeduplicateSubmissions(ImportContext context) {
+    internal static void DeduplicateSubmissions(ImportContext context) {
         var superseded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var byCikAndPeriod = context.Submissions.Values
             .Where(s => !string.IsNullOrEmpty(s.Cik) && !string.IsNullOrEmpty(s.PeriodOfReport))
@@ -573,19 +573,19 @@ public class HoldingsImportService {
     /// Finds a zip entry by filename, handling both flat and nested archives.
     /// SEC changed their 13F zip structure in mid-2025 to nest files inside a subdirectory.
     /// </summary>
-    private static ZipArchiveEntry FindEntry(ZipArchive archive, string fileName) {
+    internal static ZipArchiveEntry FindEntry(ZipArchive archive, string fileName) {
         return archive.GetEntry(fileName)
             ?? archive.Entries.FirstOrDefault(e => e.Name.Equals(fileName, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string GetValue(Dictionary<string, string> row, string key) {
+    internal static string GetValue(Dictionary<string, string> row, string key) {
         return row.TryGetValue(key, out var value) ? value : null;
     }
 
     /// <summary>
     /// Parses date strings in both ISO (yyyy-MM-dd) and SEC (dd-MMM-yyyy) formats.
     /// </summary>
-    private static bool TryParseDateOnly(string value, out DateOnly result) {
+    internal static bool TryParseDateOnly(string value, out DateOnly result) {
         result = default;
         if (string.IsNullOrEmpty(value)) return false;
 
@@ -602,11 +602,11 @@ public class HoldingsImportService {
         return false;
     }
 
-    private static long ParseLong(string value) {
+    internal static long ParseLong(string value) {
         return long.TryParse(value, out var result) ? result : 0;
     }
 
-    private static ShareType ParseShareType(string value) {
+    internal static ShareType ParseShareType(string value) {
         return value?.ToUpperInvariant() switch {
             "SH" => ShareType.Shares,
             "PRN" => ShareType.Principal,
@@ -614,7 +614,7 @@ public class HoldingsImportService {
         };
     }
 
-    private static Equibles.Holdings.Data.Models.OptionType? ParseOptionType(string value) {
+    internal static Equibles.Holdings.Data.Models.OptionType? ParseOptionType(string value) {
         return value?.ToUpperInvariant() switch {
             "PUT" => Equibles.Holdings.Data.Models.OptionType.Put,
             "CALL" => Equibles.Holdings.Data.Models.OptionType.Call,
@@ -622,11 +622,11 @@ public class HoldingsImportService {
         };
     }
 
-    private static int? ParseNullableInt(string value) {
+    internal static int? ParseNullableInt(string value) {
         return int.TryParse(value, out var result) ? result : null;
     }
 
-    private static string ResolveManagerName(ImportContext context, string accession, int? managerNumber) {
+    internal static string ResolveManagerName(ImportContext context, string accession, int? managerNumber) {
         if (managerNumber == null) return null;
         if (context.OtherManagers.TryGetValue(accession, out var seqMap)
             && seqMap.TryGetValue(managerNumber.Value, out var name)) {
@@ -635,7 +635,7 @@ public class HoldingsImportService {
         return null;
     }
 
-    private static InvestmentDiscretion ParseInvestmentDiscretion(string value) {
+    internal static InvestmentDiscretion ParseInvestmentDiscretion(string value) {
         return value?.ToUpperInvariant() switch {
             "SOLE" => InvestmentDiscretion.Sole,
             "DFND" => InvestmentDiscretion.Defined,

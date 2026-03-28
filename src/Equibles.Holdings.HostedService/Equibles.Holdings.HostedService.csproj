@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <ItemGroup>
+      <InternalsVisibleTo Include="Equibles.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
       <PackageReference Include="Equibles.Core.AutoWiring" />
       <PackageReference Include="Microsoft.Extensions.Hosting" />
       <PackageReference Include="Microsoft.Extensions.Http" />
