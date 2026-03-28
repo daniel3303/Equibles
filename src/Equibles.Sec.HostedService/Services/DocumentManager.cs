@@ -15,6 +15,7 @@ public class DocumentManager {
     private readonly DocumentRepository _documentRepository;
     private readonly ChunkRepository _chunkRepository;
     private readonly IDocumentProcessor _documentProcessor;
+    private readonly EmbeddingConfig _embeddingConfig;
     private readonly int _loadSize;
     private readonly ILogger<DocumentManager> _logger;
 
@@ -28,7 +29,8 @@ public class DocumentManager {
         _documentRepository = documentRepository;
         _chunkRepository = chunkRepository;
         _documentProcessor = documentProcessor;
-        _loadSize = Math.Max(DefaultLoadSize, embeddingConfig.Value.BatchSize);
+        _embeddingConfig = embeddingConfig.Value;
+        _loadSize = Math.Max(DefaultLoadSize, _embeddingConfig.BatchSize);
         _logger = logger;
     }
 
@@ -49,6 +51,8 @@ public class DocumentManager {
     }
 
     public async Task<bool> GenerateEmbeddingBatch(CancellationToken cancellationToken) {
+        if (!_embeddingConfig.IsConfigured) return false;
+
         var chunksWithoutEmbeddings = await _chunkRepository.GetAll()
             .Where(c => !c.Embeddings.Any())
             .OrderBy(c => c.CreationTime)

@@ -137,6 +137,11 @@ public class DocumentProcessor : IDocumentProcessor {
 
         var embeddings = await _embeddingClient.GenerateEmbeddings(chunkContents);
 
+        if (embeddings.Count != chunks.Count) {
+            throw new InvalidOperationException(
+                $"Embedding count mismatch: expected {chunks.Count}, got {embeddings.Count}");
+        }
+
         for (int i = 0; i < chunks.Count; i++) {
             var embedding = new Embedding {
                 Chunk = chunks[i],
