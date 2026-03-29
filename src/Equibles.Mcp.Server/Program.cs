@@ -36,6 +36,8 @@ builder.Services.AddSerilog(config => {
     }
 });
 
+Equibles.Plugins.PluginLoader.LoadAll();
+
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddEquiblesDbContext(connectionString, modules => modules.AddAllModules());
 builder.Services.AddAllRepositories();

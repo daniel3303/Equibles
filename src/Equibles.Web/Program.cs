@@ -1,20 +1,8 @@
-using Equibles.Cboe.Data.Extensions;
-using Equibles.Cftc.Data.Extensions;
-using Equibles.CommonStocks.Data.Extensions;
-using Equibles.Congress.Data.Extensions;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Data.Extensions;
-using Equibles.Errors.Data.Extensions;
-using Equibles.Finra.Data.Extensions;
-using Equibles.Fred.Data.Extensions;
-using Equibles.Holdings.Data.Extensions;
-using Equibles.InsiderTrading.Data.Extensions;
-using Equibles.Media.Data.Extensions;
-using Equibles.Sec.Data.Extensions;
 using Equibles.Web.Authentication;
 using Equibles.Web.FlashMessage;
-using Equibles.Yahoo.Data.Extensions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
@@ -31,6 +19,8 @@ builder.Services.AddSerilog(config => {
         config.MinimumLevel.Is(level);
     }
 });
+
+Equibles.Plugins.PluginLoader.LoadAll();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddEquiblesDbContext(connectionString,
