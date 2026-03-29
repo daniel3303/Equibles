@@ -32,8 +32,10 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<EquiblesDb
         optionsBuilder.UseNpgsql(connectionString, options => {
             options.UseVector();
             options.UseParadeDb();
+            options.UseQuerySplittingBehavior(Microsoft.EntityFrameworkCore.QuerySplittingBehavior.SplitQuery);
             options.MigrationsAssembly(typeof(DesignTimeDbContextFactory).Assembly);
         });
+        optionsBuilder.UseLazyLoadingProxies();
 
         IModuleConfiguration[] modules = [
             new CommonStocksModuleConfiguration(),
