@@ -257,6 +257,10 @@ public class FtdImportService {
         return records;
     }
 
+    // Oldest FTD file available on SEC EDGAR is cnsfails201706b.zip (second half of June 2017).
+    // Files before this date return 404; clamping here avoids hundreds of wasted requests on first sync.
+    private static readonly DateOnly OldestAvailableDate = new(2017, 6, 1);
+
     /// <summary>
     /// Generates FTD file names from a start date to now.
     /// Format: cnsfails{YYYYMM}{a|b}.zip (a = first half, b = second half)
@@ -265,12 +269,20 @@ public class FtdImportService {
         var fileNames = new List<string>();
         var now = DateOnly.FromDateTime(DateTime.UtcNow);
 
+        // Clamp to the oldest date the SEC provides FTD data for
+        if (startDate < OldestAvailableDate)
+            startDate = OldestAvailableDate;
+
         // Start from the beginning of the start month
         var current = new DateOnly(startDate.Year, startDate.Month, 1);
 
         while (current <= now) {
             var yearMonth = current.ToString("yyyyMM");
-            fileNames.Add($"cnsfails{yearMonth}a.zip");
+
+            // The 'a' file for June 2017 doesn't exist — only 'b' is available
+            if (current != OldestAvailableDate)
+                fileNames.Add($"cnsfails{yearMonth}a.zip");
+
             fileNames.Add($"cnsfails{yearMonth}b.zip");
 
             current = current.AddMonths(1);
