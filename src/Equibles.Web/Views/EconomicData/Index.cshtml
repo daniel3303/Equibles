@@ -1,4 +1,4 @@
-@model Equibles.Web.ViewModels.Economy.EconomyIndexViewModel
+@model Equibles.Web.ViewModels.EconomicData.EconomyIndexViewModel
 
 @{
     ViewData["Title"] = "Economic Data";
@@ -11,7 +11,8 @@
         <p class="text-base-content/60">
             @Model.Categories.Sum(c => c.Series.Count) indicators from
             <a href="https://fred.stlouisfed.org" target="_blank" rel="noopener" class="link link-primary">FRED</a>
-            across @Model.Categories.Count categories
+            across @Model.Categories.Count categories.
+            Click any indicator to explore charts, statistics, and historical data.
         </p>
     </div>
 
@@ -29,12 +30,13 @@
                                     <th class="hidden md:table-cell">Frequency</th>
                                     <th class="text-right">Latest Value</th>
                                     <th class="text-right hidden sm:table-cell">Date</th>
+                                    <th class="w-8"></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach (var series in category.Series) {
                                     <tr class="hover cursor-pointer economy-row"
-                                        data-href="@Url.Action("Show", "Economy", new { seriesId = series.SeriesId })">
+                                        data-href="@Url.Action("Show", "EconomicData", new { seriesId = series.SeriesId })">
                                         <td>
                                             <a asp-action="Show" asp-route-seriesId="@series.SeriesId"
                                                class="font-mono text-sm link link-primary">@series.SeriesId</a>
@@ -52,6 +54,9 @@
                                             @if (series.LatestDate.HasValue) {
                                                 @series.LatestDate.Value.ToString("yyyy-MM-dd")
                                             }
+                                        </td>
+                                        <td class="text-base-content/30">
+                                            <icon name="chevron-right" size="4" />
                                         </td>
                                     </tr>
                                 }

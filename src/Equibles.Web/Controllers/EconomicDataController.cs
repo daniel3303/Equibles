@@ -2,21 +2,21 @@ using Equibles.Core.Extensions;
 using Equibles.Fred.Data.Models;
 using Equibles.Fred.Repositories;
 using Equibles.Web.Controllers.Abstract;
-using Equibles.Web.ViewModels.Economy;
+using Equibles.Web.ViewModels.EconomicData;
 using MathNet.Numerics.Statistics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Web.Controllers;
 
-public class EconomyController : BaseController {
+public class EconomicDataController : BaseController {
     private readonly FredSeriesRepository _seriesRepository;
     private readonly FredObservationRepository _observationRepository;
 
-    public EconomyController(
+    public EconomicDataController(
         FredSeriesRepository seriesRepository,
         FredObservationRepository observationRepository,
-        ILogger<EconomyController> logger
+        ILogger<EconomicDataController> logger
     ) : base(logger) {
         _seriesRepository = seriesRepository;
         _observationRepository = observationRepository;
@@ -43,7 +43,7 @@ public class EconomyController : BaseController {
                         SeriesId = s.SeriesId,
                         Title = s.Title,
                         Units = s.Units,
-                        Frequency = s.Frequency,
+                        Frequency = ExpandFrequency(s.Frequency),
                         LatestValue = latest?.Value,
                         LatestDate = latest?.Date
                     };
@@ -54,15 +54,16 @@ public class EconomyController : BaseController {
         return View(new EconomyIndexViewModel { Categories = categories });
     }
 
-    [HttpGet("~/Economy/{seriesId}")]
+    [HttpGet("~/EconomicData/{seriesId}")]
     public async Task<IActionResult> Show(string seriesId) {
-        var series = await _seriesRepository.GetBySeriesId(seriesId).FirstOrDefaultAsync();
+        if (string.IsNullOrWhiteSpace(seriesId)) return NotFound();
+
+        var series = await _seriesRepository.GetBySeriesId(seriesId.ToUpperInvariant()).FirstOrDefaultAsync();
         if (series == null) return NotFound();
 
         var observations = await _observationRepository.GetBySeries(series)
             .Where(o => o.Value != null)
             .OrderByDescending(o => o.Date)
-            .Take(500)
             .Select(o => new ObservationItem {
                 Date = o.Date,
                 Value = o.Value
@@ -74,7 +75,7 @@ public class EconomyController : BaseController {
             Title = series.Title,
             Category = series.Category,
             CategoryDisplayName = series.Category.NameForHumans(),
-            Frequency = series.Frequency,
+            Frequency = ExpandFrequency(series.Frequency),
             Units = series.Units,
             SeasonalAdjustment = series.SeasonalAdjustment,
             Observations = observations
@@ -112,4 +113,15 @@ public class EconomyController : BaseController {
         var sma = values.MovingAverage(period);
         return sma.Select((v, i) => i < period - 1 ? (decimal?)null : (decimal?)Math.Round(v, 4)).ToList();
     }
+
+    private static string ExpandFrequency(string frequency) => frequency?.Trim().ToUpperInvariant() switch {
+        "D" => "Daily",
+        "W" => "Weekly",
+        "BW" => "Biweekly",
+        "M" => "Monthly",
+        "Q" => "Quarterly",
+        "SA" => "Semiannual",
+        "A" => "Annual",
+        _ => frequency
+    };
 }

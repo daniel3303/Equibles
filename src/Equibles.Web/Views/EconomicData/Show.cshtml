@@ -1,4 +1,4 @@
-@model Equibles.Web.ViewModels.Economy.EconomySeriesViewModel
+@model Equibles.Web.ViewModels.EconomicData.EconomySeriesViewModel
 
 @{
     // Chronological order for chart
@@ -12,7 +12,7 @@
     <!-- Breadcrumb -->
     <div class="breadcrumbs text-sm text-base-content/60 mb-2">
         <ul>
-            <li><a asp-controller="Economy" asp-action="Index">Economic Data</a></li>
+            <li><a asp-controller="EconomicData" asp-action="Index">Economic Data</a></li>
             <li>
                 <span class="font-semibold text-base-content">@Model.SeriesId</span>
             </li>
@@ -60,18 +60,20 @@
         <!-- Statistics Cards (computed over displayed observations) -->
         <div class="flex items-baseline gap-2 mb-2">
             <h2 class="font-semibold text-sm">Statistics</h2>
-            <span class="text-xs text-base-content/50">last @Model.Observations.Count observations</span>
+            <span class="text-xs text-base-content/50">@Model.Observations.Count observations</span>
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
             @if (Model.LatestValue.HasValue) {
-                var change = Model.PreviousValue.HasValue ? Model.LatestValue.Value - Model.PreviousValue.Value : (decimal?)null;
+                var changePct = Model.PreviousValue.HasValue && Model.PreviousValue.Value != 0
+                    ? (Model.LatestValue.Value - Model.PreviousValue.Value) / Model.PreviousValue.Value * 100
+                    : (decimal?)null;
                 <div class="card bg-base-100 shadow-sm">
                     <div class="card-body p-3">
                         <div class="text-xs text-base-content/50 uppercase tracking-wider">Latest</div>
                         <div class="text-lg font-bold tabular-nums">@Model.LatestValue.Value.ToString("N2")</div>
-                        @if (change.HasValue) {
-                            <div class="text-xs tabular-nums @(change.Value > 0 ? "text-success" : change.Value < 0 ? "text-error" : "text-base-content/50")">
-                                @(change.Value > 0 ? "+" : "")@change.Value.ToString("N2")
+                        @if (changePct.HasValue) {
+                            <div class="text-xs tabular-nums @(changePct.Value > 0 ? "text-success" : changePct.Value < 0 ? "text-error" : "text-base-content/50")">
+                                @(changePct.Value > 0 ? "+" : "")@changePct.Value.ToString("N2")%
                             </div>
                         }
                     </div>
@@ -135,7 +137,7 @@
         <div class="card-body p-4 lg:p-6">
             <h2 class="card-title text-lg mb-3">
                 Observations
-                <span class="text-sm font-normal text-base-content/50">(@Model.Observations.Count most recent)</span>
+                <span class="text-sm font-normal text-base-content/50">(@Model.Observations.Count total)</span>
             </h2>
 
             @if (Model.Observations.Count == 0) {
@@ -149,14 +151,16 @@
                             <tr>
                                 <th>Date</th>
                                 <th class="text-right">Value</th>
-                                <th class="text-right hidden sm:table-cell">Change</th>
+                                <th class="text-right hidden sm:table-cell">Change %</th>
                             </tr>
                         </thead>
                         <tbody>
                             @for (var i = 0; i < Model.Observations.Count; i++) {
                                 var obs = Model.Observations[i];
                                 var prev = i + 1 < Model.Observations.Count ? Model.Observations[i + 1] : null;
-                                var change = obs.Value.HasValue && prev?.Value != null ? obs.Value.Value - prev.Value.Value : (decimal?)null;
+                                var pctChange = obs.Value.HasValue && prev?.Value != null && prev.Value.Value != 0
+                                    ? (obs.Value.Value - prev.Value.Value) / prev.Value.Value * 100
+                                    : (decimal?)null;
                                 <tr>
                                     <td class="font-mono text-sm">@obs.Date.ToString("yyyy-MM-dd")</td>
                                     <td class="text-right font-semibold tabular-nums">
@@ -166,9 +170,9 @@
                                             <span class="text-base-content/30">&mdash;</span>
                                         }
                                     </td>
-                                    <td class="text-right text-sm tabular-nums hidden sm:table-cell @(change > 0 ? "text-success" : change < 0 ? "text-error" : "text-base-content/50")">
-                                        @if (change.HasValue) {
-                                            @(change.Value > 0 ? "+" : "")@change.Value.ToString("N2")
+                                    <td class="text-right text-sm tabular-nums hidden sm:table-cell @(pctChange > 0 ? "text-success" : pctChange < 0 ? "text-error" : "text-base-content/50")">
+                                        @if (pctChange.HasValue) {
+                                            @(pctChange.Value > 0 ? "+" : "")@pctChange.Value.ToString("N2")<text>%</text>
                                         }
                                     </td>
                                 </tr>

@@ -1,6 +1,6 @@
 using Equibles.Fred.Data.Models;
 
-namespace Equibles.Web.ViewModels.Economy;
+namespace Equibles.Web.ViewModels.EconomicData;
 
 public class EconomySeriesViewModel {
     public string SeriesId { get; set; }
