@@ -13,8 +13,6 @@ public class EquiblesModuleBuilder {
     }
 
     public EquiblesModuleBuilder AddAllModules() {
-        EquiblesAssemblyLoader.EnsureLoaded();
-
         var moduleTypes = AppDomain.CurrentDomain.GetAssemblies()
             .SelectMany(a => {
                 try { return a.DefinedTypes; } catch { return []; }

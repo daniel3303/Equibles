@@ -38,7 +38,6 @@ public static class ServiceCollectionExtensions {
     }
 
     public static IServiceCollection AddAllRepositories(this IServiceCollection services) {
-        EquiblesAssemblyLoader.EnsureLoaded();
         var assemblies = AppDomain.CurrentDomain.GetAssemblies()
             .Where(a => a.FullName != null && a.FullName.StartsWith("Equibles.", StringComparison.Ordinal))
             .ToArray();

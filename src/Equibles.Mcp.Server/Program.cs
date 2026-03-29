@@ -1,15 +1,27 @@
+using Equibles.Cboe.Data.Extensions;
+using Equibles.Cboe.Mcp.Extensions;
+using Equibles.Cftc.Data.Extensions;
+using Equibles.Cftc.Mcp.Extensions;
+using Equibles.CommonStocks.Data.Extensions;
+using Equibles.Congress.Data.Extensions;
 using Equibles.Core.AutoWiring;
 using Equibles.Data.Extensions;
+using Equibles.Errors.Data.Extensions;
+using Equibles.Finra.Data.Extensions;
+using Equibles.Fred.Data.Extensions;
 using Equibles.Fred.Mcp.Extensions;
+using Equibles.Holdings.Data.Extensions;
 using Equibles.Holdings.Mcp.Extensions;
+using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.InsiderTrading.Mcp.Extensions;
 using Equibles.Mcp.Contracts;
 using Equibles.Mcp.Extensions;
 using Equibles.Mcp.Middleware;
 using Equibles.Mcp.Server;
+using Equibles.Media.Data.Extensions;
+using Equibles.Sec.Data.Extensions;
 using Equibles.Sec.Mcp.Extensions;
-using Equibles.Cftc.Mcp.Extensions;
-using Equibles.Cboe.Mcp.Extensions;
+using Equibles.Yahoo.Data.Extensions;
 using ModelContextProtocol.AspNetCore;
 using Serilog;
 using Serilog.Events;
@@ -25,8 +37,35 @@ builder.Services.AddSerilog(config => {
 });
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddEquiblesDbContext(connectionString, modules => modules.AddAllModules());
-builder.Services.AddAllRepositories();
+builder.Services.AddEquiblesDbContext(connectionString, modules => {
+    modules.AddCommonStocks();
+    modules.AddHoldings();
+    modules.AddInsiderTrading();
+    modules.AddCongress();
+    modules.AddFinra();
+    modules.AddFred();
+    modules.AddYahoo();
+    modules.AddCftc();
+    modules.AddCboe();
+    modules.AddSec();
+    modules.AddMedia();
+    modules.AddErrors();
+});
+
+builder.Services.AddRepositoriesFrom(
+    typeof(Equibles.CommonStocks.Repositories.CommonStockRepository).Assembly,
+    typeof(Equibles.Holdings.Repositories.InstitutionalHolderRepository).Assembly,
+    typeof(Equibles.InsiderTrading.Repositories.InsiderOwnerRepository).Assembly,
+    typeof(Equibles.Fred.Repositories.FredSeriesRepository).Assembly,
+    typeof(Equibles.Sec.Repositories.DocumentRepository).Assembly,
+    typeof(Equibles.Congress.Repositories.CongressMemberRepository).Assembly,
+    typeof(Equibles.Finra.Repositories.DailyShortVolumeRepository).Assembly,
+    typeof(Equibles.Yahoo.Repositories.DailyStockPriceRepository).Assembly,
+    typeof(Equibles.Cftc.Repositories.CftcContractRepository).Assembly,
+    typeof(Equibles.Cboe.Repositories.CboePutCallRatioRepository).Assembly,
+    typeof(Equibles.Media.Repositories.FileRepository).Assembly,
+    typeof(Equibles.Errors.Repositories.ErrorRepository).Assembly
+);
 
 builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();
 builder.Services.AutoWireServicesFrom<Equibles.Sec.BusinessLogic.Search.RagManager>();
