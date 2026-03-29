@@ -24,13 +24,18 @@ Tests are organized by feature area, mirroring the `src/` project structure:
 
 ```
 tests/Equibles.Tests/
+├── Helpers/                 # TestDbContextFactory, ServiceScopeSubstitute
+├── CommonStocks/            # CommonStockManager validation
+├── Congress/                # DisclosureParsingHelper (static parsing methods)
 ├── Core/                    # Extension methods, shared utilities
 ├── Data/                    # EquiblesDbContext, module builder
-├── Errors/                  # ErrorSource value object
-├── Holdings/                # Value normalizers, TsvParser, import helpers
+├── Errors/                  # ErrorSource, ErrorManager, ErrorReporter
+├── Holdings/                # Value normalizers, TsvParser, import helpers, SelectNormalizer
 ├── Integrations/            # RateLimiter
+├── Mcp/                     # ApiKeyMiddleware, EquiblesMcpBuilder
+├── Media/                   # FileManager (save, MIME detection)
 ├── Models/                  # Entity models, enum Display attributes
-└── Sec/                     # Document processing, normalizers, filing processors
+└── Sec/                     # Document processing, normalizers, filing processors, RagManager
     └── Normalizers/         # HTML normalization pipeline steps
 ```
 
@@ -57,43 +62,55 @@ tests/Equibles.Tests/
 - `ErrorSourceTests` — Value object equality, hashing, `GetAll()`
 - `DocumentTypeTests` — Case-insensitive parsing, display names, custom registration
 
+### Business Logic
+- `CommonStockManagerTests` — Create/Update validation (required fields, uniqueness, secondary ticker conflicts)
+- `ErrorManagerTests` — Create with truncation boundaries, null defaults, MarkAsSeen, Delete
+- `ErrorReporterTests` — Delegation to ErrorManager, exception suppression on failure
+- `FileManagerTests` — SaveFile with MIME type detection, extension parsing, size validation
+
 ### Holdings Module
 - `ValueNormalizerTests` — Passthrough and Thousands normalizer behavior
 - `TsvParserTests` — Tab-delimited parsing from zip archives, edge cases
-- `HoldingsImportServiceTests` — Static parsing helpers (dates, enums, lookups, deduplication)
+- `HoldingsImportServiceTests` — Static parsing helpers (dates, enums, lookups, deduplication), SelectNormalizer decision tree (pre/post-2023, amendment consensus)
 
 ### SEC Module
 - `ChunkingStrategyTests` — Document segmentation into token-limited chunks
 - `TokenCounterTests` — Tokenization utility
 - `SecDocumentHtmlNormalizerTests` — SGML parsing, document type filtering
 - `SecDocumentHtmlToMarkdownConverterTests` — HTML-to-Markdown conversion
-- `InsiderTradingFilingProcessorTests` — XML sanitization, transaction code/bool/numeric parsing
+- `InsiderTradingFilingProcessorTests` — XML sanitization, transaction code/bool/numeric parsing, full Process pipeline (Form 3/4, amendments, deduplication)
 - `FtdImportServiceTests` — FTD file name generation, recent-file detection
+- `RagManagerTests` — BuildContext formatting (grouping, ordering, whitespace filtering)
 - **Normalizer pipeline** (6 test classes): XBRL stripping, table normalization, heading conversion, list conversion, pagination removal, currency consolidation
+
+### Congress Module
+- `DisclosureParsingHelperTests` — ParseTransactionType, ParseAmountRange, ParseDate, ExtractTickerFromAssetName, GetCell, CleanSentinel, Truncate, IsValidDisclosureUrl, ParseTransactionsFromHtml (end-to-end)
+
+### MCP Infrastructure
+- `ApiKeyMiddlewareTests` — Valid/invalid Bearer tokens, disabled validator, missing headers, case-insensitive prefix
+- `EquiblesMcpBuilderTests` — AddModule registration/deduplication, UseMiddleware DI registration, fluent API
 
 ### Integrations
 - `RateLimiterTests` — Async rate limiting, pause behavior, concurrency
 
 ## What Could Be Tested Next
 
-### High Value (complex logic, currently private or requires mocking)
+### High Value
 
-| Component | What to Test | Blocker |
-|-----------|-------------|---------|
-| `HoldingsImportService.SelectNormalizer` | Value normalization decision tree (pre-2023 vs post-cutoff, amendment consensus) | Requires DB mock for `GetConsensusPrice` |
-| `CommonStockManager.ValidateCommonStock` | Multi-field validation with uniqueness checks | Requires `CommonStockRepository` mock |
-| `ErrorManager.Create` | String truncation at 128/512 char boundaries | Requires `ErrorRepository` mock |
+| Component | What to Test | Notes |
+|-----------|-------------|-------|
 | `CompanySyncService` | Ticker conflict resolution, obsolete stock replacement | Heavy service scope dependencies |
-| `InsiderTradingFilingProcessor.Process` | Full XML parsing pipeline with owner/transaction upsert | Requires SEC client + repo mocks |
+| `SecDocumentService` | Paginated document listing with filters | Requires in-memory DB |
+| `ImageManager.SaveImage` | Extension validation, MIME resolution, resize logic | Requires ImageSharp test images |
 
-### Medium Value (less complex but useful coverage)
+### Medium Value
 
 | Component | What to Test |
 |-----------|-------------|
-| `ImageManager.SaveImage` | Extension validation, MIME resolution, resize logic |
-| `FileManager.SaveFile` | Extension parsing, MIME fallback |
-| `ErrorReporter.Report` | Exception suppression behavior |
-| `EquiblesMcpBuilder` | Middleware registration (already has module tests) |
+| `FredImportService.ImportSeries` | Series creation, observation import, deduplication | Requires making method internal |
+| `ShortInterestImportService` | Date filtering, ticker mapping, duplicate detection |
+| `YahooPriceImportService` | Date range calculation, price record mapping |
+| Integration clients (`SecEdgarClient`, `FredClient`, `FinraClient`) | Response parsing with `HttpMessageHandler` mocking |
 
 ### Lower Priority (simple pass-through or IO-bound)
 
