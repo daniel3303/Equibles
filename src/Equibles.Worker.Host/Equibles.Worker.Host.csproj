@@ -19,6 +19,10 @@
       <ProjectReference Include="..\Equibles.Fred.HostedService\Equibles.Fred.HostedService.csproj" />
       <ProjectReference Include="..\Equibles.Integrations.Yahoo\Equibles.Integrations.Yahoo.csproj" />
       <ProjectReference Include="..\Equibles.Yahoo.HostedService\Equibles.Yahoo.HostedService.csproj" />
+      <ProjectReference Include="..\Equibles.Cftc.HostedService\Equibles.Cftc.HostedService.csproj" />
+      <ProjectReference Include="..\Equibles.Cboe.HostedService\Equibles.Cboe.HostedService.csproj" />
+      <ProjectReference Include="..\Equibles.Integrations.Cftc\Equibles.Integrations.Cftc.csproj" />
+      <ProjectReference Include="..\Equibles.Integrations.Cboe\Equibles.Integrations.Cboe.csproj" />
     </ItemGroup>
 
 </Project>

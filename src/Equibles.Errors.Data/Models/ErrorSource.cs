@@ -14,9 +14,11 @@ public class ErrorSource {
     public static readonly ErrorSource CongressScraper = new("CongressScraper");
     public static readonly ErrorSource FredScraper = new("FredScraper");
     public static readonly ErrorSource YahooPriceScraper = new("YahooPriceScraper");
+    public static readonly ErrorSource CftcScraper = new("CftcScraper");
+    public static readonly ErrorSource CboeScraper = new("CboeScraper");
     public static readonly ErrorSource Other = new("Other");
 
-    public static IEnumerable<ErrorSource> GetAll() => [McpTool, DocumentScraper, HoldingsScraper, FinraScraper, FtdScraper, DocumentProcessor, CongressScraper, FredScraper, YahooPriceScraper, Other];
+    public static IEnumerable<ErrorSource> GetAll() => [McpTool, DocumentScraper, HoldingsScraper, FinraScraper, FtdScraper, DocumentProcessor, CongressScraper, FredScraper, YahooPriceScraper, CftcScraper, CboeScraper, Other];
 
     public override string ToString() => Value;
     public override bool Equals(object obj) => obj is ErrorSource other && Value == other.Value;

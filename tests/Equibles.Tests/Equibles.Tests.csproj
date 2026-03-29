@@ -46,6 +46,24 @@
     <ProjectReference Include="..\..\src\Equibles.Fred.HostedService\Equibles.Fred.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Fred.Repositories\Equibles.Fred.Repositories.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.Fred\Equibles.Integrations.Fred.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Integrations.Sec\Equibles.Integrations.Sec.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Integrations.Finra\Equibles.Integrations.Finra.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Integrations.Yahoo\Equibles.Integrations.Yahoo.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Worker\Equibles.Worker.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Web\Equibles.Web.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Yahoo.Data\Equibles.Yahoo.Data.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Yahoo.Repositories\Equibles.Yahoo.Repositories.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Yahoo.HostedService\Equibles.Yahoo.HostedService.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Finra.Data\Equibles.Finra.Data.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Finra.Repositories\Equibles.Finra.Repositories.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Finra.HostedService\Equibles.Finra.HostedService.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Congress.Repositories\Equibles.Congress.Repositories.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Holdings.Repositories\Equibles.Holdings.Repositories.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Media.Repositories\Equibles.Media.Repositories.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Holdings.Mcp\Equibles.Holdings.Mcp.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Fred.Mcp\Equibles.Fred.Mcp.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.InsiderTrading.Mcp\Equibles.InsiderTrading.Mcp.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Sec.Mcp\Equibles.Sec.Mcp.csproj" />
   </ItemGroup>
 
 </Project>

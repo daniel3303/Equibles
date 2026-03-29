@@ -18,6 +18,8 @@
       <ProjectReference Include="..\Equibles.Media.Data\Equibles.Media.Data.csproj" />
       <ProjectReference Include="..\Equibles.Errors.Data\Equibles.Errors.Data.csproj" />
       <ProjectReference Include="..\Equibles.Yahoo.Data\Equibles.Yahoo.Data.csproj" />
+      <ProjectReference Include="..\Equibles.Cftc.Data\Equibles.Cftc.Data.csproj" />
+      <ProjectReference Include="..\Equibles.Cboe.Data\Equibles.Cboe.Data.csproj" />
     </ItemGroup>
 
 </Project>

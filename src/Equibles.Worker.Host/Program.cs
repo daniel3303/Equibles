@@ -8,6 +8,8 @@ using Equibles.Sec.HostedService.Services;
 using Equibles.Fred.HostedService;
 using Equibles.Finra.HostedService;
 using Equibles.Yahoo.HostedService;
+using Equibles.Cftc.HostedService;
+using Equibles.Cboe.HostedService;
 using Equibles.Congress.HostedService;
 using Equibles.Holdings.HostedService;
 using Serilog;
@@ -43,6 +45,10 @@ builder.Services.Configure<Equibles.Integrations.Fred.Configuration.FredOptions>
     builder.Configuration.GetSection("Fred"));
 builder.Services.Configure<Equibles.Yahoo.HostedService.Configuration.YahooPriceScraperOptions>(
     builder.Configuration.GetSection("YahooPriceScraper"));
+builder.Services.Configure<Equibles.Cftc.HostedService.Configuration.CftcScraperOptions>(
+    builder.Configuration.GetSection("CftcScraper"));
+builder.Services.Configure<Equibles.Cboe.HostedService.Configuration.CboeScraperOptions>(
+    builder.Configuration.GetSection("CboeScraper"));
 
 builder.Services.AddHttpClient();
 
@@ -61,6 +67,10 @@ builder.Services.AutoWireServicesFrom<Equibles.Holdings.HostedService.Services.H
 builder.Services.AutoWireServicesFrom<Equibles.Sec.HostedService.Services.FtdImportService>();
 builder.Services.AutoWireServicesFrom<Equibles.Finra.HostedService.Services.ShortVolumeImportService>();
 builder.Services.AutoWireServicesFrom<Equibles.Yahoo.HostedService.Services.YahooPriceImportService>();
+builder.Services.AutoWireServicesFrom<Equibles.Integrations.Cftc.CftcClient>();
+builder.Services.AutoWireServicesFrom<Equibles.Integrations.Cboe.CboeClient>();
+builder.Services.AutoWireServicesFrom<Equibles.Cftc.HostedService.Services.CftcImportService>();
+builder.Services.AutoWireServicesFrom<Equibles.Cboe.HostedService.Services.CboeImportService>();
 
 // Cross-module services (interface-based, need manual registration)
 builder.Services.AddScoped<Equibles.Core.Contracts.IStockPriceProvider, Equibles.Yahoo.Repositories.YahooStockPriceProvider>();
@@ -79,6 +89,8 @@ builder.Services.AddHostedService<FtdScraperWorker>();
 builder.Services.AddHostedService<FinraScraperWorker>();
 builder.Services.AddHostedService<FredScraperWorker>();
 builder.Services.AddHostedService<YahooPriceScraperWorker>();
+builder.Services.AddHostedService<CftcScraperWorker>();
+builder.Services.AddHostedService<CboeScraperWorker>();
 
 var host = builder.Build();
 host.Run();

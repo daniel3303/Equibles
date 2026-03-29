@@ -10,6 +10,8 @@ using Equibles.Sec.Data;
 using Equibles.Finra.Data;
 using Equibles.Fred.Data;
 using Equibles.Yahoo.Data;
+using Equibles.Cftc.Data;
+using Equibles.Cboe.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
@@ -41,6 +43,8 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<EquiblesDb
             new FinraModuleConfiguration(),
             new FredModuleConfiguration(),
             new YahooModuleConfiguration(),
+            new CftcModuleConfiguration(),
+            new CboeModuleConfiguration(),
             new SecModuleConfiguration(),
             new MediaModuleConfiguration(),
             new ErrorsModuleConfiguration(),
