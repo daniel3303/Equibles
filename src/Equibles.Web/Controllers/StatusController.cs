@@ -122,7 +122,11 @@ public class StatusController : BaseController {
                 ["CongressionalTradeCount"] = status.CongressionalTradeCount,
                 ["InstitutionalHoldingCount"] = status.InstitutionalHoldingCount,
                 ["FailToDeliverCount"] = status.FailToDeliverCount,
-                ["FredObservationCount"] = status.FredObservationCount
+                ["FredObservationCount"] = status.FredObservationCount,
+                ["DailyStockPriceCount"] = status.DailyStockPriceCount,
+                ["CftcPositionReportCount"] = status.CftcPositionReportCount,
+                ["CboePutCallRatioCount"] = status.CboePutCallRatioCount,
+                ["CboeVixDailyCount"] = status.CboeVixDailyCount
             },
             Workers = workers.Select(w => new { w.Name, w.Active, w.Reason }),
             status.TotalErrorCount,
@@ -160,6 +164,9 @@ public class StatusController : BaseController {
             status.FailToDeliverCount = await _dataCountService.GetFailToDeliverCount();
             status.FredObservationCount = await _dataCountService.GetFredObservationCount();
             status.DailyStockPriceCount = await _dataCountService.GetDailyStockPriceCount();
+            status.CftcPositionReportCount = await _dataCountService.GetCftcPositionReportCount();
+            status.CboePutCallRatioCount = await _dataCountService.GetCboePutCallRatioCount();
+            status.CboeVixDailyCount = await _dataCountService.GetCboeVixDailyCount();
         }
 
         status.Workers = BuildWorkerStatuses();
@@ -211,6 +218,18 @@ public class StatusController : BaseController {
             new WorkerStatus {
                 Name = "Yahoo Price Scraper",
                 Description = "Daily OHLCV stock prices with technical indicators (SMA, RSI, MACD)",
+                Active = true,
+                Reason = "Always active — no API key required"
+            },
+            new WorkerStatus {
+                Name = "CFTC Scraper",
+                Description = "Commitments of Traders futures positioning data",
+                Active = true,
+                Reason = "Always active — no API key required"
+            },
+            new WorkerStatus {
+                Name = "CBOE Scraper",
+                Description = "VIX volatility index and put/call ratios",
                 Active = true,
                 Reason = "Always active — no API key required"
             },

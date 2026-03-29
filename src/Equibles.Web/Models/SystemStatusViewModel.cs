@@ -19,6 +19,9 @@ public class SystemStatusViewModel {
     public int FailToDeliverCount { get; set; }
     public int FredObservationCount { get; set; }
     public int DailyStockPriceCount { get; set; }
+    public int CftcPositionReportCount { get; set; }
+    public int CboePutCallRatioCount { get; set; }
+    public int CboeVixDailyCount { get; set; }
 }
 
 public class WorkerStatus {

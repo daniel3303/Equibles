@@ -89,7 +89,7 @@
     <div class="card bg-base-100 shadow-sm @(!Model.DatabaseConnected ? "hidden" : "")" data-status-data-card>
         <div class="card-body">
             <h2 class="card-title text-lg mb-2">Data</h2>
-            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 <div class="text-center">
                     <div class="text-2xl font-bold" data-status-count="StockCount">@Model.StockCount.ToString("N0")</div>
                     <div class="text-xs text-base-content/50">Stocks</div>
@@ -121,6 +121,18 @@
                 <div class="text-center">
                     <div class="text-2xl font-bold" data-status-count="DailyStockPriceCount">@Model.DailyStockPriceCount.ToString("N0")</div>
                     <div class="text-xs text-base-content/50">Daily Prices</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold" data-status-count="CftcPositionReportCount">@Model.CftcPositionReportCount.ToString("N0")</div>
+                    <div class="text-xs text-base-content/50">Futures Positions</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold" data-status-count="CboePutCallRatioCount">@Model.CboePutCallRatioCount.ToString("N0")</div>
+                    <div class="text-xs text-base-content/50">Put/Call Ratios</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold" data-status-count="CboeVixDailyCount">@Model.CboeVixDailyCount.ToString("N0")</div>
+                    <div class="text-xs text-base-content/50">VIX Data</div>
                 </div>
             </div>
         </div>
