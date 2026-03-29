@@ -70,6 +70,7 @@
 
     <!-- Tabs -->
     <div role="tablist" class="flex flex-wrap gap-2 mb-6">
+        <a role="tab" class="btn btn-sm @(activeTab == "price" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Price" asp-route-ticker="@stock.Ticker">Price</a>
         <a role="tab" class="btn btn-sm @(activeTab == "holdings" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Holdings" asp-route-ticker="@stock.Ticker">Holdings</a>
         <a role="tab" class="btn btn-sm @(activeTab == "short-volume" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="ShortVolume" asp-route-ticker="@stock.Ticker">Short Volume</a>
         <a role="tab" class="btn btn-sm @(activeTab == "short-interest" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="ShortInterest" asp-route-ticker="@stock.Ticker">Short Interest</a>
@@ -82,6 +83,9 @@
     <!-- Tab Content (server-rendered) -->
     <div>
         @switch (activeTab) {
+            case "price":
+                @await Html.PartialAsync("_PriceTab", (PriceTabViewModel)ViewData["TabViewModel"])
+                break;
             case "holdings":
                 @await Html.PartialAsync("_HoldingsTab", (HoldingsTabViewModel)ViewData["TabViewModel"])
                 break;

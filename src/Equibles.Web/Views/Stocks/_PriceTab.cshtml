@@ -1,0 +1,277 @@
+@model Equibles.Web.ViewModels.Stocks.PriceTabViewModel
+
+@if (Model.Prices.Count == 0) {
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body text-center py-12">
+            <div class="text-base-content/30 mb-3">
+                <icon name="chart-bar" size="12" />
+            </div>
+            <h3 class="text-base-content/60 mb-2">No Price Data</h3>
+            <p class="text-base-content/40 text-sm">No daily price data is available for this stock yet. Data syncs automatically from Yahoo Finance.</p>
+        </div>
+    </div>
+} else {
+    <!-- Period selector -->
+    <div class="flex flex-wrap gap-2 mb-4">
+        <button class="btn btn-sm btn-primary period-btn" data-months="1">1M</button>
+        <button class="btn btn-sm btn-ghost border border-base-300 period-btn" data-months="3">3M</button>
+        <button class="btn btn-sm btn-ghost border border-base-300 period-btn" data-months="6">6M</button>
+        <button class="btn btn-sm btn-ghost border border-base-300 period-btn" data-months="12">1Y</button>
+        <button class="btn btn-sm btn-ghost border border-base-300 period-btn" data-months="60">5Y</button>
+        <button class="btn btn-sm btn-ghost border border-base-300 period-btn" data-months="0">All</button>
+    </div>
+
+    <!-- Price + SMA Chart -->
+    <div class="card bg-base-100 shadow-sm mb-2">
+        <div class="card-body p-4 lg:p-6 pb-2 lg:pb-2">
+            <h3 class="font-semibold text-sm mb-3">Price &amp; Moving Averages</h3>
+            <div class="h-[350px]">
+                <canvas id="price-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Volume Chart -->
+    <div class="card bg-base-100 shadow-sm mb-2">
+        <div class="card-body p-4 lg:p-6 py-2 lg:py-2">
+            <div class="h-[80px]">
+                <canvas id="volume-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- RSI Chart -->
+    <div class="card bg-base-100 shadow-sm mb-2">
+        <div class="card-body p-4 lg:p-6 pb-2 lg:pb-2">
+            <h3 class="font-semibold text-sm mb-3">RSI (14)</h3>
+            <div class="h-[120px]">
+                <canvas id="rsi-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- MACD Chart -->
+    <div class="card bg-base-100 shadow-sm mb-4">
+        <div class="card-body p-4 lg:p-6 pb-2 lg:pb-2">
+            <h3 class="font-semibold text-sm mb-3">MACD (12, 26, 9)</h3>
+            <div class="h-[120px]">
+                <canvas id="macd-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary stats -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 lg:p-6">
+            @{
+                var latest = Model.Prices.Last();
+                var first = Model.Prices.First();
+                var high52w = Model.Prices.TakeLast(252).Max(p => p.High);
+                var low52w = Model.Prices.TakeLast(252).Min(p => p.Low);
+                var avgVol30 = Model.Prices.TakeLast(30).Average(p => (double)p.Volume);
+            }
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 text-sm">
+                <div>
+                    <div class="text-base-content/50">Close</div>
+                    <div class="font-mono font-semibold">$@latest.Close.ToString("N2")</div>
+                </div>
+                <div>
+                    <div class="text-base-content/50">Open</div>
+                    <div class="font-mono">$@latest.Open.ToString("N2")</div>
+                </div>
+                <div>
+                    <div class="text-base-content/50">52W High</div>
+                    <div class="font-mono">$@high52w.ToString("N2")</div>
+                </div>
+                <div>
+                    <div class="text-base-content/50">52W Low</div>
+                    <div class="font-mono">$@low52w.ToString("N2")</div>
+                </div>
+                <div>
+                    <div class="text-base-content/50">Avg Vol (30d)</div>
+                    <div class="font-mono">@(avgVol30 >= 1e6 ? (avgVol30/1e6).ToString("F1") + "M" : avgVol30 >= 1e3 ? (avgVol30/1e3).ToString("F0") + "K" : avgVol30.ToString("F0"))</div>
+                </div>
+                <div>
+                    <div class="text-base-content/50">Data Range</div>
+                    <div class="font-mono text-xs">@first.Date.ToString("yyyy-MM-dd") — @latest.Date.ToString("yyyy-MM-dd")</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // Stock price charts with technical indicators (SMA, RSI, MACD)
+    document.addEventListener('DOMContentLoaded', function() {
+        if (typeof Chart === 'undefined') return;
+
+        // Serialize all data from server
+        const allLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Prices.Select(p => p.Date.ToString("yyyy-MM-dd")).ToList()));
+        const allClose = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Prices.Select(p => (decimal?)p.Close).ToList()));
+        const allVolume = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Prices.Select(p => p.Volume).ToList()));
+        const allSma20 = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sma20));
+        const allSma50 = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sma50));
+        const allSma200 = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sma200));
+        const allRsi = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Rsi14));
+        const allMacdLine = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MacdLine));
+        const allMacdSignal = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MacdSignal));
+        const allMacdHist = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MacdHistogram));
+
+        let priceChart, volumeChart, rsiChart, macdChart;
+
+        // Shared axis options for consistent appearance
+        const xAxisOpts = { ticks: { maxTicksLimit: 12, font: { size: 10 } } };
+        const tooltipOpts = { mode: 'index', intersect: false };
+        const legendOpts = { position: 'top', labels: { boxWidth: 10, font: { size: 10 } } };
+        const yPriceFormat = v => '$' + (v >= 1e3 ? (v/1e3).toFixed(1)+'K' : v.toFixed(2));
+        const yVolFormat = v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v;
+
+        // Render all charts for a given slice of data
+        function renderCharts(startIdx) {
+            const labels = allLabels.slice(startIdx);
+            const close = allClose.slice(startIdx);
+            const volume = allVolume.slice(startIdx);
+            const sma20 = allSma20.slice(startIdx);
+            const sma50 = allSma50.slice(startIdx);
+            const sma200 = allSma200.slice(startIdx);
+            const rsi = allRsi.slice(startIdx);
+            const macdLine = allMacdLine.slice(startIdx);
+            const macdSignal = allMacdSignal.slice(startIdx);
+            const macdHist = allMacdHist.slice(startIdx);
+
+            // Destroy previous charts if they exist
+            if (priceChart) priceChart.destroy();
+            if (volumeChart) volumeChart.destroy();
+            if (rsiChart) rsiChart.destroy();
+            if (macdChart) macdChart.destroy();
+
+            // Price + SMA chart
+            priceChart = new Chart(document.getElementById('price-chart'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'Close', data: close, borderColor: 'oklch(55% 0.2 250)', borderWidth: 1.5, pointRadius: 0, tension: 0.1 },
+                        { label: 'SMA 20', data: sma20, borderColor: 'oklch(65% 0.15 145)', borderWidth: 1, pointRadius: 0, borderDash: [4, 2] },
+                        { label: 'SMA 50', data: sma50, borderColor: 'oklch(65% 0.2 45)', borderWidth: 1, pointRadius: 0, borderDash: [4, 2] },
+                        { label: 'SMA 200', data: sma200, borderColor: 'oklch(55% 0.2 15)', borderWidth: 1, pointRadius: 0, borderDash: [6, 3] },
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, spanGaps: true,
+                    scales: { x: xAxisOpts, y: { ticks: { callback: yPriceFormat } } },
+                    plugins: { legend: legendOpts, tooltip: tooltipOpts },
+                    interaction: { mode: 'index', intersect: false }
+                }
+            });
+
+            // Volume bar chart
+            volumeChart = new Chart(document.getElementById('volume-chart'), {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{ label: 'Volume', data: volume, backgroundColor: 'oklch(70% 0.1 250 / 0.5)', borderRadius: 1 }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { x: { display: false }, y: { ticks: { callback: yVolFormat, maxTicksLimit: 3 } } },
+                    plugins: { legend: { display: false }, tooltip: tooltipOpts }
+                }
+            });
+
+            // RSI chart with overbought/oversold zones
+            rsiChart = new Chart(document.getElementById('rsi-chart'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'RSI', data: rsi, borderColor: 'oklch(55% 0.2 280)', borderWidth: 1.5, pointRadius: 0, tension: 0.1 },
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, spanGaps: true,
+                    scales: {
+                        x: xAxisOpts,
+                        y: { min: 0, max: 100, ticks: { stepSize: 30 } }
+                    },
+                    plugins: {
+                        legend: { display: false }, tooltip: tooltipOpts,
+                        // Draw 30/70 reference lines via annotation-like approach
+                        annotation: undefined
+                    },
+                    interaction: { mode: 'index', intersect: false }
+                },
+                plugins: [{
+                    // Custom plugin to draw horizontal reference lines at RSI 30 and 70
+                    id: 'rsiZones',
+                    beforeDraw(chart) {
+                        const { ctx, chartArea, scales: { y } } = chart;
+                        if (!chartArea) return;
+                        ctx.save();
+                        ctx.setLineDash([4, 4]);
+                        ctx.lineWidth = 1;
+
+                        // Oversold line at 30
+                        ctx.strokeStyle = 'oklch(60% 0.15 145 / 0.6)';
+                        ctx.beginPath();
+                        ctx.moveTo(chartArea.left, y.getPixelForValue(30));
+                        ctx.lineTo(chartArea.right, y.getPixelForValue(30));
+                        ctx.stroke();
+
+                        // Overbought line at 70
+                        ctx.strokeStyle = 'oklch(60% 0.2 15 / 0.6)';
+                        ctx.beginPath();
+                        ctx.moveTo(chartArea.left, y.getPixelForValue(70));
+                        ctx.lineTo(chartArea.right, y.getPixelForValue(70));
+                        ctx.stroke();
+
+                        ctx.restore();
+                    }
+                }]
+            });
+
+            // MACD chart — line, signal, and histogram
+            const histColors = macdHist.map(v => v >= 0 ? 'oklch(60% 0.15 145 / 0.6)' : 'oklch(60% 0.2 15 / 0.6)');
+            macdChart = new Chart(document.getElementById('macd-chart'), {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { type: 'line', label: 'MACD', data: macdLine, borderColor: 'oklch(55% 0.2 250)', borderWidth: 1.5, pointRadius: 0, tension: 0.1, order: 1 },
+                        { type: 'line', label: 'Signal', data: macdSignal, borderColor: 'oklch(65% 0.2 45)', borderWidth: 1, pointRadius: 0, borderDash: [4, 2], order: 2 },
+                        { label: 'Histogram', data: macdHist, backgroundColor: histColors, borderRadius: 1, order: 3 },
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, spanGaps: true,
+                    scales: { x: xAxisOpts, y: { ticks: { maxTicksLimit: 5 } } },
+                    plugins: { legend: legendOpts, tooltip: tooltipOpts },
+                    interaction: { mode: 'index', intersect: false }
+                }
+            });
+        }
+
+        // Initial render — default to 1 month
+        renderCharts(Math.max(0, allLabels.length - 22));
+
+        // Period selector buttons — filter data by slicing from the end
+        const periodMap = { 1: 22, 3: 66, 6: 132, 12: 252, 60: 1260, 0: 0 };
+        document.querySelectorAll('.period-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                // Update active button styling
+                document.querySelectorAll('.period-btn').forEach(b => {
+                    b.classList.remove('btn-primary');
+                    b.classList.add('btn-ghost', 'border', 'border-base-300');
+                });
+                this.classList.add('btn-primary');
+                this.classList.remove('btn-ghost', 'border', 'border-base-300');
+
+                // Compute start index based on trading days
+                const months = parseInt(this.dataset.months);
+                const tradingDays = periodMap[months] || 0;
+                const startIdx = tradingDays === 0 ? 0 : Math.max(0, allLabels.length - tradingDays);
+                renderCharts(startIdx);
+            });
+        });
+    });
+    </script>
+}

@@ -62,10 +62,20 @@ public class StocksController : BaseController {
         return View(viewModel);
     }
 
-    // Default stock page — redirects to Holdings tab
+    // Default stock page — redirects to Price tab
     [HttpGet("~/Stocks/{ticker}")]
     public IActionResult Show(string ticker) {
-        return RedirectToAction(nameof(Holdings), new { ticker });
+        return RedirectToAction(nameof(Price), new { ticker });
+    }
+
+    [HttpGet("~/Stocks/{ticker}/Price")]
+    public async Task<IActionResult> Price(string ticker) {
+        var stock = await LoadStock(ticker);
+        if (stock == null) return NotFound();
+
+        var viewModel = BuildStockViewModel(stock, "price");
+        ViewData["TabViewModel"] = await _stockTabService.LoadPriceTab(stock);
+        return View("Show", viewModel);
     }
 
     [HttpGet("~/Stocks/{ticker}/Holdings")]

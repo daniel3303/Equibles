@@ -2,6 +2,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.Congress.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Finra.Repositories;
+using Equibles.Yahoo.Repositories;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.InsiderTrading.Repositories;
@@ -21,6 +22,7 @@ public class StockTabService {
     private readonly DocumentRepository _documentRepository;
     private readonly InsiderTransactionRepository _insiderTransactionRepository;
     private readonly CongressionalTradeRepository _congressionalTradeRepository;
+    private readonly DailyStockPriceRepository _dailyStockPriceRepository;
 
     public StockTabService(
         InstitutionalHoldingRepository institutionalHoldingRepository,
@@ -30,7 +32,8 @@ public class StockTabService {
         FailToDeliverRepository failToDeliverRepository,
         DocumentRepository documentRepository,
         InsiderTransactionRepository insiderTransactionRepository,
-        CongressionalTradeRepository congressionalTradeRepository
+        CongressionalTradeRepository congressionalTradeRepository,
+        DailyStockPriceRepository dailyStockPriceRepository
     ) {
         _institutionalHoldingRepository = institutionalHoldingRepository;
         _institutionalHolderRepository = institutionalHolderRepository;
@@ -40,6 +43,7 @@ public class StockTabService {
         _documentRepository = documentRepository;
         _insiderTransactionRepository = insiderTransactionRepository;
         _congressionalTradeRepository = congressionalTradeRepository;
+        _dailyStockPriceRepository = dailyStockPriceRepository;
     }
 
     public async Task<HoldingsTabViewModel> LoadHoldingsTab(CommonStock stock, DateOnly? date) {
@@ -121,6 +125,27 @@ public class StockTabService {
             .Take(100)
             .ToListAsync();
         return new CongressionalTradesTabViewModel { Trades = trades, Ticker = stock.Ticker };
+    }
+
+    public async Task<PriceTabViewModel> LoadPriceTab(CommonStock stock) {
+        var prices = await _dailyStockPriceRepository.GetByStock(stock)
+            .OrderBy(p => p.Date)
+            .ToListAsync();
+
+        var closePrices = prices.Select(p => p.Close).ToList();
+        var (macdLine, macdSignal, macdHistogram) = TechnicalIndicatorService.ComputeMacd(closePrices);
+
+        return new PriceTabViewModel {
+            Ticker = stock.Ticker,
+            Prices = prices,
+            Sma20 = TechnicalIndicatorService.ComputeSma(closePrices, 20),
+            Sma50 = TechnicalIndicatorService.ComputeSma(closePrices, 50),
+            Sma200 = TechnicalIndicatorService.ComputeSma(closePrices, 200),
+            Rsi14 = TechnicalIndicatorService.ComputeRsi(closePrices),
+            MacdLine = macdLine,
+            MacdSignal = macdSignal,
+            MacdHistogram = macdHistogram,
+        };
     }
 
     public async Task<HolderDetailViewModel> LoadHolderDetail(CommonStock stock, InstitutionalHolder holder) {
