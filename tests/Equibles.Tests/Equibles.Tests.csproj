@@ -64,6 +64,10 @@
     <ProjectReference Include="..\..\src\Equibles.Fred.Mcp\Equibles.Fred.Mcp.csproj" />
     <ProjectReference Include="..\..\src\Equibles.InsiderTrading.Mcp\Equibles.InsiderTrading.Mcp.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Sec.Mcp\Equibles.Sec.Mcp.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Cftc.Data\Equibles.Cftc.Data.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Cftc.Repositories\Equibles.Cftc.Repositories.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Cboe.Data\Equibles.Cboe.Data.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Cboe.Repositories\Equibles.Cboe.Repositories.csproj" />
   </ItemGroup>
 
 </Project>
