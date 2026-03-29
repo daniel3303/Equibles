@@ -6,9 +6,11 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-8A2BE2?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0wIDE4Yy00LjQyIDAtOC0zLjU4LTgtOHMzLjU4LTggOC04IDggMy41OCA4IDgtMy41OCA4LTggOHoiLz48L3N2Zz4=)](https://modelcontextprotocol.io)
 
-An open-source, self-hosted mini Bloomberg Terminal for AI agents. Scrapes, stores, and serves SEC filings, institutional holdings, insider trading, congressional trades, short data, and economic indicators — and exposes it all via MCP so your AI assistant can query it directly.
+An open-source, self-hosted mini Bloomberg Terminal for AI agents. Scrapes, stores, and serves SEC filings, institutional holdings, insider trading, congressional trades, short data, economic indicators, and daily stock prices — and exposes it all via MCP so your AI assistant can query it directly.
 
 Powers [equibles.com](https://equibles.com).
+
+![Stock detail page showing price charts, moving averages, and technical indicators for AAPL](docs/screenshots/stock-detail.png)
 
 ## What's Included
 
@@ -20,6 +22,7 @@ Powers [equibles.com](https://equibles.com).
 | **Congressional Trading** | House/Senate disclosures | Stock trades by members of Congress |
 | **Short Data** | SEC / FINRA | Fails-to-deliver (SEC), daily short volume and short interest (FINRA) |
 | **Economic Indicators** | FRED (Federal Reserve) | Interest rates, inflation, employment, GDP, yield spreads, and more |
+| **Stock Prices** | Yahoo Finance | Daily OHLCV prices with technical indicators (SMA, RSI, MACD) |
 
 ## Quick Start
 
@@ -42,7 +45,7 @@ This starts:
 | **db** | 5432 | ParadeDB (PostgreSQL + pgvector + pg_search) |
 | **web** | 8080 | Web portal for browsing data |
 | **mcp** | 8081 | MCP server for AI assistants |
-| **worker** | — | Scrapers (SEC, FINRA, Congress, FRED) |
+| **worker** | — | Scrapers (SEC, FINRA, Congress, FRED, Yahoo) |
 
 Data scraping starts automatically. SEC filings, holdings, insider trades, and congressional trades will begin populating within minutes.
 
@@ -114,9 +117,13 @@ When set, the web portal requires login and the MCP server requires `Authorizati
 
 The web portal at `http://localhost:8080` provides a browser-based interface for exploring data:
 
-- **Stocks** — Browse and search all tracked companies, view institutional holdings, short data, SEC filings, insider trading, and congressional trades per stock
+- **Stocks** — Browse and search all tracked companies, view price charts with technical indicators (SMA, RSI, MACD), institutional holdings, short data, SEC filings, insider trading, and congressional trades per stock
 - **Economy** — Browse FRED economic indicators grouped by category (interest rates, inflation, employment, GDP, etc.) with charts and statistics
 - **Status** — System health, worker status, data counts, and error log
+
+| Stocks | Economy | Economy Detail |
+|--------|---------|----------------|
+| ![Stocks page](docs/screenshots/stocks-list.png) | ![Economy page](docs/screenshots/economy.png) | ![Federal Funds Rate detail](docs/screenshots/economy-detail.png) |
 
 ## MCP Server
 
