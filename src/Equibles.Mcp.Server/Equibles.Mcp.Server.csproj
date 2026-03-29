@@ -18,6 +18,8 @@
       <ProjectReference Include="..\Equibles.Finra.Repositories\Equibles.Finra.Repositories.csproj" />
       <ProjectReference Include="..\Equibles.Media.Repositories\Equibles.Media.Repositories.csproj" />
       <ProjectReference Include="..\Equibles.Yahoo.Repositories\Equibles.Yahoo.Repositories.csproj" />
+      <ProjectReference Include="..\Equibles.Cftc.Mcp\Equibles.Cftc.Mcp.csproj" />
+      <ProjectReference Include="..\Equibles.Cboe.Mcp\Equibles.Cboe.Mcp.csproj" />
     </ItemGroup>
 
 </Project>

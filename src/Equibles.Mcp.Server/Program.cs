@@ -8,6 +8,8 @@ using Equibles.Mcp.Extensions;
 using Equibles.Mcp.Middleware;
 using Equibles.Mcp.Server;
 using Equibles.Sec.Mcp.Extensions;
+using Equibles.Cftc.Mcp.Extensions;
+using Equibles.Cboe.Mcp.Extensions;
 using ModelContextProtocol.AspNetCore;
 using Serilog;
 using Serilog.Events;
@@ -34,6 +36,8 @@ builder.Services.AddEquiblesMcp(mcp => {
     mcp.AddInsiderTrading();
     mcp.AddFred();
     mcp.AddSec();
+    mcp.AddCftc();
+    mcp.AddCboe();
 });
 
 builder.Services.AddSingleton<IApiKeyValidator, SimpleApiKeyValidator>();
