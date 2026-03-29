@@ -17,6 +17,7 @@
       <ProjectReference Include="..\Equibles.Congress.Repositories\Equibles.Congress.Repositories.csproj" />
       <ProjectReference Include="..\Equibles.Finra.Repositories\Equibles.Finra.Repositories.csproj" />
       <ProjectReference Include="..\Equibles.Media.Repositories\Equibles.Media.Repositories.csproj" />
+      <ProjectReference Include="..\Equibles.Yahoo.Repositories\Equibles.Yahoo.Repositories.csproj" />
     </ItemGroup>
 
 </Project>

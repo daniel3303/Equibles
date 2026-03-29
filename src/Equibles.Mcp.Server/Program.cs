@@ -16,6 +16,7 @@ using Equibles.Mcp.Server;
 using Equibles.Congress.Data.Extensions;
 using Equibles.Finra.Data.Extensions;
 using Equibles.Sec.Data.Extensions;
+using Equibles.Yahoo.Data.Extensions;
 using Equibles.Sec.Mcp.Extensions;
 using ModelContextProtocol.AspNetCore;
 using Serilog;
@@ -40,6 +41,7 @@ builder.Services.AddEquiblesDbContext(connectionString, modules => {
     modules.AddSec();
     modules.AddCongress();
     modules.AddFinra();
+    modules.AddYahoo();
     modules.AddMedia();
     modules.AddErrors();
 });
@@ -52,6 +54,7 @@ builder.Services.AddRepositoriesFrom(
     typeof(Equibles.Sec.Repositories.DocumentRepository).Assembly,
     typeof(Equibles.Congress.Repositories.CongressMemberRepository).Assembly,
     typeof(Equibles.Finra.Repositories.DailyShortVolumeRepository).Assembly,
+    typeof(Equibles.Yahoo.Repositories.DailyStockPriceRepository).Assembly,
     typeof(Equibles.Media.Repositories.FileRepository).Assembly,
     typeof(Equibles.Errors.Repositories.ErrorRepository).Assembly
 );
