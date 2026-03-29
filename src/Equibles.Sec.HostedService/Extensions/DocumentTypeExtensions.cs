@@ -19,7 +19,7 @@ public static class DocumentTypeExtensions {
     };
 
     public static DocumentTypeFilter? ToSecEdgarFilter(this DocumentType docType) {
-        return DatabaseToSecMapping.GetValueOrDefault(docType);
+        return DatabaseToSecMapping.TryGetValue(docType, out var filter) ? filter : null;
     }
 
     public static DocumentType FromFormName(string formName) {
