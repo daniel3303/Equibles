@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+      <PackageReference Include="Equibles.Core.AutoWiring" />
+      <PackageReference Include="Microsoft.Extensions.Hosting" />
+      <PackageReference Include="Microsoft.Extensions.Http" />
+      <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
+      <ProjectReference Include="..\Equibles.Cftc.Repositories\Equibles.Cftc.Repositories.csproj" />
+      <ProjectReference Include="..\Equibles.Integrations.Cftc\Equibles.Integrations.Cftc.csproj" />
+      <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
+      <ProjectReference Include="..\Equibles.Worker\Equibles.Worker.csproj" />
+    </ItemGroup>
+
+</Project>
