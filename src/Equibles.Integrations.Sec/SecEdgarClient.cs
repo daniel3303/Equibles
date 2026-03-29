@@ -147,17 +147,20 @@ public class SecEdgarClient : ISecEdgarClient {
 
 
     public async Task<Stream> DownloadStream(string url) {
-        var response = await SendWithRetryAsync(url);
+        var response = await SendWithRetryAsync(url, HttpCompletionOption.ResponseHeadersRead);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStreamAsync();
     }
 
-    private async Task<HttpResponseMessage> SendWithRetryAsync(string url) {
+    private Task<HttpResponseMessage> SendWithRetryAsync(string url) =>
+        SendWithRetryAsync(url, HttpCompletionOption.ResponseContentRead);
+
+    private async Task<HttpResponseMessage> SendWithRetryAsync(string url, HttpCompletionOption completionOption) {
         for (var attempt = 0; attempt <= MaxRetries; attempt++) {
             await RateLimiter.WaitAsync();
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            var response = await _httpClient.GetAsync(url);
+            var response = await _httpClient.GetAsync(url, completionOption);
             sw.Stop();
 
             _logger.LogDebug("SEC request {StatusCode} {Elapsed}ms {Url}",
