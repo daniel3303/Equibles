@@ -1,0 +1,227 @@
+@model Equibles.Web.ViewModels.Cftc.CftcContractViewModel
+
+@{
+    ViewData["Title"] = Model.MarketCode + " — " + Model.MarketName;
+    ViewData["Description"] = "CFTC Commitments of Traders positioning data for " + Model.MarketName + ".";
+
+    // Chronological order for chart
+    var chronological = Model.Reports
+        .OrderBy(r => r.ReportDate)
+        .ToList();
+
+    // Most recent report for stats
+    var latest = Model.Reports.FirstOrDefault();
+}
+
+<div class="max-w-6xl mx-auto px-6 py-8">
+    <!-- Breadcrumb -->
+    <div class="breadcrumbs text-sm text-base-content/60 mb-2">
+        <ul>
+            <li><a asp-controller="Cftc" asp-action="Index">Futures</a></li>
+            <li>
+                <span class="font-semibold text-base-content">@Model.MarketCode</span>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Contract Header -->
+    <div class="card bg-base-100 shadow-sm mb-6">
+        <div class="card-body p-4 lg:p-6">
+            <div class="flex items-baseline gap-3 mb-1">
+                <h1 class="text-2xl font-bold">@Model.MarketName</h1>
+                <span class="badge badge-ghost">@Model.Category</span>
+            </div>
+            <p class="text-base text-base-content/70 font-mono">@Model.MarketCode</p>
+        </div>
+    </div>
+
+    @if (latest != null) {
+        <!-- Statistics Cards -->
+        <div class="flex items-baseline gap-2 mb-2">
+            <h2 class="font-semibold text-sm">Latest Positioning</h2>
+            <span class="text-xs text-base-content/50">@latest.ReportDate.ToString("yyyy-MM-dd")</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Open Interest</div>
+                    <div class="text-lg font-bold tabular-nums">@latest.OpenInterest.ToString("N0")</div>
+                </div>
+            </div>
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Commercial Net</div>
+                    <div class="text-lg font-bold tabular-nums">@((latest.CommLong - latest.CommShort).ToString("N0"))</div>
+                </div>
+            </div>
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Non-Commercial Net</div>
+                    <div class="text-lg font-bold tabular-nums">@((latest.NonCommLong - latest.NonCommShort).ToString("N0"))</div>
+                </div>
+            </div>
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Spreads</div>
+                    <div class="text-lg font-bold tabular-nums">@latest.NonCommSpreads.ToString("N0")</div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (chronological.Count > 0) {
+        <!-- Chart -->
+        <div class="card bg-base-100 shadow-sm mb-6">
+            <div class="card-body p-4 lg:p-6">
+                <h2 class="font-semibold text-sm mb-3">Net Positioning</h2>
+                <div class="h-[320px]">
+                    <canvas id="cftc-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Data Table -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 lg:p-6">
+            <h2 class="card-title text-lg mb-3">
+                Reports
+                <span class="text-sm font-normal text-base-content/50">(@Model.Reports.Count total)</span>
+            </h2>
+
+            @if (Model.Reports.Count == 0) {
+                <div class="text-center py-8 text-base-content/50">
+                    <p class="text-sm">No reports yet</p>
+                </div>
+            } else {
+                <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
+                    <table class="table table-zebra table-sm">
+                        <thead class="sticky top-0 bg-base-100 z-10">
+                            <tr>
+                                <th>Date</th>
+                                <th class="text-right">Open Interest</th>
+                                <th class="text-right hidden sm:table-cell">Comm Long</th>
+                                <th class="text-right hidden sm:table-cell">Comm Short</th>
+                                <th class="text-right hidden md:table-cell">Non-Comm Long</th>
+                                <th class="text-right hidden md:table-cell">Non-Comm Short</th>
+                                <th class="text-right hidden lg:table-cell">Spreads</th>
+                                <th class="text-right hidden lg:table-cell">Change OI</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var report in Model.Reports) {
+                                <tr>
+                                    <td class="font-mono text-sm">@report.ReportDate.ToString("yyyy-MM-dd")</td>
+                                    <td class="text-right font-semibold tabular-nums">@report.OpenInterest.ToString("N0")</td>
+                                    <td class="text-right tabular-nums hidden sm:table-cell">@report.CommLong.ToString("N0")</td>
+                                    <td class="text-right tabular-nums hidden sm:table-cell">@report.CommShort.ToString("N0")</td>
+                                    <td class="text-right tabular-nums hidden md:table-cell">@report.NonCommLong.ToString("N0")</td>
+                                    <td class="text-right tabular-nums hidden md:table-cell">@report.NonCommShort.ToString("N0")</td>
+                                    <td class="text-right tabular-nums hidden lg:table-cell">@report.NonCommSpreads.ToString("N0")</td>
+                                    <td class="text-right tabular-nums hidden lg:table-cell">
+                                        @if (report.ChangeOpenInterest.HasValue) {
+                                            <span class="@(report.ChangeOpenInterest.Value > 0 ? "text-success" : report.ChangeOpenInterest.Value < 0 ? "text-error" : "text-base-content/50")">
+                                                @(report.ChangeOpenInterest.Value > 0 ? "+" : "")@report.ChangeOpenInterest.Value.ToString("N0")
+                                            </span>
+                                        } else {
+                                            <span class="text-base-content/30">&mdash;</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@if (chronological.Count > 0) {
+    @section Scripts {
+        <script>
+        // Render CFTC positioning chart with Commercial and Non-Commercial net lines
+        document.addEventListener('DOMContentLoaded', function() {
+            const ctx = document.getElementById('cftc-chart');
+            if (!ctx || typeof Chart === 'undefined') return;
+
+            const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chronological.Select(r => r.ReportDate.ToString("yyyy-MM-dd")).ToList()));
+            const commNet = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chronological.Select(r => r.CommLong - r.CommShort).ToList()));
+            const nonCommNet = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chronological.Select(r => r.NonCommLong - r.NonCommShort).ToList()));
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Commercial Net',
+                            data: commNet,
+                            borderColor: 'rgba(34, 197, 94, 1)',
+                            backgroundColor: 'rgba(34, 197, 94, 0.08)',
+                            fill: false,
+                            tension: 0.3,
+                            pointRadius: 0,
+                            pointHitRadius: 6,
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'Non-Commercial Net',
+                            data: nonCommNet,
+                            borderColor: 'rgba(59, 130, 246, 1)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            fill: false,
+                            tension: 0.3,
+                            pointRadius: 0,
+                            pointHitRadius: 6,
+                            borderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                maxTicksLimit: 12,
+                                font: { size: 10 }
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                callback: function(v) {
+                                    if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+                                    if (Math.abs(v) >= 1e3) return (v / 1e3).toFixed(1) + 'K';
+                                    return v;
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: { boxWidth: 12, font: { size: 11 } }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    if (ctx.raw === null) return null;
+                                    return ctx.dataset.label + ': ' + Number(ctx.raw).toLocaleString(undefined, {
+                                        minimumFractionDigits: 0,
+                                        maximumFractionDigits: 0
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+        </script>
+    }
+}

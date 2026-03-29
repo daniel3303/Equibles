@@ -1,0 +1,134 @@
+@model Equibles.Web.ViewModels.Market.MarketIndexViewModel
+
+@{
+    ViewData["Title"] = "Market Indicators";
+    ViewData["Description"] = "Browse market indicators — put/call ratios, VIX, and sentiment data from CBOE.";
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">Market Indicators</h1>
+        <p class="text-base-content/60">
+            Sentiment and volatility data sourced from
+            <a href="https://www.cboe.com" target="_blank" rel="noopener" class="link link-primary">CBOE</a>.
+            Explore put/call ratios and VIX historical data.
+        </p>
+    </div>
+
+    <div class="space-y-6">
+        <!-- Put/Call Ratios -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4 lg:p-6">
+                <h2 class="card-title text-lg mb-3">Put/Call Ratios</h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra table-sm">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th class="text-right">P/C Ratio</th>
+                                <th class="text-right hidden sm:table-cell">Call Volume</th>
+                                <th class="text-right hidden sm:table-cell">Put Volume</th>
+                                <th class="text-right hidden md:table-cell">Date</th>
+                                <th class="w-8"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var ratio in Model.PutCallRatios) {
+                                <tr class="hover cursor-pointer market-row"
+                                    data-href="@Url.Action("PutCallRatio", "Market", new { type = ratio.Type })">
+                                    <td>
+                                        <a asp-action="PutCallRatio" asp-route-type="@ratio.Type"
+                                           class="font-semibold link link-primary">@ratio.DisplayName</a>
+                                    </td>
+                                    <td class="text-right font-semibold tabular-nums">
+                                        @if (ratio.LatestRatio.HasValue) {
+                                            @ratio.LatestRatio.Value.ToString("N2")
+                                        } else {
+                                            <span class="text-base-content/30">&mdash;</span>
+                                        }
+                                    </td>
+                                    <td class="text-right tabular-nums hidden sm:table-cell">
+                                        @if (ratio.LatestCallVolume.HasValue) {
+                                            @ratio.LatestCallVolume.Value.ToString("N0")
+                                        } else {
+                                            <span class="text-base-content/30">&mdash;</span>
+                                        }
+                                    </td>
+                                    <td class="text-right tabular-nums hidden sm:table-cell">
+                                        @if (ratio.LatestPutVolume.HasValue) {
+                                            @ratio.LatestPutVolume.Value.ToString("N0")
+                                        } else {
+                                            <span class="text-base-content/30">&mdash;</span>
+                                        }
+                                    </td>
+                                    <td class="text-right text-sm text-base-content/60 hidden md:table-cell">
+                                        @if (ratio.LatestDate.HasValue) {
+                                            @ratio.LatestDate.Value.ToString("yyyy-MM-dd")
+                                        }
+                                    </td>
+                                    <td class="text-base-content/30">
+                                        <icon name="chevron-right" size="4" />
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIX -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4 lg:p-6">
+                <a asp-action="Vix" asp-controller="Market" class="card-title text-lg mb-3 link link-hover">
+                    VIX
+                    <icon name="chevron-right" size="4" class="text-base-content/30" />
+                </a>
+                @if (Model.Vix != null) {
+                    var vixChange = (Model.Vix.LatestClose.HasValue && Model.Vix.PreviousClose.HasValue)
+                        ? Model.Vix.LatestClose.Value - Model.Vix.PreviousClose.Value
+                        : (decimal?)null;
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div>
+                            <div class="text-xs text-base-content/50 uppercase tracking-wider">Latest Close</div>
+                            <div class="text-lg font-bold tabular-nums">@Model.Vix.LatestClose?.ToString("N2")</div>
+                            @if (vixChange.HasValue) {
+                                <div class="text-xs tabular-nums @(vixChange.Value > 0 ? "text-error" : vixChange.Value < 0 ? "text-success" : "text-base-content/50")">
+                                    @(vixChange.Value > 0 ? "+" : "")@vixChange.Value.ToString("N2")
+                                </div>
+                            }
+                        </div>
+                        <div>
+                            <div class="text-xs text-base-content/50 uppercase tracking-wider">Date</div>
+                            <div class="text-sm font-semibold">@Model.Vix.LatestDate?.ToString("yyyy-MM-dd")</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-base-content/50 uppercase tracking-wider">52-Week High</div>
+                            <div class="text-lg font-bold tabular-nums">@Model.Vix.High52Week?.ToString("N2")</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-base-content/50 uppercase tracking-wider">52-Week Low</div>
+                            <div class="text-lg font-bold tabular-nums">@Model.Vix.Low52Week?.ToString("N2")</div>
+                        </div>
+                    </div>
+                } else {
+                    <div class="text-center py-4 text-base-content/50">
+                        <p class="text-sm">No VIX data available</p>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+    // Make table rows clickable to navigate to the detail page
+    document.querySelectorAll('.market-row').forEach(function(row) {
+        row.addEventListener('click', function(e) {
+            if (e.target.closest('a')) return; // let native link clicks through
+            window.location.href = this.dataset.href;
+        });
+    });
+    </script>
+}

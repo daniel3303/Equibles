@@ -3,6 +3,8 @@ using Equibles.Congress.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Fred.Repositories;
 using Equibles.Yahoo.Repositories;
+using Equibles.Cftc.Repositories;
+using Equibles.Cboe.Repositories;
 using Equibles.Holdings.Repositories;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Sec.Repositories;
@@ -20,6 +22,9 @@ public class DataCountService {
     private readonly FailToDeliverRepository _failToDeliverRepository;
     private readonly FredObservationRepository _fredObservationRepository;
     private readonly DailyStockPriceRepository _dailyStockPriceRepository;
+    private readonly CftcPositionReportRepository _cftcPositionReportRepository;
+    private readonly CboePutCallRatioRepository _cboePutCallRatioRepository;
+    private readonly CboeVixDailyRepository _cboeVixDailyRepository;
 
     public DataCountService(
         CommonStockRepository commonStockRepository,
@@ -29,7 +34,10 @@ public class DataCountService {
         InstitutionalHoldingRepository institutionalHoldingRepository,
         FailToDeliverRepository failToDeliverRepository,
         FredObservationRepository fredObservationRepository,
-        DailyStockPriceRepository dailyStockPriceRepository
+        DailyStockPriceRepository dailyStockPriceRepository,
+        CftcPositionReportRepository cftcPositionReportRepository,
+        CboePutCallRatioRepository cboePutCallRatioRepository,
+        CboeVixDailyRepository cboeVixDailyRepository
     ) {
         _commonStockRepository = commonStockRepository;
         _documentRepository = documentRepository;
@@ -39,6 +47,9 @@ public class DataCountService {
         _failToDeliverRepository = failToDeliverRepository;
         _fredObservationRepository = fredObservationRepository;
         _dailyStockPriceRepository = dailyStockPriceRepository;
+        _cftcPositionReportRepository = cftcPositionReportRepository;
+        _cboePutCallRatioRepository = cboePutCallRatioRepository;
+        _cboeVixDailyRepository = cboeVixDailyRepository;
     }
 
     public async Task<int> GetStockCount() =>
@@ -64,4 +75,13 @@ public class DataCountService {
 
     public async Task<int> GetDailyStockPriceCount() =>
         await _dailyStockPriceRepository.GetAll().CountAsync();
+
+    public async Task<int> GetCftcPositionReportCount() =>
+        await _cftcPositionReportRepository.GetAll().CountAsync();
+
+    public async Task<int> GetCboePutCallRatioCount() =>
+        await _cboePutCallRatioRepository.GetAll().CountAsync();
+
+    public async Task<int> GetCboeVixDailyCount() =>
+        await _cboeVixDailyRepository.GetAll().CountAsync();
 }

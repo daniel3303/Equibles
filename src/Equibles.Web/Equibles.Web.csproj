@@ -27,6 +27,8 @@
       <ProjectReference Include="..\Equibles.Media.Repositories\Equibles.Media.Repositories.csproj" />
       <ProjectReference Include="..\Equibles.Migrations\Equibles.Migrations.csproj" />
       <ProjectReference Include="..\Equibles.Yahoo.Repositories\Equibles.Yahoo.Repositories.csproj" />
+      <ProjectReference Include="..\Equibles.Cftc.Repositories\Equibles.Cftc.Repositories.csproj" />
+      <ProjectReference Include="..\Equibles.Cboe.Repositories\Equibles.Cboe.Repositories.csproj" />
     </ItemGroup>
 
 </Project>

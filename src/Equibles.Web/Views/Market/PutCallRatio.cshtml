@@ -1,0 +1,212 @@
+@model Equibles.Web.ViewModels.Market.PutCallRatioViewModel
+
+@{
+    ViewData["Title"] = Model.DisplayName + " Put/Call Ratio";
+    ViewData["Description"] = "Historical put/call ratio data for " + Model.DisplayName + " from CBOE.";
+
+    // Chronological order for chart, limited to last 365 records
+    var chronological = Model.Records
+        .OrderBy(r => r.Date)
+        .TakeLast(365)
+        .ToList();
+
+    // Table records limited to 250 (most recent first, already ordered by model)
+    var tableRecords = Model.Records.Take(250).ToList();
+}
+
+<div class="max-w-6xl mx-auto px-6 py-8">
+    <!-- Breadcrumb -->
+    <div class="breadcrumbs text-sm text-base-content/60 mb-2">
+        <ul>
+            <li><a asp-controller="Market" asp-action="Index">Market</a></li>
+            <li><span class="text-base-content/60">Put/Call Ratio</span></li>
+            <li>
+                <span class="font-semibold text-base-content">@Model.DisplayName</span>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Header -->
+    <div class="card bg-base-100 shadow-sm mb-6">
+        <div class="card-body p-4 lg:p-6">
+            <h1 class="text-2xl font-bold">@Model.DisplayName Put/Call Ratio</h1>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="flex items-baseline gap-2 mb-2">
+        <h2 class="font-semibold text-sm">Statistics</h2>
+        <span class="text-xs text-base-content/50">@Model.Records.Count observations</span>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+        @if (Model.LatestRatio.HasValue) {
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Latest</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.LatestRatio.Value.ToString("N2")</div>
+                </div>
+            </div>
+        }
+        @if (Model.Mean.HasValue) {
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Mean</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.Mean.Value.ToString("N2")</div>
+                </div>
+            </div>
+        }
+        @if (Model.Median.HasValue) {
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Median</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.Median.Value.ToString("N2")</div>
+                </div>
+            </div>
+        }
+        @if (Model.Min.HasValue) {
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Min</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.Min.Value.ToString("N2")</div>
+                </div>
+            </div>
+        }
+        @if (Model.Max.HasValue) {
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Max</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.Max.Value.ToString("N2")</div>
+                </div>
+            </div>
+        }
+        @if (Model.StdDev.HasValue) {
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Std Dev</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.StdDev.Value.ToString("N2")</div>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (chronological.Count > 0) {
+        <!-- Chart -->
+        <div class="card bg-base-100 shadow-sm mb-6">
+            <div class="card-body p-4 lg:p-6">
+                <h2 class="font-semibold text-sm mb-3">@Model.DisplayName P/C Ratio</h2>
+                <div class="h-[320px]">
+                    <canvas id="pcr-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Data Table -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 lg:p-6">
+            <h2 class="card-title text-lg mb-3">
+                History
+                <span class="text-sm font-normal text-base-content/50">(@Model.Records.Count total)</span>
+            </h2>
+
+            @if (Model.Records.Count == 0) {
+                <div class="text-center py-8 text-base-content/50">
+                    <p class="text-sm">No data yet</p>
+                </div>
+            } else {
+                <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
+                    <table class="table table-zebra table-sm">
+                        <thead class="sticky top-0 bg-base-100 z-10">
+                            <tr>
+                                <th>Date</th>
+                                <th class="text-right">Call Vol</th>
+                                <th class="text-right">Put Vol</th>
+                                <th class="text-right hidden sm:table-cell">Total Vol</th>
+                                <th class="text-right">P/C Ratio</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var record in tableRecords) {
+                                <tr>
+                                    <td class="font-mono text-sm">@record.Date.ToString("yyyy-MM-dd")</td>
+                                    <td class="text-right tabular-nums">@record.CallVolume?.ToString("N0")</td>
+                                    <td class="text-right tabular-nums">@record.PutVolume?.ToString("N0")</td>
+                                    <td class="text-right tabular-nums hidden sm:table-cell">@record.TotalVolume?.ToString("N0")</td>
+                                    <td class="text-right font-semibold tabular-nums">@record.PutCallRatio?.ToString("N2")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@if (chronological.Count > 0) {
+    @section Scripts {
+        <script>
+        // Render put/call ratio line chart
+        document.addEventListener('DOMContentLoaded', function() {
+            const ctx = document.getElementById('pcr-chart');
+            if (!ctx || typeof Chart === 'undefined') return;
+
+            const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chronological.Select(r => r.Date.ToString("yyyy-MM-dd")).ToList()));
+            const values = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chronological.Select(r => r.PutCallRatio).ToList()));
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'P/C Ratio',
+                        data: values,
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0,
+                        pointHitRadius: 6,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                maxTicksLimit: 12,
+                                font: { size: 10 }
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                callback: function(v) { return v.toFixed(2); }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: { boxWidth: 12, font: { size: 11 } }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    if (ctx.raw === null) return null;
+                                    return ctx.dataset.label + ': ' + Number(ctx.raw).toFixed(2);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+        </script>
+    }
+}

@@ -1,0 +1,88 @@
+@model Equibles.Web.ViewModels.Cftc.CftcIndexViewModel
+
+@{
+    ViewData["Title"] = "Futures";
+    ViewData["Description"] = "Browse CFTC Commitments of Traders data — commercial and non-commercial positions across futures markets.";
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">Futures</h1>
+        <p class="text-base-content/60">
+            @Model.Categories.Sum(c => c.Contracts.Count) contracts from
+            <a href="https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm" target="_blank" rel="noopener" class="link link-primary">CFTC</a>
+            across @Model.Categories.Count categories.
+            Click any contract to explore positioning charts and historical data.
+        </p>
+    </div>
+
+    <div class="space-y-6">
+        @foreach (var category in Model.Categories) {
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-4 lg:p-6">
+                    <h2 class="card-title text-lg mb-3">@category.DisplayName</h2>
+                    <div class="overflow-x-auto">
+                        <table class="table table-zebra table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Market Name</th>
+                                    <th class="text-right hidden sm:table-cell">Comm Net</th>
+                                    <th class="text-right hidden sm:table-cell">Non-Comm Net</th>
+                                    <th class="text-right hidden md:table-cell">Date</th>
+                                    <th class="w-8"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var contract in category.Contracts) {
+                                    <tr class="hover cursor-pointer cftc-row"
+                                        data-href="@Url.Action("Show", "Cftc", new { marketCode = contract.MarketCode })">
+                                        <td>
+                                            <a asp-action="Show" asp-route-marketCode="@contract.MarketCode"
+                                               class="font-mono text-sm link link-primary">@contract.MarketCode</a>
+                                        </td>
+                                        <td class="max-w-xs truncate">@contract.MarketName</td>
+                                        <td class="text-right font-semibold tabular-nums hidden sm:table-cell">
+                                            @if (contract.CommercialNet.HasValue) {
+                                                @contract.CommercialNet.Value.ToString("N0")
+                                            } else {
+                                                <span class="text-base-content/30">&mdash;</span>
+                                            }
+                                        </td>
+                                        <td class="text-right font-semibold tabular-nums hidden sm:table-cell">
+                                            @if (contract.NonCommercialNet.HasValue) {
+                                                @contract.NonCommercialNet.Value.ToString("N0")
+                                            } else {
+                                                <span class="text-base-content/30">&mdash;</span>
+                                            }
+                                        </td>
+                                        <td class="text-right text-sm text-base-content/60 hidden md:table-cell">
+                                            @if (contract.LatestDate.HasValue) {
+                                                @contract.LatestDate.Value.ToString("yyyy-MM-dd")
+                                            }
+                                        </td>
+                                        <td class="text-base-content/30">
+                                            <icon name="chevron-right" size="4" />
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+    // Make table rows clickable to navigate to the contract detail page
+    document.querySelectorAll('.cftc-row').forEach(function(row) {
+        row.addEventListener('click', function(e) {
+            if (e.target.closest('a')) return; // let native link clicks through
+            window.location.href = this.dataset.href;
+        });
+    });
+    </script>
+}

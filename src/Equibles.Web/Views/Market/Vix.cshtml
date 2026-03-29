@@ -1,0 +1,267 @@
+@model Equibles.Web.ViewModels.Market.VixViewModel
+
+@{
+    ViewData["Title"] = "VIX";
+    ViewData["Description"] = "CBOE Volatility Index (VIX) historical data — daily open, high, low, close with moving averages.";
+
+    // Chronological order for chart, limited to last 365 records
+    var chronological = Model.Records
+        .OrderBy(r => r.Date)
+        .TakeLast(365)
+        .ToList();
+
+    // Table records limited to 250 (most recent first, already ordered by model)
+    var tableRecords = Model.Records.Take(250).ToList();
+}
+
+<div class="max-w-6xl mx-auto px-6 py-8">
+    <!-- Breadcrumb -->
+    <div class="breadcrumbs text-sm text-base-content/60 mb-2">
+        <ul>
+            <li><a asp-controller="Market" asp-action="Index">Market</a></li>
+            <li>
+                <span class="font-semibold text-base-content">VIX</span>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Header -->
+    <div class="card bg-base-100 shadow-sm mb-6">
+        <div class="card-body p-4 lg:p-6">
+            <h1 class="text-2xl font-bold">CBOE Volatility Index (VIX)</h1>
+            <p class="text-base text-base-content/70">Measures the market's expectation of 30-day forward-looking volatility.</p>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="flex items-baseline gap-2 mb-2">
+        <h2 class="font-semibold text-sm">Statistics</h2>
+        <span class="text-xs text-base-content/50">@Model.Records.Count observations</span>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+        @{
+            var vixChange = (Model.LatestClose.HasValue && Model.PreviousClose.HasValue)
+                ? Model.LatestClose.Value - Model.PreviousClose.Value
+                : (decimal?)null;
+        }
+        @if (Model.LatestClose.HasValue) {
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Latest Close</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.LatestClose.Value.ToString("N2")</div>
+                    @if (vixChange.HasValue) {
+                        <div class="text-xs tabular-nums @(vixChange.Value > 0 ? "text-error" : vixChange.Value < 0 ? "text-success" : "text-base-content/50")">
+                            @(vixChange.Value > 0 ? "+" : "")@vixChange.Value.ToString("N2")
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        @if (Model.Mean.HasValue) {
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Mean</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.Mean.Value.ToString("N2")</div>
+                </div>
+            </div>
+        }
+        @if (Model.Median.HasValue) {
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Median</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.Median.Value.ToString("N2")</div>
+                </div>
+            </div>
+        }
+        @if (Model.Min.HasValue) {
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Min</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.Min.Value.ToString("N2")</div>
+                </div>
+            </div>
+        }
+        @if (Model.Max.HasValue) {
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Max</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.Max.Value.ToString("N2")</div>
+                </div>
+            </div>
+        }
+        @if (Model.StdDev.HasValue) {
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Std Dev</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.StdDev.Value.ToString("N2")</div>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (chronological.Count > 0) {
+        <!-- Chart -->
+        <div class="card bg-base-100 shadow-sm mb-6">
+            <div class="card-body p-4 lg:p-6">
+                <h2 class="font-semibold text-sm mb-3">VIX Close</h2>
+                <div class="h-[320px]">
+                    <canvas id="vix-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Data Table -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 lg:p-6">
+            <h2 class="card-title text-lg mb-3">
+                History
+                <span class="text-sm font-normal text-base-content/50">(@Model.Records.Count total)</span>
+            </h2>
+
+            @if (Model.Records.Count == 0) {
+                <div class="text-center py-8 text-base-content/50">
+                    <p class="text-sm">No data yet</p>
+                </div>
+            } else {
+                <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
+                    <table class="table table-zebra table-sm">
+                        <thead class="sticky top-0 bg-base-100 z-10">
+                            <tr>
+                                <th>Date</th>
+                                <th class="text-right hidden sm:table-cell">Open</th>
+                                <th class="text-right hidden sm:table-cell">High</th>
+                                <th class="text-right hidden sm:table-cell">Low</th>
+                                <th class="text-right">Close</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var record in tableRecords) {
+                                <tr>
+                                    <td class="font-mono text-sm">@record.Date.ToString("yyyy-MM-dd")</td>
+                                    <td class="text-right tabular-nums hidden sm:table-cell">@record.Open.ToString("N2")</td>
+                                    <td class="text-right tabular-nums hidden sm:table-cell">@record.High.ToString("N2")</td>
+                                    <td class="text-right tabular-nums hidden sm:table-cell">@record.Low.ToString("N2")</td>
+                                    <td class="text-right font-semibold tabular-nums">@record.Close.ToString("N2")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@if (chronological.Count > 0) {
+    @section Scripts {
+        <script>
+        // Render VIX chart with SMA-20 and SMA-50 overlays
+        document.addEventListener('DOMContentLoaded', function() {
+            const ctx = document.getElementById('vix-chart');
+            if (!ctx || typeof Chart === 'undefined') return;
+
+            const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chronological.Select(r => r.Date.ToString("yyyy-MM-dd")).ToList()));
+            const closes = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chronological.Select(r => r.Close).ToList()));
+
+            // Compute SMA-20 and SMA-50 from chart data
+            function computeSma(data, period) {
+                const result = [];
+                for (let i = 0; i < data.length; i++) {
+                    if (i < period - 1) {
+                        result.push(null);
+                    } else {
+                        let sum = 0;
+                        for (let j = i - period + 1; j <= i; j++) {
+                            sum += data[j];
+                        }
+                        result.push(sum / period);
+                    }
+                }
+                return result;
+            }
+
+            const sma20 = computeSma(closes, 20);
+            const sma50 = computeSma(closes, 50);
+
+            const datasets = [{
+                label: 'VIX Close',
+                data: closes,
+                borderColor: 'rgba(59, 130, 246, 1)',
+                backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+                pointHitRadius: 6,
+                borderWidth: 2
+            }];
+
+            if (sma20.some(v => v !== null)) {
+                datasets.push({
+                    label: 'SMA 20',
+                    data: sma20,
+                    borderColor: 'rgba(34, 197, 94, 1)',
+                    borderWidth: 1.5,
+                    borderDash: [4, 2],
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0.3
+                });
+            }
+
+            if (sma50.some(v => v !== null)) {
+                datasets.push({
+                    label: 'SMA 50',
+                    data: sma50,
+                    borderColor: 'rgba(249, 115, 22, 1)',
+                    borderWidth: 1.5,
+                    borderDash: [6, 3],
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0.3
+                });
+            }
+
+            new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                maxTicksLimit: 12,
+                                font: { size: 10 }
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                callback: function(v) { return v.toFixed(1); }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: { boxWidth: 12, font: { size: 11 } }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    if (ctx.raw === null) return null;
+                                    return ctx.dataset.label + ': ' + Number(ctx.raw).toFixed(2);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+        </script>
+    }
+}
