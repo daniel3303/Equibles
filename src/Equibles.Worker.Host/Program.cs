@@ -80,6 +80,7 @@ builder.Services.AutoWireServicesFrom<Equibles.Sec.BusinessLogic.SecDocumentHtml
 builder.Services.AutoWireServicesFrom<Equibles.Integrations.Sec.SecEdgarClient>();
 builder.Services.AutoWireServicesFrom<Equibles.Integrations.Finra.FinraClient>();
 builder.Services.AutoWireServicesFrom<Equibles.Integrations.Fred.FredClient>();
+builder.Services.AutoWireServicesFrom<Equibles.Integrations.Yahoo.YahooFinanceClient>();
 builder.Services.AutoWireServicesFrom<Equibles.Fred.HostedService.Services.FredImportService>();
 builder.Services.AutoWireServicesFrom<Equibles.Sec.HostedService.Services.DocumentManager>();
 builder.Services.AutoWireServicesFrom<Equibles.Congress.HostedService.Services.CongressionalTradeSyncService>();
