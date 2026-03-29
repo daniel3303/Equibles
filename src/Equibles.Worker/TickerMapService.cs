@@ -3,7 +3,7 @@ using Equibles.Core.AutoWiring;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Equibles.Yahoo.HostedService.Services;
+namespace Equibles.Worker;
 
 [Service]
 public class TickerMapService {

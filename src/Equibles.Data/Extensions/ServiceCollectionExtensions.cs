@@ -37,6 +37,13 @@ public static class ServiceCollectionExtensions {
         return services;
     }
 
+    public static IServiceCollection AddAllRepositories(this IServiceCollection services) {
+        var assemblies = AppDomain.CurrentDomain.GetAssemblies()
+            .Where(a => a.FullName != null && a.FullName.StartsWith("Equibles.", StringComparison.Ordinal))
+            .ToArray();
+        return services.AddRepositoriesFrom(assemblies);
+    }
+
     public static IServiceCollection AddRepositoriesFrom(this IServiceCollection services, params Assembly[] assemblies) {
         foreach (var assembly in assemblies) {
             var repositories = assembly.DefinedTypes.Where(t =>

@@ -5,6 +5,7 @@ using Equibles.Finra.Repositories;
 using Equibles.Integrations.Finra.Contracts;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
+using Equibles.Worker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -106,24 +107,12 @@ public class ShortVolumeImportService {
                     }
                 }
 
-                var batch = new List<DailyShortVolume>(InsertBatchSize);
-                var totalInserted = 0;
-
-                foreach (var item in aggregated.Values) {
-                    batch.Add(item);
-
-                    if (batch.Count >= InsertBatchSize) {
-                        await FlushBatch(batch);
-                        totalInserted += batch.Count;
-                        batch.Clear();
-                    }
-                }
-
-                if (batch.Count > 0) {
-                    await FlushBatch(batch);
-                    totalInserted += batch.Count;
-                    batch.Clear();
-                }
+                var totalInserted = await BatchPersister.Persist(aggregated.Values, InsertBatchSize, async batch => {
+                    using var scope = _scopeFactory.CreateScope();
+                    var repo = scope.ServiceProvider.GetRequiredService<DailyShortVolumeRepository>();
+                    repo.AddRange(batch);
+                    await repo.SaveChanges();
+                });
 
                 _logger.LogInformation("Imported {Count} short volume records for {Date}", totalInserted, currentDate);
             } catch (HttpRequestException ex) {
@@ -135,13 +124,6 @@ public class ShortVolumeImportService {
 
             currentDate = currentDate.AddDays(1);
         }
-    }
-
-    private async Task FlushBatch(List<DailyShortVolume> items) {
-        using var scope = _scopeFactory.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<DailyShortVolumeRepository>();
-        repo.AddRange(items);
-        await repo.SaveChanges();
     }
 
 }

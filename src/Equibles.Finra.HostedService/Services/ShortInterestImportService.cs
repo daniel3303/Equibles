@@ -5,6 +5,7 @@ using Equibles.Finra.Repositories;
 using Equibles.Integrations.Finra.Contracts;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
+using Equibles.Worker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -85,37 +86,24 @@ public class ShortInterestImportService {
                     continue;
                 }
 
-                var batch = new List<ShortInterest>(InsertBatchSize);
-                var totalInserted = 0;
-
-                foreach (var record in records) {
-                    if (string.IsNullOrEmpty(record.Symbol)
-                        || !tickerMap.TryGetValue(record.Symbol, out var commonStockId)) {
-                        continue;
-                    }
-
-                    batch.Add(new ShortInterest {
-                        CommonStockId = commonStockId,
+                var items = records
+                    .Where(r => !string.IsNullOrEmpty(r.Symbol) && tickerMap.ContainsKey(r.Symbol))
+                    .Select(r => new ShortInterest {
+                        CommonStockId = tickerMap[r.Symbol],
                         SettlementDate = settlementDate,
-                        CurrentShortPosition = record.CurrentShortPosition ?? 0,
-                        PreviousShortPosition = record.PreviousShortPosition ?? 0,
-                        ChangeInShortPosition = record.ChangeInShortPosition ?? 0,
-                        AverageDailyVolume = record.AverageDailyVolume,
-                        DaysToCover = record.DaysToCover,
+                        CurrentShortPosition = r.CurrentShortPosition ?? 0,
+                        PreviousShortPosition = r.PreviousShortPosition ?? 0,
+                        ChangeInShortPosition = r.ChangeInShortPosition ?? 0,
+                        AverageDailyVolume = r.AverageDailyVolume,
+                        DaysToCover = r.DaysToCover,
                     });
 
-                    if (batch.Count >= InsertBatchSize) {
-                        await FlushBatch(batch);
-                        totalInserted += batch.Count;
-                        batch.Clear();
-                    }
-                }
-
-                if (batch.Count > 0) {
-                    await FlushBatch(batch);
-                    totalInserted += batch.Count;
-                    batch.Clear();
-                }
+                var totalInserted = await BatchPersister.Persist(items, InsertBatchSize, async batch => {
+                    using var scope = _scopeFactory.CreateScope();
+                    var repo = scope.ServiceProvider.GetRequiredService<ShortInterestRepository>();
+                    repo.AddRange(batch);
+                    await repo.SaveChanges();
+                });
 
                 _logger.LogInformation(
                     "Imported {Count} short interest records for settlement date {Date}",
@@ -127,13 +115,6 @@ public class ShortInterestImportService {
                 await _errorReporter.Report(ErrorSource.FinraScraper, "ShortInterest.ImportDate", ex.Message, ex.StackTrace, $"date: {settlementDate}");
             }
         }
-    }
-
-    private async Task FlushBatch(List<ShortInterest> items) {
-        using var scope = _scopeFactory.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<ShortInterestRepository>();
-        repo.AddRange(items);
-        await repo.SaveChanges();
     }
 
 }

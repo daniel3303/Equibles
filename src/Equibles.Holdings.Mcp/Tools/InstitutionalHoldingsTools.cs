@@ -4,6 +4,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Repositories;
+using Equibles.Mcp;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -34,12 +35,12 @@ public class InstitutionalHoldingsTools {
 
     [McpServerTool(Name = "GetTopHolders")]
     [Description("Get the top institutional holders (fund managers) of a stock from SEC 13F-HR filings. Returns a ranked list of institutions by shares held, including market value and percentage of total institutional ownership. Data is sourced from quarterly 13F filings that large investment managers are required to file with the SEC. Use this to understand who the major institutional investors in a company are.")]
-    public async Task<string> GetTopHolders(
+    public Task<string> GetTopHolders(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
         [Description("Report date in YYYY-MM-DD format (defaults to latest available)")] string reportDate = null,
         [Description("Maximum number of holders to return (default: 20)")] int maxResults = 20
     ) {
-        try {
+        return McpToolExecutor.Execute(async () => {
             var stock = await _commonStockRepository.GetByTicker(ticker);
             if (stock == null) return $"Stock '{ticker}' not found.";
 
@@ -57,7 +58,6 @@ public class InstitutionalHoldingsTools {
                 targetDate = latestDate;
             }
 
-            // Get total counts across all holders for this stock/date
             var allHoldings = _holdingRepository.GetByStock(stock, targetDate);
             var totalInstitutions = await allHoldings.Select(h => h.InstitutionalHolderId).Distinct().CountAsync();
             var totalSharesAll = await allHoldings.SumAsync(h => h.Shares);
@@ -85,20 +85,16 @@ public class InstitutionalHoldingsTools {
             }
 
             return result.ToString();
-        } catch (Exception ex) {
-            _logger.LogError(ex, "GetTopHolders failed for {Ticker}", ticker);
-            try { await _errorManager.Create(ErrorSource.McpTool, "GetTopHolders", ex.Message, ex.StackTrace, $"ticker: {ticker}"); } catch { }
-            return "An error occurred while fetching top holders. Please try again.";
-        }
+        }, _logger, "GetTopHolders", $"ticker: {ticker}", ReportError);
     }
 
     [McpServerTool(Name = "GetOwnershipHistory")]
     [Description("Get the historical trend of institutional ownership for a stock across multiple quarters. Shows how total institutional shares, market value, and number of institutional holders have changed over time based on SEC 13F-HR filings. Use this to understand whether institutional interest in a company is growing or declining.")]
-    public async Task<string> GetOwnershipHistory(
+    public Task<string> GetOwnershipHistory(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
         [Description("Maximum number of quarterly periods to return (default: 8)")] int maxPeriods = 8
     ) {
-        try {
+        return McpToolExecutor.Execute(async () => {
             var stock = await _commonStockRepository.GetByTicker(ticker);
             if (stock == null) return $"Stock '{ticker}' not found.";
 
@@ -135,21 +131,17 @@ public class InstitutionalHoldingsTools {
             }
 
             return result.ToString();
-        } catch (Exception ex) {
-            _logger.LogError(ex, "GetOwnershipHistory failed for {Ticker}", ticker);
-            try { await _errorManager.Create(ErrorSource.McpTool, "GetOwnershipHistory", ex.Message, ex.StackTrace, $"ticker: {ticker}"); } catch { }
-            return "An error occurred while fetching ownership history. Please try again.";
-        }
+        }, _logger, "GetOwnershipHistory", $"ticker: {ticker}", ReportError);
     }
 
     [McpServerTool(Name = "GetInstitutionPortfolio")]
     [Description("View the stock portfolio of a specific institutional investor (fund manager) from their SEC 13F-HR filing. Shows all tracked stocks held by the institution with share counts and market values. Use this to understand what stocks a particular fund manager or institution is investing in.")]
-    public async Task<string> GetInstitutionPortfolio(
+    public Task<string> GetInstitutionPortfolio(
         [Description("Institution name or partial name to search for")] string institutionName,
         [Description("Report date in YYYY-MM-DD format (defaults to latest available)")] string reportDate = null,
         [Description("Maximum number of holdings to return (default: 20)")] int maxResults = 20
     ) {
-        try {
+        return McpToolExecutor.Execute(async () => {
             var holders = await _holderRepository.Search(institutionName)
                 .Take(5)
                 .ToListAsync();
@@ -192,20 +184,16 @@ public class InstitutionalHoldingsTools {
             }
 
             return result.ToString();
-        } catch (Exception ex) {
-            _logger.LogError(ex, "GetInstitutionPortfolio failed for {InstitutionName}", institutionName);
-            try { await _errorManager.Create(ErrorSource.McpTool, "GetInstitutionPortfolio", ex.Message, ex.StackTrace, $"institution: {institutionName}"); } catch { }
-            return "An error occurred while fetching institution portfolio. Please try again.";
-        }
+        }, _logger, "GetInstitutionPortfolio", $"institution: {institutionName}", ReportError);
     }
 
     [McpServerTool(Name = "SearchInstitutions")]
     [Description("Search for institutional investors (fund managers) by name. Returns matching institutions with their SEC CIK number, city, and state/country. Use this to find the correct institution name before calling GetInstitutionPortfolio or to discover which institutions are tracked in the database.")]
-    public async Task<string> SearchInstitutions(
+    public Task<string> SearchInstitutions(
         [Description("Search query — institution name or partial name")] string query,
         [Description("Maximum number of results to return (default: 10)")] int maxResults = 10
     ) {
-        try {
+        return McpToolExecutor.Execute(async () => {
             var holders = await _holderRepository.Search(query)
                 .OrderBy(h => h.Name)
                 .Take(maxResults)
@@ -224,10 +212,10 @@ public class InstitutionalHoldingsTools {
             }
 
             return result.ToString();
-        } catch (Exception ex) {
-            _logger.LogError(ex, "SearchInstitutions failed for query {Query}", query);
-            try { await _errorManager.Create(ErrorSource.McpTool, "SearchInstitutions", ex.Message, ex.StackTrace, $"query: {query}"); } catch { }
-            return "An error occurred while searching institutions. Please try again.";
-        }
+        }, _logger, "SearchInstitutions", $"query: {query}", ReportError);
+    }
+
+    private Task ReportError(string toolName, string message, string stackTrace, string context) {
+        return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
 }

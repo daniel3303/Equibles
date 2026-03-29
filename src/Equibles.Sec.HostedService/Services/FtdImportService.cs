@@ -8,6 +8,7 @@ using Equibles.Sec.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Integrations.Sec.Contracts;
+using Equibles.Worker;
 using Equibles.Sec.HostedService.Models;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;

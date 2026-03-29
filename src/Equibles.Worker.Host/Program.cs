@@ -1,25 +1,15 @@
-using Equibles.CommonStocks.Data.Extensions;
-using Equibles.Congress.Data.Extensions;
-using Equibles.Congress.HostedService;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Data.Extensions;
-using Equibles.Errors.Data.Extensions;
-using Equibles.Holdings.Data.Extensions;
-using Equibles.Holdings.HostedService;
-using Equibles.InsiderTrading.Data.Extensions;
-using Equibles.Media.Data.Extensions;
-using Equibles.Sec.Data.Extensions;
 using Equibles.Sec.HostedService;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Services;
-using Equibles.Fred.Data.Extensions;
 using Equibles.Fred.HostedService;
-using Equibles.Finra.Data.Extensions;
 using Equibles.Finra.HostedService;
-using Equibles.Yahoo.Data.Extensions;
 using Equibles.Yahoo.HostedService;
+using Equibles.Congress.HostedService;
+using Equibles.Holdings.HostedService;
 using Serilog;
 using Serilog.Events;
 
@@ -34,31 +24,8 @@ builder.Services.AddSerilog(config => {
 });
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddEquiblesDbContext(connectionString, modules => {
-    modules.AddCommonStocks();
-    modules.AddHoldings();
-    modules.AddInsiderTrading();
-    modules.AddCongress();
-    modules.AddFinra();
-    modules.AddFred();
-    modules.AddSec();
-    modules.AddYahoo();
-    modules.AddMedia();
-    modules.AddErrors();
-});
-
-builder.Services.AddRepositoriesFrom(
-    typeof(Equibles.CommonStocks.Repositories.CommonStockRepository).Assembly,
-    typeof(Equibles.Holdings.Repositories.InstitutionalHolderRepository).Assembly,
-    typeof(Equibles.InsiderTrading.Repositories.InsiderOwnerRepository).Assembly,
-    typeof(Equibles.Congress.Repositories.CongressMemberRepository).Assembly,
-    typeof(Equibles.Finra.Repositories.DailyShortVolumeRepository).Assembly,
-    typeof(Equibles.Fred.Repositories.FredSeriesRepository).Assembly,
-    typeof(Equibles.Yahoo.Repositories.DailyStockPriceRepository).Assembly,
-    typeof(Equibles.Sec.Repositories.DocumentRepository).Assembly,
-    typeof(Equibles.Media.Repositories.FileRepository).Assembly,
-    typeof(Equibles.Errors.Repositories.ErrorRepository).Assembly
-);
+builder.Services.AddEquiblesDbContext(connectionString, modules => modules.AddAllModules());
+builder.Services.AddAllRepositories();
 
 builder.Services.Configure<WorkerOptions>(
     builder.Configuration.GetSection("Worker"));

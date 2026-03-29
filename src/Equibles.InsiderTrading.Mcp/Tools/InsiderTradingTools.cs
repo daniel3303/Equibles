@@ -3,7 +3,9 @@ using System.Text;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Repositories;
+using Equibles.Mcp;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -34,11 +36,11 @@ public class InsiderTradingTools {
 
     [McpServerTool(Name = "GetInsiderTransactions")]
     [Description("Get recent insider trading transactions (purchases, sales, awards) for a stock from SEC Form 3 and Form 4 filings. Shows insider name, role, transaction type, shares, price, and post-transaction ownership. Use this to understand insider buying/selling activity.")]
-    public async Task<string> GetInsiderTransactions(
+    public Task<string> GetInsiderTransactions(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
         [Description("Maximum number of transactions to return (default: 50)")] int maxResults = 50
     ) {
-        try {
+        return McpToolExecutor.Execute(async () => {
             var stock = await _commonStockRepository.GetByTicker(ticker);
             if (stock == null) return $"Stock '{ticker}' not found.";
 
@@ -60,10 +62,10 @@ public class InsiderTradingTools {
 
             foreach (var t in transactions) {
                 var role = GetRole(t.InsiderOwner);
-                var type = t.AcquiredDisposed == Equibles.InsiderTrading.Data.Models.AcquiredDisposed.Acquired ? "Buy" : "Sell";
-                if (t.TransactionCode == Equibles.InsiderTrading.Data.Models.TransactionCode.Award) type = "Award";
-                if (t.TransactionCode == Equibles.InsiderTrading.Data.Models.TransactionCode.Gift) type = "Gift";
-                if (t.TransactionCode == Equibles.InsiderTrading.Data.Models.TransactionCode.Exercise) type = "Exercise";
+                var type = t.AcquiredDisposed == AcquiredDisposed.Acquired ? "Buy" : "Sell";
+                if (t.TransactionCode == TransactionCode.Award) type = "Award";
+                if (t.TransactionCode == TransactionCode.Gift) type = "Gift";
+                if (t.TransactionCode == TransactionCode.Exercise) type = "Exercise";
 
                 var value = t.Shares * t.PricePerShare;
                 result.AppendLine(
@@ -71,23 +73,18 @@ public class InsiderTradingTools {
             }
 
             return result.ToString();
-        } catch (Exception ex) {
-            _logger.LogError(ex, "GetInsiderTransactions failed for {Ticker}", ticker);
-            try { await _errorManager.Create(ErrorSource.McpTool, "GetInsiderTransactions", ex.Message, ex.StackTrace, $"ticker: {ticker}"); } catch { }
-            return "An error occurred while fetching insider transactions. Please try again.";
-        }
+        }, _logger, "GetInsiderTransactions", $"ticker: {ticker}", ReportError);
     }
 
     [McpServerTool(Name = "GetInsiderOwnership")]
     [Description("Get a summary of current insider ownership for a stock. Shows each insider, their role, total shares held, and their most recent transaction. Use this to understand the insider ownership structure of a company.")]
-    public async Task<string> GetInsiderOwnership(
+    public Task<string> GetInsiderOwnership(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker
     ) {
-        try {
+        return McpToolExecutor.Execute(async () => {
             var stock = await _commonStockRepository.GetByTicker(ticker);
             if (stock == null) return $"Stock '{ticker}' not found.";
 
-            // Get the latest transaction per insider to determine current holdings
             var latestTransactions = await _transactionRepository.GetByStock(stock)
                 .Include(t => t.InsiderOwner)
                 .GroupBy(t => t.InsiderOwnerId)
@@ -114,20 +111,16 @@ public class InsiderTradingTools {
             }
 
             return result.ToString();
-        } catch (Exception ex) {
-            _logger.LogError(ex, "GetInsiderOwnership failed for {Ticker}", ticker);
-            try { await _errorManager.Create(ErrorSource.McpTool, "GetInsiderOwnership", ex.Message, ex.StackTrace, $"ticker: {ticker}"); } catch { }
-            return "An error occurred while fetching insider ownership data. Please try again.";
-        }
+        }, _logger, "GetInsiderOwnership", $"ticker: {ticker}", ReportError);
     }
 
     [McpServerTool(Name = "SearchInsiders")]
     [Description("Search for corporate insiders (directors, officers, 10% owners) by name. Returns matching insiders with their CIK and role information.")]
-    public async Task<string> SearchInsiders(
+    public Task<string> SearchInsiders(
         [Description("Search query for insider name")] string query,
         [Description("Maximum number of results (default: 10)")] int maxResults = 10
     ) {
-        try {
+        return McpToolExecutor.Execute(async () => {
             var insiders = await _ownerRepository.Search(query)
                 .Take(maxResults)
                 .ToListAsync();
@@ -149,14 +142,14 @@ public class InsiderTradingTools {
             }
 
             return result.ToString();
-        } catch (Exception ex) {
-            _logger.LogError(ex, "SearchInsiders failed for query {Query}", query);
-            try { await _errorManager.Create(ErrorSource.McpTool, "SearchInsiders", ex.Message, ex.StackTrace, $"query: {query}"); } catch { }
-            return "An error occurred while searching insiders. Please try again.";
-        }
+        }, _logger, "SearchInsiders", $"query: {query}", ReportError);
     }
 
-    private static string GetRole(Equibles.InsiderTrading.Data.Models.InsiderOwner owner) {
+    private Task ReportError(string toolName, string message, string stackTrace, string context) {
+        return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
+    }
+
+    private static string GetRole(InsiderOwner owner) {
         var roles = new List<string>();
         if (owner.IsDirector) roles.Add("Director");
         if (owner.IsOfficer) roles.Add(owner.OfficerTitle ?? "Officer");
