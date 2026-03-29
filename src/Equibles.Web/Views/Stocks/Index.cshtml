@@ -27,24 +27,27 @@
     <!-- Results Table -->
     <div class="card bg-base-100 shadow-sm">
         <div class="overflow-x-auto">
-            <table class="table table-zebra">
+            <table class="table table-zebra table-sm">
                 <thead>
                     <tr>
                         <th>Ticker</th>
                         <th>Name</th>
                         <th class="hidden lg:table-cell">CUSIP</th>
-                        <th class="text-right">Action</th>
+                        <th class="w-8"></th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var stock in Model.Stocks) {
-                        <tr class="hover">
-                            <td class="font-semibold">@stock.Ticker</td>
+                        <tr class="hover cursor-pointer stock-row"
+                            data-href="@Url.Action("Show", "Stocks", new { ticker = stock.Ticker })">
+                            <td>
+                                <a asp-action="Show" asp-controller="Stocks" asp-route-ticker="@stock.Ticker"
+                                   class="font-semibold link link-primary">@stock.Ticker</a>
+                            </td>
                             <td class="max-w-xs truncate">@stock.Name</td>
                             <td class="hidden lg:table-cell font-mono text-sm text-base-content/60">@(stock.Cusip ?? "—")</td>
-                            <td class="text-right">
-                                <a asp-action="Show" asp-controller="Stocks" asp-route-ticker="@stock.Ticker"
-                                   class="btn btn-ghost btn-sm">View</a>
+                            <td class="text-base-content/30">
+                                <icon name="chevron-right" size="4" />
                             </td>
                         </tr>
                     }
@@ -92,4 +95,16 @@
         </div>
     }
 </div>
+
+@section Scripts {
+    <script>
+    // Make table rows clickable to navigate to the stock detail page
+    document.querySelectorAll('.stock-row').forEach(function(row) {
+        row.addEventListener('click', function(e) {
+            if (e.target.closest('a')) return; // let native link clicks through
+            window.location.href = this.dataset.href;
+        });
+    });
+    </script>
+}
 
