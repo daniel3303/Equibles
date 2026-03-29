@@ -11,7 +11,8 @@
             [Equibles.Migrations]*,
             [Equibles.Mcp.Server]*,
             [Equibles.Worker.Host]*,
-            [Equibles.Integrations.*]*
+            [Equibles.Integrations.*]*,
+            [Equibles.Web]*
           </Exclude>
         </Configuration>
       </DataCollector>
