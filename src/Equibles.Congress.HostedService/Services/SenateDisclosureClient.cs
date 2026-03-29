@@ -221,6 +221,16 @@ public class SenateDisclosureClient : IAsyncDisposable {
                 result = await _page.EvaluateAsync<JsonElement>(BrowserFetchScript, new { url, formFields });
             } catch (PlaywrightException) when (ct.IsCancellationRequested) {
                 throw new OperationCanceledException(ct);
+            } catch (PlaywrightException ex) {
+                if (attempt >= MaxRetries) {
+                    _logger.LogError(ex, "Playwright failed for {Url} after {Attempts} attempt(s)", url, attempt + 1);
+                    throw;
+                }
+                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+                _logger.LogWarning("Playwright timeout for {Url}, retrying in {Delay}s (attempt {Attempt}/{MaxRetries}): {Message}",
+                    url, delay.TotalSeconds, attempt + 1, MaxRetries, ex.Message);
+                await Task.Delay(delay, ct);
+                continue;
             }
             var status = result.GetProperty("status").GetInt32();
             var body = result.GetProperty("body").GetString();
@@ -237,8 +247,11 @@ public class SenateDisclosureClient : IAsyncDisposable {
                 continue;
             }
 
-            if (status is < 200 or >= 300)
+            if (status is < 200 or >= 300) {
+                _logger.LogError("Senate eFD returned HTTP {Status} for {Url} after {Attempts} attempt(s)",
+                    status, url, attempt + 1);
                 throw new HttpRequestException($"Senate eFD returned HTTP {status} for {url} (after {attempt + 1} attempt(s))");
+            }
 
             return body;
         }
