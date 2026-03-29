@@ -39,18 +39,11 @@ public class ShortVolumeImportService {
     }
 
     public async Task Import(CancellationToken cancellationToken) {
-        // Determine start date
         DateOnly startDate;
         using (var scope = _scopeFactory.CreateScope()) {
             var repo = scope.ServiceProvider.GetRequiredService<DailyShortVolumeRepository>();
             var latestDate = await repo.GetLatestDate().FirstOrDefaultAsync(cancellationToken);
-
-            if (latestDate != default) {
-                startDate = latestDate.AddDays(1);
-            } else {
-                var minDate = _workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1);
-                startDate = DateOnly.FromDateTime(minDate);
-            }
+            startDate = SyncDateResolver.Resolve(latestDate, _workerOptions);
         }
 
         var endDate = DateOnly.FromDateTime(DateTime.UtcNow);

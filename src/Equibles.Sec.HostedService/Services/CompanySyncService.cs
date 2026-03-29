@@ -49,7 +49,7 @@ public class CompanySyncService : ICompanySyncService {
             using var scope = _serviceScopeFactory.CreateScope();
             var commonStockRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
             var commonStockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
-            var dbContext = commonStockRepository.GetDbContext();
+            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
 
             // Get all CIKs from SEC companies
             var secCiks = secCompanies.Select(c => c.Cik).ToHashSet();

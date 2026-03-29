@@ -13,7 +13,7 @@ public class HoldingsImportServiceTests {
     [InlineData("2019-12-31", 2019, 12, 31)]
     [InlineData("2000-01-01", 2000, 1, 1)]
     public void TryParseDateOnly_IsoFormat_ParsesCorrectly(string input, int year, int month, int day) {
-        var success = HoldingsImportService.TryParseDateOnly(input, out var result);
+        var success = HoldingsParsingHelper.TryParseDateOnly(input, out var result);
 
         success.Should().BeTrue();
         result.Should().Be(new DateOnly(year, month, day));
@@ -24,7 +24,7 @@ public class HoldingsImportServiceTests {
     [InlineData("01-JAN-2020", 2020, 1, 1)]
     [InlineData("15-MAR-2024", 2024, 3, 15)]
     public void TryParseDateOnly_SecFormat_ParsesCorrectly(string input, int year, int month, int day) {
-        var success = HoldingsImportService.TryParseDateOnly(input, out var result);
+        var success = HoldingsParsingHelper.TryParseDateOnly(input, out var result);
 
         success.Should().BeTrue();
         result.Should().Be(new DateOnly(year, month, day));
@@ -36,7 +36,7 @@ public class HoldingsImportServiceTests {
     [InlineData("not-a-date")]
     [InlineData("xyz-abc-1234")]
     public void TryParseDateOnly_InvalidInput_ReturnsFalse(string input) {
-        var success = HoldingsImportService.TryParseDateOnly(input, out _);
+        var success = HoldingsParsingHelper.TryParseDateOnly(input, out _);
 
         success.Should().BeFalse();
     }
@@ -49,7 +49,7 @@ public class HoldingsImportServiceTests {
     [InlineData("PRN", ShareType.Principal)]
     [InlineData("prn", ShareType.Principal)]
     public void ParseShareType_ValidInput_ReturnsCorrectType(string input, ShareType expected) {
-        HoldingsImportService.ParseShareType(input).Should().Be(expected);
+        HoldingsParsingHelper.ParseShareType(input).Should().Be(expected);
     }
 
     [Theory]
@@ -57,7 +57,7 @@ public class HoldingsImportServiceTests {
     [InlineData("")]
     [InlineData("UNKNOWN")]
     public void ParseShareType_InvalidOrNull_DefaultsToShares(string input) {
-        HoldingsImportService.ParseShareType(input).Should().Be(ShareType.Shares);
+        HoldingsParsingHelper.ParseShareType(input).Should().Be(ShareType.Shares);
     }
 
     // ── ParseOptionType ──
@@ -68,7 +68,7 @@ public class HoldingsImportServiceTests {
     [InlineData("CALL", OptionType.Call)]
     [InlineData("call", OptionType.Call)]
     public void ParseOptionType_ValidInput_ReturnsCorrectType(string input, OptionType expected) {
-        HoldingsImportService.ParseOptionType(input).Should().Be(expected);
+        HoldingsParsingHelper.ParseOptionType(input).Should().Be(expected);
     }
 
     [Theory]
@@ -76,7 +76,7 @@ public class HoldingsImportServiceTests {
     [InlineData("")]
     [InlineData("UNKNOWN")]
     public void ParseOptionType_InvalidOrNull_ReturnsNull(string input) {
-        HoldingsImportService.ParseOptionType(input).Should().BeNull();
+        HoldingsParsingHelper.ParseOptionType(input).Should().BeNull();
     }
 
     // ── ParseInvestmentDiscretion ──
@@ -87,7 +87,7 @@ public class HoldingsImportServiceTests {
     [InlineData("DFND", InvestmentDiscretion.Defined)]
     [InlineData("OTR", InvestmentDiscretion.Other)]
     public void ParseInvestmentDiscretion_ValidInput_ReturnsCorrectValue(string input, InvestmentDiscretion expected) {
-        HoldingsImportService.ParseInvestmentDiscretion(input).Should().Be(expected);
+        HoldingsParsingHelper.ParseInvestmentDiscretion(input).Should().Be(expected);
     }
 
     [Theory]
@@ -95,7 +95,7 @@ public class HoldingsImportServiceTests {
     [InlineData("")]
     [InlineData("UNKNOWN")]
     public void ParseInvestmentDiscretion_InvalidOrNull_DefaultsToSole(string input) {
-        HoldingsImportService.ParseInvestmentDiscretion(input).Should().Be(InvestmentDiscretion.Sole);
+        HoldingsParsingHelper.ParseInvestmentDiscretion(input).Should().Be(InvestmentDiscretion.Sole);
     }
 
     // ── ParseLong ──
@@ -106,7 +106,7 @@ public class HoldingsImportServiceTests {
     [InlineData("-100", -100)]
     [InlineData("1000000", 1_000_000)]
     public void ParseLong_ValidInput_ReturnsValue(string input, long expected) {
-        HoldingsImportService.ParseLong(input).Should().Be(expected);
+        HoldingsParsingHelper.ParseLong(input).Should().Be(expected);
     }
 
     [Theory]
@@ -114,14 +114,14 @@ public class HoldingsImportServiceTests {
     [InlineData("")]
     [InlineData("abc")]
     public void ParseLong_InvalidOrNull_ReturnsZero(string input) {
-        HoldingsImportService.ParseLong(input).Should().Be(0);
+        HoldingsParsingHelper.ParseLong(input).Should().Be(0);
     }
 
     // ── ParseNullableInt ──
 
     [Fact]
     public void ParseNullableInt_ValidInput_ReturnsValue() {
-        HoldingsImportService.ParseNullableInt("42").Should().Be(42);
+        HoldingsParsingHelper.ParseNullableInt("42").Should().Be(42);
     }
 
     [Theory]
@@ -129,7 +129,7 @@ public class HoldingsImportServiceTests {
     [InlineData("")]
     [InlineData("abc")]
     public void ParseNullableInt_InvalidOrNull_ReturnsNull(string input) {
-        HoldingsImportService.ParseNullableInt(input).Should().BeNull();
+        HoldingsParsingHelper.ParseNullableInt(input).Should().BeNull();
     }
 
     // ── GetValue ──
@@ -138,14 +138,14 @@ public class HoldingsImportServiceTests {
     public void GetValue_KeyExists_ReturnsValue() {
         var row = new Dictionary<string, string> { ["NAME"] = "Test" };
 
-        HoldingsImportService.GetValue(row, "NAME").Should().Be("Test");
+        HoldingsParsingHelper.GetValue(row, "NAME").Should().Be("Test");
     }
 
     [Fact]
     public void GetValue_KeyMissing_ReturnsNull() {
         var row = new Dictionary<string, string>();
 
-        HoldingsImportService.GetValue(row, "MISSING").Should().BeNull();
+        HoldingsParsingHelper.GetValue(row, "MISSING").Should().BeNull();
     }
 
     // ── FindEntry ──
@@ -160,7 +160,7 @@ public class HoldingsImportServiceTests {
         stream.Position = 0;
         using var readArchive = new ZipArchive(stream, ZipArchiveMode.Read);
 
-        var entry = HoldingsImportService.FindEntry(readArchive, "SUBMISSION.tsv");
+        var entry = HoldingsParsingHelper.FindEntry(readArchive, "SUBMISSION.tsv");
         entry.Should().NotBeNull();
         entry.Name.Should().Be("SUBMISSION.tsv");
     }
@@ -175,7 +175,7 @@ public class HoldingsImportServiceTests {
         stream.Position = 0;
         using var readArchive = new ZipArchive(stream, ZipArchiveMode.Read);
 
-        var entry = HoldingsImportService.FindEntry(readArchive, "SUBMISSION.tsv");
+        var entry = HoldingsParsingHelper.FindEntry(readArchive, "SUBMISSION.tsv");
         entry.Should().NotBeNull();
         entry.Name.Should().Be("SUBMISSION.tsv");
     }
@@ -190,7 +190,7 @@ public class HoldingsImportServiceTests {
         stream.Position = 0;
         using var readArchive = new ZipArchive(stream, ZipArchiveMode.Read);
 
-        HoldingsImportService.FindEntry(readArchive, "SUBMISSION.tsv").Should().BeNull();
+        HoldingsParsingHelper.FindEntry(readArchive, "SUBMISSION.tsv").Should().BeNull();
     }
 
     // ── ResolveManagerName ──
@@ -201,7 +201,7 @@ public class HoldingsImportServiceTests {
             OtherManagers = new Dictionary<string, Dictionary<int, string>>()
         };
 
-        HoldingsImportService.ResolveManagerName(context, "ACC-001", null).Should().BeNull();
+        HoldingsParsingHelper.ResolveManagerName(context, "ACC-001", null).Should().BeNull();
     }
 
     [Fact]
@@ -212,7 +212,7 @@ public class HoldingsImportServiceTests {
             }
         };
 
-        HoldingsImportService.ResolveManagerName(context, "ACC-001", 1).Should().Be("Goldman Sachs");
+        HoldingsParsingHelper.ResolveManagerName(context, "ACC-001", 1).Should().Be("Goldman Sachs");
     }
 
     [Fact]
@@ -221,7 +221,7 @@ public class HoldingsImportServiceTests {
             OtherManagers = new Dictionary<string, Dictionary<int, string>>()
         };
 
-        HoldingsImportService.ResolveManagerName(context, "ACC-999", 1).Should().BeNull();
+        HoldingsParsingHelper.ResolveManagerName(context, "ACC-999", 1).Should().BeNull();
     }
 
     [Fact]
@@ -232,7 +232,7 @@ public class HoldingsImportServiceTests {
             }
         };
 
-        HoldingsImportService.ResolveManagerName(context, "ACC-001", 99).Should().BeNull();
+        HoldingsParsingHelper.ResolveManagerName(context, "ACC-001", 99).Should().BeNull();
     }
 
     // ── DeduplicateSubmissions ──

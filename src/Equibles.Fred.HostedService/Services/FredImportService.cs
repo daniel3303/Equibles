@@ -5,6 +5,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Fred.Data.Models;
 using Equibles.Fred.Repositories;
 using Equibles.Integrations.Fred.Contracts;
+using Equibles.Worker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -89,14 +90,7 @@ public class FredImportService {
             var obsRepo = scope.ServiceProvider.GetRequiredService<FredObservationRepository>();
             var latestDate = await obsRepo.GetLatestDate(series).FirstOrDefaultAsync(cancellationToken);
 
-            var minDate = _workerOptions.MinSyncDate != null
-                ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
-                : new DateOnly(2020, 1, 1);
-
-            // Start from the day after the latest observation, or minDate
-            startDate = latestDate != default
-                ? latestDate.AddDays(1)
-                : minDate;
+            startDate = SyncDateResolver.Resolve(latestDate, _workerOptions);
 
             _logger.LogDebug("FRED series {SeriesId}: latest stored={LatestDate}, startDate={StartDate}",
                 curated.SeriesId, latestDate, startDate);
@@ -146,8 +140,7 @@ public class FredImportService {
             curated.SeriesId, records.Count, minApiDate, maxApiDate, existingDates.Count);
 
         // Build new observations, skipping any that already exist
-        var batch = new List<FredObservation>(InsertBatchSize);
-        var totalInserted = 0;
+        var observations = new List<FredObservation>();
         var skipped = 0;
         var latestObservationDate = DateOnly.MinValue;
 
@@ -166,24 +159,19 @@ public class FredImportService {
                 value = parsed;
             }
 
-            batch.Add(new FredObservation {
+            observations.Add(new FredObservation {
                 FredSeriesId = series.Id,
                 Date = date,
                 Value = value,
             });
-
-            if (batch.Count >= InsertBatchSize) {
-                await FlushBatch(batch);
-                totalInserted += batch.Count;
-                batch.Clear();
-            }
         }
 
-        if (batch.Count > 0) {
-            await FlushBatch(batch);
-            totalInserted += batch.Count;
-            batch.Clear();
-        }
+        var totalInserted = await BatchPersister.Persist(observations, InsertBatchSize, async batch => {
+            using var scope = _scopeFactory.CreateScope();
+            var repo = scope.ServiceProvider.GetRequiredService<FredObservationRepository>();
+            repo.AddRange(batch);
+            await repo.SaveChanges();
+        });
 
         // Update series metadata
         using (var scope = _scopeFactory.CreateScope()) {
@@ -202,13 +190,6 @@ public class FredImportService {
 
         _logger.LogInformation("Imported {Count} observations for FRED series {SeriesId}",
             totalInserted, curated.SeriesId);
-    }
-
-    private async Task FlushBatch(List<FredObservation> items) {
-        using var scope = _scopeFactory.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<FredObservationRepository>();
-        repo.AddRange(items);
-        await repo.SaveChanges();
     }
 
     private static DateOnly? ParseDate(string value) {

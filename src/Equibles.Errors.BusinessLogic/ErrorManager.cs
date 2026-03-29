@@ -41,6 +41,6 @@ public class ErrorManager {
     }
 
     public async Task DeleteAll() {
-        await _errorRepository.GetDbSet().ExecuteDeleteAsync();
+        await _errorRepository.ExecuteDeleteAll();
     }
 }

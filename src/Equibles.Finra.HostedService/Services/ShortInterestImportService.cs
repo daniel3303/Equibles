@@ -39,16 +39,13 @@ public class ShortInterestImportService {
     }
 
     public async Task Import(CancellationToken cancellationToken) {
-        // Determine latest settlement date in DB
         DateOnly latestDate;
         using (var scope = _scopeFactory.CreateScope()) {
             var repo = scope.ServiceProvider.GetRequiredService<ShortInterestRepository>();
             latestDate = await repo.GetLatestSettlementDate().FirstOrDefaultAsync(cancellationToken);
         }
 
-        var minDate = _workerOptions.MinSyncDate != null
-            ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
-            : new DateOnly(2020, 1, 1);
+        var minDate = SyncDateResolver.Resolve(default, _workerOptions);
 
         // Get available settlement dates from FINRA
         List<DateOnly> settlementDates;

@@ -90,6 +90,7 @@ public class CongressionalTradeSyncService {
 
     private async Task ProcessTransactions(List<DisclosureTransaction> transactions, CancellationToken ct) {
         await using var scope = _scopeFactory.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
         var memberRepository = scope.ServiceProvider.GetRequiredService<CongressMemberRepository>();
         var tradeRepository = scope.ServiceProvider.GetRequiredService<CongressionalTradeRepository>();
         var commonStockRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
@@ -110,13 +111,13 @@ public class CongressionalTradeSyncService {
 
         if (matched.Count == 0) return;
 
-        var members = await UpsertCongressMembers(matched, memberRepository, ct);
+        var members = await UpsertCongressMembers(matched, dbContext, memberRepository, ct);
         var trades = BuildTrades(matched, members, stocks);
-        await PersistTrades(trades, tradeRepository, ct);
+        await PersistTrades(trades, dbContext, ct);
     }
 
     private async Task<Dictionary<string, CongressMember>> UpsertCongressMembers(
-        List<DisclosureTransaction> matched, CongressMemberRepository memberRepository, CancellationToken ct
+        List<DisclosureTransaction> matched, EquiblesDbContext dbContext, CongressMemberRepository memberRepository, CancellationToken ct
     ) {
         var distinctMembers = matched
             .GroupBy(t => t.MemberName)
@@ -124,7 +125,7 @@ public class CongressionalTradeSyncService {
             .Select(t => new CongressMember { Name = t.MemberName, Position = t.Position })
             .ToList();
 
-        await memberRepository.GetDbSet()
+        await dbContext.Set<CongressMember>()
             .UpsertRange(distinctMembers)
             .On(m => new { m.Name })
             .WhenMatched(m => new CongressMember { Position = m.Position })
@@ -169,10 +170,10 @@ public class CongressionalTradeSyncService {
 
     private async Task PersistTrades(
         List<CongressionalTrade> trades,
-        CongressionalTradeRepository tradeRepository,
+        EquiblesDbContext dbContext,
         CancellationToken ct
     ) {
-        await tradeRepository.GetDbSet()
+        await dbContext.Set<CongressionalTrade>()
             .UpsertRange(trades)
             .On(t => new { t.CommonStockId, t.CongressMemberId, t.TransactionDate, t.TransactionType, t.AssetName })
             .NoUpdate()

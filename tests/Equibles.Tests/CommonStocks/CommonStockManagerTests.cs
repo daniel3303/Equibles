@@ -2,6 +2,7 @@ using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.Core.Exceptions;
 using Equibles.Tests.Helpers;
 
 namespace Equibles.Tests.CommonStocks;
@@ -41,59 +42,59 @@ public class CommonStockManagerTests {
     }
 
     [Fact]
-    public async Task Create_EmptyTicker_ThrowsApplicationException() {
+    public async Task Create_EmptyTicker_ThrowsDomainValidationException() {
         var stock = MakeStock(ticker: "");
 
         var act = () => _sut.Create(stock);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("Ticker is required");
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("Ticker is required");
     }
 
     [Fact]
-    public async Task Create_NullTicker_ThrowsApplicationException() {
+    public async Task Create_NullTicker_ThrowsDomainValidationException() {
         var stock = MakeStock(ticker: null);
 
         var act = () => _sut.Create(stock);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("Ticker is required");
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("Ticker is required");
     }
 
     [Fact]
-    public async Task Create_EmptyName_ThrowsApplicationException() {
+    public async Task Create_EmptyName_ThrowsDomainValidationException() {
         var stock = MakeStock(name: "");
 
         var act = () => _sut.Create(stock);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("Name is required");
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("Name is required");
     }
 
     [Fact]
-    public async Task Create_EmptyCik_ThrowsApplicationException() {
+    public async Task Create_EmptyCik_ThrowsDomainValidationException() {
         var stock = MakeStock(cik: "");
 
         var act = () => _sut.Create(stock);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("Cik is required");
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("Cik is required");
     }
 
     [Fact]
-    public async Task Create_NegativeMarketCap_ThrowsApplicationException() {
+    public async Task Create_NegativeMarketCap_ThrowsDomainValidationException() {
         var stock = MakeStock();
         stock.MarketCapitalization = -1;
 
         var act = () => _sut.Create(stock);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("*cannot be negative*");
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*cannot be negative*");
     }
 
     [Fact]
-    public async Task Create_NegativeSharesOutstanding_ThrowsApplicationException() {
+    public async Task Create_NegativeSharesOutstanding_ThrowsDomainValidationException() {
         var stock = MakeStock();
         stock.SharesOutStanding = -1;
 
         var act = () => _sut.Create(stock);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("*cannot be negative*");
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*cannot be negative*");
     }
 
     [Fact]
@@ -108,38 +109,38 @@ public class CommonStockManagerTests {
     }
 
     [Fact]
-    public async Task Create_DuplicateTicker_ThrowsApplicationException() {
+    public async Task Create_DuplicateTicker_ThrowsDomainValidationException() {
         await _sut.Create(MakeStock());
 
         var duplicate = MakeStock(ticker: "AAPL", name: "Other", cik: "9999999");
         var act = () => _sut.Create(duplicate);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("*ticker*already exists*");
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*ticker*already exists*");
     }
 
     [Fact]
-    public async Task Create_DuplicateCik_ThrowsApplicationException() {
+    public async Task Create_DuplicateCik_ThrowsDomainValidationException() {
         await _sut.Create(MakeStock());
 
         var duplicate = MakeStock(ticker: "GOOG", name: "Other", cik: "0000320193");
         var act = () => _sut.Create(duplicate);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("*cik*already exists*");
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*cik*already exists*");
     }
 
     [Fact]
-    public async Task Create_SecondaryTickerConflictsWithExistingPrimary_ThrowsApplicationException() {
+    public async Task Create_SecondaryTickerConflictsWithExistingPrimary_ThrowsDomainValidationException() {
         await _sut.Create(MakeStock(ticker: "AAPL", name: "Apple", cik: "111"));
 
         var stock = MakeStock(ticker: "GOOG", name: "Google", cik: "222");
         stock.SecondaryTickers = ["AAPL"];
         var act = () => _sut.Create(stock);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("*Secondary ticker*already used*");
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*Secondary ticker*already used*");
     }
 
     [Fact]
-    public async Task Create_SecondaryTickerConflictsWithExistingSecondary_ThrowsApplicationException() {
+    public async Task Create_SecondaryTickerConflictsWithExistingSecondary_ThrowsDomainValidationException() {
         var existing = MakeStock(ticker: "AAPL", name: "Apple", cik: "111");
         existing.SecondaryTickers = ["ALT1"];
         await _sut.Create(existing);
@@ -148,7 +149,7 @@ public class CommonStockManagerTests {
         stock.SecondaryTickers = ["ALT1"];
         var act = () => _sut.Create(stock);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("*Secondary ticker*already used*");
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*Secondary ticker*already used*");
     }
 
     [Fact]
@@ -203,36 +204,36 @@ public class CommonStockManagerTests {
     }
 
     [Fact]
-    public async Task Update_TickerConflictWithDifferentStock_ThrowsApplicationException() {
+    public async Task Update_TickerConflictWithDifferentStock_ThrowsDomainValidationException() {
         await _sut.Create(MakeStock(ticker: "AAPL", name: "Apple", cik: "111"));
         var google = await _sut.Create(MakeStock(ticker: "GOOG", name: "Google", cik: "222"));
         google.Ticker = "AAPL";
 
         var act = () => _sut.Update(google);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("*ticker*already exists*");
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*ticker*already exists*");
     }
 
     [Fact]
-    public async Task Update_CikConflictWithDifferentStock_ThrowsApplicationException() {
+    public async Task Update_CikConflictWithDifferentStock_ThrowsDomainValidationException() {
         await _sut.Create(MakeStock(ticker: "AAPL", name: "Apple", cik: "111"));
         var google = await _sut.Create(MakeStock(ticker: "GOOG", name: "Google", cik: "222"));
         google.Cik = "111";
 
         var act = () => _sut.Update(google);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("*cik*already exists*");
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*cik*already exists*");
     }
 
     [Fact]
-    public async Task Update_SecondaryTickerConflict_ThrowsApplicationException() {
+    public async Task Update_SecondaryTickerConflict_ThrowsDomainValidationException() {
         await _sut.Create(MakeStock(ticker: "AAPL", name: "Apple", cik: "111"));
         var google = await _sut.Create(MakeStock(ticker: "GOOG", name: "Google", cik: "222"));
         google.SecondaryTickers = ["AAPL"];
 
         var act = () => _sut.Update(google);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("*Secondary ticker*already used*");
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*Secondary ticker*already used*");
     }
 
     [Fact]

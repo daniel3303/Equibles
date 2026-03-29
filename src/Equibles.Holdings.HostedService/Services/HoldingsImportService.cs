@@ -12,6 +12,7 @@ using Equibles.Core.Contracts;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using static Equibles.Holdings.HostedService.Services.HoldingsParsingHelper;
 
 namespace Equibles.Holdings.HostedService.Services;
 
@@ -468,7 +469,6 @@ public class HoldingsImportService {
 
     private async Task<int> FlushBatch(List<InstitutionalHolding> holdings, CancellationToken cancellationToken) {
         using var scope = _scopeFactory.CreateScope();
-        var holdingRepo = scope.ServiceProvider.GetRequiredService<InstitutionalHoldingRepository>();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
 
         var entriesByKey = new Dictionary<string, List<HoldingManagerEntry>>();
@@ -478,7 +478,7 @@ public class HoldingsImportService {
             h.ManagerEntries.Clear();
         }
 
-        await holdingRepo.GetDbSet()
+        await dbContext.Set<InstitutionalHolding>()
             .UpsertRange(holdings)
             .On(h => new { h.CommonStockId, h.InstitutionalHolderId, h.ReportDate, h.ShareType, h.OptionType })
             .WhenMatched(h => new InstitutionalHolding {
@@ -516,84 +516,4 @@ public class HoldingsImportService {
         return holdings.Count;
     }
 
-    /// <summary>
-    /// Finds a zip entry by filename, handling both flat and nested archives.
-    /// SEC changed their 13F zip structure in mid-2025 to nest files inside a subdirectory.
-    /// </summary>
-    internal static ZipArchiveEntry FindEntry(ZipArchive archive, string fileName) {
-        return archive.GetEntry(fileName)
-            ?? archive.Entries.FirstOrDefault(e => e.Name.Equals(fileName, StringComparison.OrdinalIgnoreCase));
-    }
-
-    internal static string GetValue(Dictionary<string, string> row, string key) {
-        return row.TryGetValue(key, out var value) ? value : null;
-    }
-
-    /// <summary>
-    /// Parses date strings in both ISO (yyyy-MM-dd) and SEC (dd-MMM-yyyy) formats.
-    /// </summary>
-    internal static bool TryParseDateOnly(string value, out DateOnly result) {
-        result = default;
-        if (string.IsNullOrEmpty(value)) return false;
-
-        if (DateOnly.TryParse(value, out result)) return true;
-
-        if (DateOnly.TryParseExact(value, "dd-MMM-yyyy",
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None, out result)) {
-            return true;
-        }
-
-        return false;
-    }
-
-    internal static long ParseLong(string value) {
-        return long.TryParse(value, out var result) ? result : 0;
-    }
-
-    internal static ShareType ParseShareType(string value) {
-        return value?.ToUpperInvariant() switch {
-            "SH" => ShareType.Shares,
-            "PRN" => ShareType.Principal,
-            _ => ShareType.Shares,
-        };
-    }
-
-    internal static Equibles.Holdings.Data.Models.OptionType? ParseOptionType(string value) {
-        return value?.ToUpperInvariant() switch {
-            "PUT" => Equibles.Holdings.Data.Models.OptionType.Put,
-            "CALL" => Equibles.Holdings.Data.Models.OptionType.Call,
-            _ => null,
-        };
-    }
-
-    internal static int? ParseNullableInt(string value) {
-        return int.TryParse(value, out var result) ? result : null;
-    }
-
-    internal static string ResolveManagerName(ImportContext context, string accession, int? managerNumber) {
-        if (managerNumber == null) return null;
-        if (context.OtherManagers.TryGetValue(accession, out var seqMap)
-            && seqMap.TryGetValue(managerNumber.Value, out var name)) {
-            return name;
-        }
-        return null;
-    }
-
-    internal static InvestmentDiscretion ParseInvestmentDiscretion(string value) {
-        return value?.ToUpperInvariant() switch {
-            "SOLE" => InvestmentDiscretion.Sole,
-            "DFND" => InvestmentDiscretion.Defined,
-            "OTR" => InvestmentDiscretion.Other,
-            _ => InvestmentDiscretion.Sole,
-        };
-    }
-
-    private async Task ReportError(string context, string message, string stackTrace, string requestSummary = null) {
-        try {
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var errorManager = scope.ServiceProvider.GetRequiredService<ErrorManager>();
-            await errorManager.Create(ErrorSource.HoldingsScraper, context, message, stackTrace, requestSummary);
-        } catch { }
-    }
 }

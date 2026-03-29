@@ -42,12 +42,16 @@ public abstract class BaseRepository<TEntity> where TEntity : class {
         }
     }
 
-    public DbSet<TEntity> GetDbSet() {
+    protected DbSet<TEntity> GetDbSet() {
         return DbContext.Set<TEntity>();
     }
 
-    public EquiblesDbContext GetDbContext() {
+    protected EquiblesDbContext GetDbContext() {
         return DbContext;
+    }
+
+    public async Task ExecuteDeleteAll(CancellationToken cancellationToken = default) {
+        await DbContext.Set<TEntity>().ExecuteDeleteAsync(cancellationToken);
     }
 
     public void ClearChangeTracker() {

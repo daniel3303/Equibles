@@ -42,18 +42,11 @@ public class FtdImportService {
     }
 
     public async Task Import(CancellationToken cancellationToken) {
-        // Determine start date
         DateOnly startDate;
         using (var scope = _scopeFactory.CreateScope()) {
             var repo = scope.ServiceProvider.GetRequiredService<FailToDeliverRepository>();
             var latestDate = await repo.GetLatestDate().FirstOrDefaultAsync(cancellationToken);
-
-            if (latestDate != default) {
-                startDate = latestDate.AddDays(1);
-            } else {
-                var minDate = _workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1);
-                startDate = DateOnly.FromDateTime(minDate);
-            }
+            startDate = SyncDateResolver.Resolve(latestDate, _workerOptions);
         }
 
         var fileNames = GetFileNames(startDate);
@@ -167,33 +160,14 @@ public class FtdImportService {
             };
         }
 
-        var batch = new List<FailToDeliver>(InsertBatchSize);
-        var totalInserted = 0;
-
-        foreach (var item in grouped.Values) {
-            batch.Add(item);
-
-            if (batch.Count >= InsertBatchSize) {
-                await FlushBatch(batch);
-                totalInserted += batch.Count;
-                batch.Clear();
-            }
-        }
-
-        if (batch.Count > 0) {
-            await FlushBatch(batch);
-            totalInserted += batch.Count;
-            batch.Clear();
-        }
-
-        return totalInserted;
+        return await BatchPersister.Persist(grouped.Values, InsertBatchSize, FlushBatch);
     }
 
     private async Task FlushBatch(List<FailToDeliver> items) {
         using var scope = _scopeFactory.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<FailToDeliverRepository>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
 
-        await repo.GetDbSet()
+        await dbContext.Set<FailToDeliver>()
             .UpsertRange(items)
             .On(f => new { f.CommonStockId, f.SettlementDate })
             .WhenMatched(f => new FailToDeliver {

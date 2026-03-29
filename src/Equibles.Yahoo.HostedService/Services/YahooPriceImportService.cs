@@ -3,6 +3,7 @@ using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Yahoo.Contracts;
+using Equibles.Worker;
 using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -97,14 +98,15 @@ public class YahooPriceImportService {
 
         if (newPrices.Count == 0) return 0;
 
-        // Insert in batches
-        for (var i = 0; i < newPrices.Count; i += InsertBatchSize) {
-            var batch = newPrices.Skip(i).Take(InsertBatchSize).ToList();
-            await FlushBatch(batch);
-        }
+        var inserted = await BatchPersister.Persist(newPrices, InsertBatchSize, async batch => {
+            using var scope = _scopeFactory.CreateScope();
+            var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+            repo.AddRange(batch);
+            await repo.SaveChanges();
+        });
 
-        _logger.LogDebug("Inserted {Count} prices for {Ticker}", newPrices.Count, ticker);
-        return newPrices.Count;
+        _logger.LogDebug("Inserted {Count} prices for {Ticker}", inserted, ticker);
+        return inserted;
     }
 
     private async Task<DateOnly> GetSyncStartDate(Guid commonStockId, CancellationToken cancellationToken) {
@@ -117,14 +119,7 @@ public class YahooPriceImportService {
             .OrderByDescending(d => d)
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (latestDate != default) {
-            return latestDate.AddDays(1); // start from day after latest
-        }
-
-        var minSync = _workerOptions.MinSyncDate;
-        return minSync.HasValue
-            ? DateOnly.FromDateTime(minSync.Value)
-            : new DateOnly(2020, 1, 1);
+        return SyncDateResolver.Resolve(latestDate, _workerOptions);
     }
 
     private async Task<HashSet<DateOnly>> GetExistingDates(
@@ -141,10 +136,4 @@ public class YahooPriceImportService {
         return dates.ToHashSet();
     }
 
-    private async Task FlushBatch(List<DailyStockPrice> items) {
-        using var scope = _scopeFactory.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
-        repo.AddRange(items);
-        await repo.SaveChanges();
-    }
 }
