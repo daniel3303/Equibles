@@ -12,7 +12,15 @@
             [Equibles.Mcp.Server]*,
             [Equibles.Worker.Host]*,
             [Equibles.Integrations.*]*,
-            [Equibles.Web]*
+            [Equibles.Web]*,
+            [Equibles.*.HostedService]*Worker,
+            [Equibles.*.HostedService]*Scraper,
+            [Equibles.*.HostedService]*DataSetClient,
+            [Equibles.*.HostedService]*PersistenceService,
+            [Equibles.*.Mcp]*.Extensions.*,
+            [Equibles.Mcp]*.Extensions.*,
+            [Equibles.Data]*PluginLoader,
+            [Equibles.Data]*EquiblesModuleBuilder
           </Exclude>
         </Configuration>
       </DataCollector>
