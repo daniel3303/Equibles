@@ -9,6 +9,7 @@ using Equibles.ParadeDB.EntityFrameworkCore;
 using Equibles.Sec.Data;
 using Equibles.Finra.Data;
 using Equibles.Fred.Data;
+using Equibles.Yahoo.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
@@ -39,6 +40,7 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<EquiblesDb
             new CongressModuleConfiguration(),
             new FinraModuleConfiguration(),
             new FredModuleConfiguration(),
+            new YahooModuleConfiguration(),
             new SecModuleConfiguration(),
             new MediaModuleConfiguration(),
             new ErrorsModuleConfiguration(),

@@ -18,6 +18,8 @@ using Equibles.Fred.Data.Extensions;
 using Equibles.Fred.HostedService;
 using Equibles.Finra.Data.Extensions;
 using Equibles.Finra.HostedService;
+using Equibles.Yahoo.Data.Extensions;
+using Equibles.Yahoo.HostedService;
 using Serilog;
 using Serilog.Events;
 
@@ -40,6 +42,7 @@ builder.Services.AddEquiblesDbContext(connectionString, modules => {
     modules.AddFinra();
     modules.AddFred();
     modules.AddSec();
+    modules.AddYahoo();
     modules.AddMedia();
     modules.AddErrors();
 });
@@ -51,6 +54,7 @@ builder.Services.AddRepositoriesFrom(
     typeof(Equibles.Congress.Repositories.CongressMemberRepository).Assembly,
     typeof(Equibles.Finra.Repositories.DailyShortVolumeRepository).Assembly,
     typeof(Equibles.Fred.Repositories.FredSeriesRepository).Assembly,
+    typeof(Equibles.Yahoo.Repositories.DailyStockPriceRepository).Assembly,
     typeof(Equibles.Sec.Repositories.DocumentRepository).Assembly,
     typeof(Equibles.Media.Repositories.FileRepository).Assembly,
     typeof(Equibles.Errors.Repositories.ErrorRepository).Assembly
@@ -70,6 +74,8 @@ builder.Services.Configure<Equibles.Fred.HostedService.Configuration.FredScraper
     builder.Configuration.GetSection("FredScraper"));
 builder.Services.Configure<Equibles.Integrations.Fred.Configuration.FredOptions>(
     builder.Configuration.GetSection("Fred"));
+builder.Services.Configure<Equibles.Yahoo.HostedService.Configuration.YahooPriceScraperOptions>(
+    builder.Configuration.GetSection("YahooPriceScraper"));
 
 builder.Services.AddHttpClient();
 
@@ -87,6 +93,7 @@ builder.Services.AutoWireServicesFrom<Equibles.Congress.HostedService.Services.C
 builder.Services.AutoWireServicesFrom<Equibles.Holdings.HostedService.Services.HoldingsDataSetClient>();
 builder.Services.AutoWireServicesFrom<Equibles.Sec.HostedService.Services.FtdImportService>();
 builder.Services.AutoWireServicesFrom<Equibles.Finra.HostedService.Services.ShortVolumeImportService>();
+builder.Services.AutoWireServicesFrom<Equibles.Yahoo.HostedService.Services.YahooPriceImportService>();
 
 // SEC scraper services (interface-based, need manual registration)
 builder.Services.AddScoped<IFilingProcessor, InsiderTradingFilingProcessor>();
@@ -101,6 +108,7 @@ builder.Services.AddHostedService<CongressionalTradeScraperWorker>();
 builder.Services.AddHostedService<FtdScraperWorker>();
 builder.Services.AddHostedService<FinraScraperWorker>();
 builder.Services.AddHostedService<FredScraperWorker>();
+builder.Services.AddHostedService<YahooPriceScraperWorker>();
 
 var host = builder.Build();
 host.Run();

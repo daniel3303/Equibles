@@ -18,6 +18,7 @@
       <ProjectReference Include="..\Equibles.Finra.HostedService\Equibles.Finra.HostedService.csproj" />
       <ProjectReference Include="..\Equibles.Fred.HostedService\Equibles.Fred.HostedService.csproj" />
       <ProjectReference Include="..\Equibles.Integrations.Yahoo\Equibles.Integrations.Yahoo.csproj" />
+      <ProjectReference Include="..\Equibles.Yahoo.HostedService\Equibles.Yahoo.HostedService.csproj" />
     </ItemGroup>
 
 </Project>
