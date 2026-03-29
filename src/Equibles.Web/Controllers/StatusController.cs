@@ -159,6 +159,7 @@ public class StatusController : BaseController {
             status.InstitutionalHoldingCount = await _dataCountService.GetInstitutionalHoldingCount();
             status.FailToDeliverCount = await _dataCountService.GetFailToDeliverCount();
             status.FredObservationCount = await _dataCountService.GetFredObservationCount();
+            status.DailyStockPriceCount = await _dataCountService.GetDailyStockPriceCount();
         }
 
         status.Workers = BuildWorkerStatuses();
@@ -206,6 +207,12 @@ public class StatusController : BaseController {
                 Reason = fredConfigured
                     ? "FRED API key configured"
                     : "Fred:ApiKey not set — get a free key at fred.stlouisfed.org/docs/api/api_key.html"
+            },
+            new WorkerStatus {
+                Name = "Yahoo Price Scraper",
+                Description = "Daily OHLCV stock prices with technical indicators (SMA, RSI, MACD)",
+                Active = true,
+                Reason = "Always active — no API key required"
             },
             new WorkerStatus {
                 Name = "Embedding Generator",

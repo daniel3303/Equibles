@@ -18,6 +18,7 @@ public class SystemStatusViewModel {
     public int InstitutionalHoldingCount { get; set; }
     public int FailToDeliverCount { get; set; }
     public int FredObservationCount { get; set; }
+    public int DailyStockPriceCount { get; set; }
 }
 
 public class WorkerStatus {

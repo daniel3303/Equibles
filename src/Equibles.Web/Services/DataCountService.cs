@@ -2,6 +2,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Fred.Repositories;
+using Equibles.Yahoo.Repositories;
 using Equibles.Holdings.Repositories;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Sec.Repositories;
@@ -18,6 +19,7 @@ public class DataCountService {
     private readonly InstitutionalHoldingRepository _institutionalHoldingRepository;
     private readonly FailToDeliverRepository _failToDeliverRepository;
     private readonly FredObservationRepository _fredObservationRepository;
+    private readonly DailyStockPriceRepository _dailyStockPriceRepository;
 
     public DataCountService(
         CommonStockRepository commonStockRepository,
@@ -26,7 +28,8 @@ public class DataCountService {
         CongressionalTradeRepository congressionalTradeRepository,
         InstitutionalHoldingRepository institutionalHoldingRepository,
         FailToDeliverRepository failToDeliverRepository,
-        FredObservationRepository fredObservationRepository
+        FredObservationRepository fredObservationRepository,
+        DailyStockPriceRepository dailyStockPriceRepository
     ) {
         _commonStockRepository = commonStockRepository;
         _documentRepository = documentRepository;
@@ -35,6 +38,7 @@ public class DataCountService {
         _institutionalHoldingRepository = institutionalHoldingRepository;
         _failToDeliverRepository = failToDeliverRepository;
         _fredObservationRepository = fredObservationRepository;
+        _dailyStockPriceRepository = dailyStockPriceRepository;
     }
 
     public async Task<int> GetStockCount() =>
@@ -57,4 +61,7 @@ public class DataCountService {
 
     public async Task<int> GetFredObservationCount() =>
         await _fredObservationRepository.GetAll().CountAsync();
+
+    public async Task<int> GetDailyStockPriceCount() =>
+        await _dailyStockPriceRepository.GetAll().CountAsync();
 }
