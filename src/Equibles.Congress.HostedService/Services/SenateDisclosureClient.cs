@@ -216,7 +216,12 @@ public class SenateDisclosureClient : IAsyncDisposable {
             ct.ThrowIfCancellationRequested();
             await RateLimiter.WaitAsync();
 
-            var result = await _page.EvaluateAsync<JsonElement>(BrowserFetchScript, new { url, formFields });
+            JsonElement result;
+            try {
+                result = await _page.EvaluateAsync<JsonElement>(BrowserFetchScript, new { url, formFields });
+            } catch (PlaywrightException) when (ct.IsCancellationRequested) {
+                throw new OperationCanceledException(ct);
+            }
             var status = result.GetProperty("status").GetInt32();
             var body = result.GetProperty("body").GetString();
 
