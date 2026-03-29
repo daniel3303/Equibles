@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <ExcludeByFile>**/Migrations/**</ExcludeByFile>
+          <ExcludeByAttribute>GeneratedCodeAttribute,CompilerGeneratedAttribute</ExcludeByAttribute>
+          <Exclude>
+            [Equibles.Migrations]*,
+            [Equibles.Mcp.Server]*,
+            [Equibles.Worker.Host]*,
+            [Equibles.Integrations.Sec]*,
+            [Equibles.Integrations.Finra]*,
+            [Equibles.Integrations.Fred]*,
+            [Equibles.Integrations.Yahoo]*,
+            [Equibles.Integrations.Cftc]*,
+            [Equibles.Integrations.Cboe]*
+          </Exclude>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

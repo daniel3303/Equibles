@@ -30,7 +30,7 @@ jobs:
         run: dotnet build Equibles.sln --no-restore -c Release
 
       - name: Test
-        run: dotnet test Equibles.sln --no-build -c Release --logger "trx;LogFileName=results.trx" --collect:"XPlat Code Coverage" --results-directory ./coverage
+        run: dotnet test Equibles.sln --no-build -c Release --logger "trx;LogFileName=results.trx" --collect:"XPlat Code Coverage" --settings coverage.runsettings --results-directory ./coverage
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
