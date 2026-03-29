@@ -14,8 +14,8 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesDbContext))]
-    [Migration("20260329010659_AddValuePendingToHoldings")]
-    partial class AddValuePendingToHoldings
+    [Migration("20260329212931_Initial")]
+    partial class Initial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -23,11 +23,218 @@ namespace Equibles.Migrations.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasAnnotation("ProductVersion", "10.0.3")
+                .HasAnnotation("Proxies:ChangeTracking", false)
+                .HasAnnotation("Proxies:CheckEquality", false)
+                .HasAnnotation("Proxies:LazyLoading", true)
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "pg_search");
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("Equibles.Cboe.Data.Models.CboePutCallRatio", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("CallVolume")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<decimal?>("PutCallRatio")
+                        .HasColumnType("numeric");
+
+                    b.Property<long?>("PutVolume")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("RatioType")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("TotalVolume")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Date");
+
+                    b.HasIndex("RatioType", "Date")
+                        .IsUnique();
+
+                    b.ToTable("CboePutCallRatio");
+                });
+
+            modelBuilder.Entity("Equibles.Cboe.Data.Models.CboeVixDaily", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Close")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("High")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Low")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Open")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Date")
+                        .IsUnique();
+
+                    b.ToTable("CboeVixDaily");
+                });
+
+            modelBuilder.Entity("Equibles.Cftc.Data.Models.CftcContract", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Category")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("LatestReportDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("MarketCode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("MarketName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Category");
+
+                    b.HasIndex("MarketCode")
+                        .IsUnique();
+
+                    b.ToTable("CftcContract");
+                });
+
+            modelBuilder.Entity("Equibles.Cftc.Data.Models.CftcPositionReport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CftcContractId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("ChangeCommLong")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("ChangeCommShort")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("ChangeNonCommLong")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("ChangeNonCommShort")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("ChangeOpenInterest")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("CommLong")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("CommShort")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("NonCommLong")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("NonCommShort")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("NonCommSpreads")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("NonRptLong")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("NonRptShort")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("OpenInterest")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal?>("PctCommLong")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("PctCommShort")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("PctNonCommLong")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("PctNonCommShort")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateOnly>("ReportDate")
+                        .HasColumnType("date");
+
+                    b.Property<long>("TotalRptLong")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("TotalRptShort")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("TradersCommLong")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TradersCommShort")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TradersNonCommLong")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TradersNonCommShort")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TradersTotal")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportDate");
+
+                    b.HasIndex("CftcContractId", "ReportDate")
+                        .IsUnique();
+
+                    b.ToTable("CftcPositionReport");
+                });
 
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.CommonStock", b =>
                 {
@@ -898,6 +1105,17 @@ namespace Equibles.Migrations.Migrations
                     b.HasDiscriminator().HasValue("Image");
                 });
 
+            modelBuilder.Entity("Equibles.Cftc.Data.Models.CftcPositionReport", b =>
+                {
+                    b.HasOne("Equibles.Cftc.Data.Models.CftcContract", "CftcContract")
+                        .WithMany("Reports")
+                        .HasForeignKey("CftcContractId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CftcContract");
+                });
+
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.CommonStock", b =>
                 {
                     b.HasOne("Equibles.CommonStocks.Data.Models.Taxonomies.Industry", "Industry")
@@ -1106,6 +1324,11 @@ namespace Equibles.Migrations.Migrations
                         .IsRequired();
 
                     b.Navigation("CommonStock");
+                });
+
+            modelBuilder.Entity("Equibles.Cftc.Data.Models.CftcContract", b =>
+                {
+                    b.Navigation("Reports");
                 });
 
             modelBuilder.Entity("Equibles.Congress.Data.Models.CongressMember", b =>
