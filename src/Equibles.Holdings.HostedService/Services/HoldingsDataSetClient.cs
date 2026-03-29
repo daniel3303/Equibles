@@ -40,6 +40,11 @@ public class HoldingsDataSetClient {
         var fileNames = new List<string>();
         var now = DateTime.UtcNow;
 
+        // SEC 13F structured data sets start at 2013 — clamp earlier dates
+        if (startDate.Year < 2013) {
+            startDate = new DateTime(2013, 1, 1);
+        }
+
         // Old format: 2013-2023
         var startYear = startDate.Year;
         var startQuarter = (startDate.Month - 1) / 3 + 1;
@@ -101,22 +106,6 @@ public class HoldingsDataSetClient {
         }
 
         return fileNames;
-    }
-
-    /// <summary>
-    /// SEC 13F structured data sets changed the VALUE column from thousands of dollars
-    /// to actual dollars starting with the 2023 Q1 data set. Data sets through 2022 Q4
-    /// report VALUE in thousands; 2023 Q1 and later report in actual dollars.
-    /// </summary>
-    public static bool IsValueInThousands(string fileName) {
-        // Old format: {year}q{quarter}_form13f.zip (2013-2023)
-        // New format: {date range}_form13f.zip (2024+)
-        // Only old-format files with year <= 2022 use thousands
-        if (fileName.Length >= 6 && fileName[4] == 'q' && int.TryParse(fileName[..4], out var year)) {
-            return year <= 2022;
-        }
-
-        return false;
     }
 
     private static string FormatDatePart(DateOnly date) {

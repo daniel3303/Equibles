@@ -8,7 +8,6 @@
       <PackageReference Include="Equibles.Core.AutoWiring" />
       <PackageReference Include="Microsoft.Extensions.Hosting" />
       <PackageReference Include="Microsoft.Extensions.Http" />
-      <PackageReference Include="Newtonsoft.Json" />
       <PackageReference Include="FlexLabs.EntityFrameworkCore.Upsert" />
     </ItemGroup>
 
@@ -19,7 +18,6 @@
       <ProjectReference Include="..\Equibles.CommonStocks.BusinessLogic\Equibles.CommonStocks.BusinessLogic.csproj" />
       <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
       <ProjectReference Include="..\Equibles.Worker\Equibles.Worker.csproj" />
-      <ProjectReference Include="..\Equibles.Integrations.Yahoo\Equibles.Integrations.Yahoo.csproj" />
     </ItemGroup>
 
 </Project>

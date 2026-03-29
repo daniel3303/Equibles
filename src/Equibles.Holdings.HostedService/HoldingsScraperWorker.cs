@@ -82,6 +82,21 @@ public class HoldingsScraperWorker : BaseScraperWorker {
                 }
             }
         }
+
+        // Recalculate holdings that were imported without a Yahoo price available
+        await RecalculatePendingValues(stoppingToken);
+    }
+
+    private async Task RecalculatePendingValues(CancellationToken cancellationToken) {
+        try {
+            using var scope = ScopeFactory.CreateScope();
+            var recalculator = scope.ServiceProvider.GetRequiredService<HoldingsValueRecalculator>();
+            await recalculator.Recalculate(cancellationToken);
+        } catch (OperationCanceledException) {
+            throw;
+        } catch (Exception ex) {
+            Logger.LogError(ex, "Failed to recalculate pending holding values");
+        }
     }
 
     private async Task<bool> TryProcessDataSet(
@@ -105,9 +120,8 @@ public class HoldingsScraperWorker : BaseScraperWorker {
                 var dataSetClient = scope.ServiceProvider.GetRequiredService<HoldingsDataSetClient>();
                 var importService = scope.ServiceProvider.GetRequiredService<HoldingsImportService>();
 
-                var valueInThousands = HoldingsDataSetClient.IsValueInThousands(fileName);
                 using var archive = await dataSetClient.DownloadDataSet(fileName, cancellationToken);
-                await importService.ImportDataSet(archive, minReportDate, valueInThousands, cancellationToken);
+                await importService.ImportDataSet(archive, minReportDate, cancellationToken);
 
                 GarbageCollectorUtil.ForceAggressiveCollection();
 

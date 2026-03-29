@@ -6,9 +6,9 @@ using Equibles.Holdings.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.HostedService.Models;
-using Equibles.Holdings.HostedService.Services.ValueNormalizers;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
+using Equibles.Core.Contracts;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -19,35 +19,29 @@ namespace Equibles.Holdings.HostedService.Services;
 public class HoldingsImportService {
     private const int InsertBatchSize = 1000;
     private const int MaxConsecutiveEmptyBatches = 5;
-    private const int MinHoldersForConsensus = 5;
-    // Thousands-vs-dollars gap is 1000×; 100× gives a safe margin for price variance across filers
-    private const decimal OutlierThreshold = 100m;
-    private static readonly DateOnly CutoffDate = new(2023, 1, 1);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<HoldingsImportService> _logger;
     private readonly WorkerOptions _workerOptions;
+    private readonly IStockPriceProvider _stockPriceProvider;
 
     public HoldingsImportService(
         IServiceScopeFactory scopeFactory,
         ILogger<HoldingsImportService> logger,
-        IOptions<WorkerOptions> workerOptions
+        IOptions<WorkerOptions> workerOptions,
+        IStockPriceProvider stockPriceProvider
     ) {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _workerOptions = workerOptions.Value;
+        _stockPriceProvider = stockPriceProvider;
     }
 
-    /// <param name="valueInThousands">
-    /// True for pre-2023 SEC data sets where the VALUE column is in thousands of dollars.
-    /// False for 2023+ data sets where VALUE is in actual dollars.
-    /// </param>
-    public async Task ImportDataSet(ZipArchive archive, DateOnly minReportDate, bool valueInThousands, CancellationToken cancellationToken) {
+    public async Task ImportDataSet(ZipArchive archive, DateOnly minReportDate, CancellationToken cancellationToken) {
         var context = new ImportContext {
             TsvParser = new TsvParser(),
             Archive = archive,
             MinReportDate = minReportDate,
-            DataSetValueInThousands = valueInThousands,
         };
 
         if (!await ParseSubmissions(context, cancellationToken)) return;
@@ -55,7 +49,7 @@ public class HoldingsImportService {
         if (await IsAlreadyImported(context, cancellationToken)) return;
         if (!await ParseCoverPages(context, cancellationToken)) return;
         if (!await BuildCusipMapping(context, cancellationToken)) return;
-        if (context.DataSetValueInThousands) await BuildRawPriceConsensus(context);
+        await BuildPriceMap(context, cancellationToken);
         await ParseOtherManagers(context, cancellationToken);
         await UpsertInstitutionalHolders(context, cancellationToken);
         await HandleAmendments(context, cancellationToken);
@@ -231,60 +225,28 @@ public class HoldingsImportService {
     }
 
     /// <summary>
-    /// Pre-computes median raw VALUE/SHARES for each (stock, reportDate) from the dataset.
-    /// Some filers in pre-2023 data report VALUE in actual dollars instead of thousands;
-    /// the median lets SelectNormalizer detect and skip the ×1000 multiplication for those outliers.
+    /// Pre-fetches Yahoo closing prices for all (stock, reportDate) pairs in this dataset.
+    /// Holdings without an available price will be marked as ValuePending during import.
     /// </summary>
-    /// <remarks>
-    /// This adds a third parse of INFOTABLE.tsv (after BuildCusipMapping and before
-    /// StreamAndInsertHoldings). Could be merged into BuildCusipMapping to avoid the extra
-    /// decompression, but kept separate for clarity.
-    /// </remarks>
-    internal async Task BuildRawPriceConsensus(ImportContext context) {
-        var infoTableEntry = FindEntry(context.Archive, "INFOTABLE.tsv");
-        if (infoTableEntry == null) return;
+    private async Task BuildPriceMap(ImportContext context, CancellationToken cancellationToken) {
+        var reportDates = context.Submissions.Values
+            .Select(s => s.PeriodOfReport)
+            .Where(p => TryParseDateOnly(p, out _))
+            .Select(p => { TryParseDateOnly(p, out var d); return d; })
+            .Distinct()
+            .ToList();
 
-        // Collect raw price-per-share for each (stockId, reportDate)
-        var rawPrices = new Dictionary<(Guid, DateOnly), List<decimal>>();
+        var stockIds = context.CusipMapping.Values.Distinct().ToList();
 
-        await foreach (var row in context.TsvParser.ParseEntry(infoTableEntry)) {
-            var accession = GetValue(row, "ACCESSION_NUMBER");
-            if (!context.Submissions.TryGetValue(accession, out var submission)) continue;
+        var requests = reportDates
+            .SelectMany(date => stockIds.Select(id => (id, date)))
+            .ToList();
 
-            var cusip = GetValue(row, "CUSIP");
-            if (!context.CusipMapping.TryGetValue(cusip, out var commonStockId)) continue;
-
-            var shares = ParseLong(GetValue(row, "SSHPRNAMT"));
-            var rawValue = ParseLong(GetValue(row, "VALUE"));
-            if (shares <= 0 || rawValue <= 0) continue;
-
-            if (!TryParseDateOnly(submission.PeriodOfReport, out var reportDate)) continue;
-
-            var key = (commonStockId, reportDate);
-            if (!rawPrices.TryGetValue(key, out var list)) {
-                list = [];
-                rawPrices[key] = list;
-            }
-
-            list.Add((decimal)rawValue / shares);
-        }
-
-        // Compute median for each group with enough data points
-        foreach (var (key, prices) in rawPrices) {
-            if (prices.Count < MinHoldersForConsensus) continue;
-
-            prices.Sort();
-            var mid = prices.Count / 2;
-            var median = prices.Count % 2 == 0
-                ? (prices[mid - 1] + prices[mid]) / 2m
-                : prices[mid];
-
-            context.RawPriceConsensus[key] = median;
-        }
+        context.StockPrices = await _stockPriceProvider.GetClosingPrices(requests, cancellationToken);
 
         _logger.LogInformation(
-            "Built raw price consensus for {Count} (stock, date) pairs from {Total} groups",
-            context.RawPriceConsensus.Count, rawPrices.Count);
+            "Fetched Yahoo prices for {Found}/{Requested} (stock, date) pairs",
+            context.StockPrices.Count, requests.Count);
     }
 
     private async Task UpsertInstitutionalHolders(ImportContext context, CancellationToken cancellationToken) {
@@ -395,6 +357,7 @@ public class HoldingsImportService {
         var totalInserted = 0;
         var totalSkipped = 0;
         var totalDuplicates = 0;
+        var totalPending = 0;
         var consecutiveEmptyBatches = 0;
 
         await foreach (var row in context.TsvParser.ParseEntry(infoTableEntry)) {
@@ -421,13 +384,13 @@ public class HoldingsImportService {
             var isAmendment = context.CoverPages.TryGetValue(accession, out var cp)
                 && string.Equals(cp.IsAmendment, "Y", StringComparison.OrdinalIgnoreCase);
 
-            var rawValue = ParseLong(GetValue(row, "VALUE"));
             var shares = ParseLong(GetValue(row, "SSHPRNAMT"));
 
-            var normalizer = await SelectNormalizer(
-                context, submission, isAmendment, commonStockId, rawValue, shares, cancellationToken);
+            // Calculate value from Yahoo stock price
+            var hasPrice = context.StockPrices.TryGetValue((commonStockId, reportDate), out var closePrice);
+            var value = hasPrice ? (long)(shares * closePrice) : 0L;
+            var valuePending = !hasPrice;
 
-            var normalizedValue = normalizer.Normalize(rawValue);
             var otherManagerNumber = ParseNullableInt(GetValue(row, "OTHERMANAGER"));
             var discretion = ParseInvestmentDiscretion(GetValue(row, "INVESTMENTDISCRETION"));
 
@@ -435,26 +398,27 @@ public class HoldingsImportService {
                 ManagerNumber = otherManagerNumber,
                 ManagerName = ResolveManagerName(context, accession, otherManagerNumber),
                 Shares = shares,
-                Value = normalizedValue,
+                Value = value,
                 InvestmentDiscretion = discretion,
             };
 
             if (holdingsMap.TryGetValue(uniqueKey, out var existing)) {
                 totalDuplicates++;
-                // Aggregate: sum shares, value, and voting authority across sub-manager rows
                 existing.Shares += shares;
-                existing.Value += normalizedValue;
+                existing.Value += value;
                 existing.VotingAuthSole += ParseLong(GetValue(row, "VOTING_AUTH_SOLE"));
                 existing.VotingAuthShared += ParseLong(GetValue(row, "VOTING_AUTH_SHARED"));
                 existing.VotingAuthNone += ParseLong(GetValue(row, "VOTING_AUTH_NONE"));
                 existing.ManagerEntries.Add(managerEntry);
             } else {
+                if (valuePending) totalPending++;
+
                 var holding = new InstitutionalHolding {
                     InstitutionalHolderId = holderId,
                     CommonStockId = commonStockId,
                     FilingDate = filingDate,
                     ReportDate = reportDate,
-                    Value = normalizedValue,
+                    Value = value,
                     Shares = shares,
                     ShareType = shareType,
                     OptionType = optionType,
@@ -466,6 +430,7 @@ public class HoldingsImportService {
                     Cusip = cusip,
                     AccessionNumber = accession,
                     IsAmendment = isAmendment,
+                    ValuePending = valuePending,
                 };
                 holding.ManagerEntries.Add(managerEntry);
                 holdingsMap[uniqueKey] = holding;
@@ -490,7 +455,6 @@ public class HoldingsImportService {
             }
         }
 
-        // Flush remaining
         if (holdingsMap.Count > 0) {
             var inserted = await FlushBatch(holdingsMap.Values.ToList(), cancellationToken);
             totalInserted += inserted;
@@ -498,89 +462,8 @@ public class HoldingsImportService {
         }
 
         _logger.LogInformation(
-            "Import complete. Inserted: {Inserted}, Skipped (untracked): {Skipped}, Duplicates removed: {Duplicates}",
-            totalInserted, totalSkipped, totalDuplicates);
-    }
-
-    private async Task<IValueNormalizer> SelectNormalizer(
-        ImportContext context,
-        SubmissionRow submission,
-        bool isAmendment,
-        Guid commonStockId,
-        long rawValue,
-        long shares,
-        CancellationToken cancellationToken
-    ) {
-        // Pre-2023 data set → thousands by default, but detect filers who report in dollars
-        if (context.DataSetValueInThousands) {
-            if (!TryParseDateOnly(submission.PeriodOfReport, out var preReportDate))
-                return ThousandsValueNormalizer.Instance;
-
-            return IsValueAlreadyInDollars(context.RawPriceConsensus, commonStockId, preReportDate, rawValue, shares)
-                ? PassthroughValueNormalizer.Instance
-                : ThousandsValueNormalizer.Instance;
-        }
-
-        // 2023+ non-amendment → dollars
-        if (!isAmendment)
-            return PassthroughValueNormalizer.Instance;
-
-        // Unparseable report date → can't determine era, default to dollars
-        if (!TryParseDateOnly(submission.PeriodOfReport, out var reportDate))
-            return PassthroughValueNormalizer.Instance;
-
-        // 2023+ amendment for post-cutoff report date → dollars
-        if (reportDate >= CutoffDate)
-            return PassthroughValueNormalizer.Instance;
-
-        // 2023+ amendment for pre-cutoff → consensus detection (rare cross-boundary case;
-        // each unique (stock, date) pair hits the DB once, then is cached in ConsensusCache)
-        if (shares <= 0)
-            return PassthroughValueNormalizer.Instance;
-
-        var impliedPrice = (decimal)rawValue / shares;
-        var medianPrice = await GetConsensusPrice(context, commonStockId, reportDate, cancellationToken);
-
-        if (medianPrice == null)
-            return PassthroughValueNormalizer.Instance;
-
-        return impliedPrice < medianPrice.Value * 0.005m
-            ? ThousandsValueNormalizer.Instance
-            : PassthroughValueNormalizer.Instance;
-    }
-
-    private async Task<decimal?> GetConsensusPrice(
-        ImportContext context,
-        Guid commonStockId,
-        DateOnly reportDate,
-        CancellationToken cancellationToken
-    ) {
-        var cacheKey = (commonStockId, reportDate);
-        if (context.ConsensusCache.TryGetValue(cacheKey, out var cached))
-            return cached;
-
-        using var scope = _scopeFactory.CreateScope();
-        var holdingRepo = scope.ServiceProvider.GetRequiredService<InstitutionalHoldingRepository>();
-
-        var pricePerShare = await holdingRepo.GetAll()
-            .Where(h => h.CommonStockId == commonStockId
-                && h.ReportDate == reportDate
-                && h.Shares > 0
-                && h.Value > 0)
-            .Select(h => (decimal)h.Value / h.Shares)
-            .ToListAsync(cancellationToken);
-
-        decimal? result = null;
-        if (pricePerShare.Count >= MinHoldersForConsensus) {
-            pricePerShare.Sort();
-            var mid = pricePerShare.Count / 2;
-            result = pricePerShare.Count % 2 == 0
-                ? (pricePerShare[mid - 1] + pricePerShare[mid]) / 2m
-                : pricePerShare[mid];
-        }
-
-        context.ConsensusCache[cacheKey] = result;
-        return result;
+            "Import complete. Inserted: {Inserted}, Skipped (untracked): {Skipped}, Duplicates: {Duplicates}, Pending price: {Pending}",
+            totalInserted, totalSkipped, totalDuplicates, totalPending);
     }
 
     private async Task<int> FlushBatch(List<InstitutionalHolding> holdings, CancellationToken cancellationToken) {
@@ -588,7 +471,6 @@ public class HoldingsImportService {
         var holdingRepo = scope.ServiceProvider.GetRequiredService<InstitutionalHoldingRepository>();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
 
-        // Extract manager entries before upsert (FlexLabs doesn't handle owned entities)
         var entriesByKey = new Dictionary<string, List<HoldingManagerEntry>>();
         foreach (var h in holdings) {
             var key = $"{h.CommonStockId}|{h.InstitutionalHolderId}|{h.ReportDate}|{(int)h.ShareType}|{h.OptionType?.ToString() ?? ""}";
@@ -596,7 +478,6 @@ public class HoldingsImportService {
             h.ManagerEntries.Clear();
         }
 
-        // Upsert main holding rows (without manager entries)
         await holdingRepo.GetDbSet()
             .UpsertRange(holdings)
             .On(h => new { h.CommonStockId, h.InstitutionalHolderId, h.ReportDate, h.ShareType, h.OptionType })
@@ -612,10 +493,10 @@ public class HoldingsImportService {
                 TitleOfClass = h.TitleOfClass,
                 Cusip = h.Cusip,
                 IsAmendment = h.IsAmendment,
+                ValuePending = h.ValuePending,
             })
             .RunAsync(cancellationToken);
 
-        // Load upserted holdings from DB to get IDs and replace manager entries
         var accessions = holdings.Select(h => h.AccessionNumber).Distinct().ToList();
         var dbHoldings = await dbContext.Set<InstitutionalHolding>()
             .Include(h => h.ManagerEntries)
@@ -655,10 +536,8 @@ public class HoldingsImportService {
         result = default;
         if (string.IsNullOrEmpty(value)) return false;
 
-        // Try ISO format first (yyyy-MM-dd)
         if (DateOnly.TryParse(value, out result)) return true;
 
-        // Try SEC format (dd-MMM-yyyy, e.g., "31-DEC-2019")
         if (DateOnly.TryParseExact(value, "dd-MMM-yyyy",
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out result)) {
@@ -699,32 +578,6 @@ public class HoldingsImportService {
             return name;
         }
         return null;
-    }
-
-    /// <summary>
-    /// Returns true when a pre-2023 raw VALUE appears to already be in dollars (not thousands).
-    /// Compares the entry's raw price-per-share against the dataset median; a ratio above
-    /// <see cref="OutlierThreshold"/> indicates the filer used dollars.
-    /// </summary>
-    /// <remarks>
-    /// Known limitation: if dollar-reporting filers outnumber thousands-reporting filers for
-    /// a thinly-held stock, the median shifts toward dollar-scale pricing and detection inverts.
-    /// In that case no outliers are detected and all entries are multiplied by 1000 — same as
-    /// today's behavior, so no regression, but the fix is ineffective for that stock.
-    /// </remarks>
-    internal static bool IsValueAlreadyInDollars(
-        Dictionary<(Guid, DateOnly), decimal> rawPriceConsensus,
-        Guid commonStockId,
-        DateOnly reportDate,
-        long rawValue,
-        long shares
-    ) {
-        if (shares <= 0 || rawValue <= 0) return false;
-
-        var rawPrice = (decimal)rawValue / shares;
-        return rawPriceConsensus.TryGetValue((commonStockId, reportDate), out var medianRawPrice)
-            && medianRawPrice > 0
-            && rawPrice > medianRawPrice * OutlierThreshold;
     }
 
     internal static InvestmentDiscretion ParseInvestmentDiscretion(string value) {

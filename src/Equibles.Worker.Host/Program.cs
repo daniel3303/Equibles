@@ -95,6 +95,9 @@ builder.Services.AutoWireServicesFrom<Equibles.Sec.HostedService.Services.FtdImp
 builder.Services.AutoWireServicesFrom<Equibles.Finra.HostedService.Services.ShortVolumeImportService>();
 builder.Services.AutoWireServicesFrom<Equibles.Yahoo.HostedService.Services.YahooPriceImportService>();
 
+// Cross-module services (interface-based, need manual registration)
+builder.Services.AddScoped<Equibles.Core.Contracts.IStockPriceProvider, Equibles.Yahoo.Repositories.YahooStockPriceProvider>();
+
 // SEC scraper services (interface-based, need manual registration)
 builder.Services.AddScoped<IFilingProcessor, InsiderTradingFilingProcessor>();
 builder.Services.AddScoped<IDocumentPersistenceService, DocumentPersistenceService>();

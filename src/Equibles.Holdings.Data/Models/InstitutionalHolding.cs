@@ -44,6 +44,7 @@ public class InstitutionalHolding {
     public string AccessionNumber { get; set; }
 
     public bool IsAmendment { get; set; }
+    public bool ValuePending { get; set; }
 
     public List<HoldingManagerEntry> ManagerEntries { get; set; } = [];
 
