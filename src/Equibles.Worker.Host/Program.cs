@@ -1,29 +1,28 @@
 using Equibles.Cboe.Data.Extensions;
+using Equibles.Cboe.HostedService.Extensions;
 using Equibles.Cftc.Data.Extensions;
+using Equibles.Cftc.HostedService.Extensions;
 using Equibles.CommonStocks.Data.Extensions;
 using Equibles.Congress.Data.Extensions;
+using Equibles.Congress.HostedService.Extensions;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Data.Extensions;
 using Equibles.Errors.Data.Extensions;
 using Equibles.Finra.Data.Extensions;
+using Equibles.Finra.HostedService.Extensions;
 using Equibles.Fred.Data.Extensions;
+using Equibles.Fred.HostedService.Extensions;
 using Equibles.Holdings.Data.Extensions;
+using Equibles.Holdings.HostedService.Extensions;
 using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.Media.Data.Extensions;
 using Equibles.Sec.Data.Extensions;
-using Equibles.Sec.HostedService;
-using Equibles.Yahoo.Data.Extensions;
 using Equibles.Sec.HostedService.Configuration;
-using Equibles.Sec.HostedService.Contracts;
-using Equibles.Sec.HostedService.Services;
-using Equibles.Fred.HostedService;
-using Equibles.Finra.HostedService;
-using Equibles.Yahoo.HostedService;
-using Equibles.Cftc.HostedService;
-using Equibles.Cboe.HostedService;
-using Equibles.Congress.HostedService;
-using Equibles.Holdings.HostedService;
+using Equibles.Sec.HostedService.Extensions;
+using Equibles.Worker.Extensions;
+using Equibles.Yahoo.Data.Extensions;
+using Equibles.Yahoo.HostedService.Extensions;
 using Serilog;
 using Serilog.Events;
 
@@ -43,6 +42,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddEquiblesDbContext(connectionString, modules => modules.AddAllModules());
 builder.Services.AddAllRepositories();
 
+// Worker-specific configuration
 builder.Services.Configure<WorkerOptions>(
     builder.Configuration.GetSection("Worker"));
 builder.Services.Configure<DocumentScraperOptions>(
@@ -66,46 +66,25 @@ builder.Services.Configure<Equibles.Cboe.HostedService.Configuration.CboeScraper
 
 builder.Services.AddHttpClient();
 
-builder.Services.AutoWireServicesFrom<Equibles.Worker.TickerMapService>();
+// AutoWire OSS business logic services
 builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();
 builder.Services.AutoWireServicesFrom<Equibles.CommonStocks.BusinessLogic.CommonStockManager>();
 builder.Services.AutoWireServicesFrom<Equibles.Media.BusinessLogic.FileManager>();
 builder.Services.AutoWireServicesFrom<Equibles.Sec.BusinessLogic.SecDocumentHtmlNormalizer>();
-builder.Services.AutoWireServicesFrom<Equibles.Integrations.Sec.SecEdgarClient>();
-builder.Services.AutoWireServicesFrom<Equibles.Integrations.Finra.FinraClient>();
-builder.Services.AutoWireServicesFrom<Equibles.Integrations.Fred.FredClient>();
-builder.Services.AutoWireServicesFrom<Equibles.Integrations.Yahoo.YahooFinanceClient>();
-builder.Services.AutoWireServicesFrom<Equibles.Fred.HostedService.Services.FredImportService>();
-builder.Services.AutoWireServicesFrom<Equibles.Sec.HostedService.Services.DocumentManager>();
-builder.Services.AutoWireServicesFrom<Equibles.Congress.HostedService.Services.CongressionalTradeSyncService>();
-builder.Services.AutoWireServicesFrom<Equibles.Holdings.HostedService.Services.HoldingsDataSetClient>();
-builder.Services.AutoWireServicesFrom<Equibles.Sec.HostedService.Services.FtdImportService>();
-builder.Services.AutoWireServicesFrom<Equibles.Finra.HostedService.Services.ShortVolumeImportService>();
-builder.Services.AutoWireServicesFrom<Equibles.Yahoo.HostedService.Services.YahooPriceImportService>();
-builder.Services.AutoWireServicesFrom<Equibles.Integrations.Cftc.CftcClient>();
-builder.Services.AutoWireServicesFrom<Equibles.Integrations.Cboe.CboeClient>();
-builder.Services.AutoWireServicesFrom<Equibles.Cftc.HostedService.Services.CftcImportService>();
-builder.Services.AutoWireServicesFrom<Equibles.Cboe.HostedService.Services.CboeImportService>();
+
+// Register worker services and all scrapers
+builder.Services.AddWorkerServices();
+builder.Services.AddSecWorker();
+builder.Services.AddFinraWorker();
+builder.Services.AddFredWorker();
+builder.Services.AddYahooWorker();
+builder.Services.AddCftcWorker();
+builder.Services.AddCboeWorker();
+builder.Services.AddCongressWorker();
+builder.Services.AddHoldingsWorker();
 
 // Cross-module services (interface-based, need manual registration)
 builder.Services.AddScoped<Equibles.Core.Contracts.IStockPriceProvider, Equibles.Yahoo.Repositories.YahooStockPriceProvider>();
-
-// SEC scraper services (interface-based, need manual registration)
-builder.Services.AddScoped<IFilingProcessor, InsiderTradingFilingProcessor>();
-builder.Services.AddScoped<IDocumentPersistenceService, DocumentPersistenceService>();
-builder.Services.AddScoped<ICompanySyncService, CompanySyncService>();
-builder.Services.AddScoped<IDocumentScraper, DocumentScraper>();
-
-builder.Services.AddHostedService<SecScraperWorker>();
-builder.Services.AddHostedService<DocumentProcessorWorker>();
-builder.Services.AddHostedService<HoldingsScraperWorker>();
-builder.Services.AddHostedService<CongressionalTradeScraperWorker>();
-builder.Services.AddHostedService<FtdScraperWorker>();
-builder.Services.AddHostedService<FinraScraperWorker>();
-builder.Services.AddHostedService<FredScraperWorker>();
-builder.Services.AddHostedService<YahooPriceScraperWorker>();
-builder.Services.AddHostedService<CftcScraperWorker>();
-builder.Services.AddHostedService<CboeScraperWorker>();
 
 var host = builder.Build();
 host.Run();
