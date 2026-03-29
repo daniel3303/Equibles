@@ -76,8 +76,10 @@ public class YahooPriceImportService {
         var prices = await _yahooClient.GetHistoricalPrices(ticker, startDate, today);
         if (prices.Count == 0) return 0;
 
-        // Load existing dates in range to avoid duplicates
-        var existingDates = await GetExistingDates(commonStockId, startDate, today, cancellationToken);
+        // Load existing dates covering the actual response range to avoid duplicates
+        var minDate = prices.Min(p => p.Date);
+        var maxDate = prices.Max(p => p.Date);
+        var existingDates = await GetExistingDates(commonStockId, minDate, maxDate, cancellationToken);
 
         var newPrices = prices
             .Where(p => !existingDates.Contains(p.Date))
