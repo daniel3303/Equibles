@@ -10,8 +10,6 @@ An open-source, self-hosted mini Bloomberg Terminal for AI agents. Scrapes, stor
 
 Powers [equibles.com](https://equibles.com).
 
-![Stock detail page showing price charts, moving averages, and technical indicators for AAPL](docs/screenshots/stock-detail.png)
-
 ## What's Included
 
 | Domain | Data Source | Description |
@@ -121,10 +119,6 @@ The web portal at `http://localhost:8080` provides a browser-based interface for
 - **Economy** — Browse FRED economic indicators grouped by category (interest rates, inflation, employment, GDP, etc.) with charts and statistics
 - **Status** — System health, worker status, data counts, and error log
 
-| Stocks | Economy | Economy Detail |
-|--------|---------|----------------|
-| ![Stocks page](docs/screenshots/stocks-list.png) | ![Economy page](docs/screenshots/economy.png) | ![Federal Funds Rate detail](docs/screenshots/economy-detail.png) |
-
 ## MCP Server
 
 The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, etc.):
@@ -204,6 +198,24 @@ This adds:
 | **worker-embedding** | — | Worker with embedding generation enabled |
 
 Without the embedding profile, BM25 full-text search via ParadeDB still works out of the box — vector search is purely additive.
+
+## Screenshots
+
+### Stock Detail
+
+![Stock detail page showing price charts, moving averages, and technical indicators for AAPL](docs/screenshots/stock-detail.png)
+
+### Stocks
+
+![Stocks page with search and ticker listing](docs/screenshots/stocks-list.png)
+
+### Economic Data
+
+![Economic indicators grouped by category](docs/screenshots/economy.png)
+
+### Economic Indicator Detail
+
+![Federal Funds Rate chart and observations](docs/screenshots/economy-detail.png)
 
 ## Contributing
 
