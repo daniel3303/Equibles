@@ -70,6 +70,7 @@
     <!-- Resilience -->
     <PackageVersion Include="Polly" Version="8.6.5" />
     <!-- Testing -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.3" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.0.2" />

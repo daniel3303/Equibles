@@ -6,10 +6,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="NSubstitute" />
   </ItemGroup>
@@ -22,14 +27,25 @@
     <ProjectReference Include="..\..\src\Equibles.Sec.Data\Equibles.Sec.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Sec.BusinessLogic\Equibles.Sec.BusinessLogic.csproj" />
     <ProjectReference Include="..\..\src\Equibles.CommonStocks.Data\Equibles.CommonStocks.Data.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.CommonStocks.BusinessLogic\Equibles.CommonStocks.BusinessLogic.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Holdings.Data\Equibles.Holdings.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Holdings.HostedService\Equibles.Holdings.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.InsiderTrading.Data\Equibles.InsiderTrading.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Congress.Data\Equibles.Congress.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Fred.Data\Equibles.Fred.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Errors.Data\Equibles.Errors.Data.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Errors.Repositories\Equibles.Errors.Repositories.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Sec.HostedService\Equibles.Sec.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Media.Data\Equibles.Media.Data.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Media.BusinessLogic\Equibles.Media.BusinessLogic.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Congress.HostedService\Equibles.Congress.HostedService.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.InsiderTrading.Repositories\Equibles.InsiderTrading.Repositories.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Sec.Repositories\Equibles.Sec.Repositories.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Fred.HostedService\Equibles.Fred.HostedService.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Fred.Repositories\Equibles.Fred.Repositories.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Integrations.Fred\Equibles.Integrations.Fred.csproj" />
   </ItemGroup>
 
 </Project>
