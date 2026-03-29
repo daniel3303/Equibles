@@ -16,6 +16,7 @@ namespace Equibles.Cftc.HostedService.Services;
 [Service]
 public class CftcImportService {
     private const int InsertBatchSize = 1000;
+    private const int EarliestCftcYear = 1986;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<CftcImportService> _logger;
@@ -100,7 +101,7 @@ public class CftcImportService {
             ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
             : new DateOnly(2020, 1, 1);
 
-        return minDate.Year;
+        return Math.Max(minDate.Year, EarliestCftcYear);
     }
 
     private async Task ImportYear(int year, Dictionary<string, CuratedContract> curatedLookup, CancellationToken cancellationToken) {
