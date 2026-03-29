@@ -21,6 +21,8 @@ Powers [equibles.com](https://equibles.com).
 | **Short Data** | SEC / FINRA | Fails-to-deliver (SEC), daily short volume and short interest (FINRA) |
 | **Economic Indicators** | FRED (Federal Reserve) | Interest rates, inflation, employment, GDP, yield spreads, and more |
 | **Stock Prices** | Yahoo Finance | Daily OHLCV prices with technical indicators (SMA, RSI, MACD) |
+| **Futures Positioning** | CFTC | Commitments of Traders (COT) data for 30+ futures contracts |
+| **Market Indicators** | CBOE | VIX volatility index (1990+) and put/call ratios by category |
 
 ## Quick Start
 
@@ -117,6 +119,8 @@ The web portal at `http://localhost:8080` provides a browser-based interface for
 
 - **Stocks** — Browse and search all tracked companies, view price charts with technical indicators (SMA, RSI, MACD), institutional holdings, short data, SEC filings, insider trading, and congressional trades per stock
 - **Economy** — Browse FRED economic indicators grouped by category (interest rates, inflation, employment, GDP, etc.) with charts and statistics
+- **Futures** — CFTC Commitments of Traders positioning data for 30+ futures contracts (commodities, indices, currencies) with commercial/non-commercial position charts
+- **Market** — CBOE market indicators: VIX volatility index with OHLC charts, put/call ratios (equity, index, total, VIX, ETP)
 - **Status** — System health, worker status, data counts, and error log
 
 ## MCP Server
@@ -127,6 +131,8 @@ The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, 
 - **Insider Trading** — Insider transactions, ownership summary, insider search
 - **SEC Documents** — Full-text search, semantic search, document browsing, keyword search within filings
 - **Economic Indicators** — FRED data lookup, latest macro snapshot, indicator search across categories
+- **Futures Positioning** — COT positioning data, latest snapshot across all contracts, contract search
+- **Market Indicators** — VIX historical data, put/call ratios by type (equity, index, total, VIX, ETP)
 
 ### Connecting to Claude Desktop
 
