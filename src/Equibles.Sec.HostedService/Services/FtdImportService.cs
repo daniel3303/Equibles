@@ -232,9 +232,9 @@ public class FtdImportService {
         return records;
     }
 
-    // Oldest FTD file available on SEC EDGAR is cnsfails201706b.zip (second half of June 2017).
-    // Files before this date return 404; clamping here avoids hundreds of wasted requests on first sync.
-    private static readonly DateOnly OldestAvailableDate = new(2017, 6, 1);
+    // SEC periodically removes older FTD files. As of 2026, files before ~2022 return 404.
+    // Clamping here avoids hundreds of wasted requests on first sync.
+    private static readonly DateOnly OldestAvailableDate = new(2022, 1, 1);
 
     /// <summary>
     /// Generates FTD file names from a start date to now.

@@ -8,13 +8,13 @@ public class FtdImportServiceTests {
     [Fact]
     public void GetFileNames_SingleMonth_ReturnsTwoFiles() {
         // Use a date far enough in the past that the month boundary is clear
-        var startDate = new DateOnly(2020, 1, 15);
+        var startDate = new DateOnly(2024, 1, 15);
 
         var fileNames = FtdImportService.GetFileNames(startDate);
 
         // Should include at least the start month's a and b files
-        fileNames.Should().Contain("cnsfails202001a.zip");
-        fileNames.Should().Contain("cnsfails202001b.zip");
+        fileNames.Should().Contain("cnsfails202401a.zip");
+        fileNames.Should().Contain("cnsfails202401b.zip");
     }
 
     [Fact]

@@ -40,9 +40,10 @@ public class HoldingsDataSetClient {
         var fileNames = new List<string>();
         var now = DateTime.UtcNow;
 
-        // SEC 13F structured data sets start at 2013 — clamp earlier dates
-        if (startDate.Year < 2013) {
-            startDate = new DateTime(2013, 1, 1);
+        // SEC 13F bulk data sets are periodically removed; only ~4 years of old-format
+        // files remain available. Clamp to avoid hundreds of 404 retries on stale URLs.
+        if (startDate.Year < 2022) {
+            startDate = new DateTime(2022, 1, 1);
         }
 
         // Old format: 2013-2023

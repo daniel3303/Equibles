@@ -32,10 +32,16 @@ public class CongressionalTradeSyncService {
         _errorReporter = errorReporter;
     }
 
+    // Congressional trade disclosures are available from 2012 (STOCK Act).
+    private static readonly DateOnly EarliestAvailableDate = new(2012, 4, 1);
+
     public async Task SyncAll(CancellationToken ct) {
         var fromDate = _workerOptions.MinSyncDate.HasValue
             ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
             : DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
+
+        if (fromDate < EarliestAvailableDate)
+            fromDate = EarliestAvailableDate;
         var toDate = DateOnly.FromDateTime(DateTime.UtcNow);
 
         _logger.LogInformation("Starting congressional trade sync from {From} to {To}", fromDate, toDate);
