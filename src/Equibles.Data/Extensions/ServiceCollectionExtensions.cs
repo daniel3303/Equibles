@@ -11,6 +11,7 @@ public static class ServiceCollectionExtensions {
         string connectionString,
         Action<EquiblesModuleBuilder> configureModules,
         Assembly migrationsAssembly = null,
+        string migrationsAssemblyName = null,
         TimeSpan? commandTimeout = null) {
         var moduleBuilder = new EquiblesModuleBuilder();
         configureModules(moduleBuilder);
@@ -26,6 +27,8 @@ public static class ServiceCollectionExtensions {
                     .UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
                 if (migrationsAssembly != null) {
                     npgsql.MigrationsAssembly(migrationsAssembly);
+                } else if (migrationsAssemblyName != null) {
+                    npgsql.MigrationsAssembly(migrationsAssemblyName);
                 }
                 if (commandTimeout.HasValue) {
                     npgsql.CommandTimeout((int)commandTimeout.Value.TotalSeconds);
