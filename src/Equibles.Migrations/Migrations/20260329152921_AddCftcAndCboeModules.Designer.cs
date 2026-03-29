@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesDbContext))]
-    [Migration("20260329135920_AddCftcAndCboeModules")]
+    [Migration("20260329152921_AddCftcAndCboeModules")]
     partial class AddCftcAndCboeModules
     {
         /// <inheritdoc />
