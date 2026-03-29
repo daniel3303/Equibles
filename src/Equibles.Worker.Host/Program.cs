@@ -66,6 +66,7 @@ builder.Services.Configure<Equibles.Cboe.HostedService.Configuration.CboeScraper
 
 builder.Services.AddHttpClient();
 
+builder.Services.AutoWireServicesFrom<Equibles.Worker.TickerMapService>();
 builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();
 builder.Services.AutoWireServicesFrom<Equibles.CommonStocks.BusinessLogic.CommonStockManager>();
 builder.Services.AutoWireServicesFrom<Equibles.Media.BusinessLogic.FileManager>();
