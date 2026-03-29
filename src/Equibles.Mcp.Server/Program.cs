@@ -37,35 +37,8 @@ builder.Services.AddSerilog(config => {
 });
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddEquiblesDbContext(connectionString, modules => {
-    modules.AddCommonStocks();
-    modules.AddHoldings();
-    modules.AddInsiderTrading();
-    modules.AddCongress();
-    modules.AddFinra();
-    modules.AddFred();
-    modules.AddYahoo();
-    modules.AddCftc();
-    modules.AddCboe();
-    modules.AddSec();
-    modules.AddMedia();
-    modules.AddErrors();
-});
-
-builder.Services.AddRepositoriesFrom(
-    typeof(Equibles.CommonStocks.Repositories.CommonStockRepository).Assembly,
-    typeof(Equibles.Holdings.Repositories.InstitutionalHolderRepository).Assembly,
-    typeof(Equibles.InsiderTrading.Repositories.InsiderOwnerRepository).Assembly,
-    typeof(Equibles.Fred.Repositories.FredSeriesRepository).Assembly,
-    typeof(Equibles.Sec.Repositories.DocumentRepository).Assembly,
-    typeof(Equibles.Congress.Repositories.CongressMemberRepository).Assembly,
-    typeof(Equibles.Finra.Repositories.DailyShortVolumeRepository).Assembly,
-    typeof(Equibles.Yahoo.Repositories.DailyStockPriceRepository).Assembly,
-    typeof(Equibles.Cftc.Repositories.CftcContractRepository).Assembly,
-    typeof(Equibles.Cboe.Repositories.CboePutCallRatioRepository).Assembly,
-    typeof(Equibles.Media.Repositories.FileRepository).Assembly,
-    typeof(Equibles.Errors.Repositories.ErrorRepository).Assembly
-);
+builder.Services.AddEquiblesDbContext(connectionString, modules => modules.AddAllModules());
+builder.Services.AddAllRepositories();
 
 builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();
 builder.Services.AutoWireServicesFrom<Equibles.Sec.BusinessLogic.Search.RagManager>();
