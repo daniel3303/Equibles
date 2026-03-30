@@ -18,5 +18,6 @@ public class SecModuleConfiguration : Equibles.Data.IModuleConfiguration {
         });
 
         builder.Entity<FailToDeliver>();
+        builder.Entity<TranscriptCheckStatus>();
     }
 }
