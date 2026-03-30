@@ -1,0 +1,60 @@
+name: Feature request
+description: Propose new functionality.
+title: "[Feature]: "
+labels:
+  - "type: feature"
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One-line statement of the requested capability.
+      placeholder: Add support for fetching SEC XBRL financial statements.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What user need this addresses and why current behavior is insufficient.
+      placeholder: Users cannot access structured financial data (balance sheet, income statement) — only raw filing documents are available.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: Proposed solution
+      description: Desired behavior, API surface, or architecture with as much specificity as possible.
+      placeholder: Add an XBRL parser that extracts financial facts from SEC filings and stores them as structured entities.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches and why they are weaker.
+      placeholder: Parsing financials from markdown documents is unreliable and lossy.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which module would this affect?
+      options:
+        - SEC / Documents
+        - Common Stocks
+        - Holdings
+        - Insider Trading
+        - Congress
+        - Short Data
+        - MCP
+        - Worker / Scrapers
+        - Data / EF Core
+        - New module
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Prior art, links, mockups, or references.
