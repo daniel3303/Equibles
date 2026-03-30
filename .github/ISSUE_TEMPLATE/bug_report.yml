@@ -1,81 +1,28 @@
 name: Bug report
-description: Report defects, regressions, crashes, or incorrect behavior.
+description: Report defects, regressions, or incorrect behavior.
 title: "[Bug]: "
 labels:
   - "type: bug"
 body:
-  - type: dropdown
-    id: bug_type
-    attributes:
-      label: Bug type
-      options:
-        - Regression (worked before, now fails)
-        - Crash (process exits or hangs)
-        - Data integrity (incorrect, missing, or duplicate data)
-        - Behavior bug (incorrect output/state without crash)
-    validations:
-      required: true
   - type: textarea
-    id: summary
+    id: description
     attributes:
-      label: Summary
-      description: One-sentence statement of what is broken.
-      placeholder: "SEC document scraper only fetches the most recent ~1,000 filings per company, missing all paginated historical filings."
+      label: Description
+      description: What happened and what did you expect instead?
+      placeholder: "The SEC scraper only fetches recent filings, missing all historical data for companies with >1,000 filings."
     validations:
       required: true
   - type: textarea
     id: repro
     attributes:
       label: Steps to reproduce
-      description: Shortest path to reproduce the issue.
+      description: How can we reproduce this? (optional but very helpful)
       placeholder: |
-        1. Run the document scraper worker.
-        2. Check document count for a company with >1,000 filings (e.g., Apple).
-        3. Observe that only recent filings are present.
-    validations:
-      required: true
-  - type: textarea
-    id: expected
-    attributes:
-      label: Expected behavior
-      description: What should happen instead.
-      placeholder: All historical filings should be fetched, including paginated files from the SEC API.
-    validations:
-      required: true
-  - type: textarea
-    id: actual
-    attributes:
-      label: Actual behavior
-      description: What actually happens, including any error messages or logs.
-      placeholder: Only filings from `recent` are fetched. The `files` array in the API response is ignored.
-    validations:
-      required: true
-  - type: dropdown
-    id: area
-    attributes:
-      label: Area
-      description: Which module is affected?
-      options:
-        - SEC / Documents
-        - Common Stocks
-        - Holdings
-        - Insider Trading
-        - Congress
-        - Short Data
-        - MCP
-        - Worker / Scrapers
-        - Data / EF Core
-        - Other
-    validations:
-      required: true
+        1. Run the document scraper.
+        2. Check document count for Apple (CIK 0000320193).
   - type: textarea
     id: logs
     attributes:
-      label: Logs, screenshots, and evidence
-      description: Include relevant logs, screenshots, or API responses.
+      label: Logs or screenshots
+      description: Any relevant output, errors, or screenshots.
       render: shell
-  - type: textarea
-    id: additional
-    attributes:
-      label: Additional context
-      description: Any other information that helps diagnose the issue.
