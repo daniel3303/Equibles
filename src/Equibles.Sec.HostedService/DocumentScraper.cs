@@ -141,7 +141,7 @@ public class DocumentScraper : IDocumentScraper {
         try {
             _logger.LogInformation("Processing documents for company: {Ticker} - {Name}", company.Ticker, company.Name);
 
-            foreach (var documentType in _options.DocumentTypesToSync) {
+            foreach (var documentType in _options.GetDocumentTypes()) {
                 var secFilter = documentType.ToSecEdgarFilter();
                 if (secFilter == null) {
                     _logger.LogWarning("No SEC Edgar filter mapping found for document type: {DocumentType}",
