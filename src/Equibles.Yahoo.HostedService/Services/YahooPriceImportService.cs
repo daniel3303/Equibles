@@ -3,6 +3,7 @@ using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Yahoo.Contracts;
+using Equibles.Integrations.Yahoo.Models;
 using Equibles.Worker;
 using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.Repositories;
@@ -16,6 +17,7 @@ namespace Equibles.Yahoo.HostedService.Services;
 [Service]
 public class YahooPriceImportService {
     private const int InsertBatchSize = 500;
+    private const decimal MaxPriceValue = 99_999_999_999_999.9999m; // numeric(18,4) ceiling
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<YahooPriceImportService> _logger;
@@ -82,8 +84,20 @@ public class YahooPriceImportService {
         var maxDate = prices.Max(p => p.Date);
         var existingDates = await GetExistingDates(commonStockId, minDate, maxDate, cancellationToken);
 
+        var outOfRange = prices.Where(HasOverflowPrice).ToList();
+        if (outOfRange.Count > 0) {
+            var sample = outOfRange[0];
+            _logger.LogWarning(
+                "Skipping {Count} prices for {Ticker} exceeding numeric(18,4) limit. " +
+                "Sample: {Date} O={Open} H={High} L={Low} C={Close} AC={AdjClose}",
+                outOfRange.Count, ticker,
+                sample.Date, sample.Open, sample.High, sample.Low, sample.Close, sample.AdjustedClose);
+        }
+
+        var overflowDates = outOfRange.Select(p => p.Date).ToHashSet();
+
         var newPrices = prices
-            .Where(p => !existingDates.Contains(p.Date))
+            .Where(p => !existingDates.Contains(p.Date) && !overflowDates.Contains(p.Date))
             .Select(p => new DailyStockPrice {
                 CommonStockId = commonStockId,
                 Date = p.Date,
@@ -121,6 +135,13 @@ public class YahooPriceImportService {
 
         return SyncDateResolver.Resolve(latestDate, _workerOptions);
     }
+
+    private static bool HasOverflowPrice(HistoricalPrice p) =>
+        Math.Abs(p.Open) > MaxPriceValue ||
+        Math.Abs(p.High) > MaxPriceValue ||
+        Math.Abs(p.Low) > MaxPriceValue ||
+        Math.Abs(p.Close) > MaxPriceValue ||
+        Math.Abs(p.AdjustedClose) > MaxPriceValue;
 
     private async Task<HashSet<DateOnly>> GetExistingDates(
         Guid commonStockId, DateOnly startDate, DateOnly endDate, CancellationToken cancellationToken
