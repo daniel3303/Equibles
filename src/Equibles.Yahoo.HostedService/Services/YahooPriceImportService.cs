@@ -1,5 +1,6 @@
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
+using Equibles.CommonStocks.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Yahoo.Contracts;
@@ -55,10 +56,11 @@ public class YahooPriceImportService {
             try {
                 var inserted = await ImportTicker(ticker, commonStockId, today, cancellationToken);
                 totalInserted += inserted;
+                await SyncKeyStatistics(ticker, commonStockId, cancellationToken);
             } catch (HttpRequestException ex) {
-                _logger.LogWarning(ex, "Failed to fetch prices for {Ticker}, skipping", ticker);
+                _logger.LogWarning(ex, "Failed to fetch data for {Ticker}, skipping", ticker);
             } catch (Exception ex) {
-                _logger.LogError(ex, "Error importing prices for {Ticker}", ticker);
+                _logger.LogError(ex, "Error importing data for {Ticker}", ticker);
                 await _errorReporter.Report(
                     ErrorSource.YahooPriceScraper, $"ImportTicker({ticker})", ex.Message, ex.StackTrace);
             }
@@ -121,6 +123,22 @@ public class YahooPriceImportService {
 
         _logger.LogDebug("Inserted {Count} prices for {Ticker}", inserted, ticker);
         return inserted;
+    }
+
+    private async Task SyncKeyStatistics(string ticker, Guid commonStockId, CancellationToken cancellationToken) {
+        var stats = await _yahooClient.GetKeyStatistics(ticker);
+        if (stats == null || stats.SharesOutstanding == 0) return;
+
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+
+        var stock = await stockRepo.Get(commonStockId);
+        if (stock.SharesOutStanding == stats.SharesOutstanding) return;
+
+        stock.SharesOutStanding = stats.SharesOutstanding;
+        await stockRepo.SaveChanges();
+
+        _logger.LogDebug("Updated shares outstanding for {Ticker}: {Shares}", ticker, stats.SharesOutstanding);
     }
 
     private async Task<DateOnly> GetSyncStartDate(Guid commonStockId, CancellationToken cancellationToken) {

@@ -19,6 +19,22 @@ public class QuoteSummaryContainer {
 public class QuoteSummaryResult {
     [JsonProperty("recommendationTrend")]
     public RecommendationTrendContainer RecommendationTrend { get; set; }
+
+    [JsonProperty("defaultKeyStatistics")]
+    public DefaultKeyStatisticsContainer DefaultKeyStatistics { get; set; }
+}
+
+public class DefaultKeyStatisticsContainer {
+    [JsonProperty("sharesOutstanding")]
+    public YahooRawValue SharesOutstanding { get; set; }
+
+    [JsonProperty("enterpriseValue")]
+    public YahooRawValue EnterpriseValue { get; set; }
+}
+
+public class YahooRawValue {
+    [JsonProperty("raw")]
+    public long Raw { get; set; }
 }
 
 public class RecommendationTrendContainer {

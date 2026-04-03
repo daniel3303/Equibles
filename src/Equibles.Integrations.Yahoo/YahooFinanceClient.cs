@@ -106,6 +106,21 @@ public class YahooFinanceClient : IYahooFinanceClient {
         return result;
     }
 
+    public async Task<KeyStatistics> GetKeyStatistics(string ticker) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
+        var url = $"{QuoteSummaryBaseUrl}/{Uri.EscapeDataString(ticker)}?modules=defaultKeyStatistics";
+
+        var content = await SendWithRetry(url);
+        var response = JsonConvert.DeserializeObject<YahooQuoteSummaryResponse>(content);
+
+        var stats = response?.QuoteSummary?.Result?.FirstOrDefault()?.DefaultKeyStatistics;
+        if (stats == null) return null;
+
+        return new KeyStatistics {
+            SharesOutstanding = stats.SharesOutstanding?.Raw ?? 0
+        };
+    }
+
     // ── Session management (mirrors FINRA's token caching pattern) ──
 
     private async Task<(string Crumb, string CookieHeader)> EnsureSession() {
