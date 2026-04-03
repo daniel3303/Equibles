@@ -152,7 +152,21 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         if (transactions.Count == 0) {
             _logger.LogDebug("No transactions found for {Ticker} - {AccessionNumber}",
                 companyTicker, filing.AccessionNumber);
-            return false;
+
+            // Save a marker record so the accession number dedup prevents re-fetching this filing
+            // on every cycle. This is common for Form 3 initial statements with noSecuritiesOwned.
+            transactionRepository.Add(new InsiderTransaction {
+                InsiderOwnerId = owner.Id,
+                CommonStockId = companyId,
+                FilingDate = filing.FilingDate,
+                TransactionDate = filing.ReportDate,
+                TransactionCode = TransactionCode.Other,
+                AccessionNumber = filing.AccessionNumber,
+                SecurityTitle = "No Securities Owned"
+            });
+            await transactionRepository.SaveChanges();
+
+            return true;
         }
 
         // Deduplicate within the batch (same composite key can appear in a single filing)
@@ -191,7 +205,21 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         if (inserted == 0 && updated == 0) {
             _logger.LogDebug("All transactions already exist for {Ticker} - {AccessionNumber}",
                 companyTicker, filing.AccessionNumber);
-            return false;
+
+            // Save a marker record so the accession number dedup prevents re-fetching.
+            // All transactions matched by unique key from a different filing's accession number.
+            transactionRepository.Add(new InsiderTransaction {
+                InsiderOwnerId = owner.Id,
+                CommonStockId = companyId,
+                FilingDate = filing.FilingDate,
+                TransactionDate = filing.ReportDate,
+                TransactionCode = TransactionCode.Other,
+                AccessionNumber = filing.AccessionNumber,
+                SecurityTitle = "Duplicate Filing"
+            });
+            await transactionRepository.SaveChanges();
+
+            return true;
         }
 
         await transactionRepository.SaveChanges();
