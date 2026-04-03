@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Equibles.Errors.BusinessLogic;
@@ -23,6 +24,10 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
     private readonly ILogger<InsiderTradingFilingProcessor> _logger;
     private readonly ErrorReporter _errorReporter;
 
+    // Tracks accession numbers that were fetched but had no non-derivative data.
+    // Prevents infinite re-fetching of derivative-only filings across scraper cycles.
+    private readonly ConcurrentDictionary<string, byte> _emptyFilings = new();
+
     public InsiderTradingFilingProcessor(IServiceScopeFactory scopeFactory,
         ILogger<InsiderTradingFilingProcessor> logger,
         ErrorReporter errorReporter) {
@@ -44,6 +49,9 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         var secEdgarClient = scope.ServiceProvider.GetRequiredService<ISecEdgarClient>();
         var ownerRepository = scope.ServiceProvider.GetRequiredService<InsiderOwnerRepository>();
         var transactionRepository = scope.ServiceProvider.GetRequiredService<InsiderTransactionRepository>();
+
+        // Check in-memory cache first (derivative-only filings that had no non-derivative data)
+        if (_emptyFilings.ContainsKey(filing.AccessionNumber)) return false;
 
         // Check if already imported by accession number
         var existing = await transactionRepository.GetByAccessionNumber(filing.AccessionNumber).AnyAsync();
@@ -141,6 +149,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         if (transactions.Count == 0) {
             _logger.LogDebug("No non-derivative transactions found for {Ticker} - {AccessionNumber}",
                 companyTicker, filing.AccessionNumber);
+            _emptyFilings.TryAdd(filing.AccessionNumber, 0);
             return false;
         }
 
