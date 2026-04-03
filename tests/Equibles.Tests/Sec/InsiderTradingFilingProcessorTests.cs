@@ -456,26 +456,29 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_AmendmentFiling_UpdatesExistingTransaction() {
+    public async Task Process_AmendmentFiling_InsertsAsNewRecord() {
         var (processor, ownerRepo, txRepo, secClient) = CreateProcessorWithDeps();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(ValidForm4Xml);
         var company = MakeCompany();
 
         // First import
         await processor.Process(MakeFiling(accession: "0001-24-000001"), company);
-        txRepo.GetAll().Single().Shares.Should().Be(1000);
+        txRepo.GetAll().Should().HaveCount(1);
 
-        // Amendment with updated shares (same XML structure but different accession + /A form)
+        // Amendment — stored as a separate record (different accession number)
         var amendedXml = ValidForm4Xml.Replace("<value>1000</value>", "<value>2000</value>");
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(amendedXml);
         var amendFiling = MakeFiling(accession: "0001-24-000002", form: "4/A");
 
         await processor.Process(amendFiling, company);
 
-        var transactions = txRepo.GetAll().ToList();
-        transactions.Should().HaveCount(1);
-        transactions[0].Shares.Should().Be(2000);
-        transactions[0].IsAmendment.Should().BeTrue();
+        var transactions = txRepo.GetAll().OrderBy(t => t.AccessionNumber).ToList();
+        transactions.Should().HaveCount(2);
+        transactions[0].Shares.Should().Be(1000);
+        transactions[0].AccessionNumber.Should().Be("0001-24-000001");
+        transactions[1].Shares.Should().Be(2000);
+        transactions[1].AccessionNumber.Should().Be("0001-24-000002");
+        transactions[1].IsAmendment.Should().BeTrue();
     }
 
     [Fact]
