@@ -99,11 +99,6 @@ public class SenateDisclosureClient : IAsyncDisposable {
             _playwright = await Playwright.CreateAsync();
             _browser = await _playwright.Firefox.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
 
-            // Register cancellation to force-close the browser on shutdown
-            ct.Register(() => {
-                _browser?.CloseAsync().ConfigureAwait(false);
-            });
-
             var context = await _browser.NewContextAsync();
             context.SetDefaultTimeout(BrowserFetchTimeoutMs);
             _page = await context.NewPageAsync();
@@ -262,13 +257,21 @@ public class SenateDisclosureClient : IAsyncDisposable {
     public async ValueTask DisposeAsync() {
         GC.SuppressFinalize(this);
 
-        if (_page != null) {
-            await _page.Context.CloseAsync();
+        try {
+            if (_page != null) {
+                await _page.Context.CloseAsync();
+                _page = null;
+            }
+        } catch (PlaywrightException) {
             _page = null;
         }
 
-        if (_browser != null) {
-            await _browser.CloseAsync();
+        try {
+            if (_browser != null) {
+                await _browser.CloseAsync();
+                _browser = null;
+            }
+        } catch (PlaywrightException) {
             _browser = null;
         }
 
