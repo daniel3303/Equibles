@@ -45,6 +45,8 @@ public class InstitutionalHolding {
 
     public bool IsAmendment { get; set; }
     public bool ValuePending { get; set; }
+    public int ValueRetryCount { get; set; }
+    public DateTime? ValueLastRetryAt { get; set; }
 
     public List<HoldingManagerEntry> ManagerEntries { get; set; } = [];
 

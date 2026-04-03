@@ -8,7 +8,14 @@ namespace Equibles.Holdings.HostedService.Services;
 
 [Service]
 public class HoldingsValueRecalculator {
-    private const int BatchSize = 500;
+    private const int MaxRetries = 3;
+
+    // Backoff schedule: retry 1 → 1 day, retry 2 → 1 week, retry 3 → 1 month
+    private static readonly TimeSpan[] RetryDelays = [
+        TimeSpan.FromDays(1),
+        TimeSpan.FromDays(7),
+        TimeSpan.FromDays(30),
+    ];
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IStockPriceProvider _stockPriceProvider;
@@ -26,10 +33,10 @@ public class HoldingsValueRecalculator {
 
     /// <summary>
     /// Recalculates Value for all holdings with ValuePending = true
-    /// where a Yahoo stock price is now available.
+    /// where a Yahoo stock price is now available. Uses exponential backoff
+    /// (1 day, 1 week, 1 month) and gives up after 3 failed retries.
     /// </summary>
     public async Task Recalculate(CancellationToken cancellationToken) {
-        // Find all distinct (stock, date) pairs that need prices
         using var lookupScope = _scopeFactory.CreateScope();
         var lookupContext = lookupScope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
 
@@ -49,16 +56,13 @@ public class HoldingsValueRecalculator {
         var requests = pendingPairs.Select(p => (p.CommonStockId, p.ReportDate)).ToList();
         var prices = await _stockPriceProvider.GetClosingPrices(requests, cancellationToken);
 
-        if (prices.Count == 0) {
-            _logger.LogInformation("No Yahoo prices available yet for any pending holdings");
-            return;
-        }
-
         _logger.LogInformation("Found prices for {Count}/{Total} pending pairs", prices.Count, pendingPairs.Count);
 
-        // Process in batches per (stock, date) pair that now has a price
+        var resolvedPairKeys = prices.Keys.ToHashSet();
         var totalUpdated = 0;
+        var totalGivenUp = 0;
 
+        // Resolve holdings that now have a price
         foreach (var ((stockId, reportDate), closePrice) in prices) {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -83,6 +87,50 @@ public class HoldingsValueRecalculator {
             totalUpdated += pendingHoldings.Count;
         }
 
-        _logger.LogInformation("Recalculated values for {Count} holdings", totalUpdated);
+        // Increment retry count for unresolved pairs and give up after MaxRetries
+        var unresolvedPairs = pendingPairs
+            .Where(p => !resolvedPairKeys.Contains((p.CommonStockId, p.ReportDate)))
+            .ToList();
+
+        var now = DateTime.UtcNow;
+
+        foreach (var pair in unresolvedPairs) {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            using var scope = _scopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+
+            // Only load holdings that are due for retry based on their last retry time
+            var holdings = await dbContext.Set<InstitutionalHolding>()
+                .Where(h => h.ValuePending && h.CommonStockId == pair.CommonStockId && h.ReportDate == pair.ReportDate)
+                .ToListAsync(cancellationToken);
+
+            var changed = false;
+
+            foreach (var holding in holdings) {
+                var delay = RetryDelays[Math.Min(holding.ValueRetryCount, MaxRetries - 1)];
+                var anchor = holding.ValueLastRetryAt ?? holding.CreationTime;
+
+                if (anchor.Add(delay) > now) continue;
+
+                holding.ValueRetryCount++;
+                holding.ValueLastRetryAt = now;
+
+                if (holding.ValueRetryCount > MaxRetries) {
+                    holding.ValuePending = false;
+                    totalGivenUp++;
+                }
+
+                changed = true;
+            }
+
+            if (changed) {
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+        }
+
+        _logger.LogInformation(
+            "Recalculated values for {Updated} holdings, gave up on {GivenUp}",
+            totalUpdated, totalGivenUp);
     }
 }
