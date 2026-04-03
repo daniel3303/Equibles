@@ -116,43 +116,36 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
 
         var isAmendment = filing.Form.Contains("/A", StringComparison.OrdinalIgnoreCase);
 
-        // Parse non-derivative transactions
+        // Both non-derivative and derivative XML tables share the same element names for the
+        // fields we extract (securityTitle, transactionDate, transactionCoding, transactionAmounts,
+        // postTransactionAmounts, ownershipNature). The SecurityTitle distinguishes the instrument
+        // type (e.g., "Common Stock" vs "Stock Option (Right to Buy)"). For derivatives, Shares
+        // and PricePerShare refer to the derivative instrument, not the underlying security.
         var transactions = new List<InsiderTransaction>();
+
         var nonDerivTable = root.Element("nonDerivativeTable");
         if (nonDerivTable != null) {
             foreach (var txElement in nonDerivTable.Elements("nonDerivativeTransaction")) {
-                var transaction = ParseNonDerivativeTransaction(txElement, owner, companyId, filing, isAmendment);
-                if (transaction != null) {
-                    transactions.Add(transaction);
-                }
+                var transaction = ParseTransaction(txElement, owner, companyId, filing, isAmendment);
+                if (transaction != null) transactions.Add(transaction);
             }
-        }
 
-        // Parse non-derivative holdings (Form 3 reports initial holdings, not transactions)
-        if (nonDerivTable != null) {
             foreach (var holdingElement in nonDerivTable.Elements("nonDerivativeHolding")) {
-                var transaction = ParseNonDerivativeHolding(holdingElement, owner, companyId, filing, isAmendment);
-                if (transaction != null) {
-                    transactions.Add(transaction);
-                }
+                var transaction = ParseHolding(holdingElement, owner, companyId, filing, isAmendment);
+                if (transaction != null) transactions.Add(transaction);
             }
         }
 
-        // Parse derivative transactions (options, warrants, convertible securities)
         var derivTable = root.Element("derivativeTable");
         if (derivTable != null) {
             foreach (var txElement in derivTable.Elements("derivativeTransaction")) {
-                var transaction = ParseNonDerivativeTransaction(txElement, owner, companyId, filing, isAmendment);
-                if (transaction != null) {
-                    transactions.Add(transaction);
-                }
+                var transaction = ParseTransaction(txElement, owner, companyId, filing, isAmendment);
+                if (transaction != null) transactions.Add(transaction);
             }
 
             foreach (var holdingElement in derivTable.Elements("derivativeHolding")) {
-                var transaction = ParseNonDerivativeHolding(holdingElement, owner, companyId, filing, isAmendment);
-                if (transaction != null) {
-                    transactions.Add(transaction);
-                }
+                var transaction = ParseHolding(holdingElement, owner, companyId, filing, isAmendment);
+                if (transaction != null) transactions.Add(transaction);
             }
         }
 
@@ -209,7 +202,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         return true;
     }
 
-    private InsiderTransaction ParseNonDerivativeTransaction(XElement txElement,
+    private InsiderTransaction ParseTransaction(XElement txElement,
         InsiderOwner owner, Guid companyId, FilingData filing, bool isAmendment) {
         var securityTitle = txElement.Element("securityTitle")?.Element("value")?.Value?.Trim();
         var transactionDateStr = txElement.Element("transactionDate")?.Element("value")?.Value;
@@ -239,7 +232,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         };
     }
 
-    private InsiderTransaction ParseNonDerivativeHolding(XElement holdingElement,
+    private InsiderTransaction ParseHolding(XElement holdingElement,
         InsiderOwner owner, Guid companyId, FilingData filing, bool isAmendment) {
         var securityTitle = holdingElement.Element("securityTitle")?.Element("value")?.Value?.Trim();
         var sharesStr = holdingElement.Element("postTransactionAmounts")?.Element("sharesOwnedFollowingTransaction")?.Element("value")?.Value;
