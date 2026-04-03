@@ -295,7 +295,8 @@ public class InsiderTradingFilingProcessorTests {
         return (processor, ownerRepo, txRepo, secClient);
     }
 
-    private static FilingData MakeFiling(string accession = "0001-24-000001", string form = "4") {
+    private static FilingData MakeFiling(string accession = null, string form = "4") {
+        accession ??= $"0001-24-{Guid.NewGuid().ToString("N")[..6]}";
         return new FilingData {
             AccessionNumber = accession,
             Form = form,
@@ -432,7 +433,7 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_NoNonDerivativeTransactions_ReturnsFalse() {
+    public async Task Process_NoTransactions_CachesAndReturnsFalse() {
         var xml = """
             <ownershipDocument>
                 <reportingOwner>
@@ -443,12 +444,13 @@ public class InsiderTradingFilingProcessorTests {
                 </reportingOwner>
             </ownershipDocument>
             """;
-        var (processor, _, _, secClient) = CreateProcessorWithDeps();
+        var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(xml);
 
         var result = await processor.Process(MakeFiling(), MakeCompany());
 
         result.Should().BeFalse();
+        txRepo.GetAll().Should().BeEmpty();
     }
 
     [Fact]

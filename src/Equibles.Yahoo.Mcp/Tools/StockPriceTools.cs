@@ -83,6 +83,7 @@ public class StockPriceTools {
                 .ToList();
 
             if (tickerList.Count == 0) return "No tickers provided.";
+            if (tickerList.Count > 25) return "Maximum 25 tickers per request. Please split into multiple calls.";
 
             var result = new StringBuilder();
             result.AppendLine("Latest prices:");

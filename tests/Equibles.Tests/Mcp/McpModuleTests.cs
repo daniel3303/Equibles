@@ -1,9 +1,14 @@
 using System.Reflection;
+using Equibles.Cboe.Mcp.Tools;
+using Equibles.Cftc.Mcp.Tools;
+using Equibles.Congress.Mcp.Tools;
+using Equibles.Finra.Mcp.Tools;
 using Equibles.Fred.Mcp.Tools;
 using Equibles.Holdings.Mcp.Tools;
 using Equibles.InsiderTrading.Mcp.Tools;
 using Equibles.Mcp;
 using Equibles.Sec.Mcp.Tools;
+using Equibles.Yahoo.Mcp.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Server;
 using NSubstitute;
@@ -116,7 +121,12 @@ public class McpModuleInterfaceTests {
             typeof(AssemblyMcpModule<FredTools>),
             typeof(AssemblyMcpModule<InstitutionalHoldingsTools>),
             typeof(AssemblyMcpModule<InsiderTradingTools>),
-            typeof(AssemblyMcpModule<RagSearchTools>)
+            typeof(AssemblyMcpModule<RagSearchTools>),
+            typeof(AssemblyMcpModule<CboeTools>),
+            typeof(AssemblyMcpModule<CftcTools>),
+            typeof(AssemblyMcpModule<CongressTools>),
+            typeof(AssemblyMcpModule<ShortDataTools>),
+            typeof(AssemblyMcpModule<StockPriceTools>)
         };
 }
 
@@ -235,6 +245,7 @@ public class McpModuleToolDiscoveryTests {
         toolNames.Should().Contain("ListCompanyDocuments");
         toolNames.Should().Contain("SearchDocumentKeyword");
         toolNames.Should().Contain("ReadDocumentLines");
+        toolNames.Should().Contain("GetFailsToDeliver");
     }
 
     // ── Cross-module uniqueness ─────────────────────────────────────────
@@ -245,7 +256,12 @@ public class McpModuleToolDiscoveryTests {
                 typeof(FredTools),
                 typeof(InstitutionalHoldingsTools),
                 typeof(InsiderTradingTools),
-                typeof(RagSearchTools)
+                typeof(RagSearchTools),
+                typeof(CboeTools),
+                typeof(CftcTools),
+                typeof(CongressTools),
+                typeof(ShortDataTools),
+                typeof(StockPriceTools)
             }
             .SelectMany(t => GetToolNamesFromAssembly(t.Assembly))
             .ToList();
@@ -284,8 +300,29 @@ public class McpModuleToolDiscoveryTests {
                 typeof(RagSearchTools),
                 new[] {
                     "SearchDocuments", "SearchCompanyDocuments", "SearchDocument",
-                    "ListCompanyDocuments", "SearchDocumentKeyword", "ReadDocumentLines"
+                    "ListCompanyDocuments", "SearchDocumentKeyword", "ReadDocumentLines",
+                    "GetFailsToDeliver"
                 }
+            },
+            {
+                typeof(CboeTools),
+                new[] { "GetPutCallRatios", "GetVixHistory" }
+            },
+            {
+                typeof(CftcTools),
+                new[] { "GetCftcPositioning", "GetLatestCftcData", "SearchCftcMarkets" }
+            },
+            {
+                typeof(CongressTools),
+                new[] { "GetCongressionalTrades", "GetMemberTrades", "SearchCongressMembers" }
+            },
+            {
+                typeof(ShortDataTools),
+                new[] { "GetShortVolume", "GetShortInterest", "GetShortInterestSnapshot" }
+            },
+            {
+                typeof(StockPriceTools),
+                new[] { "GetStockPrices", "GetLatestPrices" }
             }
         };
 
@@ -294,6 +331,11 @@ public class McpModuleToolDiscoveryTests {
             typeof(FredTools),
             typeof(InstitutionalHoldingsTools),
             typeof(InsiderTradingTools),
-            typeof(RagSearchTools)
+            typeof(RagSearchTools),
+            typeof(CboeTools),
+            typeof(CftcTools),
+            typeof(CongressTools),
+            typeof(ShortDataTools),
+            typeof(StockPriceTools)
         };
 }
