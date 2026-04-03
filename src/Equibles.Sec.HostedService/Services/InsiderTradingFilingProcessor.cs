@@ -150,11 +150,11 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         }
 
         if (transactions.Count == 0) {
-            _logger.LogDebug("No transactions found for {Ticker} - {AccessionNumber}",
+            // Form 3 with noSecuritiesOwned — save a 0-shares record so the accession number
+            // dedup prevents re-fetching this filing on every scraper cycle.
+            _logger.LogDebug("No transactions found for {Ticker} - {AccessionNumber}, saving 0-shares holding",
                 companyTicker, filing.AccessionNumber);
 
-            // Save a marker record so the accession number dedup prevents re-fetching this filing
-            // on every cycle. This is common for Form 3 initial statements with noSecuritiesOwned.
             transactionRepository.Add(new InsiderTransaction {
                 InsiderOwnerId = owner.Id,
                 CommonStockId = companyId,
@@ -169,63 +169,28 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
             return true;
         }
 
-        // Deduplicate within the batch (same composite key can appear in a single filing)
-        var seen = new HashSet<(Guid, Guid, DateOnly, TransactionCode, string)>();
+        // Deduplicate within the batch — a single filing can have multiple holdings with the
+        // same (stock, owner, date, code, title, accession) e.g. direct vs indirect ownership.
+        var seen = new HashSet<(Guid, Guid, DateOnly, TransactionCode, string, string)>();
         var uniqueTransactions = new List<InsiderTransaction>();
         foreach (var tx in transactions) {
-            var key = (tx.CommonStockId, tx.InsiderOwnerId, tx.TransactionDate, tx.TransactionCode, tx.SecurityTitle);
+            var key = (tx.CommonStockId, tx.InsiderOwnerId, tx.TransactionDate,
+                tx.TransactionCode, tx.SecurityTitle, tx.AccessionNumber);
             if (seen.Add(key)) {
                 uniqueTransactions.Add(tx);
             }
         }
 
-        // Upsert: insert new transactions, update existing ones for amendments
-        var inserted = 0;
-        var updated = 0;
+        // The unique index (which includes AccessionNumber) allows the same transaction
+        // data from different filings to coexist.
         foreach (var tx in uniqueTransactions) {
-            var existingTx = await transactionRepository.GetByUniqueKey(
-                tx.CommonStockId, tx.InsiderOwnerId, tx.TransactionDate, tx.TransactionCode, tx.SecurityTitle);
-
-            if (existingTx == null) {
-                transactionRepository.Add(tx);
-                inserted++;
-            } else if (isAmendment) {
-                existingTx.Shares = tx.Shares;
-                existingTx.PricePerShare = tx.PricePerShare;
-                existingTx.AcquiredDisposed = tx.AcquiredDisposed;
-                existingTx.SharesOwnedAfter = tx.SharesOwnedAfter;
-                existingTx.OwnershipNature = tx.OwnershipNature;
-                existingTx.FilingDate = tx.FilingDate;
-                existingTx.AccessionNumber = tx.AccessionNumber;
-                existingTx.IsAmendment = true;
-                updated++;
-            }
-        }
-
-        if (inserted == 0 && updated == 0) {
-            _logger.LogDebug("All transactions already exist for {Ticker} - {AccessionNumber}",
-                companyTicker, filing.AccessionNumber);
-
-            // Save a marker record so the accession number dedup prevents re-fetching.
-            // All transactions matched by unique key from a different filing's accession number.
-            transactionRepository.Add(new InsiderTransaction {
-                InsiderOwnerId = owner.Id,
-                CommonStockId = companyId,
-                FilingDate = filing.FilingDate,
-                TransactionDate = filing.ReportDate,
-                TransactionCode = TransactionCode.Other,
-                AccessionNumber = filing.AccessionNumber,
-                SecurityTitle = "Duplicate Filing"
-            });
-            await transactionRepository.SaveChanges();
-
-            return true;
+            transactionRepository.Add(tx);
         }
 
         await transactionRepository.SaveChanges();
 
-        _logger.LogInformation("Imported {Inserted} and updated {Updated} insider transactions for {Ticker} from {Form} - {AccessionNumber}",
-            inserted, updated, companyTicker, filing.Form, filing.AccessionNumber);
+        _logger.LogInformation("Imported {Count} insider transactions for {Ticker} from {Form} - {AccessionNumber}",
+            uniqueTransactions.Count, companyTicker, filing.Form, filing.AccessionNumber);
 
         return true;
     }

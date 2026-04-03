@@ -29,13 +29,4 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction> {
         return GetAll().Where(t => t.AccessionNumber == accessionNumber);
     }
 
-    public Task<InsiderTransaction> GetByUniqueKey(Guid commonStockId, Guid insiderOwnerId,
-        DateOnly transactionDate, TransactionCode transactionCode, string securityTitle) {
-        return GetAll().FirstOrDefaultAsync(t =>
-            t.CommonStockId == commonStockId &&
-            t.InsiderOwnerId == insiderOwnerId &&
-            t.TransactionDate == transactionDate &&
-            t.TransactionCode == transactionCode &&
-            t.SecurityTitle == securityTitle);
-    }
 }

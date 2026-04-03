@@ -433,7 +433,7 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_NoTransactions_CachesAndReturnsFalse() {
+    public async Task Process_NoTransactions_SavesMarkerAndReturnsTrue() {
         var xml = """
             <ownershipDocument>
                 <reportingOwner>
@@ -449,8 +449,10 @@ public class InsiderTradingFilingProcessorTests {
 
         var result = await processor.Process(MakeFiling(), MakeCompany());
 
-        result.Should().BeFalse();
-        txRepo.GetAll().Should().BeEmpty();
+        result.Should().BeTrue();
+        var markers = txRepo.GetAll().ToList();
+        markers.Should().HaveCount(1);
+        markers[0].SecurityTitle.Should().Be("No Securities Owned");
     }
 
     [Fact]
