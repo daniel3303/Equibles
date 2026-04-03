@@ -97,6 +97,9 @@ services:
       context: .
       dockerfile: src/Equibles.Worker.Host/Dockerfile
     profiles: ["embedding"]
+    env_file:
+      - path: .env
+        required: false
     environment:
       ConnectionStrings__DefaultConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
       Sec__ContactEmail: ${SEC_CONTACT_EMAIL}
