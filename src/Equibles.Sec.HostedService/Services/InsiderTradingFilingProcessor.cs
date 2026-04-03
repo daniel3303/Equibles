@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Equibles.Errors.BusinessLogic;
@@ -24,10 +23,6 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
     private readonly ILogger<InsiderTradingFilingProcessor> _logger;
     private readonly ErrorReporter _errorReporter;
 
-    // Tracks accession numbers that were fetched but had no non-derivative data.
-    // Prevents infinite re-fetching of derivative-only filings across scraper cycles.
-    private readonly ConcurrentDictionary<string, byte> _emptyFilings = new();
-
     public InsiderTradingFilingProcessor(IServiceScopeFactory scopeFactory,
         ILogger<InsiderTradingFilingProcessor> logger,
         ErrorReporter errorReporter) {
@@ -49,9 +44,6 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         var secEdgarClient = scope.ServiceProvider.GetRequiredService<ISecEdgarClient>();
         var ownerRepository = scope.ServiceProvider.GetRequiredService<InsiderOwnerRepository>();
         var transactionRepository = scope.ServiceProvider.GetRequiredService<InsiderTransactionRepository>();
-
-        // Check in-memory cache first (derivative-only filings that had no non-derivative data)
-        if (_emptyFilings.ContainsKey(filing.AccessionNumber)) return false;
 
         // Check if already imported by accession number
         var existing = await transactionRepository.GetByAccessionNumber(filing.AccessionNumber).AnyAsync();
@@ -146,10 +138,27 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
             }
         }
 
+        // Parse derivative transactions (options, warrants, convertible securities)
+        var derivTable = root.Element("derivativeTable");
+        if (derivTable != null) {
+            foreach (var txElement in derivTable.Elements("derivativeTransaction")) {
+                var transaction = ParseNonDerivativeTransaction(txElement, owner, companyId, filing, isAmendment);
+                if (transaction != null) {
+                    transactions.Add(transaction);
+                }
+            }
+
+            foreach (var holdingElement in derivTable.Elements("derivativeHolding")) {
+                var transaction = ParseNonDerivativeHolding(holdingElement, owner, companyId, filing, isAmendment);
+                if (transaction != null) {
+                    transactions.Add(transaction);
+                }
+            }
+        }
+
         if (transactions.Count == 0) {
-            _logger.LogDebug("No non-derivative transactions found for {Ticker} - {AccessionNumber}",
+            _logger.LogDebug("No transactions found for {Ticker} - {AccessionNumber}",
                 companyTicker, filing.AccessionNumber);
-            _emptyFilings.TryAdd(filing.AccessionNumber, 0);
             return false;
         }
 
