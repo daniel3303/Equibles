@@ -10,5 +10,7 @@ public class HoldingsModuleConfiguration : Equibles.Data.IModuleConfiguration {
             .HasIndex(h => new { h.CommonStockId, h.InstitutionalHolderId, h.ReportDate, h.ShareType, h.OptionType })
             .IsUnique()
             .AreNullsDistinct(false);
+
+        builder.Entity<ProcessedDataSet>();
     }
 }

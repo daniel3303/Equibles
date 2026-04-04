@@ -3,7 +3,9 @@ using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Holdings.HostedService.Services;
+using Equibles.Holdings.Repositories;
 using Equibles.Worker;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
@@ -48,6 +50,8 @@ public class HoldingsScraperWorker : BaseScraperWorker {
         var minReportDate = DateOnly.FromDateTime(startDate);
         var fileNames = HoldingsDataSetClient.GetDataSetFileNames(startDate);
 
+        await BackfillProcessedDataSets(fileNames, stoppingToken);
+
         Logger.LogInformation(
             "Processing {Count} quarterly data sets from {Start:yyyy-MM-dd}",
             fileNames.Count, startDate);
@@ -56,6 +60,11 @@ public class HoldingsScraperWorker : BaseScraperWorker {
 
         foreach (var fileName in fileNames) {
             stoppingToken.ThrowIfCancellationRequested();
+
+            if (await IsAlreadyProcessed(fileName)) {
+                Logger.LogDebug("Skipping already-processed data set: {FileName}", fileName);
+                continue;
+            }
 
             if (!await TryProcessDataSet(fileName, minReportDate, stoppingToken)) {
                 failedDataSets.Add(fileName);
@@ -85,6 +94,45 @@ public class HoldingsScraperWorker : BaseScraperWorker {
 
         // Recalculate holdings that were imported without a Yahoo price available
         await RecalculatePendingValues(stoppingToken);
+    }
+
+    /// <summary>
+    /// On first run (empty ProcessedDataSet table), seeds all file names except the latest
+    /// so only the most recent period gets downloaded and checked.
+    /// </summary>
+    private async Task BackfillProcessedDataSets(List<string> fileNames, CancellationToken cancellationToken) {
+        using var scope = ScopeFactory.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
+
+        if (await repo.GetAll().AnyAsync(cancellationToken)) return;
+        if (fileNames.Count <= 1) return;
+
+        // Seed all except the last file name (most recent period)
+        var toSeed = fileNames.Take(fileNames.Count - 1);
+        foreach (var fileName in toSeed) {
+            repo.Add(new Holdings.Data.Models.ProcessedDataSet { FileName = fileName });
+        }
+
+        await repo.SaveChanges();
+        Logger.LogInformation(
+            "Backfilled {Count} historical data sets as already processed",
+            fileNames.Count - 1);
+    }
+
+    private async Task<bool> IsAlreadyProcessed(string fileName) {
+        using var scope = ScopeFactory.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
+        return await repo.Exists(fileName);
+    }
+
+    private async Task MarkAsProcessed(string fileName, int submissionCount) {
+        using var scope = ScopeFactory.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
+        repo.Add(new Holdings.Data.Models.ProcessedDataSet {
+            FileName = fileName,
+            SubmissionCount = submissionCount,
+        });
+        await repo.SaveChanges();
     }
 
     private async Task RecalculatePendingValues(CancellationToken cancellationToken) {
@@ -121,7 +169,21 @@ public class HoldingsScraperWorker : BaseScraperWorker {
                 var importService = scope.ServiceProvider.GetRequiredService<HoldingsImportService>();
 
                 using var archive = await dataSetClient.DownloadDataSet(fileName, cancellationToken);
-                await importService.ImportDataSet(archive, minReportDate, cancellationToken);
+                var result = await importService.ImportDataSet(archive, minReportDate, cancellationToken);
+
+                if (result.IsComplete) {
+                    try {
+                        await MarkAsProcessed(fileName, result.SubmissionCount);
+                    } catch (Exception ex) {
+                        Logger.LogError(ex,
+                            "Failed to mark data set {FileName} as processed (import was successful)",
+                            fileName);
+                    }
+                } else {
+                    Logger.LogWarning(
+                        "Data set {FileName} import incomplete (structural issue), will retry next cycle",
+                        fileName);
+                }
 
                 GarbageCollectorUtil.ForceAggressiveCollection();
 

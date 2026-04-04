@@ -38,30 +38,38 @@ public class HoldingsImportService {
         _stockPriceProvider = stockPriceProvider;
     }
 
-    public async Task ImportDataSet(ZipArchive archive, DateOnly minReportDate, CancellationToken cancellationToken) {
+    public async Task<ImportResult> ImportDataSet(ZipArchive archive, DateOnly minReportDate, CancellationToken cancellationToken) {
         var context = new ImportContext {
             TsvParser = new TsvParser(),
             Archive = archive,
             MinReportDate = minReportDate,
         };
 
-        if (!await ParseSubmissions(context, cancellationToken)) return;
+        var parseResult = await ParseSubmissions(context, cancellationToken);
+        if (parseResult == null) return new ImportResult(0, IsComplete: false);
+        if (parseResult == false) return new ImportResult(0, IsComplete: true);
         DeduplicateSubmissions(context);
-        if (await IsAlreadyImported(context, cancellationToken)) return;
-        if (!await ParseCoverPages(context, cancellationToken)) return;
-        if (!await BuildCusipMapping(context, cancellationToken)) return;
+        var submissionCount = context.Submissions.Count;
+        if (!await ParseCoverPages(context, cancellationToken)) return new ImportResult(submissionCount, IsComplete: false);
+        if (!await BuildCusipMapping(context, cancellationToken)) return new ImportResult(submissionCount, IsComplete: true);
         await BuildPriceMap(context, cancellationToken);
         await ParseOtherManagers(context, cancellationToken);
         await UpsertInstitutionalHolders(context, cancellationToken);
         await HandleAmendments(context, cancellationToken);
         await StreamAndInsertHoldings(context, cancellationToken);
+        return new ImportResult(submissionCount, IsComplete: true);
     }
 
-    private async Task<bool> ParseSubmissions(ImportContext context, CancellationToken cancellationToken) {
+    /// <summary>
+    /// Returns null if SUBMISSION.tsv is missing (structural failure).
+    /// Returns false if no 13F-HR submissions match filters (legitimate empty).
+    /// Returns true if submissions were parsed successfully.
+    /// </summary>
+    private async Task<bool?> ParseSubmissions(ImportContext context, CancellationToken cancellationToken) {
         var submissionEntry = FindEntry(context.Archive, "SUBMISSION.tsv");
         if (submissionEntry == null) {
             _logger.LogWarning("SUBMISSION.tsv not found in archive");
-            return false;
+            return null;
         }
 
         var submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase);
@@ -116,35 +124,6 @@ public class HoldingsImportService {
         foreach (var accession in superseded) {
             context.Submissions.Remove(accession);
         }
-    }
-
-    private async Task<bool> IsAlreadyImported(ImportContext context, CancellationToken cancellationToken) {
-        using var scope = _scopeFactory.CreateScope();
-        var holdingRepo = scope.ServiceProvider.GetRequiredService<InstitutionalHoldingRepository>();
-
-        var allAccessions = context.Submissions.Keys.ToList();
-        var sampleSize = Math.Min(20, allAccessions.Count);
-        var random = new Random();
-        var sampleAccessions = allAccessions.OrderBy(_ => random.Next()).Take(sampleSize).ToList();
-
-        var matchedCount = await holdingRepo.GetAll()
-            .Where(h => sampleAccessions.Contains(h.AccessionNumber))
-            .Select(h => h.AccessionNumber)
-            .Distinct()
-            .CountAsync(cancellationToken);
-
-        var threshold = (int)Math.Ceiling(sampleSize * 0.8);
-        if (matchedCount >= threshold) {
-            _logger.LogInformation(
-                "Data set appears already imported ({Matched}/{Sample} accessions found, threshold {Threshold}), skipping",
-                matchedCount, sampleSize, threshold);
-            return true;
-        }
-
-        _logger.LogInformation(
-            "Already-imported check: {Matched}/{Sample} accessions found (threshold {Threshold}), proceeding with import",
-            matchedCount, sampleSize, threshold);
-        return false;
     }
 
     private async Task<bool> ParseCoverPages(ImportContext context, CancellationToken cancellationToken) {
