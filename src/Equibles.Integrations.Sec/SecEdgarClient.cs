@@ -104,6 +104,14 @@ public class SecEdgarClient : ISecEdgarClient {
             var apiResponse = JsonConvert.DeserializeObject<SecApiResponse>(content);
 
             var filings = MapToFilingData(apiResponse?.Filings?.Recent, cik);
+
+            // Fetch older filings from archive files (SEC paginates older filings into separate JSON files)
+            var archiveFilings = await GetArchiveFilings(apiResponse?.Filings, cik, fromDate, toDate);
+            filings.AddRange(archiveFilings);
+
+            // Deduplicate in case recent and archive ranges overlap
+            filings = filings.DistinctBy(f => f.AccessionNumber).ToList();
+
             var filteredFilings = FilterFilings(filings, documentType, fromDate, toDate);
 
             _logger.LogInformation("Successfully retrieved {Count} filings for CIK: {Cik}", filteredFilings.Count,
@@ -113,6 +121,43 @@ public class SecEdgarClient : ISecEdgarClient {
             _logger.LogError(ex, "Error retrieving filings for CIK: {Cik}", cik);
             throw;
         }
+    }
+
+    private async Task<List<FilingData>> GetArchiveFilings(FilingsContainer filings, string cik, DateOnly? fromDate, DateOnly? toDate) {
+        if (filings?.Files == null || filings.Files.Count == 0)
+            return [];
+
+        var result = new List<FilingData>();
+
+        foreach (var archiveFile in filings.Files) {
+            // Skip archive files whose date range is entirely outside the requested window
+            if (fromDate.HasValue
+                && DateOnly.TryParse(archiveFile.FilingTo, out var archiveTo)
+                && archiveTo < fromDate.Value) {
+                _logger.LogDebug("Skipping archive {File} — all filings before {FromDate}", archiveFile.Name, fromDate);
+                continue;
+            }
+
+            if (toDate.HasValue
+                && DateOnly.TryParse(archiveFile.FilingFrom, out var archiveFrom)
+                && archiveFrom > toDate.Value) {
+                _logger.LogDebug("Skipping archive {File} — all filings after {ToDate}", archiveFile.Name, toDate);
+                continue;
+            }
+
+            var archiveUrl = BuildUrl($"/submissions/{archiveFile.Name}");
+            _logger.LogInformation("Fetching archive filings from {File} ({Count} filings)",
+                archiveFile.Name, archiveFile.FilingCount);
+
+            using var response = await SendWithRetryAsync(archiveUrl);
+            response.EnsureSuccessStatusCode();
+
+            var content = await response.Content.ReadAsStringAsync();
+            var archiveFilings = JsonConvert.DeserializeObject<RecentFilings>(content);
+            result.AddRange(MapToFilingData(archiveFilings, cik));
+        }
+
+        return result;
     }
 
     public async Task<string> GetDocumentContent(FilingData filing) {
