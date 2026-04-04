@@ -1,4 +1,3 @@
-using Equibles.Core;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Sec.HostedService.Services;
@@ -20,21 +19,19 @@ public class DocumentProcessorWorker : BaseScraperWorker {
     protected override async Task DoWork(CancellationToken stoppingToken) {
         Logger.LogInformation("Phase 1: Chunking all pending documents");
         while (!stoppingToken.IsCancellationRequested) {
-            using var chunkScope = ScopeFactory.CreateScope();
+            await using var chunkScope = ScopeFactory.CreateAsyncScope();
             var documentManager = chunkScope.ServiceProvider.GetRequiredService<DocumentManager>();
             var workDone = await documentManager.ChunkDocumentBatch(stoppingToken);
             if (!workDone) break;
-            GarbageCollectorUtil.ForceAggressiveCollection();
         }
         Logger.LogInformation("Phase 1 complete: All documents chunked");
 
         Logger.LogInformation("Phase 2: Generating all pending embeddings");
         while (!stoppingToken.IsCancellationRequested) {
-            using var embedScope = ScopeFactory.CreateScope();
+            await using var embedScope = ScopeFactory.CreateAsyncScope();
             var documentManager = embedScope.ServiceProvider.GetRequiredService<DocumentManager>();
             var workDone = await documentManager.GenerateEmbeddingBatch(stoppingToken);
             if (!workDone) break;
-            GarbageCollectorUtil.ForceAggressiveCollection();
         }
         Logger.LogInformation("Phase 2 complete: All embeddings generated");
     }

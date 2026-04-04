@@ -17,7 +17,7 @@ public class CongressionalTradeScraperWorker : BaseScraperWorker {
     ) : base(logger, scopeFactory, errorReporter) { }
 
     protected override async Task DoWork(CancellationToken stoppingToken) {
-        using var scope = ScopeFactory.CreateScope();
+        await using var scope = ScopeFactory.CreateAsyncScope();
         var syncService = scope.ServiceProvider.GetRequiredService<CongressionalTradeSyncService>();
         await syncService.SyncAll(stoppingToken);
         Logger.LogInformation("Congressional trade sync completed");

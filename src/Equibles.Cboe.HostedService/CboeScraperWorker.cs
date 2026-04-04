@@ -22,7 +22,7 @@ public class CboeScraperWorker : BaseScraperWorker {
     }
 
     protected override async Task DoWork(CancellationToken stoppingToken) {
-        using var scope = ScopeFactory.CreateScope();
+        await using var scope = ScopeFactory.CreateAsyncScope();
         var importService = scope.ServiceProvider.GetRequiredService<CboeImportService>();
         await importService.Import(stoppingToken);
     }

@@ -1,4 +1,3 @@
-using Equibles.Core;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
@@ -101,7 +100,7 @@ public class HoldingsScraperWorker : BaseScraperWorker {
     /// so only the most recent period gets downloaded and checked.
     /// </summary>
     private async Task BackfillProcessedDataSets(List<string> fileNames, CancellationToken cancellationToken) {
-        using var scope = ScopeFactory.CreateScope();
+        await using var scope = ScopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
 
         if (await repo.GetAll().AnyAsync(cancellationToken)) return;
@@ -120,13 +119,13 @@ public class HoldingsScraperWorker : BaseScraperWorker {
     }
 
     private async Task<bool> IsAlreadyProcessed(string fileName) {
-        using var scope = ScopeFactory.CreateScope();
+        await using var scope = ScopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
         return await repo.Exists(fileName);
     }
 
     private async Task MarkAsProcessed(string fileName, int submissionCount) {
-        using var scope = ScopeFactory.CreateScope();
+        await using var scope = ScopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
         repo.Add(new Holdings.Data.Models.ProcessedDataSet {
             FileName = fileName,
@@ -137,7 +136,7 @@ public class HoldingsScraperWorker : BaseScraperWorker {
 
     private async Task RecalculatePendingValues(CancellationToken cancellationToken) {
         try {
-            using var scope = ScopeFactory.CreateScope();
+            await using var scope = ScopeFactory.CreateAsyncScope();
             var recalculator = scope.ServiceProvider.GetRequiredService<HoldingsValueRecalculator>();
             await recalculator.Recalculate(cancellationToken);
         } catch (OperationCanceledException) {
@@ -164,7 +163,7 @@ public class HoldingsScraperWorker : BaseScraperWorker {
 
                 Logger.LogInformation("Processing data set: {FileName}", fileName);
 
-                using var scope = ScopeFactory.CreateScope();
+                await using var scope = ScopeFactory.CreateAsyncScope();
                 var dataSetClient = scope.ServiceProvider.GetRequiredService<HoldingsDataSetClient>();
                 var importService = scope.ServiceProvider.GetRequiredService<HoldingsImportService>();
 
@@ -184,8 +183,6 @@ public class HoldingsScraperWorker : BaseScraperWorker {
                         "Data set {FileName} import incomplete (structural issue), will retry next cycle",
                         fileName);
                 }
-
-                GarbageCollectorUtil.ForceAggressiveCollection();
 
                 await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
                 return true;

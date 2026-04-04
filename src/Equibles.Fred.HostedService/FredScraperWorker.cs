@@ -33,7 +33,7 @@ public class FredScraperWorker : BaseScraperWorker {
     }
 
     protected override async Task DoWork(CancellationToken stoppingToken) {
-        using var scope = ScopeFactory.CreateScope();
+        await using var scope = ScopeFactory.CreateAsyncScope();
         var importService = scope.ServiceProvider.GetRequiredService<FredImportService>();
         await importService.Import(stoppingToken);
     }

@@ -22,7 +22,7 @@ public class CftcScraperWorker : BaseScraperWorker {
     }
 
     protected override async Task DoWork(CancellationToken stoppingToken) {
-        using var scope = ScopeFactory.CreateScope();
+        await using var scope = ScopeFactory.CreateAsyncScope();
         var importService = scope.ServiceProvider.GetRequiredService<CftcImportService>();
         await importService.Import(stoppingToken);
     }

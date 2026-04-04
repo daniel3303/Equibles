@@ -24,7 +24,7 @@ public class YahooPriceScraperWorker : BaseScraperWorker {
     }
 
     protected override async Task DoWork(CancellationToken stoppingToken) {
-        using var scope = ScopeFactory.CreateScope();
+        await using var scope = ScopeFactory.CreateAsyncScope();
         var importService = scope.ServiceProvider.GetRequiredService<YahooPriceImportService>();
         await importService.Import(stoppingToken);
     }

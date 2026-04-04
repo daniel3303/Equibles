@@ -1,4 +1,3 @@
-using Equibles.Core;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,8 +40,6 @@ public abstract class BaseScraperWorker : BackgroundService {
                 Logger.LogCritical(ex, "Critical error in {Worker}", WorkerName);
                 await ErrorReporter.Report(ErrorSource, $"{WorkerName}.DoWork", ex.Message, ex.StackTrace);
             }
-
-            GarbageCollectorUtil.ForceAggressiveCollection();
 
             Logger.LogInformation("{Worker} cycle complete. Sleeping for {Interval}",
                 WorkerName, SleepInterval);

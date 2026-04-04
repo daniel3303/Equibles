@@ -58,7 +58,7 @@ public class DocumentScraper : IDocumentScraper {
 
             // Step 1: Sync companies from SEC API to database
             await _companySyncService.SyncCompaniesFromSecApi();
-            GarbageCollectorUtil.ForceAggressiveCollection();
+
 
             // Step 2: Process SEC documents for each company
             var companiesUntracked = await GetAllCompaniesWithNoTracking();
@@ -69,7 +69,7 @@ public class DocumentScraper : IDocumentScraper {
                     break;
 
                 await ProcessCompanyDocumentsWithScope(companyUntracked, result);
-                GarbageCollectorUtil.ForceAggressiveCollection();
+    
                 result.CompaniesProcessed++;
             }
 
@@ -98,7 +98,7 @@ public class DocumentScraper : IDocumentScraper {
                         result.DocumentsSkipped++;
                     }
 
-                    GarbageCollectorUtil.ForceAggressiveCollection();
+        
                 }
             }
 
@@ -119,7 +119,7 @@ public class DocumentScraper : IDocumentScraper {
     }
 
     private async Task<List<CommonStock>> GetAllCompaniesWithNoTracking() {
-        using var scope = _serviceScopeFactory.CreateScope();
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var commonStockRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
 
         if (_workerOptions.TickersToSync?.Count > 0) {
@@ -131,7 +131,7 @@ public class DocumentScraper : IDocumentScraper {
 
     private async Task ProcessCompanyDocumentsWithScope(CommonStock companyUntracked, ScrapingResult result) {
         var startTime = DateTime.UtcNow;
-        using var scope = _serviceScopeFactory.CreateScope();
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var companyRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var secEdgarClient = scope.ServiceProvider.GetRequiredService<ISecEdgarClient>();
         var persistenceService = scope.ServiceProvider.GetRequiredService<IDocumentPersistenceService>();

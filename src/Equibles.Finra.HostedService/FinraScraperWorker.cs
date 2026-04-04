@@ -1,4 +1,3 @@
-using Equibles.Core;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Finra.HostedService.Configuration;
@@ -35,15 +34,13 @@ public class FinraScraperWorker : BaseScraperWorker {
 
     protected override async Task DoWork(CancellationToken stoppingToken) {
         Logger.LogInformation("Starting daily short volume import");
-        using (var scope = ScopeFactory.CreateScope()) {
+        await using (var scope = ScopeFactory.CreateAsyncScope()) {
             var shortVolumeService = scope.ServiceProvider.GetRequiredService<ShortVolumeImportService>();
             await shortVolumeService.Import(stoppingToken);
         }
 
-        GarbageCollectorUtil.ForceAggressiveCollection();
-
         Logger.LogInformation("Starting short interest import");
-        using (var scope = ScopeFactory.CreateScope()) {
+        await using (var scope = ScopeFactory.CreateAsyncScope()) {
             var shortInterestService = scope.ServiceProvider.GetRequiredService<ShortInterestImportService>();
             await shortInterestService.Import(stoppingToken);
         }

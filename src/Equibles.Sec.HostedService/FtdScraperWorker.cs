@@ -35,7 +35,7 @@ public class FtdScraperWorker : BaseScraperWorker {
     }
 
     protected override async Task DoWork(CancellationToken stoppingToken) {
-        using var scope = ScopeFactory.CreateScope();
+        await using var scope = ScopeFactory.CreateAsyncScope();
         var ftdService = scope.ServiceProvider.GetRequiredService<FtdImportService>();
         await ftdService.Import(stoppingToken);
     }
