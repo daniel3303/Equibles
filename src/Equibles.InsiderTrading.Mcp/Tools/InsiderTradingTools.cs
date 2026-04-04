@@ -85,10 +85,16 @@ public class InsiderTradingTools {
             var stock = await _commonStockRepository.GetByTicker(ticker);
             if (stock == null) return $"Stock '{ticker}' not found.";
 
-            var latestTransactions = await _transactionRepository.GetByStock(stock)
+            var byStock = _transactionRepository.GetByStock(stock);
+
+            var latestTransactions = await byStock
+                .Where(t => t.Id == byStock
+                    .Where(t2 => t2.InsiderOwnerId == t.InsiderOwnerId)
+                    .OrderByDescending(t2 => t2.TransactionDate)
+                    .ThenByDescending(t2 => t2.FilingDate)
+                    .Select(t2 => t2.Id)
+                    .First())
                 .Include(t => t.InsiderOwner)
-                .GroupBy(t => t.InsiderOwnerId)
-                .Select(g => g.OrderByDescending(t => t.TransactionDate).ThenByDescending(t => t.FilingDate).First())
                 .OrderByDescending(t => t.SharesOwnedAfter)
                 .Take(30)
                 .ToListAsync();
