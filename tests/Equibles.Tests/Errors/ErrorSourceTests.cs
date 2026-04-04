@@ -16,6 +16,7 @@ public class ErrorSourceTests
     [InlineData(nameof(ErrorSource.YahooPriceScraper), "YahooPriceScraper")]
     [InlineData(nameof(ErrorSource.CftcScraper), "CftcScraper")]
     [InlineData(nameof(ErrorSource.CboeScraper), "CboeScraper")]
+    [InlineData(nameof(ErrorSource.TranscriptScraper), "TranscriptScraper")]
     [InlineData(nameof(ErrorSource.Other), "Other")]
     public void StaticInstance_HasCorrectValue(string fieldName, string expectedValue)
     {
@@ -26,7 +27,7 @@ public class ErrorSourceTests
     [Fact]
     public void GetAll_ReturnsAllItems()
     {
-        ErrorSource.GetAll().Should().HaveCount(12);
+        ErrorSource.GetAll().Should().HaveCount(13);
     }
 
     [Fact]
@@ -45,6 +46,7 @@ public class ErrorSourceTests
         all.Should().Contain(ErrorSource.YahooPriceScraper);
         all.Should().Contain(ErrorSource.CftcScraper);
         all.Should().Contain(ErrorSource.CboeScraper);
+        all.Should().Contain(ErrorSource.TranscriptScraper);
         all.Should().Contain(ErrorSource.Other);
     }
 
