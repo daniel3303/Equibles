@@ -638,8 +638,8 @@ public class ShortInterestImportServiceTests : IDisposable {
         await SeedInterest(apple, existingDate);
 
         var newDate = new DateOnly(2026, 3, 15);
-        _finraClient.GetShortInterestSettlementDates()
-            .Returns(new List<DateOnly> { existingDate, newDate });
+        _finraClient.GetShortInterestSettlementDatesAfter(existingDate)
+            .Returns(new List<DateOnly> { newDate });
 
         _finraClient.GetShortInterest(newDate)
             .Returns(CreateInterestRecords(("AAPL", 12_000_000, 10_000_000, 2_000_000, null, null)));
@@ -662,8 +662,8 @@ public class ShortInterestImportServiceTests : IDisposable {
         var existingDate = new DateOnly(2026, 3, 15);
         await SeedInterest(apple, existingDate);
 
-        _finraClient.GetShortInterestSettlementDates()
-            .Returns(new List<DateOnly> { existingDate });
+        _finraClient.GetShortInterestSettlementDatesAfter(existingDate)
+            .Returns(new List<DateOnly>());
 
         await _service.Import(CancellationToken.None);
 
