@@ -360,14 +360,6 @@ public class InsiderTradingToolsTests : IDisposable {
     // ══════════════════════════════════════════════════════════════════
     // GetInsiderOwnership
     // ══════════════════════════════════════════════════════════════════
-    //
-    // Note: GetInsiderOwnership uses GroupBy + Select(g => g.OrderBy().First())
-    // which is not supported by the EF Core in-memory provider. The
-    // McpToolExecutor catches the resulting exception and returns a
-    // generic error message. We verify the stock-not-found path (which
-    // runs before the GroupBy query) and the error-handling path here.
-    //
-    // For full integration coverage, use a PostgreSQL test database.
 
     [Fact]
     public async Task GetInsiderOwnership_StockNotFound_ReturnsNotFoundMessage() {
@@ -377,7 +369,7 @@ public class InsiderTradingToolsTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetInsiderOwnership_GroupByNotSupportedInMemory_ReturnsErrorMessage() {
+    public async Task GetInsiderOwnership_ReturnsOwnershipSummary() {
         var stock = CreateStock("AAPL", "Apple Inc.");
         var owner = CreateOwner(name: "Tim Cook", isDirector: false, isOfficer: true, officerTitle: "CEO");
         await SeedStock(stock);
@@ -388,24 +380,19 @@ public class InsiderTradingToolsTests : IDisposable {
 
         var result = await _sut.GetInsiderOwnership("AAPL");
 
-        result.Should().Contain("An error occurred while executing GetInsiderOwnership");
+        result.Should().Contain("Insider ownership summary for Apple Inc. (AAPL):");
+        result.Should().Contain("Tim Cook");
+        result.Should().Contain("CEO");
     }
 
     [Fact]
-    public async Task GetInsiderOwnership_ErrorIsReportedToErrorManager() {
+    public async Task GetInsiderOwnership_NoData_ReturnsNoDataMessage() {
         var stock = CreateStock("AAPL", "Apple Inc.");
-        var owner = CreateOwner(name: "Test Insider");
         await SeedStock(stock);
-        await SeedOwner(owner);
 
-        var tx = CreateTransaction(stock, owner);
-        await SeedTransaction(tx);
+        var result = await _sut.GetInsiderOwnership("AAPL");
 
-        await _sut.GetInsiderOwnership("AAPL");
-
-        var errors = _dbContext.Set<Equibles.Errors.Data.Models.Error>().ToList();
-        errors.Should().ContainSingle();
-        errors[0].Context.Should().Be("GetInsiderOwnership");
+        result.Should().Contain("No insider ownership data found for AAPL.");
     }
 
     // ══════════════════════════════════════════════════════════════════
