@@ -23,4 +23,14 @@ public class ShortInterestRepository : BaseRepository<ShortInterest> {
     public IQueryable<ShortInterest> GetBySettlementDate(DateOnly settlementDate) {
         return GetAll().Where(s => s.SettlementDate == settlementDate);
     }
+
+    public IQueryable<DateOnly> GetAllSettlementDates() {
+        return GetAll().Select(s => s.SettlementDate).Distinct();
+    }
+
+    public IQueryable<Guid> GetStockIdsBySettlementDate(DateOnly settlementDate) {
+        return GetAll()
+            .Where(s => s.SettlementDate == settlementDate)
+            .Select(s => s.CommonStockId);
+    }
 }

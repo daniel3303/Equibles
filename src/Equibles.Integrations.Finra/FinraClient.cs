@@ -20,6 +20,13 @@ public class FinraClient : IFinraClient {
     private const int MaxPageSize = 5000;
     private const int MaxRetries = 3;
 
+    private static readonly string[] ShortInterestFields = [
+        "settlementDate", "symbolCode", "issueName",
+        "currentShortPositionQuantity", "previousShortPositionQuantity",
+        "changePreviousNumber", "averageDailyVolumeQuantity",
+        "daysToCoverQuantity", "changePercent", "marketClassCode"
+    ];
+
     private static readonly IRateLimiter RateLimiter = new Common.RateLimiter.RateLimiter(
         maxRequests: 20, timeWindow: TimeSpan.FromSeconds(1));
 
@@ -84,37 +91,46 @@ public class FinraClient : IFinraClient {
         return results;
     }
 
-    public async Task<List<ShortInterestRecord>> GetShortInterest(DateOnly settlementDate) {
+    public Task<List<ShortInterestRecord>> GetShortInterest(DateOnly settlementDate) {
+        return GetShortInterestCore(settlementDate, null);
+    }
+
+    public Task<List<ShortInterestRecord>> GetShortInterest(DateOnly settlementDate, IReadOnlyList<string> symbols) {
+        return GetShortInterestCore(settlementDate, symbols);
+    }
+
+    private async Task<List<ShortInterestRecord>> GetShortInterestCore(DateOnly settlementDate, IReadOnlyList<string> symbols) {
         var dateStr = settlementDate.ToString("yyyy-MM-dd");
-        _logger.LogDebug("Fetching short interest for settlement date {Date}", dateStr);
+        _logger.LogDebug("Fetching short interest for settlement date {Date}{Filter}",
+            dateStr, symbols != null ? $" (filtered to {symbols.Count} symbols)" : "");
 
         var results = new List<ShortInterestRecord>();
         var offset = 0;
 
         while (true) {
-            var query = new {
-                fields = new[] {
-                    "settlementDate",
-                    "symbolCode",
-                    "issueName",
-                    "currentShortPositionQuantity",
-                    "previousShortPositionQuantity",
-                    "changePreviousNumber",
-                    "averageDailyVolumeQuantity",
-                    "daysToCoverQuantity",
-                    "changePercent",
-                    "marketClassCode"
-                },
-                dateRangeFilters = new[] {
-                    new {
-                        fieldName = "settlementDate",
-                        startDate = dateStr,
-                        endDate = dateStr
-                    }
-                },
-                limit = MaxPageSize,
-                offset
-            };
+            object query;
+            if (symbols != null) {
+                query = new {
+                    fields = ShortInterestFields,
+                    dateRangeFilters = new[] {
+                        new { fieldName = "settlementDate", startDate = dateStr, endDate = dateStr }
+                    },
+                    domainFilters = new[] {
+                        new { fieldName = "symbolCode", values = symbols }
+                    },
+                    limit = MaxPageSize,
+                    offset
+                };
+            } else {
+                query = new {
+                    fields = ShortInterestFields,
+                    dateRangeFilters = new[] {
+                        new { fieldName = "settlementDate", startDate = dateStr, endDate = dateStr }
+                    },
+                    limit = MaxPageSize,
+                    offset
+                };
+            }
 
             var page = await PostQuery<ShortInterestRecord>("OTCMarket", "consolidatedShortInterest", query);
             if (page.Count == 0) break;
@@ -157,6 +173,43 @@ public class FinraClient : IFinraClient {
         }
 
         _logger.LogDebug("Fetched {Count} distinct settlement dates", dates.Count);
+        return dates.OrderBy(d => d).ToList();
+    }
+
+    public async Task<List<DateOnly>> GetShortInterestSettlementDatesAfter(DateOnly afterDate) {
+        var startDateStr = afterDate.AddDays(1).ToString("yyyy-MM-dd");
+        var endDateStr = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd");
+
+        _logger.LogDebug("Discovering settlement dates after {Date}", afterDate);
+
+        var dates = new HashSet<DateOnly>();
+        var offset = 0;
+
+        while (true) {
+            var query = new {
+                fields = new[] { "settlementDate" },
+                dateRangeFilters = new[] {
+                    new { fieldName = "settlementDate", startDate = startDateStr, endDate = endDateStr }
+                },
+                limit = MaxPageSize,
+                offset
+            };
+
+            var records = await PostQuery<ShortInterestRecord>("OTCMarket", "consolidatedShortInterest", query);
+            if (records.Count == 0) break;
+
+            foreach (var record in records) {
+                if (!string.IsNullOrEmpty(record.SettlementDate)
+                    && DateOnly.TryParse(record.SettlementDate, out var date)) {
+                    dates.Add(date);
+                }
+            }
+
+            if (records.Count < MaxPageSize) break;
+            offset += records.Count;
+        }
+
+        _logger.LogDebug("Discovered {Count} new settlement dates after {Date}", dates.Count, afterDate);
         return dates.OrderBy(d => d).ToList();
     }
 
