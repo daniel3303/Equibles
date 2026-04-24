@@ -261,6 +261,71 @@ public class CommonStockRepositoryTests : IDisposable {
         result.Ticker.Should().Be("MSFT");
     }
 
+    [Fact]
+    public async Task GetByTicker_AmbiguousBetweenPrimaryAndSecondary_PrefersPrimary() {
+        await SeedStocks(
+            MakeStock(ticker: "SOHOB", name: "Sotherly LP", cik: "1313536"),
+            MakeStock(ticker: "SOHOO", name: "Sotherly Inc", cik: "1301236", secondaryTickers: ["SOHOB"]));
+
+        var result = await _repository.GetByTicker("SOHOB");
+
+        result.Should().NotBeNull();
+        result.Ticker.Should().Be("SOHOB");
+        result.Cik.Should().Be("1313536");
+    }
+
+    [Fact]
+    public async Task GetByTicker_AmbiguousWithSecondaryHolderSeededFirst_StillPrefersPrimary() {
+        // Mirror of the previous test with inverse seed order. Guards against a regression
+        // where insertion order rather than the explicit OrderBy drives the result.
+        await SeedStocks(
+            MakeStock(ticker: "SOHOO", name: "Sotherly Inc", cik: "1301236", secondaryTickers: ["SOHOB"]),
+            MakeStock(ticker: "SOHOB", name: "Sotherly LP", cik: "1313536"));
+
+        var result = await _repository.GetByTicker("SOHOB");
+
+        result.Should().NotBeNull();
+        result.Ticker.Should().Be("SOHOB");
+        result.Cik.Should().Be("1313536");
+    }
+
+    // ── GetByPrimaryTicker ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetByPrimaryTicker_PrimaryMatch_ReturnsStock() {
+        await SeedStocks(MakeStock(ticker: "AAPL"));
+
+        var result = await _repository.GetByPrimaryTicker("AAPL");
+
+        result.Should().NotBeNull();
+        result.Ticker.Should().Be("AAPL");
+    }
+
+    [Fact]
+    public async Task GetByPrimaryTicker_OnlySecondaryMatch_ReturnsNull() {
+        await SeedStocks(MakeStock(ticker: "GOOG", secondaryTickers: ["GOOGL"]));
+
+        var result = await _repository.GetByPrimaryTicker("GOOGL");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetByPrimaryTicker_NoMatch_ReturnsNull() {
+        await SeedStocks(MakeStock(ticker: "AAPL"));
+
+        var result = await _repository.GetByPrimaryTicker("MSFT");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetByPrimaryTicker_EmptyDatabase_ReturnsNull() {
+        var result = await _repository.GetByPrimaryTicker("AAPL");
+
+        result.Should().BeNull();
+    }
+
     // ── GetByTickers ────────────────────────────────────────────────────
     // Note: GetByTickers uses SecondaryTickers.Any() which involves
     // querying into a JSON array column. The in-memory provider cannot

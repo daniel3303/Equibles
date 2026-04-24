@@ -58,17 +58,23 @@ public class CompanySyncService : ICompanySyncService {
             var existingStocks = await commonStockRepository.GetByCiks(secCiks).ToListAsync();
             var existingCiks = existingStocks.Select(cs => cs.Cik).ToHashSet();
 
-            // Load ALL tickers (primary + secondary) from DB for comprehensive conflict detection
-            var existingTickers = (await commonStockRepository.GetAllTickers().ToListAsync())
+            // Primary tickers are globally unique — collisions on primary mean the incoming
+            // company must replace or skip. Secondary tickers may legitimately overlap across
+            // related SEC filers (e.g. parent REIT + operating partnership sharing a
+            // preferred-share ticker), so they are tracked separately and never drive
+            // replace/skip routing decisions.
+            var existingPrimaryTickers = (await commonStockRepository.GetAllTickers().ToListAsync())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var allSecondaryTickers = await commonStockRepository.GetAllSecondaryTickers().ToListAsync();
-            foreach (var t in allSecondaryTickers) existingTickers.Add(t);
+            var existingSecondaryTickers =
+                (await commonStockRepository.GetAllSecondaryTickers().ToListAsync())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var state = new StockSyncState {
                 SecCiks = secCiks,
                 ExistingStocks = existingStocks,
                 ExistingCiks = existingCiks,
-                ExistingTickers = existingTickers,
+                ExistingPrimaryTickers = existingPrimaryTickers,
+                ExistingSecondaryTickers = existingSecondaryTickers,
                 CommonStockRepository = commonStockRepository,
                 CommonStockManager = commonStockManager,
                 DbContext = dbContext
@@ -87,7 +93,9 @@ public class CompanySyncService : ICompanySyncService {
                 if (state.ExistingCiks.Contains(secCompany.Cik)) {
                     await UpdateExistingStock(secCompany, primaryTicker, secondaryTickers, state);
                 } else {
-                    if (state.ExistingTickers.Contains(primaryTicker))
+                    // Only a primary-ticker collision requires the replace/skip branch —
+                    // overlap with another company's secondaries is allowed by the domain.
+                    if (state.ExistingPrimaryTickers.Contains(primaryTicker))
                         await ReplaceObsoleteStock(secCompany, primaryTicker, secondaryTickers, state);
                     else
                         await CreateNewStock(secCompany, primaryTicker, secondaryTickers, state);
@@ -111,8 +119,9 @@ public class CompanySyncService : ICompanySyncService {
         if (!needsUpdate)
             return;
 
-        // Pre-check: if the new primary ticker conflicts with another company
-        if (existingStock.Ticker != primaryTicker && state.ExistingTickers.Contains(primaryTicker)) {
+        // Pre-check: only a collision against another company's primary ticker blocks us.
+        // Secondary-ticker overlap is allowed by the domain.
+        if (existingStock.Ticker != primaryTicker && state.ExistingPrimaryTickers.Contains(primaryTicker)) {
             var tickerHolder = state.ExistingStocks.FirstOrDefault(cs => cs.Ticker == primaryTicker);
             if (tickerHolder != null && !state.SecCiks.Contains(tickerHolder.Cik)) {
                 // Old holder is no longer in SEC data - remove it
@@ -121,8 +130,8 @@ public class CompanySyncService : ICompanySyncService {
                     await state.CommonStockRepository.SaveChanges();
 
                     state.ExistingCiks.Remove(tickerHolder.Cik);
-                    state.ExistingTickers.Remove(tickerHolder.Ticker);
-                    foreach (var t in tickerHolder.SecondaryTickers) state.ExistingTickers.Remove(t);
+                    state.ExistingPrimaryTickers.Remove(tickerHolder.Ticker);
+                    foreach (var t in tickerHolder.SecondaryTickers) state.ExistingSecondaryTickers.Remove(t);
                     state.ExistingStocks.Remove(tickerHolder);
 
                     _logger.LogInformation(
@@ -154,11 +163,11 @@ public class CompanySyncService : ICompanySyncService {
 
             // Update tracking sets on success
             if (oldTicker != primaryTicker) {
-                state.ExistingTickers.Remove(oldTicker);
-                state.ExistingTickers.Add(primaryTicker);
+                state.ExistingPrimaryTickers.Remove(oldTicker);
+                state.ExistingPrimaryTickers.Add(primaryTicker);
             }
-            foreach (var t in oldSecondaryTickers) state.ExistingTickers.Remove(t);
-            foreach (var t in secondaryTickers) state.ExistingTickers.Add(t);
+            foreach (var t in oldSecondaryTickers) state.ExistingSecondaryTickers.Remove(t);
+            foreach (var t in secondaryTickers) state.ExistingSecondaryTickers.Add(t);
 
             _logger.LogDebug("Updated company: {OldTicker} -> {NewTicker}, {OldName} -> {NewName}",
                 oldTicker, primaryTicker, oldName, secCompany.Name);
@@ -192,8 +201,8 @@ public class CompanySyncService : ICompanySyncService {
             await state.CommonStockRepository.SaveChanges();
 
             state.ExistingCiks.Remove(obsoleteStock.Cik);
-            state.ExistingTickers.Remove(obsoleteStock.Ticker);
-            foreach (var t in obsoleteStock.SecondaryTickers) state.ExistingTickers.Remove(t);
+            state.ExistingPrimaryTickers.Remove(obsoleteStock.Ticker);
+            foreach (var t in obsoleteStock.SecondaryTickers) state.ExistingSecondaryTickers.Remove(t);
             state.ExistingStocks.Remove(obsoleteStock);
 
             var newStock = await state.CommonStockManager.Create(new CommonStock {
@@ -207,8 +216,8 @@ public class CompanySyncService : ICompanySyncService {
             });
 
             state.ExistingCiks.Add(secCompany.Cik);
-            state.ExistingTickers.Add(primaryTicker);
-            foreach (var t in secondaryTickers) state.ExistingTickers.Add(t);
+            state.ExistingPrimaryTickers.Add(primaryTicker);
+            foreach (var t in secondaryTickers) state.ExistingSecondaryTickers.Add(t);
             state.ExistingStocks.Add(newStock);
 
             _logger.LogInformation(
@@ -236,8 +245,8 @@ public class CompanySyncService : ICompanySyncService {
 
             // Add to tracking sets to avoid duplicates in this run
             state.ExistingCiks.Add(secCompany.Cik);
-            state.ExistingTickers.Add(primaryTicker);
-            foreach (var t in secondaryTickers) state.ExistingTickers.Add(t);
+            state.ExistingPrimaryTickers.Add(primaryTicker);
+            foreach (var t in secondaryTickers) state.ExistingSecondaryTickers.Add(t);
             state.ExistingStocks.Add(newStock);
             _logger.LogDebug("Created new company: {Ticker} - {Name} (CIK: {Cik})",
                 primaryTicker, secCompany.Name, secCompany.Cik);
@@ -271,7 +280,8 @@ public class CompanySyncService : ICompanySyncService {
         public HashSet<string> SecCiks { get; init; }
         public List<CommonStock> ExistingStocks { get; init; }
         public HashSet<string> ExistingCiks { get; init; }
-        public HashSet<string> ExistingTickers { get; init; }
+        public HashSet<string> ExistingPrimaryTickers { get; init; }
+        public HashSet<string> ExistingSecondaryTickers { get; init; }
         public CommonStockRepository CommonStockRepository { get; init; }
         public CommonStockManager CommonStockManager { get; init; }
         public DbContext DbContext { get; init; }

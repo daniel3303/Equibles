@@ -52,8 +52,8 @@ public class CommonStockManager {
             throw new DomainValidationException("SharesOutStanding cannot be negative");
         }
 
-        // Checks for unique indexes
-        var existingByTicker = await _commonStockRepository.GetByTicker(commonStock.Ticker);
+        // Primary ticker must be globally unique across all companies.
+        var existingByTicker = await _commonStockRepository.GetByPrimaryTicker(commonStock.Ticker);
         if (existingByTicker != null && (isInsert || existingByTicker.Id != commonStock.Id)) {
             throw new DomainValidationException($"CommonStock with ticker {commonStock.Ticker} already exists");
         }
@@ -63,14 +63,9 @@ public class CommonStockManager {
             throw new DomainValidationException($"CommonStock with cik {commonStock.Cik} already exists");
         }
 
-        // Check secondary tickers don't collide with other companies' primary or secondary tickers
-        foreach (var secondaryTicker in commonStock.SecondaryTickers) {
-            var existingBySecondary = await _commonStockRepository.GetByTicker(secondaryTicker);
-            if (existingBySecondary != null && existingBySecondary.Id != commonStock.Id) {
-                throw new DomainValidationException($"Secondary ticker {secondaryTicker} is already used as a primary ticker by another company");
-            }
-        }
+        // Secondary tickers are allowed to overlap with primary or secondary tickers of other
+        // companies. In SEC filings a preferred-share ticker can legitimately appear under both
+        // the parent REIT filer and its operating-partnership filer, so cross-company overlap
+        // is valid. Lookups resolve ambiguity via GetByTicker's primary-first ordering.
     }
-
-
 }

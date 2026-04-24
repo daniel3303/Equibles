@@ -129,27 +129,32 @@ public class CommonStockManagerTests {
     }
 
     [Fact]
-    public async Task Create_SecondaryTickerConflictsWithExistingPrimary_ThrowsDomainValidationException() {
+    public async Task Create_SecondaryTickerMatchesAnotherCompanyPrimary_Succeeds() {
+        // SEC filings legitimately expose the same ticker on related filers (e.g. a REIT's
+        // preferred-share class appearing on both the parent and the operating partnership).
+        // The domain must accept a secondary ticker that is already primary on another company.
         await _sut.Create(MakeStock(ticker: "AAPL", name: "Apple", cik: "111"));
 
         var stock = MakeStock(ticker: "GOOG", name: "Google", cik: "222");
         stock.SecondaryTickers = ["AAPL"];
-        var act = () => _sut.Create(stock);
 
-        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*Secondary ticker*already used*");
+        var result = await _sut.Create(stock);
+
+        result.SecondaryTickers.Should().Contain("AAPL");
     }
 
     [Fact]
-    public async Task Create_SecondaryTickerConflictsWithExistingSecondary_ThrowsDomainValidationException() {
+    public async Task Create_SecondaryTickerMatchesAnotherCompanySecondary_Succeeds() {
         var existing = MakeStock(ticker: "AAPL", name: "Apple", cik: "111");
         existing.SecondaryTickers = ["ALT1"];
         await _sut.Create(existing);
 
         var stock = MakeStock(ticker: "GOOG", name: "Google", cik: "222");
         stock.SecondaryTickers = ["ALT1"];
-        var act = () => _sut.Create(stock);
 
-        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*Secondary ticker*already used*");
+        var result = await _sut.Create(stock);
+
+        result.SecondaryTickers.Should().Contain("ALT1");
     }
 
     [Fact]
@@ -226,14 +231,30 @@ public class CommonStockManagerTests {
     }
 
     [Fact]
-    public async Task Update_SecondaryTickerConflict_ThrowsDomainValidationException() {
+    public async Task Update_SecondaryTickerMatchesAnotherCompanyPrimary_Succeeds() {
         await _sut.Create(MakeStock(ticker: "AAPL", name: "Apple", cik: "111"));
         var google = await _sut.Create(MakeStock(ticker: "GOOG", name: "Google", cik: "222"));
         google.SecondaryTickers = ["AAPL"];
 
-        var act = () => _sut.Update(google);
+        var result = await _sut.Update(google);
 
-        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*Secondary ticker*already used*");
+        result.SecondaryTickers.Should().Contain("AAPL");
+    }
+
+    [Fact]
+    public async Task Update_PrimaryTickerConflictWithAnotherCompanySecondary_Succeeds() {
+        // A primary ticker that exists only as a secondary on another company is still free
+        // for use as a new primary — only primary-vs-primary collisions are disallowed.
+        var apple = await _sut.Create(MakeStock(ticker: "AAPL", name: "Apple", cik: "111"));
+        apple.SecondaryTickers = ["LEGACY"];
+        await _sut.Update(apple);
+
+        var google = await _sut.Create(MakeStock(ticker: "GOOG", name: "Google", cik: "222"));
+        google.Ticker = "LEGACY";
+
+        var result = await _sut.Update(google);
+
+        result.Ticker.Should().Be("LEGACY");
     }
 
     [Fact]
