@@ -37,6 +37,25 @@ public class CommonStockRepository : BaseRepository<CommonStock> {
     }
 
     /// <summary>
+    /// Returns the stock whose primary <c>Cik</c> equals <paramref name="cik"/>, or whose
+    /// <c>SecondaryCiks</c> contains it. Primary matches are preferred so lookups remain
+    /// deterministic when a subsidiary CIK is attached to a parent that's also queryable
+    /// by its own primary CIK.
+    /// </summary>
+    public async Task<CommonStock> GetByAnyCik(string cik) {
+        return await GetAll()
+            .Where(cs => cs.Cik == cik || cs.SecondaryCiks.Contains(cik))
+            .OrderBy(cs => cs.Cik == cik ? 0 : 1)
+            .FirstOrDefaultAsync();
+    }
+
+    public IQueryable<string> GetAllSecondaryCiks() {
+        return GetAll()
+            .Where(cs => cs.SecondaryCiks.Count > 0)
+            .SelectMany(cs => cs.SecondaryCiks);
+    }
+
+    /// <summary>
     /// Returns the stock whose primary <c>Ticker</c> equals <paramref name="ticker"/>, or whose
     /// <c>SecondaryTickers</c> contains it. A single ticker symbol can legitimately appear on
     /// more than one company (e.g. a preferred-share ticker listed under both the parent REIT

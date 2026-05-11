@@ -34,6 +34,11 @@ public class CommonStock {
         set;
     } = [];
 
+    public List<string> SecondaryCiks {
+        get => field ?? [];
+        set;
+    } = [];
+
     [MaxLength(9)]
     public string Cusip { get; set; }
 
