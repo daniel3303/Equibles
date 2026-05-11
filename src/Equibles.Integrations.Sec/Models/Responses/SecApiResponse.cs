@@ -9,5 +9,7 @@ internal class SecApiResponse {
 
     [JsonProperty("entityType")] public string EntityType { get; set; }
 
+    [JsonProperty("exchanges")] public List<string> Exchanges { get; set; } = [];
+
     [JsonProperty("filings")] public FilingsContainer Filings { get; set; } = new();
 }

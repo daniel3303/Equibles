@@ -54,9 +54,36 @@ public class CompanySyncService : ICompanySyncService {
             // Get all CIKs from SEC companies
             var secCiks = secCompanies.Select(c => c.Cik).ToHashSet();
 
-            // Get existing companies from database
-            var existingStocks = await commonStockRepository.GetByCiks(secCiks).ToListAsync();
+            // Load every existing stock so we can detect subsidiaries already attached
+            // as SecondaryCiks on prior syncs. We can't filter by SEC CIKs alone because
+            // the subsidiary's CIK won't match any incoming primary CIK — it lives only
+            // inside another stock's SecondaryCiks list.
+            var allExistingStocks = await commonStockRepository.GetAll().ToListAsync();
+            var existingStocks = allExistingStocks.Where(cs => secCiks.Contains(cs.Cik)).ToList();
             var existingCiks = existingStocks.Select(cs => cs.Cik).ToHashSet();
+
+            // Build the ticker → stock lookup over every row so ReplaceObsoleteStock can find
+            // a ticker holder whose own CIK dropped out of SEC's feed but who still owns the
+            // primary ticker our incoming company wants.
+            var primaryTickerToStock = allExistingStocks
+                .ToDictionary(s => s.Ticker, s => s);
+
+            // Subsidiaries we already decided about: each entry maps a subsidiary CIK to
+            // its parent stock. Incoming SEC entries whose CIK appears here are silently
+            // skipped — without this filter every sync would re-evaluate the collision
+            // and re-log the warning. We build defensively to survive a data anomaly
+            // (the same subsidiary CIK attached to two parents) rather than throwing.
+            var secondaryCikToParent = new Dictionary<string, CommonStock>();
+            foreach (var stock in allExistingStocks) {
+                foreach (var subCik in stock.SecondaryCiks) {
+                    if (!secondaryCikToParent.TryAdd(subCik, stock)) {
+                        _logger.LogWarning(
+                            "Subsidiary CIK {Cik} is attached to multiple parents ({ExistingParent} and {DuplicateParent}); " +
+                            "keeping {ExistingParent}. Manual cleanup required.",
+                            subCik, secondaryCikToParent[subCik].Ticker, stock.Ticker);
+                    }
+                }
+            }
 
             // Primary tickers are globally unique — collisions on primary mean the incoming
             // company must replace or skip. Secondary tickers may legitimately overlap across
@@ -75,12 +102,21 @@ public class CompanySyncService : ICompanySyncService {
                 ExistingCiks = existingCiks,
                 ExistingPrimaryTickers = existingPrimaryTickers,
                 ExistingSecondaryTickers = existingSecondaryTickers,
+                PrimaryTickerToStock = primaryTickerToStock,
+                SecondaryCikToParent = secondaryCikToParent,
                 CommonStockRepository = commonStockRepository,
                 CommonStockManager = commonStockManager,
                 DbContext = dbContext
             };
 
             foreach (var secCompany in secCompanies) {
+                if (state.SecondaryCikToParent.TryGetValue(secCompany.Cik, out var parent)) {
+                    _logger.LogDebug(
+                        "Skipping subsidiary CIK {Cik} ({Name}) — already attached to parent {ParentTicker} (CIK: {ParentCik})",
+                        secCompany.Cik, secCompany.Name, parent.Ticker, parent.Cik);
+                    continue;
+                }
+
                 var primaryTicker = secCompany.Tickers.FirstOrDefault();
                 if (string.IsNullOrEmpty(primaryTicker)) {
                     _logger.LogWarning("Company {CompanyName} (CIK: {Cik}) has no tickers, skipping", secCompany.Name,
@@ -185,12 +221,23 @@ public class CompanySyncService : ICompanySyncService {
 
     private async Task ReplaceObsoleteStock(CompanyInfo secCompany, string primaryTicker,
         List<string> secondaryTickers, StockSyncState state) {
-        // Ticker exists - check if the current holder is still active in SEC data
-        var obsoleteStock = state.ExistingStocks.FirstOrDefault(cs => cs.Ticker == primaryTicker);
+        // The ticker holder may not be in state.ExistingStocks (which is scoped to CIKs in
+        // SEC's current feed). Look in the full in-memory map so we also see holders whose
+        // own CIK dropped out of the feed.
+        state.PrimaryTickerToStock.TryGetValue(primaryTicker, out var obsoleteStock);
 
-        if (obsoleteStock == null || state.SecCiks.Contains(obsoleteStock.Cik)) {
+        if (obsoleteStock != null && state.SecCiks.Contains(obsoleteStock.Cik)) {
+            // Both CIKs are active in SEC's feed — this is the legitimate parent/subsidiary
+            // case (e.g. ATAI Life Sciences + AtaiBeckley sharing ATAI). Resolve which one
+            // is the listed parent and attach the loser as a SecondaryCik on the winner
+            // so its filings still flow through, without re-warning on future syncs.
+            await ResolveTickerCollision(secCompany, obsoleteStock, primaryTicker, state);
+            return;
+        }
+
+        if (obsoleteStock == null) {
             _logger.LogWarning(
-                "Company {CompanyName} (CIK: {Cik}) has ticker {Ticker} already used by another active company, skipping",
+                "Company {CompanyName} (CIK: {Cik}) has ticker {Ticker} marked as taken but the holder could not be loaded, skipping",
                 secCompany.Name, secCompany.Cik, primaryTicker);
             return;
         }
@@ -276,12 +323,86 @@ public class CompanySyncService : ICompanySyncService {
         return company.IsOperatingCompany;
     }
 
+    /// <summary>
+    /// Handles the case where two CIKs in SEC's feed both claim the same primary ticker.
+    /// Decides the rightful owner via (listed-on-exchange &gt; operating &gt; older CIK) and
+    /// attaches the loser's CIK to the winner's <see cref="CommonStock.SecondaryCiks"/> so
+    /// the subsidiary's filings still flow through and we don't re-warn on every sync.
+    /// </summary>
+    private async Task ResolveTickerCollision(CompanyInfo incoming, CommonStock incumbent, string ticker, StockSyncState state) {
+        try {
+            var incumbentWins = await ShouldIncumbentWin(incoming, incumbent);
+
+            if (incumbentWins) {
+                if (incumbent.SecondaryCiks.Contains(incoming.Cik))
+                    return;
+
+                incumbent.SecondaryCiks = [..incumbent.SecondaryCiks, incoming.Cik];
+                // Save directly via the repository — manager.Update would re-run the full
+                // uniqueness validation against the incumbent's own Ticker/CIK, which is
+                // an unnecessary round-trip for a SecondaryCiks-only mutation.
+                await state.CommonStockRepository.SaveChanges();
+                state.SecondaryCikToParent[incoming.Cik] = incumbent;
+
+                _logger.LogInformation(
+                    "Attached subsidiary CIK {Cik} ({Name}) to parent {Ticker} (CIK: {ParentCik})",
+                    incoming.Cik, incoming.Name, ticker, incumbent.Cik);
+            } else {
+                // Authoritative signals say the incoming CIK is the rightful holder. We
+                // don't auto-swap (that would delete or rewrite the incumbent's history);
+                // surface a warning once and rely on operator intervention.
+                _logger.LogWarning(
+                    "Ticker {Ticker} appears to belong to incoming CIK {IncomingCik} ({IncomingName}) " +
+                    "rather than incumbent CIK {IncumbentCik} ({IncumbentName}). Manual review required.",
+                    ticker, incoming.Cik, incoming.Name, incumbent.Cik, incumbent.Name);
+            }
+        } catch (Exception ex) {
+            _logger.LogError(ex, "Error resolving ticker collision for {Ticker} between CIKs {IncomingCik} and {IncumbentCik}",
+                ticker, incoming.Cik, incumbent.Cik);
+            await _errorReporter.Report(ErrorSource.DocumentScraper, "CompanySync.ResolveTickerCollision",
+                ex.Message, ex.StackTrace,
+                $"ticker: {ticker}, incoming: {incoming.Cik}, incumbent: {incumbent.Cik}");
+        }
+    }
+
+    private async Task<bool> ShouldIncumbentWin(CompanyInfo incoming, CommonStock incumbent) {
+        var incomingMeta = await _secEdgarClient.GetCompanyMetadata(incoming.Cik);
+        var incumbentMeta = await _secEdgarClient.GetCompanyMetadata(incumbent.Cik);
+
+        // Without authoritative metadata for either side we have no evidence to override
+        // the existing assignment — keep the incumbent. Log so operators can investigate
+        // patterns of malformed SEC responses that silently force the fallback path.
+        if (incomingMeta == null || incumbentMeta == null) {
+            _logger.LogWarning(
+                "Cannot resolve ticker collision deterministically — metadata missing for {MissingSide}: " +
+                "incoming CIK {IncomingCik}, incumbent CIK {IncumbentCik}. Defaulting to incumbent.",
+                incomingMeta == null && incumbentMeta == null ? "both"
+                    : incomingMeta == null ? "incoming"
+                    : "incumbent",
+                incoming.Cik, incumbent.Cik);
+            return true;
+        }
+
+        if (incomingMeta.IsListed != incumbentMeta.IsListed)
+            return incumbentMeta.IsListed;
+        if (incomingMeta.IsOperatingCompany != incumbentMeta.IsOperatingCompany)
+            return incumbentMeta.IsOperatingCompany;
+
+        return ParseCik(incumbent.Cik) <= ParseCik(incoming.Cik);
+    }
+
+    private static long ParseCik(string cik) {
+        return long.TryParse(cik, out var n) ? n : long.MaxValue;
+    }
+
     private class StockSyncState {
         public HashSet<string> SecCiks { get; init; }
         public List<CommonStock> ExistingStocks { get; init; }
         public HashSet<string> ExistingCiks { get; init; }
         public HashSet<string> ExistingPrimaryTickers { get; init; }
         public HashSet<string> ExistingSecondaryTickers { get; init; }
+        public Dictionary<string, CommonStock> PrimaryTickerToStock { get; init; }
+        public Dictionary<string, CommonStock> SecondaryCikToParent { get; init; }
         public CommonStockRepository CommonStockRepository { get; init; }
         public CommonStockManager CommonStockManager { get; init; }
         public DbContext DbContext { get; init; }

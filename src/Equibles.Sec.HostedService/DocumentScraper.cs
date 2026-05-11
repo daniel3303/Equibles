@@ -173,24 +173,46 @@ public class DocumentScraper : IDocumentScraper {
         _logger.LogDebug("Fetching {DocumentType} filings for {Ticker}", documentType, company.Ticker);
 
         try {
-            var filings = await secEdgarClient.GetCompanyFilings(
-                company.Cik,
-                secFilter,
-                _workerOptions.MinSyncDate != null ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value) : null);
+            // Subsidiary CIKs share the parent's public ticker (e.g. parent + co-registrant
+            // operating sub). Their filings belong on the parent's stock page, so we fetch
+            // each CIK separately and dedupe by AccessionNumber (globally unique in SEC).
+            var ciks = new List<string> { company.Cik };
+            ciks.AddRange(company.SecondaryCiks);
 
-            _logger.LogDebug("Found {FilingCount} {DocumentType} filings for {Ticker}",
-                filings.Count, documentType, company.Ticker);
+            var fromDate = _workerOptions.MinSyncDate != null
+                ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
+                : (DateOnly?)null;
+
+            var filings = new List<FilingData>();
+            var seenAccessions = new HashSet<string>();
+
+            foreach (var cik in ciks) {
+                List<FilingData> cikFilings;
+                try {
+                    cikFilings = await secEdgarClient.GetCompanyFilings(cik, secFilter, fromDate);
+                } catch (HttpRequestException ex) {
+                    // One CIK failing shouldn't drop the others — log and continue.
+                    _logger.LogWarning(ex, "HTTP error fetching {DocumentType} filings for CIK {Cik} ({Ticker})",
+                        documentType, cik, company.Ticker);
+                    result.Errors++;
+                    result.ErrorMessages.Add($"Company {company.Ticker} CIK {cik} - {documentType}: {ex.Message}");
+                    continue;
+                }
+
+                foreach (var filing in cikFilings) {
+                    if (seenAccessions.Add(filing.AccessionNumber))
+                        filings.Add(filing);
+                }
+            }
+
+            _logger.LogDebug("Found {FilingCount} {DocumentType} filings for {Ticker} across {CikCount} CIK(s)",
+                filings.Count, documentType, company.Ticker, ciks.Count);
 
             result.DocumentsFound += filings.Count;
 
             foreach (var filing in filings) {
                 await ProcessFiling(company, filing, documentType, result, persistenceService);
             }
-        } catch (HttpRequestException ex) {
-            _logger.LogWarning(ex, "HTTP error processing {DocumentType} documents for company {Ticker}",
-                documentType, company.Ticker);
-            result.Errors++;
-            result.ErrorMessages.Add($"Company {company.Ticker} - {documentType}: {ex.Message}");
         } catch (Exception ex) {
             _logger.LogError(ex, "Error processing {DocumentType} documents for company {Ticker}",
                 documentType, company.Ticker);
