@@ -62,6 +62,11 @@ public class SecEdgarClient : ISecEdgarClient {
     }
 
     public async Task<string> GetEntityType(string cik) {
+        var metadata = await GetCompanyMetadata(cik);
+        return metadata?.EntityType;
+    }
+
+    public async Task<CompanyMetadata> GetCompanyMetadata(string cik) {
         try {
             var formattedCik = FormatCik(cik);
             var url = BuildUrl($"/submissions/CIK{formattedCik}.json");
@@ -72,14 +77,21 @@ public class SecEdgarClient : ISecEdgarClient {
             var content = await response.Content.ReadAsStringAsync();
             var apiResponse = JsonConvert.DeserializeObject<SecApiResponse>(content);
 
-            return apiResponse?.EntityType;
+            if (apiResponse == null)
+                return null;
+
+            return new CompanyMetadata {
+                Cik = cik,
+                EntityType = apiResponse.EntityType,
+                Exchanges = apiResponse.Exchanges ?? []
+            };
         } catch (HttpRequestException ex) {
             // HTTP errors (including exhausted 429 retries) propagate to caller
-            _logger.LogError(ex, "HTTP error retrieving entity type for CIK: {Cik}", cik);
+            _logger.LogError(ex, "HTTP error retrieving metadata for CIK: {Cik}", cik);
             throw;
         } catch (Exception ex) {
             // Non-HTTP errors (deserialization, etc.) — return null as "not found"
-            _logger.LogError(ex, "Error retrieving entity type for CIK: {Cik}", cik);
+            _logger.LogError(ex, "Error retrieving metadata for CIK: {Cik}", cik);
             return null;
         }
     }

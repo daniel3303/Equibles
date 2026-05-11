@@ -5,6 +5,7 @@ namespace Equibles.Integrations.Sec.Contracts;
 public interface ISecEdgarClient {
     Task<List<CompanyInfo>> GetActiveCompanies();
     Task<string> GetEntityType(string cik);
+    Task<CompanyMetadata> GetCompanyMetadata(string cik);
     Task<List<FilingData>> GetCompanyFilings(string cik, DocumentTypeFilter? documentType = null, DateOnly? fromDate = null, DateOnly? toDate = null);
     Task<string> GetDocumentContent(string accessionNumber, string cik);
     Task<string> GetDocumentContent(FilingData filing);
