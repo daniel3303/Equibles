@@ -3,7 +3,7 @@ using Equibles.Data;
 using Equibles.Yahoo.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace Equibles.Yahoo.Repositories;
+namespace Equibles.Yahoo.HostedService.Services;
 
 public class YahooStockPriceProvider : IStockPriceProvider {
     private const int LookbackDays = 7;

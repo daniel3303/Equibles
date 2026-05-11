@@ -83,8 +83,5 @@ builder.Services.AddCboeWorker();
 builder.Services.AddCongressWorker();
 builder.Services.AddHoldingsWorker();
 
-// Cross-module services (interface-based, need manual registration)
-builder.Services.AddScoped<Equibles.Core.Contracts.IStockPriceProvider, Equibles.Yahoo.Repositories.YahooStockPriceProvider>();
-
 var host = builder.Build();
 host.Run();
