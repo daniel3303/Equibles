@@ -4,6 +4,7 @@ using Equibles.Data;
 using Equibles.Tests.Helpers;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Data.Models;
+using Equibles.Yahoo.HostedService.Services;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
 
