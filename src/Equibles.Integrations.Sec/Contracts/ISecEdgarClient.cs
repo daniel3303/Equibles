@@ -10,6 +10,12 @@ public interface ISecEdgarClient {
     Task<string> GetDocumentContent(FilingData filing);
 
     /// <summary>
+    /// Fetches a single artifact (e.g. an attached PDF) inside a filing by filename,
+    /// using the per-file URL pattern /Archives/edgar/data/{cik}/{accession-no-dashes}/{filename}.
+    /// </summary>
+    Task<byte[]> GetDocumentFileBytes(string cik, string accessionNumber, string filename, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Downloads a file from sec.gov with rate limiting, retries, and 429 handling.
     /// Use this for any SEC download (FTD files, 13F data sets, etc.).
     /// </summary>
