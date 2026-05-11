@@ -70,14 +70,14 @@
 
     <!-- Tabs -->
     <div role="tablist" class="flex flex-wrap gap-2 mb-6">
-        <a role="tab" class="btn btn-sm @(activeTab == "price" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Price" asp-route-ticker="@stock.Ticker">Price</a>
-        <a role="tab" class="btn btn-sm @(activeTab == "holdings" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Holdings" asp-route-ticker="@stock.Ticker">Holdings</a>
+        <a role="tab" class="btn btn-sm @(activeTab == "price" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Price" asp-route-ticker="@stock.Ticker">Price History</a>
+        <a role="tab" class="btn btn-sm @(activeTab == "holdings" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Holdings" asp-route-ticker="@stock.Ticker">Institutional Holders</a>
         <a role="tab" class="btn btn-sm @(activeTab == "short-volume" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="ShortVolume" asp-route-ticker="@stock.Ticker">Short Volume</a>
         <a role="tab" class="btn btn-sm @(activeTab == "short-interest" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="ShortInterest" asp-route-ticker="@stock.Ticker">Short Interest</a>
         <a role="tab" class="btn btn-sm @(activeTab == "ftd" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Ftd" asp-route-ticker="@stock.Ticker">Fails to Deliver</a>
         <a role="tab" class="btn btn-sm @(activeTab == "documents" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Documents" asp-route-ticker="@stock.Ticker">SEC Filings</a>
-        <a role="tab" class="btn btn-sm @(activeTab == "insider-trading" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="InsiderTrading" asp-route-ticker="@stock.Ticker">Insider Trading</a>
-        <a role="tab" class="btn btn-sm @(activeTab == "congressional-trades" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="CongressionalTrades" asp-route-ticker="@stock.Ticker">Congress Trades</a>
+        <a role="tab" class="btn btn-sm @(activeTab == "insider-trading" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="InsiderTrading" asp-route-ticker="@stock.Ticker">Insider Trades</a>
+        <a role="tab" class="btn btn-sm @(activeTab == "congressional-trades" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="CongressionalTrades" asp-route-ticker="@stock.Ticker">Congressional Trades</a>
     </div>
 
     <!-- Tab Content (server-rendered) -->
