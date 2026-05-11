@@ -191,21 +191,47 @@ public class SecEdgarClient : ISecEdgarClient {
     }
 
 
+    public async Task<byte[]> GetDocumentFileBytes(string cik, string accessionNumber, string filename, CancellationToken cancellationToken = default) {
+        if (string.IsNullOrEmpty(cik) || string.IsNullOrEmpty(accessionNumber) || string.IsNullOrEmpty(filename))
+            throw new ArgumentException("cik, accessionNumber and filename are required");
+
+        // Per-file URL uses unpadded CIK and the accession number with dashes removed.
+        // Padded CIK works too but triggers a 301 redirect; skip the extra hop.
+        var unpaddedCik = cik.TrimStart('0');
+        var accessionNoDashes = accessionNumber.Replace("-", string.Empty);
+        var url = $"{FilesBaseUrl}/Archives/edgar/data/{unpaddedCik}/{accessionNoDashes}/{Uri.EscapeDataString(filename)}";
+
+        _logger.LogInformation("Requesting filing artifact: {Url}", url);
+
+        using var response = await SendWithRetryAsync(url, cancellationToken);
+
+        // 404 means the parsed filename does not match a published artifact (renamed, case
+        // mismatch, etc.). Return empty so the caller can warn-and-skip rather than retry-loop.
+        if (response.StatusCode == HttpStatusCode.NotFound) {
+            _logger.LogWarning("Filing artifact not found at {Url}", url);
+            return [];
+        }
+
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadAsByteArrayAsync(cancellationToken);
+    }
+
     public async Task<Stream> DownloadStream(string url) {
         var response = await SendWithRetryAsync(url, HttpCompletionOption.ResponseHeadersRead);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStreamAsync();
     }
 
-    private Task<HttpResponseMessage> SendWithRetryAsync(string url) =>
-        SendWithRetryAsync(url, HttpCompletionOption.ResponseContentRead);
+    private Task<HttpResponseMessage> SendWithRetryAsync(string url, CancellationToken cancellationToken = default) =>
+        SendWithRetryAsync(url, HttpCompletionOption.ResponseContentRead, cancellationToken);
 
-    private async Task<HttpResponseMessage> SendWithRetryAsync(string url, HttpCompletionOption completionOption) {
+    private async Task<HttpResponseMessage> SendWithRetryAsync(string url, HttpCompletionOption completionOption, CancellationToken cancellationToken = default) {
         for (var attempt = 0; attempt <= MaxRetries; attempt++) {
             await RateLimiter.WaitAsync();
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            var response = await _httpClient.GetAsync(url, completionOption);
+            var response = await _httpClient.GetAsync(url, completionOption, cancellationToken);
             sw.Stop();
 
             _logger.LogDebug("SEC request {StatusCode} {Elapsed}ms {Url}",
@@ -222,7 +248,7 @@ public class SecEdgarClient : ISecEdgarClient {
 
                 if (attempt < MaxRetries) {
                     response.Dispose();
-                    await Task.Delay(delay);
+                    await Task.Delay(delay, cancellationToken);
                     continue;
                 }
             }
@@ -235,7 +261,7 @@ public class SecEdgarClient : ISecEdgarClient {
                     (int)response.StatusCode, url, delay.TotalSeconds, attempt + 1, MaxRetries);
 
                 response.Dispose();
-                await Task.Delay(delay);
+                await Task.Delay(delay, cancellationToken);
                 continue;
             }
 

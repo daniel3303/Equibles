@@ -265,6 +265,7 @@ public class DocumentScraper : IDocumentScraper {
             var secEdgarClient = scope.ServiceProvider.GetRequiredService<ISecEdgarClient>();
             var normalizer = scope.ServiceProvider.GetRequiredService<ISecDocumentHtmlNormalizer>();
             var converter = scope.ServiceProvider.GetRequiredService<ISecDocumentHtmlToMarkdownConverter>();
+            var pdfTextExtractor = scope.ServiceProvider.GetRequiredService<PdfTextExtractor>();
             var persistenceService = scope.ServiceProvider.GetRequiredService<IDocumentPersistenceService>();
             var companyRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
 
@@ -275,9 +276,28 @@ public class DocumentScraper : IDocumentScraper {
             var markdownDocument = converter.Convert(normalizedHtml);
 
             if (string.IsNullOrWhiteSpace(markdownDocument)) {
-                _logger.LogWarning("Skipping document for {Ticker} - {DocumentType} - {FilingDate}: no content after conversion. URL: {Url}",
-                    companyOutContext.Ticker, documentType, filing.FilingDate, filing.DocumentUrl);
-                return;
+                // Paper-filed submissions (typically older 6-K/20-F) wrap a uuencoded PDF
+                // and have no HTML for the normalizer to consume. Fetch the standalone PDF
+                // artifact and extract its text instead.
+                if (!SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(content, out var pdfFilename)) {
+                    _logger.LogWarning("Skipping document for {Ticker} - {DocumentType} - {FilingDate}: no content after conversion. URL: {Url}",
+                        companyOutContext.Ticker, documentType, filing.FilingDate, filing.DocumentUrl);
+                    return;
+                }
+
+                var pdfBytes = await secEdgarClient.GetDocumentFileBytes(filing.Cik, filing.AccessionNumber, pdfFilename, cancellationToken);
+                markdownDocument = pdfTextExtractor.Extract(pdfBytes);
+
+                if (string.IsNullOrWhiteSpace(markdownDocument)) {
+                    // PDF was located but yielded no extractable text — either the artifact was
+                    // missing (404, logged by the client), or it's an image-only scan needing OCR.
+                    _logger.LogWarning("Skipping document for {Ticker} - {DocumentType} - {FilingDate}: PDF {Filename} produced no text. URL: {Url}",
+                        companyOutContext.Ticker, documentType, filing.FilingDate, pdfFilename, filing.DocumentUrl);
+                    return;
+                }
+
+                _logger.LogInformation("Extracted PDF text for {Ticker} - {DocumentType} - {FilingDate} from paper filing artifact {Filename}",
+                    companyOutContext.Ticker, documentType, filing.FilingDate, pdfFilename);
             }
 
             await persistenceService.Save(company, Encoding.UTF8.GetBytes(markdownDocument),
