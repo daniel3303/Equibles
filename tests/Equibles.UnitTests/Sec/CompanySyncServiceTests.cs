@@ -24,6 +24,48 @@ public class CompanySyncServiceTests {
     private static readonly MethodInfo ParseCikMethod = typeof(CompanySyncService)
         .GetMethod("ParseCik", BindingFlags.NonPublic | BindingFlags.Static);
 
+    private static readonly MethodInfo ShouldIncumbentWinMethod = typeof(CompanySyncService)
+        .GetMethod("ShouldIncumbentWin", BindingFlags.NonPublic | BindingFlags.Instance);
+
+    [Fact]
+    public async Task ShouldIncumbentWin_ListedIncumbentVsUnlistedIncoming_IncumbentWinsRegardlessOfCik() {
+        // ShouldIncumbentWin resolves ticker collisions through a priority chain:
+        //   1. If either side's SEC metadata is missing → incumbent wins (safe default)
+        //   2. If IsListed differs → the LISTED side wins
+        //   3. If IsOperatingCompany differs → the operating side wins
+        //   4. Numerical CIK tiebreak (smaller CIK wins, via ParseCik)
+        //
+        // Step 2 is the most important business rule: a real exchange-listed company
+        // must always beat an OTC-only subsidiary that happens to share the ticker on
+        // SEC's submissions feed. The tiebreak step is already pinned via
+        // ParseCik_UnparseableValue_ReturnsLongMaxValue; step 2 has no test.
+        //
+        // The risk this test pins: a refactor that reorders the priority chain (CIK
+        // first), drops step 2 entirely, or swaps the `return incumbentMeta.IsListed`
+        // for its negation would let an OTC-only subsidiary win against an exchange-
+        // listed parent. The collision would replace real trading data with a CIK
+        // that has none — every downstream stock page would 404 or show empty charts.
+        //
+        // Construction: incoming.Cik = "100" (would beat 200 in CIK tiebreak),
+        // incumbent.Cik = "200". Mock incumbent's metadata as listed (NASDAQ),
+        // incoming's as OTC-only (unlisted). If the listing priority works, incumbent
+        // wins (return true) DESPITE losing the CIK tiebreak — which is the exact
+        // distinguishing case.
+        var secEdgarClient = Substitute.For<ISecEdgarClient>();
+        secEdgarClient.GetCompanyMetadata("100")
+            .Returns(new CompanyMetadata { Cik = "100", EntityType = "operating", Exchanges = ["OTC"] });
+        secEdgarClient.GetCompanyMetadata("200")
+            .Returns(new CompanyMetadata { Cik = "200", EntityType = "operating", Exchanges = ["NASDAQ"] });
+
+        var service = CreateService(secEdgarClient: secEdgarClient);
+        var incoming = new CompanyInfo { Cik = "100", Name = "Subsidiary Co", Tickers = ["X"] };
+        var incumbent = new Equibles.CommonStocks.Data.Models.CommonStock { Cik = "200", Ticker = "X" };
+
+        var result = await (Task<bool>)ShouldIncumbentWinMethod.Invoke(service, [incoming, incumbent]);
+
+        result.Should().BeTrue();
+    }
+
     [Fact]
     public void ParseCik_UnparseableValue_ReturnsLongMaxValue() {
         // ShouldIncumbentWin breaks ticker-collision ties with
