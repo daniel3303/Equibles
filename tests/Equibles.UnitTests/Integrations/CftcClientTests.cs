@@ -14,6 +14,29 @@ public class CftcClientTests {
     private static readonly MethodInfo ParseLongMethod = typeof(CftcClient)
         .GetMethod("ParseLong", BindingFlags.NonPublic | BindingFlags.Static);
 
+    private static readonly MethodInfo BuildColumnIndexMethod = typeof(CftcClient)
+        .GetMethod("BuildColumnIndex", BindingFlags.NonPublic | BindingFlags.Static);
+
+    [Fact]
+    public void BuildColumnIndex_QuotedHeaderName_IndexedWithoutQuotes() {
+        // CFTC's COT history CSVs ship header rows in two flavours that vary by year:
+        // bare (`Open_Interest_All`) and double-quoted (`"Open_Interest_All"`). The
+        // downstream ParseLine looks up each column by its bare-string name through
+        // GetField, so the index built here must strip surrounding quotes — drop the
+        // `.Trim('"')` and every quoted-header file's GetField calls miss, falling
+        // through to `idx >= fields.Length` returning null, and every numeric column
+        // silently parses to zero. Pin the quote-strip path on a single quoted header
+        // and a follow-on case-insensitive lookup (the index uses OrdinalIgnoreCase),
+        // so a regression that swaps the comparer or removes the trim is caught.
+        var headerLine = "\"Open_Interest_All\",Some_Other";
+
+        var index = (Dictionary<string, int>)BuildColumnIndexMethod.Invoke(null, [headerLine]);
+
+        index.Should().ContainKey("Open_Interest_All").WhoseValue.Should().Be(0);
+        // OrdinalIgnoreCase: bare lookup with different casing must still hit.
+        index.Should().ContainKey("open_interest_all");
+    }
+
     [Fact]
     public void ParseLong_ValueWithThousandSeparatorCommas_StripsAndParses() {
         // CFTC's legacy COT history files format every numeric position column
