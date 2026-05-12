@@ -173,23 +173,36 @@ public class BaseScraperWorkerTests {
 
     [Fact]
     public async Task ExecuteAsync_SleepsForSleepInterval_BetweenCycles() {
-        // Use a long sleep so only 1 cycle fits in the window
-        var sleepInterval = TimeSpan.FromMilliseconds(500);
+        // Use a long sleep interval so a second cycle cannot complete while we
+        // observe the first. The previous design raced a 400ms CTS timer against
+        // a 500ms Task.Delay — on slow CI runners the CTS fired after the Delay
+        // returned, allowing a second DoWork before cancellation propagated.
+        var sleepInterval = TimeSpan.FromSeconds(30);
         using var worker = CreateWorker(sleepInterval: sleepInterval);
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(400));
+        using var cts = new CancellationTokenSource();
 
         await worker.StartAsync(cts.Token);
 
-        // Wait for the CTS to fire and the worker to stop
-        await Task.Delay(600);
+        // Wait until the worker has entered DoWork once AND emitted the "Sleeping for"
+        // log — that proves it cleared DoWork and started Task.Delay(SleepInterval).
+        // Both conditions polled deterministically; no real-clock race.
+        await WaitUntilAsync(() => worker.DoWorkCallCount >= 1, TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(
+            () => _logger.ReceivedCalls().Any(c =>
+                c.GetMethodInfo().Name == nameof(ILogger.Log) &&
+                c.GetArguments().Length > 2 &&
+                c.GetArguments()[2]?.ToString()?.Contains("Sleeping for") == true),
+            TimeSpan.FromSeconds(5));
+
+        await cts.CancelAsync();
         await worker.StopAsync(CancellationToken.None);
 
-        // First DoWork executes immediately, then the 500ms sleep exceeds the 400ms timeout,
-        // so the worker should complete exactly 1 cycle
+        // The 30s sleep cannot complete in the few milliseconds it takes for the
+        // polling waits + CancelAsync above, so DoWork ran exactly once.
         worker.DoWorkCallCount.Should().Be(1,
-            "a 500ms sleep interval in a 400ms window should allow only 1 cycle to complete DoWork");
+            "cancellation arrived while the worker was sleeping after its first cycle");
 
-        // Verify the "cycle complete" log includes the sleep interval
+        // Verify the "Sleeping for" log was emitted.
         _logger.Received().Log(
             LogLevel.Information,
             Arg.Any<EventId>(),
