@@ -353,6 +353,40 @@ public class SecEdgarClientTests {
         filings[0].AccessionNumber.Should().Be("0001-20-DUP");
     }
 
+    [Fact]
+    public async Task GetDocumentContent_FilingDataWithEmptyAccessionNumber_ThrowsArgumentException() {
+        // GetDocumentContent(FilingData) is the entry point InsiderTradingFilingProcessor
+        // (and any future form-handler) uses to fetch the SGML envelope for a filing. Two
+        // guards run before any HTTP request: a null check (ArgumentNullException) and a
+        // string-validity check on AccessionNumber/Cik (ArgumentException). Hitting the SEC
+        // EDGAR URL with an empty accession would either 404 (waste of a rate-limited
+        // request) or — worse — return the company-level archive index, which the parser
+        // would silently treat as a filing payload and produce garbage rows.
+        //
+        // This `[Fact]` pins the AccessionNumber-empty branch. A `Cik`-empty variant would
+        // be the other half; the rule is `IsNullOrEmpty(AccessionNumber) || IsNullOrEmpty(Cik)`
+        // so either gets caught — testing AccessionNumber is enough to prove the guard is
+        // wired. The handler is a `Substitute.For<HttpMessageHandler>` that throws if
+        // touched, which doubles as a "no HTTP was made" assertion.
+
+        var handler = new ScriptedHandler(); // empty queue — any HTTP attempt throws
+        var httpClient = new HttpClient(handler);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" })
+            .Build();
+        var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
+
+        var filing = new Equibles.Integrations.Sec.Models.FilingData {
+            AccessionNumber = "",
+            Cik = "1234567",
+            Form = "4",
+        };
+
+        var act = async () => await sut.GetDocumentContent(filing);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
     private sealed class ScriptedHandler : HttpMessageHandler {
         private readonly Queue<string> _responses;
 
