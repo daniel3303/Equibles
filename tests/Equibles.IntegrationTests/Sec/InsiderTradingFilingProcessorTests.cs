@@ -692,4 +692,83 @@ public class InsiderTradingFilingProcessorTests {
         // First-seen wins: the D row is processed before the I row in document order.
         transactions[0].OwnershipNature.Should().Be(OwnershipNature.Direct);
     }
+
+    [Fact]
+    public async Task Process_Form4WithMalformedTransactionDate_DropsThatRowAndPersistsTheRest() {
+        // `InsiderTradingFilingProcessor.ParseTransaction` short-circuits with `null` when
+        // `DateOnly.TryParse(transactionDateStr, out var transactionDate)` fails — the
+        // surrounding loop filters null results out (`if (transaction != null) ...`). The
+        // contract is: a single malformed `<transactionDate>` does NOT take down the whole
+        // filing; sibling transactions still flow through.
+        //
+        // This matters in production because SEC filers occasionally emit blank or
+        // typo'd date elements (e.g. `0000-00-00`, blank, or just `<value/>`). Without the
+        // skip, the parser would either throw (taking down the entire scrape iteration)
+        // or produce a `DateOnly.MinValue` row that violates the unique index. The current
+        // behaviour — silently drop the malformed row, persist the valid one — keeps
+        // ingestion resilient at the cost of one missing transaction.
+        //
+        // The `[Fact]` ships a Form 4 with two `<nonDerivativeTransaction>`s: the first has
+        // an empty `<transactionDate><value></value>`, the second is well-formed. Asserts:
+        // (a) Process returns true (parse succeeded overall), (b) exactly one row was
+        // persisted, (c) it's the well-formed one (SecurityTitle = "Common Stock B"
+        // distinguishes it from the dropped row's "Common Stock A").
+        var mixedDateForm4Xml = """
+            <ownershipDocument>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0006666666</rptOwnerCik>
+                        <rptOwnerName>Bob Lee</rptOwnerName>
+                    </reportingOwnerId>
+                    <reportingOwnerRelationship>
+                        <isOfficer>1</isOfficer>
+                        <officerTitle>COO</officerTitle>
+                    </reportingOwnerRelationship>
+                </reportingOwner>
+                <nonDerivativeTable>
+                    <nonDerivativeTransaction>
+                        <securityTitle><value>Common Stock A</value></securityTitle>
+                        <transactionDate><value></value></transactionDate>
+                        <transactionCoding><transactionCode>P</transactionCode></transactionCoding>
+                        <transactionAmounts>
+                            <transactionShares><value>100</value></transactionShares>
+                            <transactionPricePerShare><value>50.00</value></transactionPricePerShare>
+                            <transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
+                        </transactionAmounts>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>100</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </nonDerivativeTransaction>
+                    <nonDerivativeTransaction>
+                        <securityTitle><value>Common Stock B</value></securityTitle>
+                        <transactionDate><value>2024-04-22</value></transactionDate>
+                        <transactionCoding><transactionCode>P</transactionCode></transactionCoding>
+                        <transactionAmounts>
+                            <transactionShares><value>200</value></transactionShares>
+                            <transactionPricePerShare><value>75.00</value></transactionPricePerShare>
+                            <transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
+                        </transactionAmounts>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>200</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </nonDerivativeTransaction>
+                </nonDerivativeTable>
+            </ownershipDocument>
+            """;
+        var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(mixedDateForm4Xml);
+
+        var result = await processor.Process(MakeFiling(), MakeCompany());
+
+        result.Should().BeTrue();
+        var transactions = txRepo.GetAll().ToList();
+        transactions.Should().ContainSingle();
+        transactions[0].SecurityTitle.Should().Be("Common Stock B");
+    }
 }
