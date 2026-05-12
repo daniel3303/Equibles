@@ -77,6 +77,7 @@
     <ProjectReference Include="..\..\src\Equibles.Cboe.Repositories\Equibles.Cboe.Repositories.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.Cboe\Equibles.Integrations.Cboe.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.Cftc\Equibles.Integrations.Cftc.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Plugins\Equibles.Plugins.csproj" />
   </ItemGroup>
 
 </Project>
