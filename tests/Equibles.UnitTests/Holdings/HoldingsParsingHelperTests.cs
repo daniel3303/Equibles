@@ -34,6 +34,31 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
+    public void ParseOptionType_UnrecognizedValue_ReturnsNullNotADefaultEnumValue() {
+        // SEC 13F filings only carry an option-type wire value ("PUT" / "CALL") for actual
+        // option positions; for the vast majority of holdings (common stock, ADRs, fund
+        // shares, principal-denominated bonds) the field is empty or absent and `null`
+        // is what flows downstream to InstitutionalHolding.OptionType.
+        //
+        // Critically, ParseOptionType's switch falls back to `return null` — UNLIKE its
+        // structurally similar siblings ParseShareType (default → Shares) and
+        // ParseInvestmentDiscretion (default → Sole), both of which intentionally swallow
+        // unknown values into a "safest guess" enum. The asymmetry matters: the OptionType
+        // column is nullable in the schema precisely because "this isn't an option" must
+        // remain distinguishable from "this is an unrecognized option type". A copy-paste
+        // refactor that "harmonizes" the default to `OptionType.Put` (or any other concrete
+        // value) would silently reclassify every regular-stock holding as a Put position,
+        // poisoning derivatives analytics across the entire dataset.
+        //
+        // Pin the null default on an unrecognized non-empty value (the wire emits "" for
+        // non-options, but an unknown-but-non-empty input — e.g. a typo in a future SEC
+        // schema change — is the sharper edge case).
+        var result = HoldingsParsingHelper.ParseOptionType("WARRANT");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
     public void ParseShareType_PrincipalAbbreviation_ReturnsPrincipal() {
         // SEC 13F filings use abbreviated wire values: "SH" for Shares, "PRN" for Principal.
         // The C# enum uses full descriptive names per project standards. ParseShareType is
