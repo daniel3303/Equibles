@@ -24,4 +24,20 @@ public class HoldingsParsingHelperTests {
         success.Should().BeTrue();
         result.Should().Be(new DateOnly(2024, 9, 30));
     }
+
+    [Fact]
+    public void ParseInvestmentDiscretion_DfndAbbreviation_ReturnsDefined() {
+        // 13F INFOTABLE.tsv encodes the discretion column as a four-character SEC
+        // abbreviation: SOLE / DFND / OTR. The first two map 1:1 (`Sole`, `Other`) but `DFND`
+        // is the surprising one — it expands to `Defined`, not `Default` (a developer
+        // refactoring the parser by autocomplete is far more likely to type `Default`).
+        // Pinning this here means a rename that flips the mapping silently — every 13F row
+        // with `INVESTMENTDISCRETION=DFND` would land on the fallback (`Sole`) and the
+        // entire defined-discretion fleet would misrepresent — fails loudly instead. The
+        // production reading runs through `value?.ToUpperInvariant()` first, so the
+        // assertion uses uppercase to match what real SEC TSVs ship.
+        var result = HoldingsParsingHelper.ParseInvestmentDiscretion("DFND");
+
+        result.Should().Be(Equibles.Holdings.Data.Models.InvestmentDiscretion.Defined);
+    }
 }
