@@ -49,6 +49,28 @@ public class FtdImportServiceTests {
     }
 
     [Fact]
+    public void GetFileNames_StartBeforeOldestAvailable_ClampsAndSkipsJune2017AFile() {
+        // SEC's failure-to-deliver history begins June 2017, but the FIRST month is special:
+        // only the second-half file `cnsfails201706b.zip` exists — there is no
+        // `cnsfails201706a.zip` on sec.gov. GetFileNames encodes this asymmetry with
+        // `if (current != OldestAvailableDate) fileNames.Add($"...a.zip")`. Without
+        // that guard, every import would request the non-existent 201706a file, the
+        // download would 404, and (per the IsRecentFtdFile check) a stale 404 from
+        // 2017 would be reported as an error every single scrape cycle — burning
+        // log volume and triggering false ErrorReporter pages. Pin the clamp-to-
+        // 2017-06 AND the no-'a'-for-June-2017 rule with a deliberately ancient
+        // start date.
+        var startDate = new DateOnly(2010, 1, 1);
+
+        var fileNames = FtdImportService.GetFileNames(startDate);
+
+        fileNames[0].Should().Be("cnsfails201706b.zip");
+        fileNames[1].Should().Be("cnsfails201707a.zip");
+        fileNames[2].Should().Be("cnsfails201707b.zip");
+        fileNames.Should().NotContain("cnsfails201706a.zip");
+    }
+
+    [Fact]
     public void GetFileNames_FutureDate_ReturnsEmptyList() {
         var futureDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1);
 
