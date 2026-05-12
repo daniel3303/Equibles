@@ -74,6 +74,39 @@ public class RateLimiterTests {
     }
 
     [Fact]
+    public async Task WaitAsync_FillsCapacity_NextRequestWaitsForOldestToAgeOut() {
+        // RateLimiter is the only thing standing between our scrapers and rate-limit bans
+        // from FRED, FINRA, Yahoo, CBOE, and CFTC. Its core function is throttling: when
+        // the in-window request count reaches `maxRequests`, the next WaitAsync MUST block
+        // until the oldest request ages out of the window. The existing tests cover the
+        // "within capacity" path (everything fast) and PauseFor (external 429 reaction)
+        // — neither exercises the capacity-throttle branch in CalculateWaitTime where
+        // `_requestTimes.Count >= _maxRequests` returns the positive remainder time.
+        //
+        // The risk this test pins: a refactor that simplifies CalculateWaitTime to always
+        // return TimeSpan.Zero (or that inverts the `Count < _maxRequests` predicate, or
+        // that drops the recursive `await WaitAsync()` at the end of WaitAsync) would
+        // let through unlimited requests at the speed of the await machinery. None of the
+        // existing tests would fail — they all use maxRequests sized comfortably above
+        // their request count. The first sign of the regression would be production bans
+        // from the rate-limited APIs, with no visible test failure in CI.
+        //
+        // Construction: capacity=2 in a 300ms window. Fire 2 requests immediately to fill
+        // the queue, then time the 3rd. The 3rd must wait long enough for the first
+        // request to age out — at least ~200ms (300ms window minus the small gap between
+        // requests one and three).
+        var limiter = new RateLimiter(maxRequests: 2, timeWindow: TimeSpan.FromMilliseconds(300));
+        await limiter.WaitAsync();
+        await limiter.WaitAsync();
+
+        var sw = Stopwatch.StartNew();
+        await limiter.WaitAsync();
+        sw.Stop();
+
+        sw.ElapsedMilliseconds.Should().BeGreaterThanOrEqualTo(200);
+    }
+
+    [Fact]
     public void Constructor_WithCustomTimeWindow_Succeeds() {
         // Arrange & Act
         var limiter = new RateLimiter(maxRequests: 3, timeWindow: TimeSpan.FromMilliseconds(100));
