@@ -24,6 +24,7 @@
     <ProjectReference Include="..\..\src\Equibles.Core\Equibles.Core.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Data\Equibles.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Mcp\Equibles.Mcp.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Mcp.Server\Equibles.Mcp.Server.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.Common\Equibles.Integrations.Common.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Sec.Data\Equibles.Sec.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Sec.BusinessLogic\Equibles.Sec.BusinessLogic.csproj" />
