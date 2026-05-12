@@ -614,4 +614,82 @@ public class InsiderTradingFilingProcessorTests {
         // <transactionDate> element of its own.
         transactions[0].TransactionDate.Should().Be(filing.ReportDate);
     }
+
+    [Fact]
+    public async Task Process_Form4WithDirectAndIndirectOwnershipOfSameSecurity_DedupsToOneRecordWithinBatch() {
+        // A single Form 4 routinely reports the same (security, date, code) twice when an
+        // insider holds the position both directly (their own account) and indirectly
+        // (through a trust, joint account, etc.). The DB unique index would only catch
+        // those AFTER they hit the wire — `InsiderTradingFilingProcessor.Process` dedupes
+        // earlier, inside the parse batch, using `(stock, owner, date, code, title,
+        // accession)` as the key. Critically the key does NOT include `OwnershipNature`,
+        // so D + I rows for the same security collapse into one persisted record (the
+        // first one seen wins).
+        //
+        // A regression that added OwnershipNature to the dedup key — or dropped the dedup
+        // step altogether — would let both rows reach SaveChanges and the unique index
+        // would throw at insert time, aborting the entire filing. This `[Fact]` ships a
+        // Form 4 with two non-derivative transactions identical except for the
+        // directOrIndirectOwnership value ("D" vs "I"), and asserts: (a) Process returns
+        // true (didn't abort), (b) exactly one row was persisted (in-batch dedup fired),
+        // (c) the surviving row's OwnershipNature is `Direct` — the first one parsed.
+        var dualOwnershipForm4Xml = """
+            <ownershipDocument>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0008888888</rptOwnerCik>
+                        <rptOwnerName>Alice Roe</rptOwnerName>
+                    </reportingOwnerId>
+                    <reportingOwnerRelationship>
+                        <isOfficer>1</isOfficer>
+                        <officerTitle>CTO</officerTitle>
+                    </reportingOwnerRelationship>
+                </reportingOwner>
+                <nonDerivativeTable>
+                    <nonDerivativeTransaction>
+                        <securityTitle><value>Common Stock</value></securityTitle>
+                        <transactionDate><value>2024-05-10</value></transactionDate>
+                        <transactionCoding><transactionCode>S</transactionCode></transactionCoding>
+                        <transactionAmounts>
+                            <transactionShares><value>500</value></transactionShares>
+                            <transactionPricePerShare><value>150.00</value></transactionPricePerShare>
+                            <transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>
+                        </transactionAmounts>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>1000</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </nonDerivativeTransaction>
+                    <nonDerivativeTransaction>
+                        <securityTitle><value>Common Stock</value></securityTitle>
+                        <transactionDate><value>2024-05-10</value></transactionDate>
+                        <transactionCoding><transactionCode>S</transactionCode></transactionCoding>
+                        <transactionAmounts>
+                            <transactionShares><value>500</value></transactionShares>
+                            <transactionPricePerShare><value>150.00</value></transactionPricePerShare>
+                            <transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>
+                        </transactionAmounts>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>2000</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>I</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </nonDerivativeTransaction>
+                </nonDerivativeTable>
+            </ownershipDocument>
+            """;
+        var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(dualOwnershipForm4Xml);
+
+        var result = await processor.Process(MakeFiling(), MakeCompany());
+
+        result.Should().BeTrue();
+        var transactions = txRepo.GetAll().ToList();
+        transactions.Should().ContainSingle();
+        // First-seen wins: the D row is processed before the I row in document order.
+        transactions[0].OwnershipNature.Should().Be(OwnershipNature.Direct);
+    }
 }
