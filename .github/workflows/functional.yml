@@ -35,7 +35,7 @@ jobs:
         run: pwsh tests/Equibles.FunctionalTests/bin/Release/net10.0/playwright.ps1 install chromium --with-deps
 
       - name: Run functional tests
-        run: dotnet test tests/Equibles.FunctionalTests/Equibles.FunctionalTests.csproj --no-build -c Release --logger "trx;LogFileName=results.trx" --results-directory ./functional-results
+        run: dotnet test tests/Equibles.FunctionalTests/Equibles.FunctionalTests.csproj --no-build -c Release --logger "trx;LogFileName=results.trx" --collect:"XPlat Code Coverage" --settings coverage.runsettings --results-directory ./functional-results
 
       - name: Upload Playwright traces on failure
         if: failure()
@@ -44,6 +44,15 @@ jobs:
           name: playwright-traces
           path: tests/Equibles.FunctionalTests/bin/Release/net10.0/playwright-traces
           if-no-files-found: ignore
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        if: success() || failure()
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: functional-results/**/coverage.cobertura.xml
+          flags: functional
+          fail_ci_if_error: false
 
       - name: Test Report
         uses: dorny/test-reporter@v1

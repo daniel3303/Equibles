@@ -42,6 +42,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage/**/coverage.cobertura.xml
+          flags: unit-integration
           fail_ci_if_error: false
 
       - name: Test Report
