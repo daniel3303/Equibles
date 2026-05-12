@@ -61,4 +61,51 @@ public class HoldingsImportServiceTests {
             .WhoseValue.Cik.Should().Be("0009999999");
         context.Submissions.Should().NotContainKey("ACC-001");
     }
+
+    [Fact]
+    public void DeduplicateSubmissions_RowsWithEmptyCikOrPeriod_NotGroupedAndSurvive() {
+        // The dedupe grouper filters incomplete rows out of the group-by step:
+        //   `.Where(s => !string.IsNullOrEmpty(s.Cik) && !string.IsNullOrEmpty(s.PeriodOfReport))`
+        // Without that filter, every malformed submission (Cik="" or PeriodOfReport="") would
+        // share the synthetic group key `"|"` and silently supersede each other. Real-world
+        // SEC TSVs occasionally ship submissions with missing fields — paper filings, EDGAR
+        // backfill bugs — and they MUST flow through dedupe unchanged so downstream phases
+        // can decide what to do with them (typically: skip and report). A regression that
+        // dropped the IsNullOrEmpty filter would quietly delete every malformed submission
+        // except one per malformed-key bucket.
+        //
+        // This `[Fact]` ships three submissions whose only flaw is missing pieces: empty
+        // Cik, empty PeriodOfReport, both empty. None share a (Cik, PeriodOfReport) key, so
+        // even with the filter, none should be touched. Asserts all three survive.
+        var context = new ImportContext {
+            Submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase) {
+                ["ACC-NO-CIK"] = new() {
+                    AccessionNumber = "ACC-NO-CIK",
+                    Cik = "",
+                    PeriodOfReport = "2024-09-30",
+                    FilingDate = "2024-10-15",
+                    FormType = "13F-HR",
+                },
+                ["ACC-NO-PERIOD"] = new() {
+                    AccessionNumber = "ACC-NO-PERIOD",
+                    Cik = "0001234567",
+                    PeriodOfReport = "",
+                    FilingDate = "2024-10-15",
+                    FormType = "13F-HR",
+                },
+                ["ACC-BOTH-EMPTY"] = new() {
+                    AccessionNumber = "ACC-BOTH-EMPTY",
+                    Cik = "",
+                    PeriodOfReport = "",
+                    FilingDate = "2024-10-15",
+                    FormType = "13F-HR",
+                },
+            },
+        };
+
+        HoldingsImportService.DeduplicateSubmissions(context);
+
+        context.Submissions.Should().HaveCount(3);
+        context.Submissions.Should().ContainKeys("ACC-NO-CIK", "ACC-NO-PERIOD", "ACC-BOTH-EMPTY");
+    }
 }
