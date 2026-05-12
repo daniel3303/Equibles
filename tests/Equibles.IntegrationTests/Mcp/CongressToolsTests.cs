@@ -33,4 +33,28 @@ public class CongressToolsTests {
 
         result.Should().Be("Member 'Nonexistent Person' not found. Use SearchCongressMembers to find the exact name.");
     }
+
+    [Fact]
+    public async Task SearchCongressMembers_NoMatches_ReturnsQueryEchoedNotFoundMessage() {
+        // SearchCongressMembers' no-match reply echoes the user's query string back —
+        // "No congress members found matching 'Foobar'." — so the agent can see at a
+        // glance that the search ran and returned nothing for *this exact query*,
+        // rather than the search having silently been re-bound to a different term
+        // (e.g. by a stale shell-escape or default-arg regression). Pin the echo
+        // so a refactor that swaps in a generic "no results" reply can't strip the
+        // query echo and hide a binding bug.
+        using var ctx = TestDbContextFactory.Create(
+            new CommonStocksModuleConfiguration(),
+            new CongressModuleConfiguration(),
+            new ErrorsModuleConfiguration());
+        var tradeRepo = new CongressionalTradeRepository(ctx);
+        var memberRepo = new CongressMemberRepository(ctx);
+        var stockRepo = new CommonStockRepository(ctx);
+        var errorManager = new ErrorManager(new ErrorRepository(ctx));
+        var sut = new CongressTools(tradeRepo, memberRepo, stockRepo, errorManager, Substitute.For<ILogger<CongressTools>>());
+
+        var result = await sut.SearchCongressMembers("Foobar");
+
+        result.Should().Be("No congress members found matching 'Foobar'.");
+    }
 }
