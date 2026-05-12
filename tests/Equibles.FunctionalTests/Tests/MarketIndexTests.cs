@@ -24,6 +24,7 @@ public class MarketIndexTests {
         // header renders, the Put/Call Ratios card shows the table shell (every enum value gets
         // a row even with no data), and the response is 200 — not the YSOD that would surface a
         // missing null-coalesce in the view.
+        await _web.ResetAndSeedAsync();   // guarantee empty DB regardless of test ordering
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
 
         var response = await page.GotoAsync("/market");

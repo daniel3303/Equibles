@@ -24,6 +24,7 @@ public class CftcIndexTests {
         // and the description text must reflect that without nulling out. Catches view regressions
         // where the Sum/Count over an empty IEnumerable wouldn't survive a missing null-guard, or
         // a category enum's NameForHumans is invoked before the empty check.
+        await _web.ResetAndSeedAsync();   // guarantee empty DB regardless of test ordering
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
 
         var response = await page.GotoAsync("/futures");
