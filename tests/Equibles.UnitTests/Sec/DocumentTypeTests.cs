@@ -65,10 +65,15 @@ public class DocumentTypeTests {
     }
 
     [Fact]
-    public void GetAll_ReturnsAll12Types() {
+    public void GetAll_ContainsAllBuiltInTypes() {
         var all = DocumentType.GetAll().ToList();
 
-        all.Should().HaveCount(12);
+        all.Should().Contain(new[] {
+            DocumentType.TenK, DocumentType.TenQ, DocumentType.EightK,
+            DocumentType.TenKa, DocumentType.TenQa, DocumentType.EightKa,
+            DocumentType.TwentyF, DocumentType.SixK, DocumentType.FortyF,
+            DocumentType.FormFour, DocumentType.FormThree, DocumentType.Other
+        });
     }
 
     [Fact]
