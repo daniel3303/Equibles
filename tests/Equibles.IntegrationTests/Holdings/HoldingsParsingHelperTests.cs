@@ -1,3 +1,4 @@
+using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.HostedService.Services;
 
 namespace Equibles.IntegrationTests.Holdings;
@@ -39,5 +40,34 @@ public class HoldingsParsingHelperTests {
         var result = HoldingsParsingHelper.ParseInvestmentDiscretion("DFND");
 
         result.Should().Be(Equibles.Holdings.Data.Models.InvestmentDiscretion.Defined);
+    }
+
+    [Fact]
+    public void ResolveManagerName_AccessionAndSequenceFoundInOtherManagers_ReturnsMappedName() {
+        // 13F-HR filings can carry multiple managers per accession — the primary filing
+        // manager from SUBMISSION.tsv plus zero-or-more "other managers" listed in
+        // OTHERMANAGER2.tsv keyed by `(ACCESSION_NUMBER, SEQUENCENUMBER)`. During INFOTABLE
+        // processing, each holding row points to a manager via its OTHERMANAGER index;
+        // ResolveManagerName walks the nested `OtherManagers[accession][seq]` dictionary to
+        // turn that index back into a human-readable name. A regression that lost the inner
+        // dictionary or keyed by the wrong tuple would leave every multi-manager holding
+        // attributed to "null" — silently flattening real co-advisor relationships.
+        //
+        // This `[Fact]` pins the happy-path lookup at minimum size: one accession with two
+        // sequence-numbered managers, asks for sequence 2, asserts the second name comes
+        // back. Covers (a) the outer dictionary hit, (b) the inner dictionary hit, (c) the
+        // exact sequence-number selection (not e.g. first-in-iteration order).
+        var context = new ImportContext {
+            OtherManagers = new Dictionary<string, Dictionary<int, string>>(StringComparer.OrdinalIgnoreCase) {
+                ["ACC-001"] = new() {
+                    [1] = "Capital Group Companies, Inc.",
+                    [2] = "Capital Research Global Investors",
+                },
+            },
+        };
+
+        var result = HoldingsParsingHelper.ResolveManagerName(context, "ACC-001", managerNumber: 2);
+
+        result.Should().Be("Capital Research Global Investors");
     }
 }
