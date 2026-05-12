@@ -246,6 +246,51 @@ public class SecEdgarClientTests {
         metadata.Exchanges.Should().Equal("Nasdaq");
     }
 
+    [Fact]
+    public async Task GetCompanyFilings_ToDateInsideRecentRange_DropsFilingsStrictlyAfterIt() {
+        // FilterFilings applies the upper-bound `toDate` clause `f.FilingDate <= toDate`
+        // to every row that survives the earlier mapping. This is structurally different
+        // from the archive-skip path (PR #108): the archive skip avoids the HTTP fetch
+        // entirely; the toDate filter operates on per-row `FilingData` after MapToFilingData.
+        // A regression that flipped the inequality (`< toDate` or `> toDate`) would drop
+        // filings filed exactly on the boundary, or admit filings strictly after it.
+        //
+        // This `[Fact]` ships two `recent` filings — January and December of the same year —
+        // and sets `toDate = 2024-06-30`. Only the January row should survive (Jan < Jun).
+        // Asserts the December filing is gone (proves the upper bound bites) and that
+        // exactly one filing returns with the January accession (proves the comparison is
+        // per-row, not all-or-nothing).
+        var json = """
+            {
+              "cik": "1234567",
+              "name": "Test Co",
+              "filings": {
+                "recent": {
+                  "accessionNumber": ["0001-24-JAN", "0001-24-DEC"],
+                  "filingDate":      ["2024-01-15", "2024-12-15"],
+                  "reportDate":      ["2024-01-14", "2024-12-14"],
+                  "form":            ["4",          "4"],
+                  "primaryDocument": ["jan.xml",    "dec.xml"],
+                  "primaryDocDescription": ["",     ""]
+                },
+                "files": []
+              }
+            }
+            """;
+
+        var handler = new ScriptedHandler(json);
+        var httpClient = new HttpClient(handler);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" })
+            .Build();
+        var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
+
+        var filings = await sut.GetCompanyFilings("1234567", toDate: new DateOnly(2024, 6, 30));
+
+        filings.Should().ContainSingle();
+        filings[0].AccessionNumber.Should().Be("0001-24-JAN");
+    }
+
     private sealed class ScriptedHandler : HttpMessageHandler {
         private readonly Queue<string> _responses;
 
