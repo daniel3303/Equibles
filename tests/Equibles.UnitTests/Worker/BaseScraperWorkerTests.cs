@@ -130,10 +130,13 @@ public class BaseScraperWorkerTests {
     [Fact]
     public async Task ExecuteAsync_LogsStartAndCompletionMessages() {
         using var worker = CreateWorker();
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
 
         await worker.StartAsync(cts.Token);
-        await Task.Delay(100);
+        // Wait until at least one full cycle has executed rather than a blind delay —
+        // a 100ms wait races on slow CI runners where ExecuteAsync may not be scheduled
+        // before the assertion runs, even though DoWork eventually fires.
+        await WaitUntilAsync(() => worker.DoWorkCallCount >= 1, TimeSpan.FromSeconds(2));
         await worker.StopAsync(CancellationToken.None);
 
         // "running at" log on start of each cycle
@@ -153,6 +156,14 @@ public class BaseScraperWorkerTests {
             Arg.Any<Exception?>(),
             Arg.Any<Func<object, Exception?, string>>()
         );
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout) {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline) {
+            if (condition()) return;
+            await Task.Delay(10);
+        }
     }
 
     [Fact]
