@@ -27,6 +27,20 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
+    public void ParseInvestmentDiscretion_OtrAbbreviation_ReturnsOther() {
+        // 13F INFOTABLE.tsv encodes "Other" discretion as the four-character code OTR — not
+        // OTH, OTHR, or OTHER as a developer reading SEC's plain-English column header might
+        // guess. The DFND branch is already pinned by the sibling [Fact], but OTR has the
+        // same regression risk: a refactor that "fixes" what looks like a truncated
+        // abbreviation (e.g. someone changes the literal to "OTHER") would silently drop
+        // every Other-discretion row through the `_ => Sole` fallback, mis-categorising the
+        // 13F manager's discretion mix. Pin OTR→Other so a literal-string drift is caught.
+        var result = HoldingsParsingHelper.ParseInvestmentDiscretion("OTR");
+
+        result.Should().Be(Equibles.Holdings.Data.Models.InvestmentDiscretion.Other);
+    }
+
+    [Fact]
     public void ParseInvestmentDiscretion_DfndAbbreviation_ReturnsDefined() {
         // 13F INFOTABLE.tsv encodes the discretion column as a four-character SEC
         // abbreviation: SOLE / DFND / OTR. The first two map 1:1 (`Sole`, `Other`) but `DFND`
