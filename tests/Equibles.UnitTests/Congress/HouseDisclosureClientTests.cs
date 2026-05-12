@@ -16,6 +16,21 @@ public class HouseDisclosureClientTests {
         .GetMethod("RemoveTrailingTransactionType", BindingFlags.NonPublic | BindingFlags.Static);
 
     [Fact]
+    public void ExtractTransactionType_PurchaseTrailingP_ReturnsPurchase() {
+        // House PTRs encode purchases as a trailing bare "P" (no qualifier). The
+        // PurchaseTypeRegex (`\bP\s*$`) is the only matcher for that path — if a
+        // regression typo'd it to `^P\b` (anchored to start) or dropped the
+        // word-boundary, every Purchase transaction would silently classify as null
+        // and be dropped by the ProcessRow loop in CongressionalTradeSyncService.
+        // The companion Sale [Fact] covers the more complex SaleTypeRegex; this one
+        // pins the simpler Purchase branch — equally load-bearing, currently
+        // unpinned, and trivial to regress because the regex is one line away.
+        var result = (CongressTransactionType?)ExtractTransactionTypeMethod.Invoke(null, ["AAPL P"]);
+
+        result.Should().Be(CongressTransactionType.Purchase);
+    }
+
+    [Fact]
     public void ExtractTransactionType_SaleWithPartialQualifier_ReturnsSale() {
         // House PTRs encode partial sales as "S (partial)" rather than bare "S".
         // The SaleTypeRegex must accept both forms — if a regression tightens it to
