@@ -1,4 +1,5 @@
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.HostedService.Services;
 
 namespace Equibles.UnitTests.Holdings;
@@ -31,6 +32,35 @@ public class HoldingsParsingHelperTests {
         var result = HoldingsParsingHelper.ParseInvestmentDiscretion("DFND");
 
         result.Should().Be(InvestmentDiscretion.Defined);
+    }
+
+    [Fact]
+    public void ResolveManagerName_AccessionNotInOtherManagers_ReturnsNull() {
+        // 13F filings list co-filing managers in a separate `OTHERMANAGER2.tsv` table
+        // keyed by AccessionNumber → SequenceNumber → ManagerName. The vast majority
+        // of filings are single-manager (no co-filers) and never produce an
+        // OTHERMANAGER2 row, so ImportContext.OtherManagers has no key for those
+        // accessions. ResolveManagerName guards every lookup with two layers of
+        // TryGetValue so the missing-accession case returns null cleanly.
+        //
+        // The risk this test pins: a "simplification" refactor to direct indexer
+        // access — `context.OtherManagers[accession][managerNumber.Value]` — would
+        // throw KeyNotFoundException on every single-manager filing. That's the
+        // common path in production: the importer batches submissions, and the
+        // first co-filer-less filing would crash ImportDataSet, leaving the entire
+        // quarterly dataset in a half-imported state with no recovery (the worker
+        // marks ProcessedDataSet only on IsComplete = true).
+        //
+        // Choose a non-null managerNumber so the early `if (managerNumber == null)`
+        // guard doesn't short-circuit — that path is trivial, the TryGetValue
+        // chain is the dangerous one.
+        var context = new ImportContext {
+            OtherManagers = new Dictionary<string, Dictionary<int, string>>(),
+        };
+
+        var result = HoldingsParsingHelper.ResolveManagerName(context, "0001234-25-000001", managerNumber: 2);
+
+        result.Should().BeNull();
     }
 
     [Fact]
