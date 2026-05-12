@@ -79,6 +79,26 @@ public class FtdImportServiceTests {
         fileNames.Should().BeEmpty();
     }
 
+    [Fact]
+    public void GetFileNames_StartBeforeOldestAvailableDate_OmitsJune2017AFile() {
+        // June 2017 is the oldest month SEC publishes FTD data for, and uniquely has
+        // only the second-half ("b") file — cnsfails201706a.zip does not exist on
+        // sec.gov. Any backfill from the earliest history must skip the 'a' file
+        // for June 2017 specifically; otherwise the very first download in the
+        // sequence 404s and gets logged as "URL change" (per the >2-months check),
+        // which would noisily mask a known, permanent SEC quirk.
+        //
+        // Passing a start date earlier than the clamp date (here: 2015) exercises
+        // both the clamp branch and the June-2017 special case. Without the
+        // `if (current != OldestAvailableDate)` guard, the first generated name
+        // would be cnsfails201706a.zip and break the backfill.
+        var fileNames = FtdImportService.GetFileNames(new DateOnly(2015, 1, 1));
+
+        fileNames.Should().NotContain("cnsfails201706a.zip");
+        fileNames.Should().StartWith("cnsfails201706b.zip");
+        fileNames.Should().Contain("cnsfails201707a.zip");
+    }
+
     // ── IsRecentFtdFile ──
 
     [Fact]
