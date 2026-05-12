@@ -387,6 +387,44 @@ public class SecEdgarClientTests {
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
+    [Fact]
+    public async Task GetDocumentFileBytes_RemoteReturns404_ReturnsEmptyArrayInsteadOfThrowing() {
+        // `GetDocumentFileBytes` fetches individual artifacts inside a SEC filing — the
+        // 10-K HTML, exhibits, the uuencoded PDF from a 6-K paper filing, etc. SEC's filing
+        // listings occasionally reference filenames that no longer resolve (renamed,
+        // case-mismatch, retracted). The deliberate contract is: on `404`, log a warning
+        // and return an empty `byte[]` so the caller (`InsiderTradingFilingProcessor`,
+        // `DocumentScraper`, etc.) can skip and continue, instead of throwing through the
+        // entire scrape iteration.
+        //
+        // A regression that dropped the explicit 404 branch — letting
+        // `EnsureSuccessStatusCode` throw on every missing artifact — would convert every
+        // renamed file into a scrape-iteration abort. This `[Fact]` asserts the empty-array
+        // contract by feeding the client a handler that always returns `404 Not Found`.
+        var handler = new StatusCodeHandler(HttpStatusCode.NotFound);
+        var httpClient = new HttpClient(handler);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" })
+            .Build();
+        var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
+
+        var bytes = await sut.GetDocumentFileBytes("1234567", "0001-24-000001", "form4.xml");
+
+        bytes.Should().BeEmpty();
+    }
+
+    private sealed class StatusCodeHandler : HttpMessageHandler {
+        private readonly HttpStatusCode _statusCode;
+
+        public StatusCodeHandler(HttpStatusCode statusCode) => _statusCode = statusCode;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+            return Task.FromResult(new HttpResponseMessage(_statusCode) {
+                Content = new StringContent(string.Empty),
+            });
+        }
+    }
+
     private sealed class ScriptedHandler : HttpMessageHandler {
         private readonly Queue<string> _responses;
 
