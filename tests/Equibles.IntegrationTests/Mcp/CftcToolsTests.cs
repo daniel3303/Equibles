@@ -30,4 +30,27 @@ public class CftcToolsTests {
 
         result.Should().Be("Contract '999999' not found. Use SearchCftcMarkets to find available contracts.");
     }
+
+    [Fact]
+    public async Task GetLatestCftcData_EmptyDatabase_ReturnsNoContractsMessage() {
+        // GetLatestCftcData uses a different empty-state message than GetCftcPositioning
+        // because it doesn't take a market code — it dumps the latest report per contract
+        // across all curated contracts. When the contracts table is empty (fresh install
+        // before EnsureContractsExist has run, or a misconfigured deployment), the user-
+        // facing message must say "No CFTC contracts found in the database." so the agent
+        // can distinguish a config problem from a "no data for this code" problem. Pin
+        // the exact text so a refactor that swaps in the generic positioning message
+        // can't hide a config gap behind a misleading reply.
+        using var ctx = TestDbContextFactory.Create(
+            new CftcModuleConfiguration(),
+            new ErrorsModuleConfiguration());
+        var contractRepo = new CftcContractRepository(ctx);
+        var reportRepo = new CftcPositionReportRepository(ctx);
+        var errorManager = new ErrorManager(new ErrorRepository(ctx));
+        var sut = new CftcTools(contractRepo, reportRepo, errorManager, Substitute.For<ILogger<CftcTools>>());
+
+        var result = await sut.GetLatestCftcData();
+
+        result.Should().Be("No CFTC contracts found in the database.");
+    }
 }
