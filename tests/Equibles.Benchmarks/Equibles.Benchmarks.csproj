@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Equibles.Holdings.HostedService\Equibles.Holdings.HostedService.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Sec.BusinessLogic\Equibles.Sec.BusinessLogic.csproj" />
   </ItemGroup>
 
 </Project>
