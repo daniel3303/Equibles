@@ -2,6 +2,7 @@ using Equibles.Cboe.Data.Models;
 using Equibles.Cboe.Repositories;
 using Equibles.Core.Extensions;
 using Equibles.Web.Controllers.Abstract;
+using Equibles.Web.Extensions;
 using Equibles.Web.ViewModels.Market;
 using MathNet.Numerics.Statistics;
 using Microsoft.AspNetCore.Mvc;
@@ -87,12 +88,11 @@ public class MarketController : BaseController {
         var values = records.Where(r => r.PutCallRatio.HasValue).Select(r => (double)r.PutCallRatio.Value).ToArray();
         if (values.Length > 0) {
             var stats = new DescriptiveStatistics(values);
-            viewModel.Mean = SafeRound(stats.Mean, 4);
-            viewModel.Median = SafeRound(values.Median(), 4);
-            viewModel.Min = SafeRound(stats.Minimum, 4);
-            viewModel.Max = SafeRound(stats.Maximum, 4);
-            // StandardDeviation is NaN for a single-value sample.
-            viewModel.StdDev = SafeRound(stats.StandardDeviation, 4);
+            viewModel.Mean = stats.Mean.SafeRound(4);
+            viewModel.Median = values.Median().SafeRound(4);
+            viewModel.Min = stats.Minimum.SafeRound(4);
+            viewModel.Max = stats.Maximum.SafeRound(4);
+            viewModel.StdDev = stats.StandardDeviation.SafeRound(4);
             viewModel.LatestRatio = records.FirstOrDefault()?.PutCallRatio;
             if (records.Count > 1) viewModel.PreviousRatio = records[1].PutCallRatio;
         }
@@ -120,32 +120,22 @@ public class MarketController : BaseController {
         var values = records.Select(r => (double)r.Close).ToArray();
         if (values.Length > 0) {
             var stats = new DescriptiveStatistics(values);
-            viewModel.Mean = SafeRound(stats.Mean, 2);
-            viewModel.Median = SafeRound(values.Median(), 2);
-            viewModel.Min = SafeRound(stats.Minimum, 2);
-            viewModel.Max = SafeRound(stats.Maximum, 2);
-            // StandardDeviation is NaN for a single-value sample.
-            viewModel.StdDev = SafeRound(stats.StandardDeviation, 2);
+            viewModel.Mean = stats.Mean.SafeRound(2);
+            viewModel.Median = values.Median().SafeRound(2);
+            viewModel.Min = stats.Minimum.SafeRound(2);
+            viewModel.Max = stats.Maximum.SafeRound(2);
+            viewModel.StdDev = stats.StandardDeviation.SafeRound(2);
             viewModel.LatestClose = records.FirstOrDefault()?.Close;
             if (records.Count > 1) viewModel.PreviousClose = records[1].Close;
 
             // Moving averages (chronological order)
             var chronological = records.OrderBy(r => r.Date).Select(r => (double)r.Close).ToArray();
-            viewModel.Sma20 = ComputeSma(chronological, 20);
-            viewModel.Sma50 = ComputeSma(chronological, 50);
+            viewModel.Sma20 = chronological.ComputeSma(20, 2);
+            viewModel.Sma50 = chronological.ComputeSma(50, 2);
         }
 
         ViewData["Title"] = "VIX — Volatility Index";
         ViewData["Description"] = "CBOE Volatility Index (VIX) daily history with chart and statistics.";
         return View(viewModel);
-    }
-
-    private static List<decimal?> ComputeSma(double[] values, int period) {
-        var sma = values.MovingAverage(period);
-        return sma.Select((v, i) => i < period - 1 ? (decimal?)null : (decimal?)Math.Round(v, 2)).ToList();
-    }
-
-    private static decimal? SafeRound(double value, int digits) {
-        return double.IsFinite(value) ? (decimal?)Math.Round(value, digits) : null;
     }
 }
