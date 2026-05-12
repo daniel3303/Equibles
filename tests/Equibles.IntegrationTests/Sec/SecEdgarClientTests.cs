@@ -86,6 +86,60 @@ public class SecEdgarClientTests {
         filings[0].AccessionNumber.Should().Be("0001-24-000001");
     }
 
+    [Fact]
+    public async Task GetCompanyFilings_FromDateAfterArchiveRange_SkipsArchiveFetchEntirely() {
+        // SEC paginates older filings into separate JSON files listed in `filings.files`, each
+        // tagged with `filingFrom`/`filingTo`. `GetArchiveFilings` looks at the requested
+        // date window and skips archives whose entire range falls outside it — saving an
+        // expensive HTTP fetch (each archive is ~hundreds of filings, and the SEC rate-limit
+        // is unforgiving). A regression here either drops data the caller asked for (skipping
+        // an in-range archive) or hammers SEC for nothing (fetching an archive that can't
+        // contribute).
+        //
+        // This `[Fact]` ships a `recent` list with zero filings plus ONE archive whose
+        // `filingTo` (2020-12-31) is before the requested `fromDate` (2024-01-01). The
+        // ScriptedHandler holds exactly ONE response — the main submissions JSON. If the
+        // production code wrongly fetches the archive, `ScriptedHandler.SendAsync` throws
+        // "ScriptedHandler exhausted", the test surfaces that exception, and the failure
+        // points squarely at the missing skip. Asserting the resulting list is empty also
+        // protects against a regression that pulled archive entries out of thin air.
+        var json = """
+            {
+              "cik": "1234567",
+              "name": "Test Co",
+              "filings": {
+                "recent": {
+                  "accessionNumber": [],
+                  "filingDate": [],
+                  "reportDate": [],
+                  "form": [],
+                  "primaryDocument": [],
+                  "primaryDocDescription": []
+                },
+                "files": [
+                  {
+                    "name": "CIK0001234567-submissions-001.json",
+                    "filingCount": 100,
+                    "filingFrom": "2020-01-01",
+                    "filingTo": "2020-12-31"
+                  }
+                ]
+              }
+            }
+            """;
+
+        var handler = new ScriptedHandler(json);
+        var httpClient = new HttpClient(handler);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" })
+            .Build();
+        var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
+
+        var filings = await sut.GetCompanyFilings("1234567", fromDate: new DateOnly(2024, 1, 1));
+
+        filings.Should().BeEmpty();
+    }
+
     private sealed class ScriptedHandler : HttpMessageHandler {
         private readonly Queue<string> _responses;
 
