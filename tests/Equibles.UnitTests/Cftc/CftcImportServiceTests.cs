@@ -24,4 +24,16 @@ public class CftcImportServiceTests {
 
         result.Should().Be(new DateOnly(2025, 1, 15));
     }
+
+    [Fact]
+    public void ParseDate_UnparseableValue_ReturnsNull() {
+        // ImportYear's foreach skips malformed rows via `if (date == null) continue;`,
+        // so returning null on bad input — rather than throwing — is the contract that
+        // keeps the importer from crashing an entire year on a single bad row. A
+        // refactor that swapped TryParseExact for DateOnly.Parse would throw
+        // FormatException and break that contract silently.
+        var result = (DateOnly?)ParseDateMethod.Invoke(null, ["not-a-date"]);
+
+        result.Should().BeNull();
+    }
 }
