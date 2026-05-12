@@ -72,6 +72,30 @@ public class FlashMessageClassTests {
     }
 
     [Fact]
+    public void Info_QueuesMessageWithInfoTypeNotDefaultSuccess() {
+        // Final sibling pin in the FlashMessage helper family. Error (#180) and Warning
+        // (#181) are already covered; Info is the remaining helper whose Type-assignment
+        // could silently regress to the default Success on a copy-paste refactor. Pin
+        // it with the same round-trip-through-real-serializer pattern so a future
+        // consolidation of the four helpers can't quietly drop the Info → Info wiring.
+        var serializer = new JsonFlashMessageSerializer();
+        string captured = null;
+        var tempData = Substitute.For<ITempDataDictionary>();
+        tempData.WhenForAnyArgs(t => t[FlashMessage.KeyName] = default)
+            .Do(callInfo => captured = (string)callInfo.Arg<object>());
+        var factory = Substitute.For<ITempDataDictionaryFactory>();
+        factory.GetTempData(Arg.Any<HttpContext>()).Returns(tempData);
+        var sut = new FlashMessage(factory, Substitute.For<IHttpContextAccessor>(), serializer);
+
+        sut.Info("Backfill complete");
+
+        captured.Should().NotBeNull();
+        var roundTripped = serializer.Deserialize(captured);
+        roundTripped.Should().ContainSingle()
+            .Which.Type.Should().Be(FlashMessageType.Info);
+    }
+
+    [Fact]
     public void Retrieve_WhenEntryExists_RemovesItFromTempData() {
         var serializer = new JsonFlashMessageSerializer();
         var serialized = serializer.Serialize(new List<IFlashMessageModel> {
