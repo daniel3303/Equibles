@@ -162,6 +162,30 @@ public class AuthControllerTests {
     }
 
     [Fact]
+    public void LoginPost_ValidCredentials_CookieSetsHttpOnlyAndSameSiteStrictFlags() {
+        // The session cookie carries the only credential the browser will replay on every
+        // subsequent request, so its two hardening flags are load-bearing:
+        //   - HttpOnly: blocks document.cookie access from injected JS, the difference
+        //     between "someone planted a stored XSS in a markdown filing" and "someone
+        //     planted a stored XSS in a markdown filing AND now has every operator's
+        //     session token".
+        //   - SameSite=Strict: blocks third-party-context cookie attachment, which is the
+        //     only thing keeping a cross-origin form-POST attacker from logging an admin
+        //     in to operations of the attacker's choice.
+        // The existing `*_SetsCookie` test only asserts the cookie's *name* appears in
+        // Set-Cookie — a regression that removed either flag would still pass it. Pin
+        // both flags together: a single Set-Cookie header must carry `httponly` and
+        // `samesite=strict` (case-insensitive — the framework emits in mixed-case).
+        var controller = CreateController(EnabledAuthSettings());
+
+        controller.Login(ValidUsername, ValidPassword, returnUrl: null!);
+
+        var cookies = controller.HttpContext.Response.Headers["Set-Cookie"].ToString();
+        cookies.ToLowerInvariant().Should().Contain("httponly");
+        cookies.ToLowerInvariant().Should().Contain("samesite=strict");
+    }
+
+    [Fact]
     public void LoginPost_ValidCredentials_CookieContainsExpectedToken() {
         var controller = CreateController(EnabledAuthSettings());
         var expectedToken = EnvAuthHandler.GenerateToken(ValidUsername, SessionSecret);
