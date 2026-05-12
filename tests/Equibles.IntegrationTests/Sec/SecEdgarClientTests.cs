@@ -204,6 +204,48 @@ public class SecEdgarClientTests {
         filings[0].Form.Should().Be("4");
     }
 
+    [Fact]
+    public async Task GetCompanyMetadata_OperatingCompanyOnNasdaq_LiftsEntityTypeAndExchangesFromJson() {
+        // GetCompanyMetadata is the entry point CompanySyncService leans on to decide if a
+        // CIK represents a real operating company or a non-issuer (subsidiary that files
+        // but isn't separately listed). The decision flows through CompanyMetadata's two
+        // derived flags: `IsOperatingCompany` reads `EntityType`, `IsListed` reads
+        // `Exchanges`. Both originate in the SEC submissions JSON. A regression in the
+        // JSON-property mapping — e.g. someone reading `entityType` from the wrong field
+        // after a Newtonsoft rename, or dropping the `?? []` Exchanges defensive — would
+        // silently misclassify every company sync from that point on.
+        //
+        // This `[Fact]` ships the smallest representative SEC payload: an operating
+        // company listed on Nasdaq with a single-entry `exchanges` array. Asserts each of
+        // the three properties `GetCompanyMetadata` populates — `Cik` (echoed from the
+        // input parameter, not from the body), `EntityType` (from `entityType`),
+        // `Exchanges` (from `exchanges`) — so a swapped or renamed field surfaces here
+        // rather than as a subtle classification drift downstream.
+        var json = """
+            {
+              "cik": "1234567",
+              "name": "Test Co",
+              "entityType": "operating",
+              "exchanges": ["Nasdaq"],
+              "filings": { "recent": { }, "files": [] }
+            }
+            """;
+
+        var handler = new ScriptedHandler(json);
+        var httpClient = new HttpClient(handler);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" })
+            .Build();
+        var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
+
+        var metadata = await sut.GetCompanyMetadata("1234567");
+
+        metadata.Should().NotBeNull();
+        metadata!.Cik.Should().Be("1234567");
+        metadata.EntityType.Should().Be("operating");
+        metadata.Exchanges.Should().Equal("Nasdaq");
+    }
+
     private sealed class ScriptedHandler : HttpMessageHandler {
         private readonly Queue<string> _responses;
 
