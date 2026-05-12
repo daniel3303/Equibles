@@ -17,6 +17,7 @@
     <ProjectReference Include="..\..\src\Equibles.Congress.HostedService\Equibles.Congress.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Holdings.HostedService\Equibles.Holdings.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Sec.BusinessLogic\Equibles.Sec.BusinessLogic.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Web\Equibles.Web.csproj" />
   </ItemGroup>
 
 </Project>
