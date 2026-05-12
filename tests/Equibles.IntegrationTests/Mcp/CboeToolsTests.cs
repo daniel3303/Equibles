@@ -30,4 +30,24 @@ public class CboeToolsTests {
 
         result.Should().Be("Invalid type 'Bogus'. Valid types: Total, Equity, Index, Vix, Etp");
     }
+
+    [Fact]
+    public async Task GetVixHistory_EmptyDatabase_ReturnsNoDataMessage() {
+        // GetVixHistory's empty-state reply is "No VIX data found in the specified
+        // date range." — date-range-scoped, not "no data ever". An MCP client uses
+        // the wording to decide whether to widen its date window (the data exists
+        // somewhere) versus surface a backfill problem. If a refactor swapped in a
+        // generic "no data available" message, the agent loses the recovery hint.
+        using var ctx = TestDbContextFactory.Create(
+            new CboeModuleConfiguration(),
+            new ErrorsModuleConfiguration());
+        var putCallRepo = new CboePutCallRatioRepository(ctx);
+        var vixRepo = new CboeVixDailyRepository(ctx);
+        var errorManager = new ErrorManager(new ErrorRepository(ctx));
+        var sut = new CboeTools(putCallRepo, vixRepo, errorManager, Substitute.For<ILogger<CboeTools>>());
+
+        var result = await sut.GetVixHistory();
+
+        result.Should().Be("No VIX data found in the specified date range.");
+    }
 }
