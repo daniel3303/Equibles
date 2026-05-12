@@ -87,11 +87,12 @@ public class MarketController : BaseController {
         var values = records.Where(r => r.PutCallRatio.HasValue).Select(r => (double)r.PutCallRatio.Value).ToArray();
         if (values.Length > 0) {
             var stats = new DescriptiveStatistics(values);
-            viewModel.Mean = (decimal)Math.Round(stats.Mean, 4);
-            viewModel.Median = (decimal)Math.Round(values.Median(), 4);
-            viewModel.Min = (decimal)stats.Minimum;
-            viewModel.Max = (decimal)stats.Maximum;
-            viewModel.StdDev = (decimal)Math.Round(stats.StandardDeviation, 4);
+            viewModel.Mean = SafeRound(stats.Mean, 4);
+            viewModel.Median = SafeRound(values.Median(), 4);
+            viewModel.Min = SafeRound(stats.Minimum, 4);
+            viewModel.Max = SafeRound(stats.Maximum, 4);
+            // StandardDeviation is NaN for a single-value sample.
+            viewModel.StdDev = SafeRound(stats.StandardDeviation, 4);
             viewModel.LatestRatio = records.FirstOrDefault()?.PutCallRatio;
             if (records.Count > 1) viewModel.PreviousRatio = records[1].PutCallRatio;
         }
@@ -119,11 +120,12 @@ public class MarketController : BaseController {
         var values = records.Select(r => (double)r.Close).ToArray();
         if (values.Length > 0) {
             var stats = new DescriptiveStatistics(values);
-            viewModel.Mean = (decimal)Math.Round(stats.Mean, 2);
-            viewModel.Median = (decimal)Math.Round(values.Median(), 2);
-            viewModel.Min = (decimal)stats.Minimum;
-            viewModel.Max = (decimal)stats.Maximum;
-            viewModel.StdDev = (decimal)Math.Round(stats.StandardDeviation, 2);
+            viewModel.Mean = SafeRound(stats.Mean, 2);
+            viewModel.Median = SafeRound(values.Median(), 2);
+            viewModel.Min = SafeRound(stats.Minimum, 2);
+            viewModel.Max = SafeRound(stats.Maximum, 2);
+            // StandardDeviation is NaN for a single-value sample.
+            viewModel.StdDev = SafeRound(stats.StandardDeviation, 2);
             viewModel.LatestClose = records.FirstOrDefault()?.Close;
             if (records.Count > 1) viewModel.PreviousClose = records[1].Close;
 
@@ -141,5 +143,9 @@ public class MarketController : BaseController {
     private static List<decimal?> ComputeSma(double[] values, int period) {
         var sma = values.MovingAverage(period);
         return sma.Select((v, i) => i < period - 1 ? (decimal?)null : (decimal?)Math.Round(v, 2)).ToList();
+    }
+
+    private static decimal? SafeRound(double value, int digits) {
+        return double.IsFinite(value) ? (decimal?)Math.Round(value, digits) : null;
     }
 }
