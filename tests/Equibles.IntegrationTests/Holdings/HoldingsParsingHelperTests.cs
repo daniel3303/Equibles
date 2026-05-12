@@ -89,4 +89,23 @@ public class HoldingsParsingHelperTests {
 
         result.Should().Be(Equibles.Holdings.Data.Models.ShareType.Principal);
     }
+
+    [Fact]
+    public void ParseOptionType_CallString_ReturnsCall() {
+        // 13F INFOTABLE.tsv column PUTCALL distinguishes derivative holdings: blank for
+        // direct equity, `PUT` for put options, `CALL` for call options. The parser returns
+        // `OptionType?` — null for the blank/unknown case, distinct enum values for the
+        // two named cases. This `[Fact]` pins the `CALL → Call` branch.
+        //
+        // The risk pattern here is the silent-fallthrough: `_ => null` swallows any value
+        // the parser doesn't recognise, including hypothetical case-typos like `Call`
+        // (mixed case) IF the production code ever loses its `ToUpperInvariant()` upstream.
+        // The assertion uses uppercase `CALL` to match the wire format, and a non-null
+        // expectation discriminates against the swallow path. Together with the existing
+        // `[Fact]` set, this completes coverage of every named branch in
+        // `HoldingsParsingHelper`.
+        var result = HoldingsParsingHelper.ParseOptionType("CALL");
+
+        result.Should().Be(Equibles.Holdings.Data.Models.OptionType.Call);
+    }
 }
