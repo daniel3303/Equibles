@@ -554,4 +554,64 @@ public class InsiderTradingFilingProcessorTests {
         transactions[0].Shares.Should().Be(2000);
         transactions[0].TransactionCode.Should().Be(TransactionCode.Award);
     }
+
+    [Fact]
+    public async Task Process_Form3WithDerivativeHolding_InsertsHoldingFromDerivativeTable() {
+        // Companion to Process_Form4WithDerivativeTransaction. Inside `<derivativeTable>`
+        // there are two element kinds — `<derivativeTransaction>` (covered) and
+        // `<derivativeHolding>` (NOT covered). The holdings loop at line 146 of
+        // InsiderTradingFilingProcessor.Process is what initial-statement Form 3 filings
+        // rely on: a newly-onboarding executive who already owns stock options reports them
+        // as derivativeHoldings (no transactionDate, no acquired/disposed code — just "this
+        // is what I currently hold"). `ParseHolding` synthesises a record using
+        // `filing.ReportDate` as the TransactionDate, hard-codes TransactionCode.Other and
+        // AcquiredDisposed.Acquired, and lifts Shares from `postTransactionAmounts`.
+        //
+        // A regression that dropped this branch — or accidentally narrowed the inner foreach
+        // to `derivativeTransaction` only — would silently flatten every newly-onboarding
+        // executive's option portfolio on Form 3 filings. The existing
+        // Process_Form3Holdings_InsertsHoldingsAsTransactions test covers the
+        // **nonDerivative** holding path; this one covers the derivative path.
+        var derivativeHoldingForm3Xml = """
+            <ownershipDocument>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0007777777</rptOwnerCik>
+                        <rptOwnerName>Jane Doe</rptOwnerName>
+                    </reportingOwnerId>
+                    <reportingOwnerRelationship>
+                        <isOfficer>1</isOfficer>
+                        <officerTitle>CFO</officerTitle>
+                    </reportingOwnerRelationship>
+                </reportingOwner>
+                <derivativeTable>
+                    <derivativeHolding>
+                        <securityTitle><value>Stock Option (Right to Buy)</value></securityTitle>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>5000</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </derivativeHolding>
+                </derivativeTable>
+            </ownershipDocument>
+            """;
+        var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(derivativeHoldingForm3Xml);
+        var filing = MakeFiling(form: "3");
+
+        var result = await processor.Process(filing, MakeCompany());
+
+        result.Should().BeTrue();
+        var transactions = txRepo.GetAll().ToList();
+        transactions.Should().ContainSingle();
+        transactions[0].SecurityTitle.Should().Be("Stock Option (Right to Buy)");
+        transactions[0].Shares.Should().Be(5000);
+        // ParseHolding hard-codes TransactionCode = Other (no transaction, just a held position).
+        transactions[0].TransactionCode.Should().Be(TransactionCode.Other);
+        // TransactionDate falls back to filing.ReportDate because <derivativeHolding> has no
+        // <transactionDate> element of its own.
+        transactions[0].TransactionDate.Should().Be(filing.ReportDate);
+    }
 }
