@@ -24,6 +24,7 @@ public class StocksIndexTests {
         // "search" so the query-string parameter round-trips through asp-for. A renamed parameter
         // on the controller or a broken tag helper would change the rendered name attribute and
         // silently break URL-based searching.
+        await _web.ResetAndSeedAsync();   // guarantee empty DB regardless of test ordering
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
 
         var response = await page.GotoAsync("/stocks");

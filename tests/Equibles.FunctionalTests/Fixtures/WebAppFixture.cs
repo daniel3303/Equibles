@@ -1,6 +1,10 @@
+using Equibles.Data;
 using Equibles.Web;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
+using Respawn;
 using Testcontainers.PostgreSql;
 using Xunit;
 
@@ -17,6 +21,11 @@ namespace Equibles.FunctionalTests.Fixtures;
 /// its IServer as a <c>TestServer</c> — accessing its <c>Server</c> or <c>Services</c> property
 /// throws <c>InvalidCastException</c> when the underlying server is Kestrel, so it cannot drive
 /// the real HTTP listener Playwright needs.
+///
+/// Tests that need pre-existing data call <see cref="ResetAndSeedAsync"/> from their
+/// constructor — xUnit creates a fresh test class instance per test, so per-test isolation
+/// is automatic. Respawn truncates every user table in <c>public</c> between calls while
+/// keeping the migration history intact.
 /// </summary>
 public class WebAppFixture : IAsyncLifetime {
     private readonly PostgreSqlContainer _db = new PostgreSqlBuilder()
@@ -28,8 +37,16 @@ public class WebAppFixture : IAsyncLifetime {
 
     private WebApplication _app;
     private string _keysDirectory;
+    private Respawner _respawner;
 
     public string BaseUrl { get; private set; }
+
+    /// <summary>
+    /// Application root services. Use a scope (<c>Services.CreateScope()</c>) before resolving
+    /// scoped dependencies like <see cref="EquiblesDbContext"/>; never resolve them directly
+    /// from this provider.
+    /// </summary>
+    public IServiceProvider Services => _app.Services;
 
     public async Task InitializeAsync() {
         await _db.StartAsync();
@@ -58,6 +75,19 @@ public class WebAppFixture : IAsyncLifetime {
         _app.Urls.Add("http://127.0.0.1:0");
         await _app.StartAsync();
         BaseUrl = _app.Urls.First();
+
+        // Respawn snapshots the schema's user tables once and replays a TRUNCATE on every reset.
+        // Limit to the public schema so ParadeDB's pg_search / pgvector internal tables are not
+        // touched. The migrations history table is excluded so EF Core doesn't replay migrations
+        // on every test. Respawn's string overload defaults to SqlClient — for Postgres we open
+        // an explicit NpgsqlConnection and pass it through.
+        await using var respawnConnection = new NpgsqlConnection(_db.GetConnectionString());
+        await respawnConnection.OpenAsync();
+        _respawner = await Respawner.CreateAsync(respawnConnection, new RespawnerOptions {
+            DbAdapter = DbAdapter.Postgres,
+            SchemasToInclude = ["public"],
+            TablesToIgnore = [new Respawn.Graph.Table("__EFMigrationsHistory")],
+        });
     }
 
     public async Task DisposeAsync() {
@@ -69,6 +99,31 @@ public class WebAppFixture : IAsyncLifetime {
         if (_keysDirectory is not null && Directory.Exists(_keysDirectory)) {
             try { Directory.Delete(_keysDirectory, recursive: true); } catch { /* best-effort */ }
         }
+    }
+
+    /// <summary>
+    /// Truncates all user tables in <c>public</c> via Respawn, then runs <paramref name="seed"/>
+    /// against a fresh <see cref="EquiblesDbContext"/> scope. The seed delegate receives an
+    /// attached DbContext — add entities and the method will call <c>SaveChangesAsync</c> for
+    /// you. Pass <c>null</c> (or omit) to reset without seeding.
+    ///
+    /// Call this from the test class constructor so each test starts from a known state. xUnit
+    /// instantiates the class once per test, so seeding does not leak across tests in the same
+    /// class.
+    /// </summary>
+    public async Task ResetAndSeedAsync(Func<EquiblesDbContext, Task> seed = null) {
+        // Same Postgres caveat as fixture init — Respawn's string overload defaults to SqlClient.
+        await using (var resetConnection = new NpgsqlConnection(_db.GetConnectionString())) {
+            await resetConnection.OpenAsync();
+            await _respawner.ResetAsync(resetConnection);
+        }
+
+        if (seed is null) return;
+
+        using var scope = _app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        await seed(dbContext);
+        await dbContext.SaveChangesAsync();
     }
 
     private static string ResolveWebContentRoot() {

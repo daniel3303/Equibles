@@ -24,6 +24,7 @@ public class EconomicDataIndexTests {
         // 0 — not throw on a nested empty Sum. Catches view regressions where a premature
         // NameForHumans on a missing category, or a missing null-guard on the latest-observation
         // join, would only surface on a clean install with no FRED data yet.
+        await _web.ResetAndSeedAsync();   // guarantee empty DB regardless of test ordering
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
 
         var response = await page.GotoAsync("/economicdata");

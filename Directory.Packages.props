@@ -80,6 +80,7 @@
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.3" />
     <PackageVersion Include="Testcontainers" Version="4.8.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.8.0" />
+    <PackageVersion Include="Respawn" Version="6.2.1" />
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.5" />
   </ItemGroup>
 </Project>

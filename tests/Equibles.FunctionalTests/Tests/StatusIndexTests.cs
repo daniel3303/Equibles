@@ -24,6 +24,7 @@ public class StatusIndexTests {
         // that depend on the view model being non-null. A regression that throws on Workers.Count
         // or RecentErrors enumeration (because some sub-collection was null instead of empty)
         // would surface here, not in any unit test.
+        await _web.ResetAndSeedAsync();   // guarantee empty DB regardless of test ordering
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
 
         var response = await page.GotoAsync("/status");
