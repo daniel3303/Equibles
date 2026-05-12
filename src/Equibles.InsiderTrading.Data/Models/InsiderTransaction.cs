@@ -8,7 +8,9 @@ namespace Equibles.InsiderTrading.Data.Models;
 [Index(nameof(InsiderOwnerId), nameof(TransactionDate))]
 [Index(nameof(AccessionNumber))]
 [Index(nameof(CommonStockId), nameof(InsiderOwnerId), nameof(TransactionDate),
-    nameof(TransactionCode), nameof(SecurityTitle), nameof(AccessionNumber), IsUnique = true)]
+    nameof(TransactionCode), nameof(SecurityTitle), nameof(AccessionNumber),
+    nameof(OwnershipNature), nameof(Shares), nameof(PricePerShare), nameof(SharesOwnedAfter),
+    IsUnique = true)]
 [Index(nameof(FilingDate))]
 [Index(nameof(TransactionDate))]
 public class InsiderTransaction {

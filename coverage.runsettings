@@ -7,16 +7,6 @@
           <Format>cobertura</Format>
           <ExcludeByFile>**/Migrations/**</ExcludeByFile>
           <ExcludeByAttribute>GeneratedCodeAttribute,CompilerGeneratedAttribute</ExcludeByAttribute>
-          <Exclude>
-            [Equibles.Migrations]*,
-            [Equibles.Mcp.Server]*,
-            [Equibles.Worker.Host]*,
-            [Equibles.Integrations.*]*,
-            [Equibles.*.Mcp]*.Extensions.*,
-            [Equibles.Mcp]*.Extensions.*,
-            [Equibles.Data]*PluginLoader,
-            [Equibles.Data]*EquiblesModuleBuilder
-          </Exclude>
         </Configuration>
       </DataCollector>
     </DataCollectors>

@@ -554,4 +554,369 @@ public class InsiderTradingFilingProcessorTests {
         transactions[0].Shares.Should().Be(2000);
         transactions[0].TransactionCode.Should().Be(TransactionCode.Award);
     }
+
+    [Fact]
+    public async Task Process_Form3WithDerivativeHolding_InsertsHoldingFromDerivativeTable() {
+        // Companion to Process_Form4WithDerivativeTransaction. Inside `<derivativeTable>`
+        // there are two element kinds — `<derivativeTransaction>` (covered) and
+        // `<derivativeHolding>` (NOT covered). The holdings loop at line 146 of
+        // InsiderTradingFilingProcessor.Process is what initial-statement Form 3 filings
+        // rely on: a newly-onboarding executive who already owns stock options reports them
+        // as derivativeHoldings (no transactionDate, no acquired/disposed code — just "this
+        // is what I currently hold"). `ParseHolding` synthesises a record using
+        // `filing.ReportDate` as the TransactionDate, hard-codes TransactionCode.Other and
+        // AcquiredDisposed.Acquired, and lifts Shares from `postTransactionAmounts`.
+        //
+        // A regression that dropped this branch — or accidentally narrowed the inner foreach
+        // to `derivativeTransaction` only — would silently flatten every newly-onboarding
+        // executive's option portfolio on Form 3 filings. The existing
+        // Process_Form3Holdings_InsertsHoldingsAsTransactions test covers the
+        // **nonDerivative** holding path; this one covers the derivative path.
+        var derivativeHoldingForm3Xml = """
+            <ownershipDocument>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0007777777</rptOwnerCik>
+                        <rptOwnerName>Jane Doe</rptOwnerName>
+                    </reportingOwnerId>
+                    <reportingOwnerRelationship>
+                        <isOfficer>1</isOfficer>
+                        <officerTitle>CFO</officerTitle>
+                    </reportingOwnerRelationship>
+                </reportingOwner>
+                <derivativeTable>
+                    <derivativeHolding>
+                        <securityTitle><value>Stock Option (Right to Buy)</value></securityTitle>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>5000</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </derivativeHolding>
+                </derivativeTable>
+            </ownershipDocument>
+            """;
+        var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(derivativeHoldingForm3Xml);
+        var filing = MakeFiling(form: "3");
+
+        var result = await processor.Process(filing, MakeCompany());
+
+        result.Should().BeTrue();
+        var transactions = txRepo.GetAll().ToList();
+        transactions.Should().ContainSingle();
+        transactions[0].SecurityTitle.Should().Be("Stock Option (Right to Buy)");
+        transactions[0].Shares.Should().Be(5000);
+        // ParseHolding hard-codes TransactionCode = Other (no transaction, just a held position).
+        transactions[0].TransactionCode.Should().Be(TransactionCode.Other);
+        // TransactionDate falls back to filing.ReportDate because <derivativeHolding> has no
+        // <transactionDate> element of its own.
+        transactions[0].TransactionDate.Should().Be(filing.ReportDate);
+    }
+
+    [Fact]
+    public async Task Process_Form4WithDirectAndIndirectOwnershipOfSameSecurity_PersistsBothRecords() {
+        // A single Form 4 can report the same (security, date, code) twice when an insider
+        // holds the position both directly (own account) and indirectly (through a trust,
+        // joint account, etc.). Under SEC rules these are distinct beneficial ownerships
+        // with their own running balances, so both rows must persist — the dedup key
+        // must include OwnershipNature (and SharesOwnedAfter) to keep them apart.
+        var dualOwnershipForm4Xml = """
+            <ownershipDocument>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0008888888</rptOwnerCik>
+                        <rptOwnerName>Alice Roe</rptOwnerName>
+                    </reportingOwnerId>
+                    <reportingOwnerRelationship>
+                        <isOfficer>1</isOfficer>
+                        <officerTitle>CTO</officerTitle>
+                    </reportingOwnerRelationship>
+                </reportingOwner>
+                <nonDerivativeTable>
+                    <nonDerivativeTransaction>
+                        <securityTitle><value>Common Stock</value></securityTitle>
+                        <transactionDate><value>2024-05-10</value></transactionDate>
+                        <transactionCoding><transactionCode>S</transactionCode></transactionCoding>
+                        <transactionAmounts>
+                            <transactionShares><value>500</value></transactionShares>
+                            <transactionPricePerShare><value>150.00</value></transactionPricePerShare>
+                            <transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>
+                        </transactionAmounts>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>1000</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </nonDerivativeTransaction>
+                    <nonDerivativeTransaction>
+                        <securityTitle><value>Common Stock</value></securityTitle>
+                        <transactionDate><value>2024-05-10</value></transactionDate>
+                        <transactionCoding><transactionCode>S</transactionCode></transactionCoding>
+                        <transactionAmounts>
+                            <transactionShares><value>500</value></transactionShares>
+                            <transactionPricePerShare><value>150.00</value></transactionPricePerShare>
+                            <transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>
+                        </transactionAmounts>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>2000</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>I</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </nonDerivativeTransaction>
+                </nonDerivativeTable>
+            </ownershipDocument>
+            """;
+        var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(dualOwnershipForm4Xml);
+
+        var result = await processor.Process(MakeFiling(), MakeCompany());
+
+        result.Should().BeTrue();
+        var transactions = txRepo.GetAll().OrderBy(t => t.OwnershipNature).ToList();
+        // Direct and Indirect are separate beneficial ownerships under SEC rules — they
+        // must be persisted as two distinct rows (their SharesOwnedAfter balances and
+        // OwnershipNature differ).
+        transactions.Should().HaveCount(2);
+        transactions[0].OwnershipNature.Should().Be(OwnershipNature.Direct);
+        transactions[0].SharesOwnedAfter.Should().Be(1000);
+        transactions[1].OwnershipNature.Should().Be(OwnershipNature.Indirect);
+        transactions[1].SharesOwnedAfter.Should().Be(2000);
+    }
+
+    [Fact]
+    public async Task Process_Form4WithMultiplePurchasesSameDay_PersistsAllTransactions() {
+        // Real-world filing: Joel Marcus (ARE) 2026-05-05, accession 0001216955-26-000015
+        // reports three open-market purchases on the same day, broken out by price tranche.
+        // All three share (insider, security, date, code P, accession, ownership Direct);
+        // they differ only in Shares, PricePerShare, and the running SharesOwnedAfter.
+        // A dedup key that collapses on the narrow tuple silently drops the 2nd and 3rd
+        // tranches — the user-visible bug on https://equibles.com/stocks/are/insidertrading.
+        var multiPurchaseXml = """
+            <ownershipDocument>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0001216955</rptOwnerCik>
+                        <rptOwnerName>MARCUS JOEL S</rptOwnerName>
+                    </reportingOwnerId>
+                    <reportingOwnerRelationship>
+                        <isDirector>1</isDirector>
+                        <isOfficer>1</isOfficer>
+                        <officerTitle>Executive Chairman</officerTitle>
+                    </reportingOwnerRelationship>
+                </reportingOwner>
+                <nonDerivativeTable>
+                    <nonDerivativeTransaction>
+                        <securityTitle><value>Common Stock</value></securityTitle>
+                        <transactionDate><value>2026-05-05</value></transactionDate>
+                        <transactionCoding><transactionCode>P</transactionCode></transactionCoding>
+                        <transactionAmounts>
+                            <transactionShares><value>2062</value></transactionShares>
+                            <transactionPricePerShare><value>41.89</value></transactionPricePerShare>
+                            <transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
+                        </transactionAmounts>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>574786</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </nonDerivativeTransaction>
+                    <nonDerivativeTransaction>
+                        <securityTitle><value>Common Stock</value></securityTitle>
+                        <transactionDate><value>2026-05-05</value></transactionDate>
+                        <transactionCoding><transactionCode>P</transactionCode></transactionCoding>
+                        <transactionAmounts>
+                            <transactionShares><value>3832</value></transactionShares>
+                            <transactionPricePerShare><value>42.76</value></transactionPricePerShare>
+                            <transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
+                        </transactionAmounts>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>578618</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </nonDerivativeTransaction>
+                    <nonDerivativeTransaction>
+                        <securityTitle><value>Common Stock</value></securityTitle>
+                        <transactionDate><value>2026-05-05</value></transactionDate>
+                        <transactionCoding><transactionCode>P</transactionCode></transactionCoding>
+                        <transactionAmounts>
+                            <transactionShares><value>1606</value></transactionShares>
+                            <transactionPricePerShare><value>43.70</value></transactionPricePerShare>
+                            <transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
+                        </transactionAmounts>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>580224</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </nonDerivativeTransaction>
+                </nonDerivativeTable>
+            </ownershipDocument>
+            """;
+        var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(multiPurchaseXml);
+
+        var result = await processor.Process(MakeFiling(), MakeCompany());
+
+        result.Should().BeTrue();
+        var transactions = txRepo.GetAll().OrderBy(t => t.Shares).ToList();
+        transactions.Should().HaveCount(3);
+        transactions[0].Shares.Should().Be(1606);
+        transactions[0].PricePerShare.Should().Be(43.70m);
+        transactions[0].SharesOwnedAfter.Should().Be(580224);
+        transactions[1].Shares.Should().Be(2062);
+        transactions[1].PricePerShare.Should().Be(41.89m);
+        transactions[1].SharesOwnedAfter.Should().Be(574786);
+        transactions[2].Shares.Should().Be(3832);
+        transactions[2].PricePerShare.Should().Be(42.76m);
+        transactions[2].SharesOwnedAfter.Should().Be(578618);
+    }
+
+    [Fact]
+    public async Task Process_Form4WithMalformedTransactionDate_DropsThatRowAndPersistsTheRest() {
+        // `InsiderTradingFilingProcessor.ParseTransaction` short-circuits with `null` when
+        // `DateOnly.TryParse(transactionDateStr, out var transactionDate)` fails — the
+        // surrounding loop filters null results out (`if (transaction != null) ...`). The
+        // contract is: a single malformed `<transactionDate>` does NOT take down the whole
+        // filing; sibling transactions still flow through.
+        //
+        // This matters in production because SEC filers occasionally emit blank or
+        // typo'd date elements (e.g. `0000-00-00`, blank, or just `<value/>`). Without the
+        // skip, the parser would either throw (taking down the entire scrape iteration)
+        // or produce a `DateOnly.MinValue` row that violates the unique index. The current
+        // behaviour — silently drop the malformed row, persist the valid one — keeps
+        // ingestion resilient at the cost of one missing transaction.
+        //
+        // The `[Fact]` ships a Form 4 with two `<nonDerivativeTransaction>`s: the first has
+        // an empty `<transactionDate><value></value>`, the second is well-formed. Asserts:
+        // (a) Process returns true (parse succeeded overall), (b) exactly one row was
+        // persisted, (c) it's the well-formed one (SecurityTitle = "Common Stock B"
+        // distinguishes it from the dropped row's "Common Stock A").
+        var mixedDateForm4Xml = """
+            <ownershipDocument>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0006666666</rptOwnerCik>
+                        <rptOwnerName>Bob Lee</rptOwnerName>
+                    </reportingOwnerId>
+                    <reportingOwnerRelationship>
+                        <isOfficer>1</isOfficer>
+                        <officerTitle>COO</officerTitle>
+                    </reportingOwnerRelationship>
+                </reportingOwner>
+                <nonDerivativeTable>
+                    <nonDerivativeTransaction>
+                        <securityTitle><value>Common Stock A</value></securityTitle>
+                        <transactionDate><value></value></transactionDate>
+                        <transactionCoding><transactionCode>P</transactionCode></transactionCoding>
+                        <transactionAmounts>
+                            <transactionShares><value>100</value></transactionShares>
+                            <transactionPricePerShare><value>50.00</value></transactionPricePerShare>
+                            <transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
+                        </transactionAmounts>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>100</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </nonDerivativeTransaction>
+                    <nonDerivativeTransaction>
+                        <securityTitle><value>Common Stock B</value></securityTitle>
+                        <transactionDate><value>2024-04-22</value></transactionDate>
+                        <transactionCoding><transactionCode>P</transactionCode></transactionCoding>
+                        <transactionAmounts>
+                            <transactionShares><value>200</value></transactionShares>
+                            <transactionPricePerShare><value>75.00</value></transactionPricePerShare>
+                            <transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
+                        </transactionAmounts>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>200</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </nonDerivativeTransaction>
+                </nonDerivativeTable>
+            </ownershipDocument>
+            """;
+        var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(mixedDateForm4Xml);
+
+        var result = await processor.Process(MakeFiling(), MakeCompany());
+
+        result.Should().BeTrue();
+        var transactions = txRepo.GetAll().ToList();
+        transactions.Should().ContainSingle();
+        transactions[0].SecurityTitle.Should().Be("Common Stock B");
+    }
+
+    [Fact]
+    public async Task Process_Form4WithDisposedTransaction_PersistsAsDisposedNotAcquired() {
+        // ParseTransaction encodes the SEC acquired-or-disposed code as a one-line ternary:
+        //   AcquiredDisposed = adCode == "A" ? Acquired : Disposed;
+        // The Acquired side is covered by Process_ValidForm4_InsertsTransactionsAndOwner
+        // (purchase with code "A"). The Disposed side — the `else` of the ternary — has
+        // never been exercised explicitly, even though it's exactly half of Form 4 payloads
+        // (every share sale flows through it).
+        //
+        // The risk is a refactor that swaps the ternary direction or drops the comparison
+        // (`?? Acquired` would always classify as Acquired). The resulting classification
+        // bug is silent — share counts and prices look right, only the direction of every
+        // sale is wrong, and downstream insider-sentiment signals derive purely from this
+        // flag.
+        //
+        // The `[Fact]` ships a Form 4 with a single sale: transaction code `S`,
+        // transactionAcquiredDisposedCode `D`. Asserts the persisted row's `AcquiredDisposed`
+        // is `Disposed` — pinning the "else" branch of the ternary.
+        var saleForm4Xml = """
+            <ownershipDocument>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0005555555</rptOwnerCik>
+                        <rptOwnerName>Carol Vu</rptOwnerName>
+                    </reportingOwnerId>
+                    <reportingOwnerRelationship>
+                        <isOfficer>1</isOfficer>
+                        <officerTitle>CFO</officerTitle>
+                    </reportingOwnerRelationship>
+                </reportingOwner>
+                <nonDerivativeTable>
+                    <nonDerivativeTransaction>
+                        <securityTitle><value>Common Stock</value></securityTitle>
+                        <transactionDate><value>2024-07-08</value></transactionDate>
+                        <transactionCoding><transactionCode>S</transactionCode></transactionCoding>
+                        <transactionAmounts>
+                            <transactionShares><value>1500</value></transactionShares>
+                            <transactionPricePerShare><value>200.00</value></transactionPricePerShare>
+                            <transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>
+                        </transactionAmounts>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>8500</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </nonDerivativeTransaction>
+                </nonDerivativeTable>
+            </ownershipDocument>
+            """;
+        var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(saleForm4Xml);
+
+        var result = await processor.Process(MakeFiling(), MakeCompany());
+
+        result.Should().BeTrue();
+        var transactions = txRepo.GetAll().ToList();
+        transactions.Should().ContainSingle();
+        transactions[0].AcquiredDisposed.Should().Be(AcquiredDisposed.Disposed);
+        transactions[0].TransactionCode.Should().Be(TransactionCode.Sale);
+    }
 }

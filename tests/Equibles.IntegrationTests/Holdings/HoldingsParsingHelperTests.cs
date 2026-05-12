@@ -1,3 +1,4 @@
+using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.HostedService.Services;
 
 namespace Equibles.IntegrationTests.Holdings;
@@ -39,5 +40,72 @@ public class HoldingsParsingHelperTests {
         var result = HoldingsParsingHelper.ParseInvestmentDiscretion("DFND");
 
         result.Should().Be(Equibles.Holdings.Data.Models.InvestmentDiscretion.Defined);
+    }
+
+    [Fact]
+    public void ResolveManagerName_AccessionAndSequenceFoundInOtherManagers_ReturnsMappedName() {
+        // 13F-HR filings can carry multiple managers per accession — the primary filing
+        // manager from SUBMISSION.tsv plus zero-or-more "other managers" listed in
+        // OTHERMANAGER2.tsv keyed by `(ACCESSION_NUMBER, SEQUENCENUMBER)`. During INFOTABLE
+        // processing, each holding row points to a manager via its OTHERMANAGER index;
+        // ResolveManagerName walks the nested `OtherManagers[accession][seq]` dictionary to
+        // turn that index back into a human-readable name. A regression that lost the inner
+        // dictionary or keyed by the wrong tuple would leave every multi-manager holding
+        // attributed to "null" — silently flattening real co-advisor relationships.
+        //
+        // This `[Fact]` pins the happy-path lookup at minimum size: one accession with two
+        // sequence-numbered managers, asks for sequence 2, asserts the second name comes
+        // back. Covers (a) the outer dictionary hit, (b) the inner dictionary hit, (c) the
+        // exact sequence-number selection (not e.g. first-in-iteration order).
+        var context = new ImportContext {
+            OtherManagers = new Dictionary<string, Dictionary<int, string>>(StringComparer.OrdinalIgnoreCase) {
+                ["ACC-001"] = new() {
+                    [1] = "Capital Group Companies, Inc.",
+                    [2] = "Capital Research Global Investors",
+                },
+            },
+        };
+
+        var result = HoldingsParsingHelper.ResolveManagerName(context, "ACC-001", managerNumber: 2);
+
+        result.Should().Be("Capital Research Global Investors");
+    }
+
+    [Fact]
+    public void ParseShareType_PrnAbbreviation_ReturnsPrincipal() {
+        // 13F INFOTABLE.tsv encodes the share-quantity unit in column SSHPRNAMTTYPE with
+        // exactly two valid values: `SH` (equity share count) and `PRN` (principal amount —
+        // bond face value). PRN is the surprising one — a developer expanding the
+        // abbreviation by guess is more likely to read it as `Principal` (✓) than as
+        // `Print`, `Premium`, or anything else, but the real risk is a refactor that
+        // accidentally types `Default` or simply drops the branch (causing every bond
+        // holding to be classified as `Shares`, which then double-counts when totals are
+        // computed as `Shares × price` rather than `Principal × price-per-100`). Pinning
+        // PRN→Principal here protects every bond holding in 13F filings from silently
+        // falling through to the share-count default. Production reads the value through
+        // `ToUpperInvariant()` first, so the assertion uses uppercase to match the SEC TSV
+        // wire format.
+        var result = HoldingsParsingHelper.ParseShareType("PRN");
+
+        result.Should().Be(Equibles.Holdings.Data.Models.ShareType.Principal);
+    }
+
+    [Fact]
+    public void ParseOptionType_CallString_ReturnsCall() {
+        // 13F INFOTABLE.tsv column PUTCALL distinguishes derivative holdings: blank for
+        // direct equity, `PUT` for put options, `CALL` for call options. The parser returns
+        // `OptionType?` — null for the blank/unknown case, distinct enum values for the
+        // two named cases. This `[Fact]` pins the `CALL → Call` branch.
+        //
+        // The risk pattern here is the silent-fallthrough: `_ => null` swallows any value
+        // the parser doesn't recognise, including hypothetical case-typos like `Call`
+        // (mixed case) IF the production code ever loses its `ToUpperInvariant()` upstream.
+        // The assertion uses uppercase `CALL` to match the wire format, and a non-null
+        // expectation discriminates against the swallow path. Together with the existing
+        // `[Fact]` set, this completes coverage of every named branch in
+        // `HoldingsParsingHelper`.
+        var result = HoldingsParsingHelper.ParseOptionType("CALL");
+
+        result.Should().Be(Equibles.Holdings.Data.Models.OptionType.Call);
     }
 }

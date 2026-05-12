@@ -119,8 +119,14 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task GetLatestPrices_EmptyInput_ReturnsNoTickersMessage() {
-        var result = await Sut().GetLatestPrices(",,,");
+    public async Task GetLatestPrices_OnlyCommasAndWhitespace_ReturnsNoTickersMessage() {
+        // GetLatestPrices splits the comma-separated input with RemoveEmptyEntries
+        // and TrimEntries, so a string of bare separators (",, , ,") collapses to
+        // an empty list. The guard that catches this returns "No tickers provided."
+        // — without it, the next branch would try to enforce the 25-ticker cap on
+        // an empty list (passes silently) and then emit a header-only Markdown
+        // table back to the MCP client, masking the input bug.
+        var result = await Sut().GetLatestPrices(",, , ,");
 
         result.Should().Be("No tickers provided.");
     }
