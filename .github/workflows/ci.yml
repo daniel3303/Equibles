@@ -30,7 +30,8 @@ jobs:
         run: dotnet build Equibles.sln --no-restore -c Release
 
       - name: Test
-        run: dotnet test Equibles.sln --no-build -c Release --logger "trx;LogFileName=results.trx" --collect:"XPlat Code Coverage" --settings coverage.runsettings --results-directory ./coverage
+        # Functional tests need Playwright + a ParadeDB container and live in functional.yml.
+        run: dotnet test Equibles.sln --no-build -c Release --filter "Category!=Functional" --logger "trx;LogFileName=results.trx" --collect:"XPlat Code Coverage" --settings coverage.runsettings --results-directory ./coverage
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

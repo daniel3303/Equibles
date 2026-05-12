@@ -57,8 +57,9 @@ builder.Services.AddControllersWithViews(options => {
     })
     .AddRazorRuntimeCompilation();
 
+var keysDirectory = builder.Configuration["DataProtection:KeysDirectory"] ?? "/app/keys";
 builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo("/app/keys"));
+    .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSession();
@@ -90,3 +91,8 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.Run();
+
+namespace Equibles.Web {
+    // Exposed for WebApplicationFactory<Equibles.Web.Program> in the functional test project.
+    public partial class Program;
+}

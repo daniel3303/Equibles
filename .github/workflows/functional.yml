@@ -1,0 +1,54 @@
+name: Functional Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  functional:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Restore
+        run: dotnet restore Equibles.sln
+
+      - name: Build functional test project
+        run: dotnet build tests/Equibles.FunctionalTests/Equibles.FunctionalTests.csproj --no-restore -c Release
+
+      - name: Install Playwright browsers
+        # Pre-install Chromium so the first test doesn't pay the download cost.
+        # PlaywrightFixture has a fallback for local runs without this step.
+        run: pwsh tests/Equibles.FunctionalTests/bin/Release/net10.0/playwright.ps1 install chromium --with-deps
+
+      - name: Run functional tests
+        run: dotnet test tests/Equibles.FunctionalTests/Equibles.FunctionalTests.csproj --no-build -c Release --logger "trx;LogFileName=results.trx" --results-directory ./functional-results
+
+      - name: Upload Playwright traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: tests/Equibles.FunctionalTests/bin/Release/net10.0/playwright-traces
+          if-no-files-found: ignore
+
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
+        with:
+          name: Functional Test Results
+          path: functional-results/**/*.trx
+          reporter: dotnet-trx
