@@ -21,6 +21,25 @@ public class CompanySyncServiceTests {
     private static readonly MethodInfo IsOperatingCompanyMethod = typeof(CompanySyncService)
         .GetMethod("IsOperatingCompany", BindingFlags.NonPublic | BindingFlags.Instance);
 
+    private static readonly MethodInfo ParseCikMethod = typeof(CompanySyncService)
+        .GetMethod("ParseCik", BindingFlags.NonPublic | BindingFlags.Static);
+
+    [Fact]
+    public void ParseCik_UnparseableValue_ReturnsLongMaxValue() {
+        // ShouldIncumbentWin breaks ticker-collision ties with
+        //     `ParseCik(incumbent.Cik) <= ParseCik(incoming.Cik)`
+        // — the smaller CIK wins. SEC sometimes serves non-numeric CIKs
+        // (test feeds, malformed JSON, "N/A" sentinel). ParseCik's MaxValue
+        // fallback ensures those junk CIKs LOSE every tie, so a valid
+        // incumbent is never replaced by a malformed challenger. Flip the
+        // fallback to 0 and unparseable CIKs would WIN every tie, silently
+        // overwriting good stocks with garbage. Pin MaxValue so the safety
+        // ordering survives any refactor of the helper.
+        var result = (long)ParseCikMethod.Invoke(null, ["not-a-number"]);
+
+        result.Should().Be(long.MaxValue);
+    }
+
     private static CompanySyncService CreateService(
         ISecEdgarClient secEdgarClient = null,
         WorkerOptions workerOptions = null) {
