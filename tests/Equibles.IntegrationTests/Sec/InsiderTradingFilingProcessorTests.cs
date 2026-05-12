@@ -857,4 +857,66 @@ public class InsiderTradingFilingProcessorTests {
         transactions.Should().ContainSingle();
         transactions[0].SecurityTitle.Should().Be("Common Stock B");
     }
+
+    [Fact]
+    public async Task Process_Form4WithDisposedTransaction_PersistsAsDisposedNotAcquired() {
+        // ParseTransaction encodes the SEC acquired-or-disposed code as a one-line ternary:
+        //   AcquiredDisposed = adCode == "A" ? Acquired : Disposed;
+        // The Acquired side is covered by Process_ValidForm4_InsertsTransactionsAndOwner
+        // (purchase with code "A"). The Disposed side — the `else` of the ternary — has
+        // never been exercised explicitly, even though it's exactly half of Form 4 payloads
+        // (every share sale flows through it).
+        //
+        // The risk is a refactor that swaps the ternary direction or drops the comparison
+        // (`?? Acquired` would always classify as Acquired). The resulting classification
+        // bug is silent — share counts and prices look right, only the direction of every
+        // sale is wrong, and downstream insider-sentiment signals derive purely from this
+        // flag.
+        //
+        // The `[Fact]` ships a Form 4 with a single sale: transaction code `S`,
+        // transactionAcquiredDisposedCode `D`. Asserts the persisted row's `AcquiredDisposed`
+        // is `Disposed` — pinning the "else" branch of the ternary.
+        var saleForm4Xml = """
+            <ownershipDocument>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0005555555</rptOwnerCik>
+                        <rptOwnerName>Carol Vu</rptOwnerName>
+                    </reportingOwnerId>
+                    <reportingOwnerRelationship>
+                        <isOfficer>1</isOfficer>
+                        <officerTitle>CFO</officerTitle>
+                    </reportingOwnerRelationship>
+                </reportingOwner>
+                <nonDerivativeTable>
+                    <nonDerivativeTransaction>
+                        <securityTitle><value>Common Stock</value></securityTitle>
+                        <transactionDate><value>2024-07-08</value></transactionDate>
+                        <transactionCoding><transactionCode>S</transactionCode></transactionCoding>
+                        <transactionAmounts>
+                            <transactionShares><value>1500</value></transactionShares>
+                            <transactionPricePerShare><value>200.00</value></transactionPricePerShare>
+                            <transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>
+                        </transactionAmounts>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>8500</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </nonDerivativeTransaction>
+                </nonDerivativeTable>
+            </ownershipDocument>
+            """;
+        var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(saleForm4Xml);
+
+        var result = await processor.Process(MakeFiling(), MakeCompany());
+
+        result.Should().BeTrue();
+        var transactions = txRepo.GetAll().ToList();
+        transactions.Should().ContainSingle();
+        transactions[0].AcquiredDisposed.Should().Be(AcquiredDisposed.Disposed);
+        transactions[0].TransactionCode.Should().Be(TransactionCode.Sale);
+    }
 }
