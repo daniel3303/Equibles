@@ -19,8 +19,13 @@ public static class PluginLoader {
     public static Assembly[] LoadAll() {
         if (_loaded != null) return _loaded;
 
+        // The same simple name can appear more than once in AppDomain.CurrentDomain.GetAssemblies()
+        // — for example, the xunit visual studio adapter is loaded both as the VSTest host and
+        // again via the WebApplicationFactory bin folder during functional tests. ToDictionary
+        // without a duplicate-tolerant aggregation throws; keep the first instance and skip the rest.
         var alreadyLoaded = AppDomain.CurrentDomain.GetAssemblies()
-            .ToDictionary(a => a.GetName().Name);
+            .GroupBy(a => a.GetName().Name)
+            .ToDictionary(g => g.Key, g => g.First());
         var plugins = new List<Assembly>(alreadyLoaded.Values);
 
         foreach (var dll in Directory.GetFiles(AppContext.BaseDirectory, "*.dll")) {

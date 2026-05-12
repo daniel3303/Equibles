@@ -651,44 +651,6 @@ public class StockTabServiceTests : IDisposable {
         result.HolderCount.Should().Be(0);
     }
 
-    /// <summary>
-    /// The previous quarter lookup in LoadHoldingsTab uses GroupBy + ToDictionaryAsync which the
-    /// EF Core InMemory provider cannot translate when owned entities (HoldingManagerEntry) are
-    /// auto-included. This test verifies the behavior against a real PostgreSQL database and is
-    /// skipped in unit tests. The logic is implicitly validated: when only one report date exists,
-    /// PreviousSharesByHolder is empty (see NoPreviousQuarter test); the GroupBy path is
-    /// exercised in integration tests.
-    /// </summary>
-    [Fact(Skip = "InMemory provider cannot translate GroupBy with owned entity collections")]
-    public async Task LoadHoldingsTab_PreviousQuarterLookup_PopulatesPreviousSharesByHolder() {
-        var stock = CreateStock();
-        var holder = CreateInstitutionalHolder("State Street", "0001112223");
-
-        var q4Date = new DateOnly(2024, 12, 31);
-        var q1Date = new DateOnly(2025, 3, 31);
-
-        _dbContext.Set<InstitutionalHolding>().AddRange(
-            new InstitutionalHolding {
-                CommonStockId = stock.Id, InstitutionalHolderId = holder.Id,
-                FilingDate = new DateOnly(2025, 2, 14), ReportDate = q4Date,
-                Value = 400_000, Shares = 8_000, ShareType = ShareType.Shares,
-                TitleOfClass = "COM", AccessionNumber = "0001-25-000030",
-            },
-            new InstitutionalHolding {
-                CommonStockId = stock.Id, InstitutionalHolderId = holder.Id,
-                FilingDate = new DateOnly(2025, 5, 15), ReportDate = q1Date,
-                Value = 600_000, Shares = 12_000, ShareType = ShareType.Shares,
-                TitleOfClass = "COM", AccessionNumber = "0001-25-000031",
-            }
-        );
-        await _dbContext.SaveChangesAsync();
-
-        var result = await _service.LoadHoldingsTab(stock, q1Date);
-
-        result.PreviousSharesByHolder.Should().ContainKey(holder.Id);
-        result.PreviousSharesByHolder[holder.Id].Should().Be(8_000);
-    }
-
     [Fact]
     public async Task LoadHoldingsTab_NoPreviousQuarter_PreviousSharesByHolderIsEmpty() {
         var stock = CreateStock();
