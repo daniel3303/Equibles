@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.ComponentModel;
 
 namespace Equibles.Sec.Data.Models;
@@ -25,19 +26,37 @@ public class DocumentType {
     public static readonly DocumentType FormThree = new("FormThree", "3");
     public static readonly DocumentType Other = new("Other", "Other");
 
-    private static readonly Dictionary<string, DocumentType> AllByValue = new(StringComparer.OrdinalIgnoreCase) {
-        [TenK.Value] = TenK, [TenQ.Value] = TenQ, [EightK.Value] = EightK,
-        [TenKa.Value] = TenKa, [TenQa.Value] = TenQa, [EightKa.Value] = EightKa,
-        [TwentyF.Value] = TwentyF, [SixK.Value] = SixK, [FortyF.Value] = FortyF,
-        [FormFour.Value] = FormFour, [FormThree.Value] = FormThree, [Other.Value] = Other
-    };
+    private static readonly ConcurrentDictionary<string, DocumentType> AllByValue = new(
+        new[] {
+            new KeyValuePair<string, DocumentType>(TenK.Value, TenK),
+            new KeyValuePair<string, DocumentType>(TenQ.Value, TenQ),
+            new KeyValuePair<string, DocumentType>(EightK.Value, EightK),
+            new KeyValuePair<string, DocumentType>(TenKa.Value, TenKa),
+            new KeyValuePair<string, DocumentType>(TenQa.Value, TenQa),
+            new KeyValuePair<string, DocumentType>(EightKa.Value, EightKa),
+            new KeyValuePair<string, DocumentType>(TwentyF.Value, TwentyF),
+            new KeyValuePair<string, DocumentType>(SixK.Value, SixK),
+            new KeyValuePair<string, DocumentType>(FortyF.Value, FortyF),
+            new KeyValuePair<string, DocumentType>(FormFour.Value, FormFour),
+            new KeyValuePair<string, DocumentType>(FormThree.Value, FormThree),
+            new KeyValuePair<string, DocumentType>(Other.Value, Other)
+        }, StringComparer.OrdinalIgnoreCase);
 
-    private static readonly Dictionary<string, DocumentType> AllByDisplayName = new(StringComparer.OrdinalIgnoreCase) {
-        [TenK.DisplayName] = TenK, [TenQ.DisplayName] = TenQ, [EightK.DisplayName] = EightK,
-        [TenKa.DisplayName] = TenKa, [TenQa.DisplayName] = TenQa, [EightKa.DisplayName] = EightKa,
-        [TwentyF.DisplayName] = TwentyF, [SixK.DisplayName] = SixK, [FortyF.DisplayName] = FortyF,
-        [FormFour.DisplayName] = FormFour, [FormThree.DisplayName] = FormThree, [Other.DisplayName] = Other
-    };
+    private static readonly ConcurrentDictionary<string, DocumentType> AllByDisplayName = new(
+        new[] {
+            new KeyValuePair<string, DocumentType>(TenK.DisplayName, TenK),
+            new KeyValuePair<string, DocumentType>(TenQ.DisplayName, TenQ),
+            new KeyValuePair<string, DocumentType>(EightK.DisplayName, EightK),
+            new KeyValuePair<string, DocumentType>(TenKa.DisplayName, TenKa),
+            new KeyValuePair<string, DocumentType>(TenQa.DisplayName, TenQa),
+            new KeyValuePair<string, DocumentType>(EightKa.DisplayName, EightKa),
+            new KeyValuePair<string, DocumentType>(TwentyF.DisplayName, TwentyF),
+            new KeyValuePair<string, DocumentType>(SixK.DisplayName, SixK),
+            new KeyValuePair<string, DocumentType>(FortyF.DisplayName, FortyF),
+            new KeyValuePair<string, DocumentType>(FormFour.DisplayName, FormFour),
+            new KeyValuePair<string, DocumentType>(FormThree.DisplayName, FormThree),
+            new KeyValuePair<string, DocumentType>(Other.DisplayName, Other)
+        }, StringComparer.OrdinalIgnoreCase);
 
     public static DocumentType FromValue(string value) {
         return AllByValue.GetValueOrDefault(value);
