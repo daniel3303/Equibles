@@ -13,6 +13,27 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
+    public void ParseInvestmentDiscretion_DfndAbbreviation_ReturnsDefined() {
+        // SEC 13F filings use abbreviated wire values for investment discretion:
+        // "SOLE", "DFND" (defined investment discretion), and "OTR" (other). The C#
+        // enum follows project standards by using full descriptive names — Sole,
+        // Defined, Other — and `ParseInvestmentDiscretion` is the bridge that
+        // translates each wire abbreviation to its domain value. The default arm
+        // of the switch falls back to `InvestmentDiscretion.Sole`, so a regression
+        // that drops the "DFND" case (or that renames the wire abbreviation in a
+        // copy-paste edit) would silently reclassify every Defined-discretion
+        // holding as Sole — corrupting the analytics that distinguish how managers
+        // exercise authority over the holdings they report.
+        //
+        // The sibling [Fact] above pins the same wire-to-domain contract for the
+        // "PRN" → Principal case in ParseShareType; this one extends it to the
+        // structurally similar ParseInvestmentDiscretion switch.
+        var result = HoldingsParsingHelper.ParseInvestmentDiscretion("DFND");
+
+        result.Should().Be(InvestmentDiscretion.Defined);
+    }
+
+    [Fact]
     public void ParseShareType_PrincipalAbbreviation_ReturnsPrincipal() {
         // SEC 13F filings use abbreviated wire values: "SH" for Shares, "PRN" for Principal.
         // The C# enum uses full descriptive names per project standards. ParseShareType is
