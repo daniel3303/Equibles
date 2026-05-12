@@ -7,6 +7,9 @@ public class YahooFinanceClientTests {
     private static readonly MethodInfo ToUnixTimestampMethod = typeof(YahooFinanceClient)
         .GetMethod("ToUnixTimestamp", BindingFlags.NonPublic | BindingFlags.Static);
 
+    private static readonly MethodInfo FromUnixTimestampMethod = typeof(YahooFinanceClient)
+        .GetMethod("FromUnixTimestamp", BindingFlags.NonPublic | BindingFlags.Static);
+
     [Fact]
     public void ToUnixTimestamp_KnownUtcDate_ReturnsCorrectUnixSeconds() {
         // GetHistoricalPrices builds the chart URL with `?period1={ToUnixTimestamp(start)}`,
@@ -19,6 +22,22 @@ public class YahooFinanceClientTests {
         var result = (long)ToUnixTimestampMethod.Invoke(null, [new DateOnly(2024, 1, 1)]);
 
         result.Should().Be(1704067200L);
+    }
+
+    [Fact]
+    public void FromUnixTimestamp_KnownUnixSeconds_ReturnsUtcCalendarDate() {
+        // The chart response carries one Unix-epoch-seconds timestamp per OHLCV row.
+        // FromUnixTimestamp converts it back to a DateOnly via `UnixEpoch.AddSeconds(...).UtcDateTime`
+        // — drop the `.UtcDateTime` accessor and the implicit `.LocalDateTime` conversion
+        // would shift the calendar date by the host's timezone offset, so a price stamped
+        // 2024-01-01 00:00 UTC by Yahoo would land on 2023-12-31 for any host west of UTC
+        // (and vice versa). That mis-stamps every historical row by ±1 day, breaks
+        // (CommonStockId, Date) dedup, and silently double-imports the boundary day.
+        // Pin the UTC anchor on the reverse direction, complementing the ToUnixTimestamp
+        // test that pins the forward direction.
+        var result = (DateOnly)FromUnixTimestampMethod.Invoke(null, [1704067200L]);
+
+        result.Should().Be(new DateOnly(2024, 1, 1));
     }
 
 
