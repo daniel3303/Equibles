@@ -60,7 +60,10 @@
             </div>
         </div>
     } else {
-        var chartHoldings = Model.Holdings.OrderBy(h => h.ReportDate).ToList();
+        var chartHoldings = Model.Holdings
+            .Where(h => h.OptionType == null)
+            .OrderBy(h => h.ReportDate)
+            .ToList();
 
         <h2 class="text-lg font-semibold mb-3">Holdings in @stock.Ticker</h2>
 
@@ -111,11 +114,16 @@
                                     }
                                 </td>
                                 <td class="hidden lg:table-cell">
-                                    @if (h.OptionType.HasValue) {
-                                        <span class="badge badge-sm @(h.OptionType.Value == Equibles.Holdings.Data.Models.OptionType.Call ? "badge-success" : "badge-error")">@h.OptionType.Value</span>
-                                        <span class="text-base-content/60 text-xs">@h.ShareType</span>
-                                    } else {
-                                        @h.ShareType
+                                    @switch (h.OptionType) {
+                                        case Equibles.Holdings.Data.Models.OptionType.Call:
+                                            <span class="badge badge-sm badge-success">Call</span>
+                                            break;
+                                        case Equibles.Holdings.Data.Models.OptionType.Put:
+                                            <span class="badge badge-sm badge-error">Put</span>
+                                            break;
+                                        default:
+                                            @h.ShareType
+                                            break;
                                     }
                                 </td>
                                 <td class="hidden lg:table-cell">@h.InvestmentDiscretion</td>
