@@ -492,4 +492,66 @@ public class InsiderTradingFilingProcessorTests {
         result.Should().BeTrue();
         txRepo.GetAll().Should().HaveCount(1);
     }
+
+    [Fact]
+    public async Task Process_Form4WithDerivativeTransaction_InsertsTransactionFromDerivativeTable() {
+        // Form 4 splits transactions across two parallel sections: <nonDerivativeTable> for
+        // common stock (already covered by Process_ValidForm4_InsertsTransactionsAndOwner) and
+        // <derivativeTable> for stock options, warrants, and similar instruments. The latter
+        // branch — `root.Element("derivativeTable")` in InsiderTradingFilingProcessor.Process
+        // — is not exercised by any existing test, yet executive stock options are an
+        // everyday Form 4 payload. A regression that broke just the derivative branch
+        // (e.g. someone narrowing the ParseTransaction caller to nonDerivative only) would
+        // silently lose option-grant data without dropping the surrounding stock trades.
+        //
+        // This `[Fact]` ships a Form 4 containing ONLY a derivativeTransaction — no
+        // nonDerivativeTable, no nonDerivativeTransaction — and asserts: (a) Process
+        // returns true (parse succeeded, not the empty "No Securities Owned" fallback),
+        // (b) one transaction is persisted, (c) SecurityTitle preserves the derivative
+        // instrument name ("Stock Option (Right to Buy)") which distinguishes it from a
+        // common-stock row.
+        var derivativeForm4Xml = """
+            <ownershipDocument>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0001234567</rptOwnerCik>
+                        <rptOwnerName>John Doe</rptOwnerName>
+                    </reportingOwnerId>
+                    <reportingOwnerRelationship>
+                        <isOfficer>1</isOfficer>
+                        <officerTitle>CEO</officerTitle>
+                    </reportingOwnerRelationship>
+                </reportingOwner>
+                <derivativeTable>
+                    <derivativeTransaction>
+                        <securityTitle><value>Stock Option (Right to Buy)</value></securityTitle>
+                        <transactionDate><value>2024-03-15</value></transactionDate>
+                        <transactionCoding><transactionCode>A</transactionCode></transactionCoding>
+                        <transactionAmounts>
+                            <transactionShares><value>2000</value></transactionShares>
+                            <transactionPricePerShare><value>0</value></transactionPricePerShare>
+                            <transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
+                        </transactionAmounts>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>2000</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </derivativeTransaction>
+                </derivativeTable>
+            </ownershipDocument>
+            """;
+        var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(derivativeForm4Xml);
+
+        var result = await processor.Process(MakeFiling(), MakeCompany());
+
+        result.Should().BeTrue();
+        var transactions = txRepo.GetAll().ToList();
+        transactions.Should().ContainSingle();
+        transactions[0].SecurityTitle.Should().Be("Stock Option (Right to Buy)");
+        transactions[0].Shares.Should().Be(2000);
+        transactions[0].TransactionCode.Should().Be(TransactionCode.Award);
+    }
 }
