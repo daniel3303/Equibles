@@ -291,6 +291,68 @@ public class SecEdgarClientTests {
         filings[0].AccessionNumber.Should().Be("0001-24-JAN");
     }
 
+    [Fact]
+    public async Task GetCompanyFilings_SameAccessionInRecentAndArchive_DistinctByCollapsesToOneRow() {
+        // SEC paginates older filings into archive files but the boundaries occasionally
+        // overlap — the same `accessionNumber` can appear in both `filings.recent` and a
+        // listed archive. `GetCompanyFilings` runs `.DistinctBy(f => f.AccessionNumber)`
+        // before applying the per-row filters; without it, the same Form 4 would be
+        // inserted twice into the result list and (downstream) cause the unique-index
+        // violation in `InsiderTransactionRepository` on the next save.
+        //
+        // This `[Fact]` ships TWO responses: the main `recent` block carrying one Form 4
+        // row, plus an archive whose filingFrom/filingTo overlaps the recent date and
+        // which carries the SAME accession (different primaryDocument string to make
+        // sure the test is comparing accessions, not whole rows). Asserts the result
+        // collapses to exactly one filing.
+        var mainJson = """
+            {
+              "cik": "1234567",
+              "name": "Test Co",
+              "filings": {
+                "recent": {
+                  "accessionNumber": ["0001-20-DUP"],
+                  "filingDate":      ["2020-06-15"],
+                  "reportDate":      ["2020-06-14"],
+                  "form":            ["4"],
+                  "primaryDocument": ["recent-form4.xml"],
+                  "primaryDocDescription": [""]
+                },
+                "files": [
+                  {
+                    "name": "CIK0001234567-submissions-001.json",
+                    "filingCount": 1,
+                    "filingFrom": "2020-01-01",
+                    "filingTo": "2020-12-31"
+                  }
+                ]
+              }
+            }
+            """;
+        var archiveJson = """
+            {
+              "accessionNumber": ["0001-20-DUP"],
+              "filingDate":      ["2020-06-15"],
+              "reportDate":      ["2020-06-14"],
+              "form":            ["4"],
+              "primaryDocument": ["archive-form4.xml"],
+              "primaryDocDescription": [""]
+            }
+            """;
+
+        var handler = new ScriptedHandler(mainJson, archiveJson);
+        var httpClient = new HttpClient(handler);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" })
+            .Build();
+        var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
+
+        var filings = await sut.GetCompanyFilings("1234567");
+
+        filings.Should().ContainSingle();
+        filings[0].AccessionNumber.Should().Be("0001-20-DUP");
+    }
+
     private sealed class ScriptedHandler : HttpMessageHandler {
         private readonly Queue<string> _responses;
 
