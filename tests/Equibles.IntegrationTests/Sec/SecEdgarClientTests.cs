@@ -140,6 +140,70 @@ public class SecEdgarClientTests {
         filings.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task GetCompanyFilings_RecentEmptyButArchiveInRange_FetchesArchiveAndMergesItsFilings() {
+        // Complement to GetCompanyFilings_FromDateAfterArchiveRange_SkipsArchiveFetchEntirely:
+        // there the test pinned that an out-of-window archive is NOT fetched. Here we pin the
+        // opposite leg — when the archive overlaps the request window, the second HTTP fetch
+        // happens, the archive JSON deserialises through `RecentFilings` (same shape as the
+        // main "recent" block), gets `MapToFilingData`'d, and is merged into the returned
+        // list via `AddRange` + `DistinctBy(AccessionNumber)`.
+        //
+        // A regression here can manifest as: archive contents silently dropped (caller sees
+        // empty results despite filings existing on EDGAR), or — once both legs are wired —
+        // a duplicate row when an accession appears in both `recent` and the archive but the
+        // DistinctBy is removed. This `[Fact]` ships an empty `recent` so any returned
+        // filing must have come from the archive fetch path, then asserts the archive's one
+        // Form 4 row is what we get back (AccessionNumber, Form).
+        var mainJson = """
+            {
+              "cik": "1234567",
+              "name": "Test Co",
+              "filings": {
+                "recent": {
+                  "accessionNumber": [],
+                  "filingDate": [],
+                  "reportDate": [],
+                  "form": [],
+                  "primaryDocument": [],
+                  "primaryDocDescription": []
+                },
+                "files": [
+                  {
+                    "name": "CIK0001234567-submissions-001.json",
+                    "filingCount": 1,
+                    "filingFrom": "2020-01-01",
+                    "filingTo": "2020-12-31"
+                  }
+                ]
+              }
+            }
+            """;
+        var archiveJson = """
+            {
+              "accessionNumber": ["0001-20-000099"],
+              "filingDate":      ["2020-06-15"],
+              "reportDate":      ["2020-06-14"],
+              "form":            ["4"],
+              "primaryDocument": ["wf-form4.xml"],
+              "primaryDocDescription": [""]
+            }
+            """;
+
+        var handler = new ScriptedHandler(mainJson, archiveJson);
+        var httpClient = new HttpClient(handler);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" })
+            .Build();
+        var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
+
+        var filings = await sut.GetCompanyFilings("1234567");
+
+        filings.Should().ContainSingle();
+        filings[0].AccessionNumber.Should().Be("0001-20-000099");
+        filings[0].Form.Should().Be("4");
+    }
+
     private sealed class ScriptedHandler : HttpMessageHandler {
         private readonly Queue<string> _responses;
 
