@@ -169,13 +169,19 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
             return true;
         }
 
-        // Deduplicate within the batch — a single filing can have multiple holdings with the
-        // same (stock, owner, date, code, title, accession) e.g. direct vs indirect ownership.
-        var seen = new HashSet<(Guid, Guid, DateOnly, TransactionCode, string, string)>();
+        // Deduplicate within the batch — only collapse rows that are byte-identical along
+        // every persisted dimension. A Form 4 can legitimately carry multiple non-derivative
+        // transactions on the same date with the same code and security (e.g. open-market
+        // purchases split across price tranches) — those differ in Shares / PricePerShare /
+        // SharesOwnedAfter and must survive. Direct + Indirect rows are distinct beneficial
+        // ownerships and must also survive (OwnershipNature differentiates them).
+        var seen = new HashSet<(Guid, Guid, DateOnly, TransactionCode, string, string,
+            OwnershipNature, long, decimal, long)>();
         var uniqueTransactions = new List<InsiderTransaction>();
         foreach (var tx in transactions) {
             var key = (tx.CommonStockId, tx.InsiderOwnerId, tx.TransactionDate,
-                tx.TransactionCode, tx.SecurityTitle, tx.AccessionNumber);
+                tx.TransactionCode, tx.SecurityTitle, tx.AccessionNumber,
+                tx.OwnershipNature, tx.Shares, tx.PricePerShare, tx.SharesOwnedAfter);
             if (seen.Add(key)) {
                 uniqueTransactions.Add(tx);
             }
