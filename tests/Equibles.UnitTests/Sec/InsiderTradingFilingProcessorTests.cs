@@ -7,6 +7,32 @@ public class InsiderTradingFilingProcessorTests {
     private static readonly MethodInfo SanitizeXmlMethod = typeof(InsiderTradingFilingProcessor)
         .GetMethod("SanitizeXml", BindingFlags.NonPublic | BindingFlags.Static);
 
+    private static readonly MethodInfo ParseLongMethod = typeof(InsiderTradingFilingProcessor)
+        .GetMethod("ParseLong", BindingFlags.NonPublic | BindingFlags.Static);
+
+    [Fact]
+    public void ParseLong_DecimalString_FallsBackToParseDecimalAndTruncates() {
+        // SEC Form 4 XML routinely reports fractional share counts in transactionShares
+        // and sharesOwnedFollowingTransaction — partial RSU vests, dividend reinvestments,
+        // and ESPP fractional allocations all emit values like "1234.5678" rather than
+        // a whole-share count. `long.TryParse` rejects these outright, so ParseLong falls
+        // back to `(long)ParseDecimal(value)` which parses then truncates toward zero.
+        // Without that fallback, every fractional-share transaction would silently store
+        // a Shares=0 row, polluting position-history queries and breaking ownership
+        // continuity in the holdings view.
+        //
+        // The risk this test pins: a refactor that drops the decimal fallback (or that
+        // swaps `(long)ParseDecimal(value)` for `0`/`-1`) would compile cleanly, pass the
+        // existing integration test (whose fixture XML uses whole numbers), and silently
+        // zero out every partial-share row in production.
+        //
+        // 1234.5678 → 1234 specifically distinguishes the decimal-fallback path
+        // (returns 1234) from a "truncate to 0 on parse failure" path (returns 0).
+        var result = (long)ParseLongMethod.Invoke(null, ["1234.5678"]);
+
+        result.Should().Be(1234L);
+    }
+
     [Fact]
     public void SanitizeXml_PreservesAlreadyEscapedEntities_WhileEscapingBareAmpersand() {
         // SEC Form 3/4 XML payloads routinely contain bare `&` characters in company and
