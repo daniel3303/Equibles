@@ -28,6 +28,40 @@ public class CompanySyncServiceTests {
         .GetMethod("ShouldIncumbentWin", BindingFlags.NonPublic | BindingFlags.Instance);
 
     [Fact]
+    public async Task ShouldIncumbentWin_OperatingIncumbentVsEtfIncoming_IncumbentWinsRegardlessOfCik() {
+        // Pin step 3 of the priority chain (step 2 IsListed already pinned by the
+        // sibling test). When both sides are equally listed, `IsOperatingCompany`
+        // breaks the tie: the OPERATING side wins. This matters because SEC's
+        // submissions feed surfaces ETFs and other non-operating filers under
+        // tickers that overlap with operating companies (e.g. a leveraged ETF
+        // tracking a stock can share the ticker through a different CIK on
+        // certain feeds). The operating company must always own the public
+        // ticker in our DB — otherwise an ETF CIK would replace the real
+        // operating-company CIK, and every filing-fetch downstream would pull
+        // ETF documents instead of the company's 10-K/10-Q/8-K filings.
+        //
+        // Construction: both sides listed on NASDAQ so step 2 passes through.
+        // Incumbent EntityType="operating" → IsOperatingCompany=true. Incoming
+        // EntityType="ETF" → false. Step 3 fires: `return incumbentMeta.IsOperatingCompany`
+        // → true. The CIKs are flipped (incumbent=200, incoming=100) so the
+        // step 4 fallback would say incoming wins — only correct priority
+        // ordering makes step 3 short-circuit before step 4.
+        var secEdgarClient = Substitute.For<ISecEdgarClient>();
+        secEdgarClient.GetCompanyMetadata("100")
+            .Returns(new CompanyMetadata { Cik = "100", EntityType = "ETF", Exchanges = ["NASDAQ"] });
+        secEdgarClient.GetCompanyMetadata("200")
+            .Returns(new CompanyMetadata { Cik = "200", EntityType = "operating", Exchanges = ["NASDAQ"] });
+
+        var service = CreateService(secEdgarClient: secEdgarClient);
+        var incoming = new CompanyInfo { Cik = "100", Name = "Leveraged ETF", Tickers = ["X"] };
+        var incumbent = new Equibles.CommonStocks.Data.Models.CommonStock { Cik = "200", Ticker = "X" };
+
+        var result = await (Task<bool>)ShouldIncumbentWinMethod.Invoke(service, [incoming, incumbent]);
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task ShouldIncumbentWin_ListedIncumbentVsUnlistedIncoming_IncumbentWinsRegardlessOfCik() {
         // ShouldIncumbentWin resolves ticker collisions through a priority chain:
         //   1. If either side's SEC metadata is missing → incumbent wins (safe default)
