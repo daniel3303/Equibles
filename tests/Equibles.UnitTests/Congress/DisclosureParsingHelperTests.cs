@@ -284,6 +284,58 @@ public class DisclosureParsingHelperTests {
     }
 
     [Fact]
+    public void ParseTransactionsFromHtml_BothTransactionAndNotificationDateColumns_UsesTransactionDate() {
+        // Senate HTML disclosures regularly carry BOTH a "Transaction Date" (when the
+        // member traded) AND a "Notification Date" (when the filing was acknowledged) —
+        // the two can differ by weeks. MapColumnIndices' priority chain (transaction →
+        // notification → any-date) hinges on this distinction: every analyst-facing
+        // metric (timing relative to legislation, frontrunning windows) is computed from
+        // the transaction date, never the notification date.
+        //
+        // The risk this test pins: a refactor that simplifies to a single
+        // `FindIndex(h => h.Contains("date"))` would pick the FIRST date-matching column.
+        // Because Senate often renders Notification first, the helper would silently
+        // record FilingDate-ish values as TransactionDate, blowing up every "trades
+        // within N days of a hearing" query downstream. The existing positive test only
+        // has one date column — neither this nor the integration tests catch the
+        // priority regression.
+        //
+        // Notification Date 2024-07-01 is deliberately placed BEFORE Transaction Date
+        // 2024-06-15 so the simplified fallback would pick the wrong column.
+        var html = """
+            <html><body>
+            <table>
+              <thead><tr>
+                <th>Notification Date</th>
+                <th>Transaction Date</th>
+                <th>Ticker</th>
+                <th>Asset Name</th>
+                <th>Transaction Type</th>
+                <th>Amount</th>
+              </tr></thead>
+              <tbody>
+                <tr>
+                  <td>2024-07-01</td>
+                  <td>2024-06-15</td>
+                  <td>AAPL</td>
+                  <td>Apple Inc</td>
+                  <td>Purchase</td>
+                  <td>$1,001 - $15,000</td>
+                </tr>
+              </tbody>
+            </table>
+            </body></html>
+            """;
+
+        var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
+            html, "Test Senator", CongressPosition.Senator,
+            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+
+        result.Should().HaveCount(1);
+        result[0].TransactionDate.Should().Be(new DateOnly(2024, 6, 15));
+    }
+
+    [Fact]
     public void ParseTransactionsFromHtml_TickerExtractedFromAssetName() {
         var html = """
             <html><body>
