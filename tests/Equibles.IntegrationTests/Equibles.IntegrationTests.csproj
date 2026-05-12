@@ -16,6 +16,12 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Equibles.ParadeDB.EntityFrameworkCore" />
+    <PackageReference Include="Pgvector.EntityFrameworkCore" />
+    <PackageReference Include="Testcontainers" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Respawn" />
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="NSubstitute" />
   </ItemGroup>
@@ -74,6 +80,7 @@
     <ProjectReference Include="..\..\src\Equibles.Cftc.Repositories\Equibles.Cftc.Repositories.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Cboe.Data\Equibles.Cboe.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Cboe.Repositories\Equibles.Cboe.Repositories.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Migrations\Equibles.Migrations.csproj" />
   </ItemGroup>
 
 </Project>
