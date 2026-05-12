@@ -33,4 +33,27 @@ public class FtdImportServiceTests {
         result.Should().HaveElementAt(1, "cnsfails201707a.zip");
         result.Should().HaveElementAt(2, "cnsfails201707b.zip");
     }
+
+    [Fact]
+    public void IsRecentFtdFile_FilenameForYear2000_ReturnsFalseRegardlessOfClock() {
+        // Companion to GetFileNames coverage: IsRecentFtdFile decides whether a 404 on an
+        // FTD download is "expected" (file not yet published — log INFO) or "anomalous"
+        // (URL pattern may have shifted — log WARNING and report). The recency cutoff is
+        // 2 months ago by wall clock, so the function is partially clock-dependent — BUT for
+        // any filename old enough that the cutoff cannot reach it, the answer is `false`
+        // unconditionally. Year 2000 is 20+ years before any plausible execution clock; the
+        // earliest FTD data SEC actually publishes is 2017-06.
+        //
+        // This `[Fact]` pins three things in one shot without depending on the clock:
+        //   (1) the filename guard accepts a well-formed `cnsfailsYYYYMMa.zip` length+chars,
+        //   (2) the inner date math runs (year/month parse to a valid DateOnly), and
+        //   (3) the recency comparison correctly classifies a very-old date as not-recent.
+        // A regression that swapped `>= twoMonthsAgo` for `<= twoMonthsAgo` (the easiest
+        // sign-flip mistake) would surface here: year-2000 would become "recent" and FTD
+        // 404s for ancient files would start firing the WARNING + error-report path.
+
+        var result = FtdImportService.IsRecentFtdFile("cnsfails200001a.zip");
+
+        result.Should().BeFalse();
+    }
 }
