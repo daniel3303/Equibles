@@ -42,6 +42,36 @@ public class FlashMessageClassTests {
     }
 
     [Fact]
+    public void Warning_QueuesMessageWithWarningTypeNotErrorOrSuccess() {
+        // Sibling to the existing Error_*NotDefaultSuccess test. The Warning helper is
+        // structurally a copy-paste of Error and Success — a refactor that consolidates
+        // them into a single private method risks mis-wiring the enum value for the
+        // less-obvious branches. Default is Success; Error was already pinned in #180.
+        // This test pins Warning specifically so a copy-paste regression that leaves
+        // `Type = FlashMessageType.Error` (or any other non-Warning value) inside
+        // `FlashMessage.Warning(...)` is caught at test time — without it, every
+        // warning banner would render with error styling and the operator-visible
+        // "this is recoverable" affordance would silently disappear. Same round-trip
+        // capture pattern as the Error sibling so the assertion proves the wire form,
+        // not just an in-memory property.
+        var serializer = new JsonFlashMessageSerializer();
+        string captured = null;
+        var tempData = Substitute.For<ITempDataDictionary>();
+        tempData.WhenForAnyArgs(t => t[FlashMessage.KeyName] = default)
+            .Do(callInfo => captured = (string)callInfo.Arg<object>());
+        var factory = Substitute.For<ITempDataDictionaryFactory>();
+        factory.GetTempData(Arg.Any<HttpContext>()).Returns(tempData);
+        var sut = new FlashMessage(factory, Substitute.For<IHttpContextAccessor>(), serializer);
+
+        sut.Warning("Approaching rate limit");
+
+        captured.Should().NotBeNull();
+        var roundTripped = serializer.Deserialize(captured);
+        roundTripped.Should().ContainSingle()
+            .Which.Type.Should().Be(FlashMessageType.Warning);
+    }
+
+    [Fact]
     public void Retrieve_WhenEntryExists_RemovesItFromTempData() {
         var serializer = new JsonFlashMessageSerializer();
         var serialized = serializer.Serialize(new List<IFlashMessageModel> {
