@@ -36,10 +36,12 @@ public class BaseScraperWorkerTests {
     [Fact]
     public async Task ExecuteAsync_CallsDoWork_WhenNotCancelled() {
         using var worker = CreateWorker();
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        using var cts = new CancellationTokenSource();
 
         await worker.StartAsync(cts.Token);
-        await Task.Delay(100);
+        // Poll instead of a blind Task.Delay — on slow CI runners the BackgroundService
+        // may not schedule ExecuteAsync within 100ms, leaving DoWorkCallCount at 0.
+        await WaitUntilAsync(() => worker.DoWorkCallCount >= 1, TimeSpan.FromSeconds(5));
         await worker.StopAsync(CancellationToken.None);
 
         worker.DoWorkCallCount.Should().BeGreaterThanOrEqualTo(1);
@@ -49,10 +51,13 @@ public class BaseScraperWorkerTests {
     public async Task ExecuteAsync_CatchesAndLogsCriticalException_WhenDoWorkThrows() {
         var exception = new InvalidOperationException("Something broke");
         using var worker = CreateWorker(doWorkOverride: _ => throw exception);
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        using var cts = new CancellationTokenSource();
 
         await worker.StartAsync(cts.Token);
-        await Task.Delay(100);
+        // Once DoWork has been entered twice, iteration 1's catch block (LogCritical
+        // + ErrorReporter.Report + post-cycle log + sleep) has fully completed —
+        // deterministic proof the log assertion below has a value to match.
+        await WaitUntilAsync(() => worker.DoWorkCallCount >= 2, TimeSpan.FromSeconds(5));
         await worker.StopAsync(CancellationToken.None);
 
         _logger.Received().Log(
@@ -68,10 +73,10 @@ public class BaseScraperWorkerTests {
     public async Task ExecuteAsync_ReportsErrorViaErrorReporter_WhenDoWorkThrows() {
         var exception = new InvalidOperationException("Report this error");
         using var worker = CreateWorker(doWorkOverride: _ => throw exception);
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        using var cts = new CancellationTokenSource();
 
         await worker.StartAsync(cts.Token);
-        await Task.Delay(100);
+        await WaitUntilAsync(() => worker.DoWorkCallCount >= 2, TimeSpan.FromSeconds(5));
         await worker.StopAsync(CancellationToken.None);
 
         // ErrorReporter.Report internally calls CreateAsyncScope which will throw
