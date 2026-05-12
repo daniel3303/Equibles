@@ -16,7 +16,7 @@ public class HomeIndexTests {
         _playwright = playwright;
     }
 
-    [Fact(Skip = "GH-45 — WebAppFixture casts IServer to TestServer; cannot boot Kestrel-backed functional fixture")]
+    [Fact]
     public async Task Index_Get_RendersDataBrowserLandingWithResolvedStocksLink() {
         // Drives the full Kestrel + MVC + Razor pipeline against the real app. Catches
         // regressions in routing, _Layout, the home view, and — crucially — the
@@ -34,7 +34,8 @@ public class HomeIndexTests {
 
         var stocksLink = page.Locator("a.btn-primary").First;
         var href = await stocksLink.GetAttributeAsync("href");
-        href.Should().StartWith("/Stocks",
+        // Production sets RouteOptions.LowercaseUrls = true, so the resolved href is lowercase.
+        href.Should().StartWith("/stocks",
             "the Stocks button uses asp-action/asp-controller; a broken tag helper renders href=\"\"");
     }
 }
