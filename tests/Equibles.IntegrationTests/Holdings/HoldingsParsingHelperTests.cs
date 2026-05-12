@@ -70,4 +70,23 @@ public class HoldingsParsingHelperTests {
 
         result.Should().Be("Capital Research Global Investors");
     }
+
+    [Fact]
+    public void ParseShareType_PrnAbbreviation_ReturnsPrincipal() {
+        // 13F INFOTABLE.tsv encodes the share-quantity unit in column SSHPRNAMTTYPE with
+        // exactly two valid values: `SH` (equity share count) and `PRN` (principal amount —
+        // bond face value). PRN is the surprising one — a developer expanding the
+        // abbreviation by guess is more likely to read it as `Principal` (✓) than as
+        // `Print`, `Premium`, or anything else, but the real risk is a refactor that
+        // accidentally types `Default` or simply drops the branch (causing every bond
+        // holding to be classified as `Shares`, which then double-counts when totals are
+        // computed as `Shares × price` rather than `Principal × price-per-100`). Pinning
+        // PRN→Principal here protects every bond holding in 13F filings from silently
+        // falling through to the share-count default. Production reads the value through
+        // `ToUpperInvariant()` first, so the assertion uses uppercase to match the SEC TSV
+        // wire format.
+        var result = HoldingsParsingHelper.ParseShareType("PRN");
+
+        result.Should().Be(Equibles.Holdings.Data.Models.ShareType.Principal);
+    }
 }
