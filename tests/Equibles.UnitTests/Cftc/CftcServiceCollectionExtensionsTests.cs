@@ -1,7 +1,9 @@
+using Equibles.Cftc.HostedService;
 using Equibles.Cftc.HostedService.Extensions;
 using Equibles.Cftc.HostedService.Services;
 using Equibles.Integrations.Cftc.Contracts;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Equibles.UnitTests.Cftc;
 
@@ -70,5 +72,63 @@ public class CftcServiceCollectionExtensionsTests {
         services.AddCftcWorker();
 
         services.Should().Contain(d => d.ServiceType == typeof(CftcImportService));
+    }
+
+    [Fact]
+    public void AddCftcWorker_RegistersCftcScraperWorkerAsIHostedService() {
+        // Third sibling in the AddCftcWorker registration family. The two
+        // existing pins cover the AutoWireServicesFrom scans (CftcImportService
+        // and ICftcClient). This pin covers the structurally distinct
+        // `services.AddHostedService<CftcScraperWorker>()` registration that
+        // wires the worker into the .NET generic host so it starts at boot.
+        //
+        // The risk this catches is asymmetric and unreachable from the two
+        // existing AutoWires pins:
+        //   • A regression that drops `AddHostedService<CftcScraperWorker>()`
+        //     (e.g. a "consolidate worker registrations" refactor that lost
+        //     this specific line) would compile cleanly, pass both AutoWires
+        //     pins (CftcImportService and ICftcClient are still registered),
+        //     and silently disable the entire COT (Commitments of Traders)
+        //     ingest pipeline at startup. The application boots, every
+        //     dependency resolves, but no IHostedService implementation of
+        //     CftcScraperWorker is enumerated — the periodic CFTC COT report
+        //     download never fires, position-report data stops updating, and
+        //     the CFTC dashboard silently drifts behind.
+        //   • A regression that downgrades the registration to AddScoped or
+        //     AddSingleton (instead of AddHostedService) would register the
+        //     worker as a resolvable service but NOT enumerate it as
+        //     IHostedService — same silent failure mode.
+        //
+        // The COT pipeline is particularly load-bearing because:
+        //   • CFTC publishes Commitments of Traders reports weekly (Friday
+        //     evenings, covering the prior Tuesday's data). A dropped
+        //     registration means the gap from "last successful pull" to
+        //     "first noticed missing data" can span multiple weeks before
+        //     someone notices the speculator-positioning column has stopped
+        //     updating on equity-index/commodities dashboards.
+        //   • COT data is the regulator-published signal that drives the
+        //     speculator-vs-commercial open-interest splits on the
+        //     equity-indices and commodities dashboards — exactly the kind
+        //     of metric operators rely on rather than alerting infrastructure
+        //     watching.
+        //
+        // This pin mirrors the AddSecWorker and AddHoldingsWorker
+        // hosted-service pin family pattern. CftcScraperWorker is the SINGLE
+        // hosted service AddCftcWorker registers — no further siblings in
+        // this family.
+        //
+        // Lookup pattern: filter IHostedService descriptors and assert one has
+        // ImplementationType == typeof(CftcScraperWorker).
+        var services = new ServiceCollection();
+
+        services.AddCftcWorker();
+
+        var hostedServiceDescriptors = services
+            .Where(d => d.ServiceType == typeof(IHostedService))
+            .ToList();
+
+        hostedServiceDescriptors.Should().Contain(
+            d => d.ImplementationType == typeof(CftcScraperWorker),
+            "AddHostedService<CftcScraperWorker>() must register the worker as IHostedService so the weekly CFTC COT report download runs at startup");
     }
 }
