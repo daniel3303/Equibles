@@ -63,6 +63,48 @@ public class DocumentTypeConverterTests {
     }
 
     [Fact]
+    public void CanConvertFrom_NonStringSourceType_FallsThroughToBaseAndReturnsFalse() {
+        // Sibling to `CanConvertFrom_StringSourceType_ReturnsTrue`. The
+        // production code is the short-circuit OR:
+        //   return sourceType == typeof(string) || base.CanConvertFrom(context, sourceType);
+        // The string-true sibling exercises the LEFT arm (short-circuit on
+        // the type-equality check). This pin exercises the RIGHT arm — the
+        // delegation to `base.CanConvertFrom`, which for the default
+        // `TypeConverter` base returns false for any non-string source.
+        //
+        // The risk this catches: a refactor that "simplifies" the OR to just
+        // `return sourceType == typeof(string);` — under the false
+        // intuition that the base call is dead weight since the converter
+        // is string-only — would compile, pass every existing pin
+        // (CanConvertFrom-string, ConvertFrom-string, ConvertTo-DocumentType),
+        // and silently lock out an entire FAMILY of plausible future
+        // type-converter contracts:
+        //
+        //   • A registered IConvertible-source binding (e.g. binding a
+        //     numeric DocumentType discriminator from a JSON column where
+        //     the underlying ADO.NET reader hands back an int).
+        //   • A custom InstanceDescriptor flow used by design-time tools
+        //     (the Razor visual designer, Entity Framework migration
+        //     tooling) which probe `CanConvertFrom(typeof(InstanceDescriptor))`.
+        //
+        // The opposite regression — a refactor that makes the base call
+        // return true (e.g. inheriting from `EnumConverter` instead of
+        // `TypeConverter`) — would also be caught: integer source types
+        // would suddenly bind successfully, opening the converter to
+        // unintended numeric coercion that `DocumentType.FromValue`
+        // wouldn't recognize.
+        //
+        // Pin `typeof(int)` specifically — it's the most plausible
+        // accidental admission (every numeric column in the SEC schema
+        // would suddenly become a candidate for binding). Asserting
+        // `BeFalse()` documents that ONLY the explicit string arm
+        // succeeds.
+        var result = _sut.CanConvertFrom(context: null, sourceType: typeof(int));
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
     public void ConvertFrom_UnknownStringValue_ThrowsFormatException() {
         var act = () => _sut.ConvertFrom(null, CultureInfo.InvariantCulture, "NotARealDocumentType");
 
