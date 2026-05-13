@@ -111,6 +111,37 @@ public class SecScraperWorkerTests {
         sut.InvokeErrorSource().Should().Be(ErrorSource.DocumentScraper);
     }
 
+    [Fact]
+    public void WorkerName_IsSecFilingScraper() {
+        // Third WorkerName pin in the codebase (after CboeScraperWorker and
+        // HoldingsScraperWorker). Completes the ErrorSource / SleepInterval /
+        // WorkerName triple for this worker.
+        //
+        // WorkerName flows into BaseScraperWorker's startup/shutdown log output
+        // and the heartbeat lines that operator runbooks grep for. The Sec
+        // filing scraper's display string ("SEC filing scraper") is specifically
+        // distinguished from the sibling "SEC FTD scraper" and "SEC document
+        // processor" workers — all three live in the same Sec.HostedService
+        // namespace and produce log lines in the same Serilog file. Operator
+        // runbooks split the three by the exact WorkerName prefix when
+        // diagnosing "which SEC subsystem is stuck?" — a rename that collapsed
+        // the distinction (e.g. dropping "filing" so the worker logs as "SEC
+        // scraper") would silently merge the three workers' log lines and
+        // break the per-subsystem dashboards.
+        //
+        // The "scraper" suffix is shared across all scraper workers in the
+        // codebase (CBOE scraper, Holdings scraper, FTD scraper, ...) — pin
+        // the exact "SEC filing scraper" form so a rename that drops the
+        // distinguishing word can't ship silently.
+        var sut = new TestableSecScraperWorker(
+            Substitute.For<ILogger<SecScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            new ConfigurationBuilder().Build());
+
+        sut.InvokeWorkerName().Should().Be("SEC filing scraper");
+    }
+
     private sealed class TestableSecScraperWorker : SecScraperWorker {
         public TestableSecScraperWorker(
             ILogger<SecScraperWorker> logger,
@@ -124,5 +155,7 @@ public class SecScraperWorkerTests {
         public TimeSpan InvokeSleepInterval() => SleepInterval;
 
         public ErrorSource InvokeErrorSource() => ErrorSource;
+
+        public string InvokeWorkerName() => WorkerName;
     }
 }
