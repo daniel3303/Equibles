@@ -64,6 +64,29 @@ public class SecScraperWorkerTests {
         sut.InvokeValidateConfiguration().Should().BeTrue();
     }
 
+    [Fact]
+    public void SleepInterval_IsFifteenSeconds() {
+        // SecScraperWorker is the only scraper in the pipeline that polls the SEC
+        // submissions API at sub-minute cadence (the other workers — FTD, Holdings,
+        // InsiderTrading, etc. — sleep for hours per cycle). The 15-second interval
+        // sits well inside SEC EDGAR's documented 10 req/second / 600 req/minute
+        // limit even with concurrent cycles, but a refactor that "tightened the loop"
+        // to e.g. `TimeSpan.FromSeconds(1)` (a plausible copy-paste from a unit-test
+        // helper) would cause a sustained burst that trips EDGAR's IP-level ban —
+        // which affects every other SEC scraper sharing the outbound IP, not just
+        // this one. The base class reads SleepInterval into a `Task.Delay` after
+        // each successful cycle; lowering it has no test signal and no log warning,
+        // just a silent 403 storm in production until the IP is unblocked. Pin the
+        // exact value so any future change has to update this test deliberately.
+        var sut = new TestableSecScraperWorker(
+            Substitute.For<ILogger<SecScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            new ConfigurationBuilder().Build());
+
+        sut.InvokeSleepInterval().Should().Be(TimeSpan.FromSeconds(15));
+    }
+
     private sealed class TestableSecScraperWorker : SecScraperWorker {
         public TestableSecScraperWorker(
             ILogger<SecScraperWorker> logger,
@@ -73,5 +96,7 @@ public class SecScraperWorkerTests {
             : base(logger, scopeFactory, errorReporter, configuration) { }
 
         public bool InvokeValidateConfiguration() => ValidateConfiguration();
+
+        public TimeSpan InvokeSleepInterval() => SleepInterval;
     }
 }
