@@ -223,6 +223,23 @@ public class JsonFlashMessageSerializerTests {
     }
 
     [Fact]
+    public void Deserialize_NullJsonLiteral_ReturnsNullWithoutThrowing() {
+        // TempData persists the serialized payload as a string; some
+        // serializer paths emit the literal "null" JSON token when no
+        // messages were ever queued. JsonSerializer.Deserialize<T>("null")
+        // returns a CLR null, and the production code defends against it
+        // with the `?.` short-circuit before Cast<>().ToList() — without
+        // the guard, Cast on a null sequence throws NullReferenceException.
+        // Pin the guard so a refactor that drops the `?.` (e.g. replaced
+        // by a plain .Cast<...>().ToList() chain) surfaces here rather
+        // than crashing the first request that reads a stale TempData
+        // entry.
+        var result = _serializer.Deserialize("null");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
     public void Deserialize_AllFlashMessageTypes_RoundTripCorrectly() {
         var messages = Enum.GetValues<FlashMessageType>()
             .Select(t => (IFlashMessageModel)new FlashMessageModel {
