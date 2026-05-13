@@ -1,4 +1,5 @@
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.Data.Models;
 using Equibles.Sec.HostedService;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -32,6 +33,30 @@ public class DocumentProcessorWorkerTests {
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromSeconds(15));
     }
 
+    [Fact]
+    public void ErrorSource_IsDocumentProcessor() {
+        // DocumentProcessorWorker is the post-fetch pipeline (chunking + embedding) that
+        // sits downstream of SecScraperWorker. When BaseScraperWorker's catch-all reports
+        // a failure, it tags the error with this enum value as the routing key for the
+        // issue-tracker queue. The Sec.HostedService assembly hosts BOTH this worker
+        // (`ErrorSource.DocumentProcessor`) and SecScraperWorker
+        // (`ErrorSource.DocumentScraper`) — two intentionally distinct enum members
+        // chosen so on-call can tell "the SEC website returned junk" (DocumentScraper)
+        // from "Ollama choked while embedding a chunk" (DocumentProcessor). Those have
+        // wildly different remediations: one points at SEC outages, the other at the
+        // embedding stack. A regression that copy-pasted `DocumentScraper` here (the
+        // two are visually similar; the source files even live in the same folder)
+        // would silently merge the two operational queues — embedding failures would
+        // start surfacing as "SEC scraper down" and trigger the wrong runbook. Pin the
+        // literal value so the reorder is loud.
+        var sut = new TestableDocumentProcessorWorker(
+            Substitute.For<ILogger<DocumentProcessorWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()));
+
+        sut.InvokeErrorSource().Should().Be(ErrorSource.DocumentProcessor);
+    }
+
     private sealed class TestableDocumentProcessorWorker : DocumentProcessorWorker {
         public TestableDocumentProcessorWorker(
             ILogger<DocumentProcessorWorker> logger,
@@ -40,5 +65,7 @@ public class DocumentProcessorWorkerTests {
             : base(logger, scopeFactory, errorReporter) { }
 
         public TimeSpan InvokeSleepInterval() => SleepInterval;
+
+        public ErrorSource InvokeErrorSource() => ErrorSource;
     }
 }
