@@ -222,6 +222,58 @@ public class EnvAuthHandlerTests {
     }
 
     [Fact]
+    public async Task HandleAuthenticateAsync_AuthEnabledWithValidCookie_SucceedsAsConfiguredUser() {
+        // Final sibling in the HandleAuthenticateAsync branch family. Covers branch 4:
+        // IsEnabled, cookie matches expected token → Success(principal with Username).
+        //
+        // The three previous siblings (!IsEnabled, no cookie, bogus cookie) all cover
+        // the rejection/anonymous paths. None proves the HAPPY-PATH success — a regression
+        // that returned Fail or NoResult on the matching-cookie branch would compile
+        // cleanly, pass every existing sibling pin, and silently lock every legitimate
+        // operator out of the production deployment. The failure mode is invisible to
+        // the rejection-only siblings: they only assert that bad input fails, never that
+        // good input succeeds.
+        //
+        // The principal's Identity.Name must equal the CONFIGURED username (not
+        // AnonymousUsername — that's the !IsEnabled path). A refactor that copy-pasted
+        // the anonymous-claim construction into the authenticated branch (or that
+        // forgot to use _authSettings.Username and fell back to a constant) would set
+        // the wrong principal Name, breaking downstream audit logging and BaseController
+        // operator-attribution. Pin Name == "admin" (the configured value) so that swap
+        // is caught at test time.
+        //
+        // Construction: compute the expected token via the public GenerateToken helper
+        // (so this test stays valid if the hashing scheme changes — the existing
+        // GenerateToken pins lock the algorithm). Attach the computed token as the
+        // EnvAuth cookie value. AuthenticateAsync hashes the cookie value, hashes the
+        // expected (Username, SessionSecret) tuple, ConstantTimeEquals returns true,
+        // Success(principal) is returned with Identity.Name == "admin".
+        const string username = "admin";
+        const string password = "secret123";
+        const string sessionSecret = "test-session-secret";
+
+        var authSettings = Options.Create(new AuthSettings {
+            Username = username,
+            Password = password,
+            SessionSecret = sessionSecret,
+        });
+        var schemeOptions = Substitute.For<IOptionsMonitor<AuthenticationSchemeOptions>>();
+        schemeOptions.Get(Arg.Any<string>()).Returns(new AuthenticationSchemeOptions());
+        var sut = new EnvAuthHandler(schemeOptions, NullLoggerFactory.Instance, UrlEncoder.Default, authSettings);
+
+        var validToken = EnvAuthHandler.GenerateToken(username, sessionSecret);
+        var scheme = new AuthenticationScheme(EnvAuthHandler.SchemeName, EnvAuthHandler.SchemeName, typeof(EnvAuthHandler));
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Headers["Cookie"] = $"{EnvAuthHandler.SchemeName}={validToken}";
+        await sut.InitializeAsync(scheme, httpContext);
+        var result = await sut.AuthenticateAsync();
+
+        result.Succeeded.Should().BeTrue();
+        result.Principal.Should().NotBeNull();
+        result.Principal!.FindFirstValue(ClaimTypes.Name).Should().Be(username);
+    }
+
+    [Fact]
     public void ConstantTimeEquals_NullAndEmpty_ReturnsTrue() {
         // Both null and empty hash to the same value because the implementation
         // coalesces null to "" before hashing
