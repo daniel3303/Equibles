@@ -1,7 +1,10 @@
+using System.Net;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Equibles.Congress.Data.Models;
 using Equibles.Congress.HostedService.Services;
+using Microsoft.Extensions.Logging;
+using NSubstitute;
 
 namespace Equibles.UnitTests.Congress;
 
@@ -389,6 +392,67 @@ public class HouseDisclosureClientTests {
         var result = (string)RemoveTrailingTransactionTypeMethod.Invoke(null, ["MICROSOFT CORP - COMMON STOCK P"]);
 
         result.Should().Be("MICROSOFT CORP - COMMON STOCK");
+    }
+
+    [Fact]
+    public async Task GetRecentTransactions_FdZipReturns404ForYear_ReturnsEmptyListWithoutThrowing() {
+        // First HTTP-coupled pin in this file. Every existing test targets a private
+        // regex helper via reflection; the 51 missed lines in HouseDisclosureClient
+        // sit in the public GetRecentTransactions flow and its private HTTP helpers
+        // (DownloadAndParseFilingIndex, DownloadAndParsePtrPdf, SendWithRetryAsync).
+        // This pin exercises the load-bearing 404 short-circuit in
+        // DownloadAndParseFilingIndex:
+        //   if (response.StatusCode == HttpStatusCode.NotFound) {
+        //       _logger.LogDebug("House FD ZIP not found for year {Year}", year);
+        //       return [];
+        //   }
+        // House FD ZIPs don't exist for years before the disclosure program started
+        // and may not be published yet for the current year before the first member
+        // files. A 404 is the COMMON case for valid-but-empty years — not an error.
+        // Without the short-circuit, `response.EnsureSuccessStatusCode()` on the next
+        // line throws HttpRequestException, which propagates into
+        // GetRecentTransactions' outer catch (Exception) → logs a Warning per year.
+        // Operators' dashboards then show "Failed to download House filing index"
+        // warnings for every absent year on every run, drowning genuine HTTP errors
+        // in noise.
+        //
+        // A refactor that "simplifies" DownloadAndParseFilingIndex by removing the
+        // 404 branch (under the false assumption that EnsureSuccessStatusCode +
+        // the outer try/catch handles all status codes uniformly) would compile,
+        // pass every existing regex pin (they don't touch HTTP), and silently
+        // promote every empty-year 404 from a quiet DEBUG to a WARNING. The data
+        // outcome is the same (empty list), so a test asserting only on the
+        // returned list would miss the regression — but the operational outcome
+        // diverges: log volume balloons, real failures get buried, on-call
+        // pages on noise.
+        //
+        // Pin a single-year request against an HttpClient backed by a stub handler
+        // that returns 404 for every URL. The assertion is on the returned list
+        // (empty) AND that no exception is thrown — together they prove the
+        // method handles the 404 path internally rather than relying on the
+        // outer catch as a fallback.
+        var handler = new ConstantStatusHandler(HttpStatusCode.NotFound);
+        using var httpClient = new HttpClient(handler);
+        var sut = new HouseDisclosureClient(httpClient, Substitute.For<ILogger<HouseDisclosureClient>>());
+
+        var result = await sut.GetRecentTransactions(
+            new DateOnly(2025, 1, 1),
+            new DateOnly(2025, 12, 31),
+            CancellationToken.None);
+
+        result.Should().BeEmpty();
+        handler.Requests.Should().ContainSingle(
+            "only the year's FD ZIP should be requested — a 404 must not cascade into per-filing PDF downloads");
+    }
+
+    private sealed class ConstantStatusHandler : HttpMessageHandler {
+        private readonly HttpStatusCode _statusCode;
+        public List<string> Requests { get; } = new();
+        public ConstantStatusHandler(HttpStatusCode statusCode) => _statusCode = statusCode;
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+            Requests.Add(request.RequestUri!.ToString());
+            return Task.FromResult(new HttpResponseMessage(_statusCode));
+        }
     }
 
     [Fact]
