@@ -133,6 +133,52 @@ public class CftcClientTests {
     }
 
     [Fact]
+    public void ParseInt_ValueWithThousandSeparatorCommas_StripsAndParses() {
+        // Sibling to `ParseLong_ValueWithThousandSeparatorCommas_StripsAndParses`.
+        // ParseInt and ParseLong share the same defensive idiom —
+        //   `value.Replace(",", "")` BEFORE int/long.TryParse —
+        // but they live in two distinct methods at lines 176 (ParseLong)
+        // and 186 (ParseInt) and are wired to different schema fields.
+        // ParseInt is exclusively used for the Traders_* columns
+        // (Traders_Tot_All, Traders_NonComm_Long_All, Traders_NonComm_Short_All,
+        // Traders_Comm_Long_All, Traders_Comm_Short_All): all small-cardinality
+        // integers counting how many distinct reporting traders are on each
+        // side of the market for a given contract.
+        //
+        // The risk this catches is asymmetric from the existing ParseLong
+        // pin: a refactor that "tidies up" ParseInt by dropping the
+        // .Replace(",", "") (under the assumption that CultureInfo
+        // .InvariantCulture's int parser handles thousands separators)
+        // compiles, passes the ParseLong pin (different method, untouched),
+        // and silently nulls out the Traders_* columns whenever the
+        // upstream CFTC file emits trader counts with comma separators.
+        // CFTC's legacy historical files DO emit comma-separated values
+        // for any column ≥1000 — the trader-count columns routinely cross
+        // that threshold for the most-traded contracts (S&P 500 futures,
+        // Treasury complex, oil), so this is not a hypothetical edge case.
+        //
+        // CultureInfo.InvariantCulture's default NumberStyles.Integer for
+        // int.TryParse does NOT accept thousands separators (matching the
+        // long behavior documented in the ParseLong pin) — that requires
+        // NumberStyles.AllowThousands which TryParse's three-arg overload
+        // doesn't set. Without the Replace, every comma-formatted trader
+        // count becomes null, and the public CFTC positioning page silently
+        // displays "0 reporting traders" for the highest-volume contracts.
+        //
+        // The pair (ParseLong + ParseInt pins) covers both numeric helpers
+        // with the same defensive contract. The complementary asymmetry
+        // (ParseDecimal does NOT do the replace) is intentional —
+        // percentages are always sub-100 and never carry thousands
+        // separators in CFTC's wire format. That asymmetry is captured
+        // by NOT pinning ParseDecimal here.
+        var parseInt = typeof(CftcClient).GetMethod("ParseInt", BindingFlags.NonPublic | BindingFlags.Static);
+
+        var result = (int?)parseInt!.Invoke(null, ["12,345"]);
+
+        result.Should().Be(12_345);
+    }
+
+    [Fact]
     public void SplitCsvLine_QuotedFieldWithEmbeddedComma_KeepsFieldIntact() {
         // CFTC market names routinely contain commas (e.g. the market name
         // "WHEAT-SRW - CHICAGO BOARD OF TRADE, CBOT"). The split must honour
