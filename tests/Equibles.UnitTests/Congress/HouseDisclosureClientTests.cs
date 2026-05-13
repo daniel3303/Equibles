@@ -140,6 +140,63 @@ public class HouseDisclosureClientTests {
     }
 
     [Fact]
+    public void OwnerCodeRegex_MatchesDependentChildCodeDC_AndCapturesOwnerCode() {
+        // Third sibling in the OwnerCodeRegex alternation family. The existing
+        // pins assert SP (Spouse) and JT (Joint). This pin asserts DC (Dependent
+        // Child) — the third alternative in `^(SP|JT|DC|Self)\b`.
+        //
+        // Why DC specifically (and why it's unreachable from SP/JT siblings):
+        //   The regex short-circuits on the first matching alternative, so the
+        //   SP arm only fires for SP inputs, the JT arm only for JT, the DC
+        //   arm only for DC, etc. A regression that drops the DC arm (e.g. a
+        //   "consolidate the family-attributed codes into JT" refactor under
+        //   the false intuition that "JT and DC both flag dependent attribution,
+        //   merge them") would compile, pass the SP and JT pins (their own
+        //   arms still fire), pass every ExtractTransactionType /
+        //   RemoveTrailingTransactionType pin (none use OwnerCodeRegex), and
+        //   silently drop every Dependent Child–attributed trade from the
+        //   House PTR import.
+        //
+        // The semantic distinction matters downstream:
+        //   • DC (Dependent Child) — trade is in a child's account that the
+        //     member holds custodial responsibility for. House ethics rules
+        //     require disclosure but treat the holding as the child's, not
+        //     the member's, for personal-trading influence analysis.
+        //   • JT (Joint) — shared account, member shares the economic position.
+        //   • SP (Spouse) — spouse-only account.
+        //   The three are NOT interchangeable; conflating DC with JT would
+        //   incorrectly attribute child-account trades to the member's
+        //   personal portfolio in influence-analytics, inflating the
+        //   member's apparent trading activity.
+        //
+        // The production analog: ParseTransactionLines walks every PDF line
+        // through OwnerCodeRegex and uses the capture group as the OwnerType
+        // column. A failed alternation match drops the entire row — no log,
+        // no error, just missing data. Dependent-child accounts are less
+        // common than JT but still represent a meaningful population
+        // (members of Congress with minor children routinely report
+        // through custodial accounts under federal disclosure rules).
+        //
+        // Pin uppercase "DC" (canonical case the PDFs emit) and assert both
+        // Success AND the capture group value is exactly "DC". The dual
+        // assertion proves (a) the alternation arm matched and (b) the
+        // capture-group structure survives — a refactor to non-capturing
+        // `(?:SP|JT|DC|Self)` would still match but fail
+        // `Groups[1].Value.Should().Be("DC")`.
+        //
+        // With this pin, three of four OwnerCodeRegex alternation arms are
+        // individually pinned (SP, JT, DC). The fourth, "Self" (the member
+        // themselves), is the natural-extension target for a future iteration
+        // and would close the family.
+        var regex = (Regex)OwnerCodeRegexMethod.Invoke(null, null);
+
+        var match = regex.Match("DC MICROSOFT CORP - COMMON STOCK P 06/10/2025");
+
+        match.Success.Should().BeTrue();
+        match.Groups[1].Value.Should().Be("DC");
+    }
+
+    [Fact]
     public void ExtractTransactionType_PurchaseTrailingP_ReturnsPurchase() {
         // House PTRs encode purchases as a trailing bare "P" (no qualifier). The
         // PurchaseTypeRegex (`\bP\s*$`) is the only matcher for that path — if a
