@@ -1,4 +1,5 @@
 using System.Reflection;
+using Equibles.InsiderTrading.Data.Models;
 using Equibles.Sec.HostedService.Services;
 
 namespace Equibles.UnitTests.Sec;
@@ -9,6 +10,9 @@ public class InsiderTradingFilingProcessorTests {
 
     private static readonly MethodInfo ParseLongMethod = typeof(InsiderTradingFilingProcessor)
         .GetMethod("ParseLong", BindingFlags.NonPublic | BindingFlags.Static);
+
+    private static readonly MethodInfo ParseTransactionCodeMethod = typeof(InsiderTradingFilingProcessor)
+        .GetMethod("ParseTransactionCode", BindingFlags.NonPublic | BindingFlags.Static);
 
     [Fact]
     public void ParseLong_DecimalString_FallsBackToParseDecimalAndTruncates() {
@@ -61,5 +65,42 @@ public class InsiderTradingFilingProcessorTests {
         result.Should().Contain("O&apos;Brien");
         result.Should().Contain("&#65;");
         result.Should().Contain("&#x1F;");
+    }
+
+    [Fact]
+    public void ParseTransactionCode_PurchaseCodeP_ReturnsPurchase() {
+        // SEC Form 4 transaction codes are single letters that map to specific
+        // insider-trade categories per §16 of the Exchange Act. ParseTransactionCode
+        // is the switch that translates each wire letter to the domain
+        // `TransactionCode` enum the rest of the system reads. The two highest-volume
+        // codes — `P` (open-market or private purchase) and `S` (open-market or private
+        // sale) — drive every "insider buying" / "insider selling" dashboard on the
+        // public site, the CSV exports, the MCP `GetInsiderTransactions` tool, and the
+        // alerting pipeline that flags clusters of director purchases.
+        //
+        // The risk this catches is asymmetric and INVISIBLE to the existing tests: a
+        // regression that swapped two switch arms (e.g. `"P" => Sale, "S" => Purchase`
+        // due to a careless reorder during a "tidy-up the cases alphabetically" refactor,
+        // or a copy-paste edit that touched the wrong line) would compile cleanly, pass
+        // the existing `ParseLong` + `SanitizeXml` pins, and pass the upstream integration
+        // tests that don't read TransactionCode back through the switch. Every insider
+        // purchase from that point forward would silently classify as a Sale and vice
+        // versa, inverting the SIGNAL that drives the entire insider-trading product:
+        // dashboards would show "selling pressure" when insiders are actually
+        // accumulating, alerting would page on the wrong direction, and downstream
+        // analytics (cluster-buy detection, executive-confidence scores) would invert
+        // their conclusions.
+        //
+        // Pin the P → Purchase mapping specifically because:
+        //   1. It's the most common non-Award code in the corpus (Awards "A" are routine
+        //      RSU grants, but P represents discretionary executive decisions — the
+        //      genuinely informative signal).
+        //   2. The P↔S swap is the single most likely accidental inversion (adjacent in
+        //      the source switch, related conceptually, easy to fat-finger).
+        //   3. Sibling to the existing `ParseLong` + `SanitizeXml` pins on private
+        //      static helpers in this same file — extends the pattern naturally.
+        var result = (TransactionCode)ParseTransactionCodeMethod.Invoke(null, ["P"]);
+
+        result.Should().Be(TransactionCode.Purchase);
     }
 }
