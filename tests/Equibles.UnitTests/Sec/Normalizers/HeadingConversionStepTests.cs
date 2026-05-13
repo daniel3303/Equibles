@@ -68,6 +68,18 @@ public class HeadingConversionStepTests {
     }
 
     [Fact]
+    public void SpanInsideParentWithCenterAlignment_IsConvertedToH3() {
+        // SEC filings frequently mark section labels by centering them at the
+        // parent level (<div style="text-align:center"><span>Label</span></div>)
+        // rather than on the span itself. IsCenterAligned reads both span and
+        // parent styles; the parent-only path was previously unexercised — pin
+        // it so centered section labels without bold/uppercase still get H3.
+        var result = Execute("<div style=\"text-align:center\"><span>Section Title</span></div>");
+
+        result.Should().Contain("<h3>Section Title</h3>");
+    }
+
+    [Fact]
     public void ParentheticalText_DoesNotTriggerHeading() {
         var result = Execute("<div><span>(continued)</span></div>");
 
