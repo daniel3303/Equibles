@@ -1,12 +1,13 @@
 using System.Text;
 using Equibles.Core.AutoWiring;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using UglyToad.PdfPig;
 
 namespace Equibles.Sec.BusinessLogic;
 
-[Service]
-public class PdfTextExtractor {
+[Service(ServiceLifetime.Scoped, typeof(IPdfTextExtractor))]
+public class PdfTextExtractor : IPdfTextExtractor {
     private readonly ILogger<PdfTextExtractor> _logger;
 
     public PdfTextExtractor(ILogger<PdfTextExtractor> logger) {
