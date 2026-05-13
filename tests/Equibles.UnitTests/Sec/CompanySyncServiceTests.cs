@@ -28,6 +28,41 @@ public class CompanySyncServiceTests {
         .GetMethod("ShouldIncumbentWin", BindingFlags.NonPublic | BindingFlags.Instance);
 
     [Fact]
+    public async Task ShouldIncumbentWin_BothSidesMetadataNull_IncumbentWinsAsSafeDefault() {
+        // Pin step 1 of the priority chain (steps 2 + 3 already pinned by the sibling
+        // tests above). When SEC's submissions API returns null metadata for either or
+        // both sides — most realistically a stale CIK that no longer resolves on SEC,
+        // a 404 from a recently-renamed filer, or an HTTP error swallowed upstream —
+        // we have no evidence to override the existing assignment. The safe default
+        // is "incumbent wins", logged as a warning so operators can investigate
+        // patterns of metadata failures.
+        //
+        // The risk this test pins: a refactor that "tightens" the null check to
+        // `if (incomingMeta == null && incumbentMeta == null)` (only both, not either),
+        // that flips the early return to `false`, or that drops the guard entirely
+        // would produce one of three failure modes:
+        //   - NRE on `incomingMeta.IsListed` for null metadata
+        //   - Silent overwrite of a real, listed incumbent with a now-stale CIK that
+        //     happened to lose its metadata feed
+        //   - Tiebreak by ParseCik(null/junk) → MaxValue → incoming always wins
+        // All three are silent failures in production. Pin the both-null case
+        // specifically — its symmetry forces the priority-chain branches to all be
+        // skipped, isolating the early-return path. CIKs flipped (incoming wins step 4)
+        // so a regression that fell through to ParseCik would return false instead.
+        var secEdgarClient = Substitute.For<ISecEdgarClient>();
+        secEdgarClient.GetCompanyMetadata("100").Returns((CompanyMetadata)null);
+        secEdgarClient.GetCompanyMetadata("200").Returns((CompanyMetadata)null);
+
+        var service = CreateService(secEdgarClient: secEdgarClient);
+        var incoming = new CompanyInfo { Cik = "100", Name = "Mystery Filer", Tickers = ["X"] };
+        var incumbent = new Equibles.CommonStocks.Data.Models.CommonStock { Cik = "200", Ticker = "X" };
+
+        var result = await (Task<bool>)ShouldIncumbentWinMethod.Invoke(service, [incoming, incumbent]);
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task ShouldIncumbentWin_OperatingIncumbentVsEtfIncoming_IncumbentWinsRegardlessOfCik() {
         // Pin step 3 of the priority chain (step 2 IsListed already pinned by the
         // sibling test). When both sides are equally listed, `IsOperatingCompany`
