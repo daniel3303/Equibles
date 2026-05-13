@@ -336,6 +336,43 @@ public class DisclosureParsingHelperTests {
     }
 
     [Fact]
+    public void ParseTransactionsFromHtml_UnrecognizedTransactionType_SkipsRow() {
+        // Congress disclosures occasionally carry transaction types that the
+        // enum intentionally doesn't model — "Exchange" and "Receive" are
+        // called out by the comment above ParseTransactionType. Those rows
+        // must be skipped (not silently recorded as a Purchase or Sale),
+        // pinning the LogDebug + return-null branch in ParseTransactionRow.
+        var html = """
+            <html><body>
+            <table>
+              <thead><tr>
+                <th>Transaction Date</th>
+                <th>Ticker</th>
+                <th>Asset Name</th>
+                <th>Transaction Type</th>
+                <th>Amount</th>
+              </tr></thead>
+              <tbody>
+                <tr>
+                  <td>2024-06-15</td>
+                  <td>AAPL</td>
+                  <td>Apple Inc</td>
+                  <td>Exchange</td>
+                  <td>$1,001 - $15,000</td>
+                </tr>
+              </tbody>
+            </table>
+            </body></html>
+            """;
+
+        var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
+            html, "Test", CongressPosition.Representative,
+            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
     public void ParseTransactionsFromHtml_TickerExtractedFromAssetName() {
         var html = """
             <html><body>
