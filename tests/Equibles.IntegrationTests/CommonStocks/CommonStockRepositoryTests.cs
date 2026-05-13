@@ -386,6 +386,24 @@ public class CommonStockRepositoryTests : IDisposable {
         result.Should().BeAssignableTo<IQueryable<string>>();
     }
 
+    // ── GetAllSecondaryCiks ─────────────────────────────────────────────
+    // Sibling to GetAllSecondaryTickers: same SelectMany-over-JSON-array
+    // shape, same in-memory provider limitation. The repository surfaces
+    // it for SEC ingest paths that need to detect every CIK ever assigned
+    // to a CommonStock (parent + co-registrant subs). A regression that
+    // collapses the query (e.g. dropping the .Count > 0 filter, or
+    // returning primary CIKs by mistake) would silently change downstream
+    // behavior. Pin the query shape so a refactor that breaks LINQ
+    // composition surfaces immediately as a different exception or no
+    // exception at all.
+
+    [Fact]
+    public void GetAllSecondaryCiks_ThrowsBecauseJsonArrayNotSupportedInMemory() {
+        var act = () => _repository.GetAllSecondaryCiks().ToList();
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
     // ── GetAllSecondaryTickers ──────────────────────────────────────────
     // Note: GetAllSecondaryTickers uses SelectMany over a JSON array
     // column (SecondaryTickers) and a .Count filter, which the in-memory
