@@ -140,6 +140,63 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
+    public void ParseInvestmentDiscretion_UnrecognizedValue_FallsBackToSoleNotOther() {
+        // The third sibling in the ParseInvestmentDiscretion family. Existing pins
+        // cover DFND → Defined and OTR → Other (the two arms whose return value
+        // differs from the default). This pin covers the structurally distinct
+        // DEFAULT arm:
+        //   `_ => InvestmentDiscretion.Sole`
+        //
+        // The default arm is a deliberate "fail-open as Sole" business decision —
+        // 13F-HR filers report discretion via the INVDISC column with values
+        // "SOLE" | "DFND" | "OTR", but a non-trivial fraction of historical
+        // filings omit the field entirely or contain SEC-quirky values (older
+        // INFORMATION TABLE schemas pre-2013, filer errors, post-correction
+        // amendments with partial reconstruction). Treating those as Sole — the
+        // dominant case (>80% of 13F positions per SEC's own aggregate stats) —
+        // produces a sensible default that matches what most analysts assume
+        // when discretion is "unknown".
+        //
+        // The risk this pin uniquely catches is asymmetric and unreachable from
+        // the existing DFND and OTR siblings:
+        //   • A refactor that changed `_ => Sole` to `_ => Other` (intuitive to
+        //     anyone thinking "Other" is the catch-all bucket for unrecognized
+        //     values, especially since OTR maps there) would compile cleanly,
+        //     pass the DFND pin (still maps to Defined), pass the OTR pin (still
+        //     maps to Other), and silently reclassify EVERY filing with a
+        //     blank/unknown INVDISC from "Sole" (productive default) to "Other"
+        //     (analytical dead-end). The 13F dashboard's "Sole discretion"
+        //     filter would drop ~10-15% of historical positions to "Other",
+        //     where they'd be invisible to manager-control attribution queries.
+        //   • A swap-with-default-null regression (`_ => default(InvestmentDiscretion)`
+        //     which equals Sole because Sole is the zero value, OR conversely a
+        //     refactor that changes `default(InvestmentDiscretion)` to a different
+        //     zero by reordering the enum) would corrupt the same population
+        //     without changing the source line.
+        //   • A refactor that dropped the default arm entirely (relying on the
+        //     compiler's "switch must be exhaustive" check) would produce an
+        //     unhandled-case exception at runtime — but only for filings with
+        //     unknown values, which test fixtures rarely cover. The crash would
+        //     surface in production logs but only on the specific records that
+        //     trip it.
+        //
+        // Choose an input that's CASE-SENSITIVE distinct from the three mapped
+        // arms — neither "SOLE"/"sole", "DFND"/"dfnd", nor "OTR"/"otr". The
+        // production switch normalizes via `?.ToUpperInvariant()` so any
+        // lowercase variant of a mapped arm would still hit that arm. Use a
+        // truly unrecognized literal like "UNKNOWN" or a blank-space string —
+        // both should fall through to default and produce Sole.
+        //
+        // Pin "UNKNOWN" (a value that would never appear in real 13F XML but
+        // is unambiguous as "not in the mapped allowlist") and assert the
+        // exact enum value Sole. Any regression touching the default arm
+        // surfaces here.
+        var result = HoldingsParsingHelper.ParseInvestmentDiscretion("UNKNOWN");
+
+        result.Should().Be(InvestmentDiscretion.Sole);
+    }
+
+    [Fact]
     public void ResolveManagerName_AccessionNotInOtherManagers_ReturnsNull() {
         // 13F filings list co-filing managers in a separate `OTHERMANAGER2.tsv` table
         // keyed by AccessionNumber → SequenceNumber → ManagerName. The vast majority
