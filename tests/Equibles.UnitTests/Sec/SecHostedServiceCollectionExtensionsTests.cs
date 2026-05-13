@@ -296,4 +296,68 @@ public class SecHostedServiceCollectionExtensionsTests {
             d => d.ImplementationType == typeof(DocumentProcessorWorker),
             "AddHostedService<DocumentProcessorWorker>() must register the worker as IHostedService so post-download processing runs at startup");
     }
+
+    [Fact]
+    public void AddSecWorker_RegistersFtdScraperWorkerAsIHostedService() {
+        // Third and final sibling in the AddSecWorker hosted-service
+        // registration family. Closes coverage of every
+        // `AddHostedService<T>()` call in AddSecWorker: SecScraperWorker
+        // (already pinned), DocumentProcessorWorker (already pinned), and
+        // now FtdScraperWorker.
+        //
+        // Why FtdScraperWorker uniquely matters (and why it's unreachable
+        // from the SecScraperWorker / DocumentProcessorWorker siblings):
+        //   `services.AddHostedService<T>()` registers a fresh
+        //   IHostedService descriptor per call. The generic host
+        //   enumerates ALL of them and runs each in parallel. Dropping
+        //   any single registration leaves the other two running
+        //   normally — no error, no warning at startup. The existing
+        //   pins only catch the regression that drops their specific
+        //   worker; dropping FtdScraperWorker passes both of them.
+        //
+        // FtdScraperWorker pulls the SEC's daily "Fails-to-Deliver" feed
+        // — the regulator-published settlement-failure data that powers
+        // the short-selling dashboard's FTD column. Dropping its hosted-
+        // service registration leaves the SEC ingest pipeline running
+        // (SecScraperWorker still pulls EDGAR companyfacts/submissions)
+        // and the document processor running (DocumentProcessorWorker
+        // still does post-processing), but the FTD column on the
+        // short-selling dashboard silently drifts behind — stale from
+        // whichever day the regression was deployed.
+        //
+        // FTD data is regulator-published with a T+1 to T+2 lag, so
+        // operators wouldn't notice immediately. The first 2-3 days of
+        // missing data would look like normal SEC publication latency.
+        // By the time the gap is large enough to notice in dashboards,
+        // the missed data range may span weeks — exactly the kind of
+        // silent partial-failure mode this pin's family is designed to
+        // catch.
+        //
+        // With this pin, the AddSecWorker family is complete:
+        //   • IFilingProcessor → InsiderTradingFilingProcessor (scoped, pinned)
+        //   • ICompanySyncService → CompanySyncService (scoped, pinned)
+        //   • IDocumentPersistenceService → DocumentPersistenceService (scoped, pinned)
+        //   • IDocumentScraper → DocumentScraper (scoped, pinned)
+        //   • SecScraperWorker as IHostedService (pinned)
+        //   • DocumentProcessorWorker as IHostedService (pinned)
+        //   • FtdScraperWorker as IHostedService (this pin)
+        // The auto-wired DocumentManager and SecEdgarClient registrations
+        // are exercised transitively by the scoped/hosted pins above and
+        // by every integration test that constructs the SEC pipeline.
+        //
+        // Lookup pattern: same as the two existing hosted-service siblings —
+        // filter IHostedService descriptors and assert one has
+        // ImplementationType == typeof(FtdScraperWorker).
+        var services = new ServiceCollection();
+
+        services.AddSecWorker();
+
+        var hostedServiceDescriptors = services
+            .Where(d => d.ServiceType == typeof(IHostedService))
+            .ToList();
+
+        hostedServiceDescriptors.Should().Contain(
+            d => d.ImplementationType == typeof(FtdScraperWorker),
+            "AddHostedService<FtdScraperWorker>() must register the worker as IHostedService so the daily SEC fails-to-deliver poll runs at startup");
+    }
 }
