@@ -49,6 +49,44 @@ public class TableNormalizationStepTests {
     }
 
     [Fact]
+    public void Execute_NonNumericRowspan_SkipsExpansionAndDoesNotThrow() {
+        // Sibling to Execute_NonNumericColspan_SkipsExpansionAndDoesNotThrow.
+        // FixRowspan is structurally separate from FixColspan but uses the
+        // identical defensive guard:
+        //   `if (!int.TryParse(rowspanAttr, out var rowspanValue) || rowspanValue <= 1)
+        //        continue;`
+        // The two FixX methods don't share a helper — each TryParse branch is
+        // independently load-bearing and must be pinned independently. A refactor
+        // that "modernizes" only ONE of them to int.Parse (the other staying
+        // TryParse) would leave the colspan pin green while crashing on
+        // malformed rowspan values, and vice versa. Pin the rowspan branch on
+        // a non-numeric attribute so a single-method regression is caught.
+        //
+        // The risk is the same shape as the colspan pin: SEC filings emitted
+        // by older EDGAR converters and hand-edited submissions occasionally
+        // carry malformed rowspan values ("abc", "100%", empty). The guard
+        // ensures these silently skip; without it, int.Parse throws
+        // FormatException, the foreach over cellsWithRowspan aborts, and the
+        // whole TableNormalizationStep bails out on that filing — dropping
+        // the document or crashing DocumentScraper.
+        //
+        // Assertions mirror the colspan pin: cell content survives, rowspan
+        // attribute stays intact (proving the continue fired before
+        // RemoveAttribute), no new rows are inserted (proving the for loop
+        // didn't run), no exception escapes.
+        var doc = _parser.ParseDocument(
+            "<html><body><table><tr><td rowspan=\"abc\">Cell</td></tr></table></body></html>");
+
+        var act = () => _step.Execute(doc);
+
+        act.Should().NotThrow();
+        var cells = doc.QuerySelectorAll("td");
+        cells.Length.Should().Be(1);
+        cells[0].TextContent.Should().Be("Cell");
+        cells[0].GetAttribute("rowspan").Should().Be("abc");
+    }
+
+    [Fact]
     public void Execute_ColspanExpansion_RemovesColspanAttribute() {
         var doc = _parser.ParseDocument(
             "<html><body><table><tr><td colspan=\"3\">A</td></tr></table></body></html>");
