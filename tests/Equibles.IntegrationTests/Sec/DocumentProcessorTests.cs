@@ -21,6 +21,31 @@ public class DocumentProcessorTests {
     }
 
     [Fact]
+    public async Task GenerateEmbeddings_AlreadyCancelledToken_DoesNotCallEmbeddingClient() {
+        // GenerateEmbeddings groups chunks by document, then checks the
+        // cancellation token at the top of each group. With a pre-cancelled
+        // token it must break BEFORE calling _embeddingClient — the embedding
+        // server sits behind an expensive Polly retry pipeline; firing even
+        // one request after the worker was told to stop wastes budget and
+        // can race the shutdown. Pin the early-exit so a refactor that
+        // moves the cancellation check after the embedding call (or drops
+        // it entirely) surfaces here instead of in production logs.
+        var documentId = Guid.NewGuid();
+        var chunks = new List<Chunk> {
+            new() { DocumentId = documentId, Content = "first" },
+        };
+
+        var embeddingClient = Substitute.For<IEmbeddingClient>();
+        var sut = CreateSut(embeddingClient);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await sut.GenerateEmbeddings(chunks, cts.Token);
+
+        await embeddingClient.DidNotReceiveWithAnyArgs().GenerateEmbeddings(default);
+    }
+
+    [Fact]
     public async Task GenerateEmbeddings_EmbeddingCountMismatch_Throws() {
         var documentId = Guid.NewGuid();
         var chunks = new List<Chunk> {
