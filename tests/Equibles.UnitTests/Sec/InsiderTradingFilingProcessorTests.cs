@@ -274,4 +274,46 @@ public class InsiderTradingFilingProcessorTests {
 
         result.Should().Be(TransactionCode.Conversion);
     }
+
+    [Fact]
+    public void ParseTransactionCode_ExerciseCodeX_ReturnsExercise() {
+        // Sixth pin in the ParseTransactionCode family. Existing pins cover
+        // P/Purchase, S/Sale, A/Award, _/Other, and M/Conversion. This pin
+        // covers `X => TransactionCode.Exercise` — the exercise of a
+        // derivative security (option, warrant). X is structurally related
+        // to but distinct from M: X is the option/warrant exercise event
+        // itself (the moment the derivative is converted into the right to
+        // receive common stock), where M is the corresponding receipt of
+        // the underlying common shares. In practice the two often arrive
+        // in adjacent rows on the same Form 4 — X writes off the
+        // derivative position, M records the common-stock acquisition —
+        // and the two MUST classify into distinct buckets so the
+        // option-exercise analytics can pair them up.
+        //
+        // The risk this catches is distinct from the M pin: a refactor
+        // that "consolidates" X into M (under the false intuition that
+        // they describe the same business event) would compile, pass the
+        // existing pins, and silently merge two operational streams. The
+        // option-exercise chart's pairing logic — which counts X events to
+        // detect cluster-exercise behavior across executives — would
+        // double-count or skip entirely depending on which arm got
+        // merged. The pair-up between X and M is the foundation of the
+        // dilution-tracking series; collapsing them inverts which
+        // executive bought (M) vs. which option lot they tapped (X).
+        //
+        // The mapping X => Exercise is also semantically subtle in the
+        // OTHER direction: a refactor that swapped the X arm with
+        // F/TaxPayment (adjacent in source order, both single-letter
+        // codes that look similar at a glance) would compile, pass the
+        // M pin, and silently misclassify every option exercise as a
+        // tax payment — a category mix-up that would corrupt both
+        // analytics streams at once.
+        //
+        // Pin uppercase "X" specifically. ParseTransactionCode normalizes
+        // via ToUpperInvariant before matching but the canonical wire
+        // form from SEC EDGAR is always uppercase.
+        var result = (TransactionCode)ParseTransactionCodeMethod.Invoke(null, ["X"]);
+
+        result.Should().Be(TransactionCode.Exercise);
+    }
 }
