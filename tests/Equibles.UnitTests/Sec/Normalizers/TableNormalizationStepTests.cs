@@ -157,6 +157,46 @@ public class TableNormalizationStepTests {
     }
 
     [Fact]
+    public void Execute_RowspanInTrailingColumnOverShorterRow_AppendsEmptyCellAtRowEnd() {
+        // When a rowspan in the LAST column of one row crosses into a subsequent
+        // row that has FEWER cells, the column index used to splice in the empty
+        // padding cell is past the end of that shorter row's cell list. The
+        // InsertEmptyCellAtIndex helper handles the two cases differently:
+        // `cellIndex < existingCells.Count` calls `InsertBefore(... existingCells[cellIndex])`,
+        // while the else-branch falls back to `AppendChild(newCell)`. The existing
+        // rowspan tests only exercise the in-range InsertBefore branch (rowspan in
+        // column 0 with both rows two cells wide). Without this pin, a refactor
+        // that removed the AppendChild fallback — or that threw
+        // ArgumentOutOfRangeException on the missing index — would silently corrupt
+        // SEC tables whose sparse trailing rows have fewer columns than the rowspan
+        // header (a common pattern in 10-K footnote tables, where a "(continued)"
+        // row only fills one or two columns). The downstream consumer counts the
+        // cells per row to align headers with data; a missing pad cell shifts the
+        // last column out of alignment for the rest of the table.
+        //
+        // Setup: row 1 has [A, B, C] with C declaring rowspan=2; row 2 has just [D].
+        // After normalization, row 2 must end up with TWO cells — D at index 0 and
+        // an empty appended cell — and the rowspan attribute on C must be gone.
+        var doc = _parser.ParseDocument(
+            "<html><body><table>" +
+            "<tr><td>A</td><td>B</td><td rowspan=\"2\">C</td></tr>" +
+            "<tr><td>D</td></tr>" +
+            "</table></body></html>");
+
+        _step.Execute(doc);
+
+        doc.QuerySelectorAll("[rowspan]").Length.Should().Be(0);
+
+        var rows = doc.QuerySelectorAll("tr");
+        rows.Length.Should().Be(2);
+
+        var secondRowCells = rows[1].QuerySelectorAll("td");
+        secondRowCells.Length.Should().Be(2);
+        secondRowCells[0].TextContent.Should().Be("D");
+        secondRowCells[1].TextContent.Should().BeEmpty();
+    }
+
+    [Fact]
     public void Execute_NoTables_DoesNotThrow() {
         var doc = _parser.ParseDocument(
             "<html><body><p>No tables here</p></body></html>");
