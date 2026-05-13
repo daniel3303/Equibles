@@ -66,6 +66,31 @@ public class FtdScraperWorkerTests {
         sut.InvokeValidateConfiguration().Should().BeTrue();
     }
 
+    [Fact]
+    public void Constructor_AppliesSleepIntervalHoursFromOptionsAsTimeSpanHours() {
+        // FtdScraperWorker reads FtdScraperOptions.SleepIntervalHours
+        // (inherited from ScraperOptions, default 24h) and stores it as a
+        // TimeSpan via FromHours. SEC publishes the FTD list ~bi-weekly,
+        // so the 24h default samples for new releases without thrashing
+        // the endpoint. A refactor that swaps FromHours for FromMinutes
+        // (or drops the options read in favor of a hardcoded value)
+        // would either spam SEC's CDN or silently stretch the polling
+        // window. Pin the unit conversion so the regression surfaces here.
+        // FtdScraperWorker is the only Sec.* worker that pulls its sleep
+        // interval from options — the rest are hard-coded constants —
+        // making this pin specific to FTD.
+        var options = Options.Create(new FtdScraperOptions { SleepIntervalHours = 4 });
+        var config = new ConfigurationBuilder().AddInMemoryCollection([]).Build();
+        var sut = new TestableFtdScraperWorker(
+            Substitute.For<ILogger<FtdScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            options,
+            config);
+
+        sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(4));
+    }
+
     private sealed class TestableFtdScraperWorker : FtdScraperWorker {
         public TestableFtdScraperWorker(
             ILogger<FtdScraperWorker> logger,
@@ -76,5 +101,7 @@ public class FtdScraperWorkerTests {
             : base(logger, scopeFactory, errorReporter, options, configuration) { }
 
         public bool InvokeValidateConfiguration() => ValidateConfiguration();
+
+        public TimeSpan InvokeSleepInterval() => SleepInterval;
     }
 }
