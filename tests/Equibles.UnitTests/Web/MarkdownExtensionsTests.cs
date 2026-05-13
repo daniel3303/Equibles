@@ -36,6 +36,26 @@ public class MarkdownExtensionsTests {
     }
 
     [Fact]
+    public void MarkdownToHtml_NullInput_ShortCircuitsToEmptyContentWithoutInvokingMarkdig() {
+        // Views render Markdown for stored content that may be absent (a missing
+        // field, an unsaved record). The extension short-circuits null/empty
+        // input to Raw(string.Empty) BEFORE building the Markdig pipeline —
+        // skip that guard and Markdig's Markdown.ToHtml throws NRE on a null
+        // input, surfacing as a runtime error far from the helper call. Pin
+        // the early return on null so a regression that drops the guard
+        // fails this test instead.
+        string captured = null;
+        var htmlHelper = Substitute.For<IHtmlHelper>();
+        htmlHelper.Raw(Arg.Do<string>(s => captured = s))
+            .Returns(callInfo => new HtmlString(callInfo.Arg<string>()));
+
+        var result = htmlHelper.MarkdownToHtml(null);
+
+        result.Should().NotBeNull();
+        captured.Should().Be(string.Empty);
+    }
+
+    [Fact]
     public void MarkdownToHtml_PipeTableWithBlankLineBetweenRows_RendersAsSingleTable() {
         string captured = null;
         var htmlHelper = Substitute.For<IHtmlHelper>();
