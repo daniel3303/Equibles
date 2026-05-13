@@ -133,6 +133,43 @@ public class SecDocumentEnvelopeParserTests {
     }
 
     [Fact]
+    public void TryExtractPaperPdfFilename_DocumentStartWithoutEndTag_ReturnsFalseInsteadOfThrowing() {
+        // SEC EDGAR responses can be truncated by upstream proxies, transient TCP
+        // resets, or partial reads on the scraper side. When the envelope body
+        // contains `<DOCUMENT>` but no matching `</DOCUMENT>`, the loop's
+        // `envelope.IndexOf(DocumentEndTag, blockStart, ...)` returns -1 — and
+        // the `if (blockEnd == -1) return false;` guard is the only thing
+        // preventing the next line, `envelope.Substring(blockStart, blockEnd -
+        // blockStart + DocumentEndTag.Length)`, from being called with a
+        // negative length and throwing ArgumentOutOfRangeException. A refactor
+        // that drops the guard (e.g. assuming a well-formed envelope, or
+        // replacing the explicit check with a defensive Math.Max that masks
+        // the truncation) would compile cleanly, pass every existing test
+        // (all complete envelopes), and then crash the DocumentScraper on the
+        // first partial response — which is exactly the moment we want
+        // structured "no paper PDF here" handling, not a thrown exception
+        // bubbling up to BaseScraperWorker. Pin the silent-false contract.
+        var envelope = """
+            <SEC-DOCUMENT>
+            <SEC-HEADER>
+            </SEC-HEADER>
+            <DOCUMENT>
+            <TYPE>6-K
+            <SEQUENCE>1
+            <FILENAME>form6k.pdf
+            <DESCRIPTION>Form 6-K
+            <TEXT>
+            begin 644 form6k.pdf
+            (truncated mid-stream — closing DOCUMENT tag never arrives)
+            """;
+
+        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(envelope, out var filename);
+
+        success.Should().BeFalse();
+        filename.Should().BeEmpty();
+    }
+
+    [Fact]
     public void TryExtractPaperPdfFilename_EnvelopeWrappingPdfDocument_ReturnsFilename() {
         var envelope = """
             <SEC-DOCUMENT>
