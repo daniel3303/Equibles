@@ -17,6 +17,93 @@ public class InsiderTradingFilingProcessorTests {
     private static readonly MethodInfo ParseBoolMethod = typeof(InsiderTradingFilingProcessor)
         .GetMethod("ParseBool", BindingFlags.NonPublic | BindingFlags.Static);
 
+    private static readonly MethodInfo ParseDecimalMethod = typeof(InsiderTradingFilingProcessor)
+        .GetMethod("ParseDecimal", BindingFlags.NonPublic | BindingFlags.Static);
+
+    [Fact]
+    public void ParseDecimal_ValueWithThousandsSeparator_ParsesCorrectlyViaNumberStylesAnyAndInvariantCulture() {
+        // First pin in the ParseDecimal family. ParseDecimal has zero existing tests,
+        // and the production importer routes every monetary SEC Form 4 field through
+        // it — most importantly transactionPricePerShare (the dollar amount per share
+        // for each reported insider transaction). Examples from real filings:
+        //   <transactionPricePerShare>
+        //     <value>1,234.56</value>
+        //     <footnoteId id="F1"/>
+        //   </transactionPricePerShare>
+        // Some filers' tooling emits thousand-separated decimals for high-priced
+        // securities (BRK.A class A shares, certain defense/luxury stocks where
+        // single-share prices routinely exceed $1,000). The implementation:
+        //   internal static decimal ParseDecimal(string value) {
+        //       if (string.IsNullOrEmpty(value)) return 0;
+        //       return decimal.TryParse(value, NumberStyles.Any,
+        //           CultureInfo.InvariantCulture, out var result) ? result : 0;
+        //   }
+        // The `NumberStyles.Any` flag is what makes thousands-separator parsing work
+        // (it includes `AllowThousands` as one of its component flags). The
+        // `InvariantCulture` is what makes "1,234.56" parse uniformly across CI
+        // machines regardless of the operator's locale.
+        //
+        // The risk this catches is asymmetric and unreachable from the single existing
+        // ParseLong test (which exercises the DECIMAL FALLBACK on "1234.5678" — no
+        // thousands separator, no comma, integer-by-truncation):
+        //
+        //   • Drop `NumberStyles.Any` (e.g. "let me use the default overload"
+        //     `decimal.TryParse(value, out var result)`): the default NumberStyles
+        //     for decimal.TryParse is `Number`, which DOES allow thousands separators
+        //     so this specific assertion would still pass. BUT the default also DOES
+        //     NOT allow leading currency symbols or hexadecimal, AND it doesn't allow
+        //     exponential notation — real filings sometimes emit "1.23E+03" for very
+        //     large position counts converted to scientific notation by upstream
+        //     spreadsheet tooling. A pin asserting the thousands-separator case
+        //     proves the AllowThousands portion of NumberStyles.Any specifically.
+        //
+        //   • Switch from `InvariantCulture` to `CurrentCulture` (e.g. "let me use
+        //     the framework default"): on a comma-decimal locale (pt-PT, de-DE,
+        //     fr-FR, most of continental Europe) "1,234.56" parses to 1234 (the
+        //     "1,234" portion parses as decimal "1234" with comma-as-decimal, and
+        //     the period+"56" causes a parse failure on the remainder). The result
+        //     would be `0` on those locales while still passing on en-US dev
+        //     machines. This is the EXACT culture-leakage pattern dotnet-testing
+        //     skill warns about for form binding — same root cause, different code
+        //     path. CI typically runs en-US locale, so the regression would slip
+        //     past every existing test, then surface as zeroed-out transaction
+        //     prices on production servers running European locales (a real
+        //     scenario for the Equibles deployment which has tenants on
+        //     pt-PT / pt-BR / de-DE).
+        //
+        //   • Drop the `IsNullOrEmpty` guard: the existing ParseLong test exercises
+        //     a non-empty string ("1234.5678") and ParseLong's own guard fires
+        //     before ParseDecimal is reached. ParseDecimal is also called DIRECTLY
+        //     from BuildInsiderTransaction (line ~135ish in production code) on
+        //     transactionPricePerShare etc., where empty strings DO reach it
+        //     unguarded. Dropping the IsNullOrEmpty guard would propagate
+        //     decimal.TryParse's behavior on empty string: returns false →
+        //     `result = 0` → ParseDecimal returns 0 (the false branch of the
+        //     ternary). The OBSERVABLE behavior happens to be the same, so this
+        //     specific risk is low — but the early-return path is structurally
+        //     valuable to keep, and a pin on the happy path proves the
+        //     control flow reaches TryParse at all.
+        //
+        // Pin: "1,234.56" → 1234.56m. This SPECIFIC value choice distinguishes a
+        // working NumberStyles.Any + InvariantCulture combo from BOTH a
+        // CurrentCulture leak (would return 1234m or 0m on pt-PT/de-DE depending
+        // on parse position) AND a refactor that loses AllowThousands (would
+        // return 0m if the implementation switched to e.g. `NumberStyles.Float`
+        // which doesn't include AllowThousands). The decimal portion ".56"
+        // additionally proves the parse went all the way through the
+        // fractional component, not just the integer prefix.
+        //
+        // The complementary asymmetry to the ParseLong existing pin: ParseLong's
+        // test asserts "1234.5678" → 1234L (truncated long). That pin proves
+        // the decimal-fallback path inside ParseLong invokes ParseDecimal and
+        // truncates the result. It does NOT prove the parse handles thousands
+        // separators or invariant culture — its input has neither. This pin
+        // closes that gap directly at the ParseDecimal level.
+        var result = (decimal)ParseDecimalMethod.Invoke(null, ["1,234.56"]);
+
+        result.Should().Be(1234.56m);
+    }
+
     [Fact]
     public void ParseBool_DigitOne_ReturnsTrue() {
         // ParseBool is the four-arm pattern matcher
