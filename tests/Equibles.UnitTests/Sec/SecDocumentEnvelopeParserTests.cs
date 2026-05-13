@@ -98,6 +98,41 @@ public class SecDocumentEnvelopeParserTests {
     }
 
     [Fact]
+    public void TryExtractPaperPdfFilename_FilenameWithBackslashPathSeparator_RejectsAndReturnsFalse() {
+        // The existing path-traversal pin (#258) covers `../etc/passwd.pdf` — a Unix-style
+        // traversal that fires both the leading-dot and forward-slash checks in
+        // IsSafeFilename. This sibling pins the Windows-style backslash check in
+        // isolation: `evil\backslash.pdf` doesn't start with `.` (so the leading-dot
+        // guard is bypassed) and has no `/` (so the Unix-traversal guard is bypassed),
+        // leaving ONLY the `ch == '\\'` branch as the line of defence. A refactor that
+        // drops `|| ch == '\\'` from the foreach-rejection (or that swaps the OR for a
+        // platform-specific Path.DirectorySeparatorChar on a non-Windows host) would
+        // compile cleanly and pass the Unix-traversal sibling, while letting an SEC-
+        // hosted-or-MITM'd envelope with `\` characters pierce the per-filing URL
+        // sandbox on every platform. Pin the rejection on a backslash-only filename so
+        // the regression surfaces here.
+        var envelope = """
+            <SEC-DOCUMENT>
+            <SEC-HEADER>
+            </SEC-HEADER>
+            <DOCUMENT>
+            <TYPE>6-K
+            <SEQUENCE>1
+            <FILENAME>evil\backslash.pdf
+            <DESCRIPTION>Form 6-K
+            <TEXT>
+            </TEXT>
+            </DOCUMENT>
+            </SEC-DOCUMENT>
+            """;
+
+        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(envelope, out var filename);
+
+        success.Should().BeFalse();
+        filename.Should().BeEmpty();
+    }
+
+    [Fact]
     public void TryExtractPaperPdfFilename_EnvelopeWrappingPdfDocument_ReturnsFilename() {
         var envelope = """
             <SEC-DOCUMENT>
