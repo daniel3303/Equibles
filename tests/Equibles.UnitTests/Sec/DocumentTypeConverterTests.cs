@@ -38,6 +38,31 @@ public class DocumentTypeConverterTests {
     }
 
     [Fact]
+    public void CanConvertFrom_StringSourceType_ReturnsTrue() {
+        // MVC's TypeConverter pipeline asks `CanConvertFrom(string)` BEFORE
+        // invoking the converter — if it returns false, MVC silently skips the
+        // converter entirely and falls back to default binding (which fails for
+        // the custom DocumentType reference type, surfacing as a model-state
+        // error or a null route argument). The existing ConvertFrom pins assume
+        // CanConvertFrom returns true; if the gate flipped, ConvertFrom would
+        // never be called in production and those pins would stay green while
+        // every `/Sec/Filings/{docType}` route silently breaks.
+        //
+        // The risk: a refactor that "tightens" the predicate (e.g. requiring an
+        // additional context check, or comparing `sourceType.Name == "String"`
+        // which is case-sensitive on the type name and breaks for the qualified
+        // System.String case) would compile cleanly, pass every ConvertFrom test
+        // (those bypass the CanConvertFrom gate when called directly), and only
+        // surface as 400 model-binding errors at request time.
+        //
+        // Pin the contract: `CanConvertFrom(typeof(string)) == true`. Asserts
+        // the explicit string-handling branch.
+        var result = _sut.CanConvertFrom(context: null, sourceType: typeof(string));
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
     public void ConvertFrom_UnknownStringValue_ThrowsFormatException() {
         var act = () => _sut.ConvertFrom(null, CultureInfo.InvariantCulture, "NotARealDocumentType");
 
