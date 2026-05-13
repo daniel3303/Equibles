@@ -43,9 +43,33 @@ public class BaseControllerTests {
         result.Should().BeNull();
     }
 
+    [Fact]
+    public void InitSseStream_SetsContentTypeAndDisablesNginxBuffering() {
+        // InitSseStream prepares a response for Server-Sent Events. The three
+        // headers it sets are load-bearing: text/event-stream is the SSE
+        // content type, no-cache prevents downstream caches from holding
+        // the stream, and X-Accel-Buffering: no tells nginx (and other
+        // reverse proxies that honour the header) NOT to buffer the
+        // response — without it, the proxy holds bytes until the
+        // connection closes and SSE clients see nothing until then. Pin
+        // all three so a refactor that "simplifies" the helper to a
+        // single ContentType set can't silently break streaming.
+        var sut = new TestableBaseController();
+        var httpContext = new DefaultHttpContext();
+        sut.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+        sut.InvokeInitSseStream();
+
+        httpContext.Response.ContentType.Should().Be("text/event-stream");
+        httpContext.Response.Headers.CacheControl.ToString().Should().Be("no-cache");
+        httpContext.Response.Headers["X-Accel-Buffering"].ToString().Should().Be("no");
+    }
+
     private sealed class TestableBaseController : BaseController {
         public TestableBaseController() : base(Substitute.For<ILogger<BaseController>>()) { }
 
         public string InvokeGetReturnUrl() => GetReturnUrl();
+
+        public void InvokeInitSseStream() => InitSseStream();
     }
 }
