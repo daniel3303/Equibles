@@ -1,4 +1,11 @@
+using System.Security.Claims;
+using System.Text.Encodings.Web;
 using Equibles.Web.Authentication;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using NSubstitute;
 
 namespace Equibles.UnitTests.Web;
 
@@ -85,6 +92,48 @@ public class EnvAuthHandlerTests {
     [Fact]
     public void ConstantTimeEquals_EmptyAndNonEmpty_ReturnsFalse() {
         EnvAuthHandler.ConstantTimeEquals("", "hello").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task HandleAuthenticateAsync_AuthDisabled_SucceedsAsAnonymousUser() {
+        // EnvAuthHandler.HandleAuthenticateAsync has four reachable paths:
+        //   1. !IsEnabled              → Success(anonymous)
+        //   2. IsEnabled, no cookie    → Fail("Not authenticated")
+        //   3. IsEnabled, bad cookie   → Fail("Invalid session")
+        //   4. IsEnabled, good cookie  → Success(real user)
+        // Every existing pin in this file targets the static helpers (GenerateToken,
+        // ConstantTimeEquals) — the four runtime branches of HandleAuthenticateAsync
+        // are entirely unpinned. This pin covers branch 1, which is load-bearing in
+        // two practical scenarios:
+        //   • Local dev / CI runs (AUTH_ENABLED=false), where every endpoint sees an
+        //     anonymous principal with ClaimTypes.Name == "anonymous". The downstream
+        //     `Url.IsLocalUrl`, return-URL handling, and BaseController logging all
+        //     depend on Identity.Name being populated — a regression that returns
+        //     `AuthenticateResult.NoResult()` (the "no claims" default for skipped
+        //     handlers) or `Fail` would 401 every dev request without warning.
+        //   • Public/preview deployments where the operator deliberately ships
+        //     read-only without auth — same anonymous contract.
+        //
+        // A refactor that flipped the `!IsEnabled` branch to the IsEnabled body
+        // (or that returned NoResult instead of Success(anonymous)) would still
+        // pass every static-helper sibling pin and only surface as an empty-
+        // principal failure on the first runtime request. Pin the contract: when
+        // IsEnabled=false, the result MUST be Succeeded with Name="anonymous".
+        // AuthSettings.IsEnabled is computed: `!IsNullOrEmpty(Username) && !IsNullOrEmpty(Password)`.
+        // Leaving both unset (the default) yields IsEnabled=false — the dev/CI scenario.
+        var authSettings = Options.Create(new AuthSettings());
+        var schemeOptions = Substitute.For<IOptionsMonitor<AuthenticationSchemeOptions>>();
+        schemeOptions.Get(Arg.Any<string>()).Returns(new AuthenticationSchemeOptions());
+        var sut = new EnvAuthHandler(schemeOptions, NullLoggerFactory.Instance, UrlEncoder.Default, authSettings);
+
+        var scheme = new AuthenticationScheme(EnvAuthHandler.SchemeName, EnvAuthHandler.SchemeName, typeof(EnvAuthHandler));
+        var httpContext = new DefaultHttpContext();
+        await sut.InitializeAsync(scheme, httpContext);
+        var result = await sut.AuthenticateAsync();
+
+        result.Succeeded.Should().BeTrue();
+        result.Principal.Should().NotBeNull();
+        result.Principal!.FindFirstValue(ClaimTypes.Name).Should().Be(EnvAuthHandler.AnonymousUsername);
     }
 
     [Fact]
