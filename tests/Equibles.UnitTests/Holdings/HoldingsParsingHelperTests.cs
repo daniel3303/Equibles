@@ -344,4 +344,72 @@ public class HoldingsParsingHelperTests {
 
         result.Should().Be(ShareType.Principal);
     }
+
+    [Fact]
+    public void ParseShareType_UnrecognizedValue_FallsBackToSharesNotPrincipal() {
+        // Sibling to ParseShareType_PrincipalAbbreviation_ReturnsPrincipal. The
+        // existing pin covers the PRN → Principal arm (semantically distinct return
+        // value from default). This pin covers the structurally distinct DEFAULT
+        // arm:
+        //   `_ => ShareType.Shares`
+        //
+        // The default arm is a deliberate "fail-open as Shares" business decision —
+        // SEC 13F-HR Information Table uses the SSHPRNAMT_TYPE column with values
+        // "SH" | "PRN" to distinguish equity-shares positions from bond/note
+        // principal-amount positions. The wire encoding is well-defined but real
+        // filings include legacy schema variants (pre-2013 INFORMATION TABLE forms
+        // omitted the column entirely on some filings) and filer errors (blank
+        // values, lowercase variants that ToUpperInvariant should normalize but a
+        // null input bypasses entirely). Treating those as Shares — the dominant
+        // case (>95% of 13F positions per SEC's own aggregate stats — equity
+        // dominates the 13F universe) — produces a sensible default that matches
+        // what holdings analytics assume when the type is "unknown".
+        //
+        // The parallel to ParseInvestmentDiscretion's `_ => Sole` is exact: both
+        // helpers fail-open to the dominant case (Sole discretion, Shares position
+        // type), and both default arms share their return value with one mapped
+        // arm (Sole maps via SOLE; Shares maps via SH) — so pinning the named arm
+        // (SH) wouldn't distinguish dropped-default from working-default. Only an
+        // explicit unrecognized-input pin separates the two failure modes.
+        //
+        // The risk this pin uniquely catches is asymmetric and unreachable from
+        // the PRN sibling:
+        //   • A refactor that changed `_ => Shares` to `_ => Principal` (intuitive
+        //     to anyone thinking "Principal is the catch-all for non-share types,
+        //     like loans, warrants, or anything else that doesn't fit Shares")
+        //     would compile cleanly, pass the PRN pin (still maps to Principal),
+        //     and silently reclassify EVERY blank/unknown 13F position from
+        //     Shares (equity) to Principal (debt). The holdings dashboard's
+        //     equity vs. debt aggregation would flip its denominator for an
+        //     entire population of legacy/imperfect filings — particularly
+        //     painful for any institution that historically filed with the
+        //     pre-2013 schema (the column became mandatory in the 2013 13F
+        //     EDGAR redesign, but historical loads still hit this code path).
+        //   • A copy-paste refactor that swapped the PRN arm's return value
+        //     with the default's return value (`"PRN" => Shares, _ => Principal`)
+        //     would pass the PRN-pin's intent only if the regression was a
+        //     pure rename; the existing PRN pin asserts the exact Principal
+        //     value so that swap is caught there. But the inverse — keeping
+        //     the PRN arm correct while corrupting the default — only this
+        //     pin catches.
+        //   • A refactor that dropped the default arm entirely (relying on
+        //     the compiler's "switch must be exhaustive" check) would produce
+        //     an unhandled-case exception at runtime — but only for filings
+        //     with blank/unknown values, which test fixtures rarely cover.
+        //     The crash would surface in production logs but only on the
+        //     specific records that trip it.
+        //
+        // Choose an input that's CASE-SENSITIVE distinct from both mapped arms.
+        // The production switch normalizes via `?.ToUpperInvariant()` so any
+        // lowercase variant of SH or PRN would still hit those arms. Use a
+        // truly unrecognized literal — "UNK" (which 13F never emits) is
+        // unambiguous as "not in the mapped allowlist" and falls through to
+        // the default.
+        //
+        // Pin "UNK" and assert the exact enum value Shares. Any regression
+        // touching the default arm surfaces here.
+        var result = HoldingsParsingHelper.ParseShareType("UNK");
+
+        result.Should().Be(ShareType.Shares);
+    }
 }
