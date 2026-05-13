@@ -348,4 +348,25 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase {
 
         result.Should().Contain("No insiders found matching 'Nonexistent'");
     }
+
+    [Fact]
+    public async Task SearchInsiders_OfficerWithoutTitle_FallsBackToOfficerLabel() {
+        // SEC Form 4 filings sometimes mark IsOfficer=true but leave the
+        // OfficerTitle blank (the filer omitted the title text). GetRole's
+        // `OfficerTitle ?? "Officer"` fallback ensures the rendered output
+        // still shows a meaningful role label. A regression that drops the
+        // fallback would render "| name | cik |  | location |" — a hole
+        // where the role belongs, surfacing as missing role badges in the
+        // MCP tool's response. Pin the fallback so it can't silently
+        // disappear.
+        DbContext.Set<InsiderOwner>().Add(
+            CreateOwner(name: "Anonymous Officer", isDirector: false,
+                isOfficer: true, officerTitle: null));
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().SearchInsiders("Anonymous");
+
+        result.Should().Contain("Anonymous Officer");
+        result.Should().Contain("Officer");
+    }
 }
