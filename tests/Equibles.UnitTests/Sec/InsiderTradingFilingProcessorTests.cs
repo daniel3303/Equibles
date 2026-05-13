@@ -460,4 +460,55 @@ public class InsiderTradingFilingProcessorTests {
 
         result.Should().Be(TransactionCode.Discretionary);
     }
+
+    [Fact]
+    public void ParseTransactionCode_ExpirationCodeE_ReturnsExpiration() {
+        // Tenth pin in the ParseTransactionCode family. Existing pins cover
+        // P/Purchase, S/Sale, A/Award, _/Other, M/Conversion, X/Exercise,
+        // F/TaxPayment, G/Gift, and W/Discretionary. This pin covers
+        // `E => TransactionCode.Expiration` — the SEC Form 4 code for
+        // "Expiration of short derivative position", filed when a previously
+        // disclosed short option, warrant, or other derivative held by an
+        // insider expires worthless (without exercise).
+        //
+        // E sits in the "lifecycle" semantic cluster alongside X (Exercise)
+        // and M (Conversion) — all three terminate the life of a derivative
+        // position. The codebase maps them to three distinct TransactionCode
+        // values precisely so downstream analytics can distinguish them:
+        //   • Exercise (X) — the insider USED the derivative, converting it
+        //     to underlying shares at the strike. Real economic decision.
+        //   • Conversion (M) — Rule 16b-3-exempt conversion, mechanical.
+        //   • Expiration (E) — the derivative reached its expiry date
+        //     without exercise. NO economic decision — passive event.
+        //
+        // The risk this pin uniquely catches is asymmetric and unreachable
+        // from the X/Exercise and M/Conversion siblings: a refactor that
+        // collapsed E into X (under the mistaken assumption that "expired
+        // and exercised both terminate the position, same thing") would
+        // compile cleanly, pass every existing ParseTransactionCode pin (X
+        // still maps to Exercise, M still maps to Conversion, all the others
+        // are untouched), and silently re-tag every expired option as a
+        // discretionary Exercise. Downstream insider-trading analytics built
+        // on Exercise counts would inflate by the population of expired
+        // derivatives — which is large during bear markets, when underwater
+        // options expire en masse. The signal-quality degradation is
+        // exactly the kind operators can't visually detect (a 20% lift in
+        // "Exercise" counts looks like increased insider activity rather
+        // than the bug it actually is).
+        //
+        // The complementary risk: a swap with the default arm (E falls
+        // through to Other) would lose every expiration event from the
+        // typed enum entirely, breaking any filter that targets Expiration
+        // specifically. Both regressions surface as a wrong enum value on
+        // this pin's assertion.
+        //
+        // The two remaining unpinned arms after this pin are I/Inheritance
+        // and the null-code path (`code?.ToUpperInvariant()` propagates null
+        // into the default arm). Pin uppercase "E" with assertion on the
+        // exact enum value Expiration so any of the lifecycle-cluster
+        // regressions surface here.
+        var result = (TransactionCode)ParseTransactionCodeMethod.Invoke(null, ["E"]);
+
+        result.Should().Be(TransactionCode.Expiration);
+    }
 }
