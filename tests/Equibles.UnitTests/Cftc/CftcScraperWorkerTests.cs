@@ -59,6 +59,35 @@ public class CftcScraperWorkerTests {
         sut.InvokeErrorSource().Should().Be(ErrorSource.CftcScraper);
     }
 
+    [Fact]
+    public void WorkerName_IsCftcScraper() {
+        // Tenth and final WorkerName pin in the natural-extension family (CBOE,
+        // Holdings, SEC filing, FTD, Document processor, FRED, Yahoo price,
+        // FINRA, Congressional trade, and now CFTC). Every BaseScraperWorker
+        // subclass in src/ now has its operator-visible name pinned. WorkerName
+        // flows into BaseScraperWorker's structured log scope and shows up in
+        // every Serilog line — on-call greps `data/worker/logs/log<date>.txt`
+        // for "CFTC scraper" when Commitments of Traders ingestion stalls.
+        // Like FRED and FINRA, CFTC is an acronym and capitalization matters:
+        // "CFTC" all-caps to match the regulator's own usage, "scraper"
+        // lowercase to match the family. A casing normalization regression
+        // to "Cftc scraper" would still write logs but break case-sensitive
+        // log filters and dashboard pins that target the exact literal. With
+        // FRED's "FRED scraper" and FINRA's "FINRA scraper" already pinned,
+        // this completes the three-acronym pin trio guarding against a future
+        // "lowercase everything but the first letter" normalization sweep.
+        var options = Options.Create(new CftcScraperOptions { SleepIntervalHours = 12 });
+        var sut = new TestableCftcScraperWorker(
+            Substitute.For<ILogger<CftcScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()),
+            options);
+
+        sut.InvokeWorkerName().Should().Be("CFTC scraper");
+    }
+
     private sealed class TestableCftcScraperWorker : CftcScraperWorker {
         public TestableCftcScraperWorker(
             ILogger<CftcScraperWorker> logger,
@@ -70,5 +99,7 @@ public class CftcScraperWorkerTests {
         public TimeSpan InvokeSleepInterval() => SleepInterval;
 
         public ErrorSource InvokeErrorSource() => ErrorSource;
+
+        public string InvokeWorkerName() => WorkerName;
     }
 }
