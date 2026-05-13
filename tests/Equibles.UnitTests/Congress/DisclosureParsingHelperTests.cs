@@ -451,4 +451,58 @@ public class DisclosureParsingHelperTests {
         result[0].Ticker.Should().Be("AAPL");
         result[0].TransactionType.Should().Be(CongressTransactionType.Sale);
     }
+
+    [Fact]
+    public void ParseTransactionsFromHtml_FilerColumnInsteadOfOwner_PopulatesOwnerTypeFromFilerColumn() {
+        // MapColumnIndices resolves the owner column with `h.Contains("owner") ||
+        // h.Contains("filer")`. The two alternatives are independent: House PTRs use
+        // an "Owner" column (Self / SP / JT / DC), Senate disclosures use a "Filer"
+        // column (Joint / Self / Spouse). Every existing happy-path pin in this file
+        // uses an "Owner" column; the `|| h.Contains("filer")` arm is unpinned and
+        // a refactor that "simplifies" the alternation to just `Contains("owner")`
+        // would compile cleanly, pass every existing test, and silently null out
+        // OwnerType for every Senate row in production — losing the joint vs spouse
+        // vs self distinction the analytics tier displays as the trade attribution.
+        //
+        // The failure mode is invisible: the row still parses (date/ticker/asset
+        // come through), the transaction is recorded, but the OwnerType column in
+        // the DB receives null where it used to carry "Joint" or "Spouse". The
+        // dashboard's "trades attributed to spouse" filter silently empties out.
+        //
+        // Pin the filer-column path with a Senate-style header. The assertion
+        // checks OwnerType on the parsed transaction — proving the filer column
+        // was actually resolved AND that its value flowed through GetCell →
+        // CleanSentinel → Truncate to the persisted field.
+        var html = """
+            <html><body>
+            <table>
+              <thead><tr>
+                <th>Transaction Date</th>
+                <th>Filer Type</th>
+                <th>Ticker</th>
+                <th>Asset Name</th>
+                <th>Transaction Type</th>
+                <th>Amount</th>
+              </tr></thead>
+              <tbody>
+                <tr>
+                  <td>2024-06-15</td>
+                  <td>Joint</td>
+                  <td>AAPL</td>
+                  <td>Apple Inc</td>
+                  <td>Purchase</td>
+                  <td>$1,001 - $15,000</td>
+                </tr>
+              </tbody>
+            </table>
+            </body></html>
+            """;
+
+        var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
+            html, "Test Senator", CongressPosition.Senator,
+            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+
+        result.Should().HaveCount(1);
+        result[0].OwnerType.Should().Be("Joint");
+    }
 }
