@@ -1,5 +1,8 @@
+using System.Net.Http.Headers;
 using System.Reflection;
 using Equibles.Integrations.Sec;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -14,6 +17,47 @@ public class SecEdgarClientTests {
 
     private static readonly MethodInfo GetDocumentUrlMethod = typeof(SecEdgarClient)
         .GetMethod("GetDocumentUrl", BindingFlags.NonPublic | BindingFlags.Static);
+
+    private static readonly MethodInfo GetRetryDelayMethod = typeof(SecEdgarClient)
+        .GetMethod("GetRetryDelay", BindingFlags.NonPublic | BindingFlags.Instance);
+
+    [Fact]
+    public void GetRetryDelay_RetryAfterDeltaLongerThanMaxRetryDelay_CapsAtMaxRetryDelay() {
+        // SEC EDGAR's load balancer occasionally returns Retry-After headers asking
+        // clients to back off for hours (e.g. during an outage SEC has sent values
+        // like 3600s — 1 hour — and longer windows have been observed during the
+        // EDGAR-modernization cutover). SendWithRetryAsync passes that delay verbatim
+        // into Task.Delay; without a cap, a single bad upstream response would block
+        // the entire scraper for a full hour (or longer), silently freezing every
+        // dependent worker (DocumentScraper, FtdScraper, HoldingsScraper) that
+        // shares this client.
+        //
+        // The cap is `private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(5);`
+        // applied in GetRetryDelay via `return delta > MaxRetryDelay ? MaxRetryDelay : delta;`.
+        // A refactor that "trusts SEC's Retry-After value" — dropping the cap or
+        // raising the ceiling without bound — would compile cleanly and pass every
+        // existing happy-path test (the existing tests don't exercise GetRetryDelay
+        // at all). Pin the cap on a Retry-After value an order of magnitude over
+        // the limit so any plausible regression surfaces; assert the returned
+        // delay is exactly MaxRetryDelay (not the requested 24h delta).
+        //
+        // Construction: build a real HttpResponseMessage with a long Retry-After
+        // header, build a minimal SecEdgarClient via its DI constructor (HttpClient,
+        // NullLogger, IConfiguration with no ContactEmail — the logger warning is
+        // acceptable here and doesn't fail the test), and invoke the private
+        // instance method via reflection. The `attempt` parameter is irrelevant
+        // when Retry-After is honoured — pass 0.
+        using var httpClient = new HttpClient();
+        var configuration = new ConfigurationBuilder().Build();
+        var sut = new SecEdgarClient(httpClient, NullLogger<SecEdgarClient>.Instance, configuration);
+
+        using var response = new HttpResponseMessage(System.Net.HttpStatusCode.TooManyRequests);
+        response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromHours(24));
+
+        var delay = (TimeSpan)GetRetryDelayMethod.Invoke(sut, [response, 0]);
+
+        delay.Should().Be(TimeSpan.FromMinutes(5));
+    }
 
     [Fact]
     public void FormatCik_ShortCik_PadsLeftToTenDigitsWithZeros() {
