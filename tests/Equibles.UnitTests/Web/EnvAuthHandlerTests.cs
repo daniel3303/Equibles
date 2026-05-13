@@ -137,6 +137,50 @@ public class EnvAuthHandlerTests {
     }
 
     [Fact]
+    public async Task HandleAuthenticateAsync_AuthEnabledWithNoCookie_FailsWithNotAuthenticated() {
+        // Sibling pin to HandleAuthenticateAsync_AuthDisabled_SucceedsAsAnonymousUser.
+        // That pin covers branch 1 (!IsEnabled → Success). This covers branch 2
+        // (IsEnabled, no cookie → Fail("Not authenticated")).
+        //
+        // The risk this pins is asymmetric: a refactor that inverts the
+        // `string.IsNullOrEmpty(cookie)` check (returning Success on missing cookie
+        // instead of Fail) would let every unauthenticated request through under a
+        // production deployment with AUTH_ENABLED=true. The failure mode is catastrophic
+        // — every protected endpoint is suddenly public-accessible. CI without this
+        // pin wouldn't catch the inversion since the existing anonymous-mode test only
+        // exercises the !IsEnabled branch and the static-helper tests don't go through
+        // HandleAuthenticateAsync at all.
+        //
+        // The Fail reason "Not authenticated" is asserted via FailureMessage so a
+        // refactor that swapped messages (e.g. accidentally pasted "Invalid session"
+        // from the next branch) is caught — that mismatch would mis-route operator
+        // log queries that filter by failure reason ("session expired" alert vs
+        // "missing cookie" alert).
+        //
+        // Construction: enable auth by setting both Username and Password (production
+        // pattern — AuthSettings.IsEnabled is the computed AND of both being non-empty).
+        // Use a fresh DefaultHttpContext with no cookies attached. AuthenticateAsync
+        // walks the cookie collection, finds the EnvAuth scheme cookie missing,
+        // returns Fail.
+        var authSettings = Options.Create(new AuthSettings {
+            Username = "admin",
+            Password = "secret123",
+        });
+        var schemeOptions = Substitute.For<IOptionsMonitor<AuthenticationSchemeOptions>>();
+        schemeOptions.Get(Arg.Any<string>()).Returns(new AuthenticationSchemeOptions());
+        var sut = new EnvAuthHandler(schemeOptions, NullLoggerFactory.Instance, UrlEncoder.Default, authSettings);
+
+        var scheme = new AuthenticationScheme(EnvAuthHandler.SchemeName, EnvAuthHandler.SchemeName, typeof(EnvAuthHandler));
+        var httpContext = new DefaultHttpContext();
+        await sut.InitializeAsync(scheme, httpContext);
+        var result = await sut.AuthenticateAsync();
+
+        result.Succeeded.Should().BeFalse();
+        result.Failure.Should().NotBeNull();
+        result.Failure!.Message.Should().Be("Not authenticated");
+    }
+
+    [Fact]
     public void ConstantTimeEquals_NullAndEmpty_ReturnsTrue() {
         // Both null and empty hash to the same value because the implementation
         // coalesces null to "" before hashing
