@@ -44,6 +44,50 @@ public class CompanyMetadataTests {
     }
 
     [Fact]
+    public void IsOperatingCompany_InvestmentCompanyEntityType_ReturnsFalse() {
+        // `CompanyMetadata.IsOperatingCompany` is the FIRST-tier tiebreaker in
+        // `CompanySyncService.ShouldIncumbentWin` (operating-status precedes the
+        // listing-status precedes the CIK numerical tiebreak). The predicate is
+        //   `string.Equals(EntityType, "operating", StringComparison.OrdinalIgnoreCase)`
+        // and is meant to distinguish real operating companies from non-operating
+        // SEC filer categories — investment companies (mutual funds, ETFs, BDCs),
+        // SPACs (mid-merger), trusts, and other regulatory pass-through entities.
+        //
+        // The existing pins cover IsListed but leave IsOperatingCompany entirely
+        // untested. The risk this catches: a refactor that swaps the comparer to
+        // case-sensitive `Equals` (or to `Contains` for "fuzzy matching") would
+        // either silently bucket ALL filers as non-operating (case-sensitive break
+        // on "Operating", "OPERATING", or any other casing variation SEC's
+        // submissions doc emits — the wire form varies year-over-year) or
+        // bucket all of them as operating (contains-match on any string
+        // containing "operating" anywhere — far too permissive). Either
+        // direction inverts the operating-precedence tiebreak in
+        // ShouldIncumbentWin: investment companies would either WIN every
+        // collision against operating companies (silently overwriting AAPL
+        // with the iShares fund that mentions AAPL in its submissions) or LOSE
+        // every collision they should win.
+        //
+        // The complementary risk: a refactor that flipped the predicate's
+        // negation (`!Equals(...)` instead of `Equals(...)`) would invert
+        // the entire tiebreak. The OTC sibling can't catch this because
+        // IsOperatingCompany sits BEFORE IsListed in the tiebreak chain.
+        //
+        // Pin the FALSE side with a realistic non-operating EntityType
+        // value ("investment company" — the most common non-operating
+        // category by filer count). Asserting BeFalse proves (a) the
+        // OrdinalIgnoreCase comparison is `Equals`, not `Contains` (which
+        // would have matched substring "investment company" partially) AND
+        // (b) the predicate's polarity is correct (matched = false for
+        // non-operating).
+        var metadata = new CompanyMetadata {
+            Cik = "1234567",
+            EntityType = "investment company",
+        };
+
+        metadata.IsOperatingCompany.Should().BeFalse();
+    }
+
+    [Fact]
     public void IsListed_OtcOnlyExchanges_ReturnsFalse() {
         // `CompanyMetadata.IsListed` powers the second-tier tiebreaker in
         // `CompanySyncService.ShouldIncumbentWin` — when two SEC filers race for the same
