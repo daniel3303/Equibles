@@ -197,6 +197,62 @@ public class HouseDisclosureClientTests {
     }
 
     [Fact]
+    public void OwnerCodeRegex_MatchesMemberCodeSelf_AndCapturesOwnerCode() {
+        // Fourth and final sibling in the OwnerCodeRegex alternation family. With
+        // this pin, all four alternatives in `^(SP|JT|DC|Self)\b` are individually
+        // pinned: SP (Spouse), JT (Joint), DC (Dependent Child), Self (the member).
+        //
+        // Why "Self" uniquely matters and is unreachable from the other three pins:
+        //   The regex short-circuits on the first matching alternative, so the
+        //   "Self" arm only ever fires for Self inputs. The pattern is also case-
+        //   insensitive (RegexOptions.IgnoreCase) so "self" / "SELF" / "Self"
+        //   should all match. A regression that drops the "Self" arm (e.g. a
+        //   "remove redundant Self code since it's the default attribution"
+        //   refactor — Self IS the implicit default in regulatory framing but
+        //   it's still emitted as an explicit literal in the PDF) would compile,
+        //   pass the SP/JT/DC pins, pass every ExtractTransactionType /
+        //   RemoveTrailingTransactionType pin, and silently drop every member-
+        //   attributed trade from the import.
+        //
+        // The production volume implications make this the LARGEST silent-loss
+        // regression of the four arms:
+        //   • Self (the member) — DOMINANT House PTR owner code. Most members
+        //     trade primarily through their own personal accounts; Self lines
+        //     outnumber SP+JT+DC combined for the typical member.
+        //   • SP/JT/DC — household-attributed accounts, secondary populations.
+        //   Dropping Self would silently erase the bulk of the House PTR
+        //   dataset — every member's personal trading would vanish from the
+        //   ingest, leaving only household-attributed trades. The remaining
+        //   dataset would look surprisingly small but plausible; operator
+        //   inspection of "active members" would still show data, just at
+        //   ~20% of the true volume. Exactly the silent partial-failure
+        //   mode that CI must catch.
+        //
+        // Self is structurally distinct from the three two-letter codes in
+        // one other way: it's the only multi-character alternative (4 chars
+        // vs 2 chars for SP/JT/DC). A refactor that "normalize all owner
+        // codes to two-character abbreviations" — perhaps replacing
+        // `(SP|JT|DC|Self)` with `(SP|JT|DC|SE)` to make them uniform —
+        // would silently miss every Self line in the PDFs (the PDFs emit
+        // "Self", not "SE"). The two-pin pair (any two-letter sibling +
+        // this one) catches the unification refactor; this pin alone
+        // catches the dropped-Self refactor.
+        //
+        // Pin "Self" with mixed-case capitalization (the canonical case the
+        // House PDFs emit — first letter uppercase, rest lowercase) and assert
+        // both Success AND the capture group value is exactly "Self". The dual
+        // assertion proves (a) the alternation arm matched, (b) the case
+        // preserved in the capture group, and (c) the capture-group structure
+        // is intact.
+        var regex = (Regex)OwnerCodeRegexMethod.Invoke(null, null);
+
+        var match = regex.Match("Self NVIDIA CORP - COMMON STOCK P 09/05/2025");
+
+        match.Success.Should().BeTrue();
+        match.Groups[1].Value.Should().Be("Self");
+    }
+
+    [Fact]
     public void ExtractTransactionType_PurchaseTrailingP_ReturnsPurchase() {
         // House PTRs encode purchases as a trailing bare "P" (no qualifier). The
         // PurchaseTypeRegex (`\bP\s*$`) is the only matcher for that path — if a
