@@ -73,6 +73,38 @@ public class CboeClientTests {
     }
 
     [Fact]
+    public void ParseVixCsv_RowWithFewerThanFiveFields_IsSkippedWithoutThrowing() {
+        // Sibling to ParsePutCallCsv_RowWithFewerThanFiveFields_IsSkippedWithoutThrowing.
+        // Same defensive pattern — `if (fields.Length < 5) continue;` — but in a
+        // structurally distinct parser. The VIX history CSV occasionally emits
+        // truncated rows during partial-publish windows: CBOE's CDN serves the
+        // file mid-write when the upstream pipeline updates daily OHLC
+        // intraday, and a row may carry only the date column before the OHLC
+        // values are populated.
+        //
+        // Without the guard, a 2-field row like "01/02/2020,13.46" would throw
+        // IndexOutOfRange on fields[2], fields[3], or fields[4] (the High/Low/
+        // Close decimal extractions), aborting the foreach inside the public
+        // DownloadVixHistory and crashing the entire VIX ingest pass. The
+        // existing ParseVixCsv_RowWithUnparseableOhlcDecimal pin runs on a
+        // 5-field row (decimal parse fails), so it doesn't exercise the
+        // length-skip branch — those are independent guards.
+        //
+        // Pin: a 2-field row sandwiched between header and a valid 5-field
+        // row. The valid row parses, the short row is silently skipped, no
+        // exception escapes. Single-record assertion proves the parser
+        // CONTINUED past the malformed row rather than aborting.
+        var csv = "DATE,OPEN,HIGH,LOW,CLOSE\n" +
+                  "01/02/2020,13.46\n" +
+                  "01/03/2020,13.72,14.49,13.51,14.02\n";
+
+        var records = (List<CboeVixRecord>)ParseVixCsvMethod.Invoke(null, [csv]);
+
+        records.Should().ContainSingle()
+            .Which.Date.Should().Be(new DateOnly(2020, 1, 3));
+    }
+
+    [Fact]
     public void ParseVixCsv_RowWithUnparseableOhlcDecimal_IsSkipped() {
         // The CBOE VIX history CSV occasionally carries rows where one of the
         // OHLC columns is blank or "N/A" (early history before VIX listed
