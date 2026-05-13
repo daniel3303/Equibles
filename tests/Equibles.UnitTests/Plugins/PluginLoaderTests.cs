@@ -13,6 +13,25 @@ public class PluginLoaderTests {
         .GetMethod("HasPluginAttribute", BindingFlags.NonPublic | BindingFlags.Static);
 
     [Fact]
+    public void HasPluginAttribute_RealDllWithoutPluginAttribute_ReturnsFalse() {
+        // The companion NonExistentFile test exercises the catch-all failure
+        // path. This pins the *success* walk on a real PE file: open metadata,
+        // enumerate assembly-level custom attributes, find none matching
+        // Equibles.Plugins.EquiblesPluginAttribute, return false. The test
+        // assembly itself has no [assembly: EquiblesPlugin] — Equibles.* DLLs
+        // are loaded by convention and don't need the marker. Without this
+        // pin, a refactor that mismatches the namespace/name check (e.g.
+        // typo'd "Equibles.Plugin" or compared against the wrong class) would
+        // make HasPluginAttribute return true on every DLL, defeating the
+        // third-party opt-in contract.
+        var realDll = typeof(PluginLoaderTests).Assembly.Location;
+
+        var result = (bool)HasPluginAttributeMethod.Invoke(null, [realDll]);
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
     public void HasPluginAttribute_NonExistentFile_ReturnsFalse() {
         // PluginLoader walks every DLL in AppContext.BaseDirectory. Native libraries,
         // permission-blocked files, and DLLs deleted between Directory.GetFiles and
