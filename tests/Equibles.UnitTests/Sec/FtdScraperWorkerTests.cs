@@ -1,4 +1,5 @@
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.Data.Models;
 using Equibles.Sec.HostedService;
 using Equibles.Sec.HostedService.Configuration;
 using Microsoft.Extensions.Configuration;
@@ -91,6 +92,32 @@ public class FtdScraperWorkerTests {
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(4));
     }
 
+    [Fact]
+    public void ErrorSource_IsFtdScraper() {
+        // BaseScraperWorker passes the `ErrorSource` property to `ErrorReporter.Report`
+        // every time it catches an exception in the scrape loop. The reporter uses that
+        // enum value as the routing key for the GitHub-issue tracker: errors tagged
+        // `FtdScraper` land in the FTD-specific issue queue, while errors tagged
+        // `SecScraper` / `HoldingsScraper` / `CongressScraper` land in their respective
+        // queues. A regression that swapped this property to a sibling worker's value
+        // (a plausible copy-paste from SecScraperWorker which also lives in this
+        // assembly) would silently misroute every FTD failure into the wrong queue —
+        // operators triaging FTD-specific issues would see nothing while the SEC queue
+        // would fill with confusing failure-to-deliver stack traces. The misclassification
+        // is invisible to existing tests because they only exercise the static helpers
+        // and ValidateConfiguration. Pin the literal value so the next reordering or
+        // copy-paste must update this test deliberately.
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string>()).Build();
+        var sut = new TestableFtdScraperWorker(
+            Substitute.For<ILogger<FtdScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            Options.Create(new FtdScraperOptions()),
+            config);
+
+        sut.InvokeErrorSource().Should().Be(ErrorSource.FtdScraper);
+    }
+
     private sealed class TestableFtdScraperWorker : FtdScraperWorker {
         public TestableFtdScraperWorker(
             ILogger<FtdScraperWorker> logger,
@@ -103,5 +130,7 @@ public class FtdScraperWorkerTests {
         public bool InvokeValidateConfiguration() => ValidateConfiguration();
 
         public TimeSpan InvokeSleepInterval() => SleepInterval;
+
+        public ErrorSource InvokeErrorSource() => ErrorSource;
     }
 }
