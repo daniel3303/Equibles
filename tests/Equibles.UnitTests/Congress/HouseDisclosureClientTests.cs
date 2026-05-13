@@ -63,6 +63,35 @@ public class HouseDisclosureClientTests {
     }
 
     [Fact]
+    public void ExtractTransactionType_BareSaleNoQualifier_ReturnsSale() {
+        // Completes the Sale/Purchase pin family. Existing pins cover:
+        //   • bare "P"        → Purchase  (ExtractTransactionType_PurchaseTrailingP_…)
+        //   • "S (partial)"   → Sale      (existing partial pin)
+        //   • "S (full)"      → Sale      (existing full pin)
+        // The bare "S" form — `S` at line end with NO parenthetical qualifier — is
+        // the most common House PTR sale encoding (used for ordinary whole-position
+        // sells where no partial/full qualifier applies), and it's the ONLY form
+        // currently unpinned in the family.
+        //
+        // The SaleTypeRegex pattern is `\bS\s*(\((?:partial|full)\))?\s*$` — the
+        // `?` modifier on the parenthetical group is what makes bare S match. A
+        // regression that drops the `?` (someone "tightening" the pattern under
+        // the false assumption that every Sale must carry a qualifier) would still
+        // pass BOTH the partial AND the full sibling pins — those rows have the
+        // parenthetical present — while silently classifying every bare-S row as
+        // null, dropping them from the import via the `if (txType == null) continue;`
+        // guard in ParseTransactionLines. The failure mode is invisible: the import
+        // succeeds, just with a fraction of the expected row count, and the
+        // dashboard quietly shows fewer insider sales than reality.
+        //
+        // Pin the bare-S case specifically so the optional-qualifier `?` modifier
+        // can't be removed without a test failure.
+        var result = (CongressTransactionType?)ExtractTransactionTypeMethod.Invoke(null, ["AAPL S"]);
+
+        result.Should().Be(CongressTransactionType.Sale);
+    }
+
+    [Fact]
     public void RemoveTrailingTransactionType_SaleWithPartialQualifier_StripsSuffixAndQualifier() {
         // After ExtractTransactionType recognises the trailing "S (partial)" marker,
         // RemoveTrailingTransactionType has to strip it cleanly so the asset name
