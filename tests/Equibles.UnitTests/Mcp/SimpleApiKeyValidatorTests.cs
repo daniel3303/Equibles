@@ -19,4 +19,21 @@ public class SimpleApiKeyValidatorTests {
 
         result.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task IsValid_DisabledModeWithMissingApiKeyConfig_AcceptsAnyToken() {
+        // When McpApiKey is unset (typical for local dev / docker-compose
+        // without auth), IsEnabled is false and IsValid must short-circuit to
+        // true for ANY input — including empty strings — so the MCP server
+        // accepts unauthenticated clients in that mode. Pin the pass-through
+        // so a refactor that flips the default (e.g. fail-closed when no key
+        // configured) surfaces immediately rather than silently locking every
+        // local developer out of the MCP endpoint.
+        var config = new ConfigurationBuilder().AddInMemoryCollection([]).Build();
+        var sut = new SimpleApiKeyValidator(config);
+
+        sut.IsEnabled.Should().BeFalse();
+        (await sut.IsValid("any-random-token")).Should().BeTrue();
+        (await sut.IsValid("")).Should().BeTrue();
+    }
 }
