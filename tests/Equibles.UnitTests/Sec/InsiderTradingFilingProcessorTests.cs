@@ -717,4 +717,65 @@ public class InsiderTradingFilingProcessorTests {
 
         result.Should().BeTrue();
     }
+
+    [Fact]
+    public void ParseBool_AllCapsTrueLiteral_ReturnsTrueViaFourthArm() {
+        // Fifth and final pin in the ParseBool family. With this pin, all
+        // five arms of the four-string-literal-plus-default pattern are
+        // individually pinned: "1" (DigitOne), "0" (DigitZero → default
+        // false), "true" (Lowercase → second arm), "True" (TitleCase →
+        // third arm), and now "TRUE" (AllCaps → fourth arm) closing
+        //   `value is "1" or "true" or "True" or "TRUE"`
+        //
+        // Why "TRUE" (all-caps) uniquely matters and is unreachable
+        // from the three existing string-arm siblings:
+        //   • All-caps "TRUE" is the form emitted by:
+        //     - Legacy COBOL/RPG-style serializers (some EDGAR-adjacent
+        //       tooling still in use for manual filings)
+        //     - SQL-export pipelines that uppercase every column value
+        //     - Hand-typed filings where the filer typed in caps lock
+        //     - Some XSL transformations that explicitly normalize to
+        //       UPPER per legacy schema conventions
+        //     This is a distinct filer population from
+        //     lowercase-true (Java/XML-spec-conformant), TitleCase True
+        //     (.NET tooling), and digit-1 (numeric-encoded).
+        //   • The pattern match `value is ... or "TRUE"` short-circuits
+        //     on the first matching alternative. A regression that
+        //     drops the "TRUE" arm specifically (under the false
+        //     intuition that "no production filer emits all-caps;
+        //     anyone using caps lock would also fail
+        //     the unit-test fixtures") would compile, pass DigitOne,
+        //     DigitZero, LowercaseTrue, AND TitleCaseTrue pins — yet
+        //     silently misclassify every legacy/SQL-pipeline-derived
+        //     Form 4 as isDirector=false / isOfficer=false. The
+        //     downstream consequences mirror the other case-variant
+        //     pins: the directors-buying dashboard would drop the
+        //     legacy-tooling filer population, the cluster-purchase
+        //     alert pipeline would silently miss their transactions.
+        //
+        // The complementary risk: a refactor that "consolidates" the
+        // case variants via `string.Equals(value, "true",
+        // OrdinalIgnoreCase)` would be functionally equivalent on the
+        // current input domain BUT lose the load-bearing distinction
+        // the case-variants signal (the explicit enumeration is
+        // production-observed input documentation). Pinning every
+        // case-variant arm individually keeps the audit trail intact —
+        // a future refactor that drops the explicit cases would have
+        // to update FIVE tests, not one, making the regression
+        // deliberate.
+        //
+        // The four-arm family is now complete:
+        //   • "1"    → DigitOne pin (pinned)
+        //   • "true" → Lowercase pin (pinned)
+        //   • "True" → TitleCase pin (pinned)
+        //   • "TRUE" → AllCaps pin (this pin)
+        //   • default → DigitZero pin (false via implicit fall-through)
+        //
+        // Pin all-caps "TRUE" with assertion on the exact bool value
+        // true. Any regression touching the fourth arm — drop, swap,
+        // or accidental case-change — surfaces here.
+        var result = (bool)ParseBoolMethod.Invoke(null, ["TRUE"]);
+
+        result.Should().BeTrue();
+    }
 }
