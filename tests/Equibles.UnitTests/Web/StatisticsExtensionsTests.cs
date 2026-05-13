@@ -23,6 +23,33 @@ public class StatisticsExtensionsTests {
     }
 
     [Fact]
+    public void SafeRound_PositiveInfinity_ReturnsNullInsteadOfThrowingOnDecimalCast() {
+        // Sibling to the NaN pin above. The risk this catches is asymmetric and
+        // unreachable from the NaN test alone: the guard is `double.IsFinite(value)`,
+        // which returns FALSE for `NaN`, `PositiveInfinity`, AND `NegativeInfinity`.
+        // A regression that "tightened" the guard to `!double.IsNaN(value)` — a
+        // plausible "simplify" refactor by someone who only ever saw NaN in practice
+        // — would let infinity values through to `(decimal)` cast, which throws
+        // `OverflowException` exactly like the NaN cast does. The NaN test would
+        // still pass; the infinity case would silently crash the view render.
+        //
+        // The realistic trigger is `1.0 / 0.0` in float arithmetic — common in
+        // variance/divergence calculations over a zero-spread window (constant
+        // prices), or in beta/correlation when the denominator covariance
+        // collapses to zero. MathNet's `DescriptiveStatistics` and several
+        // `TechnicalIndicatorService` helpers can produce infinity outputs on
+        // degenerate inputs that pass through to the view-model decimal cast.
+        //
+        // The pair (NaN → null, +Inf → null) distinguishes a working IsFinite
+        // guard from BOTH `!IsNaN` AND `>= 0` narrowings. Pinning +Inf
+        // specifically is the sharper edge — `IsNaN` regression slips past the
+        // existing test, and infinity values trigger the same overflow.
+        var result = double.PositiveInfinity.SafeRound(2);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
     public void ComputeSma_AlignsToInput_FirstWindowSlotsAreNullThenRoundedSma() {
         // ComputeSma is consumed by view models that overlay SMA series on price
         // charts; alignment to the original prices array matters because the
