@@ -49,6 +49,30 @@ public class FileManagerTests {
     }
 
     [Fact]
+    public async Task SaveFile_UnknownExtension_FallsBackToApplicationOctetStream() {
+        // SaveFile derives Content-Type from MimeTypeMap.GetMimeType(extension).
+        // Every existing test (.pdf, .jpg, .png, .txt) hits a mapped entry, so
+        // the fallback path — `if (string.IsNullOrEmpty(contentType))
+        // contentType = "application/octet-stream";` — is unexercised. That
+        // fallback is the only thing that prevents an unknown extension
+        // (e.g. SEC paper-filing artifacts with bespoke suffixes like
+        // `.xbrl.zip.gz`, partner uploads with obsolete suffixes, anything
+        // outside the curated AcceptedExtensions list) from persisting a
+        // null or empty `ContentType` column — which downstream blows up
+        // when the file is served back to the browser (the response either
+        // 500s on null header, or sniffs into something dangerous like
+        // text/html). A refactor that drops the fallback (e.g. assuming
+        // MimeTypeMap always returns non-empty, which it doesn't for
+        // unknown suffixes) would compile cleanly and pass every existing
+        // test, then silently corrupt the file metadata on the next bespoke
+        // upload. Pin the fallback so the regression surfaces here.
+        var file = await _sut.SaveFile([0x01, 0x02, 0x03], "weird.zzz");
+
+        file.Extension.Should().Be("zzz");
+        file.ContentType.Should().Be("application/octet-stream");
+    }
+
+    [Fact]
     public async Task SaveFile_NoExtension_ThrowsArgumentException() {
         var act = () => _sut.SaveFile([0x01], "filename");
 
