@@ -44,6 +44,25 @@ public class HouseDisclosureClientTests {
     }
 
     [Fact]
+    public void ExtractTransactionType_SaleWithFullQualifier_ReturnsSale() {
+        // Sibling to the existing "S (partial)" pin. The SaleTypeRegex alternation
+        // `(?:partial|full)` covers BOTH qualifier forms — a refactor that simplifies
+        // the group to just `partial` (e.g. someone "cleaning up" what looks like an
+        // unused alternation arm, or copying the pattern incorrectly into a sibling
+        // regex) would still pass the existing partial-qualifier test but silently
+        // drop every "S (full)" sale transaction. House PTRs use BOTH forms in
+        // production: "(full)" appears whenever a member liquidates an entire
+        // position, "(partial)" for fractional sells. The two qualifier arms are
+        // independent — partial-test coverage does NOT prove full-test coverage.
+        // Without this pin, a regex that only accepted one arm would compile cleanly,
+        // pass the existing tests, and silently halve House sale visibility while
+        // the partial-test would still report a green build.
+        var result = (CongressTransactionType?)ExtractTransactionTypeMethod.Invoke(null, ["TSLA S (full)"]);
+
+        result.Should().Be(CongressTransactionType.Sale);
+    }
+
+    [Fact]
     public void RemoveTrailingTransactionType_SaleWithPartialQualifier_StripsSuffixAndQualifier() {
         // After ExtractTransactionType recognises the trailing "S (partial)" marker,
         // RemoveTrailingTransactionType has to strip it cleanly so the asset name
