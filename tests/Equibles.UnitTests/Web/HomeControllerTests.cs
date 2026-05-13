@@ -127,6 +127,61 @@ public class HomeControllerTests {
     }
 
     [Fact]
+    public void Connect_McpPortNotConfigured_BuildsMcpUrlWithDefaultPort8081() {
+        // HomeController.Connect renders the "Connect AI Assistant" page that
+        // walks users through wiring an MCP client (Claude Desktop, Continue,
+        // etc.) to the local Equibles MCP server. The view-data the action
+        // populates IS the configuration the user copies into their MCP
+        // client config — wrong values mean wrong client setup, with no
+        // error signal because the failure surfaces only when the MCP
+        // client itself can't connect.
+        //
+        // The action composes the MCP URL from THREE inputs:
+        //   var mcpPort = _configuration["McpPort"] ?? "8081";
+        //   var scheme = Request.Scheme;
+        //   var host = Request.Host.Host;
+        //   var mcpUrl = $"{scheme}://{host}:{mcpPort}/mcp";
+        // and surfaces them via `ViewData["McpUrl"]` and
+        // `ViewData["ApiKey"]`. The Connect action has NO existing test
+        // coverage — every existing pin in this file is on the Error
+        // action.
+        //
+        // Pin the `?? "8081"` default-port coalesce specifically. Risk
+        // pattern:
+        //   • A refactor that drops the coalesce (e.g. typed as
+        //     `int.Parse(_configuration["McpPort"])` after a typing pass)
+        //     throws on the unconfigured-default scenario, producing a
+        //     500 the moment a fresh-clone user opens the Connect page —
+        //     the worst onboarding experience.
+        //   • A typo'd default ("8080", "8181", or any other plausible
+        //     dev-port number) silently misroutes copy-paste config —
+        //     the user pastes the wrong URL into Claude Desktop and
+        //     debugging "MCP server not reachable" becomes a wild-goose
+        //     chase across firewall settings, host resolution, and
+        //     docker-compose port forwarding.
+        //
+        // Pin the FULL constructed URL with the canonical scheme/host
+        // shape (`http://localhost:8081/mcp`). The assertion fails on
+        // any of: dropped coalesce, wrong default value, wrong
+        // string-interpolation order, missing "/mcp" suffix.
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Scheme = "http";
+        httpContext.Request.Host = new HostString("localhost");
+
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection([]).Build();
+
+        var controller = new HomeController(NullLogger<HomeController>.Instance, configuration) {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+            TempData = Substitute.For<ITempDataDictionary>(),
+        };
+
+        var result = controller.Connect();
+
+        result.Should().BeOfType<ViewResult>();
+        controller.ViewData["McpUrl"].Should().Be("http://localhost:8081/mcp");
+    }
+
+    [Fact]
     public void Error_NullStatusCode_SetsResponseStatusTo500AndShowsGenericTitle() {
         // ASP.NET Core's `UseStatusCodePagesWithReExecute("/Home/Error/{0}")` invokes
         // this action with the status code embedded in the URL — but the catch-all
