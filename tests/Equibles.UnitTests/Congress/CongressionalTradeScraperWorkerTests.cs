@@ -67,6 +67,33 @@ public class CongressionalTradeScraperWorkerTests {
         sut.InvokeErrorSource().Should().Be(ErrorSource.CongressScraper);
     }
 
+    [Fact]
+    public void WorkerName_IsCongressionalTradeScraper() {
+        // Ninth WorkerName pin in the natural-extension family (CBOE, Holdings,
+        // SEC filing, FTD, Document processor, FRED, Yahoo price, FINRA, and now
+        // Congressional trade). WorkerName flows into BaseScraperWorker's
+        // structured log scope and shows up in every Serilog line — on-call
+        // greps `data/worker/logs/log<date>.txt` for "Congressional trade
+        // scraper" when STOCK Act disclosure ingestion stalls. The literal
+        // qualifier "trade" matters: Congress could host more endpoints in the
+        // future (member rosters, committee assignments, financial disclosures
+        // beyond trades) and the natural copy-paste mistake is to leave the
+        // shorter "Congress scraper" name on this worker after splitting it.
+        // A merged log stream would make "Congress is down" ambiguous between
+        // the trade feed and any future sibling. The mismatch between
+        // WorkerName ("Congressional trade scraper") and ErrorSource
+        // (`CongressScraper`) is intentional — the error enum is system-wide
+        // and short, the log name is operator-facing and descriptive — so the
+        // worker name carries the disambiguating qualifier. Pin the exact
+        // literal so any normalization to match the shorter enum value fails.
+        var sut = new TestableCongressionalTradeScraperWorker(
+            Substitute.For<ILogger<CongressionalTradeScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()));
+
+        sut.InvokeWorkerName().Should().Be("Congressional trade scraper");
+    }
+
     private sealed class TestableCongressionalTradeScraperWorker : CongressionalTradeScraperWorker {
         public TestableCongressionalTradeScraperWorker(
             ILogger<CongressionalTradeScraperWorker> logger,
@@ -77,5 +104,7 @@ public class CongressionalTradeScraperWorkerTests {
         public TimeSpan InvokeSleepInterval() => SleepInterval;
 
         public ErrorSource InvokeErrorSource() => ErrorSource;
+
+        public string InvokeWorkerName() => WorkerName;
     }
 }
