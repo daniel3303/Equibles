@@ -146,6 +146,86 @@ public class CboeClientTests {
     }
 
     [Fact]
+    public void ParsePutCallCsv_FullyPopulatedRow_MapsEachFieldToTheCorrectRecordColumn() {
+        // Every existing ParsePutCallCsv pin proves a REJECTION path:
+        //   • RowWithUnparseableDate → skipped (the disclaimer-row scenario)
+        //   • RowWithFewerThanFiveFields → skipped (truncated-row defence)
+        //   • RowWithUnparseableOhlcDecimal (ParseVixCsv sibling) → row skipped
+        // None proves that on a well-formed row the FIVE distinct fields
+        //   Date , CallVolume , PutVolume , TotalVolume , PutCallRatio
+        // each land in the CORRESPONDING record column. The parser body:
+        //   records.Add(new CboePutCallRecord {
+        //       Date         = date,
+        //       CallVolume   = ParseLong(fields[1]),
+        //       PutVolume    = ParseLong(fields[2]),
+        //       TotalVolume  = ParseLong(fields[3]),
+        //       PutCallRatio = ParseDecimal(fields[4])
+        //   });
+        // does FIVE independent index-to-column mappings, and EVERY ONE of
+        // those is currently a regression risk that no existing pin detects.
+        //
+        // The risks this pin catches are asymmetric and unreachable from
+        // every existing sibling pin:
+        //
+        //   • Index/column swap: a refactor that swaps `fields[1]` and
+        //     `fields[2]` (or any pair) under the (false) intuition that
+        //     "they're both ParseLong calls, order doesn't matter" would
+        //     compile cleanly. ParseLong succeeds on either value (both
+        //     are integers). The existing rejection pins never assert on
+        //     specific field values — they assert on COUNT (single record
+        //     vs none) or DATE (which is fields[0], unaffected by 1-4
+        //     swaps). The swapped record's CallVolume now holds the put
+        //     count, and the public put/call-ratio anomaly indicator on
+        //     the equibles dashboard inverts silently.
+        //
+        //   • Off-by-one: a refactor that ZERO-indexes the assignments
+        //     (e.g. someone "fixing" `fields[1]` to `fields[0]` thinking
+        //     the date column is at index 1 not 0) would shift every
+        //     numeric column by one position and read the DATE STRING
+        //     as a long (yielding null after ParseLong fails), and the
+        //     ratio column would read what's actually TotalVolume.
+        //     The result would have null in three columns and a wrong
+        //     value in PutCallRatio — but it would be a record (not
+        //     skipped). Existing pins can't see this: they assert on
+        //     record count, not on specific column values.
+        //
+        //   • Property/parser swap: a refactor that "harmonizes" the
+        //     ratio parse to use ParseLong instead of ParseDecimal would
+        //     truncate fractional ratios. The dashboard's put/call-ratio
+        //     trend chart would show step changes (every value rounded
+        //     to the nearest integer) instead of smooth decimal values.
+        //     Existing pins can't see this — the existing ratio column
+        //     never has a fractional value asserted.
+        //
+        // The complementary asymmetry to ParseLong's thousands-separator
+        // pin: that pin proves ParseLong handles a specific INPUT
+        // correctly. This pin proves the CALLER routes its inputs
+        // (the row fields) to the right ParseLong calls in the first
+        // place. The pair proves end-to-end correctness.
+        //
+        // Construction: a header row + one fully-populated data row
+        // where every field has a DISTINCTIVE value that would be
+        // visible in the assertion if it landed in the wrong column.
+        // CallVolume/PutVolume/TotalVolume are chosen so a swap is
+        // observable (100/200/300 are pairwise distinct, and the total
+        // is NOT call+put so a "compute Total from Call+Put" lazy
+        // refactor also fails). PutCallRatio 2.0 is a fractional value
+        // that distinguishes ParseDecimal from ParseLong.
+        var csv = "Date,Call Volume,Put Volume,Total Volume,P/C Ratio\n" +
+                  "12/25/2024,100,200,300,2.0\n";
+
+        var records = (List<CboePutCallRecord>)ParsePutCallCsvMethod.Invoke(null, [csv]);
+
+        records.Should().ContainSingle();
+        var record = records[0];
+        record.Date.Should().Be(new DateOnly(2024, 12, 25));
+        record.CallVolume.Should().Be(100L);
+        record.PutVolume.Should().Be(200L);
+        record.TotalVolume.Should().Be(300L);
+        record.PutCallRatio.Should().Be(2.0m);
+    }
+
+    [Fact]
     public void ParseVixCsv_RowWithUnparseableOhlcDecimal_IsSkipped() {
         // The CBOE VIX history CSV occasionally carries rows where one of the
         // OHLC columns is blank or "N/A" (early history before VIX listed
