@@ -54,4 +54,46 @@ public class EconomicDataControllerTests {
 
         result.Should().Be("Biweekly");
     }
+
+    [Fact]
+    public void ExpandFrequency_QuarterlyCodeQ_ReturnsQuarterly() {
+        // Sibling to the existing `BW → Biweekly` pin. This pin
+        // exercises a SINGLE-letter arm ("Q") — structurally distinct
+        // from the two-character "BW" arm. The pair covers both
+        // "shape" classes of the seven-arm switch.
+        //
+        // Pin "Q → Quarterly" specifically because of its business
+        // weight: FRED's quarterly series carry the GDP family (real
+        // GDP, GDP deflator, productivity), the federal-funds-rate
+        // path's economic-summary report, and most of the BEA personal-
+        // income aggregates. Those series anchor the
+        // macro-dashboard page; misclassifying them as "Q" (the raw
+        // default-arm fallback) would break the chart legend AND the
+        // page header ("Frequency: Q" vs "Frequency: Quarterly").
+        //
+        // The risk uniquely caught by a single-letter pin (vs. the
+        // existing BW two-character pin): a regression that swaps the
+        // switch keys to ENUM values (a plausible "type-safety
+        // improvement" refactor that introduces a Frequency enum and
+        // breaks the string-key path entirely) would compile to a
+        // compiler error before reaching the test only if EVERY caller
+        // is updated. If the refactor leaves ExpandFrequency's string
+        // signature intact but routes input through an enum-parse-then-
+        // switch path, single-letter inputs that happen to match enum
+        // names (Q, D, M, etc. ARE common enum-name initials for
+        // Daily/Monthly/Quarterly) might silently fall through where
+        // the textual BW does not. The two pins together — one
+        // single-letter, one two-character — distinguish the cases.
+        //
+        // The complementary risk: arm-reordering or label-typo
+        // regressions. Pin asserts the exact label "Quarterly" — a
+        // refactor that typo'd to "Quaterly" (single-r), shortened to
+        // "Qtrly", or accidentally pasted "Quarter" from a different
+        // domain (e.g. an earnings-quarter label elsewhere) would all
+        // fail this assertion. The BW pin couldn't catch any of these
+        // because its label is two-syllable and structurally distinct.
+        var result = (string)ExpandFrequencyMethod.Invoke(null, ["Q"]);
+
+        result.Should().Be("Quarterly");
+    }
 }
