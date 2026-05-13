@@ -373,6 +373,54 @@ public class DisclosureParsingHelperTests {
     }
 
     [Fact]
+    public void ParseTransactionsFromHtml_TableWithoutTheadButFirstRowTh_ReadsHeadersFromFirstRow() {
+        // Congress disclosure HTML — particularly older House PTRs and
+        // hand-coded staff exports — frequently omits a `<thead>` and
+        // simply places `<th>` cells in the first `<tr>` of `<tbody>` (or
+        // bare, with no tbody at all). `ExtractHeaderTexts` handles this
+        // with a null-coalescing fallback: `SelectNodes(".//thead//th") ??
+        // SelectNodes(".//tr[1]//th")`. Every other parse test in this
+        // file uses a proper `<thead>`, so the fallback branch is
+        // unexercised — a refactor that drops the `??` (or that mis-orders
+        // it) would silently start returning zero transactions on the
+        // entire class of thead-less filings, with no visible failure
+        // because IsTransactionTable would receive an empty header list
+        // and return false. Pin the fallback with a deliberately
+        // thead-less table that carries a real Purchase row.
+        var html = """
+            <html><body>
+            <table>
+              <tr>
+                <th>Transaction Date</th>
+                <th>Ticker</th>
+                <th>Asset Name</th>
+                <th>Transaction Type</th>
+                <th>Amount</th>
+              </tr>
+              <tbody>
+                <tr>
+                  <td>2024-09-20</td>
+                  <td>MSFT</td>
+                  <td>Microsoft Corp</td>
+                  <td>Purchase</td>
+                  <td>$15,001 - $50,000</td>
+                </tr>
+              </tbody>
+            </table>
+            </body></html>
+            """;
+
+        var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
+            html, "Test Rep", CongressPosition.Representative,
+            new DateOnly(2024, 10, 1), Substitute.For<ILogger>());
+
+        result.Should().HaveCount(1);
+        result[0].Ticker.Should().Be("MSFT");
+        result[0].TransactionType.Should().Be(CongressTransactionType.Purchase);
+        result[0].TransactionDate.Should().Be(new DateOnly(2024, 9, 20));
+    }
+
+    [Fact]
     public void ParseTransactionsFromHtml_TickerExtractedFromAssetName() {
         var html = """
             <html><body>
