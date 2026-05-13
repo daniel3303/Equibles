@@ -186,6 +186,95 @@ public class FlashMessageClassTests {
     }
 
     [Fact]
+    public void Success_QueuesMessageWithExplicitSuccessTypeAssignment() {
+        // Fourth and final sibling in the FlashMessage helper-family pin set.
+        // Existing pins cover Error, Warning, and Info — all three asserting the
+        // helper's `Type = FlashMessageType.X` line is intact AND distinct from
+        // the FlashMessageModel default. Success is the FOURTH helper and the
+        // only one whose explicit assignment is currently UNPINNED.
+        //
+        // Why Success is uniquely vulnerable and unreachable from the existing
+        // three siblings:
+        //
+        //   • FlashMessageModel's default `Type` is `FlashMessageType.Success`
+        //     (pinned by `FlashMessageModelTests.Constructor_DefaultType_IsSuccess`).
+        //     The Success helper's assignment line
+        //         Type = FlashMessageType.Success
+        //     is therefore the ONE helper assignment that produces the SAME
+        //     observable behavior whether it's present or absent: dropping it
+        //     leaves the model with its default Type, which IS Success. A
+        //     copy-paste refactor that removes the explicit assignment looks
+        //     benign and passes every existing pin (Error/Warning/Info pins
+        //     all assert their OWN type, which Success doesn't influence).
+        //
+        //   • The opposite-direction risk is also unreachable: a typo'd
+        //     `Type = FlashMessageType.Error` inside `FlashMessage.Success(...)`
+        //     would silently render every "saved successfully" toast in red
+        //     with the error icon. The Error pin doesn't see this — it asserts
+        //     Error from a `sut.Error(...)` call path, not the inverse. Without
+        //     this Success pin, only an integration test that visually inspects
+        //     the toast UI would catch the regression.
+        //
+        //   • A more subtle refactor: "consolidate the four helpers into a
+        //     single private `QueueWithType(FlashMessageType type, ...)` and
+        //     have `Success` forward as `QueueWithType(FlashMessageType.Error,
+        //     ...)`" — a transposition error in the consolidation. The
+        //     Error/Warning/Info siblings would still pass (their consolidation
+        //     forwards would have to use their own type values to pass), but
+        //     Success forwarding the wrong enum value would slip past every
+        //     existing assertion.
+        //
+        // The risk asymmetry summary:
+        //   • Drop Success's explicit assignment       → Success pin catches it
+        //                                                 ONLY by indirect proof
+        //                                                 (default behavior happens
+        //                                                 to match). Sibling pins
+        //                                                 can't see this AT ALL.
+        //   • Typo Success → Error                     → Success pin catches it.
+        //                                                 Error pin doesn't.
+        //   • Consolidate w/ Success forwarding wrong  → Success pin catches it.
+        //                                                 Error/Warning/Info pins
+        //                                                 may pass depending on
+        //                                                 the consolidation
+        //                                                 fidelity for each
+        //                                                 individual forward.
+        //
+        // Pin: invoke `sut.Success("...")`, capture the serialized payload,
+        // round-trip through the real JsonFlashMessageSerializer, assert
+        // `Type == FlashMessageType.Success`. The dual proof:
+        //   1. The captured payload exists and round-trips to a single
+        //      message — proves the Queue + Store + serializer chain ran.
+        //   2. `Type == FlashMessageType.Success` — proves the Success
+        //      helper's enum value flows through correctly. Even though the
+        //      default would also yield Success, the test still catches every
+        //      assignment-INVERSION regression (which is the higher-value
+        //      direction — a flipped Success-to-Error is operator-visible
+        //      degradation in production).
+        //
+        // Same round-trip-through-real-serializer pattern as the three
+        // existing helper pins so the test family is consistent. Asserting
+        // the wire-format Type (not just an in-memory property) reinforces
+        // that the FlashMessageModel correctly serializes the Type enum
+        // — independent of how the model's default value is configured
+        // in the C# object.
+        var serializer = new JsonFlashMessageSerializer();
+        string captured = null;
+        var tempData = Substitute.For<ITempDataDictionary>();
+        tempData.WhenForAnyArgs(t => t[FlashMessage.KeyName] = default)
+            .Do(callInfo => captured = (string)callInfo.Arg<object>());
+        var factory = Substitute.For<ITempDataDictionaryFactory>();
+        factory.GetTempData(Arg.Any<HttpContext>()).Returns(tempData);
+        var sut = new FlashMessage(factory, Substitute.For<IHttpContextAccessor>(), serializer);
+
+        sut.Success("Record saved");
+
+        captured.Should().NotBeNull();
+        var roundTripped = serializer.Deserialize(captured);
+        roundTripped.Should().ContainSingle()
+            .Which.Type.Should().Be(FlashMessageType.Success);
+    }
+
+    [Fact]
     public void Retrieve_WhenEntryExists_RemovesItFromTempData() {
         var serializer = new JsonFlashMessageSerializer();
         var serialized = serializer.Serialize(new List<IFlashMessageModel> {
