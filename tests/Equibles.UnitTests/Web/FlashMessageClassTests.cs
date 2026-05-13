@@ -141,6 +141,51 @@ public class FlashMessageClassTests {
     }
 
     [Fact]
+    public void Queue_TwoMessagesInSameSession_PreservesBothInOrder() {
+        // Queue's body is:
+        //   var flashMessageModelList = Peek();
+        //   flashMessageModelList.Add(message);
+        //   Store(flashMessageModelList);
+        // Peek reads the current serialized payload, deserializes it, returns the
+        // accumulated list. The SECOND Queue call's Peek-Deserialize-Add chain is
+        // load-bearing for accumulation: without it (e.g. a refactor that simplified
+        // Queue to `Store(new List<...> { message })`), the second Queue would
+        // OVERWRITE the first message, and downstream controllers that emit
+        // multiple flash messages from one action (e.g. "saved successfully" +
+        // "warning: SMTP unreachable so email not sent") would silently lose the
+        // earlier message before render.
+        //
+        // Every existing Error/Warning/Info pin in this file Queues a SINGLE
+        // message — none exercises Peek's non-null branch (the existing first-call
+        // Peek hits the null TempData path). Pin two consecutive Error calls in
+        // the same TempData session and assert the final captured payload
+        // contains BOTH messages in submission order.
+        //
+        // Implementation: maintain captured payload across writes by re-routing
+        // the indexer get to return the most recent set value. This simulates
+        // the real ITempDataDictionary's single-key round-trip behaviour with
+        // NSubstitute.
+        var serializer = new JsonFlashMessageSerializer();
+        string current = null;
+        var tempData = Substitute.For<ITempDataDictionary>();
+        tempData.WhenForAnyArgs(t => t[FlashMessage.KeyName] = default)
+            .Do(callInfo => current = (string)callInfo.Arg<object>());
+        tempData.Peek(FlashMessage.KeyName).Returns(_ => current);
+        var factory = Substitute.For<ITempDataDictionaryFactory>();
+        factory.GetTempData(Arg.Any<HttpContext>()).Returns(tempData);
+        var sut = new FlashMessage(factory, Substitute.For<IHttpContextAccessor>(), serializer);
+
+        sut.Error("First error");
+        sut.Error("Second error");
+
+        current.Should().NotBeNull();
+        var roundTripped = serializer.Deserialize(current);
+        roundTripped.Should().HaveCount(2);
+        roundTripped[0].Message.Should().Be("First error");
+        roundTripped[1].Message.Should().Be("Second error");
+    }
+
+    [Fact]
     public void Retrieve_WhenEntryExists_RemovesItFromTempData() {
         var serializer = new JsonFlashMessageSerializer();
         var serialized = serializer.Serialize(new List<IFlashMessageModel> {
