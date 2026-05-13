@@ -672,4 +672,58 @@ public class HouseDisclosureClientTests {
 
         result.Should().Be("GOOGLE LLC - CLASS A COMMON");
     }
+
+    [Fact]
+    public void ParsePtrPdf_MalformedPdfBytes_ReturnsEmptyListWithoutThrowing() {
+        // ParsePtrPdf is the only callsite that wraps `PdfDocument.Open(pdfBytes)`
+        // in a try/catch — Image #6 of the coverage report flags every line of the
+        // try-body AND the catch-body as uncovered (lines 133-148). Until now this
+        // file's tests only exercised the regex helpers; the defensive wrapper that
+        // turns a single bad PDF into a per-filing skip (instead of crashing the
+        // whole year's import loop in GetRecentTransactions) had zero coverage.
+        //
+        // Why the catch is load-bearing: DownloadAndParsePtrPdf is called per
+        // filing inside `foreach (var filing in filings)`. If PdfPig throws on a
+        // truncated CDN response or a malformed upload (the House Clerk has
+        // shipped corrupted PTR PDFs in the past during their rollover windows),
+        // the exception escapes back to GetRecentTransactions' outer
+        // `catch (Exception)` — which is scoped to the YEAR, not the filing —
+        // and the entire remainder of that year's filings get skipped with a
+        // single "Failed to download House filing index" warning. The catch in
+        // ParsePtrPdf scopes the failure to the offending filing only.
+        //
+        // A refactor that "simplifies" by removing the try/catch (under the
+        // intuition that PdfPig handles all input gracefully, or that the
+        // outer catch is "good enough") would compile, pass every regex pin
+        // above, AND silently convert a one-filing-skip into a remaining-
+        // year-loss the next time the Clerk ships a bad PDF. Pin the
+        // defensive behavior here so that regression fails before it ships.
+        //
+        // The test passes obviously-not-PDF bytes (no `%PDF-` header) — PdfPig
+        // throws inside `PdfDocument.Open`, the catch fires, the method
+        // returns an empty list. The single assertion (empty + no throw)
+        // proves the catch handled the exception; if the catch were removed,
+        // the reflection Invoke call would surface a TargetInvocationException
+        // and the test would fail.
+        var parsePtrPdfMethod = typeof(HouseDisclosureClient).GetMethod(
+            "ParsePtrPdf", BindingFlags.NonPublic | BindingFlags.Instance);
+        var houseFilingType = typeof(HouseDisclosureClient).GetNestedType(
+            "HouseFiling", BindingFlags.NonPublic);
+        var houseFilingCtor = houseFilingType.GetConstructors()[0];
+        var filing = houseFilingCtor.Invoke([
+            "Jane Doe",
+            "20251234",
+            new DateOnly(2025, 2, 1),
+            "CA01"
+        ]);
+        using var httpClient = new HttpClient();
+        var client = new HouseDisclosureClient(httpClient, Substitute.For<ILogger<HouseDisclosureClient>>());
+        // Bytes that are unambiguously not a PDF — PdfPig's PdfDocument.Open
+        // requires the `%PDF-` magic header in the first ~1024 bytes.
+        var malformedBytes = new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04 };
+
+        var result = (List<DisclosureTransaction>)parsePtrPdfMethod.Invoke(client, [malformedBytes, filing]);
+
+        result.Should().BeEmpty();
+    }
 }
