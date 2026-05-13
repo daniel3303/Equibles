@@ -287,7 +287,7 @@ public class DocumentScraper : IDocumentScraper {
             var secEdgarClient = scope.ServiceProvider.GetRequiredService<ISecEdgarClient>();
             var normalizer = scope.ServiceProvider.GetRequiredService<ISecDocumentHtmlNormalizer>();
             var converter = scope.ServiceProvider.GetRequiredService<ISecDocumentHtmlToMarkdownConverter>();
-            var pdfTextExtractor = scope.ServiceProvider.GetRequiredService<PdfTextExtractor>();
+            var pdfTextExtractor = scope.ServiceProvider.GetRequiredService<IPdfTextExtractor>();
             var persistenceService = scope.ServiceProvider.GetRequiredService<IDocumentPersistenceService>();
             var companyRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
 
