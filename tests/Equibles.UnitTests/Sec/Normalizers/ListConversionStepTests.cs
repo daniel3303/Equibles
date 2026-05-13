@@ -117,6 +117,27 @@ public class ListConversionStepTests {
     }
 
     [Fact]
+    public void WrapperWithoutInlineDisplayDiv_FallsBackToCloningContentSpans() {
+        // When the item wrapper has no <div style="display:inline"> content
+        // container, the converter falls back to cloning the non-bullet
+        // spans into the <li>. This pins the fallback path so SEC filings
+        // that put item content directly in spans still produce a list.
+        var input = """
+            <div class="item-list-element-wrapper">
+              <span>•</span>
+              <span>Span-based item</span>
+            </div>
+            """;
+
+        var result = Execute(input);
+
+        result.Should().Contain("<ul>");
+        result.Should().Contain("<li>");
+        result.Should().Contain("<span>Span-based item</span>");
+        result.Should().NotContain("•");
+    }
+
+    [Fact]
     public void EmptyDocument_NoError() {
         var result = Execute(string.Empty);
 
