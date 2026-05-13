@@ -80,6 +80,37 @@ public class HeadingConversionStepTests {
     }
 
     [Fact]
+    public void SpanWithNestedItalicChild_InnerHtmlBranchTriggersH4Conversion() {
+        // IsItalicSpan mirrors the dual-arm structure of IsBoldSpan:
+        //   (a) span's own `style` attribute contains "font-style:italic"
+        //   (b) span's `innerHtml` (the serialized markup of its children)
+        //       contains "font-style:italic" — i.e. the italic styling lives
+        //       on a NESTED element like <font style="font-style:italic">
+        //       rather than on the span itself.
+        // The existing `ItalicSpan_IsConvertedToH4` pin exercises arm (a) only.
+        // Arm (b) is unpinned — and the parallel `SpanWithNestedBoldChild`
+        // already proves bold's innerHtml fallback matters in practice: SEC
+        // filings emitted by Workiva, Donnelley Financial, and Toppan Merrill
+        // routinely bubble formatting onto inner <font> elements rather than
+        // the wrapping span. The same upstream Word→XBRL conversion pattern
+        // applies to italic styling (forward-looking statement notes,
+        // footnote-pointer text, "see Note 3" cross-references). Without
+        // the italic innerHtml fallback every such note would skip H4
+        // promotion and stay as a regular span. A refactor that
+        // "simplifies" IsItalicSpan to read only the span's own style
+        // attribute — the exact mistake the bold pin guards against —
+        // would compile cleanly, pass the existing ItalicSpan test, and
+        // silently demote italic-formatted notes across the production
+        // filing corpus. Pin the italic innerHtml branch with a nested
+        // <font> italic child; the H4 promotion confirms IsItalicSpan
+        // returned true via arm (b).
+        var result = Execute("<div><span><font style=\"font-style:italic\">Note: see Item 3</font></span></div>");
+
+        result.Should().Contain("<h4>");
+        result.Should().Contain("Note: see Item 3");
+    }
+
+    [Fact]
     public void SpanInsideTable_IsNotConverted() {
         var result = Execute("<table><tr><td><span style=\"font-weight:bold\">Revenue</span></td></tr></table>");
 
