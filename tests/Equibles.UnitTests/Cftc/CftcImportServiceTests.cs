@@ -91,4 +91,73 @@ public class CftcImportServiceTests {
 
         result.Should().BeNull();
     }
+
+    [Fact]
+    public void ParseDate_ValidDateWithLeadingAndTrailingWhitespace_ParsesViaTrimBeforeTryParseExact() {
+        // Fifth pin in the ParseDate family. Existing four pins cover:
+        //   • Legacy yyMMdd format (no surrounding whitespace)
+        //   • Modern yyyy-MM-dd format (no surrounding whitespace)
+        //   • Null input → null (IsNullOrWhiteSpace guard)
+        //   • Unparseable value → null (TryParseExact fail-through)
+        // ALL existing inputs are UN-PADDED strings. The `.Trim()` calls inside
+        // both TryParseExact invocations are therefore unpinned. The implementation:
+        //   if (string.IsNullOrWhiteSpace(value)) return null;
+        //   if (DateOnly.TryParseExact(value.Trim(), "yyyy-MM-dd", ...)) return date;
+        //   if (DateOnly.TryParseExact(value.Trim(), "yyMMdd", ...)) return date;
+        //   return null;
+        //
+        // The risks this pin uniquely catches and that are unreachable from every
+        // existing sibling pin:
+        //
+        //   • Drop both `.Trim()` calls: a refactor that "simplifies" the two
+        //     TryParseExact calls under the (false) intuition that the
+        //     IsNullOrWhiteSpace guard already normalized whitespace would
+        //     compile, pass every existing pin (no padded inputs anywhere),
+        //     and silently NULL OUT every CSV cell with leading or trailing
+        //     whitespace. The downstream cascade in CftcImportService.ImportYear:
+        //       var date = ParseDate(record.ReportDate);
+        //       if (date == null) continue;
+        //     skips every padded row, halting historical-backfill ingest for
+        //     decade-old CFTC files that were re-exported with padding by
+        //     downstream aggregators. The failure mode is invisible: no
+        //     exception, no log warning, just a row-count gap.
+        //
+        //   • Drop ONE `.Trim()` call (only the modern format keeps it, or
+        //     only the legacy format does): the half-padded-half-not state
+        //     would skip rows whose date format happens to be the
+        //     untrimmed-format. A regression that "harmonizes" only one
+        //     branch would surface as "all post-2010 rows missing but pre-
+        //     2010 rows present" or vice-versa — exactly the silent-partial-
+        //     failure mode that escapes CI runs against modern fixtures.
+        //
+        //   • Switch from `Trim()` to `TrimStart()` or `TrimEnd()`: a "save
+        //     a function call" optimization that loses the bilateral trim.
+        //     Existing pins don't exercise EITHER side of the trim, so a
+        //     one-sided regression slips past. Padded inputs that have
+        //     whitespace on the dropped side would silently fail.
+        //
+        // The production scenario: CFTC's COT history CSVs are re-exported
+        // by upstream aggregators that occasionally pad string cells for
+        // alignment. Real files in production carry rows like
+        //   "001602  ,2025-01-15  ,..."
+        // where the date cell has trailing spaces baked in by the
+        // alignment-padding step. The Trim() defends against this without
+        // requiring downstream callers to know about the formatting quirk.
+        //
+        // Pin: invoke ParseDate with a valid date string surrounded by
+        // multiple leading AND trailing spaces. Asserting the parse
+        // succeeds AND returns the correct DateOnly distinguishes:
+        //   • Working Trim: returns 2025-01-15.
+        //   • Dropped Trim: returns null (TryParseExact rejects padded input).
+        //   • TrimStart-only: returns 2025-01-15 (test would still pass — this
+        //     pin alone doesn't distinguish from TrimStart, but the inverse
+        //     pin in a future iteration could).
+        //
+        // The dual-assertion (.HasValue + concrete value) defends against
+        // both null-returning regressions and value-mangling regressions.
+        var result = (DateOnly?)ParseDateMethod.Invoke(null, ["  2025-01-15  "]);
+
+        result.Should().NotBeNull();
+        result.Should().Be(new DateOnly(2025, 1, 15));
+    }
 }
