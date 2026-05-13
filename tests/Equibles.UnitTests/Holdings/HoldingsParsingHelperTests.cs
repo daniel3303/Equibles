@@ -59,6 +59,45 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
+    public void ParseInvestmentDiscretion_OtrAbbreviation_ReturnsOther() {
+        // Sibling to `ParseInvestmentDiscretion_DfndAbbreviation_ReturnsDefined`.
+        // Existing pin covers the DFND arm. This pin covers the OTR arm,
+        // completing the three-mapped-arm-plus-default coverage matrix.
+        //
+        // Why OTR uniquely matters (and why pinning SOLE would be
+        // tautological): the production switch has
+        //   "SOLE" => Sole, "DFND" => Defined, "OTR" => Other, _ => Sole
+        // The SOLE arm and the default arm BOTH return Sole. Pinning
+        // SOLE specifically wouldn't catch a regression that drops only
+        // the SOLE arm because the default would still produce the
+        // correct Sole value. By contrast:
+        //   - DFND arm (pinned by sibling): semantically distinct return
+        //     value (Defined ≠ default Sole), so a dropped arm fails.
+        //   - OTR arm (this pin): semantically distinct return value
+        //     (Other ≠ default Sole), so a dropped arm fails.
+        //
+        // The risk this pin uniquely catches: a refactor that drops the
+        // OTR arm under the false intuition that "Other is rare enough
+        // to fall through to Sole" would compile, pass DFND, pass the
+        // ParseShareType siblings, and silently reclassify every
+        // "Other"-discretion holding as Sole. The 13F-HR `OTHER`
+        // discretion category captures positions where the manager
+        // explicitly disclaimed both sole AND shared/defined authority
+        // (typically sub-advisor arrangements where another party
+        // controls the actual trades). Misclassifying them as Sole
+        // inflates the "manager fully controls" attribution that
+        // ownership-influence analytics depend on.
+        //
+        // The complementary risk: a swap of the OTR arm with another
+        // mapped value (e.g. `"OTR" => Defined` from a copy-paste edit
+        // touching the wrong line) would still fail this pin because
+        // the assertion targets the exact enum value Other.
+        var result = HoldingsParsingHelper.ParseInvestmentDiscretion("OTR");
+
+        result.Should().Be(InvestmentDiscretion.Other);
+    }
+
+    [Fact]
     public void ResolveManagerName_AccessionNotInOtherManagers_ReturnsNull() {
         // 13F filings list co-filing managers in a separate `OTHERMANAGER2.tsv` table
         // keyed by AccessionNumber → SequenceNumber → ManagerName. The vast majority
