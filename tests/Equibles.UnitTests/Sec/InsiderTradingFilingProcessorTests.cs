@@ -363,4 +363,53 @@ public class InsiderTradingFilingProcessorTests {
 
         result.Should().Be(TransactionCode.TaxPayment);
     }
+
+    [Fact]
+    public void ParseTransactionCode_GiftCodeG_ReturnsGift() {
+        // Eighth pin in the ParseTransactionCode family. Existing pins cover
+        // P/Purchase, S/Sale, A/Award, _/Other, M/Conversion, X/Exercise,
+        // and F/TaxPayment. This pin covers `G => TransactionCode.Gift` —
+        // bona-fide gifts of securities by the insider (charitable donations,
+        // gifts to family/trusts, etc.).
+        //
+        // G is critically distinct from S (Sale) on the analytics surface
+        // for the same family of reasons F is: both describe a share-OUT
+        // event but the SIGNAL VALUE differs sharply.
+        //   • S = open-market sale — the executive received cash and chose
+        //     to liquidate. Drives the "insider selling" indicator.
+        //   • G = gift — no cash to the executive; the insider transferred
+        //     ownership but received NOTHING in return. Charitable
+        //     donations and family-trust transfers are the dominant forms.
+        //     Signal value: zero for the selling-pressure metric.
+        // Collapsing G into S would inflate apparent selling pressure with
+        // mechanical donations (and charitable giving is highly seasonal —
+        // a December spike in apparent insider selling would falsely
+        // appear every year).
+        //
+        // The risk this catches: a refactor that "consolidates" G into S
+        // (similar reasoning to the F→S risk) would compile, pass every
+        // mapped-code sibling pin (P, S, A, M, X, F) plus the default
+        // (Other), and silently flip every gift row into the high-signal
+        // Sale bucket. Insider-selling dashboards spike every December
+        // from charitable giving. The complementary risk: G→Other would
+        // silently drop the gift bucket from filterable analytics. The
+        // current G arm specifically tags these as Gift so the public
+        // insider page CAN distinguish "executive gave shares to a
+        // charity" from "executive sold for cash" in the per-insider
+        // breakdown.
+        //
+        // A subtler regression: G is also visually adjacent to F in the
+        // switch arm ordering and conceptually adjacent in "share-OUT-
+        // but-not-a-real-sale" land. A copy-paste edit that touched the
+        // wrong arm could produce `"G" => TransactionCode.TaxPayment` —
+        // every donation would silently classify as a tax payment,
+        // muddying both buckets.
+        //
+        // Pin uppercase "G". ParseTransactionCode normalizes via
+        // ToUpperInvariant before matching but the canonical wire form
+        // from SEC EDGAR is always uppercase.
+        var result = (TransactionCode)ParseTransactionCodeMethod.Invoke(null, ["G"]);
+
+        result.Should().Be(TransactionCode.Gift);
+    }
 }
