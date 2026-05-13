@@ -59,4 +59,24 @@ public class EquiblesModuleBuilderTests {
 
         result.Should().BeSameAs(builder);
     }
+
+    [Fact]
+    public void AddAllModules_DoesNotDuplicateAlreadyAddedModules() {
+        // AddAllModules scans every loaded assembly for IModuleConfiguration
+        // implementations. The composition root may explicitly call
+        // AddModule<T>() for a specific module before invoking AddAllModules
+        // (e.g. when a custom module precedes the default scan order). The
+        // dedup guard at the top of AddAllModules — `if (Modules.Any(m =>
+        // m.GetType() == type)) continue;` — protects against double-
+        // registering, which would attach the entity configurations twice
+        // and crash ModelBuilder with "duplicate key" errors at startup.
+        // Pin the dedup so a refactor that drops the guard surfaces here
+        // rather than as an opaque EF Core startup exception.
+        var builder = new EquiblesModuleBuilder();
+        builder.AddModule<FakeModuleA>();
+
+        builder.AddAllModules();
+
+        builder.Modules.Should().ContainSingle(m => m is FakeModuleA);
+    }
 }
