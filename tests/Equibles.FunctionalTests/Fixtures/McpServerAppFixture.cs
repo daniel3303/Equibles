@@ -1,11 +1,28 @@
+using System.Globalization;
+using Equibles.Cboe.Data;
+using Equibles.Cftc.Data;
+using Equibles.CommonStocks.Data;
+using Equibles.Congress.Data;
 using Equibles.Data;
+using Equibles.Errors.Data;
+using Equibles.Finra.Data;
+using Equibles.Fred.Data;
+using Equibles.Holdings.Data;
+using Equibles.InsiderTrading.Data;
 using Equibles.Mcp.Server;
+using Equibles.Media.Data;
+using Equibles.ParadeDB.EntityFrameworkCore;
+using Equibles.Sec.Data;
+using Equibles.Yahoo.Data;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Npgsql;
+using Respawn;
 using Testcontainers.PostgreSql;
 using Xunit;
 
@@ -34,11 +51,36 @@ public class McpServerAppFixture : IAsyncLifetime {
         .Build();
 
     private WebApplication _app;
+    private Respawner _respawner;
 
     public string BaseUrl { get; private set; }
 
+    /// <summary>
+    /// Application root services. Use a scope (<c>Services.CreateScope()</c>) before resolving
+    /// scoped dependencies like <see cref="EquiblesDbContext"/>; never resolve them directly
+    /// from this provider.
+    /// </summary>
+    public IServiceProvider Services => _app.Services;
+
     public async Task InitializeAsync() {
+        // MCP tool output formats with :N0 / :F2 which honour CurrentCulture per-thread.
+        // The Kestrel-served threads inherit DefaultThreadCurrentCulture; without pinning
+        // invariant, dev/CI machines on non-en-US locales would render "175,50" / "50 000 000"
+        // and break substring assertions that expect "175.50" / "50,000,000".
+        CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+        CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
+
         await _db.StartAsync();
+
+        // The MCP server's AddEquiblesDbContext doesn't configure a MigrationsAssembly —
+        // production assumes another service (the Web app) has already migrated the shared
+        // database. For the test fixture, apply migrations explicitly via a separate
+        // DbContext that knows about Equibles.Migrations.DesignTimeDbContextFactory's
+        // assembly, mirroring the ParadeDbFixture pattern used by the integration tests.
+        await using (var migrationContext = BuildMigrationContext(_db.GetConnectionString())) {
+            migrationContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(5));
+            await migrationContext.Database.MigrateAsync();
+        }
 
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions {
             ApplicationName = "Equibles.Mcp.Server",
@@ -59,7 +101,6 @@ public class McpServerAppFixture : IAsyncLifetime {
 
         Program.ConfigureServices(builder);
         _app = builder.Build();
-        await Program.ApplyMigrationsAsync(_app);
         Program.ConfigurePipeline(_app);
 
         _app.Urls.Add("http://127.0.0.1:0");
@@ -70,6 +111,41 @@ public class McpServerAppFixture : IAsyncLifetime {
         // tests can connect to the actual listener.
         var addresses = _app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>();
         BaseUrl = addresses.Addresses.First();
+
+        // Snapshot user tables for Respawn to replay TRUNCATE on every reset. Excludes the
+        // EF Core migrations history so tests don't re-apply migrations between resets.
+        // Same Postgres caveat as WebAppFixture: Respawn's string overload defaults to
+        // SqlClient, so pass an explicit NpgsqlConnection.
+        await using var respawnConnection = new NpgsqlConnection(_db.GetConnectionString());
+        await respawnConnection.OpenAsync();
+        _respawner = await Respawner.CreateAsync(respawnConnection, new RespawnerOptions {
+            DbAdapter = DbAdapter.Postgres,
+            SchemasToInclude = ["public"],
+            TablesToIgnore = [new Respawn.Graph.Table("__EFMigrationsHistory")],
+        });
+    }
+
+    /// <summary>
+    /// Truncates every user table in <c>public</c> via Respawn, then runs <paramref name="seed"/>
+    /// against a fresh <see cref="EquiblesDbContext"/> scope. The seed delegate receives an
+    /// attached DbContext — add entities and the method will call <c>SaveChangesAsync</c> for
+    /// you. Pass <c>null</c> (or omit) to reset without seeding.
+    ///
+    /// Call this from a test's <c>InitializeAsync</c> so each test starts from a known state.
+    /// xUnit creates a fresh test class instance per test, so per-test isolation is automatic.
+    /// </summary>
+    public async Task ResetAndSeedAsync(Func<EquiblesDbContext, Task> seed = null) {
+        await using (var resetConnection = new NpgsqlConnection(_db.GetConnectionString())) {
+            await resetConnection.OpenAsync();
+            await _respawner.ResetAsync(resetConnection);
+        }
+
+        if (seed is null) return;
+
+        using var scope = _app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        await seed(dbContext);
+        await dbContext.SaveChangesAsync();
     }
 
     public async Task DisposeAsync() {
@@ -78,6 +154,34 @@ public class McpServerAppFixture : IAsyncLifetime {
             await _app.DisposeAsync();
         }
         await _db.DisposeAsync();
+    }
+
+    private static EquiblesDbContext BuildMigrationContext(string connectionString) {
+        var optionsBuilder = new DbContextOptionsBuilder<EquiblesDbContext>();
+        optionsBuilder.UseNpgsql(connectionString, npgsql => {
+            npgsql.UseVector();
+            npgsql.UseParadeDb();
+            npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+            npgsql.MigrationsAssembly(typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly);
+        });
+        optionsBuilder.UseLazyLoadingProxies();
+
+        IModuleConfiguration[] modules = [
+            new CommonStocksModuleConfiguration(),
+            new HoldingsModuleConfiguration(),
+            new InsiderTradingModuleConfiguration(),
+            new CongressModuleConfiguration(),
+            new FinraModuleConfiguration(),
+            new FredModuleConfiguration(),
+            new YahooModuleConfiguration(),
+            new CftcModuleConfiguration(),
+            new CboeModuleConfiguration(),
+            new SecModuleConfiguration(),
+            new MediaModuleConfiguration(),
+            new ErrorsModuleConfiguration(),
+        ];
+
+        return new EquiblesDbContext(optionsBuilder.Options, modules);
     }
 
     private static string ResolveMcpServerContentRoot() {
