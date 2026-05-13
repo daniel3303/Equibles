@@ -24,6 +24,20 @@ public class DocumentTypeConverterTests {
     }
 
     [Fact]
+    public void ConvertFrom_KnownValueString_ReturnsMatchingDocumentType() {
+        // ConvertTo emits the stable Value ("TenKa"). ConvertFrom is the inverse:
+        // MVC route/query binding hands a string like "TenKa" back to this
+        // converter, which must round-trip it to the matching DocumentType.
+        // The companion ConvertTo test pins emit; this one pins parse. Without
+        // it a refactor that switched FromValue to a DisplayName lookup would
+        // silently break every route that takes a DocumentType (no exception —
+        // null would surface only at use time, far from the binding code).
+        var result = _sut.ConvertFrom(null, CultureInfo.InvariantCulture, "TenKa");
+
+        result.Should().Be(DocumentType.TenKa);
+    }
+
+    [Fact]
     public void ConvertFrom_UnknownStringValue_ThrowsFormatException() {
         var act = () => _sut.ConvertFrom(null, CultureInfo.InvariantCulture, "NotARealDocumentType");
 
