@@ -63,6 +63,34 @@ public class YahooPriceScraperWorkerTests {
         sut.InvokeErrorSource().Should().Be(ErrorSource.YahooPriceScraper);
     }
 
+    [Fact]
+    public void WorkerName_IsYahooPriceScraper() {
+        // Seventh WorkerName pin in the natural-extension family (CBOE, Holdings,
+        // SEC filing, FTD, Document processor, FRED, and now Yahoo price).
+        // WorkerName flows into BaseScraperWorker's structured log scope and shows
+        // up in every Serilog line — on-call greps `data/worker/logs/log<date>.txt`
+        // for "Yahoo price scraper" when daily-close ingestion stalls. The string
+        // is deliberately distinct from a hypothetical sibling "Yahoo fundamentals
+        // scraper" (same vendor, different endpoint, different rate-limit
+        // envelope) — both could plausibly come from a single
+        // YahooScraperWorker.cs in a future refactor, and the natural copy-paste
+        // mistake is to leave both with the same WorkerName. A merged log stream
+        // would make "Yahoo is down" ambiguous: is it the price feed
+        // (browser-impersonation cookies/crumb) or fundamentals (different
+        // auth)? Pin the literal "Yahoo price scraper" with the "price"
+        // qualifier explicit so any merge regression fails this test.
+        var options = Options.Create(new YahooPriceScraperOptions { SleepIntervalHours = 24 });
+        var sut = new TestableYahooPriceScraperWorker(
+            Substitute.For<ILogger<YahooPriceScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()),
+            options);
+
+        sut.InvokeWorkerName().Should().Be("Yahoo price scraper");
+    }
+
     private sealed class TestableYahooPriceScraperWorker : YahooPriceScraperWorker {
         public TestableYahooPriceScraperWorker(
             ILogger<YahooPriceScraperWorker> logger,
@@ -74,5 +102,7 @@ public class YahooPriceScraperWorkerTests {
         public TimeSpan InvokeSleepInterval() => SleepInterval;
 
         public ErrorSource InvokeErrorSource() => ErrorSource;
+
+        public string InvokeWorkerName() => WorkerName;
     }
 }
