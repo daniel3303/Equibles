@@ -79,6 +79,30 @@ public class CurrencyConsolidationStepTests
     }
 
     [Fact]
+    public void TextualCurrencyCode_IsDetectedAndConsolidated()
+    {
+        // DetectCurrency matches on EITHER the symbol ("$") OR the textual code
+        // ("USD") for each entry in the currency map. The existing symbol-based
+        // tests don't exercise the code branch (`text.Contains(code)`) — SEC
+        // filings often label currency columns with the textual ISO code rather
+        // than the glyph (e.g. "USD" header above an empty cell). Pin the code
+        // path so a refactor that drops the `|| text.Contains(code)` half of
+        // the OR can't silently break detection of textual-code columns.
+        var html = @"<html><body><table>
+  <tr><td>USD</td><td></td><td>100</td></tr>
+  <tr><td>USD</td><td></td><td>200</td></tr>
+</table></body></html>";
+
+        var doc = _parser.ParseDocument(html);
+
+        _sut.Execute(doc);
+
+        var note = doc.QuerySelector("table + p em");
+        note.Should().NotBeNull();
+        note.TextContent.Should().Be("All values are in US Dollars.");
+    }
+
+    [Fact]
     public void CurrencySymbolIsRemovedFromConsolidatedText()
     {
         var html = @"<html><body><table>
