@@ -10,6 +10,41 @@ namespace Equibles.UnitTests.Web;
 
 public class HomeControllerTests {
     [Fact]
+    public void Error_StatusCode404_ShowsPageNotFoundTitleAndSets404Response() {
+        // The sibling `Error_NullStatusCode_...` test pins the default switch arm
+        // ("Something Went Wrong"). This pins the 404 case — the most common
+        // user-facing error and the one with the strongest UX/SEO consequences:
+        //
+        //   * Users see the title in the browser tab and on the page header. A
+        //     404 page rendering "Too Many Requests" or "Something Went Wrong"
+        //     looks broken.
+        //   * Search engines crawling a 404 page index the title. Mislabelling
+        //     it pollutes search results for the site.
+        //   * Monitoring tools log titles alongside status codes when capturing
+        //     error pages — a 404 with the wrong title pattern would skew
+        //     dashboards built on title-substring grouping.
+        //
+        // The risk: a refactor that simplifies the switch by collapsing arms
+        // ("404 and 429 both go to default") or that swaps two case labels in a
+        // copy-paste would shop a 404 with "Too Many Requests" or "Something
+        // Went Wrong" as the title. Both the response status (404) and the
+        // resolved title ("Page Not Found") are asserted on the same call —
+        // collapsing them into a single Theory wouldn't isolate this case
+        // distinctly enough to catch a swap.
+        var httpContext = new DefaultHttpContext();
+        var controller = new HomeController(NullLogger<HomeController>.Instance, Substitute.For<IConfiguration>()) {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+            TempData = Substitute.For<ITempDataDictionary>(),
+        };
+
+        var result = controller.Error(statusCode: 404);
+
+        result.Should().BeOfType<ViewResult>();
+        httpContext.Response.StatusCode.Should().Be(404);
+        controller.ViewData["Title"].Should().Be("Page Not Found");
+    }
+
+    [Fact]
     public void Error_NullStatusCode_SetsResponseStatusTo500AndShowsGenericTitle() {
         // ASP.NET Core's `UseStatusCodePagesWithReExecute("/Home/Error/{0}")` invokes
         // this action with the status code embedded in the URL — but the catch-all
