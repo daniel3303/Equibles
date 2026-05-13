@@ -75,6 +75,58 @@ public class HomeControllerTests {
     }
 
     [Fact]
+    public void Error_StatusCode404_SetsActionableDescriptionTextDistinctFromTitle() {
+        // Sibling pin to the three existing Title pins (404, 429, default-500).
+        // The Error() action populates TWO ViewData entries from the same statusCode:
+        //   ViewData["Title"]       — short header (e.g. "Page Not Found")
+        //   ViewData["Description"] — actionable body text (e.g. "The page you're
+        //                             looking for doesn't exist or has been moved.")
+        // Both come from THREE-arm switch expressions over the same `code` value.
+        // The existing Title pins prove the title switch resolves correctly, but
+        // they say nothing about the Description switch — it's a structurally
+        // distinct expression with six independent literal strings (three arms ×
+        // two switches) that the view template renders below the title.
+        //
+        // The risk this catches is asymmetric and unreachable from the Title pins:
+        //   • A refactor that drops the entire `ViewData["Description"] = code switch
+        //     { … }` block (e.g. someone "tidying up" what looks like a duplicated
+        //     pattern) compiles cleanly, passes every Title pin, and silently
+        //     renders an error page with NO description text — the body becomes
+        //     blank or falls back to whatever `@ViewData["Description"]` does on
+        //     null in the Razor view (an empty string for value types, blank for
+        //     reference types). Users see a header-only error page with no
+        //     guidance on what to do.
+        //   • A copy-paste swap of two description arms (404's text wired to
+        //     429's case label, or vice-versa) would produce a 404 page that
+        //     tells the user to "wait a moment and try again" — UX-confusing,
+        //     and worse for SEO because the indexed page-body wouldn't match the
+        //     indexed title.
+        //   • A regression that swapped `code switch` for `statusCode switch`
+        //     (forgetting the `?? 500` coalesce) would NRE on null input for the
+        //     Description value, but Title was set BEFORE the offending line so
+        //     existing Title pins wouldn't detect the regression — Description's
+        //     own throw would surface only here.
+        //
+        // 404 is the most user-visible error code (organic web traffic produces
+        // far more 404s than 429s or 500s), so its Description carries the most
+        // weight: "The page you're looking for doesn't exist or has been moved."
+        // is the actionable guidance the visitor reads to decide whether to use
+        // search, the back button, or report a broken link. Pin the literal
+        // string so a refactor that "simplifies" the wording must update this
+        // test deliberately.
+        var httpContext = new DefaultHttpContext();
+        var controller = new HomeController(NullLogger<HomeController>.Instance, Substitute.For<IConfiguration>()) {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+            TempData = Substitute.For<ITempDataDictionary>(),
+        };
+
+        controller.Error(statusCode: 404);
+
+        controller.ViewData["Description"].Should()
+            .Be("The page you're looking for doesn't exist or has been moved.");
+    }
+
+    [Fact]
     public void Error_NullStatusCode_SetsResponseStatusTo500AndShowsGenericTitle() {
         // ASP.NET Core's `UseStatusCodePagesWithReExecute("/Home/Error/{0}")` invokes
         // this action with the status code embedded in the URL — but the catch-all
