@@ -89,4 +89,23 @@ public class FileManagerTests {
 
         act.Should().NotThrow();
     }
+
+    [Fact]
+    public async Task DeleteFile_SavedFile_RemovesItFromRepository() {
+        // The companion DeleteFile_Null test only exercises the early
+        // null guard. Without this, the actual delete branch is unpinned —
+        // a refactor that "simplifies" DeleteFile to a no-op (or
+        // mis-routes it to a different repository) would leak files and
+        // the existing tests wouldn't catch it. Round-trip through
+        // SaveFile → SaveChanges → DeleteFile → SaveChanges to assert
+        // the file is actually removed.
+        var file = await _sut.SaveFile([0x01, 0x02], "to-delete.pdf");
+        await _repository.SaveChanges();
+        _repository.GetAll().Should().ContainSingle();
+
+        _sut.DeleteFile(file);
+        await _repository.SaveChanges();
+
+        _repository.GetAll().Should().BeEmpty();
+    }
 }
