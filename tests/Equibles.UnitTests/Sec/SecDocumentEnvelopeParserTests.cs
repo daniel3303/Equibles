@@ -37,6 +37,21 @@ public class SecDocumentEnvelopeParserTests {
     }
 
     [Fact]
+    public void TryExtractPaperPdfFilename_EmptyEnvelope_ReturnsFalseWithoutScanning() {
+        // DocumentScraper invokes the parser on whatever the SEC EDGAR fetch
+        // returned. A 404 or empty-body response yields an empty string —
+        // the parser must short-circuit on null/empty BEFORE entering the
+        // index-walking loop, otherwise IndexOf is invoked on an empty
+        // string in a tight loop. Pin the guard so a refactor that removes
+        // it surfaces immediately. The companion happy-path and traversal
+        // tests don't reach this branch.
+        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(string.Empty, out var filename);
+
+        success.Should().BeFalse();
+        filename.Should().BeEmpty();
+    }
+
+    [Fact]
     public void TryExtractPaperPdfFilename_EnvelopeWrappingPdfDocument_ReturnsFilename() {
         var envelope = """
             <SEC-DOCUMENT>
