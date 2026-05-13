@@ -1,3 +1,4 @@
+using System.Reflection;
 using Equibles.Holdings.HostedService.Services;
 
 namespace Equibles.UnitTests.Holdings;
@@ -67,6 +68,52 @@ public class HoldingsDataSetClientTests {
         var result = HoldingsDataSetClient.GetDataSetFileNames(new DateTime(2025, 1, 1));
 
         result.Should().Contain("01dec2025-28feb2026_form13f.zip");
+    }
+
+    [Fact]
+    public void GetNewFormatPeriods_DecToFebPeriodSpanningLeapYear_UsesFeb29() {
+        // Sibling to `GetDataSetFileNames_DecToFebPeriodSpanningNonLeapYear_UsesFeb28`.
+        // That pin covers the IsLeapYear=false arm of the Dec→Feb ternary:
+        //   new DateOnly(year + 1, 2, DateTime.IsLeapYear(year + 1) ? 29 : 28))
+        // This pin covers the IsLeapYear=true arm — the OTHER side of the same
+        // ternary that's currently UNREACHABLE through the public
+        // `GetDataSetFileNames` entry point given today's date.
+        //
+        // Why unreachable from the public API: the IsLeapYear=true arm fires
+        // for periods like Dec 2027 → Feb 29 2028 (year+1=2028, leap). The
+        // public method gates emissions on `end >= nowDate`, so any future
+        // leap-spanning period is skipped until that February has actually
+        // happened. Past leap years either fall before 2024 (the regular
+        // cycle's startYear floor) or are masked by the hard-coded 2024
+        // transition period — that one explicitly writes `Feb 29 2024` as a
+        // literal, NOT via DateTime.IsLeapYear, so it doesn't exercise the
+        // ternary either.
+        //
+        // The risk this catches: a refactor that hard-codes `28` (the
+        // non-leap day) in the ternary — easy to do during a "tidy up the
+        // leap-year complication" pass since the only leap-year period in
+        // the test corpus is the hardcoded 2024 transition — would compile,
+        // pass the existing pins (the non-leap arm assertion + the hardcoded
+        // 2024 transition assertion), and silently mis-name the Dec 2027 →
+        // Feb 2028 URL once that period publishes in early 2028. SEC's CDN
+        // returns 404 on the wrong day-number, HoldingsScraperWorker logs
+        // and continues, and the Q1 2028 13F-HR window silently fails to
+        // ingest — an invisible gap that persists until manual
+        // intervention.
+        //
+        // Use reflection on the private static GetNewFormatPeriods so we can
+        // inject a "now" in the future (2029-01-01) and force the Dec 2027 →
+        // Feb 29 2028 period into the emitted list. The non-leap sibling
+        // tests the public API path; this one targets the ternary directly.
+        // The pair (non-leap from 2025-01-01 + leap from injected 2029-01-01)
+        // covers both arms.
+        var method = typeof(HoldingsDataSetClient).GetMethod(
+            "GetNewFormatPeriods", BindingFlags.NonPublic | BindingFlags.Static);
+        var fakeNow = new DateTime(2029, 1, 1);
+
+        var result = (List<string>)method!.Invoke(null, [2024, fakeNow]);
+
+        result.Should().Contain("01dec2027-29feb2028_form13f.zip");
     }
 
     [Fact]
