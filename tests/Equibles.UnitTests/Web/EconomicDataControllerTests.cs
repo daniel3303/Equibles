@@ -98,6 +98,82 @@ public class EconomicDataControllerTests {
     }
 
     [Fact]
+    public void ExpandFrequency_LowercaseInputViaToUpperInvariantNormalization_MatchesMonthlyArm() {
+        // Fourth pin in the ExpandFrequency family. Existing pins cover BW
+        // (two-character mapped arm), Q (single-letter mapped arm), and XYZ
+        // (default catch-all). All three feed input ALREADY in upper-case form
+        // — they happen to exercise the matched-arm logic but leave the case-
+        // normalization pipeline `?.Trim().ToUpperInvariant()` untouched: an
+        // input like "Q" matches the "Q" arm whether or not ToUpperInvariant
+        // fires, because Q.ToUpperInvariant() == Q. This pin closes that
+        // gap by feeding lowercase input that ONLY matches the mapped arm
+        // through the case-normalization step.
+        //
+        // Production scenario: FRED routinely emits lowercase frequency codes
+        // for older legacy series — the existing BW pin's commentary
+        // explicitly calls this out ("real FRED feed which routinely emits
+        // lowercase frequency codes from older legacy series") but never
+        // exercises it. The historical-data backfill — CPI before ~2000, the
+        // BEA personal-income aggregates from the 80s, monetary statistics
+        // before the FRED2 migration — is the population most affected.
+        //
+        // Pin lowercase "m" specifically:
+        //   • "M" → Monthly is the DOMINANT FRED cadence. CPI, payroll
+        //     employment, retail sales, industrial production, housing
+        //     starts, every BLS labor-market release, every PCE/PPI inflation
+        //     series — all monthly. Drop the case-normalization and every
+        //     legacy monthly series surfaces in the UI as "m" (literal
+        //     input echoed through the default arm) instead of "Monthly".
+        //   • "m" is single-character so it tests neither the `.Trim()`
+        //     branch (no surrounding whitespace) nor the multi-character
+        //     uppercase-each-character behavior (`ToUpperInvariant` on a
+        //     single char is trivial). The pin exercises ONLY the
+        //     case-normalization itself.
+        //
+        // The risk this pin uniquely catches and that's UNREACHABLE from any
+        // existing sibling:
+        //
+        //   • A refactor that "tidies up" the switch selector to drop
+        //     `.ToUpperInvariant()` — e.g. someone introducing a stricter
+        //     `StringComparison.Ordinal`-style match under the (false)
+        //     intuition that "FRED always returns canonical uppercase" —
+        //     compiles cleanly, passes BW (uppercase), Q (uppercase), XYZ
+        //     (default arm returns raw input regardless), AND silently
+        //     mis-routes lowercase inputs into the default arm. The visible
+        //     symptom: legacy monthly series render "m" in the page header
+        //     instead of "Monthly".
+        //
+        //   • A refactor that swaps `?.Trim().ToUpperInvariant()` for
+        //     `?.Trim().ToLower()` — the inverse of `ToUpperInvariant` — would
+        //     also fail: the switch arms ARE uppercase, so a lowercased input
+        //     wouldn't match. Existing tests fed uppercase strings that
+        //     ToLower() turns lowercase, then no arm matches, then default
+        //     fires and the BW/Q tests would fail FIRST (they expect mapped
+        //     output, not raw echo). This pin reinforces from the other
+        //     direction: lowercase IN → uppercase arm matches via
+        //     normalization → mapped output.
+        //
+        //   • A refactor to a culture-sensitive `ToUpper()` (NOT
+        //     `ToUpperInvariant`) is a Turkish-locale trap: on tr-TR,
+        //     "i".ToUpper() == "İ" (dotted-I), not "I". FRED doesn't emit
+        //     lowercase "i" as a frequency code so the regression
+        //     wouldn't bite immediately, but pinning the
+        //     "ToUpperInvariant"-specific behavior documents that the
+        //     Invariant form is load-bearing.
+        //
+        // Construction: input lowercase "m", assert mapped output "Monthly".
+        // Two-step proof: (a) the input did NOT match any arm directly
+        // (the literal "m" isn't in the switch arms — all arms are
+        // uppercase), and (b) the case-normalization step folded it
+        // to "M" before the comparison fired. The single assertion on
+        // the literal mapped string distinguishes both regression
+        // classes (lost normalization, wrong-direction normalization).
+        var result = (string)ExpandFrequencyMethod.Invoke(null, ["m"]);
+
+        result.Should().Be("Monthly");
+    }
+
+    [Fact]
     public void ExpandFrequency_UnknownCode_ReturnsRawInputUnchangedNotNormalized() {
         // Third pin in the ExpandFrequency family. Existing pins cover BW
         // (two-character) and Q (single-letter). This pin covers the
