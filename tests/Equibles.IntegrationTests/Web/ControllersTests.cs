@@ -973,4 +973,17 @@ public class StatusControllerTests : IDisposable {
         totalErrorCount.Should().Be(1);
         unseenErrorCount.Should().Be(1);
     }
+
+    // ── Show ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Show_MissingError_RedirectsToIndexWithFlashError() {
+        var controller = CreateController();
+
+        var result = await controller.Show(Guid.NewGuid());
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(StatusController.Index));
+        _flashMessage.Received(1).Error("Error not found.", Arg.Any<string>(), Arg.Any<bool>());
+    }
 }
