@@ -273,4 +273,80 @@ public class SenateDisclosureClientTests {
 
         result.Should().BeNull();
     }
+
+    // ── Partial-branch fills ────────────────────────────────────────────
+
+    [Fact]
+    public void ParseReportRow_NullFirstAndLastNameCells_HandlesNullsAndReturnsNull() {
+        // Pins the null arms of:
+        //   var firstName = row[0]?.Trim() ?? "";
+        //   var lastName  = row[1]?.Trim() ?? "";
+        // Every existing pin (including the both-empty sibling) supplies non-null
+        // strings, so the `?.` short-circuit's null path and the `??` left-null
+        // path have never executed. Drop either operator and the next line throws
+        // NRE on a Trim invocation against null. Asserts the method returns null
+        // (via the memberName="" guard) AND, by completing the invocation
+        // without exception, proves the two null-safe operators handled the
+        // null inputs without dereferencing.
+        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var row = new List<string> {
+            null,
+            null,
+            "filed",
+            "<a href=\"/search/view/ptr/abc-123/\">link</a>",
+            "2024-01-15",
+        };
+
+        var act = () => ParseReportRowMethod.Invoke(sut, [row]);
+
+        act.Should().NotThrow();
+        ParseReportRowMethod.Invoke(sut, [row]).Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseReportRow_NullLinkCell_HandlesNullAndReturnsNull() {
+        // Pins the null arm of `var linkHtml = row[3] ?? "";`. Existing pins
+        // always supply a string for row[3] (whether or not it contains an
+        // anchor), so the `??` right-side has never fired. With the row[3]
+        // value null, the coalesce yields an empty string, HrefRegex.Match("")
+        // succeeds=false, and the method returns null at the !Success guard.
+        // Without the `?? ""`, HrefRegex.Match(null) throws ArgumentNullException.
+        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var row = new List<string> {
+            "Jane",
+            "Doe",
+            "filed",
+            null,
+            "2024-01-15",
+        };
+
+        var act = () => ParseReportRowMethod.Invoke(sut, [row]);
+
+        act.Should().NotThrow();
+        ParseReportRowMethod.Invoke(sut, [row]).Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseReportRow_NullDateCell_HandlesNullAndReturnsNull() {
+        // Pins the null arm of `row[4]?.Trim()` inside
+        //   if (!DateOnly.TryParse(row[4]?.Trim(), out var dateSubmitted)) { ... }
+        // The unparseable-date sibling supplies a non-null garbage string so
+        // TryParse returns false but `?.Trim()` never sees a null input. With
+        // row[4] null, `?.Trim()` short-circuits to null, TryParse(null)
+        // returns false, the method logs the debug message and returns null.
+        // Without the `?.`, Trim() would NRE on the null reference.
+        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var row = new List<string> {
+            "Jane",
+            "Doe",
+            "filed",
+            "<a href=\"/search/view/ptr/abc-123/\">link</a>",
+            null,
+        };
+
+        var act = () => ParseReportRowMethod.Invoke(sut, [row]);
+
+        act.Should().NotThrow();
+        ParseReportRowMethod.Invoke(sut, [row]).Should().BeNull();
+    }
 }

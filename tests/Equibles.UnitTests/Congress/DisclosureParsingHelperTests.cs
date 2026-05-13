@@ -728,4 +728,280 @@ public class DisclosureParsingHelperTests {
         result.Should().HaveCount(1);
         result[0].OwnerType.Should().Be("Joint");
     }
+
+    // ── Partial-branch fills ────────────────────────────────────────────
+    // Each test below pins the false/null arm of a `?.` / `??` / `&&` / `||`
+    // / pattern-match branch that the existing happy-path fixtures don't
+    // currently traverse. Identified from coverlet's cobertura
+    // `condition-coverage` attribute over the production code.
+
+    [Fact]
+    public void ParseTransactionsFromHtml_TableWithNoTheadAndNoLeadingThRow_SkipsTableSilently() {
+        // Pins ExtractHeaderTexts' null-coalesce + null-conditional fallthrough:
+        //   var headers = SelectNodes(".//thead//th") ?? SelectNodes(".//tr[1]//th");
+        //   return headers?.Select(...).ToList();
+        // and the caller's `headerTexts == null ||` short-circuit. Existing pins
+        // cover thead-present (happy path) and thead-less-but-first-row-th
+        // (TableWithoutTheadButFirstRowTh) — neither hits the case where BOTH
+        // selectors miss, which is what a malformed HTML scrape would produce.
+        // Without the `==null` guard in the caller, IsTransactionTable would NRE
+        // on a null headerTexts.
+        var html = """
+            <html><body>
+            <table>
+              <tbody>
+                <tr>
+                  <td>2024-06-15</td>
+                  <td>AAPL</td>
+                  <td>Purchase</td>
+                </tr>
+              </tbody>
+            </table>
+            </body></html>
+            """;
+
+        var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
+            html, "Test", CongressPosition.Representative,
+            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ParseTransactionsFromHtml_OnlyNotificationDateColumnNoTransactionDate_UsesNotificationDateAsTxDate() {
+        // Pins MapColumnIndices' first dateCol fallback:
+        //   if (dateCol == -1) dateCol = FindIndex(h.Contains("notification") && h.Contains("date"));
+        // The existing BothTransactionAndNotificationDateColumns pin includes a
+        // Transaction Date column, so the first FindIndex succeeds and this
+        // fallback never fires. Pin a table with ONLY a "Notification Date"
+        // so the helper has to fall through to the second tier; the parsed
+        // TransactionDate must come from that column.
+        var html = """
+            <html><body>
+            <table>
+              <thead><tr>
+                <th>Notification Date</th>
+                <th>Ticker</th>
+                <th>Asset Name</th>
+                <th>Transaction Type</th>
+                <th>Amount</th>
+              </tr></thead>
+              <tbody>
+                <tr>
+                  <td>2024-07-01</td>
+                  <td>AAPL</td>
+                  <td>Apple Inc</td>
+                  <td>Purchase</td>
+                  <td>$1,001 - $15,000</td>
+                </tr>
+              </tbody>
+            </table>
+            </body></html>
+            """;
+
+        var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
+            html, "Test", CongressPosition.Senator,
+            new DateOnly(2024, 7, 5), Substitute.For<ILogger>());
+
+        result.Should().HaveCount(1);
+        result[0].TransactionDate.Should().Be(new DateOnly(2024, 7, 1));
+    }
+
+    [Fact]
+    public void ParseTransactionsFromHtml_OnlyGenericDateColumn_UsesItAsTxDate() {
+        // Pins MapColumnIndices' SECOND dateCol fallback:
+        //   if (dateCol == -1) dateCol = FindIndex(h.Contains("date"));
+        // — the most permissive arm. Fires for legacy / hand-rolled tables that
+        // use a bare "Date" header. Together with the notification-only sibling
+        // above and the existing transaction-date primary pin, the three-tier
+        // chain is fully exercised.
+        var html = """
+            <html><body>
+            <table>
+              <thead><tr>
+                <th>Date</th>
+                <th>Ticker</th>
+                <th>Asset Name</th>
+                <th>Transaction Type</th>
+                <th>Amount</th>
+              </tr></thead>
+              <tbody>
+                <tr>
+                  <td>2024-06-15</td>
+                  <td>AAPL</td>
+                  <td>Apple Inc</td>
+                  <td>Purchase</td>
+                  <td>$1,001 - $15,000</td>
+                </tr>
+              </tbody>
+            </table>
+            </body></html>
+            """;
+
+        var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
+            html, "Test", CongressPosition.Representative,
+            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+
+        result.Should().HaveCount(1);
+        result[0].TransactionDate.Should().Be(new DateOnly(2024, 6, 15));
+    }
+
+    [Fact]
+    public void ParseTransactionsFromHtml_BareTypeHeaderWithoutTransactionPrefix_ResolvesTypeColumn() {
+        // Pins MapColumnIndices' typeCol fallback:
+        //   if (typeCol == -1) typeCol = FindIndex(h == "type");
+        // Without the fallback, tables that label the transaction column simply
+        // "Type" (older House PTR exports, hand-coded staff submissions) would
+        // never resolve cols.Type — every row would skip on the type==null
+        // guard in ParseTransactionRow. The exact-match `h == "type"` (NOT
+        // `Contains("type")`) is load-bearing: it must distinguish "Type" from
+        // "Asset Type" which is a different column entirely.
+        var html = """
+            <html><body>
+            <table>
+              <thead><tr>
+                <th>Transaction Date</th>
+                <th>Ticker</th>
+                <th>Asset Name</th>
+                <th>Type</th>
+                <th>Amount</th>
+              </tr></thead>
+              <tbody>
+                <tr>
+                  <td>2024-06-15</td>
+                  <td>AAPL</td>
+                  <td>Apple Inc</td>
+                  <td>Sale</td>
+                  <td>$1,001 - $15,000</td>
+                </tr>
+              </tbody>
+            </table>
+            </body></html>
+            """;
+
+        var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
+            html, "Test", CongressPosition.Representative,
+            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+
+        result.Should().HaveCount(1);
+        result[0].TransactionType.Should().Be(CongressTransactionType.Sale);
+    }
+
+    [Fact]
+    public void ParseTransactionsFromHtml_RowWithNoCellElements_IsSilentlySkipped() {
+        // Pins ParseTransactionRow's first null guard:
+        //   var cells = row.SelectNodes(".//td");
+        //   if (cells == null) return null;
+        // HtmlAgilityPack's SelectNodes returns null (not empty) when no match.
+        // A `<tr>` with no `<td>` descendants — common in real-world disclosure
+        // HTML where the body contains `<tr><th>...</th></tr>` separator rows
+        // alongside actual data rows — would NRE on the next `.Select` without
+        // the guard.
+        var html = """
+            <html><body>
+            <table>
+              <thead><tr>
+                <th>Transaction Date</th>
+                <th>Ticker</th>
+                <th>Asset Name</th>
+                <th>Transaction Type</th>
+                <th>Amount</th>
+              </tr></thead>
+              <tbody>
+                <tr><th>Section header — no td cells</th></tr>
+              </tbody>
+            </table>
+            </body></html>
+            """;
+
+        var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
+            html, "Test", CongressPosition.Representative,
+            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ParseTransactionsFromHtml_RowWithValidDateButEmptyTickerAndEmptyAsset_IsSkipped() {
+        // Pins ParseTransactionRow's both-empty short-circuit:
+        //   if (string.IsNullOrEmpty(ticker) && string.IsNullOrEmpty(assetName)) return null;
+        // Existing tests always have at least one of ticker/asset populated,
+        // so the `&&`-true arm has never fired. Without it, downstream
+        // ExtractTickerFromAssetName would dereference a null asset and the
+        // emitted transaction would carry both an empty ticker and an empty
+        // asset name — useless for analytics but not invalid enough for any
+        // later filter to drop.
+        var html = """
+            <html><body>
+            <table>
+              <thead><tr>
+                <th>Transaction Date</th>
+                <th>Ticker</th>
+                <th>Asset Name</th>
+                <th>Transaction Type</th>
+                <th>Amount</th>
+              </tr></thead>
+              <tbody>
+                <tr>
+                  <td>2024-06-15</td>
+                  <td></td>
+                  <td></td>
+                  <td>Purchase</td>
+                  <td>$1,001 - $15,000</td>
+                </tr>
+              </tbody>
+            </table>
+            </body></html>
+            """;
+
+        var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
+            html, "Test", CongressPosition.Representative,
+            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ParseTransactionsFromHtml_AssetNameWithoutParenthesizedTicker_RecordsTransactionWithNullTicker() {
+        // Pins the `Ticker = ticker?.ToUpperInvariant()` null-conditional on
+        // the final DisclosureTransaction. Reaches it via the path where:
+        //   - ticker cell is empty (CleanSentinel returns null)
+        //   - asset cell is populated (so the both-empty guard doesn't trip)
+        //   - asset name has no parenthesized ticker pattern, so
+        //     ExtractTickerFromAssetName returns null
+        // Without the `?.`, calling ToUpperInvariant on a null ticker would
+        // NRE at row-construction time. Existing tests always derive a ticker
+        // (either from the column or from the asset name's parens), so the
+        // null arm has never fired.
+        var html = """
+            <html><body>
+            <table>
+              <thead><tr>
+                <th>Transaction Date</th>
+                <th>Ticker</th>
+                <th>Asset Name</th>
+                <th>Transaction Type</th>
+                <th>Amount</th>
+              </tr></thead>
+              <tbody>
+                <tr>
+                  <td>2024-06-15</td>
+                  <td></td>
+                  <td>Apple Inc common stock with no ticker symbol</td>
+                  <td>Purchase</td>
+                  <td>$1,001 - $15,000</td>
+                </tr>
+              </tbody>
+            </table>
+            </body></html>
+            """;
+
+        var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
+            html, "Test", CongressPosition.Representative,
+            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+
+        result.Should().HaveCount(1);
+        result[0].Ticker.Should().BeNull();
+        result[0].AssetName.Should().Be("Apple Inc common stock with no ticker symbol");
+    }
 }

@@ -673,6 +673,75 @@ public class HouseDisclosureClientTests {
         result.Should().Be("GOOGLE LLC - CLASS A COMMON");
     }
 
+    // ── Partial-branch fills ────────────────────────────────────────────
+
+    [Fact]
+    public void ExtractTransactionType_TextThatMatchesNeitherSaleNorPurchase_ReturnsNull() {
+        // Pins the fall-through `return null` in ExtractTransactionType. Existing
+        // pins cover only the Sale and Purchase return paths; neither evaluates
+        // the second `if (PurchaseTypeRegex().IsMatch(text))` to false. Without
+        // the fall-through, a regression that "tightens" PurchaseTypeRegex (or
+        // re-orders the two ifs) could silently classify garbage text as a
+        // Purchase by leaning on a default value.
+        var result = (CongressTransactionType?)ExtractTransactionTypeMethod.Invoke(
+            null, ["ACME WIDGETS COMMON STOCK"]);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseTransactionLines_LineWithNoAssetOrTickerAfterStrip_SkipsSilently() {
+        // Pins the both-empty short-circuit:
+        //   if (string.IsNullOrEmpty(assetName) && string.IsNullOrEmpty(ticker)) continue;
+        // Existing reflection pin has both populated, so the AND=true arm never
+        // fires. Trigger here: a House PTR line with no asset description at all
+        // — owner code + transaction type + date + amount. RemoveTrailingTransactionType
+        // strips the trailing "P", assetName becomes empty, ticker stays null,
+        // the continue fires, and no transaction is recorded. Without the
+        // guard, the row would persist with both AssetName and Ticker empty.
+        var parseTransactionLines = typeof(HouseDisclosureClient).GetMethod(
+            "ParseTransactionLines", BindingFlags.NonPublic | BindingFlags.Instance);
+        var houseFilingType = typeof(HouseDisclosureClient).GetNestedType(
+            "HouseFiling", BindingFlags.NonPublic);
+        var filing = houseFilingType.GetConstructors()[0].Invoke([
+            "Jane Doe", "20251234", new DateOnly(2025, 2, 1), "CA01"
+        ]);
+        using var httpClient = new HttpClient();
+        var client = new HouseDisclosureClient(httpClient, Substitute.For<ILogger<HouseDisclosureClient>>());
+        var lines = new[] { "SP P 01/14/2025 $1,001 - $15,000" };
+
+        var result = (List<DisclosureTransaction>)parseTransactionLines.Invoke(client, [lines, filing]);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ParseTransactionLines_AssetWithoutParenthesizedTicker_RecordsTransactionWithNullTicker() {
+        // Pins the `Ticker = ticker?.ToUpperInvariant()` null-conditional. The
+        // null arm fires when the asset description carries no parenthesized
+        // ticker — ExtractTickerFromAssetName returns null and the ticker
+        // variable stays null all the way through to the property assignment.
+        // The existing "realistic" pin always supplies "APPLE INC (AAPL)" so the
+        // ticker is never null at row-construction time.
+        var parseTransactionLines = typeof(HouseDisclosureClient).GetMethod(
+            "ParseTransactionLines", BindingFlags.NonPublic | BindingFlags.Instance);
+        var houseFilingType = typeof(HouseDisclosureClient).GetNestedType(
+            "HouseFiling", BindingFlags.NonPublic);
+        var filing = houseFilingType.GetConstructors()[0].Invoke([
+            "Jane Doe", "20251234", new DateOnly(2025, 2, 1), "CA01"
+        ]);
+        using var httpClient = new HttpClient();
+        var client = new HouseDisclosureClient(httpClient, Substitute.For<ILogger<HouseDisclosureClient>>());
+        // No parens anywhere — ExtractTickerFromAssetName regex won't match.
+        var lines = new[] { "SP APPLE INC COMMON STOCK P 01/14/2025 $1,001 - $15,000" };
+
+        var result = (List<DisclosureTransaction>)parseTransactionLines.Invoke(client, [lines, filing]);
+
+        result.Should().HaveCount(1);
+        result[0].Ticker.Should().BeNull();
+        result[0].AssetName.Should().Be("APPLE INC COMMON STOCK");
+    }
+
     [Fact]
     public void ParsePtrPdf_MalformedPdfBytes_ReturnsEmptyListWithoutThrowing() {
         // ParsePtrPdf is the only callsite that wraps `PdfDocument.Open(pdfBytes)`
