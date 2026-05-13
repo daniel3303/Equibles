@@ -44,6 +44,44 @@ public class BaseControllerTests {
     }
 
     [Fact]
+    public void GetReturnUrl_LocalUrlPostedInForm_ReturnsTheUrl() {
+        // GetReturnUrl checks the FORM body first (`Request.HasFormContentType &&
+        // Request.Form.ContainsKey("ReturnUrl")`) before falling back to the query
+        // string. The login flow relies on this: the login view renders the
+        // ReturnUrl as a hidden `<input>` and submits it via POST, so the
+        // form-body branch is the load-bearing path for "send me back where I
+        // was after authenticating." The existing GetReturnUrl_External*
+        // test only exercises the query-string-rejection branch — it leaves the
+        // form-body short-circuit AND the success-return branch (`return returnUrl;`)
+        // unverified. A refactor that drops the form check (or that flips the if/else
+        // chain order so the form branch is unreachable when a query string is also
+        // present) would silently route every post-login redirect through the
+        // fallback `RedirectToAction("Index","Home")`, breaking deep links into
+        // protected pages with no failure signal. Pin BOTH that the form branch
+        // runs AND that a confirmed-local URL is returned verbatim.
+        var sut = new TestableBaseController();
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Method = "POST";
+        httpContext.Request.ContentType = "application/x-www-form-urlencoded";
+        httpContext.Request.Form = new FormCollection(new Dictionary<string, StringValues> {
+            ["ReturnUrl"] = "/Stocks/Details/42",
+        });
+
+        var urlHelper = Substitute.For<IUrlHelper>();
+        urlHelper.IsLocalUrl(Arg.Any<string>()).Returns(callInfo => {
+            var url = callInfo.Arg<string>();
+            return !string.IsNullOrEmpty(url) && url.StartsWith("/") && !url.StartsWith("//");
+        });
+
+        sut.ControllerContext = new ControllerContext { HttpContext = httpContext };
+        sut.Url = urlHelper;
+
+        var result = sut.InvokeGetReturnUrl();
+
+        result.Should().Be("/Stocks/Details/42");
+    }
+
+    [Fact]
     public void InitSseStream_SetsContentTypeAndDisablesNginxBuffering() {
         // InitSseStream prepares a response for Server-Sent Events. The three
         // headers it sets are load-bearing: text/event-stream is the SSE
