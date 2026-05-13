@@ -245,4 +245,55 @@ public class SecHostedServiceCollectionExtensionsTests {
             d => d.ImplementationType == typeof(SecScraperWorker),
             "AddHostedService<SecScraperWorker>() must register the worker as IHostedService so the generic host runs it at startup");
     }
+
+    [Fact]
+    public void AddSecWorker_RegistersDocumentProcessorWorkerAsIHostedService() {
+        // Second sibling in the hosted-service registration family. The
+        // existing pin asserts that SecScraperWorker is registered with
+        // IHostedService. This pin asserts the same shape for
+        // DocumentProcessorWorker — the second of three hosted services
+        // AddSecWorker wires up.
+        //
+        // Why DocumentProcessorWorker uniquely matters (and why it's
+        // unreachable from the SecScraperWorker sibling):
+        //   `services.AddHostedService<T>()` is called three times in
+        //   AddSecWorker — once for SecScraperWorker, once for
+        //   DocumentProcessorWorker, and once for FtdScraperWorker. Each
+        //   call registers a SEPARATE IHostedService descriptor. The
+        //   generic host enumerates ALL IHostedService implementations
+        //   and runs each in parallel. Dropping one of the three
+        //   leaves the other two running normally — no error, no
+        //   warning, just one pipeline silently disabled.
+        //
+        // SecScraperWorker pulls EDGAR feeds (already pinned).
+        // DocumentProcessorWorker is structurally distinct: it
+        // post-processes downloaded filings — running the markdown
+        // converter, embedding generator, and chunking strategy that
+        // populate the RAG pipeline. Dropping its registration would
+        // mean filings still arrive (SecScraperWorker still runs) but
+        // they never get processed for search/embedding lookup. The
+        // dashboard's RAG search would silently return stale results
+        // (only filings processed before the regression) while looking
+        // healthy to operator inspection (the SEC ingest counters keep
+        // ticking).
+        //
+        // FtdScraperWorker (the third and final hosted-service
+        // registration) is the natural-extension target for a future
+        // iteration of this family.
+        //
+        // Lookup pattern: same as the SecScraperWorker sibling — filter
+        // IHostedService descriptors and assert one has
+        // ImplementationType == typeof(DocumentProcessorWorker).
+        var services = new ServiceCollection();
+
+        services.AddSecWorker();
+
+        var hostedServiceDescriptors = services
+            .Where(d => d.ServiceType == typeof(IHostedService))
+            .ToList();
+
+        hostedServiceDescriptors.Should().Contain(
+            d => d.ImplementationType == typeof(DocumentProcessorWorker),
+            "AddHostedService<DocumentProcessorWorker>() must register the worker as IHostedService so post-download processing runs at startup");
+    }
 }
