@@ -170,6 +170,61 @@ public class SecDocumentEnvelopeParserTests {
     }
 
     [Fact]
+    public void TryExtractPaperPdfFilename_FilenameStartingWithDotNoPathSeparators_RejectsAndReturnsFalse() {
+        // IsSafeFilename's defensive guard has three independent arms:
+        //   1. `value.Length == 0` → return false
+        //   2. `value[0] == '.'` → return false (this pin)
+        //   3. foreach `ch == '/'` or `ch == '\\'` → return false
+        // The existing path-traversal pin (`../etc/passwd.pdf`) exercises arms
+        // 2 AND 3 simultaneously: the leading dot AND the embedded slash both
+        // independently reject the filename. The Windows-backslash pin
+        // (`evil\backslash.pdf`) isolates arm 3 alone. NO existing pin isolates
+        // arm 2 — the leading-dot guard — without also tripping a path-
+        // separator check.
+        //
+        // The risk: a refactor that "tidies up" the redundant-looking
+        // `value[0] == '.'` check (under the false intuition that "leading
+        // dots only show up alongside `..` traversals, which the slash guard
+        // already catches") would compile cleanly, pass BOTH existing
+        // path-traversal pins (those have slashes), and silently let a
+        // dotfile-style filename like `.env.pdf`, `.htaccess.pdf`, or
+        // `.aws/credentials.pdf` (sans-slash variants) through into URL
+        // composition. On a server that ever served EDGAR mirror content
+        // out of a writable directory, that filename would compose to
+        //   /Archives/edgar/data/{cik}/{accession}/.env.pdf
+        // which on Apache/Nginx default configs reads from a hidden file
+        // the operator never intended to expose. SEC's own CDN isn't
+        // affected today, but the guard is defence-in-depth — the parser
+        // doesn't know who is composing the downstream URL.
+        //
+        // Pin a leading-dot filename with NO path separator characters so
+        // arm 2 fires in isolation. `.env.pdf` ends with `.pdf` (passes
+        // the EndsWith check on line 31), contains no `/` or `\\` (bypasses
+        // arm 3), and has no `..` (bypasses dot-double-dot heuristics
+        // that aren't in the guard). The only line that rejects this
+        // input is arm 2; if it disappears, this test fails.
+        var envelope = """
+            <SEC-DOCUMENT>
+            <SEC-HEADER>
+            </SEC-HEADER>
+            <DOCUMENT>
+            <TYPE>6-K
+            <SEQUENCE>1
+            <FILENAME>.env.pdf
+            <DESCRIPTION>Form 6-K
+            <TEXT>
+            </TEXT>
+            </DOCUMENT>
+            </SEC-DOCUMENT>
+            """;
+
+        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(envelope, out var filename);
+
+        success.Should().BeFalse();
+        filename.Should().BeEmpty();
+    }
+
+    [Fact]
     public void TryExtractPaperPdfFilename_EnvelopeWrappingPdfDocument_ReturnsFilename() {
         var envelope = """
             <SEC-DOCUMENT>
