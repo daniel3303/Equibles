@@ -181,6 +181,47 @@ public class EnvAuthHandlerTests {
     }
 
     [Fact]
+    public async Task HandleAuthenticateAsync_AuthEnabledWithInvalidCookie_FailsWithInvalidSession() {
+        // Third sibling in the HandleAuthenticateAsync branch family. Covers branch 3:
+        // IsEnabled, cookie present but does NOT match the expected token → Fail("Invalid session").
+        //
+        // The Fail message distinction between "Not authenticated" (no cookie, branch 2)
+        // and "Invalid session" (wrong cookie, this branch) is operator-visible: log
+        // queries that filter by failure reason distinguish "user never logged in" from
+        // "user's session expired or the secret rotated." Operator runbooks branch on
+        // this distinction — pin both messages so a swap between branches is caught.
+        //
+        // The risk this asymmetric pin catches: a refactor that drops the
+        // `!ConstantTimeEquals(cookie, expectedToken)` check (or inverts it) would let
+        // any non-empty cookie value succeed as authenticated, bypassing the session-
+        // token check entirely. The branch-2 pin can't catch this — it has no cookie
+        // at all, so the cookie-check branch never fires. Without this pin, an attacker
+        // could send `Cookie: EnvAuth=anything` and authenticate as the configured user.
+        //
+        // Construction: enable auth (Username + Password), attach a cookie with a
+        // bogus value. The header form is `Cookie: EnvAuth=invalid-token-value`.
+        // DefaultHttpContext.Request.Cookies parses this header into the collection
+        // the handler reads via Request.Cookies[SchemeName].
+        var authSettings = Options.Create(new AuthSettings {
+            Username = "admin",
+            Password = "secret123",
+        });
+        var schemeOptions = Substitute.For<IOptionsMonitor<AuthenticationSchemeOptions>>();
+        schemeOptions.Get(Arg.Any<string>()).Returns(new AuthenticationSchemeOptions());
+        var sut = new EnvAuthHandler(schemeOptions, NullLoggerFactory.Instance, UrlEncoder.Default, authSettings);
+
+        var scheme = new AuthenticationScheme(EnvAuthHandler.SchemeName, EnvAuthHandler.SchemeName, typeof(EnvAuthHandler));
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Headers["Cookie"] = $"{EnvAuthHandler.SchemeName}=tampered-session-token";
+        await sut.InitializeAsync(scheme, httpContext);
+        var result = await sut.AuthenticateAsync();
+
+        result.Succeeded.Should().BeFalse();
+        result.Failure.Should().NotBeNull();
+        result.Failure!.Message.Should().Be("Invalid session");
+    }
+
+    [Fact]
     public void ConstantTimeEquals_NullAndEmpty_ReturnsTrue() {
         // Both null and empty hash to the same value because the implementation
         // coalesces null to "" before hashing
