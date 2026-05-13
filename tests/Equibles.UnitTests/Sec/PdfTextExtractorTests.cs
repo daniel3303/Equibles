@@ -21,6 +21,25 @@ public class PdfTextExtractorTests {
     }
 
     [Fact]
+    public void Extract_EmptyBytes_ReturnsEmptyWithoutLogging() {
+        // The guard at the top of Extract short-circuits on BOTH null and
+        // Length == 0. Without the Length == 0 branch, an empty byte[] would
+        // reach PdfPig, throw, hit the catch handler, and log a warning on
+        // every empty filing artifact. Pin the silent early-return so a
+        // refactor that simplifies the guard to `pdfBytes == null` surfaces
+        // as log spam in the warning-count assertion below.
+        var logger = Substitute.For<ILogger<PdfTextExtractor>>();
+        var sut = new PdfTextExtractor(logger);
+
+        var result = sut.Extract([]);
+
+        result.Should().BeEmpty();
+        logger.ReceivedCalls()
+            .Any(c => c.GetMethodInfo().Name == "Log")
+            .Should().BeFalse();
+    }
+
+    [Fact]
     public void Extract_NullBytes_ReturnsEmptyWithoutLogging() {
         // Extract is called from the SEC paper-PDF fallback in DocumentScraper:
         // when SecDocumentEnvelopeParser locates a PDF filename but the artifact
