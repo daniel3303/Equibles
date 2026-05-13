@@ -43,6 +43,52 @@ public class SenateDisclosureClientTests {
     }
 
     [Fact]
+    public void ParseReportRow_ValidRowWithRelativeUrl_ReturnsReportWithBaseUrlPrepended() {
+        // The two existing pins (cross-origin absolute URL, paper-filing path) are
+        // both REJECTION paths — they prove ParseReportRow refuses bad inputs. Neither
+        // proves the method actually ACCEPTS well-formed inputs. A regression that
+        // returned null unconditionally would compile cleanly, pass both rejection
+        // siblings, and silently halve the Senate disclosure pipeline (every report
+        // is rejected → reports list stays empty → no transactions imported). The
+        // failure mode is invisible: no exception, no error log, just zero new
+        // Senate trades appearing in the database.
+        //
+        // Pin the acceptance branch with the realistic shape Senate eFD actually
+        // returns: a relative URL that must be prefixed with BaseUrl, a valid
+        // submitted-date, and a non-empty first/last name. The assertion uses
+        // dynamic property access because SenateReport is a private nested record
+        // — the existing tests assert .Should().BeNull() which doesn't expose
+        // SenateReport's surface, so dynamic is the minimal-surface way to
+        // assert on the returned report's fields without leaking the private
+        // type into test code.
+        //
+        // The three field assertions cover the three derivations the method
+        // performs: name composition (first + " " + last), URL prefixing
+        // (BaseUrl + relative path), and date parsing (DateOnly.TryParse).
+        // Together with the two rejection siblings, ParseReportRow's contract
+        // is fully pinned: rejects cross-origin, rejects paper, accepts valid
+        // electronic Senate filings.
+        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var row = new List<string> {
+            "Jane",
+            "Doe",
+            "filed",
+            "<a href=\"/search/view/ptr/abc-123/\">link</a>",
+            "2024-01-15",
+        };
+
+        var result = ParseReportRowMethod.Invoke(sut, [row]);
+
+        result.Should().NotBeNull();
+        var resultType = result.GetType();
+        ((string)resultType.GetProperty("MemberName").GetValue(result)).Should().Be("Jane Doe");
+        ((string)resultType.GetProperty("ReportUrl").GetValue(result))
+            .Should().Be("https://efdsearch.senate.gov/search/view/ptr/abc-123/");
+        ((DateOnly)resultType.GetProperty("DateSubmitted").GetValue(result))
+            .Should().Be(new DateOnly(2024, 1, 15));
+    }
+
+    [Fact]
     public void ParseReportRow_PaperFilingUrl_ReturnsNull() {
         // Senate disclosures come in two flavours: HTML electronic filings (parseable) and
         // scanned-PDF "paper" filings (unparseable). ParseReportRow skips paper filings by
