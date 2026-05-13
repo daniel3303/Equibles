@@ -51,6 +51,46 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
+    public void ParseBool_DigitZero_ReturnsFalseViaImplicitDefaultArm() {
+        // Sibling pin to ParseBool_DigitOne_ReturnsTrue. The existing pin establishes
+        // that "1" maps to true via the four-arm `is "1" or "true" or "True" or "TRUE"`
+        // pattern match. This pin establishes that "0" — the explicit-negative encoding
+        // SEC Form 4 XML uses to indicate "not a director/officer/10%-owner" — maps to
+        // false via the implicit default arm (the pattern match falls through to false
+        // for anything not in the four-literal allowlist).
+        //
+        // The risk this catches is asymmetric and unreachable from the digit-1 sibling:
+        //   • A refactor that "simplifies" the predicate to `value != "0"` (intuitive
+        //     to anyone reading the SEC schema, where the entire ecosystem treats "1"
+        //     and "0" as the only two values) would compile cleanly, pass the digit-1
+        //     pin ("1" != "0" → true ✓), AND silently flip every other string-shaped
+        //     value to true — including "false" itself, the lowercase "true" siblings,
+        //     and any empty/unparseable XML text node. Every <isOfficer>false</isOfficer>
+        //     in non-conforming filer output would suddenly classify the reporter as an
+        //     officer, polluting the officer-purchase-cluster alerting pipeline with
+        //     false positives for non-officer filers.
+        //   • A swap-with-default-true regression (someone defaults to true on parse
+        //     failure under the assumption "if in doubt, surface the role") would
+        //     produce the same symptom: every <isDirector>0</isDirector> would
+        //     register the filer as a director, polluting the directors-buying
+        //     dashboard with retail and 10%-owner traffic.
+        //
+        // The "0" digit is the COMPLEMENT of the existing pin's "1" digit — both are
+        // the canonical SEC XML encoding for boolean section-16 role flags, and they
+        // appear with roughly equal frequency in production XML (every filing has
+        // exactly one is*=1 set and three is*=0 set, since reporters are usually only
+        // ONE of director/officer/10%-owner/other). Together, the two pins prove that
+        // the predicate handles both halves of the canonical encoding correctly —
+        // a much stronger guarantee than the digit-1 pin alone.
+        //
+        // Assert that "0" produces false. A regression that flipped this would surface
+        // immediately here.
+        var result = (bool)ParseBoolMethod.Invoke(null, ["0"]);
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
     public void ParseLong_DecimalString_FallsBackToParseDecimalAndTruncates() {
         // SEC Form 4 XML routinely reports fractional share counts in transactionShares
         // and sharesOwnedFollowingTransaction — partial RSU vests, dividend reinvestments,
