@@ -316,4 +316,51 @@ public class InsiderTradingFilingProcessorTests {
 
         result.Should().Be(TransactionCode.Exercise);
     }
+
+    [Fact]
+    public void ParseTransactionCode_TaxPaymentCodeF_ReturnsTaxPayment() {
+        // Seventh pin in the ParseTransactionCode family. Existing pins cover
+        // P/Purchase, S/Sale, A/Award, _/Other, M/Conversion, and X/Exercise.
+        // This pin covers `F => TransactionCode.TaxPayment` — payment of
+        // tax-withholding obligations on a vested RSU/PSU grant by surrendering
+        // shares back to the issuer.
+        //
+        // F is critically distinct from S (Sale) on the analytics surface
+        // even though both describe a share-OUT event:
+        //   • S = open-market or private sale — the executive received cash
+        //     and chose to liquidate. Signal value: HIGH (executive
+        //     confidence / cash needs).
+        //   • F = tax-withholding sell-back — the executive did NOT choose
+        //     to sell; the company sold shares to fund payroll-tax
+        //     withholding on a vesting event. Signal value: NONE (purely
+        //     mechanical, happens to every vest no matter the executive's
+        //     view on the stock).
+        // Mixing the two corrupts the "insider selling pressure" indicator
+        // that powers the public-site dashboard and the alerting pipeline.
+        // Every vesting event would inflate the apparent selling signal,
+        // pushing the "insiders are selling" flag on for routine
+        // compensation events.
+        //
+        // The risk this catches is the FOR-tax-withholding misclassification
+        // — a refactor that "consolidates F into S" (under the false intuition
+        // that both describe outflows from the executive) would compile,
+        // pass the existing P/S/A/M/X/default pins, and silently flip every
+        // tax-withholding row into the high-signal Sale bucket. The
+        // signal-to-noise ratio of the insider-selling dashboard would
+        // tank: ~30-50% of all S rows in the corpus would now be
+        // mechanical tax events misclassified as discretionary sales.
+        //
+        // The complementary risk: collapsing F into Other (the default
+        // arm) would silently bucket tax-payment events as
+        // uncategorized, losing the ability to filter THEM OUT of selling
+        // analytics — same end state but reached via a different
+        // simplification mistake.
+        //
+        // Pin uppercase "F". ParseTransactionCode normalizes via
+        // ToUpperInvariant before matching but the canonical wire form
+        // from SEC EDGAR is always uppercase.
+        var result = (TransactionCode)ParseTransactionCodeMethod.Invoke(null, ["F"]);
+
+        result.Should().Be(TransactionCode.TaxPayment);
+    }
 }
