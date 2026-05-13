@@ -22,6 +22,7 @@ using Equibles.Holdings.Repositories;
 using Equibles.InsiderTrading.Data;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Media.Data;
+using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Web.Controllers;
@@ -467,6 +468,57 @@ public class StocksControllerTests : IDisposable {
         var result = await controller.Price("aapl");
 
         result.Should().BeOfType<ViewResult>();
+    }
+
+    // ── ShowDocument (cross-ticker guard) ───────────────────────────────
+
+    [Fact]
+    public async Task ShowDocument_TickerInUrlDoesNotMatchDocumentStockTicker_ReturnsNotFound() {
+        // ShowDocument routes documents via `~/Stocks/{ticker}/Documents/{id:guid}`.
+        // The `{id:guid}` is sufficient on its own to uniquely identify the
+        // document — `{ticker}` is decorative for URL aesthetics. That makes
+        // the cross-check inside the action load-bearing:
+        //   if (!string.Equals(document.CommonStock.Ticker, ticker,
+        //                      StringComparison.OrdinalIgnoreCase)) return NotFound();
+        // Without this guard, ANY ticker substituted into the URL would render
+        // the same document — e.g. /Stocks/MSFT/Documents/<some-AAPL-doc-guid>
+        // would surface AAPL's 10-K under a Microsoft-branded page. The leak is
+        // invisible to the user: the document content renders normally, only
+        // the breadcrumb ticker differs. Anyone with a document GUID could
+        // mint a misleading URL — particularly damaging when shared, since
+        // the `{ticker}` segment is what social/search previews emphasise.
+        //
+        // The check has no integration sibling: every existing StocksController
+        // test exercises Index / Price / Show-redirect, and none exercise the
+        // ShowDocument action at all. A regression that "simplified" the guard
+        // away — e.g. by inlining a `LoadStock(ticker)` call and trusting
+        // EF to filter — would compile, pass every other test, and silently
+        // open the leak.
+        //
+        // Pin: seed a Document attached to AAPL, request it under the MSFT
+        // ticker, assert the response is NotFound (not the document view).
+        // The InMemory provider doesn't lazy-load `Document.CommonStock`, but
+        // the seed sets the navigation property explicitly AND the same
+        // DbContext is shared between seed and controller, so EF's change
+        // tracker returns the same instance with `CommonStock` already
+        // populated — mirroring what production's lazy-loading proxy yields.
+        var owningStock = SeedStock("AAPL", "Apple Inc.");
+        var document = new Document {
+            Id = Guid.NewGuid(),
+            CommonStockId = owningStock.Id,
+            CommonStock = owningStock,
+            ContentId = Guid.NewGuid(),
+            DocumentType = DocumentType.TenK,
+            ReportingDate = new DateOnly(2024, 1, 1),
+            ReportingForDate = new DateOnly(2023, 12, 31),
+        };
+        _dbContext.Set<Document>().Add(document);
+        await _dbContext.SaveChangesAsync();
+        var controller = CreateController();
+
+        var result = await controller.ShowDocument("MSFT", document.Id);
+
+        result.Should().BeOfType<NotFoundResult>();
     }
 }
 
