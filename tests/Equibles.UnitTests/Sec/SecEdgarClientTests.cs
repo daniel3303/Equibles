@@ -338,4 +338,88 @@ public class SecEdgarClientTests {
 
         delay.Should().Be(TimeSpan.FromSeconds(8));
     }
+
+    [Fact]
+    public void FilterFilings_DocumentTypeSpecified_ReturnsOnlyMatchingFormViaGetFormNameMapping() {
+        // First pin in the FilterFilings family. SecEdgarClient.FilterFilings is the
+        // private static three-clause AND filter that GetCompanyFilings applies to
+        // SEC's per-CIK filing list:
+        //   return filings.Where(f =>
+        //       (!documentType.HasValue || f.Form == documentType.Value.GetFormName()) &&
+        //       (!fromDate.HasValue || f.FilingDate >= fromDate.Value) &&
+        //       (!toDate.HasValue || f.FilingDate <= toDate.Value)
+        //   ).ToList();
+        // The DocumentScraper layer composes this filter for every (company, form-type)
+        // pair it sweeps — every 10-K, 10-Q, 8-K, 20-F, 6-K, 40-F, and Form 3/4 sweep
+        // round-trips through this single line of code. A regression here silently
+        // breaks the entire SEC ingest layer.
+        //
+        // Existing pins in this file cover GetRetryDelay, FormatCik, and GetDocumentUrl.
+        // None exercises FilterFilings — the three private-static parsers
+        // (ParseCompaniesFromResponse, MapToFilingData, FilterFilings) at the bottom
+        // of the file are uncovered by every existing unit test.
+        //
+        // The risks this pin catches:
+        //
+        //   • Comparison-operator regression: `f.Form == documentType.Value.GetFormName()`
+        //     swapped for `!=` would invert the filter, returning EVERY filing EXCEPT
+        //     the requested form type. The DocumentScraper would skip every 10-K row
+        //     while flooding the database with 6-K / 4 / 8-K rows it didn't ask for —
+        //     compounded across every CIK sweep. The data corruption is invisible
+        //     past the point a per-CIK row count check would catch (which the
+        //     scraper doesn't do).
+        //
+        //   • Short-circuit-arm inversion: `!documentType.HasValue` flipped to
+        //     `documentType.HasValue` would silently REJECT every filing when no
+        //     filter is applied (the GetCompanyFilings overload with documentType=null
+        //     would return empty). DocumentScraper's "fetch all forms" path would
+        //     silently halt.
+        //
+        //   • Drop GetFormName: replacing `documentType.Value.GetFormName()` with
+        //     `documentType.Value.ToString()` would compile cleanly — `ToString()`
+        //     on the enum returns "TenK" while `f.Form` is "10-K". Every filing
+        //     would be filtered out because no Form string ever equals "TenK". This
+        //     is the SEC-display-name vs C#-identifier asymmetry the GetFormName
+        //     extension was specifically introduced to handle.
+        //
+        // The existing GetFormName method (`DocumentTypeExtensions`) maps each
+        // DocumentTypeFilter enum value through its [Display(Name = "...")]
+        // attribute, so:
+        //   • TenK   → "10-K"
+        //   • TenQ   → "10-Q"
+        //   • EightK → "8-K"
+        //   • FormFour → "4"
+        //   ...
+        // The Form column in SEC's response uses the display-name form ("10-K",
+        // not "TenK"). Without GetFormName(), the comparison degenerates to
+        // mis-cased C# enum identifiers.
+        //
+        // Construction: build a mixed-form filing list (10-K, 10-Q, 8-K) and
+        // call FilterFilings with documentType=TenK. Assert ONLY the 10-K
+        // filing is returned (not the 10-Q with the substring overlap, not
+        // the 8-K with a different prefix). The single-record assertion
+        // distinguishes:
+        //   • Working ==: returns the one 10-K filing.
+        //   • Inverted !=: returns the 10-Q + 8-K (2 records, neither matching).
+        //   • Drop GetFormName: returns 0 records (no Form == "TenK").
+        //   • Drop the whole clause: returns all 3 records.
+        //
+        // Use reflection on the private static method, matching the style of
+        // the other test helpers in this file. Pass empty AccessionNumber/Cik
+        // strings — only Form matters for this assertion.
+        var filterFilingsMethod = typeof(SecEdgarClient)
+            .GetMethod("FilterFilings", BindingFlags.NonPublic | BindingFlags.Static);
+        var filings = new List<Equibles.Integrations.Sec.Models.FilingData> {
+            new() { Form = "10-K", AccessionNumber = "0001-10K", Cik = "320193" },
+            new() { Form = "10-Q", AccessionNumber = "0002-10Q", Cik = "320193" },
+            new() { Form = "8-K",  AccessionNumber = "0003-8K",  Cik = "320193" }
+        };
+
+        var result = (List<Equibles.Integrations.Sec.Models.FilingData>)filterFilingsMethod.Invoke(
+            null,
+            [filings, Equibles.Integrations.Sec.Models.DocumentTypeFilter.TenK, null, null]);
+
+        result.Should().ContainSingle()
+            .Which.Form.Should().Be("10-K");
+    }
 }
