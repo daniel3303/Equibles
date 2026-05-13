@@ -85,4 +85,26 @@ public class HeadingConversionStepTests {
 
         result.Should().NotContain("<h3>");
     }
+
+    [Fact]
+    public void PartHeadingWithArabicNumeral_DoesNotBecomeH1() {
+        // SEC 10-K filings consistently use Roman numerals for PART headings —
+        // PART I, PART II, PART III, PART IV. `IsPartHeading` enforces this by
+        // checking `firstWord.All(char.IsLetter)` AFTER stripping the "PART "
+        // prefix: "PART I" → firstWord "I" (all letters, true), "PART 1" →
+        // firstWord "1" (non-letter, false). The H1 promotion is reserved for
+        // the structural Roman-numeral PARTS only; an Arabic-numeral "PART 1"
+        // in an arbitrary filing must NOT outrank an actual PART I in the
+        // document outline. A refactor that drops `firstWord.All(char.IsLetter)`
+        // would compile cleanly and pass the existing happy-path
+        // `PartHeading_IsConvertedToH1` test, while silently double-promoting
+        // every "PART 1" / "PART 2" string in a filing — wrecking the heading
+        // hierarchy that downstream consumers (chunk-by-heading,
+        // table-of-contents extraction) depend on. Pin the rejection with
+        // an Arabic-numeral input; the existing uppercase fallback still
+        // turns it into an H3, but never an H1.
+        var result = Execute("<div><span>PART 1</span></div>");
+
+        result.Should().NotContain("<h1>");
+    }
 }
