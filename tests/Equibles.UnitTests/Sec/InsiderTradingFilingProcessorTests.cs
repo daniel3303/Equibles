@@ -94,6 +94,40 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
+    public void ParseTransactionCode_AwardCodeA_ReturnsAward() {
+        // Third sibling in the ParseTransactionCode family (after P→Purchase and
+        // s→Sale). Award (`A`) is the single highest-volume code in the entire SEC
+        // Form 4 corpus — every quarterly RSU vest, every executive performance
+        // grant, every annual director-compensation award flows through it. By
+        // count, Awards typically outnumber Purchases AND Sales combined in the
+        // production InsiderTransaction table.
+        //
+        // The risk this catches is asymmetric and unreachable from the P/S
+        // siblings: a regression that breaks only the A arm — e.g. a copy-paste
+        // edit that changes `"A" => TransactionCode.Award` to
+        // `"A" => TransactionCode.Other` (or shifts the line out of the switch
+        // entirely during a "tidy-up alphabetical order" refactor) — would
+        // compile cleanly, pass the existing P and s pins, and silently break
+        // the entire awards pipeline. The downstream consequences are concrete:
+        //
+        //   • The "insider activity overview" dashboard groups by TransactionCode;
+        //     Awards would shift into Other and disappear from the "RSU vests
+        //     this quarter" view that compensation-committee analysts query.
+        //   • Cluster-detection analytics (executive-confidence scoring) rely
+        //     on distinguishing routine Awards from discretionary Purchases
+        //     to weigh purchase signal. Mis-classified Awards would inflate
+        //     the apparent Purchase signal in noisy ways.
+        //   • The CSV export bucket "Award" would silently empty out for new
+        //     filings, breaking downstream consumers of the export.
+        //
+        // Pin A → Award specifically so the highest-volume code carries its own
+        // dedicated regression check, independent of the P and S siblings.
+        var result = (TransactionCode)ParseTransactionCodeMethod.Invoke(null, ["A"]);
+
+        result.Should().Be(TransactionCode.Award);
+    }
+
+    [Fact]
     public void ParseTransactionCode_PurchaseCodeP_ReturnsPurchase() {
         // SEC Form 4 transaction codes are single letters that map to specific
         // insider-trade categories per §16 of the Exchange Act. ParseTransactionCode
