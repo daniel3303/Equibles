@@ -89,6 +89,57 @@ public class HouseDisclosureClientTests {
     }
 
     [Fact]
+    public void OwnerCodeRegex_MatchesJointCodeJT_AndCapturesOwnerCode() {
+        // Second sibling in the OwnerCodeRegex alternation family. The existing
+        // SP pin asserts the Spouse arm; this pin asserts the Joint arm — the
+        // second-most-common House PTR owner code after Self.
+        //
+        // Why JT specifically (and why it's unreachable from the SP sibling):
+        //   OwnerCodeRegex is `^(SP|JT|DC|Self)\b` with case-insensitive matching.
+        //   Each alternative is INDEPENDENTLY load-bearing — the regex engine
+        //   short-circuits on the FIRST successful alternative, so the SP arm
+        //   only ever fires for SP inputs. A regression that drops the JT arm
+        //   (e.g. "let me reorder the alternation by frequency and drop the
+        //   middle one by mistake" — a real refactor pattern) would compile
+        //   cleanly, pass the SP pin (the input is "SP ...", SP arm fires),
+        //   pass the ExtractTransactionType and RemoveTrailingTransactionType
+        //   pins (they don't use OwnerCodeRegex), and silently drop every
+        //   joint-attributed trade from the House PTR import.
+        //
+        // The production analog is concrete: ParseTransactionLines walks every
+        // PDF line, the OwnerCodeRegex match is the gate for "is this line a
+        // transaction row?" If JT lines fail the gate, the entire row is
+        // dropped — no error, no log warning, just missing data. Joint accounts
+        // are the standard structure for House members who trade through
+        // shared marital brokerage accounts (the default ethics structure for
+        // dual-income households), so dropping JT silently erases the dominant
+        // owner-code population for married members.
+        //
+        // The semantic distinction between SP and JT matters downstream:
+        //   • SP (Spouse) — trade is in the spouse's account only. Member has
+        //     no direct economic interest; reportable but typically excluded
+        //     from "member's personal trading" influence-analytics.
+        //   • JT (Joint) — trade is in a shared account; member shares the
+        //     economic position 50/50 (or similar). Counts toward the member's
+        //     personal trading attribution.
+        // Misclassifying JT as SP (or dropping JT entirely) flips the
+        // influence-analytics signal for every joint-attributed position.
+        //
+        // Pin uppercase "JT" (canonical case the PDFs emit) and assert both
+        // Success AND the capture group value is exactly "JT". The dual
+        // assertion proves (a) the alternation arm matched and (b) the
+        // capture-group structure is intact — a refactor that changed
+        // `(SP|JT|DC|Self)` to `(?:SP|JT|DC|Self)` non-capturing would still
+        // match but would fail `Groups[1].Value.Should().Be("JT")`.
+        var regex = (Regex)OwnerCodeRegexMethod.Invoke(null, null);
+
+        var match = regex.Match("JT TESLA INC - COMMON STOCK P 03/22/2025");
+
+        match.Success.Should().BeTrue();
+        match.Groups[1].Value.Should().Be("JT");
+    }
+
+    [Fact]
     public void ExtractTransactionType_PurchaseTrailingP_ReturnsPurchase() {
         // House PTRs encode purchases as a trailing bare "P" (no qualifier). The
         // PurchaseTypeRegex (`\bP\s*$`) is the only matcher for that path — if a
