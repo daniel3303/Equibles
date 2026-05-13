@@ -34,6 +34,36 @@ public class SecScraperWorkerTests {
         sut.InvokeValidateConfiguration().Should().BeFalse();
     }
 
+    [Fact]
+    public void ValidateConfiguration_SecContactEmailConfigured_ReturnsTrue() {
+        // Sibling to the false-case pin above. The risk this catches is asymmetric and
+        // unreachable from the empty-email sibling alone: a regression that hard-codes
+        // `ValidateConfiguration => false` (defensive default during a refactor, or
+        // copy-paste from a perpetually-disabled worker) passes the empty-email test
+        // and only shows up here. Without this pin, an "always-false" regression would
+        // silently disable the SEC scraper — submissions API and filings would stop
+        // importing, and the failure mode is invisible (no exception, no Warning log
+        // from the worker once it cleanly exits ExecuteAsync).
+        //
+        // SecScraperWorker is the entry point for the entire SEC pipeline (filings,
+        // ownership, insider transactions). A silent regression here breaks every
+        // downstream Sec.HostedService path. The pair (empty → false, configured → true)
+        // distinguishes a working `IsNullOrEmpty` check from BOTH inversion (caught by
+        // the false sibling) AND constant-return regressions (caught only here).
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string> {
+                ["Sec:ContactEmail"] = "equibles-bot@example.com"
+            })
+            .Build();
+        var sut = new TestableSecScraperWorker(
+            Substitute.For<ILogger<SecScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            config);
+
+        sut.InvokeValidateConfiguration().Should().BeTrue();
+    }
+
     private sealed class TestableSecScraperWorker : SecScraperWorker {
         public TestableSecScraperWorker(
             ILogger<SecScraperWorker> logger,
