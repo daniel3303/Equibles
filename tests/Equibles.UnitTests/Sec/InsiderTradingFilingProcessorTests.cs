@@ -608,4 +608,58 @@ public class InsiderTradingFilingProcessorTests {
 
         result.Should().Be(TransactionCode.Inheritance);
     }
+
+    [Fact]
+    public void ParseBool_LowercaseTrueLiteral_ReturnsTrueViaSecondArm() {
+        // Third pin in the ParseBool family. Existing pins cover the
+        // "1" arm (DigitOne) and the default-Negative arm
+        // (DigitZero → false via implicit fall-through). This pin
+        // covers the SECOND of the three string arms in
+        //   `value is "1" or "true" or "True" or "TRUE"`
+        //
+        // Why the three case-variants matter: SEC Form 4 XML's
+        // schema doesn't constrain the wire form of boolean
+        // <isDirector>/<isOfficer>/<isTenPercentOwner> elements.
+        // Different filers (and different filer agents — Workiva,
+        // Donnelley Financial, Toppan Merrill, manual EDGAR
+        // submissions) emit any of "1", "true", "True", "TRUE" in
+        // production. The four-arm matcher is the production code
+        // saying "all four forms are equally valid 'yes'." A
+        // refactor that consolidates the three string arms via
+        // `string.Equals(value, "true", OrdinalIgnoreCase)` would
+        // be functionally equivalent on the current input domain
+        // BUT lose the load-bearing distinction the case-variants
+        // signal:
+        //   • The explicit case enumeration documents which wire
+        //     forms have been observed in production. Dropping it
+        //     to a case-insensitive comparison loses that audit
+        //     trail.
+        //   • A switch to `value.ToLowerInvariant() == "true"`
+        //     introduces a string allocation per parse on every
+        //     Form 4 (every insider transaction in the database is
+        //     a parse-this-XML call). The pattern-match version
+        //     is allocation-free.
+        //
+        // The risk this pin uniquely catches: a refactor that
+        // drops the `"true"` arm specifically (under the false
+        // intuition that "we always see 1 or TRUE, never
+        // lowercase") would compile, pass DigitOne and DigitZero,
+        // and silently misclassify every Form 4 from filers that
+        // emit lowercase "true" as isDirector=false /
+        // isOfficer=false. The downstream consequence: the
+        // "directors buying" dashboard would silently drop those
+        // filers' transactions; the cluster-purchase alert
+        // pipeline would never trigger on lowercase-emitting
+        // filers.
+        //
+        // Pin lowercase "true" — the form most likely to be lost
+        // in a "we always normalize to uppercase" refactor. The
+        // True (mixed case) and TRUE (all caps) arms remain
+        // unpinned but follow the same risk profile; this is the
+        // canonical case-variant arm to test because lowercase is
+        // the most natural-looking pre-normalization form.
+        var result = (bool)ParseBoolMethod.Invoke(null, ["true"]);
+
+        result.Should().BeTrue();
+    }
 }
