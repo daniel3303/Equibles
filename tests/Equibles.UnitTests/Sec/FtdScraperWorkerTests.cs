@@ -118,6 +118,38 @@ public class FtdScraperWorkerTests {
         sut.InvokeErrorSource().Should().Be(ErrorSource.FtdScraper);
     }
 
+    [Fact]
+    public void WorkerName_IsFtdScraper() {
+        // Fourth WorkerName pin (after CBOE, Holdings, SEC filing). Completes the
+        // ErrorSource / SleepInterval / WorkerName triple for FtdScraperWorker.
+        //
+        // FtdScraperWorker is one of three workers in the Sec.HostedService
+        // namespace — sibling to SecScraperWorker ("SEC filing scraper") and
+        // DocumentProcessorWorker ("SEC document processor"). All three log to
+        // the same Serilog file. Operator runbooks split them by exact
+        // WorkerName prefix when triaging "which SEC subsystem is the source
+        // of this 429 burst?" The "FTD scraper" string is deliberately distinct
+        // from the "SEC ..." siblings (no "SEC" prefix) because the FTD data
+        // set is a separate SEC product served from a different URL than the
+        // filings APIs and produces a different shape of upstream errors.
+        //
+        // The risk: a refactor that "harmonized" the worker names by prefixing
+        // all three with "SEC" (e.g. "SEC FTD scraper") would compile cleanly,
+        // pass every existing pin, and silently break operator runbook queries
+        // that filter for the exact "FTD scraper" prefix. The dashboards
+        // tracking failure-to-deliver download cadence would silently stop
+        // updating until someone noticed the FTD chart was missing.
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string>()).Build();
+        var sut = new TestableFtdScraperWorker(
+            Substitute.For<ILogger<FtdScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            Options.Create(new FtdScraperOptions()),
+            config);
+
+        sut.InvokeWorkerName().Should().Be("FTD scraper");
+    }
+
     private sealed class TestableFtdScraperWorker : FtdScraperWorker {
         public TestableFtdScraperWorker(
             ILogger<FtdScraperWorker> logger,
@@ -132,5 +164,7 @@ public class FtdScraperWorkerTests {
         public TimeSpan InvokeSleepInterval() => SleepInterval;
 
         public ErrorSource InvokeErrorSource() => ErrorSource;
+
+        public string InvokeWorkerName() => WorkerName;
     }
 }
