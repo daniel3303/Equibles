@@ -96,6 +96,26 @@ public class FlashMessageClassTests {
     }
 
     [Fact]
+    public void Clear_DelegatesToTempDataClear_WipingAllEntriesNotJustFlashKey() {
+        // FlashMessage.Clear() calls TempData.Clear() — which wipes EVERY key in
+        // TempData, not just the flash-message entry. That semantic is load-
+        // bearing: a refactor that "narrows" it to TempData.Remove(KeyName)
+        // would silently change behavior for controllers that read other
+        // TempData entries (PRG-pattern form repopulation, return URLs).
+        // Pin the broad-clear contract so any future change must be explicit.
+        var tempData = Substitute.For<ITempDataDictionary>();
+        var factory = Substitute.For<ITempDataDictionaryFactory>();
+        factory.GetTempData(Arg.Any<HttpContext>()).Returns(tempData);
+        var sut = new FlashMessage(factory, Substitute.For<IHttpContextAccessor>(),
+            Substitute.For<IFlashMessageSerializer>());
+
+        sut.Clear();
+
+        tempData.Received(1).Clear();
+        tempData.DidNotReceiveWithAnyArgs().Remove(default);
+    }
+
+    [Fact]
     public void Retrieve_WhenEntryExists_RemovesItFromTempData() {
         var serializer = new JsonFlashMessageSerializer();
         var serialized = serializer.Serialize(new List<IFlashMessageModel> {
