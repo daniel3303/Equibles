@@ -174,6 +174,70 @@ public class EconomicDataControllerTests {
     }
 
     [Fact]
+    public void ExpandFrequency_AnnualCodeA_ReturnsAnnualViaSingleLetterArm() {
+        // Fifth pin in the ExpandFrequency family. Existing pins cover:
+        //   • BW (two-character arm)
+        //   • Q (single-letter arm — Quarterly)
+        //   • Lowercase "m" (case-normalization via ToUpperInvariant)
+        //   • Unknown code (default catch-all)
+        // The single-letter "A" arm is the LAST mapped arm in the switch
+        // expression and is still individually unpinned. The seven-arm
+        // mapped table:
+        //   "D" → Daily       (unpinned)
+        //   "W" → Weekly      (unpinned)
+        //   "BW" → Biweekly   (pinned)
+        //   "M" → Monthly     (pinned via lowercase normalization)
+        //   "Q" → Quarterly   (pinned)
+        //   "SA" → Semiannual (unpinned)
+        //   "A" → Annual      (THIS PIN)
+        //
+        // Why "A" specifically and why it's unreachable from every existing
+        // sibling pin:
+        //
+        //   • The switch is exhaustive — each arm short-circuits on the
+        //     first matching value. Existing arms (BW, Q, M) only fire on
+        //     their own inputs; an input of "A" lands in NO existing pin
+        //     directly. The default-arm pin (XYZ) doesn't exercise the "A"
+        //     arm either — it lands in `_` because "XYZ" isn't in the
+        //     allowlist.
+        //
+        //   • Production weight: FRED's annual series are the load-bearing
+        //     macro indicators for long-horizon analyses — Census Bureau
+        //     decennial-derived population estimates, BEA's national-accounts
+        //     annual aggregates (GDP-by-state, personal-income-by-state,
+        //     the historical NIPA tables that anchor every multi-year
+        //     economic comparison). The annual cadence specifically reflects
+        //     the statistical-agency publication cycle.
+        //
+        //   • A regression that drops the "A" arm specifically — most
+        //     plausibly via a "consolidate adjacent semi/annual handling"
+        //     refactor that merges "SA" and "A" into a single
+        //     `Contains("annual")` lookup or collapses to a `"S?A"`-style
+        //     pattern — would compile cleanly, pass BW/Q/m/XYZ pins, and
+        //     silently surface raw "A" in the economy show-page header
+        //     ("Frequency: A" vs "Frequency: Annual").
+        //
+        //   • A typo-class regression: `"A" => "Anual"` (single-n),
+        //     `"A" => "Yearly"` (semantically equivalent but breaks the
+        //     dashboard's exact-match label cache), or `"A" => "Annually"`
+        //     (adverb vs noun). Each compiles cleanly and passes every
+        //     existing pin — only this pin asserts the exact string
+        //     "Annual".
+        //
+        // The single-letter "A" is also structurally the asymmetric
+        // counterpart to the existing single-letter "Q" pin:
+        //   • Q is the fifth mapped arm; A is the SEVENTH (last) arm. A
+        //     regression that iterates the arms backwards or that collapses
+        //     the tail of the alternation would break the A arm first
+        //     while leaving Q untouched.
+        //   • The single-letter pair (Q + A) covers both ends of the
+        //     table.
+        var result = (string)ExpandFrequencyMethod.Invoke(null, ["A"]);
+
+        result.Should().Be("Annual");
+    }
+
+    [Fact]
     public void ExpandFrequency_UnknownCode_ReturnsRawInputUnchangedNotNormalized() {
         // Third pin in the ExpandFrequency family. Existing pins cover BW
         // (two-character) and Q (single-letter). This pin covers the
