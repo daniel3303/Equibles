@@ -1,5 +1,6 @@
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.Data.Models;
 using Equibles.Holdings.HostedService;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -90,6 +91,41 @@ public class HoldingsScraperWorkerTests {
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(24));
     }
 
+    [Fact]
+    public void ErrorSource_IsHoldingsScraper() {
+        // BaseScraperWorker tags every error it reports through ErrorReporter
+        // with this worker's `ErrorSource` value — the tag is what routes
+        // operator alerts to the right oncall dashboard and the right team.
+        // HoldingsScraperWorker reports against `ErrorSource.HoldingsScraper`;
+        // a regression that mis-classified it (a copy-paste from the
+        // sibling SEC workers would yield `DocumentScraper` or `FtdScraper`)
+        // would silently route every 13F-pipeline error into the SEC
+        // filings dashboard instead, where it would either be ignored (the
+        // SEC team sees no familiar source identifier) or drown out the
+        // genuine SEC-filing alerts. The failure mode is invisible because
+        // the error itself still reaches the database — just under the
+        // wrong owner.
+        //
+        // Siblings:
+        //   • FtdScraperWorker.ErrorSource_IsFtdScraper (PR #273)
+        //   • SecScraperWorker.ErrorSource_IsDocumentScraper (PR #274)
+        // This pin extends the ErrorSource-tagging contract to the
+        // Holdings worker — the only Sec-pipeline worker whose ErrorSource
+        // value differs from its filename root (HoldingsScraperWorker ↔
+        // ErrorSource.HoldingsScraper, but the worker lives under the SEC
+        // umbrella alongside the other ContactEmail-gated workers, so a
+        // careless harmonization is plausible).
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string>()).Build();
+        var sut = new TestableHoldingsScraperWorker(
+            Substitute.For<ILogger<HoldingsScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            Options.Create(new WorkerOptions()),
+            config);
+
+        sut.InvokeErrorSource().Should().Be(ErrorSource.HoldingsScraper);
+    }
+
     private sealed class TestableHoldingsScraperWorker : HoldingsScraperWorker {
         public TestableHoldingsScraperWorker(
             ILogger<HoldingsScraperWorker> logger,
@@ -102,5 +138,7 @@ public class HoldingsScraperWorkerTests {
         public bool InvokeValidateConfiguration() => ValidateConfiguration();
 
         public TimeSpan InvokeSleepInterval() => SleepInterval;
+
+        public ErrorSource InvokeErrorSource() => ErrorSource;
     }
 }
