@@ -38,6 +38,48 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
+    public void TryParseDateOnly_IsoFormat_ParsesViaFirstBranchNotSecFallback() {
+        // Sibling to `TryParseDateOnly_SecFormat_ReturnsExpectedDate`. The
+        // existing pin covers the SECOND parse branch — the SEC
+        // dd-MMM-yyyy `TryParseExact` fallback. This pin covers the FIRST
+        // parse branch — `DateOnly.TryParse(value, out result)` which
+        // accepts the modern ISO yyyy-MM-dd shape.
+        //
+        // The two branches matter independently because SEC's 13F-HR
+        // structured-data feed has emitted BOTH formats across its
+        // decade-plus history: the older (pre-2017) dumps use the SEC
+        // dd-MMM-yyyy form (the SEC-sibling pin's territory), and the
+        // modern (post-2017) dumps use ISO yyyy-MM-dd. The helper's two-
+        // tier strategy is designed to handle both without an explicit
+        // version flag. Drop the ISO arm — say, by "simplifying" the
+        // helper to only the TryParseExact call — and every modern
+        // quarter silently fails to import (every row's
+        // FilingDate/ReportDate becomes default, then the upstream
+        // foreach skip-on-default-date drops the rows). The failure mode
+        // is invisible: the import logs "0 new holdings" without an
+        // error.
+        //
+        // The risk this pin uniquely catches: a refactor that drops the
+        // first `DateOnly.TryParse` call and keeps only the
+        // `TryParseExact` (or vice-versa). The existing SEC-format pin
+        // wouldn't catch dropping the ISO branch — its dd-MMM-yyyy input
+        // still parses via TryParseExact. Only the ISO input distinguishes
+        // "first branch fires" from "second branch fires", and only
+        // asserting on a date that TryParseExact wouldn't recognize
+        // forces the first branch to actually run.
+        //
+        // Pin "2024-03-15" — the canonical ISO form. `DateOnly.TryParse`
+        // accepts it via the InvariantCulture short pattern. The asserted
+        // date matches the SEC-sibling assertion (same date, different
+        // wire format), so the pair lets a reviewer see at a glance that
+        // both branches converge on the same DateOnly value.
+        var success = HoldingsParsingHelper.TryParseDateOnly("2024-03-15", out var result);
+
+        success.Should().BeTrue();
+        result.Should().Be(new DateOnly(2024, 3, 15));
+    }
+
+    [Fact]
     public void ParseInvestmentDiscretion_DfndAbbreviation_ReturnsDefined() {
         // SEC 13F filings use abbreviated wire values for investment discretion:
         // "SOLE", "DFND" (defined investment discretion), and "OTR" (other). The C#
