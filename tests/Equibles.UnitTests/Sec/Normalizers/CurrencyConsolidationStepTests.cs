@@ -103,6 +103,56 @@ public class CurrencyConsolidationStepTests
     }
 
     [Fact]
+    public void CurrencyColumnPrecededByLabelColumn_StillConsolidatesCurrencyColumnOnly()
+    {
+        // Every existing pin places the currency symbol in the FIRST column (colIndex 0).
+        // Real 10-K financial-statement tables have the form:
+        //   | Label              | $   |        | 123,456 |
+        //   | Cost of goods sold | $   |        | 234,567 |
+        // i.e. a descriptive label in column 0, the $ glyph in column 1, an empty
+        // separator in column 2, and the numeric value in column 3. The consolidation
+        // loop walks every (col, col+1) pair via `for (colIndex = 0; colIndex < maxCols - 1; colIndex++)`.
+        // For (col 0, col 1) it sees ("Label", "$") — IsEmptyCell("$") is false, so
+        // nothing triggers. For (col 1, col 2) it sees ("$", "") — IsEmptyCell("") is
+        // true AND DetectCurrency("$") matches USD, so column 1 is added to
+        // columnsToProcess. The pin asserts: the label in column 0 survives, the $
+        // symbol disappears from column 1, AND the column count drops by exactly one
+        // (only the consolidated currency column is removed, not the label).
+        //
+        // The regression this catches: a refactor that pruned the outer loop to "only
+        // examine column 0" (e.g. assuming currency is always the leading column —
+        // which is what the existing tests would suggest) would compile cleanly, pass
+        // every other [Fact] in this file, and then silently leave every real SEC
+        // statement's $ column intact while emitting a misleading "All values are in
+        // US Dollars" note below an unchanged table.
+        var html = @"<html><body><table>
+  <tr><td>Revenue</td><td>$</td><td></td><td>100</td></tr>
+  <tr><td>Expenses</td><td>$</td><td></td><td>200</td></tr>
+</table></body></html>";
+
+        var doc = _parser.ParseDocument(html);
+
+        _sut.Execute(doc);
+
+        var rows = doc.QuerySelectorAll("tr");
+        foreach (var row in rows)
+        {
+            var cells = row.QuerySelectorAll("td");
+            cells.Should().HaveCount(3);
+        }
+
+        var firstRowCells = doc.QuerySelectorAll("tr").First().QuerySelectorAll("td");
+        firstRowCells[0].TextContent.Trim().Should().Be("Revenue");
+
+        var allCellTexts = doc.QuerySelectorAll("td").Select(c => c.TextContent).ToList();
+        allCellTexts.Should().NotContain(t => t.Contains("$"));
+
+        var note = doc.QuerySelector("table + p em");
+        note.Should().NotBeNull();
+        note.TextContent.Should().Be("All values are in US Dollars.");
+    }
+
+    [Fact]
     public void CurrencySymbolIsRemovedFromConsolidatedText()
     {
         var html = @"<html><body><table>
