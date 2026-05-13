@@ -34,4 +34,38 @@ public class YahooPriceImportServiceTests {
 
         result.Should().BeTrue();
     }
+
+    [Fact]
+    public void HasOverflowPrice_AllFieldsWithinNumericCeiling_ReturnsFalse() {
+        // Sibling to the overflow-true pin above. The risk this catches is
+        // asymmetric and unreachable from the existing sibling: a regression
+        // that hard-codes `HasOverflowPrice => true` (defensive default during
+        // a refactor, or copy-paste from an "always-filter" path) passes the
+        // overflow-case test and only shows up here. Without this pin, an
+        // "always-true" regression silently filters EVERY price quote out of
+        // every batch — all Yahoo imports would import zero rows per cycle,
+        // and the failure mode is invisible because HasOverflowPrice doesn't
+        // log (the filter is applied silently inside a LINQ Where on a per-
+        // row basis). Operators discover days later when historical-price
+        // dashboards show flatlines on every active ticker.
+        //
+        // The pair (overflow → true, normal → false) distinguishes a working
+        // OR-chain from BOTH negation (`Math.Abs(p.Open) <= MaxPriceValue ||
+        // ...` → normal-case returns true, caught here) AND constant-true
+        // collapse (also caught here). Use realistic stock-price magnitudes
+        // (sub-$10K) far inside the numeric(18,4) ceiling so a refactor that
+        // tightened the threshold by a factor of 10⁹ or 10¹⁰ (still wildly
+        // above realistic prices) wouldn't accidentally trigger.
+        var price = new HistoricalPrice {
+            Open = 150.25m,
+            High = 152.80m,
+            Low = 149.10m,
+            Close = 151.45m,
+            AdjustedClose = 151.45m
+        };
+
+        var result = (bool)HasOverflowPriceMethod.Invoke(null, [price]);
+
+        result.Should().BeFalse();
+    }
 }
