@@ -77,6 +77,28 @@ public class FredScraperWorkerTests {
         sut.InvokeValidateConfiguration().Should().BeTrue();
     }
 
+    [Fact]
+    public void Constructor_AppliesSleepIntervalHoursFromOptionsAsTimeSpanHours() {
+        // FredScraperWorker reads FredScraperOptions.SleepIntervalHours
+        // (inherited from ScraperOptions, default 24h) and stores it as a
+        // TimeSpan via FromHours. FRED economic series update on varying
+        // cadences (daily fed-funds, monthly CPI/unemployment, quarterly
+        // GDP), so the 24h default polls often enough to catch the slowest
+        // important series. A refactor that swaps FromHours for FromMinutes
+        // (or drops the options read in favor of a hardcoded value) would
+        // either burn the FRED API budget or silently stretch the polling
+        // window to 24 days. Pin the unit conversion so the regression
+        // surfaces here.
+        var options = Options.Create(new FredScraperOptions { SleepIntervalHours = 6 });
+        var sut = new TestableFredScraperWorker(
+            Substitute.For<ILogger<FredScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            options);
+
+        sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(6));
+    }
+
     private sealed class TestableFredScraperWorker : FredScraperWorker {
         public TestableFredScraperWorker(
             ILogger<FredScraperWorker> logger,
@@ -86,5 +108,7 @@ public class FredScraperWorkerTests {
             : base(logger, scopeFactory, errorReporter, options) { }
 
         public bool InvokeValidateConfiguration() => ValidateConfiguration();
+
+        public TimeSpan InvokeSleepInterval() => SleepInterval;
     }
 }
