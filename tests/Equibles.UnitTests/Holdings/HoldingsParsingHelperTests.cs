@@ -101,6 +101,54 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
+    public void ParseInvestmentDiscretion_SoleAbbreviation_ReturnsSoleViaExplicitArmNotDefault() {
+        // Complement to ParseInvestmentDiscretion_UnrecognizedValue_FallsBackToSoleNotOther.
+        // The recent default-arm pin asserts that UNKNOWN input falls through to Sole.
+        // This pin asserts that the EXPLICIT "SOLE" arm also returns Sole — distinct
+        // assertion at a structurally distinct source line.
+        //
+        // Why both pins are needed when they return the same enum value:
+        //   The switch source is `"SOLE" => Sole, "DFND" => Defined, "OTR" => Other, _ => Sole`.
+        //   The "SOLE" named arm and the `_ => Sole` default arm BOTH return Sole. Two
+        //   distinct regression classes apply, each caught by a different pin:
+        //
+        //   1. DROP regression — someone removes the named "SOLE" arm under the
+        //      reasoning "SOLE falls through to the default anyway, so the explicit
+        //      arm is redundant". This compiles and behaves identically: every input
+        //      flows through the same path. The default-arm pin (passes) and this
+        //      pin (still passes — SOLE input → default → Sole) BOTH pass. So a
+        //      pure DROP is not detectable from either pin alone or together.
+        //      This is fine: a pure drop is behavior-preserving and not a regression
+        //      to catch.
+        //
+        //   2. SWAP regression — someone changes the named "SOLE" arm's mapping to
+        //      a wrong enum value (e.g. `"SOLE" => Defined` from a copy-paste edit
+        //      that touched the wrong line, or `"SOLE" => Other` from a "consolidate
+        //      with OTR" refactor). This compiles and changes behavior ONLY for the
+        //      "SOLE" input — everything else still hits its own arm or the default.
+        //      The default-arm pin (UNKNOWN input) PASSES because the default is
+        //      untouched. The DFND and OTR sibling pins PASS because they target
+        //      their own arms. Only an explicit "SOLE" → Sole pin fails on this
+        //      swap, because only this pin exercises the corrupted arm.
+        //
+        //   So the swap regression — the ONE meaningful refactor risk that the
+        //   default-arm pin doesn't catch — requires this complementary pin to
+        //   surface in CI.
+        //
+        // The production analog: "SOLE" is the dominant wire value (>80% of 13F
+        // positions per SEC aggregate stats). Silently flipping every SOLE-
+        // discretion filing to a wrong enum value would corrupt the largest
+        // population of holdings — the manager-control attribution that drives
+        // the holdings dashboard's "fully controlled by filer" filter.
+        //
+        // Pin "SOLE" (uppercase, the literal wire encoding) and assert the
+        // exact enum value Sole. A swap to any other enum value surfaces here.
+        var result = HoldingsParsingHelper.ParseInvestmentDiscretion("SOLE");
+
+        result.Should().Be(InvestmentDiscretion.Sole);
+    }
+
+    [Fact]
     public void ParseInvestmentDiscretion_OtrAbbreviation_ReturnsOther() {
         // Sibling to `ParseInvestmentDiscretion_DfndAbbreviation_ReturnsDefined`.
         // Existing pin covers the DFND arm. This pin covers the OTR arm,
