@@ -41,4 +41,24 @@ public class EmbeddingClientTests {
 
         result.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task GenerateEmbedding_DisabledConfig_ReturnsNullForwardingFromBatchedShortCircuit() {
+        // GenerateEmbedding(string) is a thin wrapper that calls
+        // GenerateEmbeddings([text]).FirstOrDefault(). When the config is
+        // disabled, the batched call short-circuits to an empty list, and
+        // FirstOrDefault on an empty sequence returns null. Pin the null
+        // forwarding so a refactor that "simplifies" GenerateEmbedding to a
+        // direct HTTP call (skipping the batched method and its config
+        // guard) surfaces here rather than as a NullReferenceException
+        // downstream when GetEmbeddingDimension dereferences the float[].
+        var httpFactory = Substitute.For<IHttpClientFactory>();
+        httpFactory.CreateClient(Arg.Any<string>()).Returns(new HttpClient());
+        var config = Options.Create(new EmbeddingConfig { Enabled = false });
+        var sut = new EmbeddingClient(httpFactory, config, Substitute.For<ILogger<EmbeddingClient>>());
+
+        var result = await sut.GenerateEmbedding("any text");
+
+        result.Should().BeNull();
+    }
 }
