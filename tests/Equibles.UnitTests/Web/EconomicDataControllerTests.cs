@@ -96,4 +96,55 @@ public class EconomicDataControllerTests {
 
         result.Should().Be("Quarterly");
     }
+
+    [Fact]
+    public void ExpandFrequency_UnknownCode_ReturnsRawInputUnchangedNotNormalized() {
+        // Third pin in the ExpandFrequency family. Existing pins cover BW
+        // (two-character) and Q (single-letter). This pin covers the
+        // CATCH-ALL `_ => frequency` arm — the default that fires when
+        // FRED emits a code outside the seven-arm whitelist.
+        //
+        // The default arm is structurally distinct in two ways from every
+        // mapped arm:
+        //
+        // 1) Return shape: every mapped arm returns a STATIC LITERAL
+        //    ("Daily", "Weekly", ...); the default returns the ORIGINAL
+        //    `frequency` parameter (NOT the normalized
+        //    `?.Trim().ToUpperInvariant()` form used for matching). That
+        //    asymmetry is load-bearing — if a future FRED data set
+        //    introduces, say, "10Y" or "M2" as a frequency code, the
+        //    show page renders whatever the upstream emitted rather than
+        //    losing the value to an empty string or "Unknown" sentinel.
+        //    Operators viewing the page can read the literal upstream
+        //    code and recognize "FRED added a new cadence we haven't
+        //    mapped yet" — a self-documenting failure.
+        //
+        // 2) Whitespace and case preservation: the switch selector
+        //    normalizes via `?.Trim().ToUpperInvariant()`, but the default
+        //    arm returns the un-normalized input. A regression that
+        //    "tidied up" the default to return the normalized form (e.g.
+        //    `_ => frequency?.Trim().ToUpperInvariant() ?? frequency`)
+        //    would compile, pass both existing pins (BW and Q are already
+        //    in their canonical upper-trimmed form), and silently start
+        //    stripping operator-visible diagnostic context — original-case
+        //    "wEekLy" wire forms (suggesting an upstream parser bug) would
+        //    surface as "WEEKLY" instead, masking the bug.
+        //
+        // The risk this pin uniquely catches: a refactor that adds an
+        // "Unknown" sentinel return for the default arm — under the false
+        // intuition that "unmapped codes shouldn't leak the raw input to
+        // operators" — would compile, pass every mapped-arm pin, and break
+        // the documented self-diagnostic contract. The literal upstream
+        // code is exactly what an operator needs to file an issue against
+        // FRED-mapping.
+        //
+        // Pin a non-whitespace, non-empty unknown code that's NOT in any
+        // mapped arm. "XYZ" works — three uppercase letters, no overlap
+        // with any FRED code. The pin asserts (a) the default arm fires
+        // (no exception thrown, no null returned) AND (b) the input is
+        // returned verbatim.
+        var result = (string)ExpandFrequencyMethod.Invoke(null, ["XYZ"]);
+
+        result.Should().Be("XYZ");
+    }
 }
