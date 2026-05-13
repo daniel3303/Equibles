@@ -487,4 +487,65 @@ public class SecEdgarClientTests {
         result.Should().HaveCount(2);
         result.Select(f => f.AccessionNumber).Should().BeEquivalentTo(["0002", "0003"]);
     }
+
+    [Fact]
+    public void FilterFilings_ToDateSpecified_ExcludesAfterAndIncludesOnOrBeforeBoundary() {
+        // Final sibling in the FilterFilings clause-triple. The previous two pins
+        // cover documentType + fromDate. This pin covers the third clause
+        // (toDate + `<=`). With this pin the three-clause contract is
+        // exhaustively pinned.
+        //
+        // The risks this pin uniquely catches (unreachable from the fromDate
+        // sibling because the comparison directions are OPPOSITE):
+        //
+        //   • Operator swap `<=` → `<` (strict): drops on-boundary filings whose
+        //     FilingDate equals the toDate. DocumentScraper's "fetch up to today"
+        //     path uses `toDate = today`; with a strict `<` regression, every
+        //     filing dated TODAY is silently skipped — the dominant on-cycle
+        //     case for the freshest ingest. The fromDate sibling can't see
+        //     this — it tests `>=` on the LOWER bound.
+        //
+        //   • Operator swap `<=` → `>=` (direction inversion): the toDate clause
+        //     becomes "include only filings AFTER the toDate". Inverts the
+        //     entire upper-bound logic.
+        //
+        //   • Operand swap: `f.FilingDate <= toDate.Value` swapped to
+        //     `toDate.Value <= f.FilingDate` produces the inverse filter.
+        //     Compiles cleanly.
+        //
+        //   • Short-circuit-arm inversion: `!toDate.HasValue` flipped to
+        //     `toDate.HasValue` makes the no-filter path return empty.
+        //
+        // Construction: three filings spanning the upper boundary at 2024-06-15:
+        //   • 2024-06-14 (BEFORE) → INCLUDED.
+        //   • 2024-06-15 (ON)     → INCLUDED via `<=` (NOT `<`).
+        //   • 2024-06-16 (AFTER)  → EXCLUDED.
+        // Working `<=`: 2 records (06-14 + 06-15). Strict `<`: 1 record (06-14).
+        // Inversion: 1 record (06-16). Drop clause: 3 records. Short-circuit
+        // fail: 0 records.
+        //
+        // The pair (fromDate sibling + this pin) covers boundary inclusion in
+        // BOTH directions — a refactor that flipped both operators symmetrically
+        // would still fail one of the two pins, since the boundary filings are
+        // at different dates and the asymmetric clause structure (`>=` vs `<=`)
+        // distinguishes them.
+        var filterFilingsMethod = typeof(SecEdgarClient)
+            .GetMethod("FilterFilings", BindingFlags.NonPublic | BindingFlags.Static);
+        var filings = new List<Equibles.Integrations.Sec.Models.FilingData> {
+            new() { Form = "10-K", AccessionNumber = "0001", Cik = "320193",
+                    FilingDate = new DateOnly(2024, 6, 14) },
+            new() { Form = "10-K", AccessionNumber = "0002", Cik = "320193",
+                    FilingDate = new DateOnly(2024, 6, 15) },
+            new() { Form = "10-K", AccessionNumber = "0003", Cik = "320193",
+                    FilingDate = new DateOnly(2024, 6, 16) },
+        };
+        DateOnly? toDate = new DateOnly(2024, 6, 15);
+
+        var result = (List<Equibles.Integrations.Sec.Models.FilingData>)filterFilingsMethod.Invoke(
+            null,
+            [filings, null, null, toDate]);
+
+        result.Should().HaveCount(2);
+        result.Select(f => f.AccessionNumber).Should().BeEquivalentTo(["0001", "0002"]);
+    }
 }
