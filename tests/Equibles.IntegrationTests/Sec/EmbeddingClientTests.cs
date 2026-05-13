@@ -43,6 +43,38 @@ public class EmbeddingClientTests {
     }
 
     [Fact]
+    public void Constructor_ConfiguredWithApiKey_AddsBearerAuthorizationHeaderToHttpClient() {
+        // EmbeddingClient is shared between two deployment shapes: local Ollama (no
+        // ApiKey, just BaseUrl) and hosted providers (e.g. OpenAI-compatible
+        // endpoints behind an API key). The conditional `if (!string.IsNullOrEmpty
+        // (_config.ApiKey))` block in the constructor is the ONLY place the Bearer
+        // token gets attached — every subsequent /api/embed call piggybacks on
+        // `HttpClient.DefaultRequestHeaders`. A refactor that "simplifies" the
+        // constructor (e.g. drops the branch, or moves the header set inside the
+        // not-yet-existing `if (_config.IsConfigured)` outer block but accidentally
+        // outside the ApiKey null-check) would silently 401 every hosted-provider
+        // request with no compile or test signal — the existing test suite never
+        // exercises the ApiKey path because both `*_DisabledConfig_*` tests omit
+        // ApiKey entirely. Pin the bearer-header wiring with a captured HttpClient
+        // so the regression surfaces here.
+        var httpClient = new HttpClient();
+        var httpFactory = Substitute.For<IHttpClientFactory>();
+        httpFactory.CreateClient(Arg.Any<string>()).Returns(httpClient);
+        var config = Options.Create(new EmbeddingConfig {
+            Enabled = true,
+            BaseUrl = "http://example.invalid",
+            ModelName = "nomic-embed-text",
+            ApiKey = "sk-test-1234567890",
+        });
+
+        _ = new EmbeddingClient(httpFactory, config, Substitute.For<ILogger<EmbeddingClient>>());
+
+        httpClient.DefaultRequestHeaders.Authorization.Should().NotBeNull();
+        httpClient.DefaultRequestHeaders.Authorization!.Scheme.Should().Be("Bearer");
+        httpClient.DefaultRequestHeaders.Authorization.Parameter.Should().Be("sk-test-1234567890");
+    }
+
+    [Fact]
     public async Task GenerateEmbedding_DisabledConfig_ReturnsNullForwardingFromBatchedShortCircuit() {
         // GenerateEmbedding(string) is a thin wrapper that calls
         // GenerateEmbeddings([text]).FirstOrDefault(). When the config is
