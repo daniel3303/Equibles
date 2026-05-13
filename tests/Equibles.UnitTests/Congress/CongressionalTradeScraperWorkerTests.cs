@@ -1,5 +1,6 @@
 using Equibles.Congress.HostedService;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.Data.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -30,6 +31,42 @@ public class CongressionalTradeScraperWorkerTests {
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(12));
     }
 
+    [Fact]
+    public void ErrorSource_IsCongressScraper() {
+        // BaseScraperWorker tags every error reported via ErrorReporter with this
+        // worker's `ErrorSource` value — the tag routes operator alerts to the
+        // correct oncall dashboard and team. CongressionalTradeScraperWorker reports
+        // against `ErrorSource.CongressScraper`; a regression that miswired this
+        // (a copy-paste from another scraper would yield `DocumentScraper`,
+        // `FtdScraper`, `HoldingsScraper`, etc.) would silently route every PTR-
+        // pipeline error into the wrong dashboard, where the error itself still
+        // lands in the DB but under the wrong owner — the SEC team sees alerts
+        // they can't action, and the Congress-trade team sees no alerts at all.
+        //
+        // This pin completes the ErrorSource-tagging contract across every
+        // BaseScraperWorker descendant. Sibling pins:
+        //   • FtdScraperWorker.ErrorSource (#273)
+        //   • SecScraperWorker.ErrorSource (#274)
+        //   • DocumentProcessorWorker.ErrorSource (#275)
+        //   • HoldingsScraperWorker.ErrorSource (#276)
+        //   • CftcScraperWorker.ErrorSource (#278)
+        //   • CboeScraperWorker.ErrorSource (#279)
+        //   • FredScraperWorker.ErrorSource (#281)
+        //   • FinraScraperWorker.ErrorSource (#283)
+        //   • YahooPriceScraperWorker.ErrorSource (#285)
+        // With this pin, the entire scraper-tagging contract is locked. Any
+        // future refactor that decided to "centralize" ErrorSource through a
+        // single property on BaseScraperWorker (and broke ALL the workers'
+        // routings in one go) would surface across the full sibling-test suite
+        // rather than leaving one orphaned silent miswire.
+        var sut = new TestableCongressionalTradeScraperWorker(
+            Substitute.For<ILogger<CongressionalTradeScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()));
+
+        sut.InvokeErrorSource().Should().Be(ErrorSource.CongressScraper);
+    }
+
     private sealed class TestableCongressionalTradeScraperWorker : CongressionalTradeScraperWorker {
         public TestableCongressionalTradeScraperWorker(
             ILogger<CongressionalTradeScraperWorker> logger,
@@ -38,5 +75,7 @@ public class CongressionalTradeScraperWorkerTests {
             : base(logger, scopeFactory, errorReporter) { }
 
         public TimeSpan InvokeSleepInterval() => SleepInterval;
+
+        public ErrorSource InvokeErrorSource() => ErrorSource;
     }
 }
