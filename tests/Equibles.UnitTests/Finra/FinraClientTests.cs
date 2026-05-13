@@ -35,6 +35,39 @@ public class FinraClientTests {
     }
 
     [Fact]
+    public void IsConfigured_BothClientIdAndClientSecretSet_ReturnsTrue() {
+        // Sibling to both false-case pins above. The risk this catches is
+        // asymmetric and unreachable from the existing pair: a regression
+        // that hard-codes `IsConfigured => false` (defensive default during
+        // a refactor, or copy-paste from a perpetually-disabled client)
+        // PASSES both existing tests (`!IsNullOrEmpty("") && ...` → false
+        // either way, with or without the property body) and only shows up
+        // here.
+        //
+        // The pair (id-only → false, secret-only → false, both → true)
+        // distinguishes a working `&&` conjunction from THREE possible
+        // regressions:
+        //   1. `||` swap (id-only would return true — caught by first sibling)
+        //   2. duplicated leg `ClientSecret && ClientSecret` (id-only would
+        //      return true — caught by first sibling)
+        //   3. `=> false` constant return (both false-cases still false, but
+        //      this true-case fails — caught ONLY here)
+        //
+        // Without this pin, an "always-false" regression silently disables
+        // the FINRA scraper. Every scrape cycle exits via the worker's
+        // ValidateConfiguration guard with no exception, no Warning log
+        // from a misconfigured environment (the guard's whole point is to
+        // exit silently). Short-volume + short-interest data freezes with
+        // no operator-visible signal — the same failure mode the two
+        // existing false-case pins were written to prevent, just via the
+        // opposite-direction regression.
+        var options = Options.Create(new FinraOptions { ClientId = "real-id-here", ClientSecret = "real-secret-here" });
+        var sut = new FinraClient(new HttpClient(), NullLogger<FinraClient>.Instance, options);
+
+        sut.IsConfigured.Should().BeTrue();
+    }
+
+    [Fact]
     public void IsConfigured_ClientIdSetButClientSecretMissing_ReturnsFalse() {
         // Mirror to the existing ClientSecretSetButClientIdMissing test.
         // The sibling exercises the first leg of the `&&` (ClientId
