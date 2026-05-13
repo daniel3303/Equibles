@@ -234,4 +234,44 @@ public class InsiderTradingFilingProcessorTests {
 
         result.Should().Be(TransactionCode.Other);
     }
+
+    [Fact]
+    public void ParseTransactionCode_ConversionCodeM_ReturnsConversion() {
+        // Fifth pin in the ParseTransactionCode family. Existing pins cover
+        // the highest-volume codes (P/Purchase, S/Sale, A/Award) and the
+        // default arm (Other). This pin covers `M => TransactionCode.Conversion` —
+        // the conversion of a derivative security (option, warrant, RSU) into
+        // common stock. M is the SECOND-most common code in §16 filings after
+        // A (Award), because every executive option exercise produces a paired
+        // M (Conversion of derivative) + S (Sale of underlying) row. Without
+        // the M arm, conversion rows would silently fall through to the
+        // default `Other` bucket.
+        //
+        // The risk this catches is distinct from the P↔S swap and the Award
+        // pins: the conversion bucket drives the "executive options exercised"
+        // dashboard and feeds the dilution-tracking analytics. A refactor that
+        // drops the M arm — easy to do during a "consolidate similar codes"
+        // cleanup that merges M into the catch-all on the assumption that
+        // conversions aren't business-relevant — would compile, pass every
+        // other ParseTransactionCode pin (P, S, A, default), and silently
+        // demote every option-exercise event in the corpus from a labeled
+        // "Conversion" to a generic "Other". Downstream consumers would lose
+        // the ability to distinguish "executive cashed in options" from
+        // "filed a random uncategorized form", wrecking the option-exercise
+        // chart on the insider trading page.
+        //
+        // The mapping M => Conversion is also semantically subtle: M does
+        // NOT mean "modification" or "miscellaneous" — it specifically means
+        // conversion per §16 schedule. A refactor that "improves clarity"
+        // by renaming the enum value from Conversion to something else
+        // would also fail this pin if the literal value changes.
+        //
+        // Pin uppercase "M" — ParseTransactionCode normalizes via
+        // ToUpperInvariant before matching, but pinning the canonical
+        // uppercase form documents the expected XML-element wire shape from
+        // SEC EDGAR (which always emits uppercase code letters).
+        var result = (TransactionCode)ParseTransactionCodeMethod.Invoke(null, ["M"]);
+
+        result.Should().Be(TransactionCode.Conversion);
+    }
 }
