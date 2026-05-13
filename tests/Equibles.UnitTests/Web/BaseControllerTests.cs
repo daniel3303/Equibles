@@ -82,6 +82,69 @@ public class BaseControllerTests {
     }
 
     [Fact]
+    public void GetReturnUrl_LocalUrlInQueryString_IsAcceptedAndReturned() {
+        // Completes the GetReturnUrl 4-cell coverage matrix
+        // (source × outcome) — source ∈ {form, query}, outcome ∈
+        // {accepted-local-url, rejected-external-or-null}:
+        //   - form, accepted   → existing `LocalUrlPostedInForm_ReturnsTheUrl`
+        //   - query, rejected  → existing `ExternalUrlInQueryString_IsRejectedAndReturnsNull`
+        //   - form, rejected   → covered indirectly (form path runs IsLocalUrl
+        //                        against external URL too; same fall-through)
+        //   - query, accepted  → THIS PIN (was empty)
+        //
+        // The query-accepted cell is structurally distinct because it
+        // exercises the `else if` arm AND the success return — TWO branches
+        // the existing pair doesn't reach together:
+        //
+        // 1) The `else if (Request.Query.ContainsKey("ReturnUrl"))` arm.
+        //    The existing query-external test reaches this arm but bails
+        //    out at the IsLocalUrl filter, so the `returnUrl = Request.Query[...]
+        //    .ToString()` assignment fires but the subsequent
+        //    `return returnUrl` never does. A regression that swapped the
+        //    assignment (e.g. `returnUrl = Request.Query["NextUrl"].ToString()`
+        //    — typo'd key name) would still produce a null/empty return
+        //    that fails the IsLocalUrl filter, identical to the existing
+        //    test's pass condition. Only this pin distinguishes "correct
+        //    key, valid local URL" from "wrong key, falls through to null".
+        //
+        // 2) The success-return branch (`return returnUrl;`). The existing
+        //    form-accepted test exercises it but ONLY on the form path.
+        //    If a refactor decoupled the success-return between the two
+        //    arms — say by adding a form-specific URL sanitizer that
+        //    accidentally also blocks query-string URLs — the form pin
+        //    would still pass but the query path would silently return
+        //    null. The post-login redirect from the standard `?ReturnUrl=`
+        //    query (the most common deep-link pattern) would break with
+        //    no signal in the form pin.
+        //
+        // Production use case: this is the dominant GET-then-POST login
+        // flow. The user lands on `/Stocks/Details/42`, gets redirected
+        // to `/Auth/Login?ReturnUrl=/Stocks/Details/42`, then POSTs the
+        // form which DOES carry the ReturnUrl in form data (form-accepted
+        // path). But the FIRST GET to `/Auth/Login?ReturnUrl=...` —
+        // when the controller wants to know the return URL to pre-fill
+        // the hidden input — hits the QUERY path. A regression breaks
+        // the entire login-with-return-url flow on the first hit.
+        var sut = new TestableBaseController();
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Method = "GET";
+        httpContext.Request.QueryString = new QueryString("?ReturnUrl=%2FStocks%2FDetails%2F42");
+
+        var urlHelper = Substitute.For<IUrlHelper>();
+        urlHelper.IsLocalUrl(Arg.Any<string>()).Returns(callInfo => {
+            var url = callInfo.Arg<string>();
+            return !string.IsNullOrEmpty(url) && url.StartsWith("/") && !url.StartsWith("//");
+        });
+
+        sut.ControllerContext = new ControllerContext { HttpContext = httpContext };
+        sut.Url = urlHelper;
+
+        var result = sut.InvokeGetReturnUrl();
+
+        result.Should().Be("/Stocks/Details/42");
+    }
+
+    [Fact]
     public void InitSseStream_SetsContentTypeAndDisablesNginxBuffering() {
         // InitSseStream prepares a response for Server-Sent Events. The three
         // headers it sets are load-bearing: text/event-stream is the SSE
