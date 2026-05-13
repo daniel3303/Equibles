@@ -105,6 +105,47 @@ public class CboeClientTests {
     }
 
     [Fact]
+    public void ParseLong_ValueWithEmbeddedThousandsSeparators_ReturnsParsedLongWithoutCommas() {
+        // ParseLong (used by ParsePutCallCsv for Call/Put/TotalVolume columns)
+        // strips commas BEFORE long.TryParse:
+        //   `long.TryParse(value.Replace(",", ""), InvariantCulture, ...)`
+        // The Replace is load-bearing defensive code that's easy to lose
+        // in a refactor — and the loss is silent:
+        //
+        // - A "clean up" that drops the Replace (under the assumption that
+        //   CultureInfo.InvariantCulture's number parser handles thousands
+        //   separators) compiles cleanly. But InvariantCulture's default
+        //   NumberStyles.Integer does NOT accept thousands separators —
+        //   that requires NumberStyles.AllowThousands, which TryParse's
+        //   single-arg overload doesn't set.
+        // - Without the Replace, every "1,234,567"-formatted value returns
+        //   null instead of 1234567. Rows still import (bare ratio and date
+        //   parse fine), but volume columns silently appear empty in
+        //   put/call analytics. Worst-case observability: no exception,
+        //   no log line, downstream consumers see "missing 2024 volume
+        //   data" without an error trail to investigate.
+        // - The same Replace pattern is NOT present in ParseDecimal — that
+        //   asymmetry suggests Replace was added specifically because the
+        //   CBOE volume feed emits comma-formatted values at some point in
+        //   its history. Pinning the behavior locks in that domain
+        //   assumption.
+        //
+        // Pin: invoke ParseLong directly via reflection on a comma-formatted
+        // input. The assertion that the result equals 1_234_567 only holds
+        // if Replace stripped the commas before TryParse — without it the
+        // method returns null (TryParse fails on "1,234,567"). This
+        // exercises the comma-strip in isolation, independent of any CSV
+        // tokenization concerns. The existing parse-skip pins exercise the
+        // CSV path; this pin protects the inner ParseLong contract that
+        // ParsePutCallCsv depends on.
+        var parseLong = typeof(CboeClient).GetMethod("ParseLong", BindingFlags.NonPublic | BindingFlags.Static);
+
+        var result = (long?)parseLong!.Invoke(null, ["1,234,567"]);
+
+        result.Should().Be(1_234_567L);
+    }
+
+    [Fact]
     public void ParseVixCsv_RowWithUnparseableOhlcDecimal_IsSkipped() {
         // The CBOE VIX history CSV occasionally carries rows where one of the
         // OHLC columns is blank or "N/A" (early history before VIX listed
