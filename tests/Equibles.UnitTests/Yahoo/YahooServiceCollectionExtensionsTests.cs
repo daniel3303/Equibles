@@ -1,8 +1,10 @@
 using Equibles.Core.Contracts;
 using Equibles.Integrations.Yahoo.Contracts;
+using Equibles.Yahoo.HostedService;
 using Equibles.Yahoo.HostedService.Extensions;
 using Equibles.Yahoo.HostedService.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Equibles.UnitTests.Yahoo;
 
@@ -71,5 +73,65 @@ public class YahooServiceCollectionExtensionsTests {
         descriptor.Should().NotBeNull();
         descriptor.ImplementationType.Should().Be(typeof(YahooStockPriceProvider));
         descriptor.Lifetime.Should().Be(ServiceLifetime.Scoped);
+    }
+
+    [Fact]
+    public void AddYahooWorker_RegistersYahooPriceScraperWorkerAsIHostedService() {
+        // Third sibling in the AddYahooWorker registration family. The two
+        // existing pins cover the AutoWires scan (IYahooFinanceClient) and
+        // the explicit IStockPriceProvider binding (the cross-module contract
+        // for Holdings valuation). This pin covers the structurally distinct
+        // `services.AddHostedService<YahooPriceScraperWorker>()` registration
+        // that wires the worker into the .NET generic host so it starts at
+        // boot.
+        //
+        // The risk this catches is asymmetric and unreachable from the two
+        // existing pins:
+        //   • A regression that drops `AddHostedService<YahooPriceScraperWorker>()`
+        //     would compile cleanly, pass both the IYahooFinanceClient AutoWires
+        //     pin AND the IStockPriceProvider explicit-binding pin, and silently
+        //     disable the daily Yahoo Finance price-fetch pipeline at startup.
+        //     The application boots, every dependency resolves, but no
+        //     IHostedService implementation of YahooPriceScraperWorker is
+        //     enumerated — daily close prices never refresh, the
+        //     CommonStocks.LastPrice column drifts stale, and the holdings
+        //     valuation pipeline starts producing values against
+        //     yesterday-and-earlier prices indefinitely.
+        //   • A regression that downgrades the registration to AddScoped or
+        //     AddSingleton would register the worker as a resolvable service
+        //     but NOT enumerate it as IHostedService — same silent failure.
+        //
+        // The Yahoo pipeline is particularly load-bearing because:
+        //   • It's the OSS source of stock prices for Holdings valuation
+        //     (the IStockPriceProvider contract is explicitly bound to
+        //     YahooStockPriceProvider for that reason). A dropped registration
+        //     stops the price-cache refresh while leaving the lookup
+        //     INTERFACE wired — every Holdings valuation continues querying
+        //     the price cache, but every entry returns the value from the
+        //     last successful refresh, producing portfolio valuations that
+        //     look reasonable but drift further from reality each day.
+        //   • Stock prices change every trading day; the staleness is
+        //     immediately operator-visible on any chart that compares
+        //     "yesterday's value" to "today's market" — but only if someone
+        //     is watching that specific comparison.
+        //
+        // This pin mirrors the AddSecWorker / AddHoldingsWorker / AddCftcWorker /
+        // AddCongressWorker / AddFredWorker / AddFinraWorker hosted-service pin
+        // family pattern. YahooPriceScraperWorker is the SINGLE hosted service
+        // AddYahooWorker registers — no further siblings in this family.
+        //
+        // Lookup pattern: filter IHostedService descriptors and assert one has
+        // ImplementationType == typeof(YahooPriceScraperWorker).
+        var services = new ServiceCollection();
+
+        services.AddYahooWorker();
+
+        var hostedServiceDescriptors = services
+            .Where(d => d.ServiceType == typeof(IHostedService))
+            .ToList();
+
+        hostedServiceDescriptors.Should().Contain(
+            d => d.ImplementationType == typeof(YahooPriceScraperWorker),
+            "AddHostedService<YahooPriceScraperWorker>() must register the worker as IHostedService so the daily Yahoo Finance price refresh runs at startup");
     }
 }
