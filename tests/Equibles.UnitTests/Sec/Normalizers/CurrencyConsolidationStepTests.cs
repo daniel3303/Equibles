@@ -153,6 +153,55 @@ public class CurrencyConsolidationStepTests
     }
 
     [Fact]
+    public void GbpColumnFollowedByEmptyColumn_AddsBritishPoundsNote()
+    {
+        // CurrencyConsolidationStep's CurrencyMap has five entries: USD, EUR,
+        // GBP, JPY, INR. The existing pins exercise USD (DollarColumn,
+        // TextualCurrencyCode, CurrencySymbolIsRemoved) and EUR (EurColumn).
+        // GBP, JPY, and INR are unpinned. Of those three, GBP carries the
+        // highest real-world relevance for 10-K filings: it's the dominant
+        // foreign currency in cross-listed SEC filings (UK/London-listed
+        // ADRs, FTSE 100 dual-listed companies, AstraZeneca, BP, GlaxoSmithKline,
+        // Shell etc. all report some segments in pounds).
+        //
+        // Two risks this pin catches:
+        //
+        // 1) Map-shrinking regression: a refactor that "consolidates" the
+        //    CurrencyMap to just USD+EUR (under the assumption that SEC
+        //    filings are USD-dominant) would compile, pass every existing
+        //    test, and silently fail to consolidate GBP/JPY/INR columns. The
+        //    pound symbol would remain in the rendered table and no
+        //    "All values are in British Pounds" note would appear.
+        //
+        // 2) Tuple-swap regression: each entry maps a code to a
+        //    `(Symbol, Name)` tuple. A refactor that reorders fields, swaps
+        //    columns, or copy-pastes a wrong (Symbol,Name) pair (e.g. GBP →
+        //    ("£", "Euros")) would only surface when the human-readable name
+        //    is asserted explicitly. Existing pins assert "US Dollars" and
+        //    "Euros"; the other three names ("British Pounds", "Japanese Yen",
+        //    "Indian Rupees") are untested. This pin asserts the FULL exit
+        //    string ("All values are in British Pounds."), so a name-swap
+        //    regression fails here.
+        //
+        // The complementary pins (JPY, INR) intentionally remain unpinned for
+        // now — they'd duplicate the structural assertion this one makes. Pick
+        // GBP as the highest-business-value representative of the
+        // non-dollar/non-euro tail.
+        var html = @"<html><body><table>
+  <tr><td>£</td><td></td><td>1000</td></tr>
+  <tr><td>£</td><td></td><td>2000</td></tr>
+</table></body></html>";
+
+        var doc = _parser.ParseDocument(html);
+
+        _sut.Execute(doc);
+
+        var note = doc.QuerySelector("table + p em");
+        note.Should().NotBeNull();
+        note.TextContent.Should().Be("All values are in British Pounds.");
+    }
+
+    [Fact]
     public void CurrencySymbolIsRemovedFromConsolidatedText()
     {
         var html = @"<html><body><table>
