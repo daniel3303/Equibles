@@ -1,9 +1,66 @@
+using System.IO.Compression;
 using System.Reflection;
 using Equibles.Holdings.HostedService.Services;
+using Equibles.Integrations.Sec.Contracts;
+using Microsoft.Extensions.Logging;
+using NSubstitute;
 
 namespace Equibles.UnitTests.Holdings;
 
 public class HoldingsDataSetClientTests {
+    [Fact]
+    public async Task DownloadDataSet_ProducedStream_BuildsRequestUrlFromBaseAndOpensReturnedStreamAsZipArchive() {
+        // The whole `DownloadDataSet` body is a tight three-step contract:
+        //   1. Compose the request URL as `{BaseUrl}/{fileName}`
+        //   2. Pump the SEC-returned Stream into a MemoryStream so the caller
+        //      can dispose it without breaking the ZipArchive
+        //   3. Open that buffer as a read-mode ZipArchive
+        // Each step is a regression risk that no other pin defends:
+        //   • URL composition — a refactor that swaps the order
+        //     ($"{fileName}/{BaseUrl}") or hard-codes the wrong CDN host
+        //     would silently 404 every download. SEC's data-set CDN does
+        //     NOT redirect partial-match URLs, so the failure mode is a
+        //     permanent 404 with no recovery path.
+        //   • Stream pump — dropping the CopyToAsync to MemoryStream (e.g.
+        //     "just return new ZipArchive(stream, Read)") compiles cleanly
+        //     and works for in-process tests, but in production the
+        //     SecEdgarClient's HttpClient response stream is a
+        //     forward-only network stream that the ZipArchive's central-
+        //     directory seek-back at end-of-stream cannot navigate —
+        //     `new ZipArchive(networkStream)` throws InvalidDataException
+        //     ("End of Central Directory record could not be found").
+        //   • ZipArchiveMode — using Update or Create instead of Read would
+        //     either fail (stream not writable) or rebuild the archive,
+        //     silently mutating the downloaded bytes.
+        //
+        // Pin: substitute ISecEdgarClient.DownloadStream to return a
+        // pre-built ZIP byte sequence, capture the URL argument, and
+        // assert (a) the URL matches `{BaseUrl}/{fileName}` AND (b) the
+        // returned ZipArchive surfaces the entry we put in the fixture.
+        // The pair of assertions catches all three regression classes above.
+        var fileName = "2024q3_form13f.zip";
+        var expectedUrl = $"https://www.sec.gov/files/structureddata/data/form-13f-data-sets/{fileName}";
+
+        var zipBytes = new MemoryStream();
+        using (var archive = new ZipArchive(zipBytes, ZipArchiveMode.Create, leaveOpen: true)) {
+            archive.CreateEntry("SUBMISSION.tsv");
+        }
+        zipBytes.Position = 0;
+
+        var capturedUrl = (string)null;
+        var sec = Substitute.For<ISecEdgarClient>();
+        sec.DownloadStream(Arg.Do<string>(url => capturedUrl = url))
+            .Returns(_ => Task.FromResult<Stream>(new MemoryStream(zipBytes.ToArray())));
+
+        var sut = new HoldingsDataSetClient(sec, Substitute.For<ILogger<HoldingsDataSetClient>>());
+
+        using var result = await sut.DownloadDataSet(fileName, CancellationToken.None);
+
+        capturedUrl.Should().Be(expectedUrl);
+        result.Entries.Should().ContainSingle()
+            .Which.Name.Should().Be("SUBMISSION.tsv");
+    }
+
     [Fact]
     public void GetDataSetFileNames_StartDateBeforeEarliestAvailable_ClampsToQ2_2013() {
         var result = HoldingsDataSetClient.GetDataSetFileNames(new DateTime(2010, 1, 1));
