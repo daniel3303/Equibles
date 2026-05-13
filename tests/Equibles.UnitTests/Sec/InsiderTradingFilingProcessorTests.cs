@@ -511,4 +511,61 @@ public class InsiderTradingFilingProcessorTests {
 
         result.Should().Be(TransactionCode.Expiration);
     }
+
+    [Fact]
+    public void ParseTransactionCode_InheritanceCodeI_ReturnsInheritance() {
+        // Eleventh pin in the ParseTransactionCode family, completing every
+        // letter-arm of the switch. Existing pins cover P/Purchase, S/Sale,
+        // A/Award, _/Other, M/Conversion, X/Exercise, F/TaxPayment, G/Gift,
+        // W/Discretionary, and E/Expiration. This pin covers
+        // `I => TransactionCode.Inheritance` — the codebase's mapping for
+        // securities acquired via the death of a prior holder (transfer by
+        // will, intestacy, or beneficiary designation).
+        //
+        // I sits in the "non-economic acquisition" semantic cluster alongside
+        // G/Gift — both represent securities entering the insider's holdings
+        // WITHOUT a market transaction or insider decision. Downstream
+        // analytics distinguish them:
+        //   • Gift (G) — donor was alive at the time of transfer. Donor
+        //     identity is reportable; the gift is a deliberate act with
+        //     tax-planning implications.
+        //   • Inheritance (I) — prior holder is deceased. The acquisition is
+        //     a passive legal event; no donor relationship exists.
+        // Misclassifying I as G (or vice versa) would corrupt both the
+        // charitable-giving analytics (Gift aggregate) AND the estate-
+        // transfer analytics (Inheritance aggregate) — two distinct
+        // disclosure categories the dashboard surfaces separately.
+        //
+        // The risk this pin uniquely catches is asymmetric and unreachable
+        // from the G/Gift sibling: a refactor that collapsed I into G (under
+        // the mistaken assumption that "both are non-purchase acquisitions,
+        // same bucket") would compile cleanly, pass every existing
+        // ParseTransactionCode pin (G still maps to Gift, all 10 others are
+        // untouched), and silently re-tag every inheritance event as a
+        // discretionary Gift. The volume signal is small but meaningful —
+        // founder/executive deaths produce concentrated Inheritance reports
+        // that estate-planning analytics filter on specifically; merging
+        // them into Gift would erase the signal entirely.
+        //
+        // The complementary risk: a swap with the default arm (I falls
+        // through to Other) would lose every inheritance event from the
+        // typed enum entirely, breaking any filter that targets Inheritance
+        // specifically. Both regressions surface as a wrong enum value on
+        // this pin's assertion.
+        //
+        // With this pin, all 10 letter arms (P, S, A, M, X, F, E, G, I, W)
+        // plus the default arm are individually pinned. The only path NOT
+        // exercised by a sibling pin is the `code?.ToUpperInvariant()` null
+        // propagation — null input bypasses the switch entirely and falls
+        // through to `_ => Other` by way of `null switch { ... _ => Other }`.
+        // That path's behavior is established transitively by the existing
+        // default-arm pin (which uses "Q", an unknown letter) — the same
+        // default-arm code emits Other regardless of which way it was
+        // reached. Pin uppercase "I" with assertion on the exact enum value
+        // Inheritance so the swap-with-Gift and swap-with-default
+        // regressions surface here.
+        var result = (TransactionCode)ParseTransactionCodeMethod.Invoke(null, ["I"]);
+
+        result.Should().Be(TransactionCode.Inheritance);
+    }
 }
