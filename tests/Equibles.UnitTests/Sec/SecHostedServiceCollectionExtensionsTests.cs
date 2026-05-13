@@ -57,6 +57,51 @@ public class SecHostedServiceCollectionExtensionsTests {
     }
 
     [Fact]
+    public void AddSecWorker_RegistersICompanySyncServiceAsScoped() {
+        // Third pin in the AddSecWorker DI-binding family. Existing pins
+        // cover IDocumentScraper (Scoped) and IFilingProcessor
+        // (InsiderTradingFilingProcessor, Scoped). This pin covers
+        // ICompanySyncService — the collaborator that DocumentScraper
+        // delegates to whenever it discovers a new filer CIK during
+        // ingest and needs to upsert the corresponding CommonStock row.
+        //
+        // ICompanySyncService's binding shape matters because:
+        //   • The interface is the cross-process seam between DocumentScraper
+        //     (consumer) and CompanySyncService (producer that resolves
+        //     SEC-side ticker→CIK→CommonStock mappings, including the
+        //     ShouldIncumbentWin tiebreak logic pinned elsewhere in the
+        //     suite). A dropped binding would NRE the first time
+        //     DocumentScraper encounters an unknown CIK — silent failure
+        //     in tests (no DocumentScraper test exercises that path with
+        //     real DI resolution), fatal in production.
+        //   • Lifetime drift matters: CompanySyncService takes a scoped
+        //     ISecEdgarClient (HttpClient-backed). A singleton lifetime
+        //     would cache the SecEdgarClient across requests and break
+        //     the per-request HttpClient lifecycle that IHttpClientFactory
+        //     orchestrates — silent connection leaks and exhausted socket
+        //     pools under load.
+        //
+        // The existing IDocumentScraper sibling only asserts the
+        // ServiceType+Lifetime, NOT the implementation type. This pin
+        // follows the same minimal contract: a wrong concrete type
+        // (e.g., a no-op stub) would still pass DI resolution but
+        // disable the company-sync side effect. The IFilingProcessor
+        // sibling DOES assert ImplementationType; pin both arms here
+        // for consistency with the broader binding-shape contract.
+        //
+        // Assert ALL THREE: descriptor exists, ImplementationType is
+        // the concrete CompanySyncService, Lifetime is Scoped.
+        var services = new ServiceCollection();
+
+        services.AddSecWorker();
+
+        var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(ICompanySyncService));
+        descriptor.Should().NotBeNull();
+        descriptor.ImplementationType.Should().Be(typeof(CompanySyncService));
+        descriptor.Lifetime.Should().Be(ServiceLifetime.Scoped);
+    }
+
+    [Fact]
     public void AddSecWorker_RegistersIDocumentScraperAsScoped() {
         // AddSecWorker is the host's composition entry point for the SEC
         // scraping pipeline. It wires the auto-discovered repositories, the
