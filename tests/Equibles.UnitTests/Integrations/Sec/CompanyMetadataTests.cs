@@ -4,6 +4,46 @@ namespace Equibles.UnitTests.Integrations.Sec;
 
 public class CompanyMetadataTests {
     [Fact]
+    public void IsListed_ExchangeListNyseAlongsideOtc_ReturnsTrue() {
+        // Sibling to `IsListed_OtcOnlyExchanges_ReturnsFalse`. The existing pin
+        // proves the rejection path — that OTC alone doesn't count as listed.
+        // The acceptance path — that ANY non-OTC, non-whitespace exchange flips
+        // IsListed to true — was unpinned. The two pins together cover both
+        // sides of the `Exchanges.Any(...)` predicate.
+        //
+        // The risk this catches is asymmetric from the OTC-only sibling: a
+        // refactor that flipped the `Any` to `All` (under the false intuition
+        // that "all exchanges must be non-OTC for the company to count as
+        // listed") would compile, pass the existing OTC-only-false pin (OTC
+        // doesn't pass the predicate for all=true to hold either), and silently
+        // mark dual-listed companies — those with BOTH NYSE and OTC entries on
+        // their SEC submissions doc — as unlisted. Dual-listing is common: a
+        // foreign issuer may have an ADR on NYSE while OTC carries the
+        // original common stock; a domestic large-cap may have OTC depositary
+        // receipts for international markets alongside its primary NYSE
+        // listing. Either way, IsListed must return true on the basis of the
+        // exchange-listed entry alone.
+        //
+        // The same regression would also break the CompanySyncService
+        // ticker-collision tiebreak in the wrong direction: legitimate
+        // exchange-listed filers would LOSE collisions against subsidiaries
+        // because both would return IsListed=false, falling through to the
+        // CIK numerical tiebreak — which is exactly the failure mode the OTC
+        // sibling guards against in the opposite direction.
+        //
+        // Pin a realistic NYSE-alongside-OTC exchange list. Asserting true
+        // proves the Any-arm fires for the NYSE entry; the existing OTC-
+        // only sibling proves the same predicate rejects OTC alone. Pair
+        // covers both directions.
+        var metadata = new CompanyMetadata {
+            Cik = "1234567",
+            Exchanges = ["NYSE", "OTC"],
+        };
+
+        metadata.IsListed.Should().BeTrue();
+    }
+
+    [Fact]
     public void IsListed_OtcOnlyExchanges_ReturnsFalse() {
         // `CompanyMetadata.IsListed` powers the second-tier tiebreaker in
         // `CompanySyncService.ShouldIncumbentWin` — when two SEC filers race for the same
