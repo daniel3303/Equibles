@@ -88,6 +88,45 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
+    public void ParseOptionType_CallWireValue_ReturnsCallEnum() {
+        // Completes the ParseOptionType three-way coverage:
+        //   - PUT → OptionType.Put         (sibling pin)
+        //   - CALL → OptionType.Call       (this pin)
+        //   - unrecognized → null          (existing pin)
+        //
+        // The PUT sibling and this CALL pin together pin the directional
+        // distinction. The PUT pin alone could pass while CALL silently
+        // returned null (if a regression dropped only the CALL arm),
+        // because:
+        //   - PUT pin proves the Put arm fires for "PUT".
+        //   - Unrecognized pin proves null is returned for unknown values.
+        //   - Without this CALL pin, dropping the CALL arm would route
+        //     "CALL" to the default null branch — passing both existing
+        //     pins while silently NULLING out every Call position in
+        //     the 13F-HR dataset.
+        //
+        // The asymmetric risk that this pin uniquely catches: a refactor
+        // that "consolidates" the two arms into a single regex-match
+        // (e.g. `value.StartsWith("P") ? Put : null` — a "performance"
+        // simplification that retains the PUT case) would compile, pass
+        // the PUT and unrecognized pins, and silently demote every Call
+        // position to null. Calls are the MAJORITY of 13F-HR option
+        // positions (managers typically buy upside exposure via Calls
+        // for index/sector beta), so this regression would empty out
+        // the larger of the two derivative-exposure buckets.
+        //
+        // The complementary risk: a swap of the CALL arm with another
+        // mapped value (e.g. `"CALL" => OptionType.Put` from a
+        // copy-paste edit that touched the wrong arm) would invert
+        // the signal — but that's the same swap risk the PUT sibling
+        // explicitly documents. This pin completes the symmetric
+        // coverage so the swap fails on BOTH ends.
+        var result = HoldingsParsingHelper.ParseOptionType("CALL");
+
+        result.Should().Be(OptionType.Call);
+    }
+
+    [Fact]
     public void ParseOptionType_PutWireValue_ReturnsPutEnum() {
         // Sibling to `ParseOptionType_UnrecognizedValue_ReturnsNullNotADefaultEnumValue`.
         // The existing pin covers the null-default branch. This pin covers the
