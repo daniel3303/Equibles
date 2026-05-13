@@ -19,4 +19,24 @@ public class PdfTextExtractorTests {
                 && c.GetArguments().OfType<LogLevel>().FirstOrDefault() == LogLevel.Warning)
             .Should().BeTrue();
     }
+
+    [Fact]
+    public void Extract_NullBytes_ReturnsEmptyWithoutLogging() {
+        // Extract is called from the SEC paper-PDF fallback in DocumentScraper:
+        // when SecDocumentEnvelopeParser locates a PDF filename but the artifact
+        // fetch returns no bytes, the caller may hand us a null. The early
+        // null/empty short-circuit MUST run *before* PdfPig touches anything,
+        // otherwise we hit an NRE or log a confusing PdfPig warning. Pin the
+        // null path so a refactor that drops the guard surfaces immediately —
+        // the malformed-bytes [Fact] only exercises the catch handler.
+        var logger = Substitute.For<ILogger<PdfTextExtractor>>();
+        var sut = new PdfTextExtractor(logger);
+
+        var result = sut.Extract(null);
+
+        result.Should().BeEmpty();
+        logger.ReceivedCalls()
+            .Any(c => c.GetMethodInfo().Name == "Log")
+            .Should().BeFalse();
+    }
 }
