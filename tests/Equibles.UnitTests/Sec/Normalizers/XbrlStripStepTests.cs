@@ -78,6 +78,32 @@ public class XbrlStripStepTests {
     }
 
     [Fact]
+    public void Execute_DivContainingIxHeaderAndSubstantiveContent_KeepsDivAndRemovesOnlyHeader() {
+        // The sibling `Execute_RemovesEmptyParentDivOfIxHeader` test covers the empty-
+        // parent-div cleanup branch — when the div wraps ONLY the XBRL header and
+        // becomes whitespace-only after the header is removed, the div is dropped too.
+        // What that test does NOT pin is the opposite branch: when the parent div has
+        // genuine, human-readable content alongside the header, the div must STAY and
+        // only the ix:header is removed. The decision hinges on the
+        // `string.IsNullOrWhiteSpace(parent.TextContent)` guard. A refactor that drops
+        // that guard (or inverts it, or replaces it with a structural-children check
+        // like `parent.ChildElementCount == 0`) would compile cleanly, pass the
+        // empty-parent sibling, and then silently strip out every SEC filing div that
+        // happens to wrap both a header and the actual filing body — which is the
+        // common case for inline-XBRL 10-K layouts. Pin the preservation branch so the
+        // regression surfaces here rather than as a SEC filing with its body missing.
+        var doc = _parser.ParseDocument(
+            "<html><body><div><ix:header>hidden XBRL context</ix:header><p>Revenue increased 12%</p></div></body></html>");
+
+        _step.Execute(doc);
+
+        doc.Body!.InnerHtml.Should().NotContain("ix:header");
+        doc.Body.InnerHtml.Should().NotContain("hidden XBRL context");
+        doc.Body.InnerHtml.Should().Contain("<div>");
+        doc.Body.InnerHtml.Should().Contain("<p>Revenue increased 12%</p>");
+    }
+
+    [Fact]
     public void Execute_LeavesRegularHtmlElementsUntouched() {
         const string html = "<html><body><div><h1>Title</h1><p>Paragraph</p><table><tr><td>Cell</td></tr></table></div></body></html>";
         var doc = _parser.ParseDocument(html);
