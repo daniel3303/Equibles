@@ -320,6 +320,99 @@ public class SecDocumentHtmlNormalizerTests {
     }
 
     [Fact]
+    public void Normalize_DocumentBlockMissingTypeElement_IsSilentlySkippedWithoutThrowingAndContinuesToNextBlock() {
+        // ExtractAndFilterDocuments gates each block on TYPE before invoking the
+        // type-allowlist check:
+        //   var typeText = ExtractSgmlTagValue(block, "TYPE");
+        //   if (string.IsNullOrEmpty(typeText) || !IsAllowedDocumentType(typeText)) continue;
+        // The `IsNullOrEmpty(typeText)` arm is the load-bearing null guard that
+        // prevents passing null straight into IsAllowedDocumentType, whose second
+        // branch calls `documentType.StartsWith("EX-")` UNCHECKED — an NRE waiting
+        // to happen if a TYPE-less block ever reaches it. Every existing pin in
+        // this file (including the `ExhibitTypeWithNonNumericSuffix_IsFiltered`
+        // and the `UnknownDocumentType_ReturnsEmptyString` siblings) feeds blocks
+        // that DO have a <TYPE> element — they exercise the IsAllowedDocumentType
+        // body but never the call-site short-circuit that protects it.
+        //
+        // The production scenario is real: SEC SGML envelopes occasionally ship
+        // DOCUMENT blocks without TYPE — typically aggregator-stripped previews,
+        // partial-publish artifacts emitted during the 30-day EDGAR re-index
+        // window, or filings rejected mid-pipeline that still leave their
+        // skeleton in the public archive. The DocumentScraper invokes Normalize
+        // on whatever the SecEdgarClient returns, including malformed envelopes,
+        // so the guard's correctness is what keeps a single bad block from
+        // aborting the entire filing import.
+        //
+        // The risk this pin catches is asymmetric and unreachable from every
+        // existing sibling pin:
+        //
+        //   • A refactor that "simplifies" the guard to just
+        //       `if (!IsAllowedDocumentType(typeText)) continue;`
+        //     — under the (false) intuition that "IsAllowedDocumentType already
+        //     handles every case", or a "the IsNullOrEmpty check is redundant
+        //     because IsAllowedDocumentType returns false on null" assumption —
+        //     would compile cleanly, pass every existing test (none has missing
+        //     TYPE), AND NRE on the very first TYPE-less block when
+        //     IsAllowedDocumentType reaches `documentType.StartsWith("EX-")`.
+        //     The exception is uncaught: there's no try/catch around the
+        //     ExtractAndFilterDocuments loop, no try/catch in Normalize itself,
+        //     and the DocumentScraper.CreateDocument call site treats Normalize
+        //     as a pure function. The NRE bubbles up to the per-filing handler
+        //     and aborts the entire filing import — every subsequent good block
+        //     in the same envelope is lost.
+        //
+        //   • Even adding a null-conditional `documentType?.StartsWith("EX-")`
+        //     inside IsAllowedDocumentType doesn't fully cover the regression
+        //     class: a refactor that simplifies the call-site guard would still
+        //     pass a null through, and on a null `documentType?.StartsWith`
+        //     returns null (not false), which when used in a conditional `if (...)`
+        //     gives a compile error in C#. So the refactor wouldn't compile if
+        //     the null-conditional propagation is preserved — but the SIMPLER
+        //     "drop the IsNullOrEmpty check" refactor would still compile and
+        //     would still NRE. The call-site guard is the only line of defence
+        //     for the second arm of IsAllowedDocumentType.
+        //
+        // Sibling pin family: the `ExtractAndFilterDocuments` extension-gate has
+        // three OR arms (.htm/.html/.txt) all individually pinned. This pin extends
+        // the same exhaustive-coverage discipline to the TYPE-gate's null arm.
+        //
+        // Construction: a two-block SGML envelope where the FIRST block omits
+        // <TYPE> entirely (no tag, no value — the structurally distinct case from
+        // empty-value-after-trim, which IS already covered by ExtractSgmlTagValue's
+        // own `if (string.IsNullOrEmpty(raw)) return null;` returning null) and
+        // the SECOND block is a well-formed 10-K. Three assertions:
+        //
+        //   1. The malformed block's content is NOT in the output — proves the
+        //      null guard fired and the `continue;` skipped the block.
+        //   2. The valid block's content IS in the output — proves the loop
+        //      continued past the malformed block instead of aborting (the
+        //      strongest signal that no exception was thrown mid-loop).
+        //   3. No exception escaped Normalize — implicit via assertion #2: if
+        //      an NRE had been thrown the test would fail with a stack trace,
+        //      not a content-mismatch.
+        var sgml = """
+            <DOCUMENT>
+            <FILENAME>typeless.htm
+            <TEXT>
+            <html><body><p>Malformed: no TYPE element</p></body></html>
+            </TEXT>
+            </DOCUMENT>
+            <DOCUMENT>
+            <TYPE>10-K
+            <FILENAME>realfiling.htm
+            <TEXT>
+            <html><body><p>Valid annual report body</p></body></html>
+            </TEXT>
+            </DOCUMENT>
+            """;
+
+        var result = _sut.Normalize(sgml);
+
+        result.Should().NotContain("Malformed: no TYPE element");
+        result.Should().Contain("Valid annual report body");
+    }
+
+    [Fact]
     public void Normalize_XbrlWrappedContent_ExtractsFromXbrlTag() {
         var sgml = """
             <DOCUMENT>
