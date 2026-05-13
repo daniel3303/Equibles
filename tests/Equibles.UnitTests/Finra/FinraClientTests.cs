@@ -33,4 +33,21 @@ public class FinraClientTests {
 
         sut.IsConfigured.Should().BeFalse();
     }
+
+    [Fact]
+    public void IsConfigured_ClientIdSetButClientSecretMissing_ReturnsFalse() {
+        // Mirror to the existing ClientSecretSetButClientIdMissing test.
+        // The sibling exercises the first leg of the `&&` (ClientId
+        // missing → short-circuits to false before reading ClientSecret).
+        // This pins the OPPOSITE asymmetry: ClientId set so the first
+        // leg passes, forcing evaluation of the second leg, which must
+        // also reject when ClientSecret is missing. Without this pin
+        // a refactor that checks ClientId twice (or returns true after
+        // the first leg passes) would silently let an environment with
+        // only the public client id slip past ValidateConfiguration.
+        var options = Options.Create(new FinraOptions { ClientId = "real-id-here", ClientSecret = "" });
+        var sut = new FinraClient(new HttpClient(), NullLogger<FinraClient>.Instance, options);
+
+        sut.IsConfigured.Should().BeFalse();
+    }
 }
