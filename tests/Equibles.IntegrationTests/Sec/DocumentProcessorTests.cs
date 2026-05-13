@@ -112,4 +112,47 @@ public class DocumentProcessorTests {
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("Embedding count mismatch: expected 3, got 2");
     }
+
+    [Fact]
+    public async Task GenerateEmbeddings_EmbeddingCountExceedsChunkCount_Throws() {
+        // Sibling to the count-too-low pin above. The risk this catches is asymmetric
+        // and unreachable from the existing sibling alone: the guard is
+        // `if (embeddings.Count != chunks.Count) throw;` — a regression that swaps `!=`
+        // for `<` (or for `embeddings.Count < chunks.Count`, a "defensive" check someone
+        // might write to "tolerate extra embeddings") would still throw on the too-low
+        // case (3 chunks, 2 embeddings) and pass the existing test, but would silently
+        // let the too-high case through. The for-loop below the guard then runs only
+        // `chunks.Count` iterations, so the extra embedding gets dropped on the floor
+        // and no exception, no log, no CI signal surfaces.
+        //
+        // That partial-drop is a real data-integrity hazard: the embedding service
+        // could return more vectors than chunks under several plausible failure modes
+        // — a hosted batching bug where one chunk's payload tokenises into two,
+        // a transient duplicate-response retry, or a misconfigured model that emits
+        // multiple vectors per input. In every case, the surviving chunks would still
+        // be persisted with their intended embeddings, but the dropped vector
+        // represents a chunk that DID exist on the wire and now silently doesn't —
+        // future search hits against the dropped vector are simply impossible, and
+        // no recovery path exists because the loss is unobservable.
+        //
+        // The pair (2-vs-3 → throws, 3-vs-2 → throws) distinguishes a working `!=`
+        // guard from BOTH `<` AND `>` collapses; only one direction is caught by the
+        // existing test.
+        var documentId = Guid.NewGuid();
+        var chunks = new List<Chunk> {
+            new() { DocumentId = documentId, Content = "first" },
+            new() { DocumentId = documentId, Content = "second" },
+        };
+
+        var embeddingClient = Substitute.For<IEmbeddingClient>();
+        embeddingClient.GenerateEmbeddings(Arg.Any<List<string>>())
+            .Returns(new List<float[]> { new float[] { 0.1f }, new float[] { 0.2f }, new float[] { 0.3f } });
+
+        var sut = CreateSut(embeddingClient);
+
+        var act = () => sut.GenerateEmbeddings(chunks, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Embedding count mismatch: expected 2, got 3");
+    }
 }
