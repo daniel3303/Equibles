@@ -1,4 +1,5 @@
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.Data.Models;
 using Equibles.Sec.HostedService;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -87,6 +88,29 @@ public class SecScraperWorkerTests {
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromSeconds(15));
     }
 
+    [Fact]
+    public void ErrorSource_IsDocumentScraper() {
+        // SecScraperWorker handles the full SEC document-pull pipeline (submissions,
+        // filings, ownership XML, insider transactions). When the BaseScraperWorker's
+        // catch-all reports a failure, it tags the error with this enum value as the
+        // routing key for the issue-tracker queue. Note this worker uses
+        // `ErrorSource.DocumentScraper` — NOT `SecScraper` — because the SEC pipeline
+        // is sliced by data-product across multiple ErrorSource enum members
+        // (DocumentScraper, FtdScraper, etc.). A regression that "tidied up the name"
+        // by switching to `SecScraper` would silently misroute every document-pipeline
+        // failure into a different queue, defeating the operational split that lets
+        // on-call distinguish "PDF parse failed" from "FTD list 404'd". The existing
+        // ValidateConfiguration and SleepInterval pins don't touch this property, so
+        // a typo or reorder elsewhere has no test signal — pin the literal value here.
+        var sut = new TestableSecScraperWorker(
+            Substitute.For<ILogger<SecScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            new ConfigurationBuilder().Build());
+
+        sut.InvokeErrorSource().Should().Be(ErrorSource.DocumentScraper);
+    }
+
     private sealed class TestableSecScraperWorker : SecScraperWorker {
         public TestableSecScraperWorker(
             ILogger<SecScraperWorker> logger,
@@ -98,5 +122,7 @@ public class SecScraperWorkerTests {
         public bool InvokeValidateConfiguration() => ValidateConfiguration();
 
         public TimeSpan InvokeSleepInterval() => SleepInterval;
+
+        public ErrorSource InvokeErrorSource() => ErrorSource;
     }
 }
