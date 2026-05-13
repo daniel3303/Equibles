@@ -1,11 +1,67 @@
+using Equibles.Cboe.HostedService;
 using Equibles.Cboe.HostedService.Extensions;
 using Equibles.Cboe.HostedService.Services;
 using Equibles.Integrations.Cboe.Contracts;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Equibles.UnitTests.Cboe;
 
 public class CboeServiceCollectionExtensionsTests {
+    [Fact]
+    public void AddCboeWorker_RegistersCboeScraperWorkerAsIHostedService() {
+        // Sibling to `AddCboeWorker_AutoWiresCboeImportService` and
+        // `AddCboeWorker_AutoWiresICboeClientFromIntegrationsAssembly`.
+        // The existing pins cover the two auto-wire scans — they prove
+        // CboeImportService and ICboeClient are registered as scoped
+        // services. This pin covers a structurally distinct binding:
+        // `services.AddHostedService<CboeScraperWorker>()`, which wires
+        // the worker into the .NET generic host so it actually RUNS
+        // at boot.
+        //
+        // The risk this catches is asymmetric and unreachable from the
+        // existing pair:
+        //   • A regression that drops `AddHostedService<CboeScraperWorker>()`
+        //     (a plausible "consolidate worker registrations" refactor
+        //     or copy-paste error during a new-worker addition) would
+        //     compile cleanly, pass BOTH existing pins (CboeImportService
+        //     and ICboeClient are still registered via the [Service]
+        //     attribute scan), and silently disable the CBOE put/call
+        //     ratio + VIX ingest at startup. The application boots,
+        //     every dependency resolves, but no IHostedService
+        //     implementation of CboeScraperWorker is enumerated — the
+        //     daily download of CBOE's volatility and put/call ratio
+        //     CSVs never runs.
+        //   • A regression that downgrades to AddScoped or AddSingleton
+        //     would register the worker as a resolvable service but
+        //     NOT enumerate it as IHostedService — same silent failure
+        //     mode.
+        //
+        // The CBOE pipeline is particularly load-bearing for the public
+        // market-overview dashboard: daily VIX values drive the
+        // volatility indicator widget on the home page, and the
+        // put/call ratio history powers the contrarian-positioning
+        // chart. A dropped hosted-service registration silently
+        // freezes both, with the dashboard appearing stale at the
+        // most recent successful import — invisible to monitoring
+        // until users notice the date stamp.
+        //
+        // Lookup pattern: filter IHostedService descriptors and assert
+        // one has ImplementationType == typeof(CboeScraperWorker).
+        // Mirrors the Holdings/CFTC/FRED hosted-service pin pattern.
+        var services = new ServiceCollection();
+
+        services.AddCboeWorker();
+
+        var hostedServiceDescriptors = services
+            .Where(d => d.ServiceType == typeof(IHostedService))
+            .ToList();
+
+        hostedServiceDescriptors.Should().Contain(
+            d => d.ImplementationType == typeof(CboeScraperWorker),
+            "AddHostedService<CboeScraperWorker>() must register the worker as IHostedService so the daily VIX + put/call ratio import runs at startup");
+    }
+
     [Fact]
     public void AddCboeWorker_AutoWiresCboeImportService() {
         // AddCboeWorker is the host's seam into auto-wiring for the CBOE
