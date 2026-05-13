@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Equibles.Congress.Data.Models;
+using Equibles.Congress.HostedService.Models;
 using Equibles.Congress.HostedService.Services;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -550,6 +551,86 @@ public class HouseDisclosureClientTests {
             response.Content.Headers.ContentType = new MediaTypeHeaderValue(_contentType);
             return Task.FromResult(response);
         }
+    }
+
+    [Fact]
+    public void ParseTransactionLines_RealisticHousePtrPurchaseLine_ProducesFullyPopulatedTransaction() {
+        // ParseTransactionLines is the central private orchestrator that ties together
+        // every regex helper in this class (OwnerCodeRegex, DatePatternRegex,
+        // PurchaseTypeRegex/SaleTypeRegex via ExtractTransactionType /
+        // RemoveTrailingTransactionType) PLUS three pure helpers from
+        // DisclosureParsingHelper (ExtractTickerFromAssetName, ParseDate,
+        // ParseAmountRange, Truncate). The existing pins in this file each prove a
+        // single regex in isolation, but none of them prove the end-to-end pipeline
+        // — i.e. that the orderings, substring slices, and field assignments inside
+        // ParseTransactionLines wire the helpers together correctly into a populated
+        // DisclosureTransaction.
+        //
+        // The risk this catches: a refactor that swaps two of the helper calls,
+        // re-orders the `remainder[..dateMatch.Index]` slice, or mis-assigns one of
+        // the ten DisclosureTransaction property setters (e.g. Ticker ↔ OwnerType
+        // swap because both are short strings, or AmountFrom ↔ AmountTo flip because
+        // the regex matches return them in a single ordered list) would pass every
+        // existing regex-level pin (each helper still works in isolation) AND would
+        // pass `dotnet build` (the types align) while silently corrupting every
+        // House PTR row in the imported dataset. The corruption would surface in
+        // dashboards as "every member trades AAPL" (ticker becomes owner code) or
+        // "every trade is $0–$1,001" (amount range inverted) — visible degradations
+        // but not a build break. This test pins the full pipeline against one
+        // canonical realistic line so any wiring regression fails here.
+        //
+        // The canonical House PTR PDF line format (as emitted by the SEC EDGAR
+        // PtrPdfUrlTemplate at disclosures-clerk.house.gov):
+        //   "{owner-code} {asset-name-with-(TICKER)} {tx-type} {MM/DD/YYYY} {$amt-from} - {$amt-to}"
+        // Every field in the line maps directly to a DisclosureTransaction column:
+        //   • SP                       → OwnerType
+        //   • APPLE INC (AAPL)         → AssetName + Ticker (via parenthetical extraction)
+        //   • P                        → TransactionType (Purchase)
+        //   • 01/14/2025               → TransactionDate
+        //   • $1,001 - $15,000         → AmountFrom + AmountTo
+        // Plus two filing-level fields fed via the HouseFiling record:
+        //   • filing.MemberName        → MemberName
+        //   • filing.FilingDate        → FilingDate
+        // Position is hardcoded to Representative (House is the House of Representatives).
+        //
+        // Reflection scaffolding mirrors the existing private-static patterns in
+        // this file but ALSO needs to (a) construct a HouseDisclosureClient
+        // instance because ParseTransactionLines is an INSTANCE method and (b)
+        // construct a HouseFiling instance because HouseFiling is a private
+        // nested record. The constructor takes HttpClient + ILogger — neither is
+        // touched by ParseTransactionLines (no HTTP, no logging in this path), so
+        // a fresh HttpClient and NullLogger suffice. The HouseFiling record is
+        // positional: (MemberName, DocId, FilingDate, StateDst).
+        var parseTransactionLines = typeof(HouseDisclosureClient).GetMethod(
+            "ParseTransactionLines", BindingFlags.NonPublic | BindingFlags.Instance);
+        var houseFilingType = typeof(HouseDisclosureClient).GetNestedType(
+            "HouseFiling", BindingFlags.NonPublic);
+        var houseFilingCtor = houseFilingType.GetConstructors()[0];
+
+        var client = new HouseDisclosureClient(new HttpClient(), Substitute.For<ILogger<HouseDisclosureClient>>());
+        var filing = houseFilingCtor.Invoke([
+            "Jane Doe",
+            "20251234",
+            new DateOnly(2025, 2, 1),
+            "CA01"
+        ]);
+
+        var lines = new[] { "SP APPLE INC (AAPL) P 01/14/2025 $1,001 - $15,000" };
+
+        var result = (List<DisclosureTransaction>)parseTransactionLines.Invoke(client, [lines, filing]);
+
+        result.Should().HaveCount(1);
+        var tx = result[0];
+        tx.MemberName.Should().Be("Jane Doe");
+        tx.Position.Should().Be(CongressPosition.Representative);
+        tx.Ticker.Should().Be("AAPL");
+        tx.AssetName.Should().Be("APPLE INC (AAPL)");
+        tx.TransactionDate.Should().Be(new DateOnly(2025, 1, 14));
+        tx.FilingDate.Should().Be(new DateOnly(2025, 2, 1));
+        tx.TransactionType.Should().Be(CongressTransactionType.Purchase);
+        tx.OwnerType.Should().Be("SP");
+        tx.AmountFrom.Should().Be(1001);
+        tx.AmountTo.Should().Be(15000);
     }
 
     [Fact]
