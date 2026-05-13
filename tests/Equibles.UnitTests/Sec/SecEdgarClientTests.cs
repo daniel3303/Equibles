@@ -120,6 +120,40 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
+    public void GetRetryDelay_RetryAfterDeltaWithinCap_ReturnsDeltaAsIsNotMaxRetryDelay() {
+        // Sibling to GetRetryDelay_RetryAfterDeltaLongerThanMaxRetryDelay_CapsAtMaxRetryDelay.
+        // That pin catches the cap branch (`delta > MaxRetryDelay ? MaxRetryDelay : delta`)
+        // on a 24-hour Retry-After. This pin catches the OTHER side of the same ternary:
+        // when SEC suggests a short backoff (30s), the helper must return that delta
+        // verbatim — not the MaxRetryDelay ceiling.
+        //
+        // The risk this catches is asymmetric and the cap pin can't see it: a refactor
+        // that simplified `return delta > MaxRetryDelay ? MaxRetryDelay : delta;` to just
+        // `return MaxRetryDelay;` (e.g. "always cap" defensive simplification) would
+        // still pass the existing cap test — the cap test's expected value IS
+        // MaxRetryDelay. Every SEC 429 would then block for the full 5-minute cap even
+        // when SEC explicitly suggests a 30-second backoff. The downstream effect is
+        // 10× slowdown on every transient SEC throttle — invisible to log inspection
+        // (no error, just sluggish throughput) and difficult to diagnose without this
+        // test.
+        //
+        // Pair (cap pin + delta-as-is pin) covers both ternary arms. Pick a realistic
+        // small SEC suggestion (30 seconds) — SEC's actual 429 responses commonly
+        // include Retry-After values between 5 and 60 seconds, well below the
+        // 5-minute MaxRetryDelay.
+        using var httpClient = new HttpClient();
+        var configuration = new ConfigurationBuilder().Build();
+        var sut = new SecEdgarClient(httpClient, NullLogger<SecEdgarClient>.Instance, configuration);
+
+        using var response = new HttpResponseMessage(System.Net.HttpStatusCode.TooManyRequests);
+        response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(30));
+
+        var delay = (TimeSpan)GetRetryDelayMethod.Invoke(sut, [response, 0]);
+
+        delay.Should().Be(TimeSpan.FromSeconds(30));
+    }
+
+    [Fact]
     public void GetDocumentUrl_ValidCikAndAccession_ComposesSecArchiveTxtUrlWithPaddedCik() {
         // Sibling to the FormatCik pin above. GetDocumentUrl composes the
         // exact URL the caller hands to HttpClient.GetAsync to fetch a
