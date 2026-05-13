@@ -129,6 +129,45 @@ public class SenateDisclosureClientTests {
     }
 
     [Fact]
+    public void ParseReportRow_RowWithUnparseableDate_ReturnsNullInsteadOfThrowing() {
+        // Fifth pin in the ParseReportRow family. Existing pins cover:
+        //   • cross-origin absolute URL → null
+        //   • paper-filing URL → null
+        //   • no-anchor link cell → null
+        //   • valid row → returns SenateReport (happy path)
+        // The unparseable-date branch is still unpinned:
+        //   if (!DateOnly.TryParse(row[4]?.Trim(), out var dateSubmitted)) {
+        //       _logger.LogDebug("Skipping Senate report with unparseable date: {Date}", row[4]);
+        //       return null;
+        //   }
+        //
+        // Senate eFD JSON occasionally emits rows with non-ISO date strings (legacy
+        // exports use mm/dd/yyyy with culture-dependent ordering, or pure placeholder
+        // strings like "Pending" for in-progress filings). The TryParse guard is the
+        // boundary between "skip this row" and "crash the whole search loop." A
+        // refactor that "modernizes" the code to `DateOnly.Parse(row[4].Trim())`
+        // would throw FormatException on the first bad date, propagate out of
+        // SearchPtrReports, and abort the entire Senate ingest for the day.
+        //
+        // The risk asymmetry: every existing rejection pin has a VALID date column
+        // (the malformed bit is the URL or anchor). None exercises the date-parse
+        // branch. Pin with a clearly-unparseable value ("not-a-date") so a regex/
+        // culture-flexibility regression doesn't accidentally parse it.
+        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var row = new List<string> {
+            "Jane",
+            "Doe",
+            "filed",
+            "<a href=\"/search/view/ptr/abc-123/\">link</a>",
+            "not-a-date",
+        };
+
+        var result = ParseReportRowMethod.Invoke(sut, [row]);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
     public void ParseReportRow_PaperFilingUrl_ReturnsNull() {
         // Senate disclosures come in two flavours: HTML electronic filings (parseable) and
         // scanned-PDF "paper" filings (unparseable). ParseReportRow skips paper filings by
