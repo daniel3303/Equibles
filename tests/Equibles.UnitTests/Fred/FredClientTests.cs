@@ -27,4 +27,27 @@ public class FredClientTests {
 
         sut.IsConfigured.Should().BeFalse();
     }
+
+    [Fact]
+    public void IsConfigured_NonEmptyApiKey_ReturnsTrue() {
+        // Sibling to the false-case pin above. The risk this pin catches is asymmetric
+        // and unreachable from the empty-key sibling alone: a regression that hard-codes
+        // `IsConfigured => false` (e.g. a defensive default added during a refactor, or
+        // an accidental constant from a copy-paste) passes the empty-key test and only
+        // shows up here. Without this pin, an "always-false" regression would silently
+        // disable the entire FRED scraper in production — FredScraperWorker.ValidateConfiguration
+        // would loop log "FRED__ApiKey not configured" forever, and economic-indicator
+        // data would stop flowing without any CI signal.
+        //
+        // The pair (empty → false, non-empty → true) is what distinguishes a working
+        // `!string.IsNullOrEmpty(ApiKey)` from BOTH inversion (`string.IsNullOrEmpty`,
+        // caught by the false sibling) AND constant-return regressions (caught only
+        // here). Pick a realistic API-key-shaped value rather than just "x" so a
+        // future refactor that adds key-format validation (length, charset) won't
+        // silently invalidate this pin without a clear failure mode.
+        var options = Options.Create(new FredOptions { ApiKey = "abcdef0123456789abcdef0123456789" });
+        var sut = new FredClient(new HttpClient(), NullLogger<FredClient>.Instance, options);
+
+        sut.IsConfigured.Should().BeTrue();
+    }
 }
