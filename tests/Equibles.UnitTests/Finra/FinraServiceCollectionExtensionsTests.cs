@@ -1,7 +1,9 @@
+using Equibles.Finra.HostedService;
 using Equibles.Finra.HostedService.Extensions;
 using Equibles.Finra.HostedService.Services;
 using Equibles.Integrations.Finra.Contracts;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Equibles.UnitTests.Finra;
 
@@ -74,5 +76,59 @@ public class FinraServiceCollectionExtensionsTests {
         services.AddFinraWorker();
 
         services.Should().Contain(d => d.ServiceType == typeof(ShortVolumeImportService));
+    }
+
+    [Fact]
+    public void AddFinraWorker_RegistersFinraScraperWorkerAsIHostedService() {
+        // Third sibling in the AddFinraWorker registration family. The two
+        // existing pins cover the AutoWireServicesFrom scans
+        // (ShortVolumeImportService and IFinraClient). This pin covers the
+        // structurally distinct `services.AddHostedService<FinraScraperWorker>()`
+        // registration that wires the worker into the .NET generic host so it
+        // starts at boot.
+        //
+        // The risk this catches is asymmetric and unreachable from the two
+        // existing AutoWires pins:
+        //   • A regression that drops `AddHostedService<FinraScraperWorker>()`
+        //     would compile cleanly, pass both AutoWires pins
+        //     (ShortVolumeImportService and IFinraClient are still registered),
+        //     and silently disable the FINRA short-volume + short-interest
+        //     ingest at startup. The application boots, every dependency
+        //     resolves, but no IHostedService implementation of
+        //     FinraScraperWorker is enumerated — the daily short-volume CSV
+        //     pull and weekly short-interest snapshot never fire. The
+        //     short-selling dashboard's columns silently stop refreshing.
+        //   • A regression that downgrades the registration to AddScoped or
+        //     AddSingleton would register the worker as a resolvable service
+        //     but NOT enumerate it as IHostedService — same silent failure.
+        //
+        // The FINRA pipeline is particularly load-bearing because:
+        //   • Short-volume data is published daily by FINRA on T+1; a dropped
+        //     registration produces an immediately-detectable gap on the next
+        //     business day's dashboard refresh — but only if someone is
+        //     watching that specific column.
+        //   • The OAuth2 token-refresh path (the most fragile integration
+        //     in the codebase) is partly tested by the IFinraClient pin's
+        //     transitive concerns, but the hosted-service registration is
+        //     a structurally separate failure mode.
+        //
+        // This pin mirrors the AddSecWorker / AddHoldingsWorker / AddCftcWorker /
+        // AddCongressWorker / AddFredWorker hosted-service pin family pattern.
+        // FinraScraperWorker is the SINGLE hosted service AddFinraWorker
+        // registers — no further siblings in this family.
+        //
+        // Lookup pattern: filter IHostedService descriptors and assert one has
+        // ImplementationType == typeof(FinraScraperWorker).
+        var services = new ServiceCollection();
+
+        services.AddFinraWorker();
+
+        var hostedServiceDescriptors = services
+            .Where(d => d.ServiceType == typeof(IHostedService))
+            .ToList();
+
+        hostedServiceDescriptors.Should().Contain(
+            d => d.ImplementationType == typeof(FinraScraperWorker),
+            "AddHostedService<FinraScraperWorker>() must register the worker as IHostedService so the daily FINRA short-volume pull runs at startup");
     }
 }
