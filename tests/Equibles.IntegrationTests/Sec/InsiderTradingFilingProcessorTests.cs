@@ -777,6 +777,17 @@ public class InsiderTradingFilingProcessorTests {
         transactions[2].Shares.Should().Be(3832);
         transactions[2].PricePerShare.Should().Be(42.76m);
         transactions[2].SharesOwnedAfter.Should().Be(578618);
+
+        // TransactionOrder is assigned from the XML document order (0, 1, 2). The unique
+        // index on (AccessionNumber, TransactionOrder) relies on each row in a filing
+        // getting a distinct ordinal — if the parser ever stopped assigning it (or assigned
+        // the same value twice), this filing would fail to insert in prod with a duplicate-
+        // key violation. Order by Shares above is incidental — assert on the ORDINAL contract.
+        var byOrder = transactions.OrderBy(t => t.TransactionOrder).ToList();
+        byOrder.Select(t => t.TransactionOrder).Should().Equal(0, 1, 2);
+        byOrder[0].Shares.Should().Be(2062);   // first tranche in the XML
+        byOrder[1].Shares.Should().Be(3832);
+        byOrder[2].Shares.Should().Be(1606);
     }
 
     [Fact]
