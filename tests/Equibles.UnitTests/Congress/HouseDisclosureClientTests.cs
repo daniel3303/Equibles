@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Equibles.Congress.Data.Models;
 using Equibles.Congress.HostedService.Services;
 
@@ -14,6 +15,45 @@ public class HouseDisclosureClientTests {
 
     private static readonly MethodInfo RemoveTrailingTransactionTypeMethod = typeof(HouseDisclosureClient)
         .GetMethod("RemoveTrailingTransactionType", BindingFlags.NonPublic | BindingFlags.Static);
+
+    private static readonly MethodInfo OwnerCodeRegexMethod = typeof(HouseDisclosureClient)
+        .GetMethod("OwnerCodeRegex", BindingFlags.NonPublic | BindingFlags.Static);
+
+    [Fact]
+    public void OwnerCodeRegex_MatchesSpouseCodeSP_AndCapturesOwnerCode() {
+        // OwnerCodeRegex pattern: `^(SP|JT|DC|Self)\b` (case-insensitive).
+        // The four alternatives are the four House PTR owner codes:
+        //   • SP   — Spouse
+        //   • JT   — Joint (member + spouse)
+        //   • DC   — Dependent Child
+        //   • Self — the member
+        // Each is independently load-bearing: ParseTransactionLines walks every PDF
+        // line through this regex, skips lines that don't match, and uses the
+        // capture group as the OwnerType field. A regression that drops any single
+        // alternative (e.g. "let me alphabetize the alternation" reorder that
+        // typos one out, or a "consolidate to SP|JT" simplification) would silently
+        // drop every PTR row attributed to that owner code from the import.
+        //
+        // The existing pins in this file cover ExtractTransactionType and
+        // RemoveTrailingTransactionType but NOT OwnerCodeRegex. Spouse (SP) is
+        // the highest-volume non-Self owner code in the House PTR corpus
+        // (members frequently trade through joint or spouse-attributed accounts
+        // for ethics-reporting reasons). Pin SP specifically so a regression that
+        // drops the SP arm of the alternation surfaces here rather than as
+        // silently-missing spouse-attributed trades in the dashboard.
+        //
+        // Two assertions: the regex matched (Success) AND the captured group
+        // value is exactly "SP" (so a regression that broke the capture group
+        // structure — e.g. changing `(SP|...)` to `(?:SP|...)` non-capturing —
+        // would also fail). The downstream `ownerMatch.Groups[1].Value` flows
+        // straight into the persisted OwnerType column.
+        var regex = (Regex)OwnerCodeRegexMethod.Invoke(null, null);
+
+        var match = regex.Match("SP APPLE INC - COMMON STOCK P 01/14/2025");
+
+        match.Success.Should().BeTrue();
+        match.Groups[1].Value.Should().Be("SP");
+    }
 
     [Fact]
     public void ExtractTransactionType_PurchaseTrailingP_ReturnsPurchase() {
