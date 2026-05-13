@@ -188,4 +188,41 @@ public class SenateDisclosureClientTests {
 
         result.Should().BeNull();
     }
+
+    [Fact]
+    public void ParseReportRow_BothFirstAndLastNameEmpty_ReturnsNull() {
+        // Sixth pin in the ParseReportRow rejection family. Covers the empty-name
+        // guard: `if (string.IsNullOrEmpty(memberName)) return null;` where
+        // memberName = $"{firstName} {lastName}".Trim().
+        //
+        // Senate eFD JSON occasionally returns rows with blank firstName AND
+        // blank lastName — corruption from upstream redaction, withdrawn filings
+        // pending re-publish, or aggregator-style rows representing summary
+        // counts rather than individual reports. The guard prevents these from
+        // producing a SenateReport whose MemberName is empty, which would
+        // cascade into FetchAndParseReport → ParseTransactionsFromHtml with
+        // an empty member-name string, persisting transactions tagged to no
+        // identifiable person (breaking the "trades by member" filter in the
+        // dashboard).
+        //
+        // The risk this catches: a refactor that drops the IsNullOrEmpty
+        // check on memberName (e.g. assuming Senate eFD always sends names)
+        // would pass every existing rejection sibling — none of them
+        // exercises this branch — and silently create phantom reports tagged
+        // to an empty member. Pin with both first AND last name as empty
+        // strings (the JSON-likely shape; nulls are also possible but ?.Trim
+        // on "" is the same as ?.Trim on null after the ?? "" coalesce).
+        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var row = new List<string> {
+            "",
+            "",
+            "filed",
+            "<a href=\"/search/view/ptr/abc-123/\">link</a>",
+            "2024-01-15",
+        };
+
+        var result = ParseReportRowMethod.Invoke(sut, [row]);
+
+        result.Should().BeNull();
+    }
 }
