@@ -58,6 +58,57 @@ public class HtmlElementExtensionsTests {
     }
 
     [Fact]
+    public void InsertAfter_RefNodeHasNextSibling_NewNodeInsertedBetweenThem() {
+        // Sibling to `InsertAfter_RefNodeIsLastChild_AppendsAtEnd`. The
+        // existing pin covers the EDGE case: refNode.NextSibling is null,
+        // so `parent.InsertBefore(newNode, null)` falls through to append-
+        // at-end semantics (DOM spec: InsertBefore with null reference
+        // appends). This pin covers the COMMON case: refNode has a
+        // non-null NextSibling, so the new node is wedged BETWEEN them.
+        //
+        // The two pins together cover both arms of `refNode.NextSibling`'s
+        // null/non-null possibilities — the entire input space of
+        // InsertAfter.
+        //
+        // The risk uniquely caught: a refactor that "simplified" InsertAfter
+        // to `parent.AppendChild(newNode)` — under the false intuition that
+        // every caller currently passes the last child as refNode (which
+        // the existing pin's input shape would suggest) — would compile,
+        // pass the existing append-at-end sibling, and silently break the
+        // PaginationRemovalStep and CurrencyConsolidationStep paths that
+        // call InsertAfter with refNode in the middle of its parent's
+        // children. CurrencyConsolidationStep specifically does
+        //   HtmlElementExtensions.InsertAfter(table.ParentElement, p, table);
+        // where `table` is rarely the parent's last child (typical
+        // SEC HTML wraps tables in `<div>`s that have surrounding text).
+        // The "All values are in {Currency}" annotation would get
+        // appended to the END of the wrapping div rather than directly
+        // after the table — breaking the visual association with the
+        // table in the rendered output.
+        //
+        // Pin a parent with 3 children: refNode in the middle position
+        // (index 1, with both a PreviousSibling and NextSibling). After
+        // InsertAfter, refNode should be at index 1 (unchanged) and the
+        // new node at index 2 (immediately after refNode, BEFORE the
+        // pre-existing NextSibling). Asserting the new node's
+        // PreviousSibling identity is refNode AND the new node's
+        // NextSibling identity is the pre-existing "third" element pins
+        // both relations.
+        var doc = new HtmlParser().ParseDocument(
+            "<html><body><div id=\"p\"><span id=\"first\"></span><span id=\"second\"></span><span id=\"third\"></span></div></body></html>");
+        var parent = doc.GetElementById("p")!;
+        var refNode = doc.GetElementById("second")!;
+        var newNode = doc.CreateElement("em");
+        newNode.SetAttribute("id", "added");
+
+        HtmlElementExtensions.InsertAfter(parent, newNode, refNode);
+
+        var added = doc.GetElementById("added")!;
+        added.PreviousElementSibling!.GetAttribute("id").Should().Be("second");
+        added.NextElementSibling!.GetAttribute("id").Should().Be("third");
+    }
+
+    [Fact]
     public void InsertAfter_RefNodeIsLastChild_AppendsAtEnd() {
         var doc = new HtmlParser().ParseDocument("<html><body><div id=\"p\"><span id=\"first\"></span></div></body></html>");
         var parent = doc.GetElementById("p")!;
