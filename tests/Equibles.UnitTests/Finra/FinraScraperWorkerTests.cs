@@ -45,6 +45,47 @@ public class FinraScraperWorkerTests {
         sut.InvokeValidateConfiguration().Should().BeFalse();
     }
 
+    [Fact]
+    public void ValidateConfiguration_FinraClientConfigured_ReturnsTrue() {
+        // Sibling to the false-case pin above. The risk this catches is asymmetric
+        // and unreachable from the not-configured sibling alone: a regression that
+        // hard-codes `ValidateConfiguration => false` (defensive default during a
+        // refactor) passes the not-configured test and only shows up here.
+        //
+        // Unlike the SEC-family workers (Sec/Ftd/Holdings) which gate on a direct
+        // IConfiguration read, FinraScraperWorker delegates to `IFinraClient.IsConfigured`
+        // via a resolved DI scope. That indirection adds an extra failure mode: a
+        // refactor that swaps the DI lookup for a hard-coded default would slip past
+        // the false sibling (mocking IsConfigured = false matches the default), and
+        // only this true-case pin catches the regression by exercising the live wire
+        // from `_scopeFactory.CreateScope() → GetRequiredService<IFinraClient>() → IsConfigured`
+        // through to a true return.
+        //
+        // Without this pin, the FINRA short-volume and short-interest scrapers would
+        // silently stop importing — short-data dashboards on the public site rely on
+        // both feeds, and an "always-false" regression here would freeze the data with
+        // no exception, no Warning log, no CI signal.
+        var finraClient = Substitute.For<IFinraClient>();
+        finraClient.IsConfigured.Returns(true);
+
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        serviceProvider.GetService(typeof(IFinraClient)).Returns(finraClient);
+
+        var scope = Substitute.For<IServiceScope>();
+        scope.ServiceProvider.Returns(serviceProvider);
+
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        scopeFactory.CreateScope().Returns(scope);
+
+        var sut = new TestableFinraScraperWorker(
+            Substitute.For<ILogger<FinraScraperWorker>>(),
+            scopeFactory,
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            Options.Create(new FinraScraperOptions()));
+
+        sut.InvokeValidateConfiguration().Should().BeTrue();
+    }
+
     private sealed class TestableFinraScraperWorker : FinraScraperWorker {
         public TestableFinraScraperWorker(
             ILogger<FinraScraperWorker> logger,
