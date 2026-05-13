@@ -100,6 +100,19 @@ public class DocumentTypeTests {
     }
 
     [Fact]
+    public void Equals_NonDocumentTypeObject_ReturnsFalseViaTypeCheck() {
+        // Equals is overridden as `obj is DocumentType other && Value == other.Value`.
+        // The Value-mismatch branch is pinned by `Equality_DifferentTypes_AreNotEqual`,
+        // but the `obj is DocumentType` false leg (where obj is null or a foreign type)
+        // wasn't pinned. A refactor that swapped the pattern for a direct
+        // `((DocumentType)obj).Value == Value` would NRE on null and InvalidCast on
+        // foreign types — both as runtime errors instead of a clean false. Pin the
+        // type-check leg so the regression fails at unit-test time.
+        DocumentType.TenK.Equals(null).Should().BeFalse();
+        DocumentType.TenK.Equals("TenK").Should().BeFalse();
+    }
+
+    [Fact]
     #pragma warning disable CS1718 // Intentional: testing custom == and != operators
     public void Operators_EqualityAndInequality_Work() {
         (DocumentType.TenK == DocumentType.TenK).Should().BeTrue();
