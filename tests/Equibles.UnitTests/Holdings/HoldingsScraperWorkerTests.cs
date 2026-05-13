@@ -63,6 +63,33 @@ public class HoldingsScraperWorkerTests {
         sut.InvokeValidateConfiguration().Should().BeTrue();
     }
 
+    [Fact]
+    public void SleepInterval_IsTwentyFourHours() {
+        // The Holdings scraper pulls SEC EDGAR's quarterly 13F filing data sets —
+        // by SEC mandate institutions report quarterly within 45 days of quarter
+        // end, so new data lands at most a few times per quarter. The 24-hour
+        // `SleepInterval` matches that cadence: a once-daily check catches every
+        // newly published data set with minutes-to-hours latency at worst, with
+        // plenty of margin for SEC's 10 req/s outbound cap shared across all
+        // SEC scrapers. The risk this pins: a refactor that lowered the interval
+        // (a copy-paste of `FromSeconds(15)` from a sibling worker, or a casual
+        // `FromHours(1)` "let's check more often") would silently 24× the
+        // outbound load against SEC EDGAR. Each Holdings pass also walks every
+        // ProcessedDataSet row to compute the "to fetch" list — that's a real
+        // DB query — and a tighter interval would burn DB time + SEC quota
+        // for zero benefit (no new 13Fs to fetch). Pin the literal value so any
+        // future cadence change is a deliberate test update.
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string>()).Build();
+        var sut = new TestableHoldingsScraperWorker(
+            Substitute.For<ILogger<HoldingsScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            Options.Create(new WorkerOptions()),
+            config);
+
+        sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(24));
+    }
+
     private sealed class TestableHoldingsScraperWorker : HoldingsScraperWorker {
         public TestableHoldingsScraperWorker(
             ILogger<HoldingsScraperWorker> logger,
@@ -73,5 +100,7 @@ public class HoldingsScraperWorkerTests {
             : base(logger, scopeFactory, errorReporter, workerOptions, configuration) { }
 
         public bool InvokeValidateConfiguration() => ValidateConfiguration();
+
+        public TimeSpan InvokeSleepInterval() => SleepInterval;
     }
 }
