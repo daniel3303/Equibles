@@ -453,6 +453,69 @@ public class DisclosureParsingHelperTests {
     }
 
     [Fact]
+    public void ParseTransactionsFromHtml_DescriptionHeaderInsteadOfAssetName_PopulatesAssetNameFromDescriptionColumn() {
+        // MapColumnIndices resolves the asset column via a three-tier fallback:
+        //   1. Contains("asset") && Contains("name")  → "Asset Name" (primary)
+        //   2. Contains("asset") && !Contains("type") → bare "Asset" (rare)
+        //   3. Contains("description")                → "Description" (older House PTRs)
+        // Every existing happy-path pin in this file uses "Asset Name" (tier 1).
+        // Tier 3 is exercised by older House PTR exports and some hand-coded
+        // staff submissions that label the asset column "Description" rather than
+        // "Asset Name" — IsTransactionTable also accepts "description" in its
+        // hasAsset gate (`Any(h.Contains("description"))`) so these tables make
+        // it past the table-detection check; they then rely on the third-tier
+        // assetCol fallback to actually pluck the column.
+        //
+        // The risk this pin catches: a refactor that "tidies up" the assetCol
+        // chain — e.g. collapses to just `Contains("asset")` — would compile
+        // cleanly, pass every existing Asset-Name test, AND pass
+        // IsTransactionTable, then silently set cols.Asset = -1 for every
+        // Description-only table. GetCell returns null on -1, CleanSentinel
+        // passes null through, the assetName check in ParseTransactionRow
+        // falls back to the ticker (which is present here as "AAPL"), the
+        // transaction IS still recorded — but with AssetName=null. Downstream
+        // consumers that group by AssetName (the "trades by company" UI, the
+        // CSV export's Description column) silently lose context for every
+        // legacy-format row.
+        //
+        // Pin: a House PTR header with no "Asset Name" or bare "Asset" — only
+        // "Description". The valid row carries AAPL ticker + Apple text. The
+        // assertion checks AssetName is populated from the Description column,
+        // proving the third-tier fallback fired. Without the fallback, AssetName
+        // would be null.
+        var html = """
+            <html><body>
+            <table>
+              <thead><tr>
+                <th>Transaction Date</th>
+                <th>Ticker</th>
+                <th>Description</th>
+                <th>Transaction Type</th>
+                <th>Amount</th>
+              </tr></thead>
+              <tbody>
+                <tr>
+                  <td>2024-06-15</td>
+                  <td>AAPL</td>
+                  <td>Apple Inc common stock</td>
+                  <td>Purchase</td>
+                  <td>$1,001 - $15,000</td>
+                </tr>
+              </tbody>
+            </table>
+            </body></html>
+            """;
+
+        var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
+            html, "Test Rep", CongressPosition.Representative,
+            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+
+        result.Should().HaveCount(1);
+        result[0].AssetName.Should().Be("Apple Inc common stock");
+        result[0].Ticker.Should().Be("AAPL");
+    }
+
+    [Fact]
     public void ParseTransactionsFromHtml_FilerColumnInsteadOfOwner_PopulatesOwnerTypeFromFilerColumn() {
         // MapColumnIndices resolves the owner column with `h.Contains("owner") ||
         // h.Contains("filer")`. The two alternatives are independent: House PTRs use
