@@ -662,4 +662,59 @@ public class InsiderTradingFilingProcessorTests {
 
         result.Should().BeTrue();
     }
+
+    [Fact]
+    public void ParseBool_TitleCaseTrueLiteral_ReturnsTrueViaThirdArm() {
+        // Fourth pin in the ParseBool family. Existing pins cover "1"
+        // (DigitOne), "0" (DigitZero → default false), and lowercase
+        // "true" (LowercaseTrue → second arm). This pin covers the
+        // THIRD of the three string arms in:
+        //   `value is "1" or "true" or "True" or "TRUE"`
+        //
+        // Why "True" (TitleCase) uniquely matters:
+        //   • It's the form .NET's `bool.ToString()` produces. Any
+        //     filer/agent that round-trips a boolean through a .NET
+        //     intermediate (System.Boolean serialized to string and
+        //     written back to XML without explicit format control)
+        //     emits exactly "True". This is the most common wire form
+        //     for filers using .NET-based EDGAR submission toolkits.
+        //   • Java's Boolean.toString() emits lowercase "true"
+        //     (covered by the existing sibling pin).
+        //   • Pure-XML serialization libraries that follow XSD
+        //     primitives ({"true", "false", "1", "0"} per W3C
+        //     XML Schema Part 2) emit lowercase per spec.
+        //   So "True" specifically tags the .NET-tooling filer
+        //   population — a distinct population from lowercase-true
+        //   (Java/XML-spec-conformant) and "TRUE" (legacy/manual).
+        //
+        // The risk this pin uniquely catches is asymmetric and
+        // unreachable from the lowercase-true sibling:
+        //   • A refactor that drops the "True" arm specifically
+        //     (under the false intuition that "all lowercase variants
+        //     are covered by the second arm + the case-insensitive
+        //     pattern would handle anything else") would compile,
+        //     pass the DigitOne pin (digit branch untouched), pass
+        //     the DigitZero pin (default arm untouched), pass the
+        //     LowercaseTrue pin (lowercase arm untouched), and
+        //     silently misclassify every Form 4 from .NET-tooling
+        //     filers as isDirector=false / isOfficer=false. This is
+        //     the WORKIVA/CERTENT-style filer population — a major
+        //     fraction of corporate Form 4 submissions, since most
+        //     public companies use professional filer agents on .NET.
+        //   • A swap with one of the other true-arms (e.g. someone
+        //     "consolidates" by dropping "True" and adding
+        //     `.ToUpperInvariant() == "TRUE"` before the switch)
+        //     would still drop the pattern-match-direct path AND
+        //     introduce an allocation per parse — same load-bearing
+        //     micro-perf regression flagged in the LowercaseTrue
+        //     pin's commentary.
+        //
+        // Pin TitleCase "True" — the form most uniquely tied to a
+        // specific filer-tooling population. The "TRUE" (all-caps)
+        // arm remains unpinned but follows the same shape; closing
+        // it completes the four-arm family (1 + true + True + TRUE).
+        var result = (bool)ParseBoolMethod.Invoke(null, ["True"]);
+
+        result.Should().BeTrue();
+    }
 }
