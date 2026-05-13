@@ -34,6 +34,45 @@ public class CboeClientTests {
     }
 
     [Fact]
+    public void ParsePutCallCsv_RowWithFewerThanFiveFields_IsSkippedWithoutThrowing() {
+        // The CBOE put/call CSV expects rows of the form
+        //   Date,CallVolume,PutVolume,TotalVolume,P/C Ratio
+        // Real CBOE feeds occasionally emit truncated rows during data outages
+        // or partial-publish windows (e.g. only the first 1-2 columns populated
+        // before the rest is written). ParsePutCallCsv guards every row with
+        //   if (fields.Length < 5) continue;
+        // BEFORE indexing into fields[1..4]. The guard is load-bearing: without
+        // it, a 2-field row like "01/15/2025,100" would throw IndexOutOfRange
+        // on fields[2] / fields[3] / fields[4], abort the foreach inside the
+        // public DownloadPutCallRatios, and crash the entire ingest cycle —
+        // not just lose this one row but blow up the worker pass that was
+        // about to import dozens of days of legitimate ratio history that
+        // appeared LATER in the same CSV.
+        //
+        // The existing `ParsePutCallCsv_RowWithUnparseableDate_IsSkipped` pin
+        // exercises the date-parse skip path on a 5-field row (the disclaimer
+        // line has the right column count). The fields.Length < 5 branch is
+        // structurally distinct — it fires BEFORE the date parse, on rows the
+        // disclaimer test never reaches. The pair (date-skip on full row,
+        // length-skip on short row) covers both early-exit guards in the
+        // parser's per-row sanity check.
+        //
+        // Pin: a 2-field row sandwiched between header and a valid 5-field
+        // row. The valid row is parsed, the short row is skipped silently,
+        // and no exception escapes ParsePutCallCsv. The single-record
+        // assertion on the valid date proves the parser CONTINUED past the
+        // malformed row instead of aborting.
+        var csv = "Date,Call Volume,Put Volume,Total Volume,P/C Ratio\n" +
+                  "01/15/2025,100\n" +
+                  "01/16/2025,100000,80000,200000,0.80\n";
+
+        var records = (List<CboePutCallRecord>)ParsePutCallCsvMethod.Invoke(null, [csv]);
+
+        records.Should().ContainSingle()
+            .Which.Date.Should().Be(new DateOnly(2025, 1, 16));
+    }
+
+    [Fact]
     public void ParseVixCsv_RowWithUnparseableOhlcDecimal_IsSkipped() {
         // The CBOE VIX history CSV occasionally carries rows where one of the
         // OHLC columns is blank or "N/A" (early history before VIX listed
