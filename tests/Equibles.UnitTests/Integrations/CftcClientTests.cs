@@ -21,6 +21,46 @@ public class CftcClientTests {
     private static readonly MethodInfo ParseLineMethod = typeof(CftcClient)
         .GetMethod("ParseLine", BindingFlags.NonPublic | BindingFlags.Static);
 
+    private static readonly MethodInfo GetFieldMethod = typeof(CftcClient)
+        .GetMethod("GetField", BindingFlags.NonPublic | BindingFlags.Static);
+
+    [Fact]
+    public void GetField_ColumnIndexExceedsRowLength_ReturnsNullInsteadOfIndexOutOfRange() {
+        // GetField's bounds guard is `!columnIndex.TryGetValue(...) || idx >= fields.Length`.
+        // The TryGetValue branch fires when the column name is absent from the header.
+        // The `idx >= fields.Length` branch fires when the COLUMN exists in the header
+        // index but the row is SHORTER than the header — a real CFTC data shape that
+        // happens when:
+        //   • CFTC truncates rows during partial-publish windows mid-week.
+        //   • A row's trailing fields get stripped by upstream CSV cleaners that drop
+        //     empty trailing columns.
+        //   • An aggregator re-emits historical data with only the populated columns.
+        //
+        // Without the guard, the next line `fields[idx].Trim()` would throw
+        // IndexOutOfRangeException — crashing the entire ParseLine call, which propagates
+        // through ParseZipArchive's foreach and aborts the whole year's import on a
+        // single bad row. The catch in CftcImportService.ImportYear logs the error but
+        // by that point the year's records list is already partially built; rolling
+        // forward typically loses unrelated rows in the same batch.
+        //
+        // The existing pins (BuildColumnIndex, ParseLong, SplitCsvLine, ParseLine
+        // legacy-date) don't exercise GetField with a mismatched-length row. Pin the
+        // guard with a 2-field row and a column index that points at position 5
+        // (which would be valid for a normal CFTC row but is past the end of this
+        // truncated one).
+        //
+        // Construction: header with 6 columns (so the index has entries at positions
+        // 0..5), data row with only 2 fields. Asking for the "Pct_of_OI_Comm_Short_All"
+        // at index 5 must return null safely.
+        var headerLine = "Market_and_Exchange_Names,CFTC_Contract_Market_Code,Open_Interest_All,NonComm_Positions_Long_All,Comm_Positions_Long_All,Pct_of_OI_Comm_Short_All";
+        var columnIndex = (Dictionary<string, int>)BuildColumnIndexMethod.Invoke(null, [headerLine]);
+        var truncatedFields = new[] { "WHEAT-SRW - CHICAGO BOARD OF TRADE", "001602" };
+
+        var result = (string)GetFieldMethod.Invoke(null, [truncatedFields, columnIndex, "Pct_of_OI_Comm_Short_All"]);
+
+        result.Should().BeNull();
+    }
+
     [Fact]
     public void ParseLine_LegacyDateColumnOnly_FallsBackToAsOfDateInFormYyMmDd() {
         // CFTC's COT history files mix two CSV schemas across the decades-long backfill:
