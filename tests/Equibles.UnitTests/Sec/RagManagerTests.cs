@@ -50,4 +50,37 @@ public class RagManagerTests {
         secondIdx.Should().BeGreaterThan(firstIdx);
         thirdIdx.Should().BeGreaterThan(secondIdx);
     }
+
+    [Fact]
+    public async Task BuildContext_EmptyChunkList_ReturnsNoDocumentsFoundMessage() {
+        // Sibling to the StartPosition-ordering pin above. The risk this catches is
+        // asymmetric and unreachable from the existing test: `BuildContext` begins
+        // with an early guard
+        //   if (!chunks.Any()) return Task.FromResult("No relevant financial documents found.");
+        // EVERY downstream line (the GroupBy on `c.Document.CommonStock.Ticker`, the
+        // `group.First()` enumerator, the `chunks.OrderBy` inside the inner foreach)
+        // would NRE on an empty list because Document navigation is fetched lazily —
+        // not because of empty enumeration itself, but because the very first chunk
+        // touch in `groupedChunks.First()` would crash if the guard were dropped.
+        //
+        // The user-visible failure mode is a generic "An error occurred while
+        // searching the document. Please try again." message from McpToolExecutor's
+        // outer catch, with no signal to the operator about WHY the empty-results
+        // case suddenly started erroring. The friendly "No relevant financial
+        // documents found." string is the contract the LLM consumer relies on to
+        // distinguish "we searched and found nothing" from "the search itself
+        // failed". A regression here corrupts that distinction silently — every
+        // legitimate zero-result query starts looking like a server failure, and
+        // the LLM either retries (wasting tokens) or surfaces a misleading error
+        // to the user.
+        //
+        // The pair (non-empty → ordered excerpts, empty → friendly empty-message)
+        // distinguishes a working guard from BOTH guard-dropped (NRE catchpath)
+        // AND guard-inverted (wrong message for non-empty case) regressions.
+        var sut = new RagManager(chunkRepository: null, commonStockRepository: null, logger: null);
+
+        var result = await sut.BuildContext(new List<Chunk>());
+
+        result.Should().Be("No relevant financial documents found.");
+    }
 }
