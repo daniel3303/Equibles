@@ -231,4 +231,55 @@ public class SecEdgarClientTests {
 
         result.Should().Be("https://www.sec.gov/Archives/edgar/data/0000320193/0000320193-25-000001-index.txt");
     }
+
+    [Fact]
+    public void GetRetryDelay_RetryAfterAbsoluteDateInFuture_ReturnsWaitUntilThatDate() {
+        // Fourth pin in the GetRetryDelay family. Existing pins cover the three
+        // Delta paths (cap, within-cap, no header → exponential backoff). This
+        // pin covers path 4: RFC 7231 §7.1.3 permits Retry-After to carry an
+        // absolute HTTP-date in addition to delta-seconds, and SEC has been
+        // observed serving both forms during throttling. The Date branch in
+        // GetRetryDelay is unpinned — every existing test uses a TimeSpan
+        // (Delta) form.
+        //
+        // The risk this catches is structurally distinct from the Delta
+        // branch: a refactor that "simplifies" GetRetryDelay by dropping the
+        //   if (response.Headers.RetryAfter?.Date is { } date) { ... }
+        // block (under the false intuition that "we never use the Date form
+        // anyway" — the existing test corpus would back that intuition) would
+        // compile, pass all three Delta pins, and silently fall through to
+        // exponential backoff every time SEC sends an absolute-date Retry-After.
+        // The fallback isn't catastrophic (the worker still retries), but the
+        // honored delay would be 2-4s instead of the seconds-until-the-stated-
+        // resumption-time SEC explicitly requested — hammering SEC's rate
+        // limiter exactly when it's asking us to wait, inviting longer bans.
+        //
+        // Tactical risks the Date branch additionally guards:
+        //   • Past-date handling: if SEC sends a stale Retry-After (clock skew,
+        //     or SEC's deployment writes one from the previous request), the
+        //     branch's `wait > TimeSpan.Zero` guard avoids a negative delay.
+        //     Not pinned here — that's a separate edge case.
+        //   • Cap: the Date branch has its own MaxRetryDelay cap mirroring the
+        //     Delta branch's cap. Not pinned here — covered by symmetry with
+        //     the existing Delta cap pin if the branch is preserved.
+        //
+        // The minimum the Date branch must do is the happy path: future date
+        // within the cap → return ≈ (date - now). Pin a date ~2 minutes in
+        // the future (well below MaxRetryDelay = 5min) so the cap clause is
+        // a no-op and the assertion isolates the "return wait" line. A small
+        // tolerance (BeCloseTo ±5s) absorbs the clock drift between
+        // constructing the header and reading UtcNow inside GetRetryDelay —
+        // that's the dominant non-determinism here.
+        using var httpClient = new HttpClient();
+        var configuration = new ConfigurationBuilder().Build();
+        var sut = new SecEdgarClient(httpClient, NullLogger<SecEdgarClient>.Instance, configuration);
+
+        var retryAt = DateTimeOffset.UtcNow.AddMinutes(2);
+        using var response = new HttpResponseMessage(System.Net.HttpStatusCode.TooManyRequests);
+        response.Headers.RetryAfter = new RetryConditionHeaderValue(retryAt);
+
+        var delay = (TimeSpan)GetRetryDelayMethod.Invoke(sut, [response, 0]);
+
+        delay.Should().BeCloseTo(TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(5));
+    }
 }
