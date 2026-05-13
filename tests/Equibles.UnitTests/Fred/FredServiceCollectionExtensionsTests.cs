@@ -1,7 +1,9 @@
+using Equibles.Fred.HostedService;
 using Equibles.Fred.HostedService.Extensions;
 using Equibles.Fred.HostedService.Services;
 using Equibles.Integrations.Fred.Contracts;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Equibles.UnitTests.Fred;
 
@@ -62,5 +64,55 @@ public class FredServiceCollectionExtensionsTests {
         services.AddFredWorker();
 
         services.Should().Contain(d => d.ServiceType == typeof(FredImportService));
+    }
+
+    [Fact]
+    public void AddFredWorker_RegistersFredScraperWorkerAsIHostedService() {
+        // Third sibling in the AddFredWorker registration family. The two
+        // existing pins cover the AutoWireServicesFrom scans (FredImportService
+        // and IFredClient). This pin covers the structurally distinct
+        // `services.AddHostedService<FredScraperWorker>()` registration that
+        // wires the worker into the .NET generic host so it starts at boot.
+        //
+        // The risk this catches is asymmetric and unreachable from the two
+        // existing AutoWires pins:
+        //   • A regression that drops `AddHostedService<FredScraperWorker>()`
+        //     would compile cleanly, pass both AutoWires pins (FredImportService
+        //     and IFredClient are still registered), and silently disable the
+        //     entire FRED macroeconomic series ingest at startup. The application
+        //     boots, every dependency resolves, but no IHostedService
+        //     implementation of FredScraperWorker is enumerated — the periodic
+        //     fetch of FEDFUNDS, CPIAUCSL, UNRATE, and other macro series never
+        //     fires. The public dashboard's macro charts silently freeze at
+        //     whichever day the regression deployed.
+        //   • A regression that downgrades the registration to AddScoped or
+        //     AddSingleton would register the worker as a resolvable service
+        //     but NOT enumerate it as IHostedService — same silent failure.
+        //
+        // FRED data updates are daily for the headline series (Fed Funds rate,
+        // CPI release windows, jobless claims) and weekly/monthly for the rest.
+        // A dropped registration produces a gap that becomes operator-visible
+        // on the next data release the public was expecting — but only if
+        // someone was watching that specific series. Other series silently
+        // accumulate staleness.
+        //
+        // This pin mirrors the AddSecWorker / AddHoldingsWorker / AddCftcWorker /
+        // AddCongressWorker hosted-service pin family pattern. FredScraperWorker
+        // is the SINGLE hosted service AddFredWorker registers — no further
+        // siblings in this family.
+        //
+        // Lookup pattern: filter IHostedService descriptors and assert one has
+        // ImplementationType == typeof(FredScraperWorker).
+        var services = new ServiceCollection();
+
+        services.AddFredWorker();
+
+        var hostedServiceDescriptors = services
+            .Where(d => d.ServiceType == typeof(IHostedService))
+            .ToList();
+
+        hostedServiceDescriptors.Should().Contain(
+            d => d.ImplementationType == typeof(FredScraperWorker),
+            "AddHostedService<FredScraperWorker>() must register the worker as IHostedService so the FRED macroeconomic series fetch runs at startup");
     }
 }
