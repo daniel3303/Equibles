@@ -460,4 +460,58 @@ public class HoldingsParsingHelperTests {
 
         result.Should().Be(ShareType.Shares);
     }
+
+    [Fact]
+    public void ParseShareType_ShAbbreviation_ReturnsSharesViaExplicitArmNotDefault() {
+        // Complement to ParseShareType_UnrecognizedValue_FallsBackToSharesNotPrincipal.
+        // The recent default-arm pin asserts that UNK input falls through to Shares.
+        // This pin asserts that the EXPLICIT "SH" arm also returns Shares — distinct
+        // assertion at a structurally distinct source line.
+        //
+        // Why both pins are needed when they return the same enum value:
+        //   The switch source is `"SH" => Shares, "PRN" => Principal, _ => Shares`.
+        //   The "SH" named arm and the `_ => Shares` default arm BOTH return Shares.
+        //   Two distinct regression classes apply, each caught by a different pin:
+        //
+        //   1. DROP regression — someone removes the named "SH" arm under the
+        //      reasoning "SH falls through to the default anyway, so the explicit
+        //      arm is redundant". This compiles and behaves identically: every input
+        //      flows through the same path. The default-arm pin (passes) and this
+        //      pin (still passes — SH input → default → Shares) BOTH pass. So a
+        //      pure DROP is not detectable from either pin alone or together.
+        //      This is acceptable: a pure drop is behavior-preserving and not a
+        //      regression to catch.
+        //
+        //   2. SWAP regression — someone changes the named "SH" arm's mapping to
+        //      a wrong enum value (e.g. `"SH" => Principal` from a copy-paste edit
+        //      that touched the wrong line, or `"SH" => Principal` from a
+        //      "harmonize with PRN" refactor that mixed up the two literals).
+        //      This compiles and changes behavior ONLY for the "SH" input —
+        //      everything else still hits its own arm or the default. The
+        //      default-arm pin (UNK input) PASSES because the default is untouched.
+        //      The PRN sibling pin PASSES because it targets its own arm. Only an
+        //      explicit "SH" → Shares pin fails on this swap.
+        //
+        //   The swap regression is the ONE meaningful refactor risk the default-arm
+        //   pin doesn't catch. This complementary pin surfaces it in CI.
+        //
+        // The production analog: "SH" is the dominant wire value (>95% of 13F
+        // positions per SEC aggregate stats — the 13F universe is overwhelmingly
+        // equity, not debt). Silently flipping every SH-encoded equity holding to
+        // Principal would corrupt the largest population of positions in the
+        // database — the holdings dashboard's equity-vs-debt aggregation would
+        // invert its denominator across virtually every modern filing.
+        //
+        // The structural parallel to the recent
+        // ParseInvestmentDiscretion_SoleAbbreviation_ReturnsSoleViaExplicitArmNotDefault
+        // pin is exact: same helper class, same "named arm + default arm share return
+        // value" shape, same swap-vs-drop regression matrix. The pair of pins
+        // (explicit + default) per shared-value switch is the established pattern.
+        //
+        // Pin "SH" (uppercase, the literal wire encoding) and assert the exact
+        // enum value Shares. A swap to Principal (or any other value) surfaces here.
+        var result = HoldingsParsingHelper.ParseShareType("SH");
+
+        result.Should().Be(ShareType.Shares);
+    }
 }
