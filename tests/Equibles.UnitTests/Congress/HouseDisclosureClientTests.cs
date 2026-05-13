@@ -1,4 +1,6 @@
+using System.IO.Compression;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Equibles.Congress.Data.Models;
@@ -453,6 +455,101 @@ public class HouseDisclosureClientTests {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
             Requests.Add(request.RequestUri!.ToString());
             return Task.FromResult(new HttpResponseMessage(_statusCode));
+        }
+    }
+
+    [Fact]
+    public async Task GetRecentTransactions_FdZipMissingExpectedXmlEntry_ReturnsEmptyListAndDoesNotRequestAnyPtrPdf() {
+        // Second HTTP-coupled pin in this file. Sibling to
+        // GetRecentTransactions_FdZipReturns404ForYear_ReturnsEmptyListWithoutThrowing.
+        // That test exercises the 404 short-circuit BEFORE the ZIP is opened.
+        // This one covers the structurally distinct branch INSIDE
+        // DownloadAndParseFilingIndex after a successful 200 response:
+        //   var xmlEntry = archive.GetEntry($"{year}FD.xml");
+        //   if (xmlEntry == null) {
+        //       _logger.LogWarning("No XML index found in House FD ZIP for year {Year}", year);
+        //       return [];
+        //   }
+        // The two early-return branches (404 status, missing XML entry) are
+        // independent guards — the 404 sibling never reaches the ZipArchive
+        // open call, so it doesn't exercise this branch.
+        //
+        // Production scenario: the House Clerk occasionally publishes a
+        // partial-build FD ZIP during the rollover window where the
+        // {year}FD.xml entry has been renamed (a past rebrand shipped
+        // "{year}_FD.xml" with an underscore for half a day before being
+        // rolled back), or the archive is uploaded with a leading
+        // directory prefix that breaks GetEntry's exact-name match. The
+        // guard ensures the importer silently skips that year rather than
+        // dereferencing a null xmlEntry on the next line:
+        //   await using var xmlStream = xmlEntry.Open();
+        // which would NRE, propagate up through GetRecentTransactions'
+        // outer catch (Exception), and log a Warning per affected year.
+        //
+        // A refactor that drops the null guard (e.g. a "use the null-
+        // forgiving operator since we just downloaded the file" simpli-
+        // fication) would compile cleanly, pass the 404 sibling (different
+        // code path entirely), and silently crash every year with a
+        // misnamed XML entry. The data outcome is the same (no filings
+        // imported for that year), but the operational signal — DEBUG vs.
+        // crash-warning per malformed-but-published ZIP — diverges
+        // exactly the way that masks real CDN incidents.
+        //
+        // Pin: build a one-entry ZIP in memory with an UNEXPECTED entry
+        // name ("wrongname.xml") and serve it as the response body for
+        // the year's FD ZIP request. Three assertions together prove the
+        // missing-entry guard fires:
+        //   1. No exception escapes — proves GetEntry's null result was
+        //      handled before the .Open() dereference.
+        //   2. The returned filings list is empty — proves the method
+        //      returned [] from the guard rather than processing some
+        //      fallback entry.
+        //   3. Only the ZIP URL was requested — proves the missing-XML
+        //      branch did NOT cascade into PTR PDF downloads (which
+        //      would happen if the method somehow surfaced phantom
+        //      filings from another path).
+        var zipBytes = BuildZipWithSingleEntry("wrongname.xml", "<irrelevant />");
+        var handler = new BytesContentHandler(zipBytes, "application/zip");
+        using var httpClient = new HttpClient(handler);
+        var sut = new HouseDisclosureClient(httpClient, Substitute.For<ILogger<HouseDisclosureClient>>());
+
+        var result = await sut.GetRecentTransactions(
+            new DateOnly(2025, 1, 1),
+            new DateOnly(2025, 12, 31),
+            CancellationToken.None);
+
+        result.Should().BeEmpty();
+        handler.Requests.Should().ContainSingle(
+            "the missing-XML-entry branch must not cascade into per-filing PTR PDF downloads");
+        handler.Requests[0].Should().Contain("2025FD.zip",
+            "only the year's FD ZIP URL should be requested");
+    }
+
+    private static byte[] BuildZipWithSingleEntry(string entryName, string entryContent) {
+        using var memory = new MemoryStream();
+        using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true)) {
+            var entry = archive.CreateEntry(entryName);
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write(entryContent);
+        }
+        return memory.ToArray();
+    }
+
+    private sealed class BytesContentHandler : HttpMessageHandler {
+        private readonly byte[] _content;
+        private readonly string _contentType;
+        public List<string> Requests { get; } = new();
+        public BytesContentHandler(byte[] content, string contentType) {
+            _content = content;
+            _contentType = contentType;
+        }
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+            Requests.Add(request.RequestUri!.ToString());
+            var response = new HttpResponseMessage(HttpStatusCode.OK) {
+                Content = new ByteArrayContent(_content)
+            };
+            response.Content.Headers.ContentType = new MediaTypeHeaderValue(_contentType);
+            return Task.FromResult(response);
         }
     }
 
