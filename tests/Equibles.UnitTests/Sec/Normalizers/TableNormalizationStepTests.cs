@@ -138,6 +138,25 @@ public class TableNormalizationStepTests {
     }
 
     [Fact]
+    public void Execute_EmptyRowRemoval_RemovesRowContainingOnlyWhitespaceSpan() {
+        // SEC filings frequently wrap whitespace in styled spans for layout
+        // (e.g. <span style="color:red"> </span>). Those rows are visually
+        // empty and should be stripped even though the cell's InnerHtml is
+        // not literally whitespace or &nbsp;.
+        var doc = _parser.ParseDocument(
+            "<html><body><table>" +
+            "<tr><td>Data</td></tr>" +
+            "<tr><td><span style=\"color:red\"> </span></td></tr>" +
+            "</table></body></html>");
+
+        _step.Execute(doc);
+
+        var rows = doc.QuerySelectorAll("tr");
+        rows.Length.Should().Be(1);
+        rows[0].QuerySelectorAll("td")[0].TextContent.Should().Be("Data");
+    }
+
+    [Fact]
     public void Execute_NoTables_DoesNotThrow() {
         var doc = _parser.ParseDocument(
             "<html><body><p>No tables here</p></body></html>");
