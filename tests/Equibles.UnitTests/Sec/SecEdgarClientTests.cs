@@ -12,6 +12,9 @@ public class SecEdgarClientTests {
     private static readonly MethodInfo FormatCikMethod = typeof(SecEdgarClient)
         .GetMethod("FormatCik", BindingFlags.NonPublic | BindingFlags.Static);
 
+    private static readonly MethodInfo GetDocumentUrlMethod = typeof(SecEdgarClient)
+        .GetMethod("GetDocumentUrl", BindingFlags.NonPublic | BindingFlags.Static);
+
     [Fact]
     public void FormatCik_ShortCik_PadsLeftToTenDigitsWithZeros() {
         // SEC EDGAR's archive URLs require the CIK in a specific 10-digit
@@ -43,5 +46,44 @@ public class SecEdgarClientTests {
         var result = (string)FormatCikMethod.Invoke(null, ["320193"]);
 
         result.Should().Be("0000320193");
+    }
+
+    [Fact]
+    public void GetDocumentUrl_ValidCikAndAccession_ComposesSecArchiveTxtUrlWithPaddedCik() {
+        // Sibling to the FormatCik pin above. GetDocumentUrl composes the
+        // exact URL the caller hands to HttpClient.GetAsync to fetch a
+        // filing's raw text envelope. SEC's CDN matches the URL byte-for-
+        // byte:
+        //   - The domain MUST be www.sec.gov (not data.sec.gov — the
+        //     submissions API uses data.sec.gov but the archive uses
+        //     www.sec.gov, and BaseUrl in this client points at data.sec.gov,
+        //     so a refactor that "deduplicates" the literal by routing
+        //     through BuildUrl would silently produce 404s).
+        //   - The path MUST be /Archives/edgar/data/{padded-cik}/{accession}
+        //     in that exact case (SEC's CDN serves capitalized `Archives`
+        //     but is case-sensitive — `/archives/...` 404s).
+        //   - The extension MUST be `.txt` for the raw SGML envelope; SEC
+        //     also publishes `.htm` index pages at adjacent URLs, but
+        //     parsing those would mis-route to an HTML index document
+        //     rather than the actual filing content.
+        //   - The CIK must be zero-padded to 10 digits (covered indirectly
+        //     here, redundant with the FormatCik pin; pair gives belt-and-
+        //     suspenders coverage in case the FormatCik wiring is bypassed).
+        //
+        // The risk this catches is a "refactor that goes too far": someone
+        // sees `https://www.sec.gov/...` as a magic string and tries to
+        // hoist it to a constant or compose it via `BuildUrl(...)` — both
+        // produce silently wrong URLs (BuildUrl uses BaseUrl =
+        // data.sec.gov, and any constant-hoisting that picks the wrong
+        // domain matches the SEC URL conventions but 404s in production).
+        // Existing integration tests don't necessarily catch the URL
+        // shape — most are HTTP-level mocks that match on relative path,
+        // not the full absolute URL.
+        //
+        // Pin with Apple's CIK and a realistic accession number; assert
+        // the literal output so a 1-character drift surfaces.
+        var result = (string)GetDocumentUrlMethod.Invoke(null, ["320193", "0000320193-25-000001-index"]);
+
+        result.Should().Be("https://www.sec.gov/Archives/edgar/data/0000320193/0000320193-25-000001-index.txt");
     }
 }
