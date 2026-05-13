@@ -930,4 +930,109 @@ public class InsiderTradingFilingProcessorTests {
         transactions[0].AcquiredDisposed.Should().Be(AcquiredDisposed.Disposed);
         transactions[0].TransactionCode.Should().Be(TransactionCode.Sale);
     }
+
+    [Fact]
+    public async Task Process_TransactionWithOnlyTransactionDate_PersistsRowWithDefaultsForEveryOptionalElement() {
+        // Pins the null arms of every `?.Element("…")?.Element("value")?.Value?.Trim()` chain
+        // inside ParseTransaction (lines 197-204). The existing happy-path tests always carry
+        // securityTitle / transactionCoding / transactionAmounts / postTransactionAmounts /
+        // ownershipNature, so only the non-null branches fire — a refactor that flattens those
+        // chains to non-null-safe access (e.g. swap `?.Element` for `.Element`) would still
+        // pass every existing pin, then NRE on production filings where the SEC omits one of
+        // these elements (common for terminated officers or auto-vested awards with no
+        // post-transaction balance reported).
+        //
+        // The transactionDate IS present because ParseTransaction returns null when it can't
+        // parse the date — that branch is already exercised. We want the OTHER null paths.
+        // Result: one persisted transaction with SecurityTitle=null, TransactionCode=Other,
+        // Shares=0, PricePerShare=0, SharesOwnedAfter=0, AcquiredDisposed=Acquired (`!= "D"`
+        // falls to Acquired), OwnershipNature=Direct (`!= "I"` falls to Direct).
+        const string xml = """
+            <ownershipDocument>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0001234567</rptOwnerCik>
+                        <rptOwnerName>Sparse Filer</rptOwnerName>
+                    </reportingOwnerId>
+                    <reportingOwnerRelationship>
+                        <isDirector>0</isDirector>
+                        <isOfficer>0</isOfficer>
+                        <isTenPercentOwner>0</isTenPercentOwner>
+                    </reportingOwnerRelationship>
+                </reportingOwner>
+                <nonDerivativeTable>
+                    <nonDerivativeTransaction>
+                        <transactionDate><value>2024-03-15</value></transactionDate>
+                    </nonDerivativeTransaction>
+                </nonDerivativeTable>
+            </ownershipDocument>
+            """;
+        var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(xml);
+
+        var result = await processor.Process(MakeFiling(), MakeCompany());
+
+        result.Should().BeTrue();
+        var transactions = txRepo.GetAll().ToList();
+        transactions.Should().ContainSingle();
+        transactions[0].SecurityTitle.Should().BeNull();
+        transactions[0].TransactionCode.Should().Be(TransactionCode.Other);
+        transactions[0].Shares.Should().Be(0);
+        transactions[0].PricePerShare.Should().Be(0m);
+        transactions[0].SharesOwnedAfter.Should().Be(0);
+        transactions[0].AcquiredDisposed.Should().Be(AcquiredDisposed.Acquired);
+        transactions[0].OwnershipNature.Should().Be(OwnershipNature.Direct);
+        transactions[0].TransactionDate.Should().Be(new DateOnly(2024, 3, 15));
+    }
+
+    [Fact]
+    public async Task Process_HoldingWithNoInnerElements_PersistsRowWithDefaultsForEveryOptionalElement() {
+        // Pins the null arms of every `?.Element(...)` chain inside ParseHolding (lines 227-229).
+        // The existing Form 3 happy-path pin always carries securityTitle / postTransactionAmounts
+        // / ownershipNature, so only the non-null branches fire. A refactor that drops a `?.` for
+        // any of those elements would still pass that pin but NRE on production filings where
+        // the SEC omits one — terminated holdings, anonymized holdings during a confidentiality
+        // window, or aggregator-flattened filings.
+        //
+        // Result: one persisted holding-as-transaction with SecurityTitle=null, Shares=0,
+        // SharesOwnedAfter=0 (both derived from the same null sharesStr), OwnershipNature=Direct
+        // (`!= "I"` falls to Direct), TransactionCode=Other (hardcoded), TransactionDate
+        // pulled from the filing's ReportDate. The transactions-count==0 fallback (which would
+        // synthesize a "No Securities Owned" row) must NOT fire because ParseHolding does
+        // return a row even when every optional element is null.
+        const string xml = """
+            <ownershipDocument>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0009999999</rptOwnerCik>
+                        <rptOwnerName>Sparse Holder</rptOwnerName>
+                    </reportingOwnerId>
+                    <reportingOwnerRelationship>
+                        <isDirector>0</isDirector>
+                        <isOfficer>0</isOfficer>
+                        <isTenPercentOwner>1</isTenPercentOwner>
+                    </reportingOwnerRelationship>
+                </reportingOwner>
+                <nonDerivativeTable>
+                    <nonDerivativeHolding>
+                    </nonDerivativeHolding>
+                </nonDerivativeTable>
+            </ownershipDocument>
+            """;
+        var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(xml);
+        var filing = MakeFiling(form: "3");
+
+        var result = await processor.Process(filing, MakeCompany());
+
+        result.Should().BeTrue();
+        var transactions = txRepo.GetAll().ToList();
+        transactions.Should().ContainSingle();
+        transactions[0].SecurityTitle.Should().BeNull();
+        transactions[0].TransactionCode.Should().Be(TransactionCode.Other);
+        transactions[0].Shares.Should().Be(0);
+        transactions[0].SharesOwnedAfter.Should().Be(0);
+        transactions[0].OwnershipNature.Should().Be(OwnershipNature.Direct);
+        transactions[0].TransactionDate.Should().Be(filing.ReportDate);
+    }
 }
