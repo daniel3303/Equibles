@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.HostedService.Services;
@@ -5,6 +6,29 @@ using Equibles.Holdings.HostedService.Services;
 namespace Equibles.UnitTests.Holdings;
 
 public class HoldingsParsingHelperTests {
+    [Fact]
+    public void FindEntry_LookupWithDifferentCase_FallsBackToCaseInsensitiveMatch() {
+        // SEC publishes 13F-HR datasets where filename casing can shift
+        // between periods (e.g. SUBMISSION.tsv in older dumps vs
+        // submission.tsv in newer ones). The exact ZipArchive.GetEntry
+        // call is case-sensitive, so FindEntry falls back to a case-
+        // insensitive linear scan via FirstOrDefault. Pin the fallback
+        // so a refactor that drops the `??` half (or replaces the scan
+        // with a case-sensitive equality check) would silently make
+        // every quarter where SEC swapped casing fail to import.
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true)) {
+            archive.CreateEntry("SUBMISSION.tsv");
+        }
+        stream.Position = 0;
+        using var readArchive = new ZipArchive(stream, ZipArchiveMode.Read);
+
+        var entry = HoldingsParsingHelper.FindEntry(readArchive, "submission.tsv");
+
+        entry.Should().NotBeNull();
+        entry.Name.Should().Be("SUBMISSION.tsv");
+    }
+
     [Fact]
     public void TryParseDateOnly_SecFormat_ReturnsExpectedDate() {
         var success = HoldingsParsingHelper.TryParseDateOnly("15-MAR-2024", out var result);
