@@ -269,6 +269,57 @@ public class SecDocumentHtmlNormalizerTests {
     }
 
     [Fact]
+    public void Normalize_FilenameWithTxtExtension_IsAllowed() {
+        // Sibling to `Normalize_FilenameWithFullHtmlExtension_IsAllowed`.
+        // Completes the three-arm OR coverage of ExtractAndFilterDocuments'
+        // extension gate:
+        //   if (!filename.EndsWith(".htm")
+        //       && !filename.EndsWith(".html")
+        //       && !filename.EndsWith(".txt")) continue;
+        // Existing tests covered `.htm`; the `.html` pin in the previous
+        // iteration covered the second arm. This pin covers the `.txt`
+        // arm — the last unpinned branch.
+        //
+        // SEC's archive uses `.txt` for legacy plain-text submissions: pre-
+        // EDGAR-modernization filings, paper-filed conversions, and the
+        // raw SGML-wrapped envelope at the canonical archive URL
+        // (`{accession}.txt`). While the bulk of the modern corpus is
+        // `.htm`/`.html`, the historical backfill — every 10-K filed
+        // before ~2000 — is `.txt`-extension only. A refactor that drops
+        // the `.txt` arm (under the false intuition that "we use the
+        // .htm wrapper for everything modern, the .txt fallback is
+        // dead code") would compile, pass the `.htm` and `.html` pins,
+        // and silently filter out the pre-2000 backfill the moment a
+        // re-ingest is triggered. The failure mode is invisible: the
+        // historical search index loses depth without any error trail.
+        //
+        // The `.txt` arm is also structurally the most distinct of the
+        // three — it doesn't share any suffix overlap with the other
+        // two. A regression that consolidates `.htm`/`.html` via a
+        // single `EndsWith(".htm")` cannot accidentally still admit
+        // `.txt` filenames; dropping `.txt` is a deliberate edit that
+        // this pin makes loud.
+        //
+        // Use a representative legacy filename pattern; the assertion on
+        // the inner content proves (a) the filename was admitted and
+        // (b) the text content was extracted by ExtractInnerContent's
+        // TEXT-tag fallback.
+        var sgml = """
+            <DOCUMENT>
+            <TYPE>10-K
+            <FILENAME>0000320193-97-000001.txt
+            <TEXT>
+            <html><body><p>Legacy text-filed annual report body</p></body></html>
+            </TEXT>
+            </DOCUMENT>
+            """;
+
+        var result = _sut.Normalize(sgml);
+
+        result.Should().Contain("Legacy text-filed annual report body");
+    }
+
+    [Fact]
     public void Normalize_XbrlWrappedContent_ExtractsFromXbrlTag() {
         var sgml = """
             <DOCUMENT>
