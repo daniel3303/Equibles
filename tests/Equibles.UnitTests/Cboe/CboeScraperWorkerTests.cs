@@ -33,6 +33,41 @@ public class CboeScraperWorkerTests {
     }
 
     [Fact]
+    public void WorkerName_IsCboeScraper() {
+        // WorkerName flows into BaseScraperWorker's startup/shutdown log output:
+        //   _logger.LogInformation("Starting {WorkerName}", WorkerName);
+        //   _logger.LogInformation("{WorkerName} stopped", WorkerName);
+        // …and into every error report context line, plus the periodic Serilog
+        // heartbeat that operator runbooks grep for to confirm the worker is alive.
+        //
+        // The risk this pins: a refactor that renames the string (e.g. "Cboe
+        // scraper" lowercase, "CBOE Scraper" Pascal, "CBOE put/call scraper" more
+        // specific) would silently break every operator runbook query that filters
+        // production Serilog by the exact display string. The downstream consequences
+        // are concrete:
+        //   • Oncall dashboards that count CBOE-scraper heartbeats would empty out,
+        //     triggering false "worker silent" alerts.
+        //   • Log-aggregation queries used during post-mortems would miss CBOE
+        //     entries, hiding the worker's behavior during incidents.
+        //
+        // No other scraper worker in the codebase has its WorkerName pinned — this
+        // pin is the first in a planned family, establishing the pattern. The
+        // ErrorSource and SleepInterval pins above protect routing and cadence;
+        // WorkerName protects operator visibility. All three are independently
+        // load-bearing and need independent regression coverage.
+        var options = Options.Create(new CboeScraperOptions { SleepIntervalHours = 24 });
+        var sut = new TestableCboeScraperWorker(
+            Substitute.For<ILogger<CboeScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()),
+            options);
+
+        sut.InvokeWorkerName().Should().Be("CBOE scraper");
+    }
+
+    [Fact]
     public void ErrorSource_IsCboeScraper() {
         // CboeScraperWorker pulls VIX history and put/call ratios from cboe.com —
         // a different upstream and data product from every other scraper. The
@@ -67,5 +102,7 @@ public class CboeScraperWorkerTests {
         public TimeSpan InvokeSleepInterval() => SleepInterval;
 
         public ErrorSource InvokeErrorSource() => ErrorSource;
+
+        public string InvokeWorkerName() => WorkerName;
     }
 }
