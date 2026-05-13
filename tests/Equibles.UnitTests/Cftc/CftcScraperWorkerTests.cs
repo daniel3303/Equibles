@@ -1,6 +1,7 @@
 using Equibles.Cftc.HostedService;
 using Equibles.Cftc.HostedService.Configuration;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.Data.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -32,6 +33,32 @@ public class CftcScraperWorkerTests {
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(12));
     }
 
+    [Fact]
+    public void ErrorSource_IsCftcScraper() {
+        // CftcScraperWorker pulls CFTC Commitment of Traders (COT) reports — a
+        // different upstream and a different data product from every other scraper
+        // in the system. When BaseScraperWorker's catch-all reports a failure, it
+        // tags the error with this enum value as the routing key for the issue
+        // tracker. A regression that copy-pasted from a sibling worker's enum
+        // value (FtdScraper, DocumentScraper, FinraScraper — all visually similar
+        // ErrorSource members defined in the same Errors.Data.Models namespace)
+        // would silently route every COT failure into the wrong on-call queue,
+        // pointing the responder at the wrong upstream's outage page. The
+        // existing SleepInterval pin doesn't touch this property, so a typo
+        // or reorder has no test signal. Pin the literal enum value so any
+        // future routing change is a deliberate test update.
+        var options = Options.Create(new CftcScraperOptions { SleepIntervalHours = 24 });
+        var sut = new TestableCftcScraperWorker(
+            Substitute.For<ILogger<CftcScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()),
+            options);
+
+        sut.InvokeErrorSource().Should().Be(ErrorSource.CftcScraper);
+    }
+
     private sealed class TestableCftcScraperWorker : CftcScraperWorker {
         public TestableCftcScraperWorker(
             ILogger<CftcScraperWorker> logger,
@@ -41,5 +68,7 @@ public class CftcScraperWorkerTests {
             : base(logger, scopeFactory, errorReporter, options) { }
 
         public TimeSpan InvokeSleepInterval() => SleepInterval;
+
+        public ErrorSource InvokeErrorSource() => ErrorSource;
     }
 }
