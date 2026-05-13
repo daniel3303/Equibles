@@ -77,4 +77,55 @@ public class HeroIconsTests {
         svg.Should().NotContain("stroke=\"currentColor\"");
         svg.Should().NotContain("stroke-linecap");
     }
+
+    [Fact]
+    public void Render_WithNonDefaultSize_EmitsCorrespondingSizeClass() {
+        // Sibling to Render_WithCustomCssClass_AppendsCssClassToBaseClassesWhilePreservingSize.
+        // The existing custom-cssClass pin asserts `svg.Should().Contain("size-6")`
+        // but uses `size: "6"` — the DEFAULT. That pin proves the size class is
+        // present when the default is selected, but it CANNOT distinguish the
+        // correct interpolation:
+        //     var sizeClass = $"size-{size}";
+        // from a regression that hardcoded the size literal:
+        //     var sizeClass = "size-6";  // hardcoded — bug
+        // Both versions emit "size-6" when called with the default — the existing
+        // pin's `Contain("size-6")` assertion passes either way.
+        //
+        // The risk this pin uniquely catches: a refactor that drops the `{size}`
+        // interpolation in favor of a hardcoded literal — perhaps under the
+        // false intuition that "we always pass size: 6 in practice, the
+        // parameter is dead" — would compile cleanly, pass every existing
+        // Render pin (Solid path, custom-cssClass, Get fallback), and silently
+        // shrink/grow every icon that callers wanted at a non-default size.
+        //
+        // Real production use:
+        //   • size: "4" — small inline icons in toast messages and badges
+        //   • size: "5" — buttons in tables and lists
+        //   • size: "6" — DEFAULT — body-text-adjacent icons (header nav, etc.)
+        //   • size: "8" — feature card headers
+        //   • size: "10" / "12" — hero illustrations and empty-state placeholders
+        // A hardcoded "size-6" regression silently flattens all those sizes to
+        // body-text size — the affordance gradient is gone, every icon becomes
+        // the same visual weight. Operators don't notice immediately because
+        // every icon still renders; they only notice when the visual hierarchy
+        // looks "flat" or "off" — exactly the kind of degradation that
+        // accumulates over time without an obvious trigger.
+        //
+        // The complementary risk: a refactor that prefixed differently
+        // (`text-{size}` instead of `size-{size}` — a copy-paste from Tailwind's
+        // text utility) would also break, producing `text-8` (not a valid
+        // Tailwind utility) instead of `size-8` (the correct dimension utility).
+        // Asserting on the exact "size-8" literal catches this too.
+        //
+        // Pin: pass `size: "8"` (a real non-default size used in production
+        // for feature card headers) and assert the output contains the
+        // CORRESPONDING "size-8" class AND does NOT contain "size-6" (the
+        // hardcoded-regression marker). Both assertions are required — the
+        // positive proves the interpolation works, the negative proves the
+        // interpolation USED THE PARAMETER (not the default).
+        var svg = HeroIcons.Render("plus", HeroIcons.IconStyle.Outline, size: "8");
+
+        svg.Should().Contain("size-8");
+        svg.Should().NotContain("size-6");
+    }
 }
