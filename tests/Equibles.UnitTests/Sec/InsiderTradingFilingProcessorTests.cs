@@ -68,6 +68,32 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
+    public void ParseTransactionCode_SaleCodeS_ReturnsSale() {
+        // Sibling pin to ParseTransactionCode_PurchaseCodeP_ReturnsPurchase. The
+        // existing P→Purchase test catches a P↔S swap (P→Sale fails the assertion),
+        // but it does NOT catch an asymmetric regression that breaks only the S arm
+        // — e.g., a careless edit that changes `"S" => TransactionCode.Sale` to
+        // `"S" => TransactionCode.Other` (or any other arm) would pass the P test
+        // cleanly while silently classifying every insider sale as Other. The
+        // failure mode is invisible: dashboards that distinguish "insider buying"
+        // from "insider selling" would lose the entire Sale signal, while the
+        // Purchase signal would still appear in green-build CI.
+        //
+        // SEC Form 4 `S` is the open-market or private sale code — the single
+        // most common bearish-signal code in the corpus (Awards "A" are routine
+        // RSU grants and "F" is tax-payment-related, not discretionary). Pin it
+        // independently of P so the two highest-volume codes carry symmetric
+        // regression coverage. Lowercase input "s" is deliberately chosen to ALSO
+        // exercise the `code?.ToUpperInvariant()` normalization branch — without
+        // ToUpperInvariant, lowercase wire payloads would fall through to the
+        // default `_ => Other` arm. The pair (P→Purchase, s→Sale) covers BOTH
+        // the high-volume mapping AND the case-normalization step in two pins.
+        var result = (TransactionCode)ParseTransactionCodeMethod.Invoke(null, ["s"]);
+
+        result.Should().Be(TransactionCode.Sale);
+    }
+
+    [Fact]
     public void ParseTransactionCode_PurchaseCodeP_ReturnsPurchase() {
         // SEC Form 4 transaction codes are single letters that map to specific
         // insider-trade categories per §16 of the Exchange Act. ParseTransactionCode
