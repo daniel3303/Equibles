@@ -118,4 +118,19 @@ public class DocumentTypeTests {
         DocumentType.FromValue("CustomFiling").Should().Be(custom);
         DocumentType.FromDisplayName("CUSTOM-1").Should().Be(custom);
     }
+
+    [Fact]
+    public void Constructor_OmittedDisplayName_DefaultsToValue() {
+        // The ctor's `displayName ?? value` fallback lets callers register a
+        // wire-style DocumentType where the human-facing label is the same as
+        // the stable internal Value. Every built-in static instance passes an
+        // explicit displayName, so the fallback is only exercised via the
+        // public single-arg ctor. Pin it so a refactor that drops the
+        // `?? value` (e.g. requiring displayName non-null) breaks here
+        // rather than producing a DocumentType with a null DisplayName that
+        // ToString() and the AllByDisplayName registration would later trip on.
+        var custom = new DocumentType("WireOnly");
+
+        custom.DisplayName.Should().Be("WireOnly");
+    }
 }
