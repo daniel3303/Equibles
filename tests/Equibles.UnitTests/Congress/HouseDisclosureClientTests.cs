@@ -204,4 +204,26 @@ public class HouseDisclosureClientTests {
 
         result.Should().Be("APPLE INC - COMMON STOCK");
     }
+
+    [Fact]
+    public void RemoveTrailingTransactionType_PurchaseTrailingP_StripsSuffix() {
+        // Sibling to the existing Sale pin. RemoveTrailingTransactionType applies
+        // BOTH SaleTypeRegex.Replace AND PurchaseTypeRegex.Replace in sequence —
+        // the existing Sale pin only exercises the Sale arm. A regression that
+        // drops the PurchaseTypeRegex().Replace() call (plausible during a
+        // refactor that consolidates the two replaces into a single combined
+        // regex) would slip past the Sale pin entirely: Sale-tagged rows still
+        // get stripped, but every Purchase row keeps a dangling " P" tail in
+        // the persisted AssetName. Downstream the asset name column reads
+        // "APPLE INC - COMMON STOCK P" — visible in the Congress trades UI
+        // and MCP tool outputs. This pin exercises the Purchase strip in
+        // isolation (no S in the input) so the Purchase replace can't be
+        // silently dropped or merged with the Sale replace in a way that
+        // changes its semantics. The PurchaseTypeRegex `\bP\s*$` is
+        // intentionally case-sensitive (unlike SaleTypeRegex's IgnoreCase),
+        // pin asserts the canonical capital-P form rather than mixed case.
+        var result = (string)RemoveTrailingTransactionTypeMethod.Invoke(null, ["MICROSOFT CORP - COMMON STOCK P"]);
+
+        result.Should().Be("MICROSOFT CORP - COMMON STOCK");
+    }
 }
