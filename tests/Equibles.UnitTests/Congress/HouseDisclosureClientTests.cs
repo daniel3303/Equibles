@@ -19,6 +19,39 @@ public class HouseDisclosureClientTests {
     private static readonly MethodInfo OwnerCodeRegexMethod = typeof(HouseDisclosureClient)
         .GetMethod("OwnerCodeRegex", BindingFlags.NonPublic | BindingFlags.Static);
 
+    private static readonly MethodInfo DatePatternRegexMethod = typeof(HouseDisclosureClient)
+        .GetMethod("DatePatternRegex", BindingFlags.NonPublic | BindingFlags.Static);
+
+    [Fact]
+    public void DatePatternRegex_MatchesMmDdYyyyDateInPdfLineText() {
+        // DatePatternRegex pattern: `\b(\d{2}/\d{2}/\d{4})\b`. Used by
+        // ParseTransactionLines to locate the transaction date within a PDF
+        // text line that mixes owner code, asset description, transaction
+        // type marker, and date — e.g. "SP APPLE INC - COMMON STOCK P 01/14/2025".
+        // Without a match the line is skipped (`if (!dateMatch.Success) continue;`);
+        // with a match, the captured date string flows into ParseDate to become
+        // the persisted TransactionDate.
+        //
+        // The risk: a refactor that drops the `\b` word boundaries (e.g. "tidy
+        // up" the pattern to `(\d{2}/\d{2}/\d{4})`) would silently match
+        // date-looking substrings inside longer numeric runs — `1234/56/789012`
+        // would produce a phantom "34/56/7890" capture. ParseDate would reject
+        // most such captures, but borderline cases could produce wrong dates
+        // that downstream date-window analytics ("trades within N days of a
+        // hearing") would silently mis-bucket.
+        //
+        // Sibling to OwnerCodeRegex_MatchesSpouseCodeSP. Same reflection pattern
+        // (private static partial Regex via GeneratedRegex). Assert both
+        // Success AND the captured date string so a regression that broke the
+        // capture group (e.g. `(?:...)` non-capturing) also fails.
+        var regex = (Regex)DatePatternRegexMethod.Invoke(null, null);
+
+        var match = regex.Match("SP APPLE INC - COMMON STOCK P 01/14/2025 $1,001 - $15,000");
+
+        match.Success.Should().BeTrue();
+        match.Groups[1].Value.Should().Be("01/14/2025");
+    }
+
     [Fact]
     public void OwnerCodeRegex_MatchesSpouseCodeSP_AndCapturesOwnerCode() {
         // OwnerCodeRegex pattern: `^(SP|JT|DC|Self)\b` (case-insensitive).
