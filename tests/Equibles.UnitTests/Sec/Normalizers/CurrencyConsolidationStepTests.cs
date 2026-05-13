@@ -248,6 +248,57 @@ public class CurrencyConsolidationStepTests
     }
 
     [Fact]
+    public void InrSymbolColumnFollowedByEmptyColumn_AddsIndianRupeesNote()
+    {
+        // Third sibling in the per-currency-arm family (USD existing, EUR
+        // existing, GBP/JPY pinned in this loop). Completes the
+        // CurrencyMap entry pinning with INR. The mapping is
+        // `("₹", "Indian Rupees")`.
+        //
+        // INR is the lowest-volume entry in CurrencyMap and the most
+        // likely casualty of a "shrink the map" refactor: Indian ADRs
+        // (Infosys, Wipro, ICICI Bank, HDFC, Reliance ADR) DO file with
+        // SEC and report subsidiary segments in rupees, but the
+        // frequency is lower than EUR/GBP/JPY. A refactor that
+        // "rationalizes" CurrencyMap to the top 4 — silently dropping
+        // INR — would compile, pass every existing pin (USD, EUR, GBP,
+        // JPY), and silently fail to consolidate rupee columns. The
+        // ₹ glyph would survive in the rendered table and no "All
+        // values are in Indian Rupees" note would appear below it.
+        //
+        // The INR symbol `₹` (U+20B9 INDIAN RUPEE SIGN) is structurally
+        // distinct from the other currency glyphs in the map: it's a
+        // 3-byte UTF-8 codepoint that can lose its encoding on a
+        // refactor that touches CurrencyMap construction (e.g.
+        // re-emitting as a const string with a stripped escape) or
+        // round-trips through a non-UTF-8 source path. Pinning the
+        // symbol-key entry — rather than the textual "INR" code path
+        // already exercised by the USD/JPY textual-code variants —
+        // catches BOTH the entry-drop regression AND the
+        // codepoint-mangling regression.
+        //
+        // Pair the symbol-path assertion (this pin) with the existing
+        // GBP symbol-path pin and JPY textual-code pin to provide
+        // diverse-mechanism coverage across the non-USD/non-EUR tail:
+        //   - GBP via `£` symbol (single-byte ASCII-adjacent codepoint)
+        //   - JPY via `JPY` textual code (3-letter ISO branch)
+        //   - INR via `₹` symbol (3-byte UTF-8 codepoint)
+        // Any single-pattern simplification refactor fails at least one.
+        var html = @"<html><body><table>
+  <tr><td>₹</td><td></td><td>50000</td></tr>
+  <tr><td>₹</td><td></td><td>75000</td></tr>
+</table></body></html>";
+
+        var doc = _parser.ParseDocument(html);
+
+        _sut.Execute(doc);
+
+        var note = doc.QuerySelector("table + p em");
+        note.Should().NotBeNull();
+        note.TextContent.Should().Be("All values are in Indian Rupees.");
+    }
+
+    [Fact]
     public void CurrencySymbolIsRemovedFromConsolidatedText()
     {
         var html = @"<html><body><table>
