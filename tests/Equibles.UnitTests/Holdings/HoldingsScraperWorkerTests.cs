@@ -126,6 +126,36 @@ public class HoldingsScraperWorkerTests {
         sut.InvokeErrorSource().Should().Be(ErrorSource.HoldingsScraper);
     }
 
+    [Fact]
+    public void WorkerName_IsHoldingsScraper() {
+        // Second WorkerName pin in the codebase (CboeScraperWorker is the first).
+        // WorkerName flows into BaseScraperWorker's startup/shutdown log output and
+        // heartbeat lines that operator runbooks grep for. A rename here would break
+        // production-log queries that filter by exact display string — oncall
+        // heartbeat-count dashboards would empty out and trigger false "Holdings
+        // worker silent" alerts, post-mortem log queries would miss Holdings
+        // entries during 13F-ingest incidents.
+        //
+        // The Holdings scraper is particularly visibility-sensitive: 13F filings
+        // arrive on a SEC-mandated quarterly cadence (45 days post quarter-end),
+        // so operators rely on the heartbeat to confirm the worker is processing
+        // the right data set during each quarterly window. A WorkerName regression
+        // around quarter-end would silently break the visibility check and
+        // potentially miss a stuck import that doesn't surface until the next cycle.
+        //
+        // Triple (ErrorSource → routing, SleepInterval → cadence, WorkerName →
+        // operator visibility) is now complete for this worker.
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string>()).Build();
+        var sut = new TestableHoldingsScraperWorker(
+            Substitute.For<ILogger<HoldingsScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            Options.Create(new WorkerOptions()),
+            config);
+
+        sut.InvokeWorkerName().Should().Be("Holdings scraper");
+    }
+
     private sealed class TestableHoldingsScraperWorker : HoldingsScraperWorker {
         public TestableHoldingsScraperWorker(
             ILogger<HoldingsScraperWorker> logger,
@@ -140,5 +170,7 @@ public class HoldingsScraperWorkerTests {
         public TimeSpan InvokeSleepInterval() => SleepInterval;
 
         public ErrorSource InvokeErrorSource() => ErrorSource;
+
+        public string InvokeWorkerName() => WorkerName;
     }
 }
