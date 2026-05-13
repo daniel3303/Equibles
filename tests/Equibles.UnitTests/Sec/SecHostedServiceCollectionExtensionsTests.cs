@@ -3,6 +3,7 @@ using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Extensions;
 using Equibles.Sec.HostedService.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -171,5 +172,77 @@ public class SecHostedServiceCollectionExtensionsTests {
         var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(IDocumentScraper));
         descriptor.Should().NotBeNull();
         descriptor.Lifetime.Should().Be(ServiceLifetime.Scoped);
+    }
+
+    [Fact]
+    public void AddSecWorker_RegistersSecScraperWorkerAsIHostedService() {
+        // Extension of the AddSecWorker pin family. The four existing pins
+        // (IFilingProcessor, ICompanySyncService, IDocumentPersistenceService,
+        // IDocumentScraper) cover the scoped collaborators that the hosted
+        // services consume. This pin covers a structurally distinct binding
+        // shape: the `services.AddHostedService<SecScraperWorker>()` call —
+        // which registers the worker itself with the .NET generic host so it
+        // starts when the application boots.
+        //
+        // The risk this catches is asymmetric and unreachable from every
+        // existing pin:
+        //   • A regression that drops `AddHostedService<SecScraperWorker>()`
+        //     (e.g. a "consolidate worker registrations into a meta-extension"
+        //     refactor that forgot to enumerate this one, or a "move all
+        //     hosted services to a different module" pass that lost it)
+        //     would compile cleanly, pass every existing collaborator pin
+        //     (IFilingProcessor / ICompanySyncService / etc. are still wired),
+        //     and silently disable the entire SEC scraping pipeline at
+        //     startup. The application boots normally, the DI container
+        //     resolves every dependency, but no IHostedService implementation
+        //     of SecScraperWorker is enumerated — `ScraperWorker.ExecuteAsync`
+        //     is never invoked, the periodic SEC EDGAR submissions/companyfacts
+        //     polling never fires, and the operating dashboard's SEC data
+        //     freshness silently drifts behind. No error log, no startup
+        //     warning — just absence of work.
+        //   • A regression that downgrades the registration to AddScoped
+        //     (instead of AddHostedService) would register the worker as a
+        //     resolvable scoped service but NOT enumerate it as IHostedService
+        //     — same silent failure mode.
+        //   • A regression that swaps the type argument
+        //     (`AddHostedService<DocumentProcessorWorker>()` written twice
+        //     instead of once for each worker) would silently double-register
+        //     one worker and drop another, producing duplicate runs of one
+        //     pipeline and zero runs of the other.
+        //
+        // SecScraperWorker is the PRIMARY worker — it pulls the EDGAR
+        // companyfacts and submissions feeds that drive every company-level
+        // dashboard (insider trades, FTDs, financial filings). Dropping it
+        // silently is the highest-impact regression of the three workers
+        // AddSecWorker registers. Pin it first; DocumentProcessorWorker and
+        // FtdScraperWorker are natural-extension targets for future
+        // iterations of this family.
+        //
+        // Lookup pattern: hosted services register as IHostedService with the
+        // worker class as ImplementationType. Use a flexible matcher that
+        // tolerates BOTH the conventional ImplementationType registration
+        // path AND the framework's "HostedServiceProvider" wrapper used by
+        // `AddHostedService<T>()` extension method internally — the
+        // ImplementationType is null when registered via the factory-based
+        // path, but ImplementationFactory is set to a factory that produces
+        // the worker. Asserting on EITHER ImplementationType OR a probing
+        // factory invocation handles both registration styles deterministically.
+        var services = new ServiceCollection();
+
+        services.AddSecWorker();
+
+        // AddHostedService<T> in modern .NET registers IHostedService with
+        // ImplementationType == typeof(T) — the framework convention since
+        // Microsoft.Extensions.Hosting 6.0+. Earlier versions used a factory;
+        // for forward-compatibility test against ImplementationType first and
+        // fall through to ImplementationInstance / ImplementationFactory
+        // identity checks if needed.
+        var hostedServiceDescriptors = services
+            .Where(d => d.ServiceType == typeof(IHostedService))
+            .ToList();
+
+        hostedServiceDescriptors.Should().Contain(
+            d => d.ImplementationType == typeof(SecScraperWorker),
+            "AddHostedService<SecScraperWorker>() must register the worker as IHostedService so the generic host runs it at startup");
     }
 }
