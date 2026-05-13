@@ -102,6 +102,58 @@ public class SecHostedServiceCollectionExtensionsTests {
     }
 
     [Fact]
+    public void AddSecWorker_RegistersIDocumentPersistenceServiceAsScoped() {
+        // Fourth pin in the AddSecWorker DI-binding family. Existing pins
+        // cover IDocumentScraper (Scoped), IFilingProcessor
+        // (InsiderTradingFilingProcessor, Scoped), and ICompanySyncService
+        // (CompanySyncService, Scoped). This pin closes the family by
+        // covering the LAST explicit AddScoped binding in AddSecWorker:
+        // IDocumentPersistenceService → DocumentPersistenceService.
+        //
+        // The full set of four pins now exhaustively covers every
+        // explicit `services.AddScoped<I…, …>()` in AddSecWorker:
+        //   • IFilingProcessor       — strategy-pattern dispatch
+        //   • IDocumentPersistenceService — this pin
+        //   • ICompanySyncService    — cross-process seam
+        //   • IDocumentScraper       — primary worker collaborator
+        // The auto-wired DocumentManager / SecEdgarClient / hosted-service
+        // bindings are not part of this pinned set (they're discovered via
+        // attribute scanning and a different drift class).
+        //
+        // IDocumentPersistenceService's binding shape matters because:
+        //   • DocumentPersistenceService.Save opens an EF Core transaction
+        //     and persists both the Document row AND the underlying
+        //     file blob (via IFileManager) atomically. The transaction
+        //     scope is per-request, so a SINGLETON lifetime would
+        //     accumulate disposed-DbContext references across requests
+        //     and throw ObjectDisposedException at the second Save call.
+        //   • A TRANSIENT lifetime would create a new
+        //     DocumentPersistenceService per resolution — fine for the
+        //     service itself, but the DocumentRepository it captures
+        //     would be a DIFFERENT scoped instance than the one
+        //     SecScraperWorker is already using for its EF Core change
+        //     tracking. Mixed-context regressions are hard to debug at
+        //     runtime: writes appear to succeed but never SaveChanges()
+        //     against the right context.
+        //   • A dropped binding would NRE the first time DocumentScraper
+        //     tries to Save a newly downloaded filing — every SEC scraper
+        //     iteration would crash and burn at the persistence boundary.
+        //
+        // Assert ALL THREE: descriptor exists, ImplementationType is the
+        // concrete DocumentPersistenceService, Lifetime is Scoped. Matches
+        // the assertion shape of the IFilingProcessor and ICompanySyncService
+        // siblings.
+        var services = new ServiceCollection();
+
+        services.AddSecWorker();
+
+        var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(IDocumentPersistenceService));
+        descriptor.Should().NotBeNull();
+        descriptor.ImplementationType.Should().Be(typeof(DocumentPersistenceService));
+        descriptor.Lifetime.Should().Be(ServiceLifetime.Scoped);
+    }
+
+    [Fact]
     public void AddSecWorker_RegistersIDocumentScraperAsScoped() {
         // AddSecWorker is the host's composition entry point for the SEC
         // scraping pipeline. It wires the auto-discovered repositories, the
