@@ -795,4 +795,103 @@ public class HouseDisclosureClientTests {
 
         result.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task GetRecentTransactions_FdZipContainsOneMatchingFilingButPtrPdfIs404_EntersPerFilingForeachAndExitsCleanly() {
+        // Closes the last two coverlet branch-coverage partials in
+        // HouseDisclosureClient — both inside DownloadAndParseFilingIndex /
+        // GetRecentTransactions:
+        //
+        //   L42 — `foreach (var filing in filings) { ... }`. Only fires when
+        //          filings is non-empty. The existing 404-status and missing-
+        //          XML-entry pins leave filings empty (early-return before
+        //          enumeration begins), so the foreach body has never executed.
+        //   L82 — `if (xmlEntry == null) { ... return []; }`. The TRUE arm is
+        //          covered by the wrong-entry-name pin; the FALSE arm requires
+        //          archive.GetEntry($"{year}FD.xml") to find a real entry —
+        //          structurally distinct from every existing fixture.
+        //
+        // Both branches are reachable only when the fixture stack delivers a
+        // valid ZIP containing a `{year}FD.xml` whose XML body has at least one
+        // <Member> with FilingType=P and FilingDate inside the request window.
+        // Then DownloadAndParseFilingIndex emits one HouseFiling, the foreach
+        // body runs, DownloadAndParsePtrPdf hits the PtR PDF URL → routed to
+        // 404 by the test handler → returns []. The end-to-end result is an
+        // empty transaction list, but two distinct URL paths were requested
+        // and both coverage branches fired.
+        //
+        // A URL-routing handler is required (the existing BytesContentHandler
+        // returns the SAME body for every request — that would feed the PDF
+        // download the ZIP bytes and trigger PdfDocument.Open's exception
+        // catch instead of the cleaner 404 short-circuit in
+        // DownloadAndParsePtrPdf, leaving the PtR-URL-404 branch unexercised).
+        const int year = 2025;
+        const string docId = "20251234";
+        // Minimal valid XML: XDocument.Descendants("Member") only requires a
+        // single root element wrapping at least one <Member>. FilingDate format
+        // is whatever DateOnly.TryParse accepts — MM/dd/yyyy is canonical
+        // because that's what the production XML actually emits.
+        var xml = $"""
+            <FinancialDisclosures>
+              <Member>
+                <Prefix>Hon.</Prefix>
+                <First>Jane</First>
+                <Last>Doe</Last>
+                <FilingType>P</FilingType>
+                <StateDst>CA01</StateDst>
+                <Year>{year}</Year>
+                <FilingDate>2/1/{year}</FilingDate>
+                <DocID>{docId}</DocID>
+              </Member>
+            </FinancialDisclosures>
+            """;
+        var zipBytes = BuildZipWithSingleEntry($"{year}FD.xml", xml);
+        var handler = new UrlRoutingHandler(zipBytes);
+        using var httpClient = new HttpClient(handler);
+        var sut = new HouseDisclosureClient(httpClient, Substitute.For<ILogger<HouseDisclosureClient>>());
+
+        var result = await sut.GetRecentTransactions(
+            new DateOnly(year, 1, 1),
+            new DateOnly(year, 12, 31),
+            CancellationToken.None);
+
+        // Empty result confirms the PtR PDF 404 short-circuit fired (no
+        // transactions parsed) AND the foreach actually iterated (otherwise
+        // we'd have skipped the PDF request entirely).
+        result.Should().BeEmpty();
+        handler.Requests.Should().HaveCount(2,
+            "one for the FD ZIP (with one matching filing inside) and one for the per-filing PtR PDF");
+        handler.Requests[0].Should().Contain($"{year}FD.zip");
+        handler.Requests[1].Should().Contain($"ptr-pdfs/{year}/{docId}.pdf");
+    }
+
+    private sealed class UrlRoutingHandler : HttpMessageHandler {
+        private readonly byte[] _zipBytes;
+        public List<string> Requests { get; } = new();
+
+        public UrlRoutingHandler(byte[] zipBytes) => _zipBytes = zipBytes;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+            var url = request.RequestUri!.ToString();
+            Requests.Add(url);
+
+            // FD ZIP — 200 + bytes
+            if (url.Contains("/financial-pdfs/") && url.EndsWith("FD.zip")) {
+                var response = new HttpResponseMessage(HttpStatusCode.OK) {
+                    Content = new ByteArrayContent(_zipBytes)
+                };
+                response.Content.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
+                return Task.FromResult(response);
+            }
+
+            // PtR PDF — 404
+            if (url.Contains("/ptr-pdfs/")) {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+            }
+
+            // Any other URL is a test-setup error; surface a hard failure so
+            // the test fails loudly rather than silently masquerading the bug.
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        }
+    }
 }
