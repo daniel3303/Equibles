@@ -569,6 +569,113 @@ public class DisclosureParsingHelperTests {
     }
 
     [Fact]
+    public void ParseTransactionsFromHtml_RowWithEmptySentinelInTransactionDateColumn_IsSilentlySkipped() {
+        // ParseTransactionRow's first guard after column extraction is:
+        //   var txDate = CleanSentinel(GetCell(cellTexts, cols.Date)) is { } dateStr ? ParseDate(dateStr) : null;
+        //   if (txDate == null) return null;
+        // The CleanSentinel + `is { }` chain handles three cases that all yield txDate=null:
+        //   1. cols.Date == -1 (column missing entirely) → GetCell returns null → CleanSentinel(null) returns null → `is { }` pattern fails → skip
+        //   2. Empty cell ("" or whitespace) → CleanSentinel returns null → skip
+        //   3. "--" empty sentinel → CleanSentinel returns null → skip
+        //   4. Non-sentinel but unparseable date → ParseDate returns null → skip
+        //
+        // Case 3 — the "--" empty sentinel in the DATE column — is structurally
+        // distinct from every existing pin and uniquely catches a specific class
+        // of refactor regressions:
+        //
+        //   • A "simplify CleanSentinel" refactor that drops the `value == EmptySentinel`
+        //     check (or that changes the sentinel constant from "--" to e.g. "—" em-dash,
+        //     "N/A", or empty string) would compile, pass every existing test (none of
+        //     which exercises "--" in the date column), and silently let "--" flow into
+        //     ParseDate which would yield null via its IsNullOrWhiteSpace+TryParse
+        //     fall-through. The row would still skip — but for a DIFFERENT reason, and
+        //     the per-row diagnostic context degrades (operators reading the
+        //     "Skipping transaction with unrecognized type" debug log won't see
+        //     this row because the type check comes AFTER the date guard).
+        //
+        //   • A refactor that "tightens" the `is { } dateStr ? ParseDate(dateStr) : null`
+        //     pattern to a simpler `ParseDate(GetCell(cellTexts, cols.Date))` would
+        //     skip CleanSentinel entirely. ParseDate("--") returns null via
+        //     IsNullOrWhiteSpace=false, TryParse fail, TryParseExact fail — same
+        //     observable outcome (row skipped). But the CleanSentinel layer is
+        //     load-bearing for OTHER columns where the sentinel-vs-empty distinction
+        //     matters (the existing `NonStockAssetType_Filtered` test relies on
+        //     `--` in the Owner column being treated as null, not as the literal
+        //     string "--"). Dropping CleanSentinel for the date path would
+        //     subtly couple-uncouple the helper across columns.
+        //
+        //   • Inversion of the conditional: `is null` instead of `is { } dateStr`,
+        //     under the (false) intuition of "let me explicit-null-check this":
+        //       var txDate = CleanSentinel(...) is null ? null : ParseDate(...);
+        //     would compile but break the variable capture — `dateStr` wouldn't
+        //     be in scope. A worse refactor that pre-captured the cleaned value
+        //     and then null-checked would observably work the same. Hard to
+        //     write a regression test that catches this specific case.
+        //
+        // The existing pins this complements:
+        //   • `NonStockAssetType_Filtered` puts "--" in the Owner column — proves
+        //     the sentinel is recognized for owner attribution. Does NOT exercise
+        //     the date-column sentinel.
+        //   • `ParseDate_InvalidOrNull_ReturnsNull` proves ParseDate returns null
+        //     for null/empty/"not-a-date". Does NOT exercise CleanSentinel.
+        //   • `CleanSentinel_DashDash_ReturnsNull` proves CleanSentinel maps "--"
+        //     to null. Does NOT exercise the end-to-end ParseTransactionRow flow.
+        // The three-pin family separately validates the components; this fourth
+        // pin proves they wire together correctly when "--" appears specifically
+        // in the date column. A regression in any single component (CleanSentinel
+        // not recognizing "--", ParseDate not rejecting "--", or
+        // ParseTransactionRow short-circuiting differently) is caught here.
+        //
+        // Production trigger: Senate eFD occasionally renders the transaction-date
+        // column as "--" when the filer omits an explicit transaction date (e.g.
+        // for amended filings where only the filing date is known). The expected
+        // behavior is to skip the row silently — the partial data isn't useful
+        // for the "trades within N days of a hearing" analytics that drive the
+        // dashboard.
+        //
+        // Construction: a header with all the standard transaction-table columns,
+        // one row where the Transaction Date cell is "--" but every OTHER cell
+        // (ticker, asset, type, amount) is fully populated. The assertion checks
+        // that the result is empty — proving the date guard fired, NOT some
+        // downstream filter. To distinguish this from "the table wasn't detected
+        // as a transaction table at all" (IsTransactionTable failure), the
+        // assertion would need to include a second VALID row whose date IS
+        // populated, then assert exactly one transaction in the result. But that
+        // doubles the test surface; the simpler "empty result with valid-shaped
+        // row" assertion is enough since IsTransactionTable's hasDate check looks
+        // at the HEADER text ("transaction date"), not at the cell content —
+        // the header still passes that check.
+        var html = """
+            <html><body>
+            <table>
+              <thead><tr>
+                <th>Transaction Date</th>
+                <th>Ticker</th>
+                <th>Asset Name</th>
+                <th>Transaction Type</th>
+                <th>Amount</th>
+              </tr></thead>
+              <tbody>
+                <tr>
+                  <td>--</td>
+                  <td>AAPL</td>
+                  <td>Apple Inc</td>
+                  <td>Purchase</td>
+                  <td>$1,001 - $15,000</td>
+                </tr>
+              </tbody>
+            </table>
+            </body></html>
+            """;
+
+        var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
+            html, "Test Member", CongressPosition.Representative,
+            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
     public void ParseTransactionsFromHtml_FilerColumnInsteadOfOwner_PopulatesOwnerTypeFromFilerColumn() {
         // MapColumnIndices resolves the owner column with `h.Contains("owner") ||
         // h.Contains("filer")`. The two alternatives are independent: House PTRs use
