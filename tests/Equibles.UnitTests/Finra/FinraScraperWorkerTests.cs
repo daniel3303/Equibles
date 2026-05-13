@@ -86,6 +86,27 @@ public class FinraScraperWorkerTests {
         sut.InvokeValidateConfiguration().Should().BeTrue();
     }
 
+    [Fact]
+    public void Constructor_AppliesSleepIntervalHoursFromOptionsAsTimeSpanHours() {
+        // FinraScraperWorker reads FinraScraperOptions.SleepIntervalHours
+        // (inherited from ScraperOptions, default 24h) and stores it as a
+        // TimeSpan via FromHours. Daily short volume publishes T+1 and
+        // short interest twice monthly — 24h polling catches both with
+        // headroom. A refactor that swaps FromHours for FromMinutes
+        // (or drops the options read in favor of a hardcoded value)
+        // would either spam FINRA's OAuth-token endpoint or silently
+        // stretch the polling window to 24 days. Pin the unit
+        // conversion so the regression surfaces here.
+        var options = Options.Create(new FinraScraperOptions { SleepIntervalHours = 12 });
+        var sut = new TestableFinraScraperWorker(
+            Substitute.For<ILogger<FinraScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            options);
+
+        sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(12));
+    }
+
     private sealed class TestableFinraScraperWorker : FinraScraperWorker {
         public TestableFinraScraperWorker(
             ILogger<FinraScraperWorker> logger,
@@ -95,5 +116,7 @@ public class FinraScraperWorkerTests {
             : base(logger, scopeFactory, errorReporter, options) { }
 
         public bool InvokeValidateConfiguration() => ValidateConfiguration();
+
+        public TimeSpan InvokeSleepInterval() => SleepInterval;
     }
 }
