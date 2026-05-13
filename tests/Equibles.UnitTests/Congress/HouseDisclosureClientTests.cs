@@ -104,6 +104,32 @@ public class HouseDisclosureClientTests {
     }
 
     [Fact]
+    public void ExtractTransactionType_LowercaseSaleS_StillReturnsSaleViaIgnoreCase() {
+        // SaleTypeRegex is declared with `RegexOptions.IgnoreCase` — PurchaseTypeRegex
+        // is NOT. The asymmetry is deliberate (House PTRs always emit uppercase "P"
+        // and "S" so case-insensitivity has no production value for either, but the
+        // SaleTypeRegex's IgnoreCase was added defensively when the (partial)/(full)
+        // parenthetical groups were introduced, and PurchaseTypeRegex stayed strict).
+        //
+        // The risk this pin catches: a refactor that "harmonizes" the two regexes
+        // by either DROPPING IgnoreCase from SaleTypeRegex (under the assumption
+        // that PurchaseTypeRegex's case-sensitivity is the convention) or ADDING
+        // IgnoreCase to PurchaseTypeRegex (consistency change). The dropping case
+        // is the dangerous one: lowercase "s" rows in any future aggregator-emitted
+        // PTR (e.g., a third-party scraper that normalizes casing before re-publishing)
+        // would silently classify as null and be dropped from the import.
+        //
+        // No other test in this file exercises the IgnoreCase modifier directly —
+        // every existing sibling uses uppercase letters. Pin lowercase "s" so the
+        // modifier can't be removed silently. The companion bare-S pin already
+        // proves uppercase "S" matches; this pin proves the case-insensitive
+        // alternative also matches.
+        var result = (CongressTransactionType?)ExtractTransactionTypeMethod.Invoke(null, ["AAPL s"]);
+
+        result.Should().Be(CongressTransactionType.Sale);
+    }
+
+    [Fact]
     public void ExtractTransactionType_SaleWithPartialQualifier_ReturnsSale() {
         // House PTRs encode partial sales as "S (partial)" rather than bare "S".
         // The SaleTypeRegex must accept both forms — if a regression tightens it to
