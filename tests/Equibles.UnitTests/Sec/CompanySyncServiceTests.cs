@@ -136,6 +136,59 @@ public class CompanySyncServiceTests {
     }
 
     [Fact]
+    public async Task ShouldIncumbentWin_BothListedBothOperatingLowerCikIncumbent_IncumbentWinsByCikTiebreak() {
+        // Pin step 4 of the ShouldIncumbentWin priority chain — the numerical CIK
+        // tiebreak that fires when neither IsListed nor IsOperatingCompany
+        // distinguishes the two sides. The three existing ShouldIncumbentWin pins
+        // each short-circuit BEFORE step 4:
+        //   • Both-null metadata → returns at step 1
+        //   • IsListed differs → returns at step 2
+        //   • IsOperating differs → returns at step 3
+        // Step 4 is the ONLY case where the parsed-CIK comparison
+        //   `return ParseCik(incumbent.Cik) <= ParseCik(incoming.Cik);`
+        // actually drives the return. The existing ParseCik_UnparseableValue pin
+        // tests the helper in isolation but doesn't prove the helper's value
+        // flows into ShouldIncumbentWin's final return as the active outcome.
+        //
+        // The risk this pin catches: a refactor that flips `<=` to `>=`, swaps
+        // the operand order, or substitutes `>` (an off-by-one boundary
+        // tightening) would compile cleanly, pass every existing ShouldIncumbentWin
+        // sibling (each returns BEFORE the tiebreak), pass the ParseCik
+        // helper-level pin (which is comparison-agnostic), and silently
+        // invert the rightful-owner rule for every equal-listing equal-operating
+        // collision. The user-visible failure mode is concrete and high-impact:
+        // older, more-established filers (which always have lower CIKs because
+        // SEC issues CIKs sequentially since 1934) would LOSE every collision
+        // to newer subsidiaries and recently-listed entities that happen to
+        // claim the same ticker. Every "AAPL" stock page would slowly migrate
+        // toward whatever sub-filer most recently appeared in SEC's feed,
+        // with all the established historical filing data being attached to
+        // the wrong CIK.
+        //
+        // Construction: both sides listed on NASDAQ AND both operating, forcing
+        // steps 2 and 3 to fall through. incumbent.Cik = "100" (numerically
+        // smaller, the older filer). incoming.Cik = "999" (larger, the newer).
+        // ParseCik("100") = 100, ParseCik("999") = 999, so 100 <= 999 is true →
+        // incumbent wins. A `>=` regression would compute 100 >= 999 = false,
+        // returning false and silently letting the newer filer overwrite the
+        // older one. The `<=` direction (smaller-CIK-wins) is the load-bearing
+        // ordering that this pin protects.
+        var secEdgarClient = Substitute.For<ISecEdgarClient>();
+        secEdgarClient.GetCompanyMetadata("999")
+            .Returns(new CompanyMetadata { Cik = "999", EntityType = "operating", Exchanges = ["NASDAQ"] });
+        secEdgarClient.GetCompanyMetadata("100")
+            .Returns(new CompanyMetadata { Cik = "100", EntityType = "operating", Exchanges = ["NASDAQ"] });
+
+        var service = CreateService(secEdgarClient: secEdgarClient);
+        var incoming = new CompanyInfo { Cik = "999", Name = "New Filer", Tickers = ["X"] };
+        var incumbent = new Equibles.CommonStocks.Data.Models.CommonStock { Cik = "100", Ticker = "X" };
+
+        var result = await (Task<bool>)ShouldIncumbentWinMethod.Invoke(service, [incoming, incumbent]);
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
     public void ParseCik_UnparseableValue_ReturnsLongMaxValue() {
         // ShouldIncumbentWin breaks ticker-collision ties with
         //     `ParseCik(incumbent.Cik) <= ParseCik(incoming.Cik)`
