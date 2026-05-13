@@ -190,6 +190,54 @@ public class SenateDisclosureClientTests {
     }
 
     [Fact]
+    public void ParseReportRow_RowWithFewerThanFiveColumns_ReturnsNullInsteadOfIndexOutOfRange() {
+        // Seventh pin in the ParseReportRow rejection family. The method opens with
+        //   if (row.Count < 5) return null;
+        // — a load-bearing length guard before the subsequent row[0]/row[1]/row[3]/row[4]
+        // indexer accesses. Every other rejection sibling in this file passes a row
+        // with exactly 5 elements; none of them exercises the short-row guard.
+        //
+        // The risk this catches: Senate eFD's JSON DataTables response occasionally
+        // emits rows with fewer than 5 elements — placeholder rows for withdrawn
+        // filings, aggregator summary rows, or column-schema changes during an
+        // eFD UI rollout (the search API has shipped 4-col and 6-col variants
+        // historically). Without the guard, row[4] throws ArgumentOutOfRangeException,
+        // which propagates out of ParseReportRow through SearchPtrReports' foreach,
+        // out of GetRecentTransactions, into CongressionalTradeSyncService's
+        // FetchSenateTransactions catch — and aborts the entire Senate sync for the
+        // day. The next day's run finds the same short row at the same offset and
+        // crashes again. Operators see "Senate disclosure data failed to fetch"
+        // warnings stack up with no apparent fix until someone reads the stack
+        // trace.
+        //
+        // A refactor that "simplifies" the guard — e.g. someone reading the method
+        // and assuming the parameter is always well-formed because the upstream
+        // JSON parse "should" produce 5-col rows — would compile cleanly, pass
+        // all six existing ParseReportRow pins (every one has Count == 5), and
+        // silently reintroduce the IndexOutOfRangeException crash path. Pin the
+        // short-row case with a deliberately 4-element row so the guard can't
+        // be removed without a test failure.
+        //
+        // Asserting NotThrow + null distinguishes a working guard from a refactor
+        // that lets the indexer throw: a missing guard would surface as
+        // TargetInvocationException wrapping IndexOutOfRangeException, which
+        // .Should().BeNull() can't observe (it asserts on a return value the
+        // exception prevents from existing).
+        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var row = new List<string> {
+            "Jane",
+            "Doe",
+            "filed",
+            "<a href=\"/search/view/ptr/abc-123/\">link</a>",
+        };
+
+        var act = () => ParseReportRowMethod.Invoke(sut, [row]);
+
+        act.Should().NotThrow();
+        ParseReportRowMethod.Invoke(sut, [row]).Should().BeNull();
+    }
+
+    [Fact]
     public void ParseReportRow_BothFirstAndLastNameEmpty_ReturnsNull() {
         // Sixth pin in the ParseReportRow rejection family. Covers the empty-name
         // guard: `if (string.IsNullOrEmpty(memberName)) return null;` where
