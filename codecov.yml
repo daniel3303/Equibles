@@ -7,3 +7,18 @@ coverage:
     patch:
       default:
         target: 60%
+
+# Flag carryforward keeps the merged "All flags" view stable when one upload is
+# missing or delayed. ci.yml uploads `unit-integration` (UnitTests +
+# IntegrationTests); functional.yml uploads `functional` (FunctionalTests, which
+# is what exercises Program.cs and the Razor views). Without carryforward, if
+# functional.yml fails (Playwright flake, container hiccup), every web-only file
+# silently reports 0% on the dashboard.
+flag_management:
+  default_rules:
+    carryforward: true
+  individual_flags:
+    - name: unit-integration
+      carryforward: true
+    - name: functional
+      carryforward: true
