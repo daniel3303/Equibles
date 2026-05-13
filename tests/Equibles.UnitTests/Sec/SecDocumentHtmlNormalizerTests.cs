@@ -215,6 +215,60 @@ public class SecDocumentHtmlNormalizerTests {
     }
 
     [Fact]
+    public void Normalize_FilenameWithFullHtmlExtension_IsAllowed() {
+        // ExtractAndFilterDocuments gates each block on the filename's
+        // extension via a three-arm OR:
+        //   if (!filename.EndsWith(".htm")
+        //       && !filename.EndsWith(".html")
+        //       && !filename.EndsWith(".txt")) continue;
+        // The existing tests across this file ALL use `.htm` filenames
+        // (`filing.htm`, `exhibit.htm`, `annual.htm`, `inline.htm`); none
+        // exercises the `.html` arm or the `.txt` arm. The `.htm` and
+        // `.html` arms look redundant but are structurally distinct in
+        // string-comparison terms: "filing.html" does NOT end with
+        // ".htm" (the trailing `l` breaks the suffix match), so dropping
+        // either arm changes which real filenames pass the gate.
+        //
+        // SEC's archive predominantly uses `.htm` for the primary
+        // submission form, but exhibits and inline-XBRL viewer
+        // attachments frequently arrive with the full `.html` extension
+        // (post-2018 inline-XBRL Financial-Report.html artifacts in
+        // particular). A refactor that "deduplicates" the gate to
+        // just `.EndsWith(".htm")` — under the false intuition that
+        // `.html` already matches `.htm` because of substring overlap —
+        // would compile cleanly, pass every existing test (all `.htm`),
+        // and silently filter out every Financial-Report.html artifact
+        // from the post-2018 corpus. Coverage gaps in the resulting
+        // searchable text are invisible: the chunk-and-embed pipeline
+        // continues to run, dashboards keep rendering, and the only
+        // signal is missing content in the per-filing detail view that
+        // nobody notices until a search query fails.
+        //
+        // Pin the `.html` arm with an inline-XBRL viewer-style filename.
+        // Asserting the expected content appears in the output proves
+        // (a) the filename did NOT match the `.htm` arm on its own
+        // and (b) the dedicated `.html` arm DID admit it. The
+        // complementary `.txt` arm intentionally remains unpinned —
+        // the OR-arm-isolation argument applies to it too, but `.html`
+        // is the higher-business-value of the two given the
+        // inline-XBRL transition. Add the `.txt` pin in a follow-up
+        // iteration.
+        var sgml = """
+            <DOCUMENT>
+            <TYPE>10-K
+            <FILENAME>Financial-Report.html
+            <TEXT>
+            <html><body><p>Inline XBRL viewer report body</p></body></html>
+            </TEXT>
+            </DOCUMENT>
+            """;
+
+        var result = _sut.Normalize(sgml);
+
+        result.Should().Contain("Inline XBRL viewer report body");
+    }
+
+    [Fact]
     public void Normalize_XbrlWrappedContent_ExtractsFromXbrlTag() {
         var sgml = """
             <DOCUMENT>
