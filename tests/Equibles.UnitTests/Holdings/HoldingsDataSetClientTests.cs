@@ -117,6 +117,59 @@ public class HoldingsDataSetClientTests {
     }
 
     [Fact]
+    public void GetDataSetFileNames_StartIn2024_EmitsSepNovPeriodWith30NovEndDay() {
+        // Pin the Sep-Nov regular-cycle period. The post-2024 GetNewFormatPeriods
+        // table adds four entries per year — Mar-May, Jun-Aug, Sep-Nov, Dec-Feb(+1):
+        //   periods.Add((new DateOnly(year, 3, 1), new DateOnly(year, 5, 31)));
+        //   periods.Add((new DateOnly(year, 6, 1), new DateOnly(year, 8, 31)));
+        //   periods.Add((new DateOnly(year, 9, 1), new DateOnly(year, 11, 30)));   // <-- THIS LINE
+        //   periods.Add((new DateOnly(year, 12, 1), ...));
+        // The Sep-Nov entry is the ONLY regular-cycle period whose end day is
+        // not 31: November has 30 days, not 31. Every other regular-cycle
+        // period ends on the 31st (May, August) or on Feb 28/29.
+        //
+        // The risk this catches is asymmetric and only this pin defends against
+        // it: a refactor that table-drives the four periods.Add calls — e.g.
+        //   foreach (var (m1, m2) in new[] { (3,5), (6,8), (9,11), (12,2) })
+        //       periods.Add((new DateOnly(year, m1, 1), new DateOnly(year, m2, 31)));
+        // — would compile cleanly, pass the existing Mar-May / Jun-Aug coverage
+        // (their end-day IS 31), pass the Dec-Feb leap/non-leap pins (those
+        // assert on the ternary, not on a literal 31), AND silently emit
+        // "01sep2024-31nov2024_form13f.zip" — a date that doesn't exist on the
+        // calendar. SEC's CDN returns 404 on that URL, the worker logs a
+        // possible-URL-change warning per scrape, and the entire Sep-Nov 13F-HR
+        // window — three months of filings every year — silently fails to
+        // ingest. The failure mode is invisible past the 404 (HoldingsScraperWorker
+        // logs per file and continues; ProcessedDataSet never marks the missing
+        // period; the gap persists across cycles).
+        //
+        // Why this is unreachable from the existing sibling pins:
+        //   • `GetDataSetFileNames_StartIn2024_EmitsLowercaseMonthInNewFormatFilename`
+        //     asserts the Jan-Feb 2024 hardcoded period — a SEPARATE periods.Add
+        //     call before the for-loop, not part of the four-Add cycle.
+        //   • `GetDataSetFileNames_DecToFebPeriodSpanningNonLeapYear_UsesFeb28`
+        //     and its leap sibling both target the Dec-Feb day-number ternary,
+        //     not the Sep-Nov hardcoded 30.
+        //   • `GetDataSetFileNames_StartIn2014_ProducesOldQuarterlyFormatFilename`
+        //     targets the pre-2024 quarterly format entirely.
+        // A regression that swapped Sep-Nov's `30` for `31` (the dominant typo
+        // direction since every other regular-cycle period uses 31) would slip
+        // past every existing sibling and produce a permanently-404ing URL.
+        //
+        // Construction: assert positive presence on "01sep2024-30nov2024_form13f.zip"
+        // — the exact filename SEC's CDN serves. Asserting on the literal day
+        // number "30" (rather than just on URL prefix) is what makes a day-31
+        // regression observable. With this pin the regular-cycle table's four
+        // Add lines are individually defended at three of the four unique
+        // end-day values (May 31, Aug 31, Nov 30, Dec→Feb 28/29) — Jun-Aug and
+        // Mar-May share the day-31 invariant, so one of them implicitly
+        // covers the other against the "drop one Add line" refactor.
+        var result = HoldingsDataSetClient.GetDataSetFileNames(new DateTime(2024, 1, 1));
+
+        result.Should().Contain("01sep2024-30nov2024_form13f.zip");
+    }
+
+    [Fact]
     public void GetDataSetFileNames_StartIn2014_ProducesOldQuarterlyFormatFilename() {
         // The SEC publishes Form 13F data sets under exact-cased filenames that the
         // downloader concatenates onto the BaseUrl verbatim. For 2013-2023 the format
