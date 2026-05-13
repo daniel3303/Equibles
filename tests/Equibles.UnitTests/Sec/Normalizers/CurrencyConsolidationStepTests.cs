@@ -202,6 +202,52 @@ public class CurrencyConsolidationStepTests
     }
 
     [Fact]
+    public void JpyTextualCodeColumnFollowedByEmptyColumn_AddsJapaneseYenNote()
+    {
+        // Sibling to the GBP pin. Existing GBP pin documents the rationale
+        // for individual currency-arm coverage (map-shrink and tuple-swap
+        // regressions). This pin extends the family with JPY — the second-
+        // most-relevant non-USD/non-EUR currency for SEC-cross-listed
+        // filings: Toyota, Sony, Honda, Mitsubishi UFJ and the bulk of
+        // Japanese ADRs report subsidiary segments in yen. The JPY
+        // mapping is `("¥", "Japanese Yen")`.
+        //
+        // JPY is structurally distinct from GBP in one specific way that
+        // makes the test stronger as a separate pin rather than a Theory
+        // case: the `¥` symbol (U+00A5 YEN SIGN) collides visually with
+        // Chinese Yuan, but the CurrencyMap has only one ¥-keyed entry
+        // (JPY). Pinning the SYMBOL path for JPY would not isolate this
+        // arm against a refactor that adds CNY/RMB and inadvertently
+        // reorders DetectCurrency's foreach. Use the TEXTUAL "JPY"
+        // code instead — DetectCurrency's OR condition (`text.Contains(symbol)
+        // || text.Contains(code)`) means an ISO code like "JPY" hits
+        // ONLY through CurrencyMap["JPY"]. This pin exercises the
+        // "JPY"→Japanese Yen mapping path explicitly and would fail
+        // both:
+        //   • A map-shrink that drops the JPY entry (CurrencyMap collapsed
+        //     to USD+EUR+GBP because "Asia ADRs are a small share").
+        //   • A tuple-name swap (e.g. `JPY => ("¥", "Yen")` truncating
+        //     "Japanese Yen" to just "Yen" during a "normalize the names"
+        //     pass). The full-string note assertion fails either way.
+        //
+        // The textual-code path also exercises the OR's right arm
+        // independently of the symbol arm — a complementary pin to the
+        // existing USD test that already uses "USD" textual code.
+        var html = @"<html><body><table>
+  <tr><td>JPY</td><td></td><td>10000</td></tr>
+  <tr><td>JPY</td><td></td><td>20000</td></tr>
+</table></body></html>";
+
+        var doc = _parser.ParseDocument(html);
+
+        _sut.Execute(doc);
+
+        var note = doc.QuerySelector("table + p em");
+        note.Should().NotBeNull();
+        note.TextContent.Should().Be("All values are in Japanese Yen.");
+    }
+
+    [Fact]
     public void CurrencySymbolIsRemovedFromConsolidatedText()
     {
         var html = @"<html><body><table>
