@@ -182,6 +182,60 @@ public class HomeControllerTests {
     }
 
     [Fact]
+    public void Connect_McpApiKeyConfigured_SurfacesApiKeyViaViewData() {
+        // Sibling to `Connect_McpPortNotConfigured_BuildsMcpUrlWithDefaultPort8081`.
+        // The McpPort sibling pins the URL composition path. This pin
+        // exercises the OTHER ViewData entry the action populates:
+        //   var apiKey = _configuration["McpApiKey"] ?? "";
+        //   ViewData["ApiKey"] = apiKey;
+        //
+        // The risk this catches is structurally distinct from the URL pin:
+        // a refactor that swaps the ViewData KEY (e.g. `ViewData["ApiToken"]`
+        // — a refactor by someone normalizing the naming under the false
+        // intuition that "api key" and "api token" are interchangeable)
+        // would compile cleanly, pass the McpUrl sibling, and silently
+        // strip the API key from the Connect view. The Razor view reads
+        // `@ViewData["ApiKey"]`; an empty/null lookup renders nothing,
+        // and the user copies an incomplete MCP client config that
+        // produces a 401 from the server with no debugging hint.
+        //
+        // The complementary risk: a refactor that drops the `?? ""`
+        // coalesce on a null-McpApiKey config would render `null` into
+        // the view template instead of an empty string, which Razor
+        // handles inconsistently — sometimes blank, sometimes the
+        // literal "null" depending on the helper invocation. This pin
+        // exercises the configured (non-null) path; the empty-default
+        // path is covered indirectly by the URL pin (which uses the
+        // same empty configuration and so transitively pins ApiKey ==
+        // "" via the lack of any throw).
+        //
+        // Pin with a realistic API key value. The assertion fails on:
+        //   • Wrong ViewData key (ApiToken / Token / Secret variants).
+        //   • Wrong source config key (`Mcp:ApiKey` indented form vs.
+        //     flat `McpApiKey`).
+        //   • Dropped read entirely (action never sets ViewData["ApiKey"]).
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Scheme = "http";
+        httpContext.Request.Host = new HostString("localhost");
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string> {
+                ["McpApiKey"] = "eq_live_abc123secrettoken",
+            })
+            .Build();
+
+        var controller = new HomeController(NullLogger<HomeController>.Instance, configuration) {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+            TempData = Substitute.For<ITempDataDictionary>(),
+        };
+
+        var result = controller.Connect();
+
+        result.Should().BeOfType<ViewResult>();
+        controller.ViewData["ApiKey"].Should().Be("eq_live_abc123secrettoken");
+    }
+
+    [Fact]
     public void Error_NullStatusCode_SetsResponseStatusTo500AndShowsGenericTitle() {
         // ASP.NET Core's `UseStatusCodePagesWithReExecute("/Home/Error/{0}")` invokes
         // this action with the status code embedded in the URL — but the catch-all
