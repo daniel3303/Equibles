@@ -48,6 +48,55 @@ public class SimpleApiKeyValidatorTests {
     }
 
     [Fact]
+    public async Task IsValid_EnabledWithNullApiKey_ReturnsFalseWithoutThrowing() {
+        // SimpleApiKeyValidator.IsValid does
+        //   `var apiKeyHash = SHA256.HashData(Encoding.UTF8.GetBytes(apiKey ?? ""));`
+        // The `?? ""` coalesce is load-bearing defensive code with two
+        // distinct contracts:
+        //
+        // 1) The method must not throw on null input. UTF8.GetBytes(null)
+        //    throws ArgumentNullException; the null-coalesce avoids that.
+        //    If the middleware ever invokes IsValid with a null token —
+        //    e.g. a malformed Authorization header where the bearer prefix
+        //    was stripped but no value followed, or an MCP client that
+        //    sent the header without a value — the validator would throw
+        //    and the request would bubble to a 500. The auth layer is
+        //    expected to translate "no valid key" to a 401, NOT crash.
+        //
+        // 2) The method must still REJECT null input. After the coalesce
+        //    the hash is SHA256(""), which is a known 32-byte value, and
+        //    FixedTimeEquals compares it to the configured key's hash.
+        //    Unless the operator configured McpApiKey = "" (which would
+        //    flip IsEnabled false and short-circuit before this branch),
+        //    the hashes differ and IsValid returns false. A refactor that
+        //    drops the `?? ""` (under the false intuition that "null
+        //    apiKey is impossible because the middleware filters it")
+        //    would compile, pass every existing pin (none of which
+        //    exercise null), and turn the first null-token request into
+        //    an unhandled NRE at runtime.
+        //
+        // The existing pins:
+        //   - mismatched key (non-null): false ✓
+        //   - matching key: true ✓
+        //   - disabled mode, any token incl. "": true ✓
+        // None hits the (IsEnabled=true, apiKey=null) cell of the
+        // 2x2-plus-disabled state space. This pin closes that cell.
+        //
+        // Assert BOTH that the call doesn't throw and that it returns
+        // false — a single Should().BeFalse() establishes both (a
+        // thrown exception fails the test before reaching the
+        // assertion).
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string> { ["McpApiKey"] = "correct-secret" })
+            .Build();
+        var sut = new SimpleApiKeyValidator(config);
+
+        var result = await sut.IsValid(null);
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task IsValid_DisabledModeWithMissingApiKeyConfig_AcceptsAnyToken() {
         // When McpApiKey is unset (typical for local dev / docker-compose
         // without auth), IsEnabled is false and IsValid must short-circuit to
