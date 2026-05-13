@@ -778,4 +778,77 @@ public class InsiderTradingFilingProcessorTests {
 
         result.Should().BeTrue();
     }
+
+    [Fact]
+    public void ParseBool_NullInput_ReturnsFalseViaPatternMatchFallThrough() {
+        // Sixth pin in the ParseBool family. The previous five pins cover the
+        // four string-literal arms of `value is "1" or "true" or "True" or "TRUE"`
+        // (DigitOne, LowercaseTrue, TitleCaseTrue, AllCapsTrue) plus the
+        // implicit-default `"0"` non-match case. This pin covers the structurally
+        // distinct **null** input — the C# `is` pattern handles `null` safely
+        // by returning false for every constant-string arm, so a null value
+        // falls through to the default-false branch without throwing.
+        //
+        // Null is the dominant unhappy-path input in production. Every call
+        // site passes the result of an XLinq chain that can short-circuit:
+        //   IsDirector = ParseBool(ownerRelationship?.Element("isDirector")?.Value)
+        //   IsOfficer  = ParseBool(ownerRelationship?.Element("isOfficer")?.Value)
+        //   IsTenPercentOwner = ParseBool(ownerRelationship?.Element("isTenPercentOwner")?.Value)
+        // When the `<ownerRelationship>` element is absent (legitimate for
+        // Form 4 amendments and edge-case filings), or when one of the three
+        // child elements is missing (some filers omit the flag they're
+        // setting to false rather than emitting `<isOfficer>0</isOfficer>`),
+        // `?.Value` evaluates to null and that null lands in ParseBool.
+        //
+        // The risk this catches is asymmetric and unreachable from every
+        // existing sibling pin: a refactor that swaps the pattern-match
+        // expression for an `Equals`-style call would compile cleanly,
+        // pass ALL five existing pins (which feed non-null inputs), and
+        // throw `NullReferenceException` on the very first XML row with
+        // a missing `<isOfficer>` element. Realistic regression patterns:
+        //
+        //   • `return value.Equals("1") || value.Equals("true") || ...`
+        //     — the "let me harmonize with the rest of the file" refactor
+        //     pattern: ParseTransactionCode uses `switch (value.ToUpper())`
+        //     several lines above, and a contributor reading the file
+        //     might "consistency-fix" ParseBool to match. NRE on the very
+        //     first call site that received null from `?.Value`.
+        //
+        //   • `return value.Equals("1", StringComparison.OrdinalIgnoreCase)`
+        //     — the "merge the four case-variant arms into one" cleanup.
+        //     Compiles cleanly, looks cleaner, NREs on null.
+        //
+        //   • `return new[] { "1", "true", "True", "TRUE" }.Contains(value)`
+        //     — Contains DOES handle null safely (returns false for a null
+        //     element since no array entry is null), so THIS specific
+        //     refactor would not regress this pin. Worth noting because it
+        //     means this pin doesn't catch every conceivable refactor —
+        //     but the dangerous ones (the Equals-style ones that NRE
+        //     in production) are the ones the C# `is` pattern's null-
+        //     safety protects against, and that's exactly what this
+        //     pin defends.
+        //
+        // The downstream impact of an NRE: ParseBool is called inside the
+        // XML parsing loop in BuildInsiderOwner (line ~107) for every
+        // owner relationship. An unhandled NRE would propagate up through
+        // BuildInsiderOwner → ProcessFiling → out of the per-filing try-catch
+        // (which catches Exception but logs at Error level and increments
+        // result.Errors), corrupting the per-filing error count and
+        // potentially aborting the entire scrape cycle if the error
+        // handling chain decides to bail. Same impact symptom as the
+        // case-variant regressions — silent data loss — but a different
+        // failure MODE (crash-and-rollback vs. silent misclassification).
+        // Both modes are equally invisible past the log noise.
+        //
+        // Pin null specifically and assert false (not "doesn't throw" —
+        // assert the concrete return value). The dual proof that
+        //   (a) the call succeeded (no exception)
+        //   (b) the return was false (default fall-through, not an
+        //       accidental true)
+        // together distinguish a working pattern-match guard from BOTH
+        // the NRE regressions AND a "default to true on null" refactor.
+        var result = (bool)ParseBoolMethod.Invoke(null, [null]);
+
+        result.Should().BeFalse();
+    }
 }
