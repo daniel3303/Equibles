@@ -179,6 +179,54 @@ public class CftcClientTests {
     }
 
     [Fact]
+    public void GetField_CellEmptyAfterTrim_ReturnsNullSoReportDateFallbackEngages() {
+        // Sibling pin to GetField_ColumnIndexExceedsRowLength_ReturnsNullInsteadOfIndexOutOfRange.
+        // GetField has THREE distinct return-null paths:
+        //   1. Column name not in index           → `!columnIndex.TryGetValue(...)`
+        //   2. Index points past end of row       → `idx >= fields.Length`     (existing pin)
+        //   3. Cell value is empty/whitespace     → `string.IsNullOrEmpty(value.Trim())` (THIS pin)
+        //
+        // Arm #3 is the one that makes ReportDate's column-name fallback work. ParseLine
+        // resolves ReportDate as:
+        //   GetField(fields, columnIndex, "Report_Date_as_YYYY-MM-DD")
+        //       ?? GetField(fields, columnIndex, "As_of_Date_In_Form_YYMMDD")
+        // The `??` operator engages ONLY when the left side is `null`. If GetField
+        // returned `""` (empty string) for a blank cell instead of `null`, the fallback
+        // would never fire — the file would carry the modern column header but with empty
+        // data, and every record would silently end up with ReportDate = "" instead of
+        // the legacy date. CftcImportService.ParseDate then treats "" as unparseable
+        // (via its `IsNullOrWhiteSpace` guard), returns null, and ImportYear's
+        // `if (date == null) continue;` drops the row — wiping out the entire year.
+        //
+        // The risk this catches is asymmetric and unreachable from existing pins:
+        //   • A refactor that "tidies up" GetField by removing the `IsNullOrEmpty`
+        //     check (e.g. someone thinking the Trim alone is enough, since "empty
+        //     string is falsy in many languages") compiles cleanly. Every existing
+        //     GetField test passes — the bounds-check pin uses a column that's truly
+        //     absent from the row (different arm), the BuildColumnIndex pin doesn't
+        //     touch GetField at all, ParseLong/ParseInt operate on already-extracted
+        //     non-null values, and the ParseLine legacy-date pin uses a header with
+        //     ONLY the legacy column (so the modern GetField hits arm #1, not arm #3).
+        //   • Result: a CFTC file with both modern AND legacy date columns, where the
+        //     modern column has blank cells but the legacy column has values, would
+        //     produce empty ReportDate strings instead of falling back to the legacy
+        //     column. This shape exists in CFTC's historical re-publishes where the
+        //     modern column was added retroactively but only populated for the most
+        //     recent rows.
+        //
+        // Pin: a row with a whitespace-only cell at the index of a real column. The
+        // returned value must be null (so `??` would fall through), NOT empty string,
+        // NOT whitespace.
+        var headerLine = "CFTC_Contract_Market_Code,Report_Date_as_YYYY-MM-DD,As_of_Date_In_Form_YYMMDD";
+        var columnIndex = (Dictionary<string, int>)BuildColumnIndexMethod.Invoke(null, [headerLine]);
+        var fieldsWithBlankModernDate = new[] { "001602", "   ", "250115" };
+
+        var modernResult = (string)GetFieldMethod.Invoke(null, [fieldsWithBlankModernDate, columnIndex, "Report_Date_as_YYYY-MM-DD"]);
+
+        modernResult.Should().BeNull();
+    }
+
+    [Fact]
     public void SplitCsvLine_QuotedFieldWithEmbeddedComma_KeepsFieldIntact() {
         // CFTC market names routinely contain commas (e.g. the market name
         // "WHEAT-SRW - CHICAGO BOARD OF TRADE, CBOT"). The split must honour
