@@ -31,6 +31,45 @@ public class HoldingsDataSetClientTests {
     }
 
     [Fact]
+    public void GetDataSetFileNames_DecToFebPeriodSpanningNonLeapYear_UsesFeb28() {
+        // The regular post-2024 cycle ends each year with a Dec→Feb period whose
+        // last day depends on whether the FOLLOWING calendar year is a leap year:
+        //   periods.Add((new DateOnly(year, 12, 1),
+        //       new DateOnly(year + 1, 2, DateTime.IsLeapYear(year + 1) ? 29 : 28)));
+        // The existing `01jan2024-29feb2024` pin doesn't exercise this branch — that
+        // period is a one-time 2024-transition entry with the `29` hardcoded
+        // literally, NOT computed via `DateTime.IsLeapYear`. The regular cycle's
+        // leap/non-leap toggle is otherwise unpinned.
+        //
+        // The risk this catches is asymmetric and reaches every other year: a
+        // regression that hard-coded `28` everywhere would silently mis-name the
+        // Dec→Feb URL for periods where year+1 IS leap (Dec 2027 → Feb 2028,
+        // Dec 2031 → Feb 2032, etc.). A regression that hard-coded `29` would
+        // mis-name every NON-leap-ending period (Dec 2024 → Feb 2025, Dec 2025 →
+        // Feb 2026, Dec 2026 → Feb 2027, etc. — 3 of every 4 cycles).
+        //
+        // SEC's CDN matches the URL case- AND day-number-sensitively: `01dec2024-29feb2025`
+        // returns 404 where `01dec2024-28feb2025` is the published artifact. A
+        // single off-by-one in the day-number silently halts ingest of one entire
+        // 3-month 13F-HR period — the most recent quarterly disclosures, which
+        // are what dashboards and analyst tools refresh against first. The
+        // failure mode is invisible past the 404 (HoldingsScraperWorker logs the
+        // download error per file and continues; ProcessedDataSet never marks
+        // the missing period; the gap silently persists across cycles).
+        //
+        // Construction: start from 2025-01-01 (after the 2024 transition period's
+        // window so no leap-year hardcoded entry confuses the assertion) and
+        // assert the Dec 2025 → Feb 2026 period's filename. 2026 is non-leap
+        // (Feb 28); a regression to hardcoded `29` would yield `29feb2026` and
+        // fail this assertion. The pair (existing `01jan2024-29feb2024` for the
+        // 2024-transition hardcoded literal + this one for the IsLeapYear=false
+        // branch of the regular cycle) covers both day-number sources.
+        var result = HoldingsDataSetClient.GetDataSetFileNames(new DateTime(2025, 1, 1));
+
+        result.Should().Contain("01dec2025-28feb2026_form13f.zip");
+    }
+
+    [Fact]
     public void GetDataSetFileNames_StartIn2014_ProducesOldQuarterlyFormatFilename() {
         // The SEC publishes Form 13F data sets under exact-cased filenames that the
         // downloader concatenates onto the BaseUrl verbatim. For 2013-2023 the format
