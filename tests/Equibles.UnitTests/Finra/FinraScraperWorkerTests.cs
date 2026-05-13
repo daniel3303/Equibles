@@ -1,4 +1,5 @@
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.Data.Models;
 using Equibles.Finra.HostedService;
 using Equibles.Finra.HostedService.Configuration;
 using Equibles.Integrations.Finra.Contracts;
@@ -107,6 +108,30 @@ public class FinraScraperWorkerTests {
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(12));
     }
 
+    [Fact]
+    public void ErrorSource_IsFinraScraper() {
+        // FinraScraperWorker drives the daily-short-volume and short-interest scrapes
+        // against the FINRA API — a different upstream, auth model (OAuth2), and quota
+        // envelope from every other scraper. When BaseScraperWorker's catch-all reports
+        // a failure, it tags the error with this enum value as the routing key for the
+        // issue-tracker queue. The Errors.Data.Models namespace defines a row of
+        // visually-similar ErrorSource members (CftcScraper, FredScraper, CboeScraper,
+        // YahooScraper) alongside FinraScraper, so a copy-paste regression that picks
+        // the wrong sibling would silently misroute FINRA failures into the wrong
+        // on-call queue — pointing the responder at the wrong API outage page. The
+        // existing ValidateConfiguration / SleepInterval pins don't touch this
+        // property, so a typo or reorder has no test signal. Pin the literal enum
+        // value so any future routing change must update this test deliberately.
+        var options = Options.Create(new FinraScraperOptions { SleepIntervalHours = 24 });
+        var sut = new TestableFinraScraperWorker(
+            Substitute.For<ILogger<FinraScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            options);
+
+        sut.InvokeErrorSource().Should().Be(ErrorSource.FinraScraper);
+    }
+
     private sealed class TestableFinraScraperWorker : FinraScraperWorker {
         public TestableFinraScraperWorker(
             ILogger<FinraScraperWorker> logger,
@@ -118,5 +143,7 @@ public class FinraScraperWorkerTests {
         public bool InvokeValidateConfiguration() => ValidateConfiguration();
 
         public TimeSpan InvokeSleepInterval() => SleepInterval;
+
+        public ErrorSource InvokeErrorSource() => ErrorSource;
     }
 }
