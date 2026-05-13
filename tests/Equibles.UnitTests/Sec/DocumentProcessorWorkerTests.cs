@@ -57,6 +57,29 @@ public class DocumentProcessorWorkerTests {
         sut.InvokeErrorSource().Should().Be(ErrorSource.DocumentProcessor);
     }
 
+    [Fact]
+    public void WorkerName_IsDocumentProcessor() {
+        // Fifth WorkerName pin, completing the SleepInterval/ErrorSource/WorkerName
+        // triple for DocumentProcessorWorker. WorkerName flows into BaseScraperWorker's
+        // structured log scope and shows up in every Serilog line the worker emits —
+        // it's the string on-call greps for in `data/worker/logs/log<date>.txt` when
+        // chasing "is the embedding pipeline running?". DocumentProcessorWorker shares
+        // the SEC worker assembly with SecScraperWorker ("SEC filing scraper") and
+        // FtdScraperWorker ("FTD scraper") — three workers, three distinct names so a
+        // tail -f can tell them apart at a glance. A copy-paste regression that gave
+        // this worker "SEC filing scraper" would silently merge two operational
+        // streams: the embedding pipeline's HTTP 429 churn against Ollama would start
+        // appearing as filing-scraper noise, and runbook authors would point on-call
+        // at the SEC website during what's actually an embedding-stack outage. Pin
+        // the literal "Document processor" so the rename is loud, not silent.
+        var sut = new TestableDocumentProcessorWorker(
+            Substitute.For<ILogger<DocumentProcessorWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()));
+
+        sut.InvokeWorkerName().Should().Be("Document processor");
+    }
+
     private sealed class TestableDocumentProcessorWorker : DocumentProcessorWorker {
         public TestableDocumentProcessorWorker(
             ILogger<DocumentProcessorWorker> logger,
@@ -67,5 +90,7 @@ public class DocumentProcessorWorkerTests {
         public TimeSpan InvokeSleepInterval() => SleepInterval;
 
         public ErrorSource InvokeErrorSource() => ErrorSource;
+
+        public string InvokeWorkerName() => WorkerName;
     }
 }
