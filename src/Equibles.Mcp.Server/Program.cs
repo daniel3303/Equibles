@@ -6,6 +6,7 @@ using Equibles.CommonStocks.Data.Extensions;
 using Equibles.Congress.Data.Extensions;
 using Equibles.Congress.Mcp.Extensions;
 using Equibles.Core.AutoWiring;
+using Equibles.Data;
 using Equibles.Data.Extensions;
 using Equibles.Errors.Data.Extensions;
 using Equibles.Finra.Data.Extensions;
@@ -19,55 +20,72 @@ using Equibles.InsiderTrading.Mcp.Extensions;
 using Equibles.Mcp.Contracts;
 using Equibles.Mcp.Extensions;
 using Equibles.Mcp.Middleware;
-using Equibles.Mcp.Server;
 using Equibles.Media.Data.Extensions;
 using Equibles.Sec.Data.Extensions;
 using Equibles.Sec.Mcp.Extensions;
 using Equibles.Yahoo.Data.Extensions;
 using Equibles.Yahoo.Mcp.Extensions;
+using Microsoft.EntityFrameworkCore;
 using ModelContextProtocol.AspNetCore;
 using Serilog;
 using Serilog.Events;
 
-var builder = WebApplication.CreateBuilder(args);
+namespace Equibles.Mcp.Server;
 
-builder.Services.AddSerilog(config => {
-    config.ReadFrom.Configuration(builder.Configuration);
-    var minLevel = builder.Configuration["MinimumLogLevel"];
-    if (!string.IsNullOrEmpty(minLevel) && Enum.TryParse<LogEventLevel>(minLevel, true, out var level)) {
-        config.MinimumLevel.Is(level);
+public partial class Program {
+    public static async Task Main(string[] args) {
+        var builder = WebApplication.CreateBuilder(args);
+        ConfigureServices(builder);
+        var app = builder.Build();
+        ConfigurePipeline(app);
+        await app.RunAsync();
     }
-});
 
-Equibles.Plugins.PluginLoader.LoadAll();
+    public static void ConfigureServices(WebApplicationBuilder builder) {
+        builder.Services.AddSerilog(config => {
+            config.ReadFrom.Configuration(builder.Configuration);
+            var minLevel = builder.Configuration["MinimumLogLevel"];
+            if (!string.IsNullOrEmpty(minLevel) && Enum.TryParse<LogEventLevel>(minLevel, true, out var level)) {
+                config.MinimumLevel.Is(level);
+            }
+        });
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddEquiblesDbContext(connectionString, modules => modules.AddAllModules());
-builder.Services.AddAllRepositories();
+        Equibles.Plugins.PluginLoader.LoadAll();
 
-builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();
-builder.Services.AutoWireServicesFrom<Equibles.Sec.BusinessLogic.Search.RagManager>();
+        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+        builder.Services.AddEquiblesDbContext(connectionString, modules => modules.AddAllModules());
+        builder.Services.AddAllRepositories();
 
-builder.Services.AddEquiblesMcp(mcp => {
-    mcp.AddHoldings();
-    mcp.AddInsiderTrading();
-    mcp.AddFred();
-    mcp.AddSec();
-    mcp.AddCftc();
-    mcp.AddCboe();
-    mcp.AddCongress();
-    mcp.AddShortData();
-    mcp.AddStockPrices();
-});
+        builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();
+        builder.Services.AutoWireServicesFrom<Equibles.Sec.BusinessLogic.Search.RagManager>();
 
-builder.Services.AddSingleton<IApiKeyValidator, SimpleApiKeyValidator>();
+        builder.Services.AddEquiblesMcp(mcp => {
+            mcp.AddHoldings();
+            mcp.AddInsiderTrading();
+            mcp.AddFred();
+            mcp.AddSec();
+            mcp.AddCftc();
+            mcp.AddCboe();
+            mcp.AddCongress();
+            mcp.AddShortData();
+            mcp.AddStockPrices();
+        });
 
-var app = builder.Build();
+        builder.Services.AddSingleton<IApiKeyValidator, SimpleApiKeyValidator>();
+    }
 
-app.UseWhen(ctx => ctx.Request.Path.StartsWithSegments("/mcp"), branch => {
-    branch.UseMiddleware<ApiKeyMiddleware>();
-});
+    public static async Task ApplyMigrationsAsync(WebApplication app) {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        dbContext.Database.SetCommandTimeout(TimeSpan.FromHours(1));
+        await dbContext.Database.MigrateAsync();
+    }
 
-app.MapMcp("/mcp");
+    public static void ConfigurePipeline(WebApplication app) {
+        app.UseWhen(ctx => ctx.Request.Path.StartsWithSegments("/mcp"), branch => {
+            branch.UseMiddleware<ApiKeyMiddleware>();
+        });
 
-app.Run();
+        app.MapMcp("/mcp");
+    }
+}

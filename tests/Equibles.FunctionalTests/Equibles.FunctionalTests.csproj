@@ -22,11 +22,13 @@
     <PackageReference Include="Testcontainers" />
     <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="Respawn" />
+    <PackageReference Include="ModelContextProtocol" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Equibles.Web\Equibles.Web.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Migrations\Equibles.Migrations.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Mcp.Server\Equibles.Mcp.Server.csproj" />
   </ItemGroup>
 
 </Project>
