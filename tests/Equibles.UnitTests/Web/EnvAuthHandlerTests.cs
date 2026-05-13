@@ -274,6 +274,53 @@ public class EnvAuthHandlerTests {
     }
 
     [Fact]
+    public async Task HandleChallengeAsync_UrlWithQueryString_RedirectsToLoginWithEscapedReturnUrl() {
+        // EnvAuthHandler.HandleChallengeAsync builds a 302 redirect to /Auth/Login
+        // carrying the requested URL (path + query) as a ReturnUrl query parameter.
+        // The implementation is:
+        //   var returnUrl = Request.Path + Request.QueryString;
+        //   Response.Redirect($"/Auth/Login?ReturnUrl={Uri.EscapeDataString(returnUrl)}");
+        //
+        // The Uri.EscapeDataString call is the security boundary. Without it, a
+        // requested URL like `/Reports?id=1&admin=true` would produce a redirect
+        // location of `/Auth/Login?ReturnUrl=/Reports?id=1&admin=true` — the
+        // `&admin=true` from the original query string would now be parsed BY
+        // /Auth/Login as a top-level query parameter rather than as part of
+        // ReturnUrl. An attacker could craft a URL whose query string injects
+        // parameters /Auth/Login interprets (think `&fallback=https://evil.com`),
+        // breaking the open-redirect mitigations in BaseController.GetReturnUrl
+        // (which validates ReturnUrl via Url.IsLocalUrl AFTER the round trip).
+        //
+        // Every existing pin in this file targets either the static helpers or the
+        // four HandleAuthenticateAsync branches. The HandleChallengeAsync codepath
+        // is entirely unpinned — a refactor that drops the `Uri.EscapeDataString`
+        // call (e.g. someone "simplifying" the format string) would compile cleanly,
+        // pass every existing test, and silently turn the redirect into an
+        // open-redirect-by-query-pollution vector on every protected endpoint.
+        //
+        // Pin both the redirect target prefix (`/Auth/Login?ReturnUrl=`) AND the
+        // escaped form of the original path+query (`%2FFoo%3Fbar%3Dbaz`). The
+        // escaped-form assertion is what distinguishes a working
+        // Uri.EscapeDataString from a refactor that dropped it — without the
+        // escape, the location would contain literal `/Foo?bar=baz`.
+        var authSettings = Options.Create(new AuthSettings());
+        var schemeOptions = Substitute.For<IOptionsMonitor<AuthenticationSchemeOptions>>();
+        schemeOptions.Get(Arg.Any<string>()).Returns(new AuthenticationSchemeOptions());
+        var sut = new EnvAuthHandler(schemeOptions, NullLoggerFactory.Instance, UrlEncoder.Default, authSettings);
+
+        var scheme = new AuthenticationScheme(EnvAuthHandler.SchemeName, EnvAuthHandler.SchemeName, typeof(EnvAuthHandler));
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Path = "/Foo";
+        httpContext.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString("?bar=baz");
+        await sut.InitializeAsync(scheme, httpContext);
+        await sut.ChallengeAsync(new AuthenticationProperties());
+
+        httpContext.Response.StatusCode.Should().Be(302);
+        httpContext.Response.Headers.Location.ToString()
+            .Should().Be("/Auth/Login?ReturnUrl=%2FFoo%3Fbar%3Dbaz");
+    }
+
+    [Fact]
     public void ConstantTimeEquals_NullAndEmpty_ReturnsTrue() {
         // Both null and empty hash to the same value because the implementation
         // coalesces null to "" before hashing
