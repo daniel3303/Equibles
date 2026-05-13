@@ -1,5 +1,6 @@
 using System.Reflection;
 using Equibles.Integrations.Cftc;
+using Equibles.Integrations.Cftc.Models;
 
 namespace Equibles.UnitTests.Integrations;
 
@@ -16,6 +17,45 @@ public class CftcClientTests {
 
     private static readonly MethodInfo BuildColumnIndexMethod = typeof(CftcClient)
         .GetMethod("BuildColumnIndex", BindingFlags.NonPublic | BindingFlags.Static);
+
+    private static readonly MethodInfo ParseLineMethod = typeof(CftcClient)
+        .GetMethod("ParseLine", BindingFlags.NonPublic | BindingFlags.Static);
+
+    [Fact]
+    public void ParseLine_LegacyDateColumnOnly_FallsBackToAsOfDateInFormYyMmDd() {
+        // CFTC's COT history files mix two CSV schemas across the decades-long backfill:
+        //   • Modern (post-2010ish): "Report_Date_as_YYYY-MM-DD" column with ISO dates
+        //     like "2025-01-15".
+        //   • Legacy: "As_of_Date_In_Form_YYMMDD" column with packed dates like "250115".
+        // ParseLine reads ReportDate with a `?? GetField(..., legacy)` fallback so a CSV
+        // that lacks the modern column still produces a ReportDate value. Without the
+        // fallback (e.g. a refactor that "simplifies" the `??` chain to just the modern
+        // column), every historical file would yield records with null ReportDate;
+        // CftcImportService.ImportYear's `if (date == null) continue;` would then drop
+        // every row, silently zeroing out the pre-2010 backfill while modern years keep
+        // working — exactly the partial-failure mode that escapes integration tests
+        // built only against recent fixtures.
+        //
+        // Sibling pins in CftcImportServiceTests cover the two date FORMATS at the
+        // ParseDate level (yyyy-MM-dd and yyMMdd). The COLUMN-NAME fallback at the
+        // CftcClient level is structurally distinct and previously unpinned. The pair
+        // (format fallback at ParseDate + column-name fallback at ParseLine) covers
+        // both reasons a date might be missing.
+        //
+        // Pin: a single-row CSV whose header carries ONLY the legacy column. The
+        // returned record's ReportDate must equal the legacy raw string "250115" —
+        // ParseLine reads the value verbatim and leaves date-string format
+        // interpretation to the downstream ParseDate helper.
+        var headerLine = "CFTC_Contract_Market_Code,As_of_Date_In_Form_YYMMDD";
+        var columnIndex = (Dictionary<string, int>)BuildColumnIndexMethod.Invoke(null, [headerLine]);
+        var line = "001602,250115";
+
+        var record = (CftcReportRecord)ParseLineMethod.Invoke(null, [line, columnIndex]);
+
+        record.Should().NotBeNull();
+        record.ReportDate.Should().Be("250115");
+        record.ContractMarketCode.Should().Be("001602");
+    }
 
     [Fact]
     public void BuildColumnIndex_QuotedHeaderName_IndexedWithoutQuotes() {
