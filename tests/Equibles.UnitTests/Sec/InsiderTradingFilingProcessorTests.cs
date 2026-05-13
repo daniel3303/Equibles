@@ -412,4 +412,52 @@ public class InsiderTradingFilingProcessorTests {
 
         result.Should().Be(TransactionCode.Gift);
     }
+
+    [Fact]
+    public void ParseTransactionCode_DiscretionaryCodeW_ReturnsDiscretionary() {
+        // Ninth pin in the ParseTransactionCode family. Existing pins cover
+        // P/Purchase, S/Sale, A/Award, _/Other, M/Conversion, X/Exercise,
+        // F/TaxPayment, and G/Gift. This pin covers
+        // `W => TransactionCode.Discretionary` — acquisitions or
+        // dispositions made via a 10b5-1 trading plan or other pre-
+        // authorized discretionary mechanism that doesn't fit the
+        // open-market / award / gift / tax-withholding categories.
+        //
+        // W is the LAST single-letter §16 code that's semantically
+        // distinct AND used in production filings (E for Expiration and
+        // I for Inheritance round out the table but are statistically
+        // rarer). It's the most semantically subtle of the codes: a
+        // "Discretionary" transaction is one the insider authorized in
+        // advance through a plan but executed mechanically — the
+        // signal-value tier sits between the genuinely informative
+        // open-market P/S (high signal) and the mechanical F/TaxPayment
+        // (no signal). Misclassifying W in either direction silently
+        // miscalibrates the insider-trading signal.
+        //
+        // The risk uniquely caught by this pin: a refactor that swapped
+        // the W arm with an adjacent letter's mapping (W appears LAST
+        // in the switch source — the natural "tail" position is the
+        // most likely to be lost in a "consolidate the tail arms"
+        // refactor that merges W/I/E into the default catch-all on the
+        // assumption that "rare codes can fall through to Other").
+        // Such a refactor would compile, pass every other ParseTransactionCode
+        // pin (P/S/A/M/X/F/G/Other), and silently demote 10b5-1 trades
+        // — the regulator-blessed mechanism executives use to time sales
+        // around earnings windows — into the uncategorized Other bucket.
+        // Downstream analytics that filter on Discretionary specifically
+        // (e.g. "did the CEO sell via plan or via discretion this quarter?")
+        // would silently return zero results.
+        //
+        // The complementary risk: a swap with G/Gift (also in the
+        // "non-open-market" semantic cluster) would silently merge two
+        // distinct disclosure categories, corrupting both the gift
+        // donation aggregate (used in charitable-giving analytics) AND
+        // the 10b5-1 plan-execution aggregate (used in insider-trading
+        // pattern detection). Pin uppercase "W" with assertion on the
+        // exact enum value Discretionary so any of these regressions
+        // surface here.
+        var result = (TransactionCode)ParseTransactionCodeMethod.Invoke(null, ["W"]);
+
+        result.Should().Be(TransactionCode.Discretionary);
+    }
 }
