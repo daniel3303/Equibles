@@ -88,6 +88,47 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
+    public void ParseOptionType_PutWireValue_ReturnsPutEnum() {
+        // Sibling to `ParseOptionType_UnrecognizedValue_ReturnsNullNotADefaultEnumValue`.
+        // The existing pin covers the null-default branch. This pin covers the
+        // "PUT" → OptionType.Put mapped arm — the high-business-value happy path.
+        //
+        // The risk this catches that the null-default sibling cannot: a
+        // refactor that swapped the two mapped arms — `"PUT" => Call, "CALL"
+        // => Put` — would compile, pass the unrecognized-default sibling
+        // (it returns null either way regardless of the swap), and silently
+        // INVERT every option position in the 13F-HR institutional-holdings
+        // dataset. Downstream consequences cascade into derivative analytics:
+        //
+        //   • "Top hedgers" dashboards (filtered on Put positions) would
+        //     surface managers who actually hold Calls — inverting the
+        //     bearish/bullish signal.
+        //   • Put/call ratio aggregates per manager would compute the
+        //     inverse, breaking the contrarian-positioning indicator that
+        //     several screener tools build on.
+        //   • The institutional-holdings page's "options exposure" badge
+        //     would mislabel every position card.
+        //
+        // The PUT arm is structurally adjacent to CALL in the switch source
+        // (lines 49-50), making it the most likely casualty of a copy-paste
+        // edit that touched the wrong line. The signal value of the inversion
+        // is asymmetric — Put holdings are the rarer, more informative
+        // signal (managers usually hedge upside via Calls, downside via
+        // Puts) — so misclassifying Put → Call dilutes a high-signal
+        // bucket into a higher-noise one.
+        //
+        // Pin uppercase "PUT" (the canonical SEC wire form per the 13F-HR
+        // schema). ParseOptionType normalizes via ToUpperInvariant before
+        // matching, but the documented contract is uppercase. Asserting
+        // the exact enum value (Put, not the integer ordinal) guards
+        // against enum-reorder refactors that would silently rebind
+        // Put/Call to different underlying values.
+        var result = HoldingsParsingHelper.ParseOptionType("PUT");
+
+        result.Should().Be(OptionType.Put);
+    }
+
+    [Fact]
     public void ParseOptionType_UnrecognizedValue_ReturnsNullNotADefaultEnumValue() {
         // SEC 13F filings only carry an option-type wire value ("PUT" / "CALL") for actual
         // option positions; for the vast majority of holdings (common stock, ADRs, fund
