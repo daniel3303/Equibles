@@ -36,6 +36,36 @@ public class HeadingConversionStepTests {
     }
 
     [Fact]
+    public void SpanWithNestedBoldChild_InnerHtmlBranchTriggersH3Conversion() {
+        // IsBoldSpan is two independent OR-arms:
+        //   (a) span's own `style` attribute contains "font-weight:bold"
+        //   (b) span's `innerHtml` (the serialized markup of its children) contains
+        //       "font-weight:bold" — i.e. the bold styling lives on a NESTED element
+        //       like <font style="font-weight:bold"> rather than on the span itself.
+        // The existing `BoldSpan_IsConvertedToH3` pin exercises arm (a) only. Arm (b)
+        // is unpinned, and it's not redundant: SEC filings emitted by Workiva, Donnelley
+        // Financial, and Toppan Merrill routinely wrap section headings as
+        //   <span><font style="font-weight:bold">Revenue</font></span>
+        // because the upstream Word→XBRL conversion bubbles formatting onto the inner
+        // <font> element rather than the wrapping span. Without the innerHtml fallback,
+        // every such heading would skip H3 promotion and stay as a regular span,
+        // wrecking the heading hierarchy that chunk-by-heading + table-of-contents
+        // extraction depend on. A refactor that "simplifies" IsBoldSpan to read only
+        // the span's own style attribute would compile cleanly, pass the existing
+        // BoldSpan test, and silently demote half the production filing corpus.
+        //
+        // Pin the innerHtml branch with a nested <font> bold child. The promotion to
+        // H3 confirms IsBoldSpan returned true via arm (b) — `AllSiblingsMatch` only
+        // succeeds if every meaningful sibling passes the predicate, and there's only
+        // one span here, so the H3 output is a direct signal that the innerHtml-bold
+        // check fired.
+        var result = Execute("<div><span><font style=\"font-weight:bold\">Revenue</font></span></div>");
+
+        result.Should().Contain("<h3>");
+        result.Should().Contain("Revenue");
+    }
+
+    [Fact]
     public void AllUppercaseSpan_IsConvertedToH3() {
         var result = Execute("<div><span>REVENUE</span></div>");
 
