@@ -56,6 +56,52 @@ public class MarkdownExtensionsTests {
     }
 
     [Fact]
+    public void MarkdownToHtml_PipeTableWithCascadedBlankLinesBetweenRows_RendersAsSingleTable() {
+        // The existing single-blank-line pin proves the BlankLineBetweenPipeRows
+        // regex replacement works for ONE adjacent pair. The production code
+        // wraps that Replace in a do-while loop until the input stops changing:
+        //   do { previous = markdown; markdown = regex.Replace(...); }
+        //   while (markdown != previous);
+        // The loop is load-bearing for inputs with THREE OR MORE pipe rows
+        // separated by blank lines — a single .Replace pass non-overlappingly
+        // matches alternating pairs, so a 3-row input
+        //   row1\n\nrow2\n\nrow3
+        // becomes after one pass:
+        //   row1\nrow2\n\nrow3
+        // (only the first pair collapsed; the second blank line survives).
+        // Only the next iteration finishes the job.
+        //
+        // The risk this catches: a refactor that "tidies up" the do-while
+        // into a single Replace call — under the false intuition that the
+        // regex's `g`-style replacement already handles all matches —
+        // would compile, pass the existing single-pair pin, and silently
+        // leave middle blank lines intact in any pipe table with 3+ rows
+        // separated by blank lines. Markdig then renders the cluster as
+        // multiple SEPARATE tables (one per non-blank stretch), breaking
+        // the visual continuity of historical-data tables we've stored in
+        // legacy SEC ingest formats (where the upstream HTML→Markdown
+        // converter routinely emitted blank-line-separated rows).
+        //
+        // Pin a 3-row pipe table with blank lines between EVERY row.
+        // Assert the rendered HTML contains exactly ONE <table tag —
+        // multiple tables would mean a cascading collapse failed. The
+        // single-pair pin's regex one-pass replacement is insufficient
+        // for this case; only the do-while loop's convergence produces
+        // a single table.
+        string captured = null;
+        var htmlHelper = Substitute.For<IHtmlHelper>();
+        htmlHelper.Raw(Arg.Do<string>(s => captured = s))
+            .Returns(callInfo => new HtmlString(callInfo.Arg<string>()));
+
+        var markdown = "| H1 | H2 |\n|----|----|\n| a  | b  |\n\n| c  | d  |\n\n| e  | f  |\n";
+
+        htmlHelper.MarkdownToHtml(markdown);
+
+        captured.Should().NotBeNull();
+        Regex.Matches(captured, "<table").Count.Should().Be(1);
+    }
+
+    [Fact]
     public void MarkdownToHtml_PipeTableWithBlankLineBetweenRows_RendersAsSingleTable() {
         string captured = null;
         var htmlHelper = Substitute.For<IHtmlHelper>();
