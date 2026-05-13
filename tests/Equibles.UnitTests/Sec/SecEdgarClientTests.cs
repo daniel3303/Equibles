@@ -282,4 +282,60 @@ public class SecEdgarClientTests {
 
         delay.Should().BeCloseTo(TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(5));
     }
+
+    [Fact]
+    public void GetRetryDelay_RetryAfterAbsoluteDateInPast_FallsThroughToExponentialBackoff() {
+        // Sibling to `GetRetryDelay_RetryAfterAbsoluteDateInFuture_ReturnsWaitUntilThatDate`.
+        // The future-date pin covers the Date-branch happy path. This pin
+        // covers the SAFETY GUARD inside that branch:
+        //   if (response.Headers.RetryAfter?.Date is { } date) {
+        //       var wait = date - DateTimeOffset.UtcNow;
+        //       if (wait > TimeSpan.Zero) {   ← THIS GUARD
+        //           return wait > MaxRetryDelay ? MaxRetryDelay : wait;
+        //       }
+        //   }
+        // The `wait > TimeSpan.Zero` check is load-bearing defensive code
+        // against TWO real production conditions:
+        //
+        //   1. Clock skew. The runtime's UtcNow may drift past SEC's
+        //      stated Retry-After date by a few hundred milliseconds —
+        //      enough to produce a tiny negative wait. Without the
+        //      guard, `Task.Delay(negativeTimeSpan)` would throw
+        //      ArgumentOutOfRangeException at the caller, crashing the
+        //      worker on every clock-skewed Retry-After response.
+        //   2. Stale Retry-After. SEC's CDN occasionally re-serves a
+        //      cached 429 response whose Retry-After header was written
+        //      minutes or hours ago, so the date is firmly in the past.
+        //      Falling through to the exponential-backoff path is the
+        //      correct behavior — back off as if no Retry-After were
+        //      sent.
+        //
+        // The risk this catches: a refactor that drops the
+        // `wait > TimeSpan.Zero` guard — under the false intuition
+        // that "SEC always sends future dates" — would compile, pass
+        // the future-date sibling, and immediately crash the worker on
+        // the first clock-skewed or stale-cached Retry-After response.
+        //
+        // Without this pin AND with the guard dropped, the fall-through
+        // path is the exponential backoff (path 3 in the family). Pin
+        // a past date and assert the result equals the expected
+        // exponential value at attempt=2 (2^(2+1) = 8 seconds), which
+        // proves:
+        //   • Past-date check fired (didn't return negative wait).
+        //   • Date branch's wait-guard correctly fell through.
+        //   • Exponential backoff branch handled the fallback.
+        // Use 1 day in the past — clearly outside any drift envelope so
+        // the test isn't flaky on slow CI.
+        using var httpClient = new HttpClient();
+        var configuration = new ConfigurationBuilder().Build();
+        var sut = new SecEdgarClient(httpClient, NullLogger<SecEdgarClient>.Instance, configuration);
+
+        var retryAt = DateTimeOffset.UtcNow.AddDays(-1);
+        using var response = new HttpResponseMessage(System.Net.HttpStatusCode.TooManyRequests);
+        response.Headers.RetryAfter = new RetryConditionHeaderValue(retryAt);
+
+        var delay = (TimeSpan)GetRetryDelayMethod.Invoke(sut, [response, 2]);
+
+        delay.Should().Be(TimeSpan.FromSeconds(8));
+    }
 }
