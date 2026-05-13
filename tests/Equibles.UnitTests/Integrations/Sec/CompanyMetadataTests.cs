@@ -88,6 +88,51 @@ public class CompanyMetadataTests {
     }
 
     [Fact]
+    public void IsOperatingCompany_OperatingTypeWithMixedCase_ReturnsTrueViaCaseInsensitiveCompare() {
+        // Sibling to `IsOperatingCompany_InvestmentCompanyEntityType_ReturnsFalse`.
+        // The predicate uses `OrdinalIgnoreCase` so any casing variation of
+        // "operating" — SEC's submissions doc has emitted "Operating",
+        // "OPERATING", and "operating" across different years/filers —
+        // must classify as an operating company. The false-case sibling
+        // catches polarity flips; this pin catches comparer narrowing.
+        //
+        // The risk this catches uniquely (and that the false sibling
+        // cannot): a refactor that swaps `OrdinalIgnoreCase` for the
+        // default case-sensitive `Equals` overload — under the false
+        // intuition that "we always emit lowercase from the upstream
+        // parser anyway" — would compile cleanly, pass the
+        // false-investment-company pin (investment company is correctly
+        // rejected either way), AND silently start mis-classifying every
+        // filer whose EntityType arrived from SEC in mixed case. The
+        // CompanySyncService tiebreak would fall through past the
+        // operating-status arm for those filers because IsOperatingCompany
+        // returns false; CIK numerical tiebreak then wins, which
+        // routinely produces the wrong outcome (older CIKs are usually
+        // subsidiaries; newer CIKs are usually the operating parent).
+        //
+        // The complementary risk: a switch from `Equals` to `Contains`
+        // would also pass the existing pins (investment-company correctly
+        // rejected, operating correctly accepted) and would silently
+        // accept "non-operating subsidiary" as containing the substring
+        // "operating". That regression is caught by the false sibling's
+        // "investment company" input — neither contains "operating" — but
+        // a different non-operating type that DOES contain the substring
+        // (e.g. "Non-Operating Holding Company") would slip past. This
+        // pin doesn't directly catch that case, but it complements the
+        // false sibling's coverage at the predicate-comparer level.
+        //
+        // Pin mixed-case "Operating" (capital O, lowercase rest — the
+        // most common SEC wire form per their submissions-doc schema).
+        // Asserting true proves the OrdinalIgnoreCase comparer fires.
+        var metadata = new CompanyMetadata {
+            Cik = "1234567",
+            EntityType = "Operating",
+        };
+
+        metadata.IsOperatingCompany.Should().BeTrue();
+    }
+
+    [Fact]
     public void IsListed_OtcOnlyExchanges_ReturnsFalse() {
         // `CompanyMetadata.IsListed` powers the second-tier tiebreaker in
         // `CompanySyncService.ShouldIncumbentWin` — when two SEC filers race for the same
