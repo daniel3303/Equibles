@@ -10,6 +10,36 @@ namespace Equibles.UnitTests.Web;
 
 public class HomeControllerTests {
     [Fact]
+    public void Error_StatusCode429_ShowsTooManyRequestsTitleAndSets429Response() {
+        // Pins the 429 case-specific branch — distinct from 404 and the default
+        // arm pinned by sibling tests. 429 ("Too Many Requests") is the response
+        // ASP.NET Core surfaces when the configured rate limiter rejects a
+        // request, and the title users see on that page is the only signal that
+        // distinguishes "you're being throttled" from "the page is broken". An
+        // operator inspecting logs/dashboards relies on the title to triage:
+        // a 429 surfaced with "Something Went Wrong" looks like a server crash
+        // and triggers wrong incident response.
+        //
+        // The risk this test pins: same shape as the 404 sibling — a refactor
+        // that swaps `429 => "Too Many Requests"` with another arm (or that
+        // collapses the case into the default) would silently rebrand
+        // rate-limit pages. The compiler doesn't care about case-label values,
+        // and the integration tests don't render the error pipeline against
+        // throttled requests, so this regression escapes other tiers entirely.
+        var httpContext = new DefaultHttpContext();
+        var controller = new HomeController(NullLogger<HomeController>.Instance, Substitute.For<IConfiguration>()) {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+            TempData = Substitute.For<ITempDataDictionary>(),
+        };
+
+        var result = controller.Error(statusCode: 429);
+
+        result.Should().BeOfType<ViewResult>();
+        httpContext.Response.StatusCode.Should().Be(429);
+        controller.ViewData["Title"].Should().Be("Too Many Requests");
+    }
+
+    [Fact]
     public void Error_StatusCode404_ShowsPageNotFoundTitleAndSets404Response() {
         // The sibling `Error_NullStatusCode_...` test pins the default switch arm
         // ("Something Went Wrong"). This pins the 404 case — the most common
