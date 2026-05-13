@@ -125,6 +125,31 @@ public class FredScraperWorkerTests {
         sut.InvokeErrorSource().Should().Be(ErrorSource.FredScraper);
     }
 
+    [Fact]
+    public void WorkerName_IsFredScraper() {
+        // Sixth WorkerName pin in the natural-extension family (CBOE, Holdings, SEC
+        // filing, FTD, Document processor, and now FRED). WorkerName flows into
+        // BaseScraperWorker's structured log scope and shows up in every Serilog
+        // line the worker emits — on-call greps `data/worker/logs/log<date>.txt`
+        // for "FRED scraper" when the macro dashboards (FEDFUNDS, CPIAUCSL,
+        // UNRATE) stop refreshing. The string is deliberately title-cased
+        // ("FRED" all-caps because it's a Fed acronym, "scraper" lowercase to
+        // match the family) — a casing regression to "Fred scraper" would still
+        // log but break any case-sensitive log filter or dashboard pinning the
+        // exact literal. FRED is the only scraper whose name carries an acronym
+        // (vs "Holdings", "Document processor"), making it the most likely
+        // casualty of a future "normalize the naming" refactor. Pin the exact
+        // capitalization so any such normalization fails this test.
+        var options = Options.Create(new FredScraperOptions { SleepIntervalHours = 24 });
+        var sut = new TestableFredScraperWorker(
+            Substitute.For<ILogger<FredScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            options);
+
+        sut.InvokeWorkerName().Should().Be("FRED scraper");
+    }
+
     private sealed class TestableFredScraperWorker : FredScraperWorker {
         public TestableFredScraperWorker(
             ILogger<FredScraperWorker> logger,
@@ -138,5 +163,7 @@ public class FredScraperWorkerTests {
         public TimeSpan InvokeSleepInterval() => SleepInterval;
 
         public ErrorSource InvokeErrorSource() => ErrorSource;
+
+        public string InvokeWorkerName() => WorkerName;
     }
 }
