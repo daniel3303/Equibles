@@ -10,6 +10,34 @@ public class YahooFinanceClientTests {
     private static readonly MethodInfo FromUnixTimestampMethod = typeof(YahooFinanceClient)
         .GetMethod("FromUnixTimestamp", BindingFlags.NonPublic | BindingFlags.Static);
 
+    private static readonly MethodInfo ApplyBrowserHeadersOnClientMethod = typeof(YahooFinanceClient)
+        .GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
+        .First(m => m.Name == "ApplyBrowserHeaders" && m.GetParameters()[0].ParameterType == typeof(HttpClient));
+
+    [Fact]
+    public void ApplyBrowserHeaders_OnHttpClient_AddsChromeUserAgentAndAcceptHeaders() {
+        // Yahoo Finance actively rejects requests that look like bots — `query1.finance.yahoo.com`
+        // returns 401/403 without explanation when the User-Agent header is missing or
+        // identifies as a typical HttpClient (".NET HttpClient/...") rather than a real
+        // browser. `ApplyBrowserHeaders(HttpClient)` is the bot-detection bypass: it
+        // attaches a Chrome User-Agent plus the Accept and Accept-Language headers a
+        // browser would normally send, on `DefaultRequestHeaders` so EVERY subsequent
+        // call shares them. The risk this pins: a refactor that drops any of the three
+        // headers (or replaces the constant `BrowserUserAgent` with `nameof(YahooFinanceClient)`,
+        // or removes the call from session bootstrap entirely) would silently 401 the
+        // next session-refresh after the 30-minute cache expiry — with no test signal
+        // because the unit tests around `GetHistoricalPrices` only exercise the
+        // ArgumentException paths that never hit the network. Asserting on the
+        // emitted header proves the bypass is wired correctly.
+        var client = new HttpClient();
+
+        ApplyBrowserHeadersOnClientMethod.Invoke(null, [client]);
+
+        client.DefaultRequestHeaders.UserAgent.ToString().Should().StartWith("Mozilla/5.0");
+        client.DefaultRequestHeaders.Accept.ToString().Should().Contain("text/html");
+        client.DefaultRequestHeaders.AcceptLanguage.ToString().Should().Contain("en-US");
+    }
+
     [Fact]
     public void ToUnixTimestamp_KnownUtcDate_ReturnsCorrectUnixSeconds() {
         // GetHistoricalPrices builds the chart URL with `?period1={ToUnixTimestamp(start)}`,
