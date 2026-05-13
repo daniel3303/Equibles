@@ -83,6 +83,8 @@
     <ProjectReference Include="..\..\src\Equibles.Cboe.Data\Equibles.Cboe.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Cboe.Repositories\Equibles.Cboe.Repositories.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.Cboe\Equibles.Integrations.Cboe.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Integrations.Cftc\Equibles.Integrations.Cftc.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Cftc.HostedService\Equibles.Cftc.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Migrations\Equibles.Migrations.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Mcp.Server\Equibles.Mcp.Server.csproj" />
   </ItemGroup>
