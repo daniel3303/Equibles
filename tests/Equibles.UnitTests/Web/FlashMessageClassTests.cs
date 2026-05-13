@@ -116,6 +116,31 @@ public class FlashMessageClassTests {
     }
 
     [Fact]
+    public void Retrieve_WhenEntryMissing_ReturnsEmptyAndDoesNotCallRemoveOrDeserialize() {
+        // Retrieve guards against a missing TempData entry with an explicit
+        // `if (obj == null) return new List<IFlashMessageModel>()` short-circuit
+        // BEFORE the TempData.Remove + deserialize calls. The guard is load-
+        // bearing: without it, Remove would run for every request that reads
+        // flash messages (silently mutating TempData on the unhappy path) AND
+        // the subsequent cast `(string)obj` would throw NullReferenceException
+        // because `obj` is null. Pin the contract — empty result, no Remove,
+        // no Deserialize — so a refactor that drops the guard surfaces here
+        // instead of crashing the first request after a fresh session.
+        var serializer = Substitute.For<IFlashMessageSerializer>();
+        var tempData = Substitute.For<ITempDataDictionary>();
+        tempData[FlashMessage.KeyName].Returns((object)null);
+        var factory = Substitute.For<ITempDataDictionaryFactory>();
+        factory.GetTempData(Arg.Any<HttpContext>()).Returns(tempData);
+        var sut = new FlashMessage(factory, Substitute.For<IHttpContextAccessor>(), serializer);
+
+        var result = sut.Retrieve();
+
+        result.Should().BeEmpty();
+        tempData.DidNotReceiveWithAnyArgs().Remove(default);
+        serializer.DidNotReceiveWithAnyArgs().Deserialize(default);
+    }
+
+    [Fact]
     public void Retrieve_WhenEntryExists_RemovesItFromTempData() {
         var serializer = new JsonFlashMessageSerializer();
         var serialized = serializer.Serialize(new List<IFlashMessageModel> {
