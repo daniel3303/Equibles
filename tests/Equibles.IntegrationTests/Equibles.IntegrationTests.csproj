@@ -24,6 +24,8 @@
     <PackageReference Include="Respawn" />
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="NSubstitute" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="ModelContextProtocol" />
   </ItemGroup>
 
   <ItemGroup>
@@ -81,6 +83,7 @@
     <ProjectReference Include="..\..\src\Equibles.Cboe.Data\Equibles.Cboe.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Cboe.Repositories\Equibles.Cboe.Repositories.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Migrations\Equibles.Migrations.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Mcp.Server\Equibles.Mcp.Server.csproj" />
   </ItemGroup>
 
 </Project>
