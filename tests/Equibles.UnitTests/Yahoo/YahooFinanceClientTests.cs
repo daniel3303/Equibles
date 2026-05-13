@@ -14,6 +14,37 @@ public class YahooFinanceClientTests {
         .GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
         .First(m => m.Name == "ApplyBrowserHeaders" && m.GetParameters()[0].ParameterType == typeof(HttpClient));
 
+    private static readonly MethodInfo ApplyBrowserHeadersOnRequestMethod = typeof(YahooFinanceClient)
+        .GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
+        .First(m => m.Name == "ApplyBrowserHeaders" && m.GetParameters()[0].ParameterType == typeof(HttpRequestMessage));
+
+    [Fact]
+    public void ApplyBrowserHeaders_OnHttpRequestMessage_AddsChromeUserAgentAndAcceptHeaders() {
+        // The HttpClient-overload sibling (covered in PR #268) attaches headers on
+        // `DefaultRequestHeaders` of the session-bootstrap client — only used for
+        // the cookie/crumb handshake. The HttpRequestMessage overload is what runs
+        // on EVERY data-fetch hop inside SendWithRetry: the DI-injected HttpClient
+        // does not carry `DefaultRequestHeaders` (it's reused across many integrations),
+        // so each chart / quoteSummary request manually attaches the same browser
+        // headers via this overload before SendAsync. A refactor that drops this
+        // call (e.g. assumes `DefaultRequestHeaders` are inherited from the DI
+        // factory) would still pass the bootstrap test that covers the HttpClient
+        // overload, but every subsequent /v8/finance/chart and /v10/finance/quoteSummary
+        // call would arrive without a real User-Agent and get silently 403'd by
+        // Yahoo's bot filter — the SendWithRetry loop would then refresh the session
+        // and retry until it exhausts MaxRetries, masking the root cause as
+        // "Yahoo session expired". Pin the per-request attach so the regression
+        // surfaces at the right layer.
+        var request = new HttpRequestMessage(HttpMethod.Get,
+            "https://query1.finance.yahoo.com/v8/finance/chart/AAPL");
+
+        ApplyBrowserHeadersOnRequestMethod.Invoke(null, [request]);
+
+        request.Headers.UserAgent.ToString().Should().StartWith("Mozilla/5.0");
+        request.Headers.Accept.ToString().Should().Contain("text/html");
+        request.Headers.AcceptLanguage.ToString().Should().Contain("en-US");
+    }
+
     [Fact]
     public void ApplyBrowserHeaders_OnHttpClient_AddsChromeUserAgentAndAcceptHeaders() {
         // Yahoo Finance actively rejects requests that look like bots — `query1.finance.yahoo.com`
