@@ -9,6 +9,7 @@ using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using Pgvector;
 using Xunit;
 using File = Equibles.Media.Data.Models.File;
 
@@ -85,6 +86,76 @@ public class DocumentManagerTests : ParadeDbMcpTestBase {
             .ContainSingle(id => id == pendingDoc.Id,
                 "only the chunkless-with-content document survives the !Chunks.Any() && Content != null filter");
     }
+
+    [Fact]
+    public async Task GenerateEmbeddingBatch_PendingChunks_PassesOnlyChunks_WithoutEmbeddingsToProcessor() {
+        // Parallel concern to ChunkDocumentBatch: the Phase 2 worker query
+        // .Where(c => !c.Embeddings.Any()) must filter on a navigation collection,
+        // which only behaves correctly against real Postgres. The unit-tier
+        // DocumentManagerTests exercises only the IsConfigured guard clauses for
+        // this method — the actual query is exclusively pinned here.
+        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL", Name = "Apple Inc." };
+        var file = MakeFile();
+        var document = MakeDocument(stock, file, contentId: file.Id, createdAt: DateTime.UtcNow.AddMinutes(-5));
+
+        var pendingChunk = MakeChunk(document, content: "needs embedding", index: 0, createdAt: DateTime.UtcNow.AddMinutes(-3));
+        var embeddedChunk = MakeChunk(document, content: "already embedded", index: 1, createdAt: DateTime.UtcNow.AddMinutes(-4));
+        var existingEmbedding = new Embedding {
+            Id = Guid.NewGuid(),
+            ChunkId = embeddedChunk.Id,
+            Model = "test-model",
+            Vector = new Vector(new ReadOnlyMemory<float>(new[] { 1f, 0f, 0f })),
+            VectorDimension = 3,
+        };
+
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<File>().Add(file);
+        DbContext.Set<Document>().Add(document);
+        DbContext.Set<Chunk>().AddRange(pendingChunk, embeddedChunk);
+        DbContext.Set<Embedding>().Add(existingEmbedding);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var sut = new DocumentManager(
+            new DocumentRepository(DbContext),
+            new ChunkRepository(DbContext),
+            _processor,
+            // IsConfigured is computed from Enabled + BaseUrl + ModelName; without these
+            // the guard returns false before the query runs and the test pins nothing.
+            Options.Create(new EmbeddingConfig {
+                Enabled = true,
+                BaseUrl = "http://localhost:11434",
+                ModelName = "test-model",
+            }),
+            NullLogger<DocumentManager>());
+
+        var workDone = await sut.GenerateEmbeddingBatch(CancellationToken.None);
+
+        workDone.Should().BeTrue("the worker reports that embedding-less chunks were handed off to the processor");
+
+        var passed = _processor.ReceivedCalls()
+            .Single(c => c.GetMethodInfo().Name == nameof(IDocumentProcessor.GenerateEmbeddings))
+            .GetArguments()[0] as IReadOnlyCollection<Chunk>;
+
+        passed.Should().NotBeNull();
+        passed!.Select(c => c.Id).Should()
+            .ContainSingle(id => id == pendingChunk.Id,
+                "only the embedding-less chunk survives the !c.Embeddings.Any() filter");
+    }
+
+    private static Chunk MakeChunk(Document document, string content, int index, DateTime createdAt) => new() {
+        Id = Guid.NewGuid(),
+        DocumentId = document.Id,
+        Content = content,
+        Index = index,
+        StartPosition = index * 100,
+        EndPosition = (index + 1) * 100,
+        StartLineNumber = index + 1,
+        DocumentType = document.DocumentType,
+        Ticker = "AAPL",
+        ReportingDate = document.ReportingDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+        CreationTime = createdAt,
+    };
 
     private static File MakeFile() => new() {
         Id = Guid.NewGuid(),
