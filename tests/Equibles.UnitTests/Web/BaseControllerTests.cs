@@ -103,11 +103,70 @@ public class BaseControllerTests {
         httpContext.Response.Headers["X-Accel-Buffering"].ToString().Should().Be("no");
     }
 
+    [Fact]
+    public async Task WriteSseEvent_FormatsEventLineWithDoubleNewlineTerminatorAndJsonPayload() {
+        // Sibling to the InitSseStream pin above. The two helpers form a contract:
+        // InitSseStream prepares the response headers, WriteSseEvent writes
+        // individual events. The existing test pins the headers; this one pins
+        // the actual event format, which has equally narrow SSE-protocol
+        // requirements.
+        //
+        // The event format emitted is `event: <type>\ndata: <json>\n\n`. THREE
+        // separate parts are load-bearing:
+        //   1. The `event: <type>` line names the event so JS clients can register
+        //      `addEventListener('<type>', handler)` against it.
+        //   2. The `data: <json>` line carries the payload — JsonConvert-serialized
+        //      so JS clients can `JSON.parse(event.data)` without quirks (e.g.
+        //      System.Text.Json would emit camelCase keys, breaking the contract).
+        //   3. The TRAILING `\n\n` (TWO newlines, not one) is what the SSE protocol
+        //      uses as the event delimiter. Drop one newline and the event never
+        //      flushes from the client's perspective — the spec specifies that an
+        //      event "is dispatched" only when a blank line is encountered. A
+        //      regression to a single `\n` terminator makes every SSE feed silently
+        //      hang: bytes reach the wire, but no event handler ever fires until
+        //      the NEXT event arrives (or the connection closes).
+        //
+        // Critically, the FlushAsync after the write ensures the bytes leave the
+        // Kestrel response buffer immediately rather than waiting for the buffer
+        // to fill. Without that flush, every event would accumulate in memory and
+        // a long-lived SSE stream would deliver events in unpredictable batches
+        // tied to buffer fill timing — utterly defeating the real-time
+        // requirement that SSE exists for. The flush is implicitly tested here:
+        // a `MemoryStream` Response.Body would still see the bytes after Write
+        // even WITHOUT the flush (in-memory streams have no buffer to flush past),
+        // but the explicit FlushAsync call is the load-bearing wire-level guarantee
+        // for real Kestrel responses. We pin the format and trust the FlushAsync
+        // to remain.
+        //
+        // The risk this catches:
+        //   - Regression dropping one `\n` from the terminator → silent SSE hangs
+        //   - Regression to `data: ... \n event: ...` order swap → standards
+        //     violation, breaks `addEventListener` registration in clients
+        //   - Regression swapping JsonConvert for System.Text.Json → camelCase
+        //     keys break every existing client's JSON.parse field lookup
+        var sut = new TestableBaseController();
+        var httpContext = new DefaultHttpContext();
+        var responseBody = new MemoryStream();
+        httpContext.Response.Body = responseBody;
+        sut.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+        var payload = new { CompaniesProcessed = 42, Message = "Halfway done" };
+        await sut.InvokeWriteSseEvent("progress", payload);
+
+        responseBody.Position = 0;
+        using var reader = new StreamReader(responseBody);
+        var written = await reader.ReadToEndAsync();
+
+        written.Should().Be("event: progress\ndata: {\"CompaniesProcessed\":42,\"Message\":\"Halfway done\"}\n\n");
+    }
+
     private sealed class TestableBaseController : BaseController {
         public TestableBaseController() : base(Substitute.For<ILogger<BaseController>>()) { }
 
         public string InvokeGetReturnUrl() => GetReturnUrl();
 
         public void InvokeInitSseStream() => InitSseStream();
+
+        public Task InvokeWriteSseEvent(string eventType, object data) => WriteSseEvent(eventType, data);
     }
 }
