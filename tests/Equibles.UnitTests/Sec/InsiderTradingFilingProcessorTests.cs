@@ -199,4 +199,39 @@ public class InsiderTradingFilingProcessorTests {
 
         result.Should().Be(TransactionCode.Purchase);
     }
+
+    [Fact]
+    public void ParseTransactionCode_UnknownCodeLetter_ReturnsOther() {
+        // Fourth pin in the ParseTransactionCode family. Existing pins cover P, S,
+        // and A (each mapped to a concrete TransactionCode value). This pin covers
+        // the `_ => TransactionCode.Other` default arm — the catch-all that ensures
+        // the switch expression always returns a value rather than throwing
+        // SwitchExpressionException.
+        //
+        // The risk this catches: a refactor that "tidies up" the switch by
+        // removing the default arm (or replacing it with a throw clause) would
+        // compile cleanly, pass every mapped-code sibling pin, and silently
+        // crash the InsiderTradingFilingProcessor on the FIRST filing carrying
+        // an unmapped code letter. SEC's §16 code set has expanded over the
+        // years — new codes have been added (e.g. "U" for "stocked-up gift"
+        // didn't exist in the original 1934 Act) — and any future SEC
+        // amendment that introduces a new letter would surface as a runtime
+        // crash rather than a silently-bucketed Other-tagged row. The throw
+        // would bubble up through the foreach in Process, abort the entire
+        // batch, and rollback the import scope — silently losing every
+        // filing in the same batch.
+        //
+        // Pin "Q" — a letter that's currently unused in SEC §16 (the
+        // existing assigned letters span A-Z minus a few). Any future
+        // assignment to "Q" would simply add a new switch arm; the default
+        // catch-all is what keeps the unmapped state from becoming an
+        // exception until that mapping is added. Asserting `Other`
+        // specifically (not just "doesn't throw") ensures a regression that
+        // typo'd the default value (e.g. `_ => TransactionCode.Purchase` —
+        // accidentally pasted from the P arm during a refactor) would also
+        // surface here.
+        var result = (TransactionCode)ParseTransactionCodeMethod.Invoke(null, ["Q"]);
+
+        result.Should().Be(TransactionCode.Other);
+    }
 }
