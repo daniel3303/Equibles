@@ -154,6 +154,46 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
+    public void GetRetryDelay_NoRetryAfterHeader_UsesExponentialBackoffFormulaTwoToAttemptPlusOne() {
+        // Third pin in the GetRetryDelay family. Existing pins cover the two
+        // RetryAfter.Delta ternary arms (cap and within-cap). This pin covers
+        // path 3: when the response has NO Retry-After header (SEC's 429s
+        // routinely arrive without one), GetRetryDelay falls through both the
+        // Delta and Date branches and lands on the exponential backoff:
+        //   var backoff = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+        //   return backoff > MaxRetryDelay ? MaxRetryDelay : backoff;
+        //
+        // The formula `2^(attempt + 1)` is load-bearing — it yields the
+        // intended backoff curve 2s, 4s, 8s, 16s, 32s, 64s, ... (capped at
+        // 5min). A refactor that "simplified" to `Math.Pow(2, attempt)` (off
+        // by one — yields 1s, 2s, 4s, 8s, ...) would silently halve every
+        // fallback delay, hammering SEC's rate limiter 2× as fast during
+        // outages and inviting longer bans. The change would compile cleanly,
+        // pass both existing GetRetryDelay pins (those use RetryAfter and
+        // never hit this code path), and only surface as production-load
+        // anomalies during the next SEC throttling event.
+        //
+        // Pick attempt=2 specifically:
+        //   • attempt=0 → 2^1 = 2s
+        //   • attempt=1 → 2^2 = 4s
+        //   • attempt=2 → 2^3 = 8s   ← this pin
+        //   • attempt=10 → 2^11 = 2048s → capped to 300s
+        // 8s is well below the cap (so the cap clause is a no-op here) and
+        // distinct enough from neighbouring attempts that a single-position
+        // off-by-one in the formula fails the assertion. Use no Retry-After
+        // header (the production-default 429 shape from SEC).
+        using var httpClient = new HttpClient();
+        var configuration = new ConfigurationBuilder().Build();
+        var sut = new SecEdgarClient(httpClient, NullLogger<SecEdgarClient>.Instance, configuration);
+
+        using var response = new HttpResponseMessage(System.Net.HttpStatusCode.InternalServerError);
+
+        var delay = (TimeSpan)GetRetryDelayMethod.Invoke(sut, [response, 2]);
+
+        delay.Should().Be(TimeSpan.FromSeconds(8));
+    }
+
+    [Fact]
     public void GetDocumentUrl_ValidCikAndAccession_ComposesSecArchiveTxtUrlWithPaddedCik() {
         // Sibling to the FormatCik pin above. GetDocumentUrl composes the
         // exact URL the caller hands to HttpClient.GetAsync to fetch a
