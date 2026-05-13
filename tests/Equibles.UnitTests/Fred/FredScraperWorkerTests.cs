@@ -1,4 +1,5 @@
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.Data.Models;
 using Equibles.Fred.HostedService;
 using Equibles.Fred.HostedService.Configuration;
 using Equibles.Integrations.Fred.Contracts;
@@ -99,6 +100,31 @@ public class FredScraperWorkerTests {
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(6));
     }
 
+    [Fact]
+    public void ErrorSource_IsFredScraper() {
+        // FredScraperWorker pulls macro economic series from api.stlouisfed.org —
+        // a different upstream and quota envelope from every other scraper. When
+        // BaseScraperWorker's catch-all reports a failure, it tags the error with
+        // this enum value as the routing key for the issue-tracker queue. The
+        // Errors.Data.Models namespace defines a row of visually-similar
+        // ErrorSource members (CftcScraper, FinraScraper, CboeScraper,
+        // YahooScraper) alongside FredScraper, so a copy-paste regression that
+        // picks the wrong sibling silently misroutes every macro-series failure
+        // into the wrong on-call queue — pointing the responder at FINRA or
+        // CFTC when the actual outage is at the St. Louis Fed. The existing
+        // ValidateConfiguration / SleepInterval pins don't touch this property,
+        // so a typo or reorder has no test signal. Pin the literal enum value
+        // so any future routing change must update this test deliberately.
+        var options = Options.Create(new FredScraperOptions { SleepIntervalHours = 24 });
+        var sut = new TestableFredScraperWorker(
+            Substitute.For<ILogger<FredScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            options);
+
+        sut.InvokeErrorSource().Should().Be(ErrorSource.FredScraper);
+    }
+
     private sealed class TestableFredScraperWorker : FredScraperWorker {
         public TestableFredScraperWorker(
             ILogger<FredScraperWorker> logger,
@@ -110,5 +136,7 @@ public class FredScraperWorkerTests {
         public bool InvokeValidateConfiguration() => ValidateConfiguration();
 
         public TimeSpan InvokeSleepInterval() => SleepInterval;
+
+        public ErrorSource InvokeErrorSource() => ErrorSource;
     }
 }
