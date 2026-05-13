@@ -132,6 +132,33 @@ public class FinraScraperWorkerTests {
         sut.InvokeErrorSource().Should().Be(ErrorSource.FinraScraper);
     }
 
+    [Fact]
+    public void WorkerName_IsFinraScraper() {
+        // Eighth WorkerName pin in the natural-extension family (CBOE, Holdings,
+        // SEC filing, FTD, Document processor, FRED, Yahoo price, and now FINRA).
+        // WorkerName flows into BaseScraperWorker's structured log scope and shows
+        // up in every Serilog line — on-call greps `data/worker/logs/log<date>.txt`
+        // for "FINRA scraper" when short-interest ingestion stalls. Like FRED,
+        // FINRA is an acronym and the string is deliberately title-cased: "FINRA"
+        // all-caps to match the regulator's own usage, "scraper" lowercase to
+        // match the family. A casing normalization regression to "Finra scraper"
+        // would still write logs but break case-sensitive log filters and
+        // dashboard pins that target the exact literal. The existing
+        // ValidateConfiguration / SleepInterval / ErrorSource pins don't touch
+        // this property — pin the exact "FINRA scraper" literal so any such
+        // normalization fails this test.
+        var options = Options.Create(new FinraScraperOptions { SleepIntervalHours = 24 });
+        var sut = new TestableFinraScraperWorker(
+            Substitute.For<ILogger<FinraScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()),
+            options);
+
+        sut.InvokeWorkerName().Should().Be("FINRA scraper");
+    }
+
     private sealed class TestableFinraScraperWorker : FinraScraperWorker {
         public TestableFinraScraperWorker(
             ILogger<FinraScraperWorker> logger,
@@ -145,5 +172,7 @@ public class FinraScraperWorkerTests {
         public TimeSpan InvokeSleepInterval() => SleepInterval;
 
         public ErrorSource InvokeErrorSource() => ErrorSource;
+
+        public string InvokeWorkerName() => WorkerName;
     }
 }
