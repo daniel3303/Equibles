@@ -516,6 +516,59 @@ public class DisclosureParsingHelperTests {
     }
 
     [Fact]
+    public void ParseTransactionsFromHtml_BareAssetHeaderWithoutNameOrType_PopulatesAssetNameFromSecondTierFallback() {
+        // Sibling pin to ParseTransactionsFromHtml_DescriptionHeaderInsteadOfAssetName.
+        // MapColumnIndices' assetCol three-tier fallback:
+        //   1. Contains("asset") && Contains("name")  → "Asset Name" (covered by happy-path tests)
+        //   2. Contains("asset") && !Contains("type") → bare "Asset" (this pin)
+        //   3. Contains("description")                → "Description" (covered by sibling)
+        // Tier 2 — bare "Asset" header without "Name" and not "Asset Type" — fires
+        // for older House PTR exports and hand-coded staff submissions that label the
+        // asset column simply "Asset". The `!Contains("type")` clause is load-bearing:
+        // it must distinguish "Asset" from "Asset Type" (which IS present in modern
+        // House PTRs alongside "Asset Name" — see ParseTransactionsFromHtml_ValidTable_…).
+        // Without the negative clause, a regression like `Contains("asset")` alone
+        // would silently pick up "Asset Type" as the asset column, populating
+        // AssetName with the asset-type string ("Stock", "Bond Fund") instead of
+        // the actual asset description.
+        //
+        // The two existing sibling pins (Asset Name → tier 1, Description → tier 3)
+        // don't exercise tier 2 — neither would catch a regression that drops the
+        // middle FindIndex call entirely (collapsing the chain from 3 tiers to 2).
+        // Pin tier 2 with a deliberately bare "Asset" header so the middle fallback
+        // is required to fire.
+        var html = """
+            <html><body>
+            <table>
+              <thead><tr>
+                <th>Transaction Date</th>
+                <th>Ticker</th>
+                <th>Asset</th>
+                <th>Transaction Type</th>
+                <th>Amount</th>
+              </tr></thead>
+              <tbody>
+                <tr>
+                  <td>2024-06-15</td>
+                  <td>AAPL</td>
+                  <td>Apple Inc</td>
+                  <td>Purchase</td>
+                  <td>$1,001 - $15,000</td>
+                </tr>
+              </tbody>
+            </table>
+            </body></html>
+            """;
+
+        var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
+            html, "Test Rep", CongressPosition.Representative,
+            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+
+        result.Should().HaveCount(1);
+        result[0].AssetName.Should().Be("Apple Inc");
+    }
+
+    [Fact]
     public void ParseTransactionsFromHtml_FilerColumnInsteadOfOwner_PopulatesOwnerTypeFromFilerColumn() {
         // MapColumnIndices resolves the owner column with `h.Contains("owner") ||
         // h.Contains("filer")`. The two alternatives are independent: House PTRs use
