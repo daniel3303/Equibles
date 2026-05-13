@@ -50,6 +50,43 @@ public class StatisticsExtensionsTests {
     }
 
     [Fact]
+    public void SafeRound_NegativeInfinity_ReturnsNullInsteadOfThrowingOnDecimalCast() {
+        // Completes the SafeRound non-finite triple. The existing pins cover
+        // NaN and PositiveInfinity. NegativeInfinity is the third value that
+        // `double.IsFinite` rejects and the third value that triggers
+        // OverflowException on `(decimal)` cast — and the existing pair
+        // doesn't catch every plausible regression on its own.
+        //
+        // Specifically:
+        //   • A "simplify" refactor that narrowed `IsFinite(v)` to
+        //     `!double.IsNaN(v) && !double.IsPositiveInfinity(v)` would
+        //     PASS both existing pins (NaN and +∞ are correctly rejected)
+        //     while silently admitting -∞ to the decimal cast — every
+        //     real production trigger involving log returns on a price
+        //     that went to zero (`Math.Log(0) = -∞`) would crash the
+        //     view render with OverflowException.
+        //   • A regression to a one-sided guard (e.g. `v < double.MaxValue`)
+        //     would mishandle -∞ (which IS less than MaxValue, so it
+        //     passes the false guard) while still rejecting +∞ via the
+        //     same comparison.
+        //
+        // The realistic production trigger is `Math.Log(price)` where a
+        // price column carries a zero or a near-zero — common in
+        // log-return calculations over distressed stocks (bankruptcies
+        // mark to ~0 before being delisted). MathNet's
+        // DescriptiveStatistics doesn't itself produce -∞ on its own, but
+        // upstream callers in TechnicalIndicatorService DO feed log
+        // returns through SafeRound for the display layer. The triple
+        // (NaN → null, +∞ → null, -∞ → null) distinguishes a working
+        // `IsFinite` from BOTH narrowing-by-one-side refactors AND
+        // narrowing-to-`!IsNaN` refactors. Pin the -∞ case so neither
+        // pattern can slip past.
+        var result = double.NegativeInfinity.SafeRound(2);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
     public void ComputeSma_AlignsToInput_FirstWindowSlotsAreNullThenRoundedSma() {
         // ComputeSma is consumed by view models that overlay SMA series on price
         // charts; alignment to the original prices array matters because the
