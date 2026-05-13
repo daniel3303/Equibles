@@ -14,6 +14,26 @@ public class DocumentTypeExtensionsTests {
         .GetMethod("GetFormName", BindingFlags.Public | BindingFlags.Static);
 
     [Fact]
+    public void GetFormName_UndefinedEnumValue_FallsBackToToStringNumericRepresentation() {
+        // GetFormName chains `?.GetCustomAttribute<DisplayAttribute>()?.Name ??
+        // documentType.ToString()`. When the enum value isn't a defined
+        // member, GetField returns null, the attribute lookup short-circuits,
+        // and the fallback returns ToString (which for an undefined value is
+        // its numeric form). Every built-in DocumentTypeFilter member carries
+        // [Display], so the fallback only fires when a future enum member is
+        // added without the attribute OR — defensively — when EDGAR
+        // unexpectedly returns a form code mapped to an out-of-range enum
+        // value. Pin the fallback so a refactor that drops the `??` (or
+        // narrows the null-conditional chain) surfaces as a clear test
+        // failure rather than a runtime NRE in SecEdgarClient's form filter.
+        var undefined = (DocumentTypeFilter)999;
+
+        var result = (string)GetFormNameMethod.Invoke(null, [undefined]);
+
+        result.Should().Be("999");
+    }
+
+    [Fact]
     public void GetFormName_FormFour_ReturnsSecWireValue() {
         // SecEdgarClient filters EDGAR API responses by `f.Form == documentType.Value.GetFormName()`.
         // The C# enum value `FormFour` carries `[Display(Name = "4")]`, and SEC's wire format for
