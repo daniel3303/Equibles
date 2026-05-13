@@ -6,11 +6,7 @@ namespace Equibles.InsiderTrading.Data.Models;
 
 [Index(nameof(CommonStockId), nameof(TransactionDate))]
 [Index(nameof(InsiderOwnerId), nameof(TransactionDate))]
-[Index(nameof(AccessionNumber))]
-[Index(nameof(CommonStockId), nameof(InsiderOwnerId), nameof(TransactionDate),
-    nameof(TransactionCode), nameof(SecurityTitle), nameof(AccessionNumber),
-    nameof(OwnershipNature), nameof(Shares), nameof(PricePerShare), nameof(SharesOwnedAfter),
-    IsUnique = true)]
+[Index(nameof(AccessionNumber), nameof(TransactionOrder), IsUnique = true)]
 [Index(nameof(FilingDate))]
 [Index(nameof(TransactionDate))]
 public class InsiderTransaction {
@@ -38,6 +34,12 @@ public class InsiderTransaction {
 
     [MaxLength(32)]
     public string AccessionNumber { get; set; }
+
+    /// <summary>
+    /// Ordinal position of this row within its Form 3/4 filing (0-based). Form 4 XML
+    /// has no per-transaction identifier — uniqueness is by (AccessionNumber, position).
+    /// </summary>
+    public int TransactionOrder { get; set; }
 
     public bool IsAmendment { get; set; }
 

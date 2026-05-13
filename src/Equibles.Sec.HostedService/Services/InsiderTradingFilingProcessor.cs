@@ -121,37 +121,43 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         // postTransactionAmounts, ownershipNature). The SecurityTitle distinguishes the instrument
         // type (e.g., "Common Stock" vs "Stock Option (Right to Buy)"). For derivatives, Shares
         // and PricePerShare refer to the derivative instrument, not the underlying security.
+        //
+        // TransactionOrder is the 0-based position of the row within its filing — assigned as
+        // we parse so the (AccessionNumber, TransactionOrder) unique index has a stable key.
+        // The XML's document order is the only natural identity Form 4 transactions have.
         var transactions = new List<InsiderTransaction>();
+
+        void AddParsed(InsiderTransaction tx) {
+            if (tx == null) return;
+            tx.TransactionOrder = transactions.Count;
+            transactions.Add(tx);
+        }
 
         var nonDerivTable = root.Element("nonDerivativeTable");
         if (nonDerivTable != null) {
             foreach (var txElement in nonDerivTable.Elements("nonDerivativeTransaction")) {
-                var transaction = ParseTransaction(txElement, owner, companyId, filing, isAmendment);
-                if (transaction != null) transactions.Add(transaction);
+                AddParsed(ParseTransaction(txElement, owner, companyId, filing, isAmendment));
             }
 
             foreach (var holdingElement in nonDerivTable.Elements("nonDerivativeHolding")) {
-                var transaction = ParseHolding(holdingElement, owner, companyId, filing, isAmendment);
-                if (transaction != null) transactions.Add(transaction);
+                AddParsed(ParseHolding(holdingElement, owner, companyId, filing, isAmendment));
             }
         }
 
         var derivTable = root.Element("derivativeTable");
         if (derivTable != null) {
             foreach (var txElement in derivTable.Elements("derivativeTransaction")) {
-                var transaction = ParseTransaction(txElement, owner, companyId, filing, isAmendment);
-                if (transaction != null) transactions.Add(transaction);
+                AddParsed(ParseTransaction(txElement, owner, companyId, filing, isAmendment));
             }
 
             foreach (var holdingElement in derivTable.Elements("derivativeHolding")) {
-                var transaction = ParseHolding(holdingElement, owner, companyId, filing, isAmendment);
-                if (transaction != null) transactions.Add(transaction);
+                AddParsed(ParseHolding(holdingElement, owner, companyId, filing, isAmendment));
             }
         }
 
         if (transactions.Count == 0) {
-            // Form 3 with noSecuritiesOwned — save a 0-shares record so the accession number
-            // dedup prevents re-fetching this filing on every scraper cycle.
+            // Form 3 with noSecuritiesOwned — save a 0-shares record so the accession-number
+            // short-circuit at the top of Process() prevents re-fetching this filing every cycle.
             _logger.LogDebug("No transactions found for {Ticker} - {AccessionNumber}, saving 0-shares holding",
                 companyTicker, filing.AccessionNumber);
 
@@ -162,41 +168,26 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
                 TransactionDate = filing.ReportDate,
                 TransactionCode = TransactionCode.Other,
                 AccessionNumber = filing.AccessionNumber,
-                SecurityTitle = "No Securities Owned"
+                SecurityTitle = "No Securities Owned",
+                TransactionOrder = 0,
             });
             await transactionRepository.SaveChanges();
 
             return true;
         }
 
-        // Deduplicate within the batch — only collapse rows that are byte-identical along
-        // every persisted dimension. A Form 4 can legitimately carry multiple non-derivative
-        // transactions on the same date with the same code and security (e.g. open-market
-        // purchases split across price tranches) — those differ in Shares / PricePerShare /
-        // SharesOwnedAfter and must survive. Direct + Indirect rows are distinct beneficial
-        // ownerships and must also survive (OwnershipNature differentiates them).
-        var seen = new HashSet<(Guid, Guid, DateOnly, TransactionCode, string, string,
-            OwnershipNature, long, decimal, long)>();
-        var uniqueTransactions = new List<InsiderTransaction>();
+        // No in-memory dedup needed: every parsed row got a unique TransactionOrder from its
+        // XML position, so the (AccessionNumber, TransactionOrder) unique index can't collide
+        // within a single filing. Duplicate full-filing re-imports are stopped by the
+        // GetByAccessionNumber(...).AnyAsync() check at the top of Process().
         foreach (var tx in transactions) {
-            var key = (tx.CommonStockId, tx.InsiderOwnerId, tx.TransactionDate,
-                tx.TransactionCode, tx.SecurityTitle, tx.AccessionNumber,
-                tx.OwnershipNature, tx.Shares, tx.PricePerShare, tx.SharesOwnedAfter);
-            if (seen.Add(key)) {
-                uniqueTransactions.Add(tx);
-            }
-        }
-
-        // The unique index (which includes AccessionNumber) allows the same transaction
-        // data from different filings to coexist.
-        foreach (var tx in uniqueTransactions) {
             transactionRepository.Add(tx);
         }
 
         await transactionRepository.SaveChanges();
 
         _logger.LogInformation("Imported {Count} insider transactions for {Ticker} from {Form} - {AccessionNumber}",
-            uniqueTransactions.Count, companyTicker, filing.Form, filing.AccessionNumber);
+            transactions.Count, companyTicker, filing.Form, filing.AccessionNumber);
 
         return true;
     }
