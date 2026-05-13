@@ -107,6 +107,43 @@ public class RateLimiterTests {
     }
 
     [Fact]
+    public async Task PauseFor_ShorterDurationFollowingLongerPause_DoesNotShortenExistingPause() {
+        // PauseFor's body holds a guard: `if (newPauseUntil > _pauseUntil) _pauseUntil = ...;`
+        // The guard is load-bearing for cascading rate-limit backoffs. Concrete production
+        // scenario: SEC EDGAR returns a 429 with Retry-After=300s, SendWithRetryAsync calls
+        // PauseFor(5min). Some time later another worker on the same shared RateLimiter gets
+        // a less-aggressive 429 (Retry-After=1s) — without the guard, the second
+        // PauseFor(1s) would OVERWRITE the still-active 5-minute pause, releasing every
+        // queued request after only one second of the SEC-mandated 5-minute cooldown.
+        // The next request burst would hit SEC's load balancer before the cooldown
+        // expires, escalate to a longer ban, and the scraper would spiral into ever-
+        // increasing 429 windows.
+        //
+        // The existing PauseFor_DelaysSubsequentWaitAsyncCalls test only exercises a single
+        // PauseFor in isolation, so it can't catch a refactor that drops the if-guard. A
+        // "simplification" PR that wrote `_pauseUntil = newPauseUntil;` unconditionally
+        // (or `_pauseUntil = Max(...)` with a wrong comparison) would pass every existing
+        // pin and silently degrade rate-limit protection in production.
+        //
+        // Construction: a generous in-window capacity so request-rate throttling can't
+        // confound the pause assertion. Issue a long PauseFor (500ms), immediately follow
+        // with a shorter PauseFor (50ms), then time WaitAsync. The assertion is that
+        // WaitAsync blocks for at least most of the long pause — proves the longer pause
+        // survived. A regression that lets the shorter pause win would complete in ~50ms,
+        // far below the 350ms threshold.
+        var limiter = new RateLimiter(maxRequests: 100, timeWindow: TimeSpan.FromSeconds(10));
+
+        limiter.PauseFor(TimeSpan.FromMilliseconds(500));
+        limiter.PauseFor(TimeSpan.FromMilliseconds(50));
+
+        var sw = Stopwatch.StartNew();
+        await limiter.WaitAsync();
+        sw.Stop();
+
+        sw.ElapsedMilliseconds.Should().BeGreaterThanOrEqualTo(350);
+    }
+
+    [Fact]
     public void Constructor_WithCustomTimeWindow_Succeeds() {
         // Arrange & Act
         var limiter = new RateLimiter(maxRequests: 3, timeWindow: TimeSpan.FromMilliseconds(100));
