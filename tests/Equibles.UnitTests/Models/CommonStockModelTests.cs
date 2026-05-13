@@ -37,6 +37,22 @@ public class CommonStockModelTests {
     }
 
     [Fact]
+    public void SecondaryCiks_ExplicitlySetToNull_GetterReturnsEmptyListNotNull() {
+        // The SecondaryCiks getter uses `field ?? []` so callers can rely on
+        // a non-null collection even when EF Core (or a deserializer) writes
+        // back a null. The default initializer protects the no-set path; the
+        // ?? fallback protects the explicit-null-set path. SEC ingest paths
+        // routinely `.Add(...)` on this collection — a regression that
+        // dropped the fallback would NRE the first time a parent filing has
+        // no co-registrant rows. Pin the fallback so the regression fails
+        // here rather than at runtime in the worker.
+        var stock = new CommonStock { SecondaryCiks = null };
+
+        stock.SecondaryCiks.Should().NotBeNull();
+        stock.SecondaryCiks.Should().BeEmpty();
+    }
+
+    [Fact]
     public void StringProperties_ShouldDefaultToNull() {
         var stock = new CommonStock();
 
