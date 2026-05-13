@@ -42,4 +42,23 @@ public class EnumExtensionsTests {
         CongressPosition value, string expected) {
         value.NameForHumans().Should().Be(expected);
     }
+
+    [Fact]
+    public void NameForHumans_EnumValueWithoutDisplayAttribute_FallsBackToToString() {
+        // Project standards require [Display(Name = "...")] on every enum
+        // value (see dotnet-standards), so the fallback only fires for
+        // legacy enums or new ones added without the convention. Every
+        // existing test in this file pre-supposes [Display] is present,
+        // so the `?.GetName() ?? enumValue.ToString()` fallback in
+        // NameForHumans isn't exercised. Pin the fallback on a locally
+        // defined enum that intentionally omits [Display] so a refactor
+        // that drops the fallback (e.g. relying on Display always being
+        // present) surfaces here rather than NRE-ing on a missed
+        // annotation in production.
+        WithoutDisplay.SomeValue.NameForHumans().Should().Be("SomeValue");
+    }
+
+    private enum WithoutDisplay {
+        SomeValue,
+    }
 }
