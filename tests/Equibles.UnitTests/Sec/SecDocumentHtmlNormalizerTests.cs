@@ -137,6 +137,29 @@ public class SecDocumentHtmlNormalizerTests {
     }
 
     [Fact]
+    public void Normalize_BlockWithoutXbrlOrTextWrapper_FallsBackToFullBlock() {
+        // ExtractAndFilterDocuments composes content as
+        //   ExtractInnerContent("XBRL") ?? ExtractInnerContent("TEXT") ?? block.
+        // The existing tests cover the XBRL and TEXT wrappers; the final
+        // fallback (whole block when neither wrapper is present) was
+        // unpinned. Some legacy SEC SGML filings carry inline HTML directly
+        // inside <DOCUMENT> without a <TEXT> envelope. Pin the fallback so a
+        // refactor that drops the `?? block` half (or reorders the chain)
+        // can't silently strip inline-content documents.
+        var sgml = """
+            <DOCUMENT>
+            <TYPE>10-K
+            <FILENAME>inline.htm
+            <html><body><p>Inline content without TEXT wrapper</p></body></html>
+            </DOCUMENT>
+            """;
+
+        var result = _sut.Normalize(sgml);
+
+        result.Should().Contain("Inline content without TEXT wrapper");
+    }
+
+    [Fact]
     public void Normalize_XbrlWrappedContent_ExtractsFromXbrlTag() {
         var sgml = """
             <DOCUMENT>
