@@ -422,4 +422,69 @@ public class SecEdgarClientTests {
         result.Should().ContainSingle()
             .Which.Form.Should().Be("10-K");
     }
+
+    [Fact]
+    public void FilterFilings_FromDateSpecified_ExcludesBeforeAndIncludesOnOrAfterBoundary() {
+        // Sibling pin to FilterFilings_DocumentTypeSpecified_…. FilterFilings has
+        // three independent clauses joined by &&:
+        //   (!documentType.HasValue || f.Form == documentType.Value.GetFormName()) &&
+        //   (!fromDate.HasValue     || f.FilingDate >= fromDate.Value)             &&
+        //   (!toDate.HasValue       || f.FilingDate <= toDate.Value)
+        // The previous pin covers clause 1 (documentType + GetFormName). This one
+        // covers clause 2 (fromDate + `>=`). They're independent — a regression in
+        // the date comparison would slip past the documentType pin because that
+        // pin passes `fromDate: null` and the short-circuit `!fromDate.HasValue`
+        // returns true regardless of the comparison operator.
+        //
+        // The risks this pin uniquely catches:
+        //
+        //   • Operator swap `>=` → `>`: a "tighten the boundary" refactor under the
+        //     (false) intuition that "filings ON the from-date should be excluded
+        //     because the date is the day we last fetched" would compile cleanly,
+        //     pass the documentType pin (fromDate=null, clause short-circuits), and
+        //     silently drop every filing whose FilingDate equals the fromDate.
+        //     DocumentScraper re-fetches with fromDate set to "last successfully
+        //     imported date" — the boundary filings on that exact date are exactly
+        //     the ones the importer must re-check for amendments. Dropping them
+        //     silently loses amendment-of-day-N filings.
+        //
+        //   • Operator inversion `>=` → `<=`: less plausible but compiles. Would
+        //     return only filings BEFORE the fromDate. The documentType pin doesn't
+        //     see this because the fromDate clause is short-circuited there.
+        //
+        //   • Short-circuit-arm inversion: `!fromDate.HasValue` flipped to
+        //     `fromDate.HasValue` makes the no-filter path return empty. Same risk
+        //     class as the documentType pin's short-circuit, but specifically
+        //     covers clause 2.
+        //
+        //   • Operand swap: `f.FilingDate >= fromDate.Value` swapped to
+        //     `fromDate.Value >= f.FilingDate` produces the inverse filter.
+        //
+        // Construction: three-filing list with FilingDates spanning the boundary:
+        //   • 2024-06-14 (BEFORE fromDate) → EXCLUDED.
+        //   • 2024-06-15 (ON boundary)     → INCLUDED via `>=` (NOT `>`).
+        //   • 2024-06-16 (AFTER)           → INCLUDED.
+        // Working `>=`: 2 records. Strict `>`: 1 record (only 06-16). Inversion:
+        // 1 record (only 06-14). Drop clause: 3 records. Short-circuit fail:
+        // 0 records. All four regression classes distinguished by record count
+        // and AccessionNumber identity.
+        var filterFilingsMethod = typeof(SecEdgarClient)
+            .GetMethod("FilterFilings", BindingFlags.NonPublic | BindingFlags.Static);
+        var filings = new List<Equibles.Integrations.Sec.Models.FilingData> {
+            new() { Form = "10-K", AccessionNumber = "0001", Cik = "320193",
+                    FilingDate = new DateOnly(2024, 6, 14) },
+            new() { Form = "10-K", AccessionNumber = "0002", Cik = "320193",
+                    FilingDate = new DateOnly(2024, 6, 15) },
+            new() { Form = "10-K", AccessionNumber = "0003", Cik = "320193",
+                    FilingDate = new DateOnly(2024, 6, 16) },
+        };
+        DateOnly? fromDate = new DateOnly(2024, 6, 15);
+
+        var result = (List<Equibles.Integrations.Sec.Models.FilingData>)filterFilingsMethod.Invoke(
+            null,
+            [filings, null, fromDate, null]);
+
+        result.Should().HaveCount(2);
+        result.Select(f => f.AccessionNumber).Should().BeEquivalentTo(["0002", "0003"]);
+    }
 }
