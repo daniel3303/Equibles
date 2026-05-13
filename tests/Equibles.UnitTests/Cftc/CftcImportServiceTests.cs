@@ -51,6 +51,36 @@ public class CftcImportServiceTests {
     }
 
     [Fact]
+    public void ParseDate_NullInput_ReturnsNullViaIsNullOrWhiteSpaceGuard() {
+        // ParseDate's first line is the defensive guard
+        //   if (string.IsNullOrWhiteSpace(value)) return null;
+        // Real CFTC rows occasionally carry null date values — empty columns from
+        // partial-publish rows during data outages, or upstream pipeline bugs
+        // that drop the date field entirely. The downstream lines call
+        //   value.Trim()
+        // unconditionally, so dropping the IsNullOrWhiteSpace guard would NRE on
+        // null.Trim() — crashing the foreach in ImportYear and aborting the
+        // entire year's import on a single bad row.
+        //
+        // The existing `ParseDate_UnparseableValue_ReturnsNull` pin exercises a
+        // non-null input ("not-a-date") that flows past the guard into both
+        // TryParseExact calls. The null-input branch is structurally distinct —
+        // it short-circuits at the guard, never reaches Trim(). Without this
+        // pin, a refactor that simplifies the guard to e.g.
+        //   if (value == null) return null;  // misses whitespace
+        // OR drops the guard entirely under the (false) assumption that
+        // upstream guarantees non-null would silently shift the failure mode
+        // from "skip this row" to "crash the whole year's import".
+        //
+        // Pair (null guard + parse-failure) covers both reasons ParseDate
+        // returns null. Asserting null AND the absence of an exception
+        // distinguishes the working guard from any refactor that drops it.
+        var result = (DateOnly?)ParseDateMethod.Invoke(null, [null]);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
     public void ParseDate_UnparseableValue_ReturnsNull() {
         // ImportYear's foreach skips malformed rows via `if (date == null) continue;`,
         // so returning null on bad input — rather than throwing — is the contract that
