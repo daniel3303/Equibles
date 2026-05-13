@@ -226,4 +226,44 @@ public class HouseDisclosureClientTests {
 
         result.Should().Be("MICROSOFT CORP - COMMON STOCK");
     }
+
+    [Fact]
+    public void RemoveTrailingTransactionType_SaleWithFullQualifier_StripsSuffixAndQualifier() {
+        // Sibling to the existing "S (partial)" pin in RemoveTrailingTransactionType.
+        // The strip path uses SaleTypeRegex `\bS\s*(\((?:partial|full)\))?\s*$` which
+        // accepts BOTH qualifiers in the `(?:partial|full)` alternation. The
+        // existing tests cover:
+        //   - ExtractTransactionType for both partial AND full qualifiers
+        //     (return-type detection — those pins read the regex via .IsMatch)
+        //   - RemoveTrailingTransactionType for partial qualifier (.Replace path)
+        // The `full` arm's BEHAVIOR through .Replace was unpinned.
+        //
+        // The risk this catches: a refactor that tightened the alternation to
+        // just `partial` (a "we never see (full) in practice" simplification)
+        // would compile, pass the ExtractTransactionType-full sibling
+        // (different code path — `.IsMatch` vs `.Replace`), pass the
+        // RemoveTrailingTransactionType-partial sibling, AND silently leave
+        // every "S (full)" tail intact in persisted AssetName columns.
+        // Downstream the asset name column would read "APPLE INC - COMMON
+        // STOCK S (full)" — visible in the Congress trades UI and MCP tool
+        // outputs.
+        //
+        // The two-step structure (recognize via IsMatch, then strip via
+        // Replace) means dropping the `full` alternation has DIFFERENT
+        // effects in each step:
+        //   - IsMatch with `(?:partial)` only: "S (full)" no longer matches,
+        //     ExtractTransactionType returns null, the row gets discarded
+        //     in the upstream filter — caught by the existing sibling.
+        //   - Replace with `(?:partial)` only: "S (full)" doesn't match the
+        //     regex but the row already classified as Sale via PERHAPS a
+        //     looser fallback path; Replace leaves the trailing tail in
+        //     place. Pin THIS specific edge.
+        //
+        // Pin "S (full)" with a realistic asset string. Asserting the
+        // cleanly-stripped output proves the full alternation arm in the
+        // Replace pipeline still fires.
+        var result = (string)RemoveTrailingTransactionTypeMethod.Invoke(null, ["GOOGLE LLC - CLASS A COMMON S (full)"]);
+
+        result.Should().Be("GOOGLE LLC - CLASS A COMMON");
+    }
 }
