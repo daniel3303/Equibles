@@ -49,6 +49,33 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
+    public void GetDocumentUrl_EmptyCik_ReturnsEmptyStringInsteadOfMalformedUrl() {
+        // GetDocumentUrl's first line is the defensive guard
+        //   `if (string.IsNullOrEmpty(cik) || string.IsNullOrEmpty(accessionNumber))
+        //        return string.Empty;`
+        // Without it, an empty CIK would flow into FormatCik("") which returns
+        // "".PadLeft(10, '0') = "0000000000" — a SYNTACTICALLY VALID 10-digit
+        // padded CIK that composes into the URL
+        //   https://www.sec.gov/Archives/edgar/data/0000000000/...accession.txt
+        // That URL hits SEC's CDN successfully (no exception), gets a 404 back,
+        // and the caller treats it as a transient miss + retries. The failure
+        // mode is the worst kind: looks like a missing filing rather than the
+        // upstream null-CIK bug that produced it. Every existing test uses a
+        // real Apple CIK ("320193"), so the empty/null guard branch is unpinned
+        // and a refactor that drops it (e.g., "simplify away the defensive
+        // check since CIKs come from a trusted DB column") would silently
+        // shift the failure mode from "obvious empty URL" to "infinite retry
+        // on a deceptive 404".
+        //
+        // Sibling to the existing GetDocumentUrl happy-path pin. Pair (valid
+        // CIK → real URL, empty CIK → string.Empty) covers both arms of the
+        // guard contract.
+        var result = (string)GetDocumentUrlMethod.Invoke(null, ["", "0000320193-25-000001-index"]);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
     public void GetDocumentUrl_ValidCikAndAccession_ComposesSecArchiveTxtUrlWithPaddedCik() {
         // Sibling to the FormatCik pin above. GetDocumentUrl composes the
         // exact URL the caller hands to HttpClient.GetAsync to fetch a
