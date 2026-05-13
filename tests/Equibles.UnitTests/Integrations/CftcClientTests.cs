@@ -98,6 +98,87 @@ public class CftcClientTests {
     }
 
     [Fact]
+    public void ParseLine_BothModernAndLegacyDateColumnsPresent_PrefersModernViaCoalesceOperandOrder() {
+        // Sibling to ParseLine_LegacyDateColumnOnly_FallsBackToAsOfDateInFormYyMmDd. That
+        // pin asserts the FALLBACK behavior — when the modern "Report_Date_as_YYYY-MM-DD"
+        // column is absent, ParseLine reads from the legacy "As_of_Date_In_Form_YYMMDD"
+        // column instead. This pin covers the STRUCTURALLY DISTINCT case where both
+        // columns are present in the same CSV — and the `??` coalesce in ParseLine must
+        // prefer the modern column:
+        //   ReportDate = GetField(fields, columnIndex, "Report_Date_as_YYYY-MM-DD")
+        //                ?? GetField(fields, columnIndex, "As_of_Date_In_Form_YYMMDD"),
+        //
+        // Why this case is real production: CFTC's COT history files for the current
+        // decade emit BOTH date columns — the modern ISO column is the canonical one,
+        // and the legacy YYMMDD column is shipped alongside for back-compat with older
+        // tooling. The CftcImportService.ParseDate helper handles both formats, so
+        // either column's value can be parsed downstream. The choice of which column
+        // FEEDS the parser is therefore a silent decision — picking the wrong one
+        // produces NO error, just a different (correct-format-but-different-encoded)
+        // date string. The downstream parser succeeds on both, so the failure mode
+        // is invisible at every CI layer except a pin like this one.
+        //
+        // The risk this pin catches is asymmetric and UNREACHABLE from the legacy-only
+        // sibling pin:
+        //   • A refactor that swaps the `??` operand order to `legacy ?? modern` would
+        //     compile cleanly. The legacy-only sibling test still passes: that test's
+        //     header has ONLY the legacy column, so `GetField(modern)` returns null,
+        //     and `legacy ?? modern` evaluates to the legacy value just like
+        //     `modern ?? legacy` would. The two operand orders are observationally
+        //     indistinguishable when modern is absent. They diverge ONLY when both
+        //     are present — exactly the case this pin tests.
+        //   • A refactor that drops the `??` entirely and reads only ONE column —
+        //     either "swap to a single canonical column" or a "we don't need the
+        //     fallback anymore, the modern column is universal" simplification —
+        //     would also flip behavior. If only-modern survives: the legacy-only
+        //     sibling fails (good, catches it). If only-legacy survives: BOTH this
+        //     pin AND the legacy-only sibling pass (legacy-only test still finds
+        //     legacy column), but every record from a modern file silently uses
+        //     the legacy-format date string. Downstream consumers that didn't read
+        //     it would have to detect the format change.
+        //
+        // Production analogue: CftcImportService.ImportYear feeds the raw ReportDate
+        // string into ParseDate, which tries yyyy-MM-dd FIRST then falls back to
+        // yyMMdd. Both encodings produce a correct DateOnly. So an operand-swap
+        // regression would NOT corrupt the data — but it WOULD switch the wire
+        // format from "2025-01-15" to "250115" for every record. Downstream
+        // logging, error reporting, and anything that compares raw ReportDate
+        // strings (debugging aids, support tickets) would see the legacy
+        // encoding mixed into a dataset that's supposed to use the modern one.
+        //
+        // The complementary asymmetry to the legacy-only pin: that one asserts
+        // GetField returns the legacy value when the modern column is absent.
+        // This pin asserts that when both are present, the MODERN value wins.
+        // The pair distinguishes the THREE possible coalesce regressions:
+        //   1. Operand swap (legacy ?? modern): caught only here (legacy-only
+        //      still passes because legacy column is present).
+        //   2. Drop modern entirely (legacy only): caught here AND legacy-only
+        //      still works (legacy column present); diagnosis depends on which
+        //      test failed.
+        //   3. Drop legacy entirely (modern only): caught by legacy-only sibling
+        //      (returns null instead of legacy value); this pin still passes
+        //      (modern column present).
+        //
+        // Construction: header with BOTH date columns. Modern column at index 1
+        // holds "2025-01-15"; legacy column at index 2 holds "250115" (the same
+        // date in legacy encoding, so the test only catches operand-swap
+        // regressions if the assertion compares the wire-format string, not
+        // the parsed DateOnly). The data row provides BOTH date values
+        // populated — neither is empty/blank — so the GetField empty-cell
+        // arm (separately pinned in GetField_CellEmptyAfterTrim) doesn't fire
+        // for either column. Assertion compares against the modern wire-format
+        // string verbatim, which can ONLY hold for `modern ?? legacy` order.
+        var headerLine = "CFTC_Contract_Market_Code,Report_Date_as_YYYY-MM-DD,As_of_Date_In_Form_YYMMDD";
+        var columnIndex = (Dictionary<string, int>)BuildColumnIndexMethod.Invoke(null, [headerLine]);
+        var line = "001602,2025-01-15,250115";
+
+        var record = (CftcReportRecord)ParseLineMethod.Invoke(null, [line, columnIndex]);
+
+        record.Should().NotBeNull();
+        record.ReportDate.Should().Be("2025-01-15");
+    }
+
+    [Fact]
     public void BuildColumnIndex_QuotedHeaderName_IndexedWithoutQuotes() {
         // CFTC's COT history CSVs ship header rows in two flavours that vary by year:
         // bare (`Open_Interest_All`) and double-quoted (`"Open_Interest_All"`). The
