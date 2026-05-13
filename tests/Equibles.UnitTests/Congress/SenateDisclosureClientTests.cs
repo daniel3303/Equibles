@@ -89,6 +89,46 @@ public class SenateDisclosureClientTests {
     }
 
     [Fact]
+    public void ParseReportRow_LinkCellWithoutAnchorTag_ReturnsNullInsteadOfFakeReportPointingAtBaseUrl() {
+        // ParseReportRow extracts the report URL from row[3] using
+        //   var hrefMatch = HrefRegex().Match(linkHtml);
+        //   if (!hrefMatch.Success) return null;
+        // Without the .Success guard, the next line `var reportPath = hrefMatch.Groups[1].Value;`
+        // would silently return an empty string (Match.Groups[1] on a failed match is a
+        // valid empty Group, not null). reportPath="" then composes a report URL of just
+        // `BaseUrl + ""` = BaseUrl, and IsValidDisclosureUrl(BaseUrl, BaseUrl) returns
+        // true since BaseUrl trivially starts with itself. The downstream FetchAndParseReport
+        // would then fetch the Senate eFD HOME PAGE as if it were a transaction report and
+        // try to parse the empty result table. The failure mode is subtle: no exception,
+        // no crash, just every "broken-link" Senate row producing a phantom report whose
+        // FetchAndParseReport call wastes a Playwright round-trip against the home page
+        // and inflates the error log with parse failures that look like upstream changes.
+        //
+        // Senate eFD JSON occasionally emits rows where row[3] carries plain text rather
+        // than an `<a href=...>` tag (placeholder rows for withdrawn filings, legal
+        // holds, or rows blocked by the eFD's own redaction layer). The HrefRegex
+        // pattern `href=[""']([^""']+)[""']` simply doesn't match when no href= literal
+        // is present.
+        //
+        // The two existing rejection siblings (paper-filing path, cross-origin absolute
+        // URL) both have a valid <a href=...> tag. Neither exercises the .Success guard.
+        // Pin the no-anchor case with a plain-text link cell so a refactor that drops
+        // the guard surfaces here rather than as silent home-page fetches in production.
+        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var row = new List<string> {
+            "John",
+            "Doe",
+            "filed",
+            "no anchor tag here — placeholder text only",
+            "2024-01-15",
+        };
+
+        var result = ParseReportRowMethod.Invoke(sut, [row]);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
     public void ParseReportRow_PaperFilingUrl_ReturnsNull() {
         // Senate disclosures come in two flavours: HTML electronic filings (parseable) and
         // scanned-PDF "paper" filings (unparseable). ParseReportRow skips paper filings by
