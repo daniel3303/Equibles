@@ -14,6 +14,42 @@ public class InsiderTradingFilingProcessorTests {
     private static readonly MethodInfo ParseTransactionCodeMethod = typeof(InsiderTradingFilingProcessor)
         .GetMethod("ParseTransactionCode", BindingFlags.NonPublic | BindingFlags.Static);
 
+    private static readonly MethodInfo ParseBoolMethod = typeof(InsiderTradingFilingProcessor)
+        .GetMethod("ParseBool", BindingFlags.NonPublic | BindingFlags.Static);
+
+    [Fact]
+    public void ParseBool_DigitOne_ReturnsTrue() {
+        // ParseBool is the four-arm pattern matcher
+        //   `value is "1" or "true" or "True" or "TRUE"`
+        // used to interpret SEC Form 4 XML elements isDirector, isOfficer, and
+        // isTenPercentOwner. The XML schema (SEC's Form 3/4/5 X-rays) emits these
+        // flags inconsistently across filers — some serialize them as "1"/"0"
+        // (the most common form for `<isDirector>1</isDirector>`), others as
+        // "true"/"false". Each helps drive a different downstream consumer:
+        //   • isDirector → identifies board members in "directors buying" dashboards
+        //   • isOfficer → drives the "officer purchase cluster" alerting pipeline
+        //   • isTenPercentOwner → tags ≥10% holders in the holdings dashboard
+        // Drop any single arm and the corresponding flag silently falls to false
+        // for the filers using that representation. The "1" arm specifically is
+        // the highest-volume one — every filer using boolean-as-integer XML
+        // serialization (the majority) flows through it.
+        //
+        // The risk this catches: a refactor that "simplifies" the pattern to
+        // `bool.TryParse(value, out var result) && result` would handle
+        // "true"/"True"/"TRUE" but reject "1" — silently misclassifying every
+        // is*=1 flag as false. The existing tests in this file don't exercise
+        // ParseBool at all (only ParseLong, SanitizeXml, ParseTransactionCode),
+        // so this regression would compile cleanly, pass every existing pin,
+        // and silently strip the director/officer/10-percent-owner tags from
+        // every new InsiderOwner row.
+        //
+        // Pin "1" specifically — it's the most common SEC form AND the one
+        // bool.TryParse rejects (the most likely simplification regression).
+        var result = (bool)ParseBoolMethod.Invoke(null, ["1"]);
+
+        result.Should().BeTrue();
+    }
+
     [Fact]
     public void ParseLong_DecimalString_FallsBackToParseDecimalAndTruncates() {
         // SEC Form 4 XML routinely reports fractional share counts in transactionShares
