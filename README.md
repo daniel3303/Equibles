@@ -58,6 +58,7 @@ All settings can be configured via a `.env` file in the project root (recommende
 The FINRA scraper (short volume and short interest) requires a free API key. Without it, the scraper skips gracefully and all other scrapers run normally. Fails-to-deliver data comes from SEC and works without FINRA credentials.
 
 To get a key:
+
 1. Create a free account at [developer.finra.org](https://developer.finra.org/)
 2. Go to **Teams & Apps** and create a new application
 3. Copy the **Client ID** and **Client Secret**
@@ -68,6 +69,7 @@ To get a key:
 The FRED scraper requires a free API key from the Federal Reserve Bank of St. Louis. Without it, the scraper skips gracefully and all other scrapers run normally.
 
 To get a key:
+
 1. Register at [fred.stlouisfed.org/docs/api/api_key.html](https://fred.stlouisfed.org/docs/api/api_key.html)
 2. Copy the 32-character API key
 3. Set `Fred__ApiKey` in your `.env` file or environment variables
