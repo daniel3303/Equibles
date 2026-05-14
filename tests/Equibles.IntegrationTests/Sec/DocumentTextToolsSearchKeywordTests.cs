@@ -31,7 +31,8 @@ public class DocumentTextToolsSearchKeywordTests : ParadeDbMcpTestBase
     {
         // Three lines so the match on line 2 produces both "line before" + "line after"
         // context — pins the branches at L77 (i > 0) and L87 (i < lines.Length - 1).
-        var content = "First line of the filing.\n"
+        var content =
+            "First line of the filing.\n"
             + "Revenue grew 15% year-over-year.\n"
             + "Operating expenses remained stable.";
         var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
@@ -68,8 +69,8 @@ public class DocumentTextToolsSearchKeywordTests : ParadeDbMcpTestBase
         var output = await sut.SearchDocumentKeyword(document.Id, "revenue");
 
         output.Should().Contain("1 matches found");
-        output.Should().Contain("**Revenue**");          // preserves original casing inside markers
-        output.Should().Contain("First line of the filing.");      // line before
+        output.Should().Contain("**Revenue**"); // preserves original casing inside markers
+        output.Should().Contain("First line of the filing."); // line before
         output.Should().Contain("Operating expenses remained stable."); // line after
         // Gutter is right-aligned 6-wide — drop the padding and downstream MCP clients
         // lose the column alignment they rely on for jump-to-line navigation.

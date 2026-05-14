@@ -22,8 +22,16 @@ public class CongressMemberRepositoryPostgresSearchTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Search_LowercaseSubstringAgainstTitleCasedName_ReturnsMatchViaILike()
     {
-        DbContext.Add(new CongressMember { Name = "Pelosi, Nancy", Position = CongressPosition.Representative });
-        DbContext.Add(new CongressMember { Name = "Tuberville, Tommy", Position = CongressPosition.Senator });
+        DbContext.Add(
+            new CongressMember
+            {
+                Name = "Pelosi, Nancy",
+                Position = CongressPosition.Representative,
+            }
+        );
+        DbContext.Add(
+            new CongressMember { Name = "Tuberville, Tommy", Position = CongressPosition.Senator }
+        );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 

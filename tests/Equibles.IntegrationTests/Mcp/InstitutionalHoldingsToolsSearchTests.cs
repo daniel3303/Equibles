@@ -26,20 +26,24 @@ public class InstitutionalHoldingsToolsSearchTests : ParadeDbMcpTestBase
     [Fact]
     public async Task SearchInstitutions_LowercaseQuery_RendersMarkdownTableWithCikCityState()
     {
-        DbContext.Add(new InstitutionalHolder
-        {
-            Cik = "0001067983",
-            Name = "Berkshire Hathaway Inc.",
-            City = "Omaha",
-            StateOrCountry = "NE",
-        });
-        DbContext.Add(new InstitutionalHolder
-        {
-            Cik = "0001364742",
-            Name = "BlackRock Inc.",
-            City = "New York",
-            StateOrCountry = "NY",
-        });
+        DbContext.Add(
+            new InstitutionalHolder
+            {
+                Cik = "0001067983",
+                Name = "Berkshire Hathaway Inc.",
+                City = "Omaha",
+                StateOrCountry = "NE",
+            }
+        );
+        DbContext.Add(
+            new InstitutionalHolder
+            {
+                Cik = "0001364742",
+                Name = "BlackRock Inc.",
+                City = "New York",
+                StateOrCountry = "NY",
+            }
+        );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 

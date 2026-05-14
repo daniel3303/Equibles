@@ -44,7 +44,8 @@ public class SecEdgarClientGetDocumentFileBytesTests
         bytes.Should().Equal(payload);
 
         // Expected: unpadded cik + accession-no-dashes + URL-escaped filename.
-        handler.LastUrl.Should()
+        handler
+            .LastUrl.Should()
             .Be("https://www.sec.gov/Archives/edgar/data/320193/000032019325000001/primary.htm");
     }
 

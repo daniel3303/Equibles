@@ -4,9 +4,9 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
-using Equibles.IntegrationTests.Helpers;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
+using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.HostedService.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -54,38 +54,50 @@ public class CompanySyncServiceResolveCollisionTests : ParadeDbMcpTestBase
         // through UpdateExistingStock; the subsidiary then hits the
         // ReplaceObsolete branch which routes to ResolveTickerCollision.
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
-        secEdgarClient.GetActiveCompanies().Returns(new List<CompanyInfo>
-        {
-            new()
-            {
-                Cik = "0001719395",
-                Name = "ATAI Life Sciences N.V.",
-                Tickers = ["ATAI"],
-                EntityType = "operating",
-            },
-            new()
-            {
-                Cik = "0001999999",
-                Name = "AtaiBeckley Subsidiary",
-                Tickers = ["ATAI"],
-                EntityType = "operating",
-            },
-        });
+        secEdgarClient
+            .GetActiveCompanies()
+            .Returns(
+                new List<CompanyInfo>
+                {
+                    new()
+                    {
+                        Cik = "0001719395",
+                        Name = "ATAI Life Sciences N.V.",
+                        Tickers = ["ATAI"],
+                        EntityType = "operating",
+                    },
+                    new()
+                    {
+                        Cik = "0001999999",
+                        Name = "AtaiBeckley Subsidiary",
+                        Tickers = ["ATAI"],
+                        EntityType = "operating",
+                    },
+                }
+            );
         // Both metadata records satisfy IsListed (a real exchange) and
         // IsOperatingCompany (entityType "operating"), so the priority chain
         // falls to the lower-CIK tiebreak — incumbent (lower) wins.
-        secEdgarClient.GetCompanyMetadata("0001719395").Returns(new CompanyMetadata
-        {
-            Cik = "0001719395",
-            EntityType = "operating",
-            Exchanges = ["Nasdaq"],
-        });
-        secEdgarClient.GetCompanyMetadata("0001999999").Returns(new CompanyMetadata
-        {
-            Cik = "0001999999",
-            EntityType = "operating",
-            Exchanges = ["Nasdaq"],
-        });
+        secEdgarClient
+            .GetCompanyMetadata("0001719395")
+            .Returns(
+                new CompanyMetadata
+                {
+                    Cik = "0001719395",
+                    EntityType = "operating",
+                    Exchanges = ["Nasdaq"],
+                }
+            );
+        secEdgarClient
+            .GetCompanyMetadata("0001999999")
+            .Returns(
+                new CompanyMetadata
+                {
+                    Cik = "0001999999",
+                    EntityType = "operating",
+                    Exchanges = ["Nasdaq"],
+                }
+            );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),

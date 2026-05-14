@@ -37,32 +37,39 @@ public class CftcPositionReportRepositoryGetLatestTests : ParadeDbMcpTestBase
         DbContext.Add(contractA);
         DbContext.Add(contractB);
 
-        DbContext.Add(new CftcPositionReport
-        {
-            CftcContractId = contractA.Id,
-            ReportDate = new DateOnly(2024, 11, 5),
-            OpenInterest = 2_400_000,
-        });
-        DbContext.Add(new CftcPositionReport
-        {
-            CftcContractId = contractA.Id,
-            ReportDate = new DateOnly(2024, 12, 24),
-            OpenInterest = 2_500_000,
-        });
-        DbContext.Add(new CftcPositionReport
-        {
-            CftcContractId = contractB.Id,
-            ReportDate = new DateOnly(2024, 12, 10),
-            OpenInterest = 1_800_000,
-        });
+        DbContext.Add(
+            new CftcPositionReport
+            {
+                CftcContractId = contractA.Id,
+                ReportDate = new DateOnly(2024, 11, 5),
+                OpenInterest = 2_400_000,
+            }
+        );
+        DbContext.Add(
+            new CftcPositionReport
+            {
+                CftcContractId = contractA.Id,
+                ReportDate = new DateOnly(2024, 12, 24),
+                OpenInterest = 2_500_000,
+            }
+        );
+        DbContext.Add(
+            new CftcPositionReport
+            {
+                CftcContractId = contractB.Id,
+                ReportDate = new DateOnly(2024, 12, 10),
+                OpenInterest = 1_800_000,
+            }
+        );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
         await using var verify = Fixture.CreateDbContext();
         var sut = new CftcPositionReportRepository(verify);
 
-        var latest = (await sut.GetLatestPerContract().AsNoTracking().ToListAsync())
-            .ToDictionary(r => r.CftcContractId);
+        var latest = (await sut.GetLatestPerContract().AsNoTracking().ToListAsync()).ToDictionary(
+            r => r.CftcContractId
+        );
 
         latest.Should().HaveCount(2);
         latest[contractA.Id].ReportDate.Should().Be(new DateOnly(2024, 12, 24));

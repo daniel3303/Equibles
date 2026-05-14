@@ -27,7 +27,10 @@ public class DocumentRepositoryExistsTests : ParadeDbMcpTestBase
         var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
         var file = new File
         {
-            Name = "10k", Extension = "htm", ContentType = "text/html", Size = 1,
+            Name = "10k",
+            Extension = "htm",
+            ContentType = "text/html",
+            Size = 1,
             FileContent = new FileContent { Bytes = new byte[] { 0x01 } },
         };
         var seeded = new Document

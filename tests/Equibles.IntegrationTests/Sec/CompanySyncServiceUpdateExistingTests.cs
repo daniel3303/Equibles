@@ -4,9 +4,9 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
-using Equibles.IntegrationTests.Helpers;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
+using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.HostedService.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -48,16 +48,20 @@ public class CompanySyncServiceUpdateExistingTests : ParadeDbMcpTestBase
         DbContext.ChangeTracker.Clear();
 
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
-        secEdgarClient.GetActiveCompanies().Returns(new List<CompanyInfo>
-        {
-            new()
-            {
-                Cik = "0001067983",
-                Name = "Berkshire Hathaway Inc.",
-                Tickers = ["BRK.A", "BRK.B"],
-                EntityType = "operating",
-            },
-        });
+        secEdgarClient
+            .GetActiveCompanies()
+            .Returns(
+                new List<CompanyInfo>
+                {
+                    new()
+                    {
+                        Cik = "0001067983",
+                        Name = "Berkshire Hathaway Inc.",
+                        Tickers = ["BRK.A", "BRK.B"],
+                        EntityType = "operating",
+                    },
+                }
+            );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),

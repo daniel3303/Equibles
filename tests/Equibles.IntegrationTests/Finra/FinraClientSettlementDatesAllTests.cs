@@ -66,9 +66,10 @@ public class FinraClientSettlementDatesAllTests
             }
             else
             {
-                LastDataRequestBody = request.Content != null
-                    ? await request.Content.ReadAsStringAsync(cancellationToken)
-                    : "";
+                LastDataRequestBody =
+                    request.Content != null
+                        ? await request.Content.ReadAsStringAsync(cancellationToken)
+                        : "";
                 body = _dataBody;
             }
             return new HttpResponseMessage(HttpStatusCode.OK)

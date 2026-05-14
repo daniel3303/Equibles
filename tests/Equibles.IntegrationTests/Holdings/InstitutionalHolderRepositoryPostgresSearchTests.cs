@@ -23,7 +23,9 @@ public class InstitutionalHolderRepositoryPostgresSearchTests : ParadeDbMcpTestB
     [Fact]
     public async Task Search_LowercaseSubstringAcrossMultipleHolders_ReturnsOnlyTheMatchViaILike()
     {
-        DbContext.Add(new InstitutionalHolder { Cik = "0001067983", Name = "Berkshire Hathaway Inc." });
+        DbContext.Add(
+            new InstitutionalHolder { Cik = "0001067983", Name = "Berkshire Hathaway Inc." }
+        );
         DbContext.Add(new InstitutionalHolder { Cik = "0001364742", Name = "BlackRock Inc." });
         DbContext.Add(new InstitutionalHolder { Cik = "0000102909", Name = "Vanguard Group Inc." });
         await DbContext.SaveChangesAsync();

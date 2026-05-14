@@ -33,12 +33,40 @@ public class FredObservationRepositoryGetLatestTests : ParadeDbMcpTestBase
         // seriesA: two observations, the older one with a real value, the newer
         // one with null (FRED reports "." for missing dates). The query must
         // SKIP the null row and surface the older real value as "latest".
-        DbContext.Add(new FredObservation { FredSeriesId = seriesA.Id, Date = new DateOnly(2024, 12, 1), Value = 4.25m });
-        DbContext.Add(new FredObservation { FredSeriesId = seriesA.Id, Date = new DateOnly(2024, 12, 8), Value = null });
+        DbContext.Add(
+            new FredObservation
+            {
+                FredSeriesId = seriesA.Id,
+                Date = new DateOnly(2024, 12, 1),
+                Value = 4.25m,
+            }
+        );
+        DbContext.Add(
+            new FredObservation
+            {
+                FredSeriesId = seriesA.Id,
+                Date = new DateOnly(2024, 12, 8),
+                Value = null,
+            }
+        );
 
         // seriesB: two real values — must pick the newer one.
-        DbContext.Add(new FredObservation { FredSeriesId = seriesB.Id, Date = new DateOnly(2024, 11, 1), Value = 4.1m });
-        DbContext.Add(new FredObservation { FredSeriesId = seriesB.Id, Date = new DateOnly(2024, 12, 1), Value = 4.2m });
+        DbContext.Add(
+            new FredObservation
+            {
+                FredSeriesId = seriesB.Id,
+                Date = new DateOnly(2024, 11, 1),
+                Value = 4.1m,
+            }
+        );
+        DbContext.Add(
+            new FredObservation
+            {
+                FredSeriesId = seriesB.Id,
+                Date = new DateOnly(2024, 12, 1),
+                Value = 4.2m,
+            }
+        );
 
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -46,8 +74,9 @@ public class FredObservationRepositoryGetLatestTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
         var sut = new FredObservationRepository(verify);
 
-        var latest = (await sut.GetLatestPerSeries().AsNoTracking().ToListAsync())
-            .ToDictionary(o => o.FredSeriesId);
+        var latest = (await sut.GetLatestPerSeries().AsNoTracking().ToListAsync()).ToDictionary(o =>
+            o.FredSeriesId
+        );
 
         latest.Should().HaveCount(2);
         latest[seriesA.Id].Date.Should().Be(new DateOnly(2024, 12, 1));

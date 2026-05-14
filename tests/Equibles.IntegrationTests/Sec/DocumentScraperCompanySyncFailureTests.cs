@@ -27,7 +27,8 @@ public class DocumentScraperCompanySyncFailureTests
     public async Task ScrapeDocuments_CompanySyncThrows_RecordsErrorAndReportsToErrorReporter()
     {
         var companySync = Substitute.For<ICompanySyncService>();
-        companySync.SyncCompaniesFromSecApi()
+        companySync
+            .SyncCompaniesFromSecApi()
             .Returns<Task>(_ => throw new HttpRequestException("SEC EDGAR 503"));
 
         var errorReporter = Substitute.For<ErrorReporter>(
@@ -48,16 +49,17 @@ public class DocumentScraperCompanySyncFailureTests
         var result = await sut.ScrapeDocuments(CancellationToken.None);
 
         result.Errors.Should().Be(1);
-        result.ErrorMessages.Should().ContainSingle()
-            .Which.Should().Contain("SEC EDGAR 503");
+        result.ErrorMessages.Should().ContainSingle().Which.Should().Contain("SEC EDGAR 503");
         // ErrorReporter.Report must be invoked once with DocumentScraper source
         // and the operation name — pins the public-facing error contract.
-        await errorReporter.Received(1).Report(
-            ErrorSource.DocumentScraper,
-            "DocumentScraper.ScrapeDocuments",
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<string>()
-        );
+        await errorReporter
+            .Received(1)
+            .Report(
+                ErrorSource.DocumentScraper,
+                "DocumentScraper.ScrapeDocuments",
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>()
+            );
     }
 }

@@ -26,18 +26,22 @@ public class CftcContractRepositorySearchTests : ParadeDbMcpTestBase
         // Two contracts. The query "13874" matches only the first one's MarketCode.
         // The second contract's MarketName is "Crude Oil" — chosen so it cannot
         // accidentally match "13874" via the MarketName branch.
-        DbContext.Add(new CftcContract
-        {
-            MarketCode = "13874+",
-            MarketName = "E-MINI S&P 500",
-            Category = CftcContractCategory.EquityIndices,
-        });
-        DbContext.Add(new CftcContract
-        {
-            MarketCode = "06765A",
-            MarketName = "Crude Oil",
-            Category = CftcContractCategory.Energy,
-        });
+        DbContext.Add(
+            new CftcContract
+            {
+                MarketCode = "13874+",
+                MarketName = "E-MINI S&P 500",
+                Category = CftcContractCategory.EquityIndices,
+            }
+        );
+        DbContext.Add(
+            new CftcContract
+            {
+                MarketCode = "06765A",
+                MarketName = "Crude Oil",
+                Category = CftcContractCategory.Energy,
+            }
+        );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
