@@ -87,4 +87,35 @@ public class StocksShortInterestTests
             .Expect(rows.First.Locator("td").First)
             .ToHaveTextAsync(newestSettlement.ToString("yyyy-MM-dd"));
     }
+
+    [Fact]
+    public async Task ShortInterest_GetForSeededStockWithNoShortInterest_RendersNoShortInterestDataEmptyState()
+    {
+        // /stocks/{ticker}/shortinterest runs StockTabService.LoadShortInterestTab against the
+        // seeded stock. With no ShortInterest rows, the view takes the explicit empty-state
+        // branch ("No Short Interest Data"). Pins both the route + LoadStock lookup AND the
+        // empty-state copy — the other test in this file only covers the populated branch.
+        await _web.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new CommonStock
+                {
+                    Ticker = "AAPL",
+                    Name = "Apple Inc.",
+                    Cik = "0000320193",
+                }
+            );
+            await Task.CompletedTask;
+        });
+
+        var page = await _playwright.NewPageAsync(_web.BaseUrl);
+        var response = await page.GotoAsync("/stocks/aapl/shortinterest");
+
+        response.Should().NotBeNull();
+        response!.Status.Should().Be(200);
+
+        await Assertions
+            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Short Interest Data" }))
+            .ToHaveCountAsync(1);
+    }
 }
