@@ -67,6 +67,9 @@ public class StocksShowTests
         response.Should().NotBeNull();
         response!.Status.Should().Be(404);
         page.Url.Should()
-            .EndWith("/stocks/unknown/price", "Show must still 302 to the Price tab even when the stock is missing");
+            .EndWith(
+                "/stocks/unknown/price",
+                "Show must still 302 to the Price tab even when the stock is missing"
+            );
     }
 }
