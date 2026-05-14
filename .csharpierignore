@@ -1,0 +1,13 @@
+## Build artifacts
+bin/
+obj/
+
+## Worktrees (transient git worktrees from the harness)
+worktrees/
+
+## Generated migrations — keep EF's exact output untouched
+**/Migrations/*.Designer.cs
+**/Migrations/*ModelSnapshot.cs
+
+## Node / front-end assets (if any sneak in)
+node_modules/
