@@ -50,4 +50,23 @@ public class StocksShowTests
         page.Url.Should()
             .EndWith("/stocks/aapl/price", "Show must redirect bare-ticker URLs to the Price tab");
     }
+
+    [Fact]
+    public async Task Show_GetBareTickerUrlForUnknownStock_FollowsRedirectAnd404s()
+    {
+        // /stocks/{ticker} unconditionally 302s to .../Price; the Price action then runs
+        // `LoadStock(ticker)` and returns NotFound() for an unknown ticker. The existing redirect
+        // test doesn't exercise the null-stock branch — and the same `if (stock == null) return
+        // NotFound()` pattern is repeated across every tab action in StocksController. Pins the
+        // bare-URL flow on the unknown-ticker side: the redirect runs AND the destination 404s.
+        await _web.ResetAndSeedAsync(); // empty DB — no CommonStock rows
+
+        var page = await _playwright.NewPageAsync(_web.BaseUrl);
+        var response = await page.GotoAsync("/stocks/unknown");
+
+        response.Should().NotBeNull();
+        response!.Status.Should().Be(404);
+        page.Url.Should()
+            .EndWith("/stocks/unknown/price", "Show must still 302 to the Price tab even when the stock is missing");
+    }
 }
