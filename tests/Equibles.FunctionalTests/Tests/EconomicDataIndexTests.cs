@@ -1,3 +1,4 @@
+using Equibles.Fred.Data.Models;
 using Equibles.FunctionalTests.Fixtures;
 using FluentAssertions;
 using Microsoft.Playwright;
@@ -39,5 +40,56 @@ public class EconomicDataIndexTests
         await Assertions
             .Expect(page.Locator("p").Filter(new() { HasTextString = "indicators from" }))
             .ToContainTextAsync("0 indicators from");
+    }
+
+    [Fact]
+    public async Task Index_GetWithSeededSeriesAndObservation_RendersIndicatorCountAndSeriesId()
+    {
+        // EconomicDataController.Index has populated-only paths the empty test cannot exercise:
+        // the `latestBySeriesId.TryGetValue(s.Id, out var latest)` lookup must succeed (otherwise
+        // `latest?.Value` is silently null and the latest-value column stays empty), and the
+        // `groupBy(Category).Select(...)` projection must emit a category. Pins both with a
+        // single seeded series + observation.
+        var seriesId = Guid.NewGuid();
+        await _web.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new FredSeries
+                {
+                    Id = seriesId,
+                    SeriesId = "DGS10",
+                    Title = "10-Year Treasury Constant Maturity Rate",
+                    Category = FredSeriesCategory.InterestRates,
+                    Frequency = "Daily",
+                    Units = "Percent",
+                    SeasonalAdjustment = "Not Seasonally Adjusted",
+                }
+            );
+            db.Add(
+                new FredObservation
+                {
+                    FredSeriesId = seriesId,
+                    Date = new DateOnly(2025, 1, 2),
+                    Value = 4.55m,
+                }
+            );
+            await Task.CompletedTask;
+        });
+
+        var page = await _playwright.NewPageAsync(_web.BaseUrl);
+        var response = await page.GotoAsync("/economicdata");
+
+        response.Should().NotBeNull();
+        response!.Status.Should().Be(200);
+
+        await Assertions.Expect(page.Locator("h1")).ToHaveTextAsync("Economic Data");
+        // Mirrors the empty-state assertion shape but pins the populated counter: with one series
+        // in one category, the description must read "1 indicators from ... across 1 categories".
+        await Assertions
+            .Expect(page.Locator("p").Filter(new() { HasTextString = "indicators from" }))
+            .ToContainTextAsync("1 indicators from");
+        await Assertions
+            .Expect(page.Locator("a.font-mono").Filter(new() { HasTextString = "DGS10" }))
+            .ToHaveCountAsync(1);
     }
 }
