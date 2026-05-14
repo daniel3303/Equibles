@@ -86,4 +86,35 @@ public class StocksShortVolumeTests
             .Expect(rows.First.Locator("td").First)
             .ToHaveTextAsync(endDate.ToString("yyyy-MM-dd"));
     }
+
+    [Fact]
+    public async Task ShortVolume_GetForSeededStockWithNoShortVolume_RendersNoShortVolumeDataEmptyState()
+    {
+        // /stocks/{ticker}/shortvolume runs StockTabService.LoadShortVolumeTab against the
+        // seeded stock. With no DailyShortVolume rows, the view takes the explicit empty-state
+        // branch ("No Short Volume Data"). Pins both the route + LoadStock lookup AND the
+        // empty-state copy — the other test in this file only covers the populated branch.
+        await _web.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new CommonStock
+                {
+                    Ticker = "AAPL",
+                    Name = "Apple Inc.",
+                    Cik = "0000320193",
+                }
+            );
+            await Task.CompletedTask;
+        });
+
+        var page = await _playwright.NewPageAsync(_web.BaseUrl);
+        var response = await page.GotoAsync("/stocks/aapl/shortvolume");
+
+        response.Should().NotBeNull();
+        response!.Status.Should().Be(200);
+
+        await Assertions
+            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Short Volume Data" }))
+            .ToHaveCountAsync(1);
+    }
 }
