@@ -17,6 +17,11 @@ updates:
       include: "scope"
     labels:
       - "type: dependencies"
+    ignore:
+      # SixLabors.ImageSharp 4.x requires a paid commercial license.
+      # Stay on the 3.x line, which remains under the Six Labors Split License.
+      - dependency-name: "SixLabors.ImageSharp"
+        update-types: ["version-update:semver-major"]
     groups:
       microsoft-extensions:
         patterns:
