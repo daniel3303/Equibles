@@ -68,4 +68,31 @@ public class MarketPutCallRatioTests
             .Expect(page.Locator(".breadcrumbs li").Filter(new() { HasTextString = "Equity" }))
             .ToHaveCountAsync(1);
     }
+
+    [Fact]
+    public async Task PutCallRatio_GetForValidTypeWithNoRecords_RendersEmptyStateAndHidesChart()
+    {
+        // /market/putcallratio/equity with zero CboePutCallRatio rows for the Equity type must
+        // (a) still return 200 — MarketController's `Enum.TryParse` succeeds for "equity"
+        // (case-insensitive) so the action takes the populated-route path even when the repo
+        // returns no rows, (b) take the `Records.Count == 0` branch of the view that renders
+        // "No data yet", and (c) skip the chart branch so #pcr-chart is absent. Distinct from
+        // the 404 path the existing test does not cover and from the populated-table path.
+        await _web.ResetAndSeedAsync(_ => Task.CompletedTask);
+
+        var page = await _playwright.NewPageAsync(_web.BaseUrl);
+        var response = await page.GotoAsync("/market/putcallratio/equity");
+
+        response.Should().NotBeNull();
+        response!.Status.Should().Be(200);
+
+        await Assertions
+            .Expect(page.Locator(".breadcrumbs li").Filter(new() { HasTextString = "Equity" }))
+            .ToHaveCountAsync(1);
+        await Assertions
+            .Expect(page.Locator("p").Filter(new() { HasTextString = "No data yet" }))
+            .ToHaveCountAsync(1);
+        await Assertions.Expect(page.Locator("#pcr-chart")).ToHaveCountAsync(0);
+        await Assertions.Expect(page.Locator("tbody tr")).ToHaveCountAsync(0);
+    }
 }
