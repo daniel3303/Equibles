@@ -4,6 +4,11 @@ title: "[Bug]: "
 labels:
   - "type: bug"
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. The more we know upfront, the faster we can reproduce it.
+
   - type: textarea
     id: description
     attributes:
@@ -12,17 +17,73 @@ body:
       placeholder: "The SEC scraper only fetches recent filings, missing all historical data for companies with >1,000 filings."
     validations:
       required: true
+
   - type: textarea
     id: repro
     attributes:
       label: Steps to reproduce
-      description: How can we reproduce this? (optional but very helpful)
+      description: A minimal recipe we can follow. Include the exact command, the input that triggers the bug, and the output you observed.
       placeholder: |
-        1. Run the document scraper.
-        2. Check document count for Apple (CIK 0000320193).
+        1. `docker compose up --build`
+        2. Wait for the SEC scraper to start.
+        3. Check document count for Apple (CIK 0000320193) in the database.
+        4. Observed: 100 filings. Expected: >2,000.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Equibles version / commit
+      description: Output of `git describe --tags --always` or the docker image tag.
+      placeholder: "main @ 64c1514"
+    validations:
+      required: true
+
+  - type: input
+    id: dotnet-version
+    attributes:
+      label: .NET runtime version
+      description: Output of `dotnet --version`. Skip if running via Docker.
+      placeholder: "10.0.102"
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How are you running Equibles?
+      options:
+        - Docker Compose (full stack)
+        - Docker Compose with embedding profile
+        - From source (`dotnet run`)
+        - Other (describe in Additional context)
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "macOS 14.5 / Ubuntu 22.04 / Windows 11"
+    validations:
+      required: true
+
   - type: textarea
     id: logs
     attributes:
       label: Logs or screenshots
-      description: Any relevant output, errors, or screenshots.
+      description: Relevant output, stack traces, or screenshots. For container logs, `docker logs <container>` is usually the right place to start.
       render: shell
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Anything else that might help — related issues, recent changes, environment quirks.
