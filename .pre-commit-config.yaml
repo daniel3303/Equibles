@@ -26,7 +26,10 @@ repos:
     rev: v0.45.0
     hooks:
       - id: markdownlint
-        args: ["--config", ".markdownlint.yaml"]
+        # --fix auto-corrects the safe rules (MD032 list spacing, MD009
+        # trailing-space variants) so we don't bounce every commit on rules
+        # the tool already knows how to repair.
+        args: ["--fix", "--config", ".markdownlint.yaml"]
 
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.1
