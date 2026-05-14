@@ -69,9 +69,10 @@ public class EmbeddingClientGenerateTests
         {
             LastUrl = request.RequestUri!.AbsoluteUri;
             LastMethod = request.Method;
-            LastBody = request.Content != null
-                ? await request.Content.ReadAsStringAsync(cancellationToken)
-                : "";
+            LastBody =
+                request.Content != null
+                    ? await request.Content.ReadAsStringAsync(cancellationToken)
+                    : "";
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(_body, Encoding.UTF8, "application/json"),

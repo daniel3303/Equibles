@@ -30,10 +30,7 @@ public class CftcClientDownloadTests
 
         var zipBytes = BuildZipWith("annual.txt", csv);
         var handler = new ZipHandler(zipBytes);
-        var sut = new CftcClient(
-            new HttpClient(handler),
-            Substitute.For<ILogger<CftcClient>>()
-        );
+        var sut = new CftcClient(new HttpClient(handler), Substitute.For<ILogger<CftcClient>>());
 
         var records = await sut.DownloadYearlyReport(2024);
 

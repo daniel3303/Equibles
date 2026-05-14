@@ -77,14 +77,16 @@ public class DocumentProcessorCreateChunksTests
             .ToList();
 
         addedChunks.Should().NotBeEmpty();
-        addedChunks.Should().AllSatisfy(c =>
-        {
-            c.Ticker.Should().Be("AAPL");
-            c.DocumentType.Should().Be(DocumentType.TenK);
-            c.Document.Should().BeSameAs(document);
-            c.Content.Should().NotBeNullOrEmpty();
-            c.ReportingDate.Kind.Should().Be(DateTimeKind.Utc);
-        });
+        addedChunks
+            .Should()
+            .AllSatisfy(c =>
+            {
+                c.Ticker.Should().Be("AAPL");
+                c.DocumentType.Should().Be(DocumentType.TenK);
+                c.Document.Should().BeSameAs(document);
+                c.Content.Should().NotBeNullOrEmpty();
+                c.ReportingDate.Kind.Should().Be(DateTimeKind.Utc);
+            });
         // Index must be assigned sequentially — a regression that reused i or shuffled
         // the order would silently corrupt downstream search/retrieval ordering.
         addedChunks.Select(c => c.Index).Should().Equal(Enumerable.Range(0, addedChunks.Count));

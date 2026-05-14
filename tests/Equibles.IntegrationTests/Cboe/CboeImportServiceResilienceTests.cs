@@ -1,8 +1,8 @@
 using Equibles.Cboe.HostedService.Services;
 using Equibles.Errors.BusinessLogic;
-using Equibles.IntegrationTests.Helpers;
 using Equibles.Integrations.Cboe.Contracts;
 using Equibles.Integrations.Cboe.Models;
+using Equibles.IntegrationTests.Helpers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -25,12 +25,15 @@ public class CboeImportServiceResilienceTests
     {
         var client = Substitute.For<ICboeClient>();
         // First type (Total) blows up with a transient HTTP failure.
-        client.DownloadPutCallRatios(CboePutCallCsvType.Total)
+        client
+            .DownloadPutCallRatios(CboePutCallCsvType.Total)
             .Returns<Task<List<CboePutCallRecord>>>(_ =>
-                throw new HttpRequestException("CBOE returned 503"));
+                throw new HttpRequestException("CBOE returned 503")
+            );
         // All other types complete with no records — exercises the early-return
         // after the empty-records check and pins that the foreach keeps iterating.
-        client.DownloadPutCallRatios(Arg.Is<CboePutCallCsvType>(t => t != CboePutCallCsvType.Total))
+        client
+            .DownloadPutCallRatios(Arg.Is<CboePutCallCsvType>(t => t != CboePutCallCsvType.Total))
             .Returns(new List<CboePutCallRecord>());
         client.DownloadVixHistory().Returns(new List<CboeVixRecord>());
 

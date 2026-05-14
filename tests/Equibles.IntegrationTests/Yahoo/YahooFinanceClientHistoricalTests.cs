@@ -22,11 +22,29 @@ public class YahooFinanceClientHistoricalTests
     {
         // Two timestamps: 2024-12-23 (Monday, real prices) and 2024-12-25 (Christmas, all nulls).
         // No adjclose array supplied — pins the `adjCloseList == null` fallback to Close.
-        var unixDec23 = new DateTimeOffset(2024, 12, 23, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
-        var unixDec25 = new DateTimeOffset(2024, 12, 25, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
+        var unixDec23 = new DateTimeOffset(
+            2024,
+            12,
+            23,
+            0,
+            0,
+            0,
+            TimeSpan.Zero
+        ).ToUnixTimeSeconds();
+        var unixDec25 = new DateTimeOffset(
+            2024,
+            12,
+            25,
+            0,
+            0,
+            0,
+            TimeSpan.Zero
+        ).ToUnixTimeSeconds();
         var json =
             "{\"chart\":{\"result\":[{\"timestamp\":["
-            + unixDec23 + "," + unixDec25
+            + unixDec23
+            + ","
+            + unixDec25
             + "],\"indicators\":{\"quote\":[{"
             + "\"open\":[100.10,null],\"high\":[101.50,null],\"low\":[99.80,null],"
             + "\"close\":[101.00,null],\"volume\":[1500000,null]}]}}]}}";
