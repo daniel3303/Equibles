@@ -1,0 +1,82 @@
+version: 2
+
+updates:
+  # NuGet packages — versions live in Directory.Packages.props (centralised).
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    # Default NuGet commit messages don't include the `build` prefix, which would
+    # break the conventional-commits PR-title-lint workflow. Force it here.
+    commit-message:
+      prefix: "build"
+      include: "scope"
+    labels:
+      - "type: dependencies"
+    groups:
+      microsoft-extensions:
+        patterns:
+          - "Microsoft.Extensions.*"
+      entity-framework:
+        patterns:
+          - "Microsoft.EntityFrameworkCore*"
+          - "Npgsql.EntityFrameworkCore*"
+          - "Pgvector.EntityFrameworkCore"
+          - "FlexLabs.EntityFrameworkCore.Upsert"
+      aspnetcore:
+        patterns:
+          - "Microsoft.AspNetCore.*"
+      ai:
+        patterns:
+          - "Microsoft.Extensions.AI*"
+          - "Microsoft.ML.*"
+          - "ModelContextProtocol*"
+      testing:
+        patterns:
+          - "xunit*"
+          - "Microsoft.NET.Test.Sdk"
+          - "coverlet.*"
+          - "Testcontainers*"
+          - "Microsoft.AspNetCore.Mvc.Testing"
+          - "Bogus"
+          - "FluentAssertions"
+          - "Moq"
+          - "Microsoft.Playwright"
+      serilog:
+        patterns:
+          - "Serilog*"
+      masstransit:
+        patterns:
+          - "MassTransit*"
+
+  # GitHub Actions referenced from .github/workflows/.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 3
+    labels:
+      - "type: dependencies"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # Docker base images in docker-compose.yml / Dockerfiles.
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 3
+    labels:
+      - "type: dependencies"
