@@ -70,7 +70,7 @@
     <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
     <!-- Media / Image -->
     <PackageVersion Include="MimeTypeMapOfficial" Version="1.0.17" />
-    <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageVersion Include="SixLabors.ImageSharp" Version="4.0.0" />
     <!-- JSON -->
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
     <!-- Resilience -->
