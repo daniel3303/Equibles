@@ -6,9 +6,11 @@ using Microsoft.Extensions.Hosting;
 
 namespace Equibles.UnitTests.Congress;
 
-public class CongressServiceCollectionExtensionsTests {
+public class CongressServiceCollectionExtensionsTests
+{
     [Fact]
-    public void AddCongressWorker_AutoWiresCongressionalTradeSyncService() {
+    public void AddCongressWorker_AutoWiresCongressionalTradeSyncService()
+    {
         // AddCongressWorker is the host's seam into auto-wiring for the
         // House/Senate disclosure pipeline. It scans the assembly for
         // [Service]-attributed types and adds CongressionalTradeScraperWorker
@@ -26,7 +28,8 @@ public class CongressServiceCollectionExtensionsTests {
     }
 
     [Fact]
-    public void AddCongressWorker_RegistersCongressionalTradeScraperWorkerAsIHostedService() {
+    public void AddCongressWorker_RegistersCongressionalTradeScraperWorkerAsIHostedService()
+    {
         // Sibling to AddCongressWorker_AutoWiresCongressionalTradeSyncService.
         // The existing pin asserts the auto-wire scan picked up the sync service
         // (the scoped collaborator). This pin asserts the structurally distinct
@@ -79,8 +82,11 @@ public class CongressServiceCollectionExtensionsTests {
             .Where(d => d.ServiceType == typeof(IHostedService))
             .ToList();
 
-        hostedServiceDescriptors.Should().Contain(
-            d => d.ImplementationType == typeof(CongressionalTradeScraperWorker),
-            "AddHostedService<CongressionalTradeScraperWorker>() must register the worker as IHostedService so the House/Senate disclosure scrape runs at startup");
+        hostedServiceDescriptors
+            .Should()
+            .Contain(
+                d => d.ImplementationType == typeof(CongressionalTradeScraperWorker),
+                "AddHostedService<CongressionalTradeScraperWorker>() must register the worker as IHostedService so the House/Senate disclosure scrape runs at startup"
+            );
     }
 }

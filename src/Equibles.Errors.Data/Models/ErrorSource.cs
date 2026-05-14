@@ -1,6 +1,7 @@
 namespace Equibles.Errors.Data.Models;
 
-public class ErrorSource {
+public class ErrorSource
+{
     public string Value { get; }
 
     public ErrorSource(string value) => Value = value;
@@ -19,9 +20,26 @@ public class ErrorSource {
     public static readonly ErrorSource TranscriptScraper = new("TranscriptScraper");
     public static readonly ErrorSource Other = new("Other");
 
-    public static IEnumerable<ErrorSource> GetAll() => [McpTool, DocumentScraper, HoldingsScraper, FinraScraper, FtdScraper, DocumentProcessor, CongressScraper, FredScraper, YahooPriceScraper, CftcScraper, CboeScraper, TranscriptScraper, Other];
+    public static IEnumerable<ErrorSource> GetAll() =>
+        [
+            McpTool,
+            DocumentScraper,
+            HoldingsScraper,
+            FinraScraper,
+            FtdScraper,
+            DocumentProcessor,
+            CongressScraper,
+            FredScraper,
+            YahooPriceScraper,
+            CftcScraper,
+            CboeScraper,
+            TranscriptScraper,
+            Other,
+        ];
 
     public override string ToString() => Value;
+
     public override bool Equals(object obj) => obj is ErrorSource other && Value == other.Value;
+
     public override int GetHashCode() => Value.GetHashCode();
 }

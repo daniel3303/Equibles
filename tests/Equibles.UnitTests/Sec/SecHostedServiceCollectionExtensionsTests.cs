@@ -7,9 +7,11 @@ using Microsoft.Extensions.Hosting;
 
 namespace Equibles.UnitTests.Sec;
 
-public class SecHostedServiceCollectionExtensionsTests {
+public class SecHostedServiceCollectionExtensionsTests
+{
     [Fact]
-    public void AddSecWorker_RegistersIFilingProcessorAsInsiderTradingFilingProcessor() {
+    public void AddSecWorker_RegistersIFilingProcessorAsInsiderTradingFilingProcessor()
+    {
         // Sibling to `AddSecWorker_RegistersIDocumentScraperAsScoped`. That
         // pin covers the IDocumentScraper binding shape. This pin covers
         // the IFilingProcessor binding — the strategy-pattern dispatch
@@ -58,7 +60,8 @@ public class SecHostedServiceCollectionExtensionsTests {
     }
 
     [Fact]
-    public void AddSecWorker_RegistersICompanySyncServiceAsScoped() {
+    public void AddSecWorker_RegistersICompanySyncServiceAsScoped()
+    {
         // Third pin in the AddSecWorker DI-binding family. Existing pins
         // cover IDocumentScraper (Scoped) and IFilingProcessor
         // (InsiderTradingFilingProcessor, Scoped). This pin covers
@@ -96,14 +99,17 @@ public class SecHostedServiceCollectionExtensionsTests {
 
         services.AddSecWorker();
 
-        var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(ICompanySyncService));
+        var descriptor = services.SingleOrDefault(d =>
+            d.ServiceType == typeof(ICompanySyncService)
+        );
         descriptor.Should().NotBeNull();
         descriptor.ImplementationType.Should().Be(typeof(CompanySyncService));
         descriptor.Lifetime.Should().Be(ServiceLifetime.Scoped);
     }
 
     [Fact]
-    public void AddSecWorker_RegistersIDocumentPersistenceServiceAsScoped() {
+    public void AddSecWorker_RegistersIDocumentPersistenceServiceAsScoped()
+    {
         // Fourth pin in the AddSecWorker DI-binding family. Existing pins
         // cover IDocumentScraper (Scoped), IFilingProcessor
         // (InsiderTradingFilingProcessor, Scoped), and ICompanySyncService
@@ -148,14 +154,17 @@ public class SecHostedServiceCollectionExtensionsTests {
 
         services.AddSecWorker();
 
-        var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(IDocumentPersistenceService));
+        var descriptor = services.SingleOrDefault(d =>
+            d.ServiceType == typeof(IDocumentPersistenceService)
+        );
         descriptor.Should().NotBeNull();
         descriptor.ImplementationType.Should().Be(typeof(DocumentPersistenceService));
         descriptor.Lifetime.Should().Be(ServiceLifetime.Scoped);
     }
 
     [Fact]
-    public void AddSecWorker_RegistersIDocumentScraperAsScoped() {
+    public void AddSecWorker_RegistersIDocumentScraperAsScoped()
+    {
         // AddSecWorker is the host's composition entry point for the SEC
         // scraping pipeline. It wires the auto-discovered repositories, the
         // explicit IFilingProcessor / IDocumentPersistenceService /
@@ -175,7 +184,8 @@ public class SecHostedServiceCollectionExtensionsTests {
     }
 
     [Fact]
-    public void AddSecWorker_RegistersSecScraperWorkerAsIHostedService() {
+    public void AddSecWorker_RegistersSecScraperWorkerAsIHostedService()
+    {
         // Extension of the AddSecWorker pin family. The four existing pins
         // (IFilingProcessor, ICompanySyncService, IDocumentPersistenceService,
         // IDocumentScraper) cover the scoped collaborators that the hosted
@@ -241,13 +251,17 @@ public class SecHostedServiceCollectionExtensionsTests {
             .Where(d => d.ServiceType == typeof(IHostedService))
             .ToList();
 
-        hostedServiceDescriptors.Should().Contain(
-            d => d.ImplementationType == typeof(SecScraperWorker),
-            "AddHostedService<SecScraperWorker>() must register the worker as IHostedService so the generic host runs it at startup");
+        hostedServiceDescriptors
+            .Should()
+            .Contain(
+                d => d.ImplementationType == typeof(SecScraperWorker),
+                "AddHostedService<SecScraperWorker>() must register the worker as IHostedService so the generic host runs it at startup"
+            );
     }
 
     [Fact]
-    public void AddSecWorker_RegistersDocumentProcessorWorkerAsIHostedService() {
+    public void AddSecWorker_RegistersDocumentProcessorWorkerAsIHostedService()
+    {
         // Second sibling in the hosted-service registration family. The
         // existing pin asserts that SecScraperWorker is registered with
         // IHostedService. This pin asserts the same shape for
@@ -292,13 +306,17 @@ public class SecHostedServiceCollectionExtensionsTests {
             .Where(d => d.ServiceType == typeof(IHostedService))
             .ToList();
 
-        hostedServiceDescriptors.Should().Contain(
-            d => d.ImplementationType == typeof(DocumentProcessorWorker),
-            "AddHostedService<DocumentProcessorWorker>() must register the worker as IHostedService so post-download processing runs at startup");
+        hostedServiceDescriptors
+            .Should()
+            .Contain(
+                d => d.ImplementationType == typeof(DocumentProcessorWorker),
+                "AddHostedService<DocumentProcessorWorker>() must register the worker as IHostedService so post-download processing runs at startup"
+            );
     }
 
     [Fact]
-    public void AddSecWorker_RegistersFtdScraperWorkerAsIHostedService() {
+    public void AddSecWorker_RegistersFtdScraperWorkerAsIHostedService()
+    {
         // Third and final sibling in the AddSecWorker hosted-service
         // registration family. Closes coverage of every
         // `AddHostedService<T>()` call in AddSecWorker: SecScraperWorker
@@ -356,8 +374,11 @@ public class SecHostedServiceCollectionExtensionsTests {
             .Where(d => d.ServiceType == typeof(IHostedService))
             .ToList();
 
-        hostedServiceDescriptors.Should().Contain(
-            d => d.ImplementationType == typeof(FtdScraperWorker),
-            "AddHostedService<FtdScraperWorker>() must register the worker as IHostedService so the daily SEC fails-to-deliver poll runs at startup");
+        hostedServiceDescriptors
+            .Should()
+            .Contain(
+                d => d.ImplementationType == typeof(FtdScraperWorker),
+                "AddHostedService<FtdScraperWorker>() must register the worker as IHostedService so the daily SEC fails-to-deliver poll runs at startup"
+            );
     }
 }

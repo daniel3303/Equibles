@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
@@ -81,5 +80,4 @@
     <ProjectReference Include="..\..\src\Equibles.Plugins\Equibles.Plugins.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Cboe.HostedService\Equibles.Cboe.HostedService.csproj" />
   </ItemGroup>
-
 </Project>

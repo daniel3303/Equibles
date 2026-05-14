@@ -7,9 +7,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Congress;
 
-public class CongressionalTradeScraperWorkerTests {
+public class CongressionalTradeScraperWorkerTests
+{
     [Fact]
-    public void SleepInterval_IsTwelveHours() {
+    public void SleepInterval_IsTwelveHours()
+    {
         // The 12-hour `SleepInterval` matches the cadence at which House clerks
         // and Senate's eFD system publish new PTR filings — neither updates more
         // than a couple of times per day. A regression that tightened the loop
@@ -26,13 +28,18 @@ public class CongressionalTradeScraperWorkerTests {
         var sut = new TestableCongressionalTradeScraperWorker(
             Substitute.For<ILogger<CongressionalTradeScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()));
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            )
+        );
 
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(12));
     }
 
     [Fact]
-    public void ErrorSource_IsCongressScraper() {
+    public void ErrorSource_IsCongressScraper()
+    {
         // BaseScraperWorker tags every error reported via ErrorReporter with this
         // worker's `ErrorSource` value — the tag routes operator alerts to the
         // correct oncall dashboard and team. CongressionalTradeScraperWorker reports
@@ -62,13 +69,18 @@ public class CongressionalTradeScraperWorkerTests {
         var sut = new TestableCongressionalTradeScraperWorker(
             Substitute.For<ILogger<CongressionalTradeScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()));
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            )
+        );
 
         sut.InvokeErrorSource().Should().Be(ErrorSource.CongressScraper);
     }
 
     [Fact]
-    public void WorkerName_IsCongressionalTradeScraper() {
+    public void WorkerName_IsCongressionalTradeScraper()
+    {
         // Ninth WorkerName pin in the natural-extension family (CBOE, Holdings,
         // SEC filing, FTD, Document processor, FRED, Yahoo price, FINRA, and now
         // Congressional trade). WorkerName flows into BaseScraperWorker's
@@ -89,16 +101,22 @@ public class CongressionalTradeScraperWorkerTests {
         var sut = new TestableCongressionalTradeScraperWorker(
             Substitute.For<ILogger<CongressionalTradeScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()));
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            )
+        );
 
         sut.InvokeWorkerName().Should().Be("Congressional trade scraper");
     }
 
-    private sealed class TestableCongressionalTradeScraperWorker : CongressionalTradeScraperWorker {
+    private sealed class TestableCongressionalTradeScraperWorker : CongressionalTradeScraperWorker
+    {
         public TestableCongressionalTradeScraperWorker(
             ILogger<CongressionalTradeScraperWorker> logger,
             IServiceScopeFactory scopeFactory,
-            ErrorReporter errorReporter)
+            ErrorReporter errorReporter
+        )
             : base(logger, scopeFactory, errorReporter) { }
 
         public TimeSpan InvokeSleepInterval() => SleepInterval;

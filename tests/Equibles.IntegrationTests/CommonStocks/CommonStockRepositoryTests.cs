@@ -8,20 +8,24 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-public class CommonStockRepositoryTests : IDisposable {
+public class CommonStockRepositoryTests : IDisposable
+{
     private readonly EquiblesDbContext _dbContext;
     private readonly CommonStockRepository _repository;
 
-    public CommonStockRepositoryTests() {
+    public CommonStockRepositoryTests()
+    {
         _dbContext = TestDbContextFactory.Create(new CommonStocksModuleConfiguration());
         _repository = new CommonStockRepository(_dbContext);
     }
 
-    public void Dispose() {
+    public void Dispose()
+    {
         _dbContext.Dispose();
     }
 
-    private static Industry MakeIndustry(string name = "Technology") {
+    private static Industry MakeIndustry(string name = "Technology")
+    {
         return new Industry { Id = Guid.NewGuid(), Name = name };
     }
 
@@ -31,8 +35,11 @@ public class CommonStockRepositoryTests : IDisposable {
         string cik = "0000320193",
         string description = "Consumer electronics company",
         Industry industry = null,
-        List<string> secondaryTickers = null) {
-        var stock = new CommonStock {
+        List<string> secondaryTickers = null
+    )
+    {
+        var stock = new CommonStock
+        {
             Id = Guid.NewGuid(),
             Ticker = ticker,
             Name = name,
@@ -48,7 +55,8 @@ public class CommonStockRepositoryTests : IDisposable {
         return stock;
     }
 
-    private async Task SeedStocks(params CommonStock[] stocks) {
+    private async Task SeedStocks(params CommonStock[] stocks)
+    {
         _dbContext.Set<CommonStock>().AddRange(stocks);
         await _dbContext.SaveChangesAsync();
     }
@@ -56,10 +64,12 @@ public class CommonStockRepositoryTests : IDisposable {
     // ── GetByCik ────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetByCik_ExistingCik_ReturnsMatchingStock() {
+    public async Task GetByCik_ExistingCik_ReturnsMatchingStock()
+    {
         await SeedStocks(
             MakeStock(ticker: "AAPL", cik: "0000320193"),
-            MakeStock(ticker: "MSFT", cik: "0000789019"));
+            MakeStock(ticker: "MSFT", cik: "0000789019")
+        );
 
         var result = await _repository.GetByCik("0000320193");
 
@@ -68,7 +78,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByCik_NonExistentCik_ReturnsNull() {
+    public async Task GetByCik_NonExistentCik_ReturnsNull()
+    {
         await SeedStocks(MakeStock());
 
         var result = await _repository.GetByCik("9999999999");
@@ -77,14 +88,16 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByCik_EmptyDatabase_ReturnsNull() {
+    public async Task GetByCik_EmptyDatabase_ReturnsNull()
+    {
         var result = await _repository.GetByCik("0000320193");
 
         result.Should().BeNull();
     }
 
     [Fact]
-    public async Task GetByCik_CikIsCaseSensitive_DoesNotMatchDifferentCase() {
+    public async Task GetByCik_CikIsCaseSensitive_DoesNotMatchDifferentCase()
+    {
         await SeedStocks(MakeStock(cik: "ABC123"));
 
         var result = await _repository.GetByCik("abc123");
@@ -95,11 +108,13 @@ public class CommonStockRepositoryTests : IDisposable {
     // ── GetByCiks ───────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetByCiks_MultipleMatchingCiks_ReturnsAllMatches() {
+    public async Task GetByCiks_MultipleMatchingCiks_ReturnsAllMatches()
+    {
         await SeedStocks(
             MakeStock(ticker: "AAPL", cik: "111"),
             MakeStock(ticker: "MSFT", cik: "222"),
-            MakeStock(ticker: "GOOG", cik: "333"));
+            MakeStock(ticker: "GOOG", cik: "333")
+        );
 
         var result = _repository.GetByCiks(["111", "333"]).ToList();
 
@@ -108,7 +123,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByCiks_NoneMatch_ReturnsEmpty() {
+    public async Task GetByCiks_NoneMatch_ReturnsEmpty()
+    {
         await SeedStocks(MakeStock(cik: "111"));
 
         var result = _repository.GetByCiks(["999", "888"]).ToList();
@@ -117,7 +133,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByCiks_EmptyInput_ReturnsEmpty() {
+    public async Task GetByCiks_EmptyInput_ReturnsEmpty()
+    {
         await SeedStocks(MakeStock());
 
         var result = _repository.GetByCiks([]).ToList();
@@ -126,19 +143,21 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByCiks_PartialMatch_ReturnsOnlyMatching() {
+    public async Task GetByCiks_PartialMatch_ReturnsOnlyMatching()
+    {
         await SeedStocks(
             MakeStock(ticker: "AAPL", cik: "111"),
-            MakeStock(ticker: "MSFT", cik: "222"));
+            MakeStock(ticker: "MSFT", cik: "222")
+        );
 
         var result = _repository.GetByCiks(["111", "999"]).ToList();
 
-        result.Should().ContainSingle()
-            .Which.Ticker.Should().Be("AAPL");
+        result.Should().ContainSingle().Which.Ticker.Should().Be("AAPL");
     }
 
     [Fact]
-    public void GetByCiks_ReturnsIQueryable_SupportsChaining() {
+    public void GetByCiks_ReturnsIQueryable_SupportsChaining()
+    {
         var result = _repository.GetByCiks(["111"]);
 
         result.Should().BeAssignableTo<IQueryable<CommonStock>>();
@@ -147,7 +166,8 @@ public class CommonStockRepositoryTests : IDisposable {
     // ── GetByName ───────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetByName_ExactMatch_ReturnsStock() {
+    public async Task GetByName_ExactMatch_ReturnsStock()
+    {
         await SeedStocks(MakeStock(name: "Apple Inc"));
 
         var result = await _repository.GetByName("Apple Inc");
@@ -157,7 +177,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByName_CaseInsensitiveMatch_ReturnsStock() {
+    public async Task GetByName_CaseInsensitiveMatch_ReturnsStock()
+    {
         await SeedStocks(MakeStock(name: "Apple Inc"));
 
         var result = await _repository.GetByName("apple inc");
@@ -167,7 +188,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByName_UpperCaseInput_ReturnsStock() {
+    public async Task GetByName_UpperCaseInput_ReturnsStock()
+    {
         await SeedStocks(MakeStock(name: "Apple Inc"));
 
         var result = await _repository.GetByName("APPLE INC");
@@ -176,7 +198,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByName_NoMatch_ReturnsNull() {
+    public async Task GetByName_NoMatch_ReturnsNull()
+    {
         await SeedStocks(MakeStock(name: "Apple Inc"));
 
         var result = await _repository.GetByName("Microsoft");
@@ -185,7 +208,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByName_PartialNameDoesNotMatch() {
+    public async Task GetByName_PartialNameDoesNotMatch()
+    {
         await SeedStocks(MakeStock(name: "Apple Inc"));
 
         var result = await _repository.GetByName("Apple");
@@ -194,7 +218,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByName_EmptyDatabase_ReturnsNull() {
+    public async Task GetByName_EmptyDatabase_ReturnsNull()
+    {
         var result = await _repository.GetByName("Apple Inc");
 
         result.Should().BeNull();
@@ -203,7 +228,8 @@ public class CommonStockRepositoryTests : IDisposable {
     // ── GetByTicker ─────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetByTicker_PrimaryTickerMatch_ReturnsStock() {
+    public async Task GetByTicker_PrimaryTickerMatch_ReturnsStock()
+    {
         await SeedStocks(MakeStock(ticker: "AAPL"));
 
         var result = await _repository.GetByTicker("AAPL");
@@ -213,7 +239,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByTicker_SecondaryTickerMatch_ReturnsStock() {
+    public async Task GetByTicker_SecondaryTickerMatch_ReturnsStock()
+    {
         await SeedStocks(MakeStock(ticker: "GOOG", secondaryTickers: ["GOOGL", "GOOG-A"]));
 
         var result = await _repository.GetByTicker("GOOGL");
@@ -223,7 +250,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByTicker_NoMatchInPrimaryOrSecondary_ReturnsNull() {
+    public async Task GetByTicker_NoMatchInPrimaryOrSecondary_ReturnsNull()
+    {
         await SeedStocks(MakeStock(ticker: "AAPL", secondaryTickers: ["AAPL-OLD"]));
 
         var result = await _repository.GetByTicker("MSFT");
@@ -232,14 +260,16 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByTicker_EmptyDatabase_ReturnsNull() {
+    public async Task GetByTicker_EmptyDatabase_ReturnsNull()
+    {
         var result = await _repository.GetByTicker("AAPL");
 
         result.Should().BeNull();
     }
 
     [Fact]
-    public async Task GetByTicker_StockWithNoSecondaryTickers_MatchesPrimaryOnly() {
+    public async Task GetByTicker_StockWithNoSecondaryTickers_MatchesPrimaryOnly()
+    {
         await SeedStocks(MakeStock(ticker: "AAPL"));
 
         var result = await _repository.GetByTicker("AAPL");
@@ -249,11 +279,13 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByTicker_MultipleStocks_ReturnsCorrectOne() {
+    public async Task GetByTicker_MultipleStocks_ReturnsCorrectOne()
+    {
         await SeedStocks(
             MakeStock(ticker: "AAPL", cik: "111"),
             MakeStock(ticker: "MSFT", cik: "222"),
-            MakeStock(ticker: "GOOG", cik: "333"));
+            MakeStock(ticker: "GOOG", cik: "333")
+        );
 
         var result = await _repository.GetByTicker("MSFT");
 
@@ -262,10 +294,17 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByTicker_AmbiguousBetweenPrimaryAndSecondary_PrefersPrimary() {
+    public async Task GetByTicker_AmbiguousBetweenPrimaryAndSecondary_PrefersPrimary()
+    {
         await SeedStocks(
             MakeStock(ticker: "SOHOB", name: "Sotherly LP", cik: "1313536"),
-            MakeStock(ticker: "SOHOO", name: "Sotherly Inc", cik: "1301236", secondaryTickers: ["SOHOB"]));
+            MakeStock(
+                ticker: "SOHOO",
+                name: "Sotherly Inc",
+                cik: "1301236",
+                secondaryTickers: ["SOHOB"]
+            )
+        );
 
         var result = await _repository.GetByTicker("SOHOB");
 
@@ -275,12 +314,19 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByTicker_AmbiguousWithSecondaryHolderSeededFirst_StillPrefersPrimary() {
+    public async Task GetByTicker_AmbiguousWithSecondaryHolderSeededFirst_StillPrefersPrimary()
+    {
         // Mirror of the previous test with inverse seed order. Guards against a regression
         // where insertion order rather than the explicit OrderBy drives the result.
         await SeedStocks(
-            MakeStock(ticker: "SOHOO", name: "Sotherly Inc", cik: "1301236", secondaryTickers: ["SOHOB"]),
-            MakeStock(ticker: "SOHOB", name: "Sotherly LP", cik: "1313536"));
+            MakeStock(
+                ticker: "SOHOO",
+                name: "Sotherly Inc",
+                cik: "1301236",
+                secondaryTickers: ["SOHOB"]
+            ),
+            MakeStock(ticker: "SOHOB", name: "Sotherly LP", cik: "1313536")
+        );
 
         var result = await _repository.GetByTicker("SOHOB");
 
@@ -292,7 +338,8 @@ public class CommonStockRepositoryTests : IDisposable {
     // ── GetByPrimaryTicker ──────────────────────────────────────────────
 
     [Fact]
-    public async Task GetByPrimaryTicker_PrimaryMatch_ReturnsStock() {
+    public async Task GetByPrimaryTicker_PrimaryMatch_ReturnsStock()
+    {
         await SeedStocks(MakeStock(ticker: "AAPL"));
 
         var result = await _repository.GetByPrimaryTicker("AAPL");
@@ -302,7 +349,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByPrimaryTicker_OnlySecondaryMatch_ReturnsNull() {
+    public async Task GetByPrimaryTicker_OnlySecondaryMatch_ReturnsNull()
+    {
         await SeedStocks(MakeStock(ticker: "GOOG", secondaryTickers: ["GOOGL"]));
 
         var result = await _repository.GetByPrimaryTicker("GOOGL");
@@ -311,7 +359,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByPrimaryTicker_NoMatch_ReturnsNull() {
+    public async Task GetByPrimaryTicker_NoMatch_ReturnsNull()
+    {
         await SeedStocks(MakeStock(ticker: "AAPL"));
 
         var result = await _repository.GetByPrimaryTicker("MSFT");
@@ -320,7 +369,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByPrimaryTicker_EmptyDatabase_ReturnsNull() {
+    public async Task GetByPrimaryTicker_EmptyDatabase_ReturnsNull()
+    {
         var result = await _repository.GetByPrimaryTicker("AAPL");
 
         result.Should().BeNull();
@@ -333,14 +383,16 @@ public class CommonStockRepositoryTests : IDisposable {
     // limitation. Full coverage requires integration tests against PostgreSQL.
 
     [Fact]
-    public void GetByTickers_ReturnsIQueryable_SupportsChaining() {
+    public void GetByTickers_ReturnsIQueryable_SupportsChaining()
+    {
         var result = _repository.GetByTickers(["AAPL"]);
 
         result.Should().BeAssignableTo<IQueryable<CommonStock>>();
     }
 
     [Fact]
-    public async Task GetByTickers_WithSecondaryTickerQuery_ThrowsBecauseJsonArrayNotSupportedInMemory() {
+    public async Task GetByTickers_WithSecondaryTickerQuery_ThrowsBecauseJsonArrayNotSupportedInMemory()
+    {
         await SeedStocks(MakeStock(ticker: "AAPL"));
 
         var act = () => _repository.GetByTickers(["AAPL"]).ToList();
@@ -351,11 +403,13 @@ public class CommonStockRepositoryTests : IDisposable {
     // ── GetAllTickers ───────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetAllTickers_ReturnsAllPrimaryTickers() {
+    public async Task GetAllTickers_ReturnsAllPrimaryTickers()
+    {
         await SeedStocks(
             MakeStock(ticker: "AAPL", cik: "111"),
             MakeStock(ticker: "MSFT", cik: "222"),
-            MakeStock(ticker: "GOOG", cik: "333"));
+            MakeStock(ticker: "GOOG", cik: "333")
+        );
 
         var result = _repository.GetAllTickers().ToList();
 
@@ -364,14 +418,16 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public void GetAllTickers_EmptyDatabase_ReturnsEmpty() {
+    public void GetAllTickers_EmptyDatabase_ReturnsEmpty()
+    {
         var result = _repository.GetAllTickers().ToList();
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task GetAllTickers_DoesNotIncludeSecondaryTickers() {
+    public async Task GetAllTickers_DoesNotIncludeSecondaryTickers()
+    {
         await SeedStocks(MakeStock(ticker: "GOOG", secondaryTickers: ["GOOGL"]));
 
         var result = _repository.GetAllTickers().ToList();
@@ -380,7 +436,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public void GetAllTickers_ReturnsIQueryableOfString() {
+    public void GetAllTickers_ReturnsIQueryableOfString()
+    {
         var result = _repository.GetAllTickers();
 
         result.Should().BeAssignableTo<IQueryable<string>>();
@@ -398,7 +455,8 @@ public class CommonStockRepositoryTests : IDisposable {
     // exception at all.
 
     [Fact]
-    public void GetAllSecondaryCiks_ThrowsBecauseJsonArrayNotSupportedInMemory() {
+    public void GetAllSecondaryCiks_ThrowsBecauseJsonArrayNotSupportedInMemory()
+    {
         var act = () => _repository.GetAllSecondaryCiks().ToList();
 
         act.Should().Throw<InvalidOperationException>();
@@ -411,14 +469,16 @@ public class CommonStockRepositoryTests : IDisposable {
     // against PostgreSQL.
 
     [Fact]
-    public void GetAllSecondaryTickers_ReturnsIQueryableOfString() {
+    public void GetAllSecondaryTickers_ReturnsIQueryableOfString()
+    {
         var result = _repository.GetAllSecondaryTickers();
 
         result.Should().BeAssignableTo<IQueryable<string>>();
     }
 
     [Fact]
-    public void GetAllSecondaryTickers_ThrowsBecauseJsonArrayNotSupportedInMemory() {
+    public void GetAllSecondaryTickers_ThrowsBecauseJsonArrayNotSupportedInMemory()
+    {
         var act = () => _repository.GetAllSecondaryTickers().ToList();
 
         act.Should().Throw<InvalidOperationException>();
@@ -432,7 +492,8 @@ public class CommonStockRepositoryTests : IDisposable {
     // test against a real PostgreSQL instance.
 
     [Fact]
-    public async Task Search_WithSearchTerm_ThrowsBecauseILikeNotSupportedInMemory() {
+    public async Task Search_WithSearchTerm_ThrowsBecauseILikeNotSupportedInMemory()
+    {
         await SeedStocks(MakeStock());
 
         var act = () => _repository.Search("Apple").ToList();
@@ -441,11 +502,12 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public void Search_WithEmptyString_ReturnsAllStocks() {
+    public void Search_WithEmptyString_ReturnsAllStocks()
+    {
         // When search is empty, the ILike branch is skipped entirely
-        _dbContext.Set<CommonStock>().AddRange(
-            MakeStock(ticker: "AAPL", cik: "111"),
-            MakeStock(ticker: "MSFT", cik: "222"));
+        _dbContext
+            .Set<CommonStock>()
+            .AddRange(MakeStock(ticker: "AAPL", cik: "111"), MakeStock(ticker: "MSFT", cik: "222"));
         _dbContext.SaveChanges();
 
         var result = _repository.Search("").ToList();
@@ -454,10 +516,11 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public void Search_WithNull_ReturnsAllStocks() {
-        _dbContext.Set<CommonStock>().AddRange(
-            MakeStock(ticker: "AAPL", cik: "111"),
-            MakeStock(ticker: "MSFT", cik: "222"));
+    public void Search_WithNull_ReturnsAllStocks()
+    {
+        _dbContext
+            .Set<CommonStock>()
+            .AddRange(MakeStock(ticker: "AAPL", cik: "111"), MakeStock(ticker: "MSFT", cik: "222"));
         _dbContext.SaveChanges();
 
         var result = _repository.Search(null).ToList();
@@ -466,11 +529,15 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public void Search_WithEmptyString_ReturnsResultsOrderedByTicker() {
-        _dbContext.Set<CommonStock>().AddRange(
-            MakeStock(ticker: "MSFT", cik: "222"),
-            MakeStock(ticker: "AAPL", cik: "111"),
-            MakeStock(ticker: "GOOG", cik: "333"));
+    public void Search_WithEmptyString_ReturnsResultsOrderedByTicker()
+    {
+        _dbContext
+            .Set<CommonStock>()
+            .AddRange(
+                MakeStock(ticker: "MSFT", cik: "222"),
+                MakeStock(ticker: "AAPL", cik: "111"),
+                MakeStock(ticker: "GOOG", cik: "333")
+            );
         _dbContext.SaveChanges();
 
         var result = _repository.Search("").ToList();
@@ -479,14 +546,16 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public void Search_EmptyDatabase_ReturnsEmpty() {
+    public void Search_EmptyDatabase_ReturnsEmpty()
+    {
         var result = _repository.Search("").ToList();
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public void Search_ReturnsIQueryable() {
+    public void Search_ReturnsIQueryable()
+    {
         var result = _repository.Search("");
 
         result.Should().BeAssignableTo<IQueryable<CommonStock>>();
@@ -497,7 +566,8 @@ public class CommonStockRepositoryTests : IDisposable {
     // to the BaseRepository operations on CommonStock entities.
 
     [Fact]
-    public async Task Add_CommonStock_PersistsViaSave() {
+    public async Task Add_CommonStock_PersistsViaSave()
+    {
         var stock = MakeStock();
 
         _repository.Add(stock);
@@ -509,8 +579,10 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task AddRange_CommonStocks_PersistsAll() {
-        var stocks = new[] {
+    public async Task AddRange_CommonStocks_PersistsAll()
+    {
+        var stocks = new[]
+        {
             MakeStock(ticker: "AAPL", cik: "111"),
             MakeStock(ticker: "MSFT", cik: "222"),
         };
@@ -522,7 +594,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task Get_ByGuidId_ReturnsCorrectStock() {
+    public async Task Get_ByGuidId_ReturnsCorrectStock()
+    {
         var stock = MakeStock();
         _repository.Add(stock);
         await _repository.SaveChanges();
@@ -534,11 +607,13 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetAll_ReturnsAllStocksAsQueryable() {
+    public async Task GetAll_ReturnsAllStocksAsQueryable()
+    {
         await SeedStocks(
             MakeStock(ticker: "AAPL", cik: "111"),
             MakeStock(ticker: "MSFT", cik: "222"),
-            MakeStock(ticker: "GOOG", cik: "333"));
+            MakeStock(ticker: "GOOG", cik: "333")
+        );
 
         var result = _repository.GetAll().ToList();
 
@@ -546,7 +621,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task Update_ModifiesExistingStock() {
+    public async Task Update_ModifiesExistingStock()
+    {
         var stock = MakeStock();
         _repository.Add(stock);
         await _repository.SaveChanges();
@@ -561,7 +637,8 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task Delete_RemovesStockFromDatabase() {
+    public async Task Delete_RemovesStockFromDatabase()
+    {
         var stock = MakeStock();
         _repository.Add(stock);
         await _repository.SaveChanges();
@@ -573,8 +650,10 @@ public class CommonStockRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task Delete_Collection_RemovesMultipleStocks() {
-        var stocks = new[] {
+    public async Task Delete_Collection_RemovesMultipleStocks()
+    {
+        var stocks = new[]
+        {
             MakeStock(ticker: "AAPL", cik: "111"),
             MakeStock(ticker: "MSFT", cik: "222"),
             MakeStock(ticker: "GOOG", cik: "333"),
@@ -585,19 +664,20 @@ public class CommonStockRepositoryTests : IDisposable {
         _repository.Delete(stocks.Take(2));
         await _repository.SaveChanges();
 
-        _repository.GetAll().Should().ContainSingle()
-            .Which.Ticker.Should().Be("GOOG");
+        _repository.GetAll().Should().ContainSingle().Which.Ticker.Should().Be("GOOG");
     }
 
     // ── Industry Navigation ─────────────────────────────────────────────
 
     [Fact]
-    public async Task GetByTicker_WithIndustry_LoadsNavigationProperty() {
+    public async Task GetByTicker_WithIndustry_LoadsNavigationProperty()
+    {
         var industry = MakeIndustry("Technology");
         _dbContext.Set<Industry>().Add(industry);
         await SeedStocks(MakeStock(ticker: "AAPL", industry: industry));
 
-        var result = await _repository.GetAll()
+        var result = await _repository
+            .GetAll()
             .Include(s => s.Industry)
             .FirstOrDefaultAsync(s => s.Ticker == "AAPL");
 

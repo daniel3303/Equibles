@@ -1,25 +1,28 @@
 using Equibles.Data;
+using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.Data;
 using Equibles.Media.Data.Models;
 using Equibles.Media.Repositories;
-using Equibles.IntegrationTests.Helpers;
 using Microsoft.EntityFrameworkCore;
 using File = Equibles.Media.Data.Models.File;
 
 namespace Equibles.IntegrationTests.Media;
 
-public class MediaRepositoryTests : IDisposable {
+public class MediaRepositoryTests : IDisposable
+{
     private readonly EquiblesDbContext _dbContext;
     private readonly ImageRepository _imageRepo;
     private readonly FileRepository _fileRepo;
 
-    public MediaRepositoryTests() {
+    public MediaRepositoryTests()
+    {
         _dbContext = TestDbContextFactory.Create(new MediaModuleConfiguration());
         _imageRepo = new ImageRepository(_dbContext);
         _fileRepo = new FileRepository(_dbContext);
     }
 
-    public void Dispose() {
+    public void Dispose()
+    {
         _dbContext.Dispose();
     }
 
@@ -31,8 +34,10 @@ public class MediaRepositoryTests : IDisposable {
         string contentType = "application/pdf",
         long size = 2048,
         byte[] bytes = null
-    ) {
-        return new File {
+    )
+    {
+        return new File
+        {
             Id = Guid.NewGuid(),
             Name = name,
             Extension = extension,
@@ -49,8 +54,10 @@ public class MediaRepositoryTests : IDisposable {
         int height = 600,
         long size = 4096,
         byte[] bytes = null
-    ) {
-        return new Image {
+    )
+    {
+        return new Image
+        {
             Id = Guid.NewGuid(),
             Name = name,
             Extension = extension,
@@ -69,7 +76,8 @@ public class MediaRepositoryTests : IDisposable {
     // ── Add ─────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task File_Add_PersistsWithAllProperties() {
+    public async Task File_Add_PersistsWithAllProperties()
+    {
         var file = CreateFile("report", "html", "text/html", 1024);
 
         _fileRepo.Add(file);
@@ -84,7 +92,8 @@ public class MediaRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task File_Add_PersistsFileContent() {
+    public async Task File_Add_PersistsFileContent()
+    {
         var bytes = new byte[] { 0x01, 0x02, 0x03, 0x04 };
         var file = CreateFile(bytes: bytes);
 
@@ -92,13 +101,16 @@ public class MediaRepositoryTests : IDisposable {
         await _fileRepo.SaveChanges();
 
         _fileRepo.ClearChangeTracker();
-        var result = await _dbContext.Set<FileContent>().FirstOrDefaultAsync(fc => fc.FileId == file.Id);
+        var result = await _dbContext
+            .Set<FileContent>()
+            .FirstOrDefaultAsync(fc => fc.FileId == file.Id);
         result.Should().NotBeNull();
         result.Bytes.Should().BeEquivalentTo(bytes);
     }
 
     [Fact]
-    public async Task File_NameWithExtension_ReturnsCorrectFormat() {
+    public async Task File_NameWithExtension_ReturnsCorrectFormat()
+    {
         var file = CreateFile("report", "pdf");
 
         file.NameWithExtension.Should().Be("report.pdf");
@@ -107,7 +119,8 @@ public class MediaRepositoryTests : IDisposable {
     // ── GetAll ──────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task File_GetAll_ReturnsAllFiles() {
+    public async Task File_GetAll_ReturnsAllFiles()
+    {
         _fileRepo.Add(CreateFile("file1", "txt"));
         _fileRepo.Add(CreateFile("file2", "csv"));
         _fileRepo.Add(CreateFile("file3", "json"));
@@ -119,7 +132,8 @@ public class MediaRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public void File_GetAll_EmptyTable_ReturnsEmpty() {
+    public void File_GetAll_EmptyTable_ReturnsEmpty()
+    {
         var result = _fileRepo.GetAll();
 
         result.Should().BeEmpty();
@@ -128,7 +142,8 @@ public class MediaRepositoryTests : IDisposable {
     // ── Get ─────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task File_Get_ExistingId_ReturnsFile() {
+    public async Task File_Get_ExistingId_ReturnsFile()
+    {
         var file = CreateFile();
         _fileRepo.Add(file);
         await _fileRepo.SaveChanges();
@@ -140,7 +155,8 @@ public class MediaRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task File_Get_NonExistentId_ReturnsNull() {
+    public async Task File_Get_NonExistentId_ReturnsNull()
+    {
         var result = await _fileRepo.Get(Guid.NewGuid());
 
         result.Should().BeNull();
@@ -149,7 +165,8 @@ public class MediaRepositoryTests : IDisposable {
     // ── Update ──────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task File_Update_PersistsChanges() {
+    public async Task File_Update_PersistsChanges()
+    {
         var file = CreateFile("original", "txt");
         _fileRepo.Add(file);
         await _fileRepo.SaveChanges();
@@ -168,7 +185,8 @@ public class MediaRepositoryTests : IDisposable {
     // ── Delete ──────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task File_Delete_RemovesFile() {
+    public async Task File_Delete_RemovesFile()
+    {
         var file = CreateFile();
         _fileRepo.Add(file);
         await _fileRepo.SaveChanges();
@@ -181,7 +199,8 @@ public class MediaRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task File_Delete_DoesNotAffectOtherFiles() {
+    public async Task File_Delete_DoesNotAffectOtherFiles()
+    {
         var file1 = CreateFile("keep", "txt");
         var file2 = CreateFile("remove", "txt");
         _fileRepo.Add(file1);
@@ -192,15 +211,16 @@ public class MediaRepositoryTests : IDisposable {
         await _fileRepo.SaveChanges();
 
         var remaining = await _fileRepo.GetAll().ToListAsync();
-        remaining.Should().ContainSingle()
-            .Which.Name.Should().Be("keep");
+        remaining.Should().ContainSingle().Which.Name.Should().Be("keep");
     }
 
     // ── AddRange ────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task File_AddRange_PersistsMultipleFiles() {
-        var files = new[] {
+    public async Task File_AddRange_PersistsMultipleFiles()
+    {
+        var files = new[]
+        {
             CreateFile("a", "txt"),
             CreateFile("b", "csv"),
             CreateFile("c", "json"),
@@ -219,7 +239,8 @@ public class MediaRepositoryTests : IDisposable {
     // ── Add ─────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Image_Add_PersistsWithDimensions() {
+    public async Task Image_Add_PersistsWithDimensions()
+    {
         var image = CreateImage("banner", "jpg", 1920, 1080, 8192);
 
         _imageRepo.Add(image);
@@ -236,7 +257,8 @@ public class MediaRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task Image_Add_PersistsFileContent() {
+    public async Task Image_Add_PersistsFileContent()
+    {
         var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47 };
         var image = CreateImage(bytes: bytes);
 
@@ -244,7 +266,9 @@ public class MediaRepositoryTests : IDisposable {
         await _imageRepo.SaveChanges();
 
         _imageRepo.ClearChangeTracker();
-        var content = await _dbContext.Set<FileContent>().FirstOrDefaultAsync(fc => fc.FileId == image.Id);
+        var content = await _dbContext
+            .Set<FileContent>()
+            .FirstOrDefaultAsync(fc => fc.FileId == image.Id);
         content.Should().NotBeNull();
         content.Bytes.Should().BeEquivalentTo(bytes);
     }
@@ -252,7 +276,8 @@ public class MediaRepositoryTests : IDisposable {
     // ── GetAll ──────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Image_GetAll_ReturnsAllImages() {
+    public async Task Image_GetAll_ReturnsAllImages()
+    {
         _imageRepo.Add(CreateImage("img1", "png", 100, 100));
         _imageRepo.Add(CreateImage("img2", "jpg", 200, 200));
         await _imageRepo.SaveChanges();
@@ -263,7 +288,8 @@ public class MediaRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public void Image_GetAll_EmptyTable_ReturnsEmpty() {
+    public void Image_GetAll_EmptyTable_ReturnsEmpty()
+    {
         var result = _imageRepo.GetAll();
 
         result.Should().BeEmpty();
@@ -272,7 +298,8 @@ public class MediaRepositoryTests : IDisposable {
     // ── Get ─────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Image_Get_ExistingId_ReturnsImage() {
+    public async Task Image_Get_ExistingId_ReturnsImage()
+    {
         var image = CreateImage();
         _imageRepo.Add(image);
         await _imageRepo.SaveChanges();
@@ -284,7 +311,8 @@ public class MediaRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task Image_Get_NonExistentId_ReturnsNull() {
+    public async Task Image_Get_NonExistentId_ReturnsNull()
+    {
         var result = await _imageRepo.Get(Guid.NewGuid());
 
         result.Should().BeNull();
@@ -293,7 +321,8 @@ public class MediaRepositoryTests : IDisposable {
     // ── Update ──────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Image_Update_PersistsDimensionChanges() {
+    public async Task Image_Update_PersistsDimensionChanges()
+    {
         var image = CreateImage("photo", "png", 800, 600);
         _imageRepo.Add(image);
         await _imageRepo.SaveChanges();
@@ -312,7 +341,8 @@ public class MediaRepositoryTests : IDisposable {
     // ── Delete ──────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Image_Delete_RemovesImage() {
+    public async Task Image_Delete_RemovesImage()
+    {
         var image = CreateImage();
         _imageRepo.Add(image);
         await _imageRepo.SaveChanges();
@@ -327,14 +357,16 @@ public class MediaRepositoryTests : IDisposable {
     // ── Image inherits File properties ──────────────────────────────────
 
     [Fact]
-    public void Image_NameWithExtension_InheritsFromFile() {
+    public void Image_NameWithExtension_InheritsFromFile()
+    {
         var image = CreateImage("avatar", "webp");
 
         image.NameWithExtension.Should().Be("avatar.webp");
     }
 
     [Fact]
-    public async Task Image_InheritsFileBaseProperties() {
+    public async Task Image_InheritsFileBaseProperties()
+    {
         var image = CreateImage("chart", "svg", 400, 300);
         image.ContentType = "image/svg+xml";
         image.Size = 12345;

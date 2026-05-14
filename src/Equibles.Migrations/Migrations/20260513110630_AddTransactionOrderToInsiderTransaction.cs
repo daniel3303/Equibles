@@ -12,24 +12,28 @@ namespace Equibles.Migrations.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "IX_InsiderTransaction_AccessionNumber",
-                table: "InsiderTransaction");
+                table: "InsiderTransaction"
+            );
 
             migrationBuilder.DropIndex(
                 name: "IX_InsiderTransaction_CommonStockId_InsiderOwnerId_Transaction~",
-                table: "InsiderTransaction");
+                table: "InsiderTransaction"
+            );
 
             migrationBuilder.AddColumn<int>(
                 name: "TransactionOrder",
                 table: "InsiderTransaction",
                 type: "integer",
                 nullable: false,
-                defaultValue: 0);
+                defaultValue: 0
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_InsiderTransaction_AccessionNumber_TransactionOrder",
                 table: "InsiderTransaction",
                 columns: new[] { "AccessionNumber", "TransactionOrder" },
-                unique: true);
+                unique: true
+            );
         }
 
         /// <inheritdoc />
@@ -37,22 +41,35 @@ namespace Equibles.Migrations.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "IX_InsiderTransaction_AccessionNumber_TransactionOrder",
-                table: "InsiderTransaction");
+                table: "InsiderTransaction"
+            );
 
-            migrationBuilder.DropColumn(
-                name: "TransactionOrder",
-                table: "InsiderTransaction");
+            migrationBuilder.DropColumn(name: "TransactionOrder", table: "InsiderTransaction");
 
             migrationBuilder.CreateIndex(
                 name: "IX_InsiderTransaction_AccessionNumber",
                 table: "InsiderTransaction",
-                column: "AccessionNumber");
+                column: "AccessionNumber"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_InsiderTransaction_CommonStockId_InsiderOwnerId_Transaction~",
                 table: "InsiderTransaction",
-                columns: new[] { "CommonStockId", "InsiderOwnerId", "TransactionDate", "TransactionCode", "SecurityTitle", "AccessionNumber", "OwnershipNature", "Shares", "PricePerShare", "SharesOwnedAfter" },
-                unique: true);
+                columns: new[]
+                {
+                    "CommonStockId",
+                    "InsiderOwnerId",
+                    "TransactionDate",
+                    "TransactionCode",
+                    "SecurityTitle",
+                    "AccessionNumber",
+                    "OwnershipNature",
+                    "Shares",
+                    "PricePerShare",
+                    "SharesOwnedAfter",
+                },
+                unique: true
+            );
         }
     }
 }

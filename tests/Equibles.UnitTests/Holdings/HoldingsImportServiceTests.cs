@@ -5,14 +5,21 @@ using Equibles.Holdings.HostedService.Services;
 
 namespace Equibles.UnitTests.Holdings;
 
-public class HoldingsImportServiceTests {
+public class HoldingsImportServiceTests
+{
     // ── TryParseDateOnly ──
 
     [Theory]
     [InlineData("2024-03-15", 2024, 3, 15)]
     [InlineData("2019-12-31", 2019, 12, 31)]
     [InlineData("2000-01-01", 2000, 1, 1)]
-    public void TryParseDateOnly_IsoFormat_ParsesCorrectly(string input, int year, int month, int day) {
+    public void TryParseDateOnly_IsoFormat_ParsesCorrectly(
+        string input,
+        int year,
+        int month,
+        int day
+    )
+    {
         var success = HoldingsParsingHelper.TryParseDateOnly(input, out var result);
 
         success.Should().BeTrue();
@@ -23,7 +30,13 @@ public class HoldingsImportServiceTests {
     [InlineData("31-DEC-2019", 2019, 12, 31)]
     [InlineData("01-JAN-2020", 2020, 1, 1)]
     [InlineData("15-MAR-2024", 2024, 3, 15)]
-    public void TryParseDateOnly_SecFormat_ParsesCorrectly(string input, int year, int month, int day) {
+    public void TryParseDateOnly_SecFormat_ParsesCorrectly(
+        string input,
+        int year,
+        int month,
+        int day
+    )
+    {
         var success = HoldingsParsingHelper.TryParseDateOnly(input, out var result);
 
         success.Should().BeTrue();
@@ -35,7 +48,8 @@ public class HoldingsImportServiceTests {
     [InlineData("")]
     [InlineData("not-a-date")]
     [InlineData("xyz-abc-1234")]
-    public void TryParseDateOnly_InvalidInput_ReturnsFalse(string input) {
+    public void TryParseDateOnly_InvalidInput_ReturnsFalse(string input)
+    {
         var success = HoldingsParsingHelper.TryParseDateOnly(input, out _);
 
         success.Should().BeFalse();
@@ -48,7 +62,8 @@ public class HoldingsImportServiceTests {
     [InlineData("sh", ShareType.Shares)]
     [InlineData("PRN", ShareType.Principal)]
     [InlineData("prn", ShareType.Principal)]
-    public void ParseShareType_ValidInput_ReturnsCorrectType(string input, ShareType expected) {
+    public void ParseShareType_ValidInput_ReturnsCorrectType(string input, ShareType expected)
+    {
         HoldingsParsingHelper.ParseShareType(input).Should().Be(expected);
     }
 
@@ -56,7 +71,8 @@ public class HoldingsImportServiceTests {
     [InlineData(null)]
     [InlineData("")]
     [InlineData("UNKNOWN")]
-    public void ParseShareType_InvalidOrNull_DefaultsToShares(string input) {
+    public void ParseShareType_InvalidOrNull_DefaultsToShares(string input)
+    {
         HoldingsParsingHelper.ParseShareType(input).Should().Be(ShareType.Shares);
     }
 
@@ -67,7 +83,8 @@ public class HoldingsImportServiceTests {
     [InlineData("put", OptionType.Put)]
     [InlineData("CALL", OptionType.Call)]
     [InlineData("call", OptionType.Call)]
-    public void ParseOptionType_ValidInput_ReturnsCorrectType(string input, OptionType expected) {
+    public void ParseOptionType_ValidInput_ReturnsCorrectType(string input, OptionType expected)
+    {
         HoldingsParsingHelper.ParseOptionType(input).Should().Be(expected);
     }
 
@@ -75,7 +92,8 @@ public class HoldingsImportServiceTests {
     [InlineData(null)]
     [InlineData("")]
     [InlineData("UNKNOWN")]
-    public void ParseOptionType_InvalidOrNull_ReturnsNull(string input) {
+    public void ParseOptionType_InvalidOrNull_ReturnsNull(string input)
+    {
         HoldingsParsingHelper.ParseOptionType(input).Should().BeNull();
     }
 
@@ -86,7 +104,11 @@ public class HoldingsImportServiceTests {
     [InlineData("sole", InvestmentDiscretion.Sole)]
     [InlineData("DFND", InvestmentDiscretion.Defined)]
     [InlineData("OTR", InvestmentDiscretion.Other)]
-    public void ParseInvestmentDiscretion_ValidInput_ReturnsCorrectValue(string input, InvestmentDiscretion expected) {
+    public void ParseInvestmentDiscretion_ValidInput_ReturnsCorrectValue(
+        string input,
+        InvestmentDiscretion expected
+    )
+    {
         HoldingsParsingHelper.ParseInvestmentDiscretion(input).Should().Be(expected);
     }
 
@@ -94,8 +116,12 @@ public class HoldingsImportServiceTests {
     [InlineData(null)]
     [InlineData("")]
     [InlineData("UNKNOWN")]
-    public void ParseInvestmentDiscretion_InvalidOrNull_DefaultsToSole(string input) {
-        HoldingsParsingHelper.ParseInvestmentDiscretion(input).Should().Be(InvestmentDiscretion.Sole);
+    public void ParseInvestmentDiscretion_InvalidOrNull_DefaultsToSole(string input)
+    {
+        HoldingsParsingHelper
+            .ParseInvestmentDiscretion(input)
+            .Should()
+            .Be(InvestmentDiscretion.Sole);
     }
 
     // ── ParseLong ──
@@ -105,7 +131,8 @@ public class HoldingsImportServiceTests {
     [InlineData("0", 0)]
     [InlineData("-100", -100)]
     [InlineData("1000000", 1_000_000)]
-    public void ParseLong_ValidInput_ReturnsValue(string input, long expected) {
+    public void ParseLong_ValidInput_ReturnsValue(string input, long expected)
+    {
         HoldingsParsingHelper.ParseLong(input).Should().Be(expected);
     }
 
@@ -113,14 +140,16 @@ public class HoldingsImportServiceTests {
     [InlineData(null)]
     [InlineData("")]
     [InlineData("abc")]
-    public void ParseLong_InvalidOrNull_ReturnsZero(string input) {
+    public void ParseLong_InvalidOrNull_ReturnsZero(string input)
+    {
         HoldingsParsingHelper.ParseLong(input).Should().Be(0);
     }
 
     // ── ParseNullableInt ──
 
     [Fact]
-    public void ParseNullableInt_ValidInput_ReturnsValue() {
+    public void ParseNullableInt_ValidInput_ReturnsValue()
+    {
         HoldingsParsingHelper.ParseNullableInt("42").Should().Be(42);
     }
 
@@ -128,21 +157,24 @@ public class HoldingsImportServiceTests {
     [InlineData(null)]
     [InlineData("")]
     [InlineData("abc")]
-    public void ParseNullableInt_InvalidOrNull_ReturnsNull(string input) {
+    public void ParseNullableInt_InvalidOrNull_ReturnsNull(string input)
+    {
         HoldingsParsingHelper.ParseNullableInt(input).Should().BeNull();
     }
 
     // ── GetValue ──
 
     [Fact]
-    public void GetValue_KeyExists_ReturnsValue() {
+    public void GetValue_KeyExists_ReturnsValue()
+    {
         var row = new Dictionary<string, string> { ["NAME"] = "Test" };
 
         HoldingsParsingHelper.GetValue(row, "NAME").Should().Be("Test");
     }
 
     [Fact]
-    public void GetValue_KeyMissing_ReturnsNull() {
+    public void GetValue_KeyMissing_ReturnsNull()
+    {
         var row = new Dictionary<string, string>();
 
         HoldingsParsingHelper.GetValue(row, "MISSING").Should().BeNull();
@@ -151,9 +183,11 @@ public class HoldingsImportServiceTests {
     // ── FindEntry ──
 
     [Fact]
-    public void FindEntry_FlatArchive_FindsByName() {
+    public void FindEntry_FlatArchive_FindsByName()
+    {
         using var stream = new MemoryStream();
-        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true)) {
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
             archive.CreateEntry("SUBMISSION.tsv");
         }
 
@@ -166,9 +200,11 @@ public class HoldingsImportServiceTests {
     }
 
     [Fact]
-    public void FindEntry_NestedArchive_FindsByFileName() {
+    public void FindEntry_NestedArchive_FindsByFileName()
+    {
         using var stream = new MemoryStream();
-        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true)) {
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
             archive.CreateEntry("subfolder/SUBMISSION.tsv");
         }
 
@@ -181,9 +217,11 @@ public class HoldingsImportServiceTests {
     }
 
     [Fact]
-    public void FindEntry_MissingFile_ReturnsNull() {
+    public void FindEntry_MissingFile_ReturnsNull()
+    {
         using var stream = new MemoryStream();
-        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true)) {
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
             archive.CreateEntry("OTHER.tsv");
         }
 
@@ -196,40 +234,57 @@ public class HoldingsImportServiceTests {
     // ── ResolveManagerName ──
 
     [Fact]
-    public void ResolveManagerName_NullManagerNumber_ReturnsNull() {
-        var context = new ImportContext {
-            OtherManagers = new Dictionary<string, Dictionary<int, string>>()
+    public void ResolveManagerName_NullManagerNumber_ReturnsNull()
+    {
+        var context = new ImportContext
+        {
+            OtherManagers = new Dictionary<string, Dictionary<int, string>>(),
         };
 
         HoldingsParsingHelper.ResolveManagerName(context, "ACC-001", null).Should().BeNull();
     }
 
     [Fact]
-    public void ResolveManagerName_FoundInMapping_ReturnsName() {
-        var context = new ImportContext {
-            OtherManagers = new Dictionary<string, Dictionary<int, string>>(StringComparer.OrdinalIgnoreCase) {
-                ["ACC-001"] = new() { [1] = "Goldman Sachs" }
-            }
+    public void ResolveManagerName_FoundInMapping_ReturnsName()
+    {
+        var context = new ImportContext
+        {
+            OtherManagers = new Dictionary<string, Dictionary<int, string>>(
+                StringComparer.OrdinalIgnoreCase
+            )
+            {
+                ["ACC-001"] = new() { [1] = "Goldman Sachs" },
+            },
         };
 
-        HoldingsParsingHelper.ResolveManagerName(context, "ACC-001", 1).Should().Be("Goldman Sachs");
+        HoldingsParsingHelper
+            .ResolveManagerName(context, "ACC-001", 1)
+            .Should()
+            .Be("Goldman Sachs");
     }
 
     [Fact]
-    public void ResolveManagerName_AccessionMissing_ReturnsNull() {
-        var context = new ImportContext {
-            OtherManagers = new Dictionary<string, Dictionary<int, string>>()
+    public void ResolveManagerName_AccessionMissing_ReturnsNull()
+    {
+        var context = new ImportContext
+        {
+            OtherManagers = new Dictionary<string, Dictionary<int, string>>(),
         };
 
         HoldingsParsingHelper.ResolveManagerName(context, "ACC-999", 1).Should().BeNull();
     }
 
     [Fact]
-    public void ResolveManagerName_SequenceNumberMissing_ReturnsNull() {
-        var context = new ImportContext {
-            OtherManagers = new Dictionary<string, Dictionary<int, string>>(StringComparer.OrdinalIgnoreCase) {
-                ["ACC-001"] = new() { [1] = "Goldman Sachs" }
-            }
+    public void ResolveManagerName_SequenceNumberMissing_ReturnsNull()
+    {
+        var context = new ImportContext
+        {
+            OtherManagers = new Dictionary<string, Dictionary<int, string>>(
+                StringComparer.OrdinalIgnoreCase
+            )
+            {
+                ["ACC-001"] = new() { [1] = "Goldman Sachs" },
+            },
         };
 
         HoldingsParsingHelper.ResolveManagerName(context, "ACC-001", 99).Should().BeNull();
@@ -238,12 +293,27 @@ public class HoldingsImportServiceTests {
     // ── DeduplicateSubmissions ──
 
     [Fact]
-    public void DeduplicateSubmissions_NoDuplicates_KeepsAll() {
-        var context = new ImportContext {
-            Submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase) {
-                ["ACC-001"] = new() { AccessionNumber = "ACC-001", Cik = "CIK1", PeriodOfReport = "2024-01-01", FilingDate = "2024-01-15" },
-                ["ACC-002"] = new() { AccessionNumber = "ACC-002", Cik = "CIK2", PeriodOfReport = "2024-01-01", FilingDate = "2024-01-15" },
-            }
+    public void DeduplicateSubmissions_NoDuplicates_KeepsAll()
+    {
+        var context = new ImportContext
+        {
+            Submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ACC-001"] = new()
+                {
+                    AccessionNumber = "ACC-001",
+                    Cik = "CIK1",
+                    PeriodOfReport = "2024-01-01",
+                    FilingDate = "2024-01-15",
+                },
+                ["ACC-002"] = new()
+                {
+                    AccessionNumber = "ACC-002",
+                    Cik = "CIK2",
+                    PeriodOfReport = "2024-01-01",
+                    FilingDate = "2024-01-15",
+                },
+            },
         };
 
         HoldingsImportService.DeduplicateSubmissions(context);
@@ -252,13 +322,34 @@ public class HoldingsImportServiceTests {
     }
 
     [Fact]
-    public void DeduplicateSubmissions_DuplicateCikAndPeriod_KeepsLatestByFilingDate() {
-        var context = new ImportContext {
-            Submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase) {
-                ["ACC-001"] = new() { AccessionNumber = "ACC-001", Cik = "CIK1", PeriodOfReport = "2024-03-31", FilingDate = "2024-04-01" },
-                ["ACC-002"] = new() { AccessionNumber = "ACC-002", Cik = "CIK1", PeriodOfReport = "2024-03-31", FilingDate = "2024-05-01" },
-                ["ACC-003"] = new() { AccessionNumber = "ACC-003", Cik = "CIK2", PeriodOfReport = "2024-03-31", FilingDate = "2024-04-01" },
-            }
+    public void DeduplicateSubmissions_DuplicateCikAndPeriod_KeepsLatestByFilingDate()
+    {
+        var context = new ImportContext
+        {
+            Submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ACC-001"] = new()
+                {
+                    AccessionNumber = "ACC-001",
+                    Cik = "CIK1",
+                    PeriodOfReport = "2024-03-31",
+                    FilingDate = "2024-04-01",
+                },
+                ["ACC-002"] = new()
+                {
+                    AccessionNumber = "ACC-002",
+                    Cik = "CIK1",
+                    PeriodOfReport = "2024-03-31",
+                    FilingDate = "2024-05-01",
+                },
+                ["ACC-003"] = new()
+                {
+                    AccessionNumber = "ACC-003",
+                    Cik = "CIK2",
+                    PeriodOfReport = "2024-03-31",
+                    FilingDate = "2024-04-01",
+                },
+            },
         };
 
         HoldingsImportService.DeduplicateSubmissions(context);
@@ -270,12 +361,27 @@ public class HoldingsImportServiceTests {
     }
 
     [Fact]
-    public void DeduplicateSubmissions_IdenticalFilingDates_KeepsOnePerGroup() {
-        var context = new ImportContext {
-            Submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase) {
-                ["ACC-001"] = new() { AccessionNumber = "ACC-001", Cik = "CIK1", PeriodOfReport = "2024-03-31", FilingDate = "2024-04-15" },
-                ["ACC-002"] = new() { AccessionNumber = "ACC-002", Cik = "CIK1", PeriodOfReport = "2024-03-31", FilingDate = "2024-04-15" },
-            }
+    public void DeduplicateSubmissions_IdenticalFilingDates_KeepsOnePerGroup()
+    {
+        var context = new ImportContext
+        {
+            Submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ACC-001"] = new()
+                {
+                    AccessionNumber = "ACC-001",
+                    Cik = "CIK1",
+                    PeriodOfReport = "2024-03-31",
+                    FilingDate = "2024-04-15",
+                },
+                ["ACC-002"] = new()
+                {
+                    AccessionNumber = "ACC-002",
+                    Cik = "CIK1",
+                    PeriodOfReport = "2024-03-31",
+                    FilingDate = "2024-04-15",
+                },
+            },
         };
 
         HoldingsImportService.DeduplicateSubmissions(context);
@@ -286,12 +392,27 @@ public class HoldingsImportServiceTests {
     }
 
     [Fact]
-    public void DeduplicateSubmissions_MissingCikOrPeriod_SkippedFromGrouping() {
-        var context = new ImportContext {
-            Submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase) {
-                ["ACC-001"] = new() { AccessionNumber = "ACC-001", Cik = null, PeriodOfReport = "2024-01-01", FilingDate = "2024-01-01" },
-                ["ACC-002"] = new() { AccessionNumber = "ACC-002", Cik = "CIK1", PeriodOfReport = null, FilingDate = "2024-01-01" },
-            }
+    public void DeduplicateSubmissions_MissingCikOrPeriod_SkippedFromGrouping()
+    {
+        var context = new ImportContext
+        {
+            Submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ACC-001"] = new()
+                {
+                    AccessionNumber = "ACC-001",
+                    Cik = null,
+                    PeriodOfReport = "2024-01-01",
+                    FilingDate = "2024-01-01",
+                },
+                ["ACC-002"] = new()
+                {
+                    AccessionNumber = "ACC-002",
+                    Cik = "CIK1",
+                    PeriodOfReport = null,
+                    FilingDate = "2024-01-01",
+                },
+            },
         };
 
         HoldingsImportService.DeduplicateSubmissions(context);

@@ -1,14 +1,14 @@
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
-using Equibles.Errors.BusinessLogic;
 using Equibles.CommonStocks.Data.Models;
-using Equibles.Sec.Data.Models;
+using Equibles.CommonStocks.Repositories;
+using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.InsiderTrading.Data.Models;
-using Equibles.CommonStocks.Repositories;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
+using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Contracts;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,24 +18,30 @@ namespace Equibles.Sec.HostedService.Services;
 /// Processes SEC Form 3 and Form 4 filings by parsing the ownership XML
 /// into structured InsiderOwner + InsiderTransaction database records.
 /// </summary>
-public class InsiderTradingFilingProcessor : IFilingProcessor {
+public class InsiderTradingFilingProcessor : IFilingProcessor
+{
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<InsiderTradingFilingProcessor> _logger;
     private readonly ErrorReporter _errorReporter;
 
-    public InsiderTradingFilingProcessor(IServiceScopeFactory scopeFactory,
+    public InsiderTradingFilingProcessor(
+        IServiceScopeFactory scopeFactory,
         ILogger<InsiderTradingFilingProcessor> logger,
-        ErrorReporter errorReporter) {
+        ErrorReporter errorReporter
+    )
+    {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _errorReporter = errorReporter;
     }
 
-    public bool CanProcess(DocumentType documentType) {
+    public bool CanProcess(DocumentType documentType)
+    {
         return documentType == DocumentType.FormFour || documentType == DocumentType.FormThree;
     }
 
-    public async Task<bool> Process(FilingData filing, CommonStock companyOutContext) {
+    public async Task<bool> Process(FilingData filing, CommonStock companyOutContext)
+    {
         // Capture IDs from the outer-scope entity to avoid leaking untracked entities into inner scope
         var companyId = companyOutContext.Id;
         var companyTicker = companyOutContext.Ticker;
@@ -43,43 +49,73 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var secEdgarClient = scope.ServiceProvider.GetRequiredService<ISecEdgarClient>();
         var ownerRepository = scope.ServiceProvider.GetRequiredService<InsiderOwnerRepository>();
-        var transactionRepository = scope.ServiceProvider.GetRequiredService<InsiderTransactionRepository>();
+        var transactionRepository =
+            scope.ServiceProvider.GetRequiredService<InsiderTransactionRepository>();
 
         // Check if already imported by accession number
-        var existing = await transactionRepository.GetByAccessionNumber(filing.AccessionNumber).AnyAsync();
-        if (existing) return false;
+        var existing = await transactionRepository
+            .GetByAccessionNumber(filing.AccessionNumber)
+            .AnyAsync();
+        if (existing)
+            return false;
 
         // Fetch the XML document from SEC
         var xmlContent = await secEdgarClient.GetDocumentContent(filing);
-        if (string.IsNullOrWhiteSpace(xmlContent)) {
-            _logger.LogWarning("Empty content for {Ticker} Form {Form} - {AccessionNumber}",
-                companyTicker, filing.Form, filing.AccessionNumber);
+        if (string.IsNullOrWhiteSpace(xmlContent))
+        {
+            _logger.LogWarning(
+                "Empty content for {Ticker} Form {Form} - {AccessionNumber}",
+                companyTicker,
+                filing.Form,
+                filing.AccessionNumber
+            );
             return false;
         }
 
         // Parse XML
         XDocument doc;
-        try {
+        try
+        {
             doc = XDocument.Parse(SanitizeXml(xmlContent));
-        } catch (Exception ex) {
-            _logger.LogWarning(ex, "Failed to parse XML for {Ticker} - {AccessionNumber}",
-                companyTicker, filing.AccessionNumber);
-            await _errorReporter.Report(ErrorSource.DocumentScraper, "InsiderTrading.ParseXml", ex.Message, ex.StackTrace, $"ticker: {companyTicker}, accession: {filing.AccessionNumber}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to parse XML for {Ticker} - {AccessionNumber}",
+                companyTicker,
+                filing.AccessionNumber
+            );
+            await _errorReporter.Report(
+                ErrorSource.DocumentScraper,
+                "InsiderTrading.ParseXml",
+                ex.Message,
+                ex.StackTrace,
+                $"ticker: {companyTicker}, accession: {filing.AccessionNumber}"
+            );
             return false;
         }
 
         var root = doc.Root;
-        if (root == null) {
-            _logger.LogWarning("Parsed XML has no root element for {Ticker} - {AccessionNumber}",
-                companyTicker, filing.AccessionNumber);
+        if (root == null)
+        {
+            _logger.LogWarning(
+                "Parsed XML has no root element for {Ticker} - {AccessionNumber}",
+                companyTicker,
+                filing.AccessionNumber
+            );
             return false;
         }
 
         // Extract reporting owner
         var ownerElement = root.Element("reportingOwner");
-        if (ownerElement == null) {
-            _logger.LogWarning("Missing reportingOwner element for {Ticker} - {AccessionNumber}",
-                companyOutContext.Ticker, filing.AccessionNumber);
+        if (ownerElement == null)
+        {
+            _logger.LogWarning(
+                "Missing reportingOwner element for {Ticker} - {AccessionNumber}",
+                companyOutContext.Ticker,
+                filing.AccessionNumber
+            );
             return false;
         }
 
@@ -87,19 +123,25 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         var ownerCik = ownerId?.Element("rptOwnerCik")?.Value?.Trim();
         var ownerName = ownerId?.Element("rptOwnerName")?.Value?.Trim();
 
-        if (string.IsNullOrEmpty(ownerCik) || string.IsNullOrEmpty(ownerName)) {
-            _logger.LogWarning("Missing owner CIK or name for {Ticker} - {AccessionNumber}",
-                companyOutContext.Ticker, filing.AccessionNumber);
+        if (string.IsNullOrEmpty(ownerCik) || string.IsNullOrEmpty(ownerName))
+        {
+            _logger.LogWarning(
+                "Missing owner CIK or name for {Ticker} - {AccessionNumber}",
+                companyOutContext.Ticker,
+                filing.AccessionNumber
+            );
             return false;
         }
 
         // Upsert insider owner
         var owner = await ownerRepository.GetByOwnerCik(ownerCik);
-        if (owner == null) {
+        if (owner == null)
+        {
             var ownerAddress = ownerElement.Element("reportingOwnerAddress");
             var ownerRelationship = ownerElement.Element("reportingOwnerRelationship");
 
-            owner = new InsiderOwner {
+            owner = new InsiderOwner
+            {
                 OwnerCik = ownerCik,
                 Name = ownerName,
                 City = ownerAddress?.Element("rptOwnerCity")?.Value?.Trim(),
@@ -107,7 +149,9 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
                 IsDirector = ParseBool(ownerRelationship?.Element("isDirector")?.Value),
                 IsOfficer = ParseBool(ownerRelationship?.Element("isOfficer")?.Value),
                 OfficerTitle = ownerRelationship?.Element("officerTitle")?.Value?.Trim(),
-                IsTenPercentOwner = ParseBool(ownerRelationship?.Element("isTenPercentOwner")?.Value)
+                IsTenPercentOwner = ParseBool(
+                    ownerRelationship?.Element("isTenPercentOwner")?.Value
+                ),
             };
 
             ownerRepository.Add(owner);
@@ -127,50 +171,65 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         // The XML's document order is the only natural identity Form 4 transactions have.
         var transactions = new List<InsiderTransaction>();
 
-        void AddParsed(InsiderTransaction tx) {
-            if (tx == null) return;
+        void AddParsed(InsiderTransaction tx)
+        {
+            if (tx == null)
+                return;
             tx.TransactionOrder = transactions.Count;
             transactions.Add(tx);
         }
 
         var nonDerivTable = root.Element("nonDerivativeTable");
-        if (nonDerivTable != null) {
-            foreach (var txElement in nonDerivTable.Elements("nonDerivativeTransaction")) {
+        if (nonDerivTable != null)
+        {
+            foreach (var txElement in nonDerivTable.Elements("nonDerivativeTransaction"))
+            {
                 AddParsed(ParseTransaction(txElement, owner, companyId, filing, isAmendment));
             }
 
-            foreach (var holdingElement in nonDerivTable.Elements("nonDerivativeHolding")) {
+            foreach (var holdingElement in nonDerivTable.Elements("nonDerivativeHolding"))
+            {
                 AddParsed(ParseHolding(holdingElement, owner, companyId, filing, isAmendment));
             }
         }
 
         var derivTable = root.Element("derivativeTable");
-        if (derivTable != null) {
-            foreach (var txElement in derivTable.Elements("derivativeTransaction")) {
+        if (derivTable != null)
+        {
+            foreach (var txElement in derivTable.Elements("derivativeTransaction"))
+            {
                 AddParsed(ParseTransaction(txElement, owner, companyId, filing, isAmendment));
             }
 
-            foreach (var holdingElement in derivTable.Elements("derivativeHolding")) {
+            foreach (var holdingElement in derivTable.Elements("derivativeHolding"))
+            {
                 AddParsed(ParseHolding(holdingElement, owner, companyId, filing, isAmendment));
             }
         }
 
-        if (transactions.Count == 0) {
+        if (transactions.Count == 0)
+        {
             // Form 3 with noSecuritiesOwned — save a 0-shares record so the accession-number
             // short-circuit at the top of Process() prevents re-fetching this filing every cycle.
-            _logger.LogDebug("No transactions found for {Ticker} - {AccessionNumber}, saving 0-shares holding",
-                companyTicker, filing.AccessionNumber);
+            _logger.LogDebug(
+                "No transactions found for {Ticker} - {AccessionNumber}, saving 0-shares holding",
+                companyTicker,
+                filing.AccessionNumber
+            );
 
-            transactionRepository.Add(new InsiderTransaction {
-                InsiderOwnerId = owner.Id,
-                CommonStockId = companyId,
-                FilingDate = filing.FilingDate,
-                TransactionDate = filing.ReportDate,
-                TransactionCode = TransactionCode.Other,
-                AccessionNumber = filing.AccessionNumber,
-                SecurityTitle = "No Securities Owned",
-                TransactionOrder = 0,
-            });
+            transactionRepository.Add(
+                new InsiderTransaction
+                {
+                    InsiderOwnerId = owner.Id,
+                    CommonStockId = companyId,
+                    FilingDate = filing.FilingDate,
+                    TransactionDate = filing.ReportDate,
+                    TransactionCode = TransactionCode.Other,
+                    AccessionNumber = filing.AccessionNumber,
+                    SecurityTitle = "No Securities Owned",
+                    TransactionOrder = 0,
+                }
+            );
             await transactionRepository.SaveChanges();
 
             return true;
@@ -180,32 +239,69 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         // XML position, so the (AccessionNumber, TransactionOrder) unique index can't collide
         // within a single filing. Duplicate full-filing re-imports are stopped by the
         // GetByAccessionNumber(...).AnyAsync() check at the top of Process().
-        foreach (var tx in transactions) {
+        foreach (var tx in transactions)
+        {
             transactionRepository.Add(tx);
         }
 
         await transactionRepository.SaveChanges();
 
-        _logger.LogInformation("Imported {Count} insider transactions for {Ticker} from {Form} - {AccessionNumber}",
-            transactions.Count, companyTicker, filing.Form, filing.AccessionNumber);
+        _logger.LogInformation(
+            "Imported {Count} insider transactions for {Ticker} from {Form} - {AccessionNumber}",
+            transactions.Count,
+            companyTicker,
+            filing.Form,
+            filing.AccessionNumber
+        );
 
         return true;
     }
 
-    private InsiderTransaction ParseTransaction(XElement txElement,
-        InsiderOwner owner, Guid companyId, FilingData filing, bool isAmendment) {
+    private InsiderTransaction ParseTransaction(
+        XElement txElement,
+        InsiderOwner owner,
+        Guid companyId,
+        FilingData filing,
+        bool isAmendment
+    )
+    {
         var securityTitle = txElement.Element("securityTitle")?.Element("value")?.Value?.Trim();
         var transactionDateStr = txElement.Element("transactionDate")?.Element("value")?.Value;
-        var codeStr = txElement.Element("transactionCoding")?.Element("transactionCode")?.Value?.Trim();
-        var sharesStr = txElement.Element("transactionAmounts")?.Element("transactionShares")?.Element("value")?.Value;
-        var priceStr = txElement.Element("transactionAmounts")?.Element("transactionPricePerShare")?.Element("value")?.Value;
-        var adCode = txElement.Element("transactionAmounts")?.Element("transactionAcquiredDisposedCode")?.Element("value")?.Value?.Trim();
-        var sharesAfterStr = txElement.Element("postTransactionAmounts")?.Element("sharesOwnedFollowingTransaction")?.Element("value")?.Value;
-        var ownership = txElement.Element("ownershipNature")?.Element("directOrIndirectOwnership")?.Element("value")?.Value?.Trim();
+        var codeStr = txElement
+            .Element("transactionCoding")
+            ?.Element("transactionCode")
+            ?.Value?.Trim();
+        var sharesStr = txElement
+            .Element("transactionAmounts")
+            ?.Element("transactionShares")
+            ?.Element("value")
+            ?.Value;
+        var priceStr = txElement
+            .Element("transactionAmounts")
+            ?.Element("transactionPricePerShare")
+            ?.Element("value")
+            ?.Value;
+        var adCode = txElement
+            .Element("transactionAmounts")
+            ?.Element("transactionAcquiredDisposedCode")
+            ?.Element("value")
+            ?.Value?.Trim();
+        var sharesAfterStr = txElement
+            .Element("postTransactionAmounts")
+            ?.Element("sharesOwnedFollowingTransaction")
+            ?.Element("value")
+            ?.Value;
+        var ownership = txElement
+            .Element("ownershipNature")
+            ?.Element("directOrIndirectOwnership")
+            ?.Element("value")
+            ?.Value?.Trim();
 
-        if (!DateOnly.TryParse(transactionDateStr, out var transactionDate)) return null;
+        if (!DateOnly.TryParse(transactionDateStr, out var transactionDate))
+            return null;
 
-        return new InsiderTransaction {
+        return new InsiderTransaction
+        {
             InsiderOwnerId = owner.Id,
             CommonStockId = companyId,
             FilingDate = filing.FilingDate,
@@ -213,22 +309,41 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
             TransactionCode = ParseTransactionCode(codeStr),
             Shares = ParseLong(sharesStr),
             PricePerShare = ParseDecimal(priceStr),
-            AcquiredDisposed = adCode == "D" ? AcquiredDisposed.Disposed : AcquiredDisposed.Acquired,
+            AcquiredDisposed =
+                adCode == "D" ? AcquiredDisposed.Disposed : AcquiredDisposed.Acquired,
             SharesOwnedAfter = ParseLong(sharesAfterStr),
             OwnershipNature = ownership == "I" ? OwnershipNature.Indirect : OwnershipNature.Direct,
             SecurityTitle = securityTitle,
             AccessionNumber = filing.AccessionNumber,
-            IsAmendment = isAmendment
+            IsAmendment = isAmendment,
         };
     }
 
-    private InsiderTransaction ParseHolding(XElement holdingElement,
-        InsiderOwner owner, Guid companyId, FilingData filing, bool isAmendment) {
-        var securityTitle = holdingElement.Element("securityTitle")?.Element("value")?.Value?.Trim();
-        var sharesStr = holdingElement.Element("postTransactionAmounts")?.Element("sharesOwnedFollowingTransaction")?.Element("value")?.Value;
-        var ownership = holdingElement.Element("ownershipNature")?.Element("directOrIndirectOwnership")?.Element("value")?.Value?.Trim();
+    private InsiderTransaction ParseHolding(
+        XElement holdingElement,
+        InsiderOwner owner,
+        Guid companyId,
+        FilingData filing,
+        bool isAmendment
+    )
+    {
+        var securityTitle = holdingElement
+            .Element("securityTitle")
+            ?.Element("value")
+            ?.Value?.Trim();
+        var sharesStr = holdingElement
+            .Element("postTransactionAmounts")
+            ?.Element("sharesOwnedFollowingTransaction")
+            ?.Element("value")
+            ?.Value;
+        var ownership = holdingElement
+            .Element("ownershipNature")
+            ?.Element("directOrIndirectOwnership")
+            ?.Element("value")
+            ?.Value?.Trim();
 
-        return new InsiderTransaction {
+        return new InsiderTransaction
+        {
             InsiderOwnerId = owner.Id,
             CommonStockId = companyId,
             FilingDate = filing.FilingDate,
@@ -241,16 +356,18 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
             OwnershipNature = ownership == "I" ? OwnershipNature.Indirect : OwnershipNature.Direct,
             SecurityTitle = securityTitle,
             AccessionNumber = filing.AccessionNumber,
-            IsAmendment = isAmendment
+            IsAmendment = isAmendment,
         };
     }
 
-    internal static string SanitizeXml(string xml) {
+    internal static string SanitizeXml(string xml)
+    {
         // SEC filings wrap the actual XML inside an SGML envelope.
         // Extract the XML content from within <XML>...</XML> tags.
         var xmlStart = xml.IndexOf("<XML>", StringComparison.OrdinalIgnoreCase);
         var xmlEnd = xml.IndexOf("</XML>", StringComparison.OrdinalIgnoreCase);
-        if (xmlStart >= 0 && xmlEnd > xmlStart) {
+        if (xmlStart >= 0 && xmlEnd > xmlStart)
+        {
             xml = xml[(xmlStart + 5)..xmlEnd].Trim();
         }
 
@@ -258,8 +375,10 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
         return Regex.Replace(xml, @"&(?!(amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)", "&amp;");
     }
 
-    internal static TransactionCode ParseTransactionCode(string code) {
-        return code?.ToUpperInvariant() switch {
+    internal static TransactionCode ParseTransactionCode(string code)
+    {
+        return code?.ToUpperInvariant() switch
+        {
             "P" => TransactionCode.Purchase,
             "S" => TransactionCode.Sale,
             "A" => TransactionCode.Award,
@@ -270,23 +389,33 @@ public class InsiderTradingFilingProcessor : IFilingProcessor {
             "G" => TransactionCode.Gift,
             "I" => TransactionCode.Inheritance,
             "W" => TransactionCode.Discretionary,
-            _ => TransactionCode.Other
+            _ => TransactionCode.Other,
         };
     }
 
-    internal static bool ParseBool(string value) {
+    internal static bool ParseBool(string value)
+    {
         return value is "1" or "true" or "True" or "TRUE";
     }
 
-    internal static long ParseLong(string value) {
-        if (string.IsNullOrEmpty(value)) return 0;
+    internal static long ParseLong(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return 0;
         return long.TryParse(value, out var result) ? result : (long)ParseDecimal(value);
     }
 
-    internal static decimal ParseDecimal(string value) {
-        if (string.IsNullOrEmpty(value)) return 0;
-        return decimal.TryParse(value, System.Globalization.NumberStyles.Any,
-            System.Globalization.CultureInfo.InvariantCulture, out var result) ? result : 0;
+    internal static decimal ParseDecimal(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return 0;
+        return decimal.TryParse(
+            value,
+            System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var result
+        )
+            ? result
+            : 0;
     }
-
 }

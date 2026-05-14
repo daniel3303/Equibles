@@ -3,34 +3,39 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.UnitTests.Data;
 
-public class EquiblesModuleBuilderTests {
-    private class FakeModuleA : IModuleConfiguration {
+public class EquiblesModuleBuilderTests
+{
+    private class FakeModuleA : IModuleConfiguration
+    {
         public void ConfigureEntities(ModelBuilder builder) { }
     }
 
-    private class FakeModuleB : IModuleConfiguration {
+    private class FakeModuleB : IModuleConfiguration
+    {
         public void ConfigureEntities(ModelBuilder builder) { }
     }
 
     [Fact]
-    public void NewBuilder_HasEmptyModulesList() {
+    public void NewBuilder_HasEmptyModulesList()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.Modules.Should().BeEmpty();
     }
 
     [Fact]
-    public void AddModule_AddsModuleToList() {
+    public void AddModule_AddsModuleToList()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.AddModule<FakeModuleA>();
 
-        builder.Modules.Should().ContainSingle()
-            .Which.Should().BeOfType<FakeModuleA>();
+        builder.Modules.Should().ContainSingle().Which.Should().BeOfType<FakeModuleA>();
     }
 
     [Fact]
-    public void AddModule_SameTypeTwice_OnlyAddsOnce() {
+    public void AddModule_SameTypeTwice_OnlyAddsOnce()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.AddModule<FakeModuleA>();
@@ -40,7 +45,8 @@ public class EquiblesModuleBuilderTests {
     }
 
     [Fact]
-    public void AddModule_DifferentTypes_AddsBoth() {
+    public void AddModule_DifferentTypes_AddsBoth()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.AddModule<FakeModuleA>();
@@ -52,7 +58,8 @@ public class EquiblesModuleBuilderTests {
     }
 
     [Fact]
-    public void AddModule_ReturnsBuilder_ForFluentApi() {
+    public void AddModule_ReturnsBuilder_ForFluentApi()
+    {
         var builder = new EquiblesModuleBuilder();
 
         var result = builder.AddModule<FakeModuleA>();
@@ -61,7 +68,8 @@ public class EquiblesModuleBuilderTests {
     }
 
     [Fact]
-    public void AddAllModules_DoesNotDuplicateAlreadyAddedModules() {
+    public void AddAllModules_DoesNotDuplicateAlreadyAddedModules()
+    {
         // AddAllModules scans every loaded assembly for IModuleConfiguration
         // implementations. The composition root may explicitly call
         // AddModule<T>() for a specific module before invoking AddAllModules

@@ -15,16 +15,19 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Mcp;
 
-public class McpToolContextTests {
+public class McpToolContextTests
+{
     [Fact]
-    public void ToolName_CanBeSetAndRetrieved() {
+    public void ToolName_CanBeSetAndRetrieved()
+    {
         var context = new McpToolContext { ToolName = "TestTool" };
 
         context.ToolName.Should().Be("TestTool");
     }
 
     [Fact]
-    public void Arguments_DefaultsToEmptyDictionary() {
+    public void Arguments_DefaultsToEmptyDictionary()
+    {
         var context = new McpToolContext();
 
         context.Arguments.Should().NotBeNull();
@@ -32,11 +35,9 @@ public class McpToolContextTests {
     }
 
     [Fact]
-    public void Arguments_CanBeSetAndRetrieved() {
-        var args = new Dictionary<string, object> {
-            ["ticker"] = "AAPL",
-            ["maxResults"] = 10
-        };
+    public void Arguments_CanBeSetAndRetrieved()
+    {
+        var args = new Dictionary<string, object> { ["ticker"] = "AAPL", ["maxResults"] = 10 };
 
         var context = new McpToolContext { Arguments = args };
 
@@ -47,7 +48,8 @@ public class McpToolContextTests {
     }
 
     [Fact]
-    public void ServiceProvider_CanBeSetAndRetrieved() {
+    public void ServiceProvider_CanBeSetAndRetrieved()
+    {
         var serviceProvider = Substitute.For<IServiceProvider>();
 
         var context = new McpToolContext { ServiceProvider = serviceProvider };
@@ -56,21 +58,24 @@ public class McpToolContextTests {
     }
 
     [Fact]
-    public void ServiceProvider_DefaultsToNull() {
+    public void ServiceProvider_DefaultsToNull()
+    {
         var context = new McpToolContext();
 
         context.ServiceProvider.Should().BeNull();
     }
 
     [Fact]
-    public void AllProperties_CanBeSetTogether() {
+    public void AllProperties_CanBeSetTogether()
+    {
         var serviceProvider = Substitute.For<IServiceProvider>();
         var args = new Dictionary<string, object> { ["key"] = "value" };
 
-        var context = new McpToolContext {
+        var context = new McpToolContext
+        {
             ToolName = "MyTool",
             Arguments = args,
-            ServiceProvider = serviceProvider
+            ServiceProvider = serviceProvider,
         };
 
         context.ToolName.Should().Be("MyTool");
@@ -79,25 +84,32 @@ public class McpToolContextTests {
     }
 }
 
-public class McpModuleInterfaceTests {
+public class McpModuleInterfaceTests
+{
     [Theory]
     [MemberData(nameof(AllModuleTypes))]
-    public void Module_ImplementsIEquiblesMcpModule(Type moduleType) {
+    public void Module_ImplementsIEquiblesMcpModule(Type moduleType)
+    {
         moduleType.Should().Implement<IEquiblesMcpModule>();
     }
 
     [Theory]
     [MemberData(nameof(AllModuleTypes))]
-    public void Module_HasParameterlessConstructor(Type moduleType) {
+    public void Module_HasParameterlessConstructor(Type moduleType)
+    {
         var constructor = moduleType.GetConstructor(Type.EmptyTypes);
 
-        constructor.Should().NotBeNull(
-            $"{moduleType.Name} must have a parameterless constructor for AddModule<T>()");
+        constructor
+            .Should()
+            .NotBeNull(
+                $"{moduleType.Name} must have a parameterless constructor for AddModule<T>()"
+            );
     }
 
     [Theory]
     [MemberData(nameof(AllModuleTypes))]
-    public void Module_CanBeInstantiated(Type moduleType) {
+    public void Module_CanBeInstantiated(Type moduleType)
+    {
         var module = Activator.CreateInstance(moduleType);
 
         module.Should().NotBeNull();
@@ -106,7 +118,8 @@ public class McpModuleInterfaceTests {
 
     [Theory]
     [MemberData(nameof(AllModuleTypes))]
-    public void RegisterTools_DoesNotThrow(Type moduleType) {
+    public void RegisterTools_DoesNotThrow(Type moduleType)
+    {
         var module = (IEquiblesMcpModule)Activator.CreateInstance(moduleType)!;
         var mcpServerBuilder = Substitute.For<IMcpServerBuilder>();
         var services = new ServiceCollection();
@@ -117,7 +130,8 @@ public class McpModuleInterfaceTests {
     }
 
     public static TheoryData<Type> AllModuleTypes =>
-        new() {
+        new()
+        {
             typeof(AssemblyMcpModule<FredTools>),
             typeof(AssemblyMcpModule<InstitutionalHoldingsTools>),
             typeof(AssemblyMcpModule<InsiderTradingTools>),
@@ -126,83 +140,114 @@ public class McpModuleInterfaceTests {
             typeof(AssemblyMcpModule<CftcTools>),
             typeof(AssemblyMcpModule<CongressTools>),
             typeof(AssemblyMcpModule<ShortDataTools>),
-            typeof(AssemblyMcpModule<StockPriceTools>)
+            typeof(AssemblyMcpModule<StockPriceTools>),
         };
 }
 
-public class McpModuleToolDiscoveryTests {
+public class McpModuleToolDiscoveryTests
+{
     [Theory]
     [MemberData(nameof(ToolAssembliesWithExpectedTools))]
-    public void Module_ExposesExpectedTools(Type markerType, string[] expectedToolNames) {
+    public void Module_ExposesExpectedTools(Type markerType, string[] expectedToolNames)
+    {
         var toolNames = GetToolNamesFromAssembly(markerType.Assembly);
 
-        toolNames.Should().Contain(expectedToolNames,
-            $"{markerType.Name}'s assembly should expose all expected tools");
+        toolNames
+            .Should()
+            .Contain(
+                expectedToolNames,
+                $"{markerType.Name}'s assembly should expose all expected tools"
+            );
     }
 
     [Theory]
     [MemberData(nameof(ToolAssembliesWithExpectedTools))]
-    public void Module_ToolCount_MatchesExpected(Type markerType, string[] expectedToolNames) {
+    public void Module_ToolCount_MatchesExpected(Type markerType, string[] expectedToolNames)
+    {
         var toolNames = GetToolNamesFromAssembly(markerType.Assembly);
 
-        toolNames.Should().HaveCount(expectedToolNames.Length,
-            $"{markerType.Name}'s assembly should expose exactly {expectedToolNames.Length} tools");
+        toolNames
+            .Should()
+            .HaveCount(
+                expectedToolNames.Length,
+                $"{markerType.Name}'s assembly should expose exactly {expectedToolNames.Length} tools"
+            );
     }
 
     [Theory]
     [MemberData(nameof(AllToolMarkerTypes))]
-    public void Module_AllToolNames_AreNonEmpty(Type markerType) {
+    public void Module_AllToolNames_AreNonEmpty(Type markerType)
+    {
         var toolNames = GetToolNamesFromAssembly(markerType.Assembly);
 
-        toolNames.Should().NotBeEmpty(
-            $"{markerType.Name}'s assembly should expose at least one tool");
+        toolNames
+            .Should()
+            .NotBeEmpty($"{markerType.Name}'s assembly should expose at least one tool");
 
-        foreach (var name in toolNames) {
-            name.Should().NotBeNullOrWhiteSpace(
-                $"all tool names in {markerType.Name}'s assembly should be non-empty");
+        foreach (var name in toolNames)
+        {
+            name.Should()
+                .NotBeNullOrWhiteSpace(
+                    $"all tool names in {markerType.Name}'s assembly should be non-empty"
+                );
         }
     }
 
     [Theory]
     [MemberData(nameof(AllToolMarkerTypes))]
-    public void Module_AllToolClasses_HaveMcpServerToolTypeAttribute(Type markerType) {
-        var toolTypes = markerType.Assembly.GetTypes()
+    public void Module_AllToolClasses_HaveMcpServerToolTypeAttribute(Type markerType)
+    {
+        var toolTypes = markerType
+            .Assembly.GetTypes()
             .Where(t => t.GetCustomAttribute<McpServerToolTypeAttribute>() != null);
 
-        toolTypes.Should().NotBeEmpty(
-            $"{markerType.Name}'s assembly should contain at least one [McpServerToolType] class");
+        toolTypes
+            .Should()
+            .NotBeEmpty(
+                $"{markerType.Name}'s assembly should contain at least one [McpServerToolType] class"
+            );
     }
 
     [Theory]
     [MemberData(nameof(AllToolMarkerTypes))]
-    public void Module_AllToolMethods_HaveDescriptionAttribute(Type markerType) {
-        var toolMethods = markerType.Assembly.GetTypes()
+    public void Module_AllToolMethods_HaveDescriptionAttribute(Type markerType)
+    {
+        var toolMethods = markerType
+            .Assembly.GetTypes()
             .Where(t => t.GetCustomAttribute<McpServerToolTypeAttribute>() != null)
             .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance))
             .Where(m => m.GetCustomAttribute<McpServerToolAttribute>() != null);
 
-        foreach (var method in toolMethods) {
-            var description = method.GetCustomAttributes()
+        foreach (var method in toolMethods)
+        {
+            var description = method
+                .GetCustomAttributes()
                 .FirstOrDefault(a => a.GetType().Name == "DescriptionAttribute");
 
-            description.Should().NotBeNull(
-                $"tool method {method.DeclaringType!.Name}.{method.Name} should have a [Description] attribute");
+            description
+                .Should()
+                .NotBeNull(
+                    $"tool method {method.DeclaringType!.Name}.{method.Name} should have a [Description] attribute"
+                );
         }
     }
 
     [Theory]
     [MemberData(nameof(AllToolMarkerTypes))]
-    public void Module_ToolNames_AreUnique(Type markerType) {
+    public void Module_ToolNames_AreUnique(Type markerType)
+    {
         var toolNames = GetToolNamesFromAssembly(markerType.Assembly);
 
-        toolNames.Should().OnlyHaveUniqueItems(
-            $"tool names in {markerType.Name}'s assembly should be unique");
+        toolNames
+            .Should()
+            .OnlyHaveUniqueItems($"tool names in {markerType.Name}'s assembly should be unique");
     }
 
     // ── Fred module specific ────────────────────────────────────────────
 
     [Fact]
-    public void FredModule_ExposesEconomicIndicatorTools() {
+    public void FredModule_ExposesEconomicIndicatorTools()
+    {
         var toolNames = GetToolNamesFromAssembly(typeof(FredTools).Assembly);
 
         toolNames.Should().Contain("GetEconomicIndicator");
@@ -213,7 +258,8 @@ public class McpModuleToolDiscoveryTests {
     // ── Holdings module specific ────────────────────────────────────────
 
     [Fact]
-    public void HoldingsModule_ExposesInstitutionalHoldingsTools() {
+    public void HoldingsModule_ExposesInstitutionalHoldingsTools()
+    {
         var toolNames = GetToolNamesFromAssembly(typeof(InstitutionalHoldingsTools).Assembly);
 
         toolNames.Should().Contain("GetTopHolders");
@@ -225,7 +271,8 @@ public class McpModuleToolDiscoveryTests {
     // ── InsiderTrading module specific ──────────────────────────────────
 
     [Fact]
-    public void InsiderTradingModule_ExposesInsiderTradingTools() {
+    public void InsiderTradingModule_ExposesInsiderTradingTools()
+    {
         var toolNames = GetToolNamesFromAssembly(typeof(InsiderTradingTools).Assembly);
 
         toolNames.Should().Contain("GetInsiderTransactions");
@@ -236,7 +283,8 @@ public class McpModuleToolDiscoveryTests {
     // ── SEC module specific ─────────────────────────────────────────────
 
     [Fact]
-    public void SecModule_ExposesSearchAndDocumentTools() {
+    public void SecModule_ExposesSearchAndDocumentTools()
+    {
         var toolNames = GetToolNamesFromAssembly(typeof(RagSearchTools).Assembly);
 
         toolNames.Should().Contain("SearchDocuments");
@@ -251,29 +299,34 @@ public class McpModuleToolDiscoveryTests {
     // ── Cross-module uniqueness ─────────────────────────────────────────
 
     [Fact]
-    public void AllModules_ToolNames_AreGloballyUnique() {
-        var allToolNames = new[] {
-                typeof(FredTools),
-                typeof(InstitutionalHoldingsTools),
-                typeof(InsiderTradingTools),
-                typeof(RagSearchTools),
-                typeof(CboeTools),
-                typeof(CftcTools),
-                typeof(CongressTools),
-                typeof(ShortDataTools),
-                typeof(StockPriceTools)
-            }
+    public void AllModules_ToolNames_AreGloballyUnique()
+    {
+        var allToolNames = new[]
+        {
+            typeof(FredTools),
+            typeof(InstitutionalHoldingsTools),
+            typeof(InsiderTradingTools),
+            typeof(RagSearchTools),
+            typeof(CboeTools),
+            typeof(CftcTools),
+            typeof(CongressTools),
+            typeof(ShortDataTools),
+            typeof(StockPriceTools),
+        }
             .SelectMany(t => GetToolNamesFromAssembly(t.Assembly))
             .ToList();
 
-        allToolNames.Should().OnlyHaveUniqueItems(
-            "tool names across all MCP modules should be globally unique");
+        allToolNames
+            .Should()
+            .OnlyHaveUniqueItems("tool names across all MCP modules should be globally unique");
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────
 
-    private static List<string> GetToolNamesFromAssembly(Assembly assembly) {
-        return assembly.GetTypes()
+    private static List<string> GetToolNamesFromAssembly(Assembly assembly)
+    {
+        return assembly
+            .GetTypes()
             .Where(t => t.GetCustomAttribute<McpServerToolTypeAttribute>() != null)
             .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance))
             .Select(m => m.GetCustomAttribute<McpServerToolAttribute>())
@@ -283,14 +336,26 @@ public class McpModuleToolDiscoveryTests {
     }
 
     public static TheoryData<Type, string[]> ToolAssembliesWithExpectedTools =>
-        new() {
+        new()
+        {
             {
                 typeof(FredTools),
-                new[] { "GetEconomicIndicator", "GetLatestEconomicData", "SearchEconomicIndicators" }
+                new[]
+                {
+                    "GetEconomicIndicator",
+                    "GetLatestEconomicData",
+                    "SearchEconomicIndicators",
+                }
             },
             {
                 typeof(InstitutionalHoldingsTools),
-                new[] { "GetTopHolders", "GetOwnershipHistory", "GetInstitutionPortfolio", "SearchInstitutions" }
+                new[]
+                {
+                    "GetTopHolders",
+                    "GetOwnershipHistory",
+                    "GetInstitutionPortfolio",
+                    "SearchInstitutions",
+                }
             },
             {
                 typeof(InsiderTradingTools),
@@ -298,16 +363,18 @@ public class McpModuleToolDiscoveryTests {
             },
             {
                 typeof(RagSearchTools),
-                new[] {
-                    "SearchDocuments", "SearchCompanyDocuments", "SearchDocument",
-                    "ListCompanyDocuments", "SearchDocumentKeyword", "ReadDocumentLines",
-                    "GetFailsToDeliver"
+                new[]
+                {
+                    "SearchDocuments",
+                    "SearchCompanyDocuments",
+                    "SearchDocument",
+                    "ListCompanyDocuments",
+                    "SearchDocumentKeyword",
+                    "ReadDocumentLines",
+                    "GetFailsToDeliver",
                 }
             },
-            {
-                typeof(CboeTools),
-                new[] { "GetPutCallRatios", "GetVixHistory" }
-            },
+            { typeof(CboeTools), new[] { "GetPutCallRatios", "GetVixHistory" } },
             {
                 typeof(CftcTools),
                 new[] { "GetCftcPositioning", "GetLatestCftcData", "SearchCftcMarkets" }
@@ -320,14 +387,12 @@ public class McpModuleToolDiscoveryTests {
                 typeof(ShortDataTools),
                 new[] { "GetShortVolume", "GetShortInterest", "GetShortInterestSnapshot" }
             },
-            {
-                typeof(StockPriceTools),
-                new[] { "GetStockPrices", "GetLatestPrices" }
-            }
+            { typeof(StockPriceTools), new[] { "GetStockPrices", "GetLatestPrices" } },
         };
 
     public static TheoryData<Type> AllToolMarkerTypes =>
-        new() {
+        new()
+        {
             typeof(FredTools),
             typeof(InstitutionalHoldingsTools),
             typeof(InsiderTradingTools),
@@ -336,6 +401,6 @@ public class McpModuleToolDiscoveryTests {
             typeof(CftcTools),
             typeof(CongressTools),
             typeof(ShortDataTools),
-            typeof(StockPriceTools)
+            typeof(StockPriceTools),
         };
 }

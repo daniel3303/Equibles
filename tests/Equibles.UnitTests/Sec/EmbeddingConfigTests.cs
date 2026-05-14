@@ -2,9 +2,11 @@ using Equibles.Sec.BusinessLogic.Embeddings;
 
 namespace Equibles.UnitTests.Sec;
 
-public class EmbeddingConfigTests {
+public class EmbeddingConfigTests
+{
     [Fact]
-    public void IsConfigured_EnabledTrueButBaseUrlMissing_ReturnsFalse() {
+    public void IsConfigured_EnabledTrueButBaseUrlMissing_ReturnsFalse()
+    {
         // EmbeddingConfig.IsConfigured is a three-conjunct gate
         // (`Enabled && !IsNullOrEmpty(BaseUrl) && !IsNullOrEmpty(ModelName)`) that the
         // entire RAG pipeline depends on. It's consulted from three places:
@@ -29,7 +31,8 @@ public class EmbeddingConfigTests {
         // Pick null specifically (not just empty string) so the test also exercises
         // the IsNullOrEmpty null path — the worst silent failure mode, since null
         // BaseUrl is what `new Uri(_config.BaseUrl)` would actually trip on.
-        var config = new EmbeddingConfig {
+        var config = new EmbeddingConfig
+        {
             Enabled = true,
             BaseUrl = null,
             ModelName = "nomic-embed-text",

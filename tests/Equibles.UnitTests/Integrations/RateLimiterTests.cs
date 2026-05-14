@@ -3,15 +3,18 @@ using Equibles.Integrations.Common.RateLimiter;
 
 namespace Equibles.UnitTests.Integrations;
 
-public class RateLimiterTests {
+public class RateLimiterTests
+{
     [Fact]
-    public async Task RequestsWithinLimit_CompleteImmediately() {
+    public async Task RequestsWithinLimit_CompleteImmediately()
+    {
         // Arrange: allow 5 requests per 100ms window
         var limiter = new RateLimiter(maxRequests: 5, timeWindow: TimeSpan.FromMilliseconds(100));
         var sw = Stopwatch.StartNew();
 
         // Act: make 3 requests (well within the limit of 5)
-        for (var i = 0; i < 3; i++) {
+        for (var i = 0; i < 3; i++)
+        {
             await limiter.WaitAsync();
         }
 
@@ -22,7 +25,8 @@ public class RateLimiterTests {
     }
 
     [Fact]
-    public void DefaultConstructor_SetsExpectedDefaults() {
+    public void DefaultConstructor_SetsExpectedDefaults()
+    {
         // Arrange & Act
         var limiter = new RateLimiter();
 
@@ -32,7 +36,8 @@ public class RateLimiterTests {
     }
 
     [Fact]
-    public void CustomConstructorValues_AreAccepted() {
+    public void CustomConstructorValues_AreAccepted()
+    {
         // Arrange & Act
         var limiter = new RateLimiter(maxRequests: 10, timeWindow: TimeSpan.FromSeconds(30));
 
@@ -42,7 +47,8 @@ public class RateLimiterTests {
     }
 
     [Fact]
-    public async Task PauseFor_DelaysSubsequentWaitAsyncCalls() {
+    public async Task PauseFor_DelaysSubsequentWaitAsyncCalls()
+    {
         // Arrange: generous limit so throttling comes only from PauseFor
         var limiter = new RateLimiter(maxRequests: 100, timeWindow: TimeSpan.FromSeconds(10));
 
@@ -58,7 +64,8 @@ public class RateLimiterTests {
     }
 
     [Fact]
-    public async Task MultipleRapidRequests_WithinLimit_AllSucceedQuickly() {
+    public async Task MultipleRapidRequests_WithinLimit_AllSucceedQuickly()
+    {
         // Arrange: allow 5 requests in a 500ms window
         var limiter = new RateLimiter(maxRequests: 5, timeWindow: TimeSpan.FromMilliseconds(500));
         var sw = Stopwatch.StartNew();
@@ -74,7 +81,8 @@ public class RateLimiterTests {
     }
 
     [Fact]
-    public async Task WaitAsync_FillsCapacity_NextRequestWaitsForOldestToAgeOut() {
+    public async Task WaitAsync_FillsCapacity_NextRequestWaitsForOldestToAgeOut()
+    {
         // RateLimiter is the only thing standing between our scrapers and rate-limit bans
         // from FRED, FINRA, Yahoo, CBOE, and CFTC. Its core function is throttling: when
         // the in-window request count reaches `maxRequests`, the next WaitAsync MUST block
@@ -107,7 +115,8 @@ public class RateLimiterTests {
     }
 
     [Fact]
-    public async Task PauseFor_ShorterDurationFollowingLongerPause_DoesNotShortenExistingPause() {
+    public async Task PauseFor_ShorterDurationFollowingLongerPause_DoesNotShortenExistingPause()
+    {
         // PauseFor's body holds a guard: `if (newPauseUntil > _pauseUntil) _pauseUntil = ...;`
         // The guard is load-bearing for cascading rate-limit backoffs. Concrete production
         // scenario: SEC EDGAR returns a 429 with Retry-After=300s, SendWithRetryAsync calls
@@ -144,7 +153,8 @@ public class RateLimiterTests {
     }
 
     [Fact]
-    public void Constructor_WithCustomTimeWindow_Succeeds() {
+    public void Constructor_WithCustomTimeWindow_Succeeds()
+    {
         // Arrange & Act
         var limiter = new RateLimiter(maxRequests: 3, timeWindow: TimeSpan.FromMilliseconds(100));
 

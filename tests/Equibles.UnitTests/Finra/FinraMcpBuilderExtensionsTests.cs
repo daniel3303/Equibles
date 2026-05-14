@@ -6,9 +6,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Finra;
 
-public class FinraMcpBuilderExtensionsTests {
+public class FinraMcpBuilderExtensionsTests
+{
     [Fact]
-    public void AddShortData_RegistersAssemblyMcpModuleForShortDataTools() {
+    public void AddShortData_RegistersAssemblyMcpModuleForShortDataTools()
+    {
         // AddShortData wires the FINRA short-volume / short-interest MCP
         // tools into the EquiblesMcpBuilder via
         // AssemblyMcpModule<ShortDataTools>. The marker type drives the
@@ -21,7 +23,10 @@ public class FinraMcpBuilderExtensionsTests {
 
         builder.AddShortData();
 
-        builder.Modules.Should().ContainSingle()
-            .Which.Should().BeOfType<AssemblyMcpModule<ShortDataTools>>();
+        builder
+            .Modules.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeOfType<AssemblyMcpModule<ShortDataTools>>();
     }
 }

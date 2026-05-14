@@ -7,7 +7,8 @@ namespace Equibles.Sec.Data.Models;
 
 [Table("TranscriptCheckStatuses")]
 [Index(nameof(CommonStockId), IsUnique = true)]
-public class TranscriptCheckStatus {
+public class TranscriptCheckStatus
+{
     [Key]
     public Guid Id { get; set; } = Guid.NewGuid();
 

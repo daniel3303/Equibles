@@ -13,19 +13,25 @@ using NSubstitute;
 
 namespace Equibles.IntegrationTests.Holdings;
 
-public class HoldingsValueRecalculatorTests : IDisposable {
-    private static readonly IModuleConfiguration[] Modules = [
+public class HoldingsValueRecalculatorTests : IDisposable
+{
+    private static readonly IModuleConfiguration[] Modules =
+    [
         new CommonStocksModuleConfiguration(),
         new HoldingsModuleConfiguration(),
     ];
 
     private readonly string _dbName = Guid.NewGuid().ToString();
     private readonly IStockPriceProvider _priceProvider = Substitute.For<IStockPriceProvider>();
-    private readonly ILogger<HoldingsValueRecalculator> _logger = Substitute.For<ILogger<HoldingsValueRecalculator>>();
+    private readonly ILogger<HoldingsValueRecalculator> _logger = Substitute.For<
+        ILogger<HoldingsValueRecalculator>
+    >();
     private readonly List<EquiblesDbContext> _contexts = [];
 
-    public void Dispose() {
-        foreach (var ctx in _contexts) {
+    public void Dispose()
+    {
+        foreach (var ctx in _contexts)
+        {
             ctx.Dispose();
         }
     }
@@ -34,7 +40,8 @@ public class HoldingsValueRecalculatorTests : IDisposable {
     /// Creates a new <see cref="EquiblesDbContext"/> backed by the same in-memory database,
     /// so every scope-resolved context shares the same data store.
     /// </summary>
-    private EquiblesDbContext CreateSharedContext() {
+    private EquiblesDbContext CreateSharedContext()
+    {
         var options = new DbContextOptionsBuilder<EquiblesDbContext>()
             .UseInMemoryDatabase(_dbName)
             .Options;
@@ -51,29 +58,36 @@ public class HoldingsValueRecalculatorTests : IDisposable {
     /// Each call to <c>CreateScope()</c> returns a fresh context instance
     /// (mirroring real DI behaviour) that still shares the same backing store.
     /// </summary>
-    private IServiceScopeFactory CreateScopeFactory() {
+    private IServiceScopeFactory CreateScopeFactory()
+    {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
 
-        scopeFactory.CreateScope().Returns(_ => {
-            var ctx = CreateSharedContext();
+        scopeFactory
+            .CreateScope()
+            .Returns(_ =>
+            {
+                var ctx = CreateSharedContext();
 
-            var sp = Substitute.For<IServiceProvider>();
-            sp.GetService(typeof(EquiblesDbContext)).Returns(ctx);
+                var sp = Substitute.For<IServiceProvider>();
+                sp.GetService(typeof(EquiblesDbContext)).Returns(ctx);
 
-            var scope = Substitute.For<IServiceScope>();
-            scope.ServiceProvider.Returns(sp);
-            return scope;
-        });
+                var scope = Substitute.For<IServiceScope>();
+                scope.ServiceProvider.Returns(sp);
+                return scope;
+            });
 
         return scopeFactory;
     }
 
-    private HoldingsValueRecalculator CreateRecalculator(IServiceScopeFactory scopeFactory) {
+    private HoldingsValueRecalculator CreateRecalculator(IServiceScopeFactory scopeFactory)
+    {
         return new HoldingsValueRecalculator(scopeFactory, _priceProvider, _logger);
     }
 
-    private static InstitutionalHolder CreateHolder(string name = "Vanguard") {
-        return new InstitutionalHolder {
+    private static InstitutionalHolder CreateHolder(string name = "Vanguard")
+    {
+        return new InstitutionalHolder
+        {
             Id = Guid.NewGuid(),
             Cik = Guid.NewGuid().ToString()[..10],
             Name = name,
@@ -88,8 +102,10 @@ public class HoldingsValueRecalculatorTests : IDisposable {
         bool valuePending,
         long value = 0,
         List<HoldingManagerEntry> managerEntries = null
-    ) {
-        return new InstitutionalHolding {
+    )
+    {
+        return new InstitutionalHolding
+        {
             Id = Guid.NewGuid(),
             CommonStockId = stockId,
             InstitutionalHolderId = holderId,
@@ -108,13 +124,25 @@ public class HoldingsValueRecalculatorTests : IDisposable {
     // ── Recalculates value based on shares * price ─────────────────────
 
     [Fact]
-    public async Task Recalculate_PendingHoldings_SetsValueToSharesTimesPrice() {
+    public async Task Recalculate_PendingHoldings_SetsValueToSharesTimesPrice()
+    {
         var seedContext = CreateSharedContext();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL", Name = "Apple" };
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple",
+        };
         var holder = CreateHolder();
         var reportDate = new DateOnly(2024, 3, 31);
 
-        var holding = CreateHolding(stock.Id, holder.Id, reportDate, shares: 1000, valuePending: true);
+        var holding = CreateHolding(
+            stock.Id,
+            holder.Id,
+            reportDate,
+            shares: 1000,
+            valuePending: true
+        );
 
         seedContext.Set<CommonStock>().Add(stock);
         seedContext.Set<InstitutionalHolder>().Add(holder);
@@ -122,10 +150,13 @@ public class HoldingsValueRecalculatorTests : IDisposable {
         await seedContext.SaveChangesAsync();
 
         _priceProvider
-            .GetClosingPrices(Arg.Any<IEnumerable<(Guid, DateOnly)>>(), Arg.Any<CancellationToken>())
-            .Returns(new Dictionary<(Guid, DateOnly), decimal> {
-                [(stock.Id, reportDate)] = 150.50m,
-            });
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 150.50m }
+            );
 
         var scopeFactory = CreateScopeFactory();
         var recalculator = CreateRecalculator(scopeFactory);
@@ -134,7 +165,8 @@ public class HoldingsValueRecalculatorTests : IDisposable {
 
         // Read from a fresh context to verify persisted state
         var verifyContext = CreateSharedContext();
-        var updated = await verifyContext.Set<InstitutionalHolding>()
+        var updated = await verifyContext
+            .Set<InstitutionalHolding>()
             .FirstAsync(h => h.Id == holding.Id);
 
         updated.Value.Should().Be((long)(1000 * 150.50m));
@@ -142,17 +174,42 @@ public class HoldingsValueRecalculatorTests : IDisposable {
     }
 
     [Fact]
-    public async Task Recalculate_PendingHoldingWithManagerEntries_RecalculatesEntryValues() {
+    public async Task Recalculate_PendingHoldingWithManagerEntries_RecalculatesEntryValues()
+    {
         var seedContext = CreateSharedContext();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "TSLA", Name = "Tesla" };
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "TSLA",
+            Name = "Tesla",
+        };
         var holder = CreateHolder("BlackRock");
         var reportDate = new DateOnly(2024, 6, 30);
 
-        var holding = CreateHolding(stock.Id, holder.Id, reportDate, shares: 5000, valuePending: true,
-            managerEntries: [
-                new HoldingManagerEntry { ManagerNumber = 1, ManagerName = "Fund A", Shares = 3000, Value = 0 },
-                new HoldingManagerEntry { ManagerNumber = 2, ManagerName = "Fund B", Shares = 2000, Value = 0 },
-            ]);
+        var holding = CreateHolding(
+            stock.Id,
+            holder.Id,
+            reportDate,
+            shares: 5000,
+            valuePending: true,
+            managerEntries:
+            [
+                new HoldingManagerEntry
+                {
+                    ManagerNumber = 1,
+                    ManagerName = "Fund A",
+                    Shares = 3000,
+                    Value = 0,
+                },
+                new HoldingManagerEntry
+                {
+                    ManagerNumber = 2,
+                    ManagerName = "Fund B",
+                    Shares = 2000,
+                    Value = 0,
+                },
+            ]
+        );
 
         seedContext.Set<CommonStock>().Add(stock);
         seedContext.Set<InstitutionalHolder>().Add(holder);
@@ -160,10 +217,11 @@ public class HoldingsValueRecalculatorTests : IDisposable {
         await seedContext.SaveChangesAsync();
 
         _priceProvider
-            .GetClosingPrices(Arg.Any<IEnumerable<(Guid, DateOnly)>>(), Arg.Any<CancellationToken>())
-            .Returns(new Dictionary<(Guid, DateOnly), decimal> {
-                [(stock.Id, reportDate)] = 200m,
-            });
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 200m });
 
         var scopeFactory = CreateScopeFactory();
         var recalculator = CreateRecalculator(scopeFactory);
@@ -171,7 +229,8 @@ public class HoldingsValueRecalculatorTests : IDisposable {
         await recalculator.Recalculate(CancellationToken.None);
 
         var verifyContext = CreateSharedContext();
-        var updated = await verifyContext.Set<InstitutionalHolding>()
+        var updated = await verifyContext
+            .Set<InstitutionalHolding>()
             .Include(h => h.ManagerEntries)
             .FirstAsync(h => h.Id == holding.Id);
 
@@ -184,14 +243,26 @@ public class HoldingsValueRecalculatorTests : IDisposable {
     // ── Skips holdings that already have a value ───────────────────────
 
     [Fact]
-    public async Task Recalculate_HoldingsNotPending_AreNotModified() {
+    public async Task Recalculate_HoldingsNotPending_AreNotModified()
+    {
         var seedContext = CreateSharedContext();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "MSFT", Name = "Microsoft" };
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "MSFT",
+            Name = "Microsoft",
+        };
         var holder = CreateHolder();
         var reportDate = new DateOnly(2024, 3, 31);
 
-        var alreadyValued = CreateHolding(stock.Id, holder.Id, reportDate,
-            shares: 500, valuePending: false, value: 99999);
+        var alreadyValued = CreateHolding(
+            stock.Id,
+            holder.Id,
+            reportDate,
+            shares: 500,
+            valuePending: false,
+            value: 99999
+        );
 
         seedContext.Set<CommonStock>().Add(stock);
         seedContext.Set<InstitutionalHolder>().Add(holder);
@@ -199,7 +270,10 @@ public class HoldingsValueRecalculatorTests : IDisposable {
         await seedContext.SaveChangesAsync();
 
         _priceProvider
-            .GetClosingPrices(Arg.Any<IEnumerable<(Guid, DateOnly)>>(), Arg.Any<CancellationToken>())
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
             .Returns(new Dictionary<(Guid, DateOnly), decimal>());
 
         var scopeFactory = CreateScopeFactory();
@@ -208,7 +282,8 @@ public class HoldingsValueRecalculatorTests : IDisposable {
         await recalculator.Recalculate(CancellationToken.None);
 
         var verifyContext = CreateSharedContext();
-        var unchanged = await verifyContext.Set<InstitutionalHolding>()
+        var unchanged = await verifyContext
+            .Set<InstitutionalHolding>()
             .FirstAsync(h => h.Id == alreadyValued.Id);
 
         unchanged.Value.Should().Be(99999, "non-pending holdings should keep their original value");
@@ -216,19 +291,36 @@ public class HoldingsValueRecalculatorTests : IDisposable {
     }
 
     [Fact]
-    public async Task Recalculate_MixOfPendingAndNonPending_OnlyUpdatesPending() {
+    public async Task Recalculate_MixOfPendingAndNonPending_OnlyUpdatesPending()
+    {
         var seedContext = CreateSharedContext();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "GOOG", Name = "Alphabet" };
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "GOOG",
+            Name = "Alphabet",
+        };
         var holder = CreateHolder();
         var reportDate = new DateOnly(2024, 3, 31);
 
-        var pendingHolding = CreateHolding(stock.Id, holder.Id, reportDate,
-            shares: 1000, valuePending: true);
+        var pendingHolding = CreateHolding(
+            stock.Id,
+            holder.Id,
+            reportDate,
+            shares: 1000,
+            valuePending: true
+        );
 
         // Need a different holder for unique constraint (same stock+holder+date+shareType would collide)
         var holder2 = CreateHolder("Fidelity");
-        var nonPendingHolding = CreateHolding(stock.Id, holder2.Id, reportDate,
-            shares: 2000, valuePending: false, value: 77777);
+        var nonPendingHolding = CreateHolding(
+            stock.Id,
+            holder2.Id,
+            reportDate,
+            shares: 2000,
+            valuePending: false,
+            value: 77777
+        );
 
         seedContext.Set<CommonStock>().Add(stock);
         seedContext.Set<InstitutionalHolder>().AddRange(holder, holder2);
@@ -236,10 +328,11 @@ public class HoldingsValueRecalculatorTests : IDisposable {
         await seedContext.SaveChangesAsync();
 
         _priceProvider
-            .GetClosingPrices(Arg.Any<IEnumerable<(Guid, DateOnly)>>(), Arg.Any<CancellationToken>())
-            .Returns(new Dictionary<(Guid, DateOnly), decimal> {
-                [(stock.Id, reportDate)] = 100m,
-            });
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 100m });
 
         var scopeFactory = CreateScopeFactory();
         var recalculator = CreateRecalculator(scopeFactory);
@@ -261,14 +354,25 @@ public class HoldingsValueRecalculatorTests : IDisposable {
     // ── Handles case where no price is available ───────────────────────
 
     [Fact]
-    public async Task Recalculate_NoPricesAvailable_LeavesHoldingsPending() {
+    public async Task Recalculate_NoPricesAvailable_LeavesHoldingsPending()
+    {
         var seedContext = CreateSharedContext();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "NVDA", Name = "NVIDIA" };
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "NVDA",
+            Name = "NVIDIA",
+        };
         var holder = CreateHolder();
         var reportDate = new DateOnly(2024, 3, 31);
 
-        var holding = CreateHolding(stock.Id, holder.Id, reportDate,
-            shares: 800, valuePending: true);
+        var holding = CreateHolding(
+            stock.Id,
+            holder.Id,
+            reportDate,
+            shares: 800,
+            valuePending: true
+        );
 
         seedContext.Set<CommonStock>().Add(stock);
         seedContext.Set<InstitutionalHolder>().Add(holder);
@@ -276,7 +380,10 @@ public class HoldingsValueRecalculatorTests : IDisposable {
         await seedContext.SaveChangesAsync();
 
         _priceProvider
-            .GetClosingPrices(Arg.Any<IEnumerable<(Guid, DateOnly)>>(), Arg.Any<CancellationToken>())
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
             .Returns(new Dictionary<(Guid, DateOnly), decimal>());
 
         var scopeFactory = CreateScopeFactory();
@@ -285,26 +392,50 @@ public class HoldingsValueRecalculatorTests : IDisposable {
         await recalculator.Recalculate(CancellationToken.None);
 
         var verifyContext = CreateSharedContext();
-        var unchanged = await verifyContext.Set<InstitutionalHolding>()
+        var unchanged = await verifyContext
+            .Set<InstitutionalHolding>()
             .FirstAsync(h => h.Id == holding.Id);
 
-        unchanged.ValuePending.Should().BeTrue("holding should remain pending when no price is available");
+        unchanged
+            .ValuePending.Should()
+            .BeTrue("holding should remain pending when no price is available");
         unchanged.Value.Should().Be(0);
     }
 
     [Fact]
-    public async Task Recalculate_PriceAvailableForSomeStocks_OnlyRecalculatesThoseWithPrices() {
+    public async Task Recalculate_PriceAvailableForSomeStocks_OnlyRecalculatesThoseWithPrices()
+    {
         var seedContext = CreateSharedContext();
-        var stockWithPrice = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL", Name = "Apple" };
-        var stockWithoutPrice = new CommonStock { Id = Guid.NewGuid(), Ticker = "AMZN", Name = "Amazon" };
+        var stockWithPrice = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple",
+        };
+        var stockWithoutPrice = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AMZN",
+            Name = "Amazon",
+        };
         var holder = CreateHolder();
         var reportDate = new DateOnly(2024, 3, 31);
 
-        var holdingWithPrice = CreateHolding(stockWithPrice.Id, holder.Id, reportDate,
-            shares: 1000, valuePending: true);
+        var holdingWithPrice = CreateHolding(
+            stockWithPrice.Id,
+            holder.Id,
+            reportDate,
+            shares: 1000,
+            valuePending: true
+        );
         var holder2 = CreateHolder("State Street");
-        var holdingWithoutPrice = CreateHolding(stockWithoutPrice.Id, holder2.Id, reportDate,
-            shares: 2000, valuePending: true);
+        var holdingWithoutPrice = CreateHolding(
+            stockWithoutPrice.Id,
+            holder2.Id,
+            reportDate,
+            shares: 2000,
+            valuePending: true
+        );
 
         seedContext.Set<CommonStock>().AddRange(stockWithPrice, stockWithoutPrice);
         seedContext.Set<InstitutionalHolder>().AddRange(holder, holder2);
@@ -312,10 +443,16 @@ public class HoldingsValueRecalculatorTests : IDisposable {
         await seedContext.SaveChangesAsync();
 
         _priceProvider
-            .GetClosingPrices(Arg.Any<IEnumerable<(Guid, DateOnly)>>(), Arg.Any<CancellationToken>())
-            .Returns(new Dictionary<(Guid, DateOnly), decimal> {
-                [(stockWithPrice.Id, reportDate)] = 175m,
-            });
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                new Dictionary<(Guid, DateOnly), decimal>
+                {
+                    [(stockWithPrice.Id, reportDate)] = 175m,
+                }
+            );
 
         var scopeFactory = CreateScopeFactory();
         var recalculator = CreateRecalculator(scopeFactory);
@@ -337,7 +474,8 @@ public class HoldingsValueRecalculatorTests : IDisposable {
     // ── Handles empty holdings list ────────────────────────────────────
 
     [Fact]
-    public async Task Recalculate_NoHoldingsInDatabase_ReturnsEarlyWithoutCallingPriceProvider() {
+    public async Task Recalculate_NoHoldingsInDatabase_ReturnsEarlyWithoutCallingPriceProvider()
+    {
         var scopeFactory = CreateScopeFactory();
         var recalculator = CreateRecalculator(scopeFactory);
 
@@ -345,18 +483,33 @@ public class HoldingsValueRecalculatorTests : IDisposable {
 
         await _priceProvider
             .DidNotReceive()
-            .GetClosingPrices(Arg.Any<IEnumerable<(Guid, DateOnly)>>(), Arg.Any<CancellationToken>());
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            );
     }
 
     [Fact]
-    public async Task Recalculate_AllHoldingsAlreadyValued_ReturnsEarlyWithoutCallingPriceProvider() {
+    public async Task Recalculate_AllHoldingsAlreadyValued_ReturnsEarlyWithoutCallingPriceProvider()
+    {
         var seedContext = CreateSharedContext();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "META", Name = "Meta" };
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "META",
+            Name = "Meta",
+        };
         var holder = CreateHolder();
         var reportDate = new DateOnly(2024, 3, 31);
 
-        var holding = CreateHolding(stock.Id, holder.Id, reportDate,
-            shares: 500, valuePending: false, value: 50000);
+        var holding = CreateHolding(
+            stock.Id,
+            holder.Id,
+            reportDate,
+            shares: 500,
+            valuePending: false,
+            value: 50000
+        );
 
         seedContext.Set<CommonStock>().Add(stock);
         seedContext.Set<InstitutionalHolder>().Add(holder);
@@ -370,6 +523,9 @@ public class HoldingsValueRecalculatorTests : IDisposable {
 
         await _priceProvider
             .DidNotReceive()
-            .GetClosingPrices(Arg.Any<IEnumerable<(Guid, DateOnly)>>(), Arg.Any<CancellationToken>());
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            );
     }
 }

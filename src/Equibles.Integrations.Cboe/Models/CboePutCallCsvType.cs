@@ -1,9 +1,10 @@
 namespace Equibles.Integrations.Cboe.Models;
 
-public enum CboePutCallCsvType {
+public enum CboePutCallCsvType
+{
     Total,
     Equity,
     Index,
     Vix,
-    Etp
+    Etp,
 }

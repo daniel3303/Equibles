@@ -1,29 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Exceptions" />
+    <PackageReference Include="Serilog.Exceptions.EntityFrameworkCore" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Settings.Configuration" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="Serilog.Sinks.File" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="Microsoft.Extensions.Hosting" />
-      <PackageReference Include="Serilog" />
-      <PackageReference Include="Serilog.Exceptions" />
-      <PackageReference Include="Serilog.Exceptions.EntityFrameworkCore" />
-      <PackageReference Include="Serilog.Extensions.Hosting" />
-      <PackageReference Include="Serilog.Settings.Configuration" />
-      <PackageReference Include="Serilog.Sinks.Console" />
-      <PackageReference Include="Serilog.Sinks.File" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <ProjectReference Include="..\Equibles.Sec.HostedService\Equibles.Sec.HostedService.csproj" />
-      <ProjectReference Include="..\Equibles.Holdings.HostedService\Equibles.Holdings.HostedService.csproj" />
-      <ProjectReference Include="..\Equibles.Congress.HostedService\Equibles.Congress.HostedService.csproj" />
-      <ProjectReference Include="..\Equibles.Finra.HostedService\Equibles.Finra.HostedService.csproj" />
-      <ProjectReference Include="..\Equibles.Fred.HostedService\Equibles.Fred.HostedService.csproj" />
-      <ProjectReference Include="..\Equibles.Integrations.Yahoo\Equibles.Integrations.Yahoo.csproj" />
-      <ProjectReference Include="..\Equibles.Yahoo.HostedService\Equibles.Yahoo.HostedService.csproj" />
-      <ProjectReference Include="..\Equibles.Cftc.HostedService\Equibles.Cftc.HostedService.csproj" />
-      <ProjectReference Include="..\Equibles.Cboe.HostedService\Equibles.Cboe.HostedService.csproj" />
-      <ProjectReference Include="..\Equibles.Integrations.Cftc\Equibles.Integrations.Cftc.csproj" />
-      <ProjectReference Include="..\Equibles.Integrations.Cboe\Equibles.Integrations.Cboe.csproj" />
-      <ProjectReference Include="..\Equibles.Plugins\Equibles.Plugins.csproj" />
-    </ItemGroup>
-
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.Sec.HostedService\Equibles.Sec.HostedService.csproj" />
+    <ProjectReference Include="..\Equibles.Holdings.HostedService\Equibles.Holdings.HostedService.csproj" />
+    <ProjectReference Include="..\Equibles.Congress.HostedService\Equibles.Congress.HostedService.csproj" />
+    <ProjectReference Include="..\Equibles.Finra.HostedService\Equibles.Finra.HostedService.csproj" />
+    <ProjectReference Include="..\Equibles.Fred.HostedService\Equibles.Fred.HostedService.csproj" />
+    <ProjectReference Include="..\Equibles.Integrations.Yahoo\Equibles.Integrations.Yahoo.csproj" />
+    <ProjectReference Include="..\Equibles.Yahoo.HostedService\Equibles.Yahoo.HostedService.csproj" />
+    <ProjectReference Include="..\Equibles.Cftc.HostedService\Equibles.Cftc.HostedService.csproj" />
+    <ProjectReference Include="..\Equibles.Cboe.HostedService\Equibles.Cboe.HostedService.csproj" />
+    <ProjectReference Include="..\Equibles.Integrations.Cftc\Equibles.Integrations.Cftc.csproj" />
+    <ProjectReference Include="..\Equibles.Integrations.Cboe\Equibles.Integrations.Cboe.csproj" />
+    <ProjectReference Include="..\Equibles.Plugins\Equibles.Plugins.csproj" />
+  </ItemGroup>
 </Project>

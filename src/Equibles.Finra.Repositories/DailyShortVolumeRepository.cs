@@ -1,26 +1,31 @@
-using Equibles.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.Data;
 using Equibles.Finra.Data.Models;
 
 namespace Equibles.Finra.Repositories;
 
-public class DailyShortVolumeRepository : BaseRepository<DailyShortVolume> {
-    public DailyShortVolumeRepository(EquiblesDbContext dbContext) : base(dbContext) {
-    }
+public class DailyShortVolumeRepository : BaseRepository<DailyShortVolume>
+{
+    public DailyShortVolumeRepository(EquiblesDbContext dbContext)
+        : base(dbContext) { }
 
-    public IQueryable<DailyShortVolume> GetByStock(CommonStock stock, DateOnly date) {
+    public IQueryable<DailyShortVolume> GetByStock(CommonStock stock, DateOnly date)
+    {
         return GetAll().Where(d => d.CommonStockId == stock.Id && d.Date == date);
     }
 
-    public IQueryable<DailyShortVolume> GetHistoryByStock(CommonStock stock) {
+    public IQueryable<DailyShortVolume> GetHistoryByStock(CommonStock stock)
+    {
         return GetAll().Where(d => d.CommonStockId == stock.Id);
     }
 
-    public IQueryable<DateOnly> GetLatestDate() {
+    public IQueryable<DateOnly> GetLatestDate()
+    {
         return GetAll().Select(d => d.Date).Distinct().OrderByDescending(d => d).Take(1);
     }
 
-    public IQueryable<DailyShortVolume> GetByDate(DateOnly date) {
+    public IQueryable<DailyShortVolume> GetByDate(DateOnly date)
+    {
         return GetAll().Where(d => d.Date == date);
     }
 }

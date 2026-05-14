@@ -4,7 +4,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.Data.Models;
 
 [Index(nameof(FileName), IsUnique = true)]
-public class ProcessedDataSet {
+public class ProcessedDataSet
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     [Required]

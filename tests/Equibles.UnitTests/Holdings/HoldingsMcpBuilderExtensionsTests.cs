@@ -6,9 +6,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Holdings;
 
-public class HoldingsMcpBuilderExtensionsTests {
+public class HoldingsMcpBuilderExtensionsTests
+{
     [Fact]
-    public void AddHoldings_RegistersAssemblyMcpModuleForInstitutionalHoldingsTools() {
+    public void AddHoldings_RegistersAssemblyMcpModuleForInstitutionalHoldingsTools()
+    {
         // AddHoldings wires the 13F institutional-holdings MCP tools into
         // the EquiblesMcpBuilder via AssemblyMcpModule<InstitutionalHoldingsTools>.
         // The marker type drives the AutoWiring assembly scan; a regression
@@ -21,7 +23,10 @@ public class HoldingsMcpBuilderExtensionsTests {
 
         builder.AddHoldings();
 
-        builder.Modules.Should().ContainSingle()
-            .Which.Should().BeOfType<AssemblyMcpModule<InstitutionalHoldingsTools>>();
+        builder
+            .Modules.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeOfType<AssemblyMcpModule<InstitutionalHoldingsTools>>();
     }
 }

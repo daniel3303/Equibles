@@ -1,6 +1,7 @@
 namespace Equibles.Holdings.HostedService.Models;
 
-public class CoverPageRow {
+public class CoverPageRow
+{
     public string AccessionNumber { get; set; }
     public string IsAmendment { get; set; }
     public string CompanyName { get; set; }

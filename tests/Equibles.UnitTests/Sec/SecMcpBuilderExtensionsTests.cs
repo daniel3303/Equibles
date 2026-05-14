@@ -6,9 +6,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Sec;
 
-public class SecMcpBuilderExtensionsTests {
+public class SecMcpBuilderExtensionsTests
+{
     [Fact]
-    public void AddSec_RegistersAssemblyMcpModuleForRagSearchTools() {
+    public void AddSec_RegistersAssemblyMcpModuleForRagSearchTools()
+    {
         // AddSec is the composition entry that wires the SEC MCP tools
         // (Ragsearch, FailToDeliver, InsiderTrading, etc.) into the
         // EquiblesMcpBuilder via AssemblyMcpModule<RagSearchTools> — the
@@ -23,7 +25,10 @@ public class SecMcpBuilderExtensionsTests {
 
         builder.AddSec();
 
-        builder.Modules.Should().ContainSingle()
-            .Which.Should().BeOfType<AssemblyMcpModule<RagSearchTools>>();
+        builder
+            .Modules.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeOfType<AssemblyMcpModule<RagSearchTools>>();
     }
 }

@@ -2,7 +2,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Equibles.Web.FlashMessage.Contracts;
 
-public enum FlashMessageType {
+public enum FlashMessageType
+{
     [Display(Name = "Information")]
     Info,
 
@@ -13,5 +14,5 @@ public enum FlashMessageType {
     Error,
 
     [Display(Name = "Success")]
-    Success
+    Success,
 }

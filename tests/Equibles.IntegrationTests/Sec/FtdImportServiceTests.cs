@@ -1,8 +1,8 @@
 using Equibles.CommonStocks.Data;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
-using Equibles.IntegrationTests.Helpers;
 using Equibles.Integrations.Sec.Contracts;
+using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
@@ -13,9 +13,11 @@ using NSubstitute;
 
 namespace Equibles.IntegrationTests.Sec;
 
-public class FtdImportServiceTests {
+public class FtdImportServiceTests
+{
     [Fact]
-    public void GetFileNames_StartDateBeforeOldestAvailable_ClampsToJune2017AndSkipsAFileForThatMonth() {
+    public void GetFileNames_StartDateBeforeOldestAvailable_ClampsToJune2017AndSkipsAFileForThatMonth()
+    {
         // FtdImportService.GetFileNames feeds every URL the FTD scraper hits — a regression
         // here means either we miss real data (start too late, skip a month) or we burn 404s
         // hammering the wrong URL (start too early, generate 'a' for June 2017 when only 'b'
@@ -46,7 +48,8 @@ public class FtdImportServiceTests {
     }
 
     [Fact]
-    public async Task Import_WhenLatestSettlementDateIsBeyondCurrentMonth_LogsUpToDateAndDoesNotCallSecEdgar() {
+    public async Task Import_WhenLatestSettlementDateIsBeyondCurrentMonth_LogsUpToDateAndDoesNotCallSecEdgar()
+    {
         // FtdImportService.Import is the entry point of the FTD scraper — invoked on every
         // worker tick. Before fetching anything it resolves the next unsynced month via
         // SyncDateResolver + GetFileNames, and if that resolution yields no files (i.e. we're
@@ -84,31 +87,40 @@ public class FtdImportServiceTests {
         //       future-dated row we'd see a delta.
         var dbContext = TestDbContextFactory.Create(
             new CommonStocksModuleConfiguration(),
-            new SecTestModuleConfiguration());
+            new SecTestModuleConfiguration()
+        );
 
         var futureSettlementDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1);
-        dbContext.Set<FailToDeliver>().Add(new FailToDeliver {
-            CommonStockId = Guid.NewGuid(),
-            SettlementDate = futureSettlementDate,
-            Quantity = 0,
-            Price = 0m,
-        });
+        dbContext
+            .Set<FailToDeliver>()
+            .Add(
+                new FailToDeliver
+                {
+                    CommonStockId = Guid.NewGuid(),
+                    SettlementDate = futureSettlementDate,
+                    Quantity = 0,
+                    Price = 0m,
+                }
+            );
         await dbContext.SaveChangesAsync();
 
         var failToDeliverRepo = new FailToDeliverRepository(dbContext);
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(FailToDeliverRepository), failToDeliverRepo));
+            (typeof(FailToDeliverRepository), failToDeliverRepo)
+        );
         var errorReporter = new ErrorReporter(
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ILogger<ErrorReporter>>());
+            Substitute.For<ILogger<ErrorReporter>>()
+        );
 
         var sut = new FtdImportService(
             scopeFactory,
             secEdgarClient,
             Substitute.For<ILogger<FtdImportService>>(),
             errorReporter,
-            Options.Create(new WorkerOptions { TickersToSync = [] }));
+            Options.Create(new WorkerOptions { TickersToSync = [] })
+        );
 
         await sut.Import(CancellationToken.None);
 
@@ -124,7 +136,8 @@ public class FtdImportServiceTests {
     }
 
     [Fact]
-    public void IsRecentFtdFile_FilenameForYear2000_ReturnsFalseRegardlessOfClock() {
+    public void IsRecentFtdFile_FilenameForYear2000_ReturnsFalseRegardlessOfClock()
+    {
         // Companion to GetFileNames coverage: IsRecentFtdFile decides whether a 404 on an
         // FTD download is "expected" (file not yet published — log INFO) or "anomalous"
         // (URL pattern may have shifted — log WARNING and report). The recency cutoff is

@@ -1,7 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
-    <ItemGroup>
-      <ProjectReference Include="..\Equibles.Holdings.Data\Equibles.Holdings.Data.csproj" />
-    </ItemGroup>
-
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.Holdings.Data\Equibles.Holdings.Data.csproj" />
+  </ItemGroup>
 </Project>

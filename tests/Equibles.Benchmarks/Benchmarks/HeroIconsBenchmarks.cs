@@ -10,11 +10,13 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// styles to keep the dictionary-lookup + string-interpolation path realistic.
 /// </summary>
 [MemoryDiagnoser]
-public class HeroIconsBenchmarks {
+public class HeroIconsBenchmarks
+{
     // A header/nav-flavoured set: a generic chart, a search icon, a chevron, a presence indicator,
     // and a missing-icon case (which exercises the fallback path). The list intentionally mixes
     // outline (default for nav) and solid (used in active states/buttons).
-    private static readonly (string Name, HeroIcons.IconStyle Style)[] IconMix = [
+    private static readonly (string Name, HeroIcons.IconStyle Style)[] IconMix =
+    [
         ("chart-bar", HeroIcons.IconStyle.Outline),
         ("plus", HeroIcons.IconStyle.Outline),
         ("plus", HeroIcons.IconStyle.Solid),
@@ -25,9 +27,11 @@ public class HeroIconsBenchmarks {
     ];
 
     [Benchmark]
-    public int RenderMixedIconSet() {
+    public int RenderMixedIconSet()
+    {
         var total = 0;
-        for (var i = 0; i < IconMix.Length; i++) {
+        for (var i = 0; i < IconMix.Length; i++)
+        {
             var (name, style) = IconMix[i];
             total += HeroIcons.Render(name, style, "6", null).Length;
         }

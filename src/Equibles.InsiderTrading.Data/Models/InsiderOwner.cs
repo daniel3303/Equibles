@@ -5,7 +5,8 @@ namespace Equibles.InsiderTrading.Data.Models;
 
 [Index(nameof(OwnerCik), IsUnique = true)]
 [Index(nameof(Name))]
-public class InsiderOwner {
+public class InsiderOwner
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     [MaxLength(16)]

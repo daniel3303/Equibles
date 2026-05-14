@@ -6,9 +6,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Web;
 
-public class FlashMessageClassTests {
+public class FlashMessageClassTests
+{
     [Fact]
-    public void Error_QueuesMessageWithErrorTypeNotDefaultSuccess() {
+    public void Error_QueuesMessageWithErrorTypeNotDefaultSuccess()
+    {
         // FlashMessageModel's default `Type` is `FlashMessageType.Success` — pinned by
         // FlashMessageModelTests.Constructor_DefaultType_IsSuccess. Every convenience
         // helper (Success / Error / Info / Warning) constructs a FlashMessageModel and
@@ -27,7 +29,8 @@ public class FlashMessageClassTests {
         var serializer = new JsonFlashMessageSerializer();
         string captured = null;
         var tempData = Substitute.For<ITempDataDictionary>();
-        tempData.WhenForAnyArgs(t => t[FlashMessage.KeyName] = default)
+        tempData
+            .WhenForAnyArgs(t => t[FlashMessage.KeyName] = default)
             .Do(callInfo => captured = (string)callInfo.Arg<object>());
         var factory = Substitute.For<ITempDataDictionaryFactory>();
         factory.GetTempData(Arg.Any<HttpContext>()).Returns(tempData);
@@ -37,12 +40,12 @@ public class FlashMessageClassTests {
 
         captured.Should().NotBeNull();
         var roundTripped = serializer.Deserialize(captured);
-        roundTripped.Should().ContainSingle()
-            .Which.Type.Should().Be(FlashMessageType.Error);
+        roundTripped.Should().ContainSingle().Which.Type.Should().Be(FlashMessageType.Error);
     }
 
     [Fact]
-    public void Warning_QueuesMessageWithWarningTypeNotErrorOrSuccess() {
+    public void Warning_QueuesMessageWithWarningTypeNotErrorOrSuccess()
+    {
         // Sibling to the existing Error_*NotDefaultSuccess test. The Warning helper is
         // structurally a copy-paste of Error and Success — a refactor that consolidates
         // them into a single private method risks mis-wiring the enum value for the
@@ -57,7 +60,8 @@ public class FlashMessageClassTests {
         var serializer = new JsonFlashMessageSerializer();
         string captured = null;
         var tempData = Substitute.For<ITempDataDictionary>();
-        tempData.WhenForAnyArgs(t => t[FlashMessage.KeyName] = default)
+        tempData
+            .WhenForAnyArgs(t => t[FlashMessage.KeyName] = default)
             .Do(callInfo => captured = (string)callInfo.Arg<object>());
         var factory = Substitute.For<ITempDataDictionaryFactory>();
         factory.GetTempData(Arg.Any<HttpContext>()).Returns(tempData);
@@ -67,12 +71,12 @@ public class FlashMessageClassTests {
 
         captured.Should().NotBeNull();
         var roundTripped = serializer.Deserialize(captured);
-        roundTripped.Should().ContainSingle()
-            .Which.Type.Should().Be(FlashMessageType.Warning);
+        roundTripped.Should().ContainSingle().Which.Type.Should().Be(FlashMessageType.Warning);
     }
 
     [Fact]
-    public void Info_QueuesMessageWithInfoTypeNotDefaultSuccess() {
+    public void Info_QueuesMessageWithInfoTypeNotDefaultSuccess()
+    {
         // Final sibling pin in the FlashMessage helper family. Error (#180) and Warning
         // (#181) are already covered; Info is the remaining helper whose Type-assignment
         // could silently regress to the default Success on a copy-paste refactor. Pin
@@ -81,7 +85,8 @@ public class FlashMessageClassTests {
         var serializer = new JsonFlashMessageSerializer();
         string captured = null;
         var tempData = Substitute.For<ITempDataDictionary>();
-        tempData.WhenForAnyArgs(t => t[FlashMessage.KeyName] = default)
+        tempData
+            .WhenForAnyArgs(t => t[FlashMessage.KeyName] = default)
             .Do(callInfo => captured = (string)callInfo.Arg<object>());
         var factory = Substitute.For<ITempDataDictionaryFactory>();
         factory.GetTempData(Arg.Any<HttpContext>()).Returns(tempData);
@@ -91,12 +96,12 @@ public class FlashMessageClassTests {
 
         captured.Should().NotBeNull();
         var roundTripped = serializer.Deserialize(captured);
-        roundTripped.Should().ContainSingle()
-            .Which.Type.Should().Be(FlashMessageType.Info);
+        roundTripped.Should().ContainSingle().Which.Type.Should().Be(FlashMessageType.Info);
     }
 
     [Fact]
-    public void Clear_DelegatesToTempDataClear_WipingAllEntriesNotJustFlashKey() {
+    public void Clear_DelegatesToTempDataClear_WipingAllEntriesNotJustFlashKey()
+    {
         // FlashMessage.Clear() calls TempData.Clear() — which wipes EVERY key in
         // TempData, not just the flash-message entry. That semantic is load-
         // bearing: a refactor that "narrows" it to TempData.Remove(KeyName)
@@ -106,8 +111,11 @@ public class FlashMessageClassTests {
         var tempData = Substitute.For<ITempDataDictionary>();
         var factory = Substitute.For<ITempDataDictionaryFactory>();
         factory.GetTempData(Arg.Any<HttpContext>()).Returns(tempData);
-        var sut = new FlashMessage(factory, Substitute.For<IHttpContextAccessor>(),
-            Substitute.For<IFlashMessageSerializer>());
+        var sut = new FlashMessage(
+            factory,
+            Substitute.For<IHttpContextAccessor>(),
+            Substitute.For<IFlashMessageSerializer>()
+        );
 
         sut.Clear();
 
@@ -116,7 +124,8 @@ public class FlashMessageClassTests {
     }
 
     [Fact]
-    public void Retrieve_WhenEntryMissing_ReturnsEmptyAndDoesNotCallRemoveOrDeserialize() {
+    public void Retrieve_WhenEntryMissing_ReturnsEmptyAndDoesNotCallRemoveOrDeserialize()
+    {
         // Retrieve guards against a missing TempData entry with an explicit
         // `if (obj == null) return new List<IFlashMessageModel>()` short-circuit
         // BEFORE the TempData.Remove + deserialize calls. The guard is load-
@@ -141,7 +150,8 @@ public class FlashMessageClassTests {
     }
 
     [Fact]
-    public void Queue_TwoMessagesInSameSession_PreservesBothInOrder() {
+    public void Queue_TwoMessagesInSameSession_PreservesBothInOrder()
+    {
         // Queue's body is:
         //   var flashMessageModelList = Peek();
         //   flashMessageModelList.Add(message);
@@ -168,7 +178,8 @@ public class FlashMessageClassTests {
         var serializer = new JsonFlashMessageSerializer();
         string current = null;
         var tempData = Substitute.For<ITempDataDictionary>();
-        tempData.WhenForAnyArgs(t => t[FlashMessage.KeyName] = default)
+        tempData
+            .WhenForAnyArgs(t => t[FlashMessage.KeyName] = default)
             .Do(callInfo => current = (string)callInfo.Arg<object>());
         tempData.Peek(FlashMessage.KeyName).Returns(_ => current);
         var factory = Substitute.For<ITempDataDictionaryFactory>();
@@ -186,7 +197,8 @@ public class FlashMessageClassTests {
     }
 
     [Fact]
-    public void Success_QueuesMessageWithExplicitSuccessTypeAssignment() {
+    public void Success_QueuesMessageWithExplicitSuccessTypeAssignment()
+    {
         // Fourth and final sibling in the FlashMessage helper-family pin set.
         // Existing pins cover Error, Warning, and Info — all three asserting the
         // helper's `Type = FlashMessageType.X` line is intact AND distinct from
@@ -260,7 +272,8 @@ public class FlashMessageClassTests {
         var serializer = new JsonFlashMessageSerializer();
         string captured = null;
         var tempData = Substitute.For<ITempDataDictionary>();
-        tempData.WhenForAnyArgs(t => t[FlashMessage.KeyName] = default)
+        tempData
+            .WhenForAnyArgs(t => t[FlashMessage.KeyName] = default)
             .Do(callInfo => captured = (string)callInfo.Arg<object>());
         var factory = Substitute.For<ITempDataDictionaryFactory>();
         factory.GetTempData(Arg.Any<HttpContext>()).Returns(tempData);
@@ -270,16 +283,19 @@ public class FlashMessageClassTests {
 
         captured.Should().NotBeNull();
         var roundTripped = serializer.Deserialize(captured);
-        roundTripped.Should().ContainSingle()
-            .Which.Type.Should().Be(FlashMessageType.Success);
+        roundTripped.Should().ContainSingle().Which.Type.Should().Be(FlashMessageType.Success);
     }
 
     [Fact]
-    public void Retrieve_WhenEntryExists_RemovesItFromTempData() {
+    public void Retrieve_WhenEntryExists_RemovesItFromTempData()
+    {
         var serializer = new JsonFlashMessageSerializer();
-        var serialized = serializer.Serialize(new List<IFlashMessageModel> {
-            new FlashMessageModel { Message = "Saved", Type = FlashMessageType.Success },
-        });
+        var serialized = serializer.Serialize(
+            new List<IFlashMessageModel>
+            {
+                new FlashMessageModel { Message = "Saved", Type = FlashMessageType.Success },
+            }
+        );
 
         var tempData = Substitute.For<ITempDataDictionary>();
         tempData[FlashMessage.KeyName].Returns(serialized);

@@ -4,9 +4,11 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Equibles.UnitTests.Mcp;
 
-public class EquiblesMcpServiceCollectionExtensionsTests {
+public class EquiblesMcpServiceCollectionExtensionsTests
+{
     [Fact]
-    public void AddEquiblesMcp_InvokesConfigureCallbackWithNonNullBuilder() {
+    public void AddEquiblesMcp_InvokesConfigureCallbackWithNonNullBuilder()
+    {
         // AddEquiblesMcp is the composition root's entry point for wiring
         // MCP tooling — it bootstraps the underlying IMcpServerBuilder
         // (with HTTP transport) and exposes an EquiblesMcpBuilder to the

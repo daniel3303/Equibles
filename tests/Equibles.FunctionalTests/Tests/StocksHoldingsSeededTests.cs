@@ -9,17 +9,20 @@ namespace Equibles.FunctionalTests.Tests;
 
 [Collection(FunctionalTestCollection.Name)]
 [Trait("Category", "Functional")]
-public class StocksHoldingsSeededTests {
+public class StocksHoldingsSeededTests
+{
     private readonly WebAppFixture _web;
     private readonly PlaywrightFixture _playwright;
 
-    public StocksHoldingsSeededTests(WebAppFixture web, PlaywrightFixture playwright) {
+    public StocksHoldingsSeededTests(WebAppFixture web, PlaywrightFixture playwright)
+    {
         _web = web;
         _playwright = playwright;
     }
 
     [Fact]
-    public async Task Holdings_GetForStockWithMultipleQuartersAndManyHolders_RendersDateSelectorAndTopHundredByValue() {
+    public async Task Holdings_GetForStockWithMultipleQuartersAndManyHolders_RendersDateSelectorAndTopHundredByValue()
+    {
         // Seeds 4 quarter-end report dates × 200 distinct InstitutionalHolders = 800
         // InstitutionalHolding rows so the page has substantially more data than
         // StockTabService.LoadHoldingsTab's Top-100 cap and more than one ReportDate.
@@ -35,7 +38,8 @@ public class StocksHoldingsSeededTests {
         const int holderCount = 200;
         const int displayedRowCap = 100;
         var stockId = Guid.NewGuid();
-        var reportDates = new[] {
+        var reportDates = new[]
+        {
             new DateOnly(2025, 3, 31),
             new DateOnly(2025, 6, 30),
             new DateOnly(2025, 9, 30),
@@ -43,36 +47,47 @@ public class StocksHoldingsSeededTests {
         };
         var mostRecentDate = reportDates[^1];
 
-        await _web.ResetAndSeedAsync(async db => {
-            db.Add(new CommonStock {
-                Id = stockId,
-                Ticker = "AAPL",
-                Name = "Apple Inc.",
-                Cik = "0000320193",
-            });
+        await _web.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new CommonStock
+                {
+                    Id = stockId,
+                    Ticker = "AAPL",
+                    Name = "Apple Inc.",
+                    Cik = "0000320193",
+                }
+            );
 
             db.ChangeTracker.AutoDetectChangesEnabled = false;
             var holders = new InstitutionalHolder[holderCount];
-            for (var i = 0; i < holderCount; i++) {
-                holders[i] = new InstitutionalHolder {
+            for (var i = 0; i < holderCount; i++)
+            {
+                holders[i] = new InstitutionalHolder
+                {
                     Cik = $"H{i:D7}",
                     Name = $"Test Holder {i + 1:D3}",
                 };
                 db.Add(holders[i]);
             }
 
-            foreach (var reportDate in reportDates) {
-                for (var i = 0; i < holderCount; i++) {
-                    db.Add(new InstitutionalHolding {
-                        CommonStockId = stockId,
-                        InstitutionalHolderId = holders[i].Id,
-                        ReportDate = reportDate,
-                        FilingDate = reportDate.AddDays(45),
-                        Value = (long)(i + 1) * 1_000_000L,
-                        Shares = (long)(i + 1) * 1_000L,
-                        ShareType = ShareType.Shares,
-                        InvestmentDiscretion = InvestmentDiscretion.Sole,
-                    });
+            foreach (var reportDate in reportDates)
+            {
+                for (var i = 0; i < holderCount; i++)
+                {
+                    db.Add(
+                        new InstitutionalHolding
+                        {
+                            CommonStockId = stockId,
+                            InstitutionalHolderId = holders[i].Id,
+                            ReportDate = reportDate,
+                            FilingDate = reportDate.AddDays(45),
+                            Value = (long)(i + 1) * 1_000_000L,
+                            Shares = (long)(i + 1) * 1_000L,
+                            ShareType = ShareType.Shares,
+                            InvestmentDiscretion = InvestmentDiscretion.Sole,
+                        }
+                    );
                 }
             }
             await Task.CompletedTask;
@@ -84,7 +99,8 @@ public class StocksHoldingsSeededTests {
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);
 
-        await Assertions.Expect(page.Locator("h3").Filter(new() { HasTextString = "No Holdings Data" }))
+        await Assertions
+            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Holdings Data" }))
             .ToHaveCountAsync(0);
 
         var dateSelect = page.Locator("select#holdings-date");
@@ -99,15 +115,23 @@ public class StocksHoldingsSeededTests {
         // the highest-Value seeded holder (i = holderCount - 1 → "Test Holder 200"). This
         // proves the .Include(h => h.InstitutionalHolder) executes against the populated
         // table — without it the cell would render the "Unknown" fallback.
-        await Assertions.Expect(rows.First.Locator("td").First)
+        await Assertions
+            .Expect(rows.First.Locator("td").First)
             .ToHaveTextAsync($"Test Holder {holderCount:D3}");
 
         // Caption only renders when DisplayedCount < HolderCount — pins both the Top-100 cap
         // and the distinct-holder aggregation across the 200 seeded rows for this quarter.
-        await Assertions.Expect(
-                page.Locator("div.text-xs").Filter(new() {
-                    HasTextString = $"Showing top {displayedRowCap} of {holderCount:N0} holders by value",
-                }))
+        await Assertions
+            .Expect(
+                page.Locator("div.text-xs")
+                    .Filter(
+                        new()
+                        {
+                            HasTextString =
+                                $"Showing top {displayedRowCap} of {holderCount:N0} holders by value",
+                        }
+                    )
+            )
             .ToHaveCountAsync(1);
     }
 }

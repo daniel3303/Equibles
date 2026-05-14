@@ -3,10 +3,15 @@ using NSubstitute;
 
 namespace Equibles.IntegrationTests.Helpers;
 
-public static class ServiceScopeSubstitute {
-    public static IServiceScopeFactory Create(params (Type serviceType, object instance)[] registrations) {
+public static class ServiceScopeSubstitute
+{
+    public static IServiceScopeFactory Create(
+        params (Type serviceType, object instance)[] registrations
+    )
+    {
         var serviceProvider = Substitute.For<IServiceProvider>();
-        foreach (var (serviceType, instance) in registrations) {
+        foreach (var (serviceType, instance) in registrations)
+        {
             serviceProvider.GetService(serviceType).Returns(instance);
         }
 

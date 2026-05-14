@@ -1,24 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <InternalsVisibleTo Include="Equibles.UnitTests" />
+    <InternalsVisibleTo Include="Equibles.IntegrationTests" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <InternalsVisibleTo Include="Equibles.UnitTests" />
-      <InternalsVisibleTo Include="Equibles.IntegrationTests" />
-    </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="AngleSharp" />
+    <PackageReference Include="Equibles.Core.AutoWiring" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="Microsoft.ML.Tokenizers.Data.O200kBase" />
+    <PackageReference Include="PdfPig" />
+    <PackageReference Include="ReverseMarkdown" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="AngleSharp" />
-      <PackageReference Include="Equibles.Core.AutoWiring" />
-      <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
-      <PackageReference Include="Microsoft.Extensions.Http" />
-      <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
-      <PackageReference Include="Microsoft.ML.Tokenizers.Data.O200kBase" />
-      <PackageReference Include="PdfPig" />
-      <PackageReference Include="ReverseMarkdown" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <ProjectReference Include="..\Equibles.Sec.Repositories\Equibles.Sec.Repositories.csproj" />
-      <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
-    </ItemGroup>
-
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.Sec.Repositories\Equibles.Sec.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
+  </ItemGroup>
 </Project>

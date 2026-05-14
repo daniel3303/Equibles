@@ -2,11 +2,13 @@ using Equibles.Sec.HostedService.Services;
 
 namespace Equibles.UnitTests.Sec;
 
-public class FtdImportServiceTests {
+public class FtdImportServiceTests
+{
     // ── GetFileNames ──
 
     [Fact]
-    public void GetFileNames_SingleMonth_ReturnsTwoFiles() {
+    public void GetFileNames_SingleMonth_ReturnsTwoFiles()
+    {
         // Use a date far enough in the past that the month boundary is clear
         var startDate = new DateOnly(2020, 1, 15);
 
@@ -18,7 +20,8 @@ public class FtdImportServiceTests {
     }
 
     [Fact]
-    public void GetFileNames_AlwaysStartsFromFirstOfMonth() {
+    public void GetFileNames_AlwaysStartsFromFirstOfMonth()
+    {
         // Even if start date is mid-month, file names start from month beginning
         var startDate = new DateOnly(2024, 6, 20);
 
@@ -29,7 +32,8 @@ public class FtdImportServiceTests {
     }
 
     [Fact]
-    public void GetFileNames_MultipleMonths_GeneratesAllPairs() {
+    public void GetFileNames_MultipleMonths_GeneratesAllPairs()
+    {
         // A start date in Jan 2024 + current is at least March 2026 → many months
         var startDate = new DateOnly(2024, 1, 1);
 
@@ -49,7 +53,8 @@ public class FtdImportServiceTests {
     }
 
     [Fact]
-    public void GetFileNames_StartBeforeOldestAvailable_ClampsAndSkipsJune2017AFile() {
+    public void GetFileNames_StartBeforeOldestAvailable_ClampsAndSkipsJune2017AFile()
+    {
         // SEC's failure-to-deliver history begins June 2017, but the FIRST month is special:
         // only the second-half file `cnsfails201706b.zip` exists — there is no
         // `cnsfails201706a.zip` on sec.gov. GetFileNames encodes this asymmetry with
@@ -71,7 +76,8 @@ public class FtdImportServiceTests {
     }
 
     [Fact]
-    public void GetFileNames_FutureDate_ReturnsEmptyList() {
+    public void GetFileNames_FutureDate_ReturnsEmptyList()
+    {
         var futureDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1);
 
         var fileNames = FtdImportService.GetFileNames(futureDate);
@@ -80,7 +86,8 @@ public class FtdImportServiceTests {
     }
 
     [Fact]
-    public void GetFileNames_StartBeforeOldestAvailableDate_OmitsJune2017AFile() {
+    public void GetFileNames_StartBeforeOldestAvailableDate_OmitsJune2017AFile()
+    {
         // June 2017 is the oldest month SEC publishes FTD data for, and uniquely has
         // only the second-half ("b") file — cnsfails201706a.zip does not exist on
         // sec.gov. Any backfill from the earliest history must skip the 'a' file
@@ -102,7 +109,8 @@ public class FtdImportServiceTests {
     // ── IsRecentFtdFile ──
 
     [Fact]
-    public void IsRecentFtdFile_CurrentMonth_ReturnsTrue() {
+    public void IsRecentFtdFile_CurrentMonth_ReturnsTrue()
+    {
         // Use a month safely inside the 2-month window to avoid boundary flakes
         var now = DateOnly.FromDateTime(DateTime.UtcNow);
         var safeRecent = now.AddMonths(0).ToString("yyyyMM");
@@ -113,13 +121,15 @@ public class FtdImportServiceTests {
         var priorFileName = $"cnsfails{priorMonth}b.zip";
 
         // At least one of these must be recent (covers month-boundary edge case)
-        var result = FtdImportService.IsRecentFtdFile(fileName)
+        var result =
+            FtdImportService.IsRecentFtdFile(fileName)
             || FtdImportService.IsRecentFtdFile(priorFileName);
         result.Should().BeTrue();
     }
 
     [Fact]
-    public void IsRecentFtdFile_SixMonthsAgo_ReturnsFalse() {
+    public void IsRecentFtdFile_SixMonthsAgo_ReturnsFalse()
+    {
         var oldDate = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(-6);
         var fileName = $"cnsfails{oldDate:yyyyMM}a.zip";
 
@@ -129,9 +139,10 @@ public class FtdImportServiceTests {
     [Theory]
     [InlineData("short.zip")]
     [InlineData("cnsfailsXXXXYYa.zip")]
-    [InlineData("cnsfails202413a.zip")]  // Invalid month 13
-    [InlineData("cnsfails202400a.zip")]  // Invalid month 0
-    public void IsRecentFtdFile_InvalidFormat_ReturnsFalse(string fileName) {
+    [InlineData("cnsfails202413a.zip")] // Invalid month 13
+    [InlineData("cnsfails202400a.zip")] // Invalid month 0
+    public void IsRecentFtdFile_InvalidFormat_ReturnsFalse(string fileName)
+    {
         FtdImportService.IsRecentFtdFile(fileName).Should().BeFalse();
     }
 }

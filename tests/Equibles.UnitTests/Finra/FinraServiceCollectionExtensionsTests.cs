@@ -7,9 +7,11 @@ using Microsoft.Extensions.Hosting;
 
 namespace Equibles.UnitTests.Finra;
 
-public class FinraServiceCollectionExtensionsTests {
+public class FinraServiceCollectionExtensionsTests
+{
     [Fact]
-    public void AddFinraWorker_AutoWiresIFinraClientFromIntegrationsAssembly() {
+    public void AddFinraWorker_AutoWiresIFinraClientFromIntegrationsAssembly()
+    {
         // Sibling to `AddFinraWorker_AutoWiresShortVolumeImportService`.
         // The existing pin covers the FIRST `AutoWireServicesFrom` call
         // — the hosted-service assembly scan that registers
@@ -59,7 +61,8 @@ public class FinraServiceCollectionExtensionsTests {
     }
 
     [Fact]
-    public void AddFinraWorker_AutoWiresShortVolumeImportService() {
+    public void AddFinraWorker_AutoWiresShortVolumeImportService()
+    {
         // AddFinraWorker is the host's seam into auto-wiring for the
         // FINRA short-volume + short-interest pipeline. It scans BOTH
         // the hosted-service assembly AND Equibles.Integrations.Finra
@@ -79,7 +82,8 @@ public class FinraServiceCollectionExtensionsTests {
     }
 
     [Fact]
-    public void AddFinraWorker_RegistersFinraScraperWorkerAsIHostedService() {
+    public void AddFinraWorker_RegistersFinraScraperWorkerAsIHostedService()
+    {
         // Third sibling in the AddFinraWorker registration family. The two
         // existing pins cover the AutoWireServicesFrom scans
         // (ShortVolumeImportService and IFinraClient). This pin covers the
@@ -127,8 +131,11 @@ public class FinraServiceCollectionExtensionsTests {
             .Where(d => d.ServiceType == typeof(IHostedService))
             .ToList();
 
-        hostedServiceDescriptors.Should().Contain(
-            d => d.ImplementationType == typeof(FinraScraperWorker),
-            "AddHostedService<FinraScraperWorker>() must register the worker as IHostedService so the daily FINRA short-volume pull runs at startup");
+        hostedServiceDescriptors
+            .Should()
+            .Contain(
+                d => d.ImplementationType == typeof(FinraScraperWorker),
+                "AddHostedService<FinraScraperWorker>() must register the worker as IHostedService so the daily FINRA short-volume pull runs at startup"
+            );
     }
 }

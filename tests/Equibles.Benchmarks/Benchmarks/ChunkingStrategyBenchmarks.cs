@@ -13,18 +13,21 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// 1024-token chunks with the 128-token overlap window, so the inner loop runs more than once.
 /// </summary>
 [MemoryDiagnoser]
-public class ChunkingStrategyBenchmarks {
+public class ChunkingStrategyBenchmarks
+{
     private readonly ChunkingStrategy _sut = new(new TokenCounter());
     private string _input;
 
     [GlobalSetup]
-    public void Setup() {
+    public void Setup()
+    {
         // 8 192 chars of plain English text — roughly ~1 800 tokens with o200k_base,
         // forcing the chunker to produce ~2 chunks with the production 1024-token window
         // and a single overlap pass. Smaller inputs would skip the sentence-boundary
         // heuristic; much larger ones blow up benchmark wall-time without exercising
         // any new code path.
-        var bag = new[] {
+        var bag = new[]
+        {
             "The Company reported strong revenue growth during the fiscal quarter.",
             "Operating expenses increased modestly compared to the prior year period.",
             "Net income rose driven by higher product margins and lower interest costs.",
@@ -34,7 +37,8 @@ public class ChunkingStrategyBenchmarks {
         };
         var builder = new StringBuilder(8_192 + 64);
         var i = 0;
-        while (builder.Length < 8_192) {
+        while (builder.Length < 8_192)
+        {
             builder.Append(bag[i % bag.Length]).Append(' ');
             i++;
         }

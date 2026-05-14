@@ -7,13 +7,15 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Mcp;
 
-public class ApiKeyMiddlewareTests {
+public class ApiKeyMiddlewareTests
+{
     private readonly IApiKeyValidator _validator;
     private readonly DefaultHttpContext _httpContext;
     private bool _nextCalled;
     private readonly ApiKeyMiddleware _sut;
 
-    public ApiKeyMiddlewareTests() {
+    public ApiKeyMiddlewareTests()
+    {
         _validator = Substitute.For<IApiKeyValidator>();
         _validator.IsEnabled.Returns(true);
         _httpContext = new DefaultHttpContext();
@@ -21,12 +23,18 @@ public class ApiKeyMiddlewareTests {
         _nextCalled = false;
 
         _sut = new ApiKeyMiddleware(
-            _ => { _nextCalled = true; return Task.CompletedTask; },
-            Substitute.For<ILogger<ApiKeyMiddleware>>());
+            _ =>
+            {
+                _nextCalled = true;
+                return Task.CompletedTask;
+            },
+            Substitute.For<ILogger<ApiKeyMiddleware>>()
+        );
     }
 
     [Fact]
-    public async Task InvokeAsync_ValidatorDisabled_CallsNext() {
+    public async Task InvokeAsync_ValidatorDisabled_CallsNext()
+    {
         _validator.IsEnabled.Returns(false);
 
         await _sut.InvokeAsync(_httpContext, _validator);
@@ -35,7 +43,8 @@ public class ApiKeyMiddlewareTests {
     }
 
     [Fact]
-    public async Task InvokeAsync_ValidBearerToken_CallsNext() {
+    public async Task InvokeAsync_ValidBearerToken_CallsNext()
+    {
         _validator.IsValid("test-key").Returns(true);
         _httpContext.Request.Headers.Authorization = "Bearer test-key";
 
@@ -45,7 +54,8 @@ public class ApiKeyMiddlewareTests {
     }
 
     [Fact]
-    public async Task InvokeAsync_MissingAuthorizationHeader_Returns401() {
+    public async Task InvokeAsync_MissingAuthorizationHeader_Returns401()
+    {
         await _sut.InvokeAsync(_httpContext, _validator);
 
         _httpContext.Response.StatusCode.Should().Be((int)HttpStatusCode.Unauthorized);
@@ -53,7 +63,8 @@ public class ApiKeyMiddlewareTests {
     }
 
     [Fact]
-    public async Task InvokeAsync_NoBearerPrefix_Returns401() {
+    public async Task InvokeAsync_NoBearerPrefix_Returns401()
+    {
         _httpContext.Request.Headers.Authorization = "Basic abc123";
 
         await _sut.InvokeAsync(_httpContext, _validator);
@@ -63,7 +74,8 @@ public class ApiKeyMiddlewareTests {
     }
 
     [Fact]
-    public async Task InvokeAsync_InvalidApiKey_Returns401() {
+    public async Task InvokeAsync_InvalidApiKey_Returns401()
+    {
         _validator.IsValid("bad-key").Returns(false);
         _httpContext.Request.Headers.Authorization = "Bearer bad-key";
 
@@ -74,7 +86,8 @@ public class ApiKeyMiddlewareTests {
     }
 
     [Fact]
-    public async Task InvokeAsync_BearerWithWhitespace_TrimsAndValidates() {
+    public async Task InvokeAsync_BearerWithWhitespace_TrimsAndValidates()
+    {
         _validator.IsValid("my-key").Returns(true);
         _httpContext.Request.Headers.Authorization = "Bearer   my-key  ";
 
@@ -84,7 +97,8 @@ public class ApiKeyMiddlewareTests {
     }
 
     [Fact]
-    public async Task InvokeAsync_EmptyBearerValue_Returns401() {
+    public async Task InvokeAsync_EmptyBearerValue_Returns401()
+    {
         _httpContext.Request.Headers.Authorization = "Bearer ";
         _validator.IsValid("").Returns(false);
 
@@ -95,7 +109,8 @@ public class ApiKeyMiddlewareTests {
     }
 
     [Fact]
-    public async Task InvokeAsync_CaseInsensitiveBearerPrefix_Accepted() {
+    public async Task InvokeAsync_CaseInsensitiveBearerPrefix_Accepted()
+    {
         _validator.IsValid("my-key").Returns(true);
         _httpContext.Request.Headers.Authorization = "bearer my-key";
 

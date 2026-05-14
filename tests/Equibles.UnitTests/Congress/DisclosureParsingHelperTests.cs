@@ -5,7 +5,8 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Congress;
 
-public class DisclosureParsingHelperTests {
+public class DisclosureParsingHelperTests
+{
     // ── ParseTransactionType ────────────────────────────────────────────
 
     [Theory]
@@ -19,7 +20,11 @@ public class DisclosureParsingHelperTests {
     [InlineData("S", CongressTransactionType.Sale)]
     [InlineData("purchase", CongressTransactionType.Purchase)]
     [InlineData("SALE", CongressTransactionType.Sale)]
-    public void ParseTransactionType_KnownTypes_ReturnsExpected(string input, CongressTransactionType expected) {
+    public void ParseTransactionType_KnownTypes_ReturnsExpected(
+        string input,
+        CongressTransactionType expected
+    )
+    {
         DisclosureParsingHelper.ParseTransactionType(input).Should().Be(expected);
     }
 
@@ -29,7 +34,8 @@ public class DisclosureParsingHelperTests {
     [InlineData("Exchange")]
     [InlineData("Receive")]
     [InlineData("unknown")]
-    public void ParseTransactionType_UnknownOrNull_ReturnsNull(string input) {
+    public void ParseTransactionType_UnknownOrNull_ReturnsNull(string input)
+    {
         DisclosureParsingHelper.ParseTransactionType(input).Should().BeNull();
     }
 
@@ -39,7 +45,12 @@ public class DisclosureParsingHelperTests {
     [InlineData("$1,001 - $15,000", 1001, 15000)]
     [InlineData("$50,001 - $100,000", 50001, 100000)]
     [InlineData("$15,001 - $50,000", 15001, 50000)]
-    public void ParseAmountRange_TwoValues_ReturnsFromTo(string input, long expectedFrom, long expectedTo) {
+    public void ParseAmountRange_TwoValues_ReturnsFromTo(
+        string input,
+        long expectedFrom,
+        long expectedTo
+    )
+    {
         var (from, to) = DisclosureParsingHelper.ParseAmountRange(input);
         from.Should().Be(expectedFrom);
         to.Should().Be(expectedTo);
@@ -48,14 +59,20 @@ public class DisclosureParsingHelperTests {
     [Theory]
     [InlineData("Over $1,000,000", 1000000, 1000000)]
     [InlineData("Over $50,000,000", 50000000, 50000000)]
-    public void ParseAmountRange_OverFormat_ReturnsSameForBoth(string input, long expectedFrom, long expectedTo) {
+    public void ParseAmountRange_OverFormat_ReturnsSameForBoth(
+        string input,
+        long expectedFrom,
+        long expectedTo
+    )
+    {
         var (from, to) = DisclosureParsingHelper.ParseAmountRange(input);
         from.Should().Be(expectedFrom);
         to.Should().Be(expectedTo);
     }
 
     [Fact]
-    public void ParseAmountRange_SingleValue_ReturnsZeroToValue() {
+    public void ParseAmountRange_SingleValue_ReturnsZeroToValue()
+    {
         var (from, to) = DisclosureParsingHelper.ParseAmountRange("$15,000");
         from.Should().Be(0);
         to.Should().Be(15000);
@@ -66,7 +83,8 @@ public class DisclosureParsingHelperTests {
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("no dollar signs")]
-    public void ParseAmountRange_InvalidOrEmpty_ReturnsZeros(string input) {
+    public void ParseAmountRange_InvalidOrEmpty_ReturnsZeros(string input)
+    {
         var (from, to) = DisclosureParsingHelper.ParseAmountRange(input);
         from.Should().Be(0);
         to.Should().Be(0);
@@ -75,12 +93,14 @@ public class DisclosureParsingHelperTests {
     // ── ParseDate ───────────────────────────────────────────────────────
 
     [Fact]
-    public void ParseDate_IsoFormat_ParsesCorrectly() {
+    public void ParseDate_IsoFormat_ParsesCorrectly()
+    {
         DisclosureParsingHelper.ParseDate("2024-03-15").Should().Be(new DateOnly(2024, 3, 15));
     }
 
     [Fact]
-    public void ParseDate_MmDdYyyyFormat_ParsesCorrectly() {
+    public void ParseDate_MmDdYyyyFormat_ParsesCorrectly()
+    {
         DisclosureParsingHelper.ParseDate("03/15/2024").Should().Be(new DateOnly(2024, 3, 15));
     }
 
@@ -89,7 +109,8 @@ public class DisclosureParsingHelperTests {
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("not-a-date")]
-    public void ParseDate_InvalidOrNull_ReturnsNull(string input) {
+    public void ParseDate_InvalidOrNull_ReturnsNull(string input)
+    {
         DisclosureParsingHelper.ParseDate(input).Should().BeNull();
     }
 
@@ -100,7 +121,11 @@ public class DisclosureParsingHelperTests {
     [InlineData("Microsoft Corp [MSFT]", "MSFT")]
     [InlineData("Tesla Inc (TSLA)", "TSLA")]
     [InlineData("Alphabet (GOOG) Class C", "GOOG")]
-    public void ExtractTickerFromAssetName_WithTicker_ReturnsTicker(string assetName, string expected) {
+    public void ExtractTickerFromAssetName_WithTicker_ReturnsTicker(
+        string assetName,
+        string expected
+    )
+    {
         DisclosureParsingHelper.ExtractTickerFromAssetName(assetName).Should().Be(expected);
     }
 
@@ -108,31 +133,36 @@ public class DisclosureParsingHelperTests {
     [InlineData("Apple Inc Common Stock")]
     [InlineData("Some Company")]
     [InlineData("")]
-    public void ExtractTickerFromAssetName_NoTicker_ReturnsNull(string assetName) {
+    public void ExtractTickerFromAssetName_NoTicker_ReturnsNull(string assetName)
+    {
         DisclosureParsingHelper.ExtractTickerFromAssetName(assetName).Should().BeNull();
     }
 
     [Fact]
-    public void ExtractTickerFromAssetName_LowercaseTicker_ReturnsUppercase() {
+    public void ExtractTickerFromAssetName_LowercaseTicker_ReturnsUppercase()
+    {
         DisclosureParsingHelper.ExtractTickerFromAssetName("test (aapl)").Should().Be("AAPL");
     }
 
     // ── GetCell ─────────────────────────────────────────────────────────
 
     [Fact]
-    public void GetCell_ValidIndex_ReturnsValue() {
+    public void GetCell_ValidIndex_ReturnsValue()
+    {
         var cells = new List<string> { "a", "b", "c" };
         DisclosureParsingHelper.GetCell(cells, 1).Should().Be("b");
     }
 
     [Fact]
-    public void GetCell_OutOfBounds_ReturnsNull() {
+    public void GetCell_OutOfBounds_ReturnsNull()
+    {
         var cells = new List<string> { "a" };
         DisclosureParsingHelper.GetCell(cells, 5).Should().BeNull();
     }
 
     [Fact]
-    public void GetCell_NegativeIndex_ReturnsNull() {
+    public void GetCell_NegativeIndex_ReturnsNull()
+    {
         var cells = new List<string> { "a" };
         DisclosureParsingHelper.GetCell(cells, -1).Should().BeNull();
     }
@@ -140,65 +170,84 @@ public class DisclosureParsingHelperTests {
     // ── CleanSentinel ───────────────────────────────────────────────────
 
     [Fact]
-    public void CleanSentinel_DashDash_ReturnsNull() {
+    public void CleanSentinel_DashDash_ReturnsNull()
+    {
         DisclosureParsingHelper.CleanSentinel("--").Should().BeNull();
     }
 
     [Fact]
-    public void CleanSentinel_NullOrEmpty_ReturnsNull() {
+    public void CleanSentinel_NullOrEmpty_ReturnsNull()
+    {
         DisclosureParsingHelper.CleanSentinel(null).Should().BeNull();
         DisclosureParsingHelper.CleanSentinel("").Should().BeNull();
     }
 
     [Fact]
-    public void CleanSentinel_NormalValue_ReturnsSame() {
+    public void CleanSentinel_NormalValue_ReturnsSame()
+    {
         DisclosureParsingHelper.CleanSentinel("Purchase").Should().Be("Purchase");
     }
 
     // ── Truncate ────────────────────────────────────────────────────────
 
     [Fact]
-    public void Truncate_WithinLimit_ReturnsSame() {
+    public void Truncate_WithinLimit_ReturnsSame()
+    {
         DisclosureParsingHelper.Truncate("short", 10).Should().Be("short");
     }
 
     [Fact]
-    public void Truncate_OverLimit_Truncated() {
+    public void Truncate_OverLimit_Truncated()
+    {
         DisclosureParsingHelper.Truncate("abcdefghij", 5).Should().Be("abcde");
     }
 
     [Fact]
-    public void Truncate_Null_ReturnsNull() {
+    public void Truncate_Null_ReturnsNull()
+    {
         DisclosureParsingHelper.Truncate(null, 10).Should().BeNull();
     }
 
     // ── IsValidDisclosureUrl ────────────────────────────────────────────
 
     [Fact]
-    public void IsValidDisclosureUrl_MatchingBase_ReturnsTrue() {
-        DisclosureParsingHelper.IsValidDisclosureUrl(
-            "https://disclosures.house.gov/public_disc/ptr-pdfs/2024/20024680.pdf",
-            "https://disclosures.house.gov").Should().BeTrue();
+    public void IsValidDisclosureUrl_MatchingBase_ReturnsTrue()
+    {
+        DisclosureParsingHelper
+            .IsValidDisclosureUrl(
+                "https://disclosures.house.gov/public_disc/ptr-pdfs/2024/20024680.pdf",
+                "https://disclosures.house.gov"
+            )
+            .Should()
+            .BeTrue();
     }
 
     [Fact]
-    public void IsValidDisclosureUrl_DifferentBase_ReturnsFalse() {
-        DisclosureParsingHelper.IsValidDisclosureUrl(
-            "https://example.com/doc.pdf",
-            "https://disclosures.house.gov").Should().BeFalse();
+    public void IsValidDisclosureUrl_DifferentBase_ReturnsFalse()
+    {
+        DisclosureParsingHelper
+            .IsValidDisclosureUrl("https://example.com/doc.pdf", "https://disclosures.house.gov")
+            .Should()
+            .BeFalse();
     }
 
     [Fact]
-    public void IsValidDisclosureUrl_CaseInsensitive_ReturnsTrue() {
-        DisclosureParsingHelper.IsValidDisclosureUrl(
-            "HTTPS://DISCLOSURES.HOUSE.GOV/doc.pdf",
-            "https://disclosures.house.gov").Should().BeTrue();
+    public void IsValidDisclosureUrl_CaseInsensitive_ReturnsTrue()
+    {
+        DisclosureParsingHelper
+            .IsValidDisclosureUrl(
+                "HTTPS://DISCLOSURES.HOUSE.GOV/doc.pdf",
+                "https://disclosures.house.gov"
+            )
+            .Should()
+            .BeTrue();
     }
 
     // ── ParseTransactionsFromHtml ───────────────────────────────────────
 
     [Fact]
-    public void ParseTransactionsFromHtml_ValidTable_ParsesTransactions() {
+    public void ParseTransactionsFromHtml_ValidTable_ParsesTransactions()
+    {
         var html = """
             <html><body>
             <table>
@@ -227,8 +276,12 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test Member", CongressPosition.Representative,
-            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+            html,
+            "Test Member",
+            CongressPosition.Representative,
+            new DateOnly(2024, 7, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().HaveCount(1);
         result[0].Ticker.Should().Be("AAPL");
@@ -239,18 +292,24 @@ public class DisclosureParsingHelperTests {
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_NoTables_ReturnsEmpty() {
+    public void ParseTransactionsFromHtml_NoTables_ReturnsEmpty()
+    {
         var html = "<html><body><p>No tables here</p></body></html>";
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test", CongressPosition.Senator,
-            new DateOnly(2024, 1, 1), Substitute.For<ILogger>());
+            html,
+            "Test",
+            CongressPosition.Senator,
+            new DateOnly(2024, 1, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_NonStockAssetType_Filtered() {
+    public void ParseTransactionsFromHtml_NonStockAssetType_Filtered()
+    {
         var html = """
             <html><body>
             <table>
@@ -277,14 +336,19 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test", CongressPosition.Senator,
-            new DateOnly(2024, 1, 1), Substitute.For<ILogger>());
+            html,
+            "Test",
+            CongressPosition.Senator,
+            new DateOnly(2024, 1, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_BothTransactionAndNotificationDateColumns_UsesTransactionDate() {
+    public void ParseTransactionsFromHtml_BothTransactionAndNotificationDateColumns_UsesTransactionDate()
+    {
         // Senate HTML disclosures regularly carry BOTH a "Transaction Date" (when the
         // member traded) AND a "Notification Date" (when the filing was acknowledged) —
         // the two can differ by weeks. MapColumnIndices' priority chain (transaction →
@@ -328,15 +392,20 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test Senator", CongressPosition.Senator,
-            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+            html,
+            "Test Senator",
+            CongressPosition.Senator,
+            new DateOnly(2024, 7, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().HaveCount(1);
         result[0].TransactionDate.Should().Be(new DateOnly(2024, 6, 15));
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_UnrecognizedTransactionType_SkipsRow() {
+    public void ParseTransactionsFromHtml_UnrecognizedTransactionType_SkipsRow()
+    {
         // Congress disclosures occasionally carry transaction types that the
         // enum intentionally doesn't model — "Exchange" and "Receive" are
         // called out by the comment above ParseTransactionType. Those rows
@@ -366,14 +435,19 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test", CongressPosition.Representative,
-            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+            html,
+            "Test",
+            CongressPosition.Representative,
+            new DateOnly(2024, 7, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_TableWithoutTheadButFirstRowTh_ReadsHeadersFromFirstRow() {
+    public void ParseTransactionsFromHtml_TableWithoutTheadButFirstRowTh_ReadsHeadersFromFirstRow()
+    {
         // Congress disclosure HTML — particularly older House PTRs and
         // hand-coded staff exports — frequently omits a `<thead>` and
         // simply places `<th>` cells in the first `<tr>` of `<tbody>` (or
@@ -411,8 +485,12 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test Rep", CongressPosition.Representative,
-            new DateOnly(2024, 10, 1), Substitute.For<ILogger>());
+            html,
+            "Test Rep",
+            CongressPosition.Representative,
+            new DateOnly(2024, 10, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().HaveCount(1);
         result[0].Ticker.Should().Be("MSFT");
@@ -421,7 +499,8 @@ public class DisclosureParsingHelperTests {
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_TickerExtractedFromAssetName() {
+    public void ParseTransactionsFromHtml_TickerExtractedFromAssetName()
+    {
         var html = """
             <html><body>
             <table>
@@ -444,8 +523,12 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test", CongressPosition.Representative,
-            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+            html,
+            "Test",
+            CongressPosition.Representative,
+            new DateOnly(2024, 7, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().HaveCount(1);
         result[0].Ticker.Should().Be("AAPL");
@@ -453,7 +536,8 @@ public class DisclosureParsingHelperTests {
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_DescriptionHeaderInsteadOfAssetName_PopulatesAssetNameFromDescriptionColumn() {
+    public void ParseTransactionsFromHtml_DescriptionHeaderInsteadOfAssetName_PopulatesAssetNameFromDescriptionColumn()
+    {
         // MapColumnIndices resolves the asset column via a three-tier fallback:
         //   1. Contains("asset") && Contains("name")  → "Asset Name" (primary)
         //   2. Contains("asset") && !Contains("type") → bare "Asset" (rare)
@@ -507,8 +591,12 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test Rep", CongressPosition.Representative,
-            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+            html,
+            "Test Rep",
+            CongressPosition.Representative,
+            new DateOnly(2024, 7, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().HaveCount(1);
         result[0].AssetName.Should().Be("Apple Inc common stock");
@@ -516,7 +604,8 @@ public class DisclosureParsingHelperTests {
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_BareAssetHeaderWithoutNameOrType_PopulatesAssetNameFromSecondTierFallback() {
+    public void ParseTransactionsFromHtml_BareAssetHeaderWithoutNameOrType_PopulatesAssetNameFromSecondTierFallback()
+    {
         // Sibling pin to ParseTransactionsFromHtml_DescriptionHeaderInsteadOfAssetName.
         // MapColumnIndices' assetCol three-tier fallback:
         //   1. Contains("asset") && Contains("name")  → "Asset Name" (covered by happy-path tests)
@@ -561,15 +650,20 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test Rep", CongressPosition.Representative,
-            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+            html,
+            "Test Rep",
+            CongressPosition.Representative,
+            new DateOnly(2024, 7, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().HaveCount(1);
         result[0].AssetName.Should().Be("Apple Inc");
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_RowWithEmptySentinelInTransactionDateColumn_IsSilentlySkipped() {
+    public void ParseTransactionsFromHtml_RowWithEmptySentinelInTransactionDateColumn_IsSilentlySkipped()
+    {
         // ParseTransactionRow's first guard after column extraction is:
         //   var txDate = CleanSentinel(GetCell(cellTexts, cols.Date)) is { } dateStr ? ParseDate(dateStr) : null;
         //   if (txDate == null) return null;
@@ -669,14 +763,19 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test Member", CongressPosition.Representative,
-            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+            html,
+            "Test Member",
+            CongressPosition.Representative,
+            new DateOnly(2024, 7, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_FilerColumnInsteadOfOwner_PopulatesOwnerTypeFromFilerColumn() {
+    public void ParseTransactionsFromHtml_FilerColumnInsteadOfOwner_PopulatesOwnerTypeFromFilerColumn()
+    {
         // MapColumnIndices resolves the owner column with `h.Contains("owner") ||
         // h.Contains("filer")`. The two alternatives are independent: House PTRs use
         // an "Owner" column (Self / SP / JT / DC), Senate disclosures use a "Filer"
@@ -722,8 +821,12 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test Senator", CongressPosition.Senator,
-            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+            html,
+            "Test Senator",
+            CongressPosition.Senator,
+            new DateOnly(2024, 7, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().HaveCount(1);
         result[0].OwnerType.Should().Be("Joint");
@@ -736,7 +839,8 @@ public class DisclosureParsingHelperTests {
     // `condition-coverage` attribute over the production code.
 
     [Fact]
-    public void ParseTransactionsFromHtml_TableWithNoTheadAndNoLeadingThRow_SkipsTableSilently() {
+    public void ParseTransactionsFromHtml_TableWithNoTheadAndNoLeadingThRow_SkipsTableSilently()
+    {
         // Pins ExtractHeaderTexts' null-coalesce + null-conditional fallthrough:
         //   var headers = SelectNodes(".//thead//th") ?? SelectNodes(".//tr[1]//th");
         //   return headers?.Select(...).ToList();
@@ -761,14 +865,19 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test", CongressPosition.Representative,
-            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+            html,
+            "Test",
+            CongressPosition.Representative,
+            new DateOnly(2024, 7, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_OnlyNotificationDateColumnNoTransactionDate_UsesNotificationDateAsTxDate() {
+    public void ParseTransactionsFromHtml_OnlyNotificationDateColumnNoTransactionDate_UsesNotificationDateAsTxDate()
+    {
         // Pins MapColumnIndices' first dateCol fallback:
         //   if (dateCol == -1) dateCol = FindIndex(h.Contains("notification") && h.Contains("date"));
         // The existing BothTransactionAndNotificationDateColumns pin includes a
@@ -800,15 +909,20 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test", CongressPosition.Senator,
-            new DateOnly(2024, 7, 5), Substitute.For<ILogger>());
+            html,
+            "Test",
+            CongressPosition.Senator,
+            new DateOnly(2024, 7, 5),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().HaveCount(1);
         result[0].TransactionDate.Should().Be(new DateOnly(2024, 7, 1));
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_OnlyGenericDateColumn_UsesItAsTxDate() {
+    public void ParseTransactionsFromHtml_OnlyGenericDateColumn_UsesItAsTxDate()
+    {
         // Pins MapColumnIndices' SECOND dateCol fallback:
         //   if (dateCol == -1) dateCol = FindIndex(h.Contains("date"));
         // — the most permissive arm. Fires for legacy / hand-rolled tables that
@@ -839,15 +953,20 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test", CongressPosition.Representative,
-            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+            html,
+            "Test",
+            CongressPosition.Representative,
+            new DateOnly(2024, 7, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().HaveCount(1);
         result[0].TransactionDate.Should().Be(new DateOnly(2024, 6, 15));
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_BareTypeHeaderWithoutTransactionPrefix_ResolvesTypeColumn() {
+    public void ParseTransactionsFromHtml_BareTypeHeaderWithoutTransactionPrefix_ResolvesTypeColumn()
+    {
         // Pins MapColumnIndices' typeCol fallback:
         //   if (typeCol == -1) typeCol = FindIndex(h == "type");
         // Without the fallback, tables that label the transaction column simply
@@ -880,15 +999,20 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test", CongressPosition.Representative,
-            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+            html,
+            "Test",
+            CongressPosition.Representative,
+            new DateOnly(2024, 7, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().HaveCount(1);
         result[0].TransactionType.Should().Be(CongressTransactionType.Sale);
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_RowWithNoCellElements_IsSilentlySkipped() {
+    public void ParseTransactionsFromHtml_RowWithNoCellElements_IsSilentlySkipped()
+    {
         // Pins ParseTransactionRow's first null guard:
         //   var cells = row.SelectNodes(".//td");
         //   if (cells == null) return null;
@@ -915,14 +1039,19 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test", CongressPosition.Representative,
-            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+            html,
+            "Test",
+            CongressPosition.Representative,
+            new DateOnly(2024, 7, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_RowWithValidDateButEmptyTickerAndEmptyAsset_IsSkipped() {
+    public void ParseTransactionsFromHtml_RowWithValidDateButEmptyTickerAndEmptyAsset_IsSkipped()
+    {
         // Pins ParseTransactionRow's both-empty short-circuit:
         //   if (string.IsNullOrEmpty(ticker) && string.IsNullOrEmpty(assetName)) return null;
         // Existing tests always have at least one of ticker/asset populated,
@@ -955,14 +1084,19 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test", CongressPosition.Representative,
-            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+            html,
+            "Test",
+            CongressPosition.Representative,
+            new DateOnly(2024, 7, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_AssetNameWithoutParenthesizedTicker_RecordsTransactionWithNullTicker() {
+    public void ParseTransactionsFromHtml_AssetNameWithoutParenthesizedTicker_RecordsTransactionWithNullTicker()
+    {
         // Pins the `Ticker = ticker?.ToUpperInvariant()` null-conditional on
         // the final DisclosureTransaction. Reaches it via the path where:
         //   - ticker cell is empty (CleanSentinel returns null)
@@ -997,8 +1131,12 @@ public class DisclosureParsingHelperTests {
             """;
 
         var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
-            html, "Test", CongressPosition.Representative,
-            new DateOnly(2024, 7, 1), Substitute.For<ILogger>());
+            html,
+            "Test",
+            CongressPosition.Representative,
+            new DateOnly(2024, 7, 1),
+            Substitute.For<ILogger>()
+        );
 
         result.Should().HaveCount(1);
         result[0].Ticker.Should().BeNull();

@@ -4,24 +4,41 @@ using Equibles.Sec.HostedService.Services;
 
 namespace Equibles.UnitTests.Sec;
 
-public class InsiderTradingFilingProcessorTests {
-    private static readonly MethodInfo SanitizeXmlMethod = typeof(InsiderTradingFilingProcessor)
-        .GetMethod("SanitizeXml", BindingFlags.NonPublic | BindingFlags.Static);
+public class InsiderTradingFilingProcessorTests
+{
+    private static readonly MethodInfo SanitizeXmlMethod =
+        typeof(InsiderTradingFilingProcessor).GetMethod(
+            "SanitizeXml",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
-    private static readonly MethodInfo ParseLongMethod = typeof(InsiderTradingFilingProcessor)
-        .GetMethod("ParseLong", BindingFlags.NonPublic | BindingFlags.Static);
+    private static readonly MethodInfo ParseLongMethod =
+        typeof(InsiderTradingFilingProcessor).GetMethod(
+            "ParseLong",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
-    private static readonly MethodInfo ParseTransactionCodeMethod = typeof(InsiderTradingFilingProcessor)
-        .GetMethod("ParseTransactionCode", BindingFlags.NonPublic | BindingFlags.Static);
+    private static readonly MethodInfo ParseTransactionCodeMethod =
+        typeof(InsiderTradingFilingProcessor).GetMethod(
+            "ParseTransactionCode",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
-    private static readonly MethodInfo ParseBoolMethod = typeof(InsiderTradingFilingProcessor)
-        .GetMethod("ParseBool", BindingFlags.NonPublic | BindingFlags.Static);
+    private static readonly MethodInfo ParseBoolMethod =
+        typeof(InsiderTradingFilingProcessor).GetMethod(
+            "ParseBool",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
-    private static readonly MethodInfo ParseDecimalMethod = typeof(InsiderTradingFilingProcessor)
-        .GetMethod("ParseDecimal", BindingFlags.NonPublic | BindingFlags.Static);
+    private static readonly MethodInfo ParseDecimalMethod =
+        typeof(InsiderTradingFilingProcessor).GetMethod(
+            "ParseDecimal",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
     [Fact]
-    public void ParseDecimal_ValueWithThousandsSeparator_ParsesCorrectlyViaNumberStylesAnyAndInvariantCulture() {
+    public void ParseDecimal_ValueWithThousandsSeparator_ParsesCorrectlyViaNumberStylesAnyAndInvariantCulture()
+    {
         // First pin in the ParseDecimal family. ParseDecimal has zero existing tests,
         // and the production importer routes every monetary SEC Form 4 field through
         // it — most importantly transactionPricePerShare (the dollar amount per share
@@ -105,7 +122,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseBool_DigitOne_ReturnsTrue() {
+    public void ParseBool_DigitOne_ReturnsTrue()
+    {
         // ParseBool is the four-arm pattern matcher
         //   `value is "1" or "true" or "True" or "TRUE"`
         // used to interpret SEC Form 4 XML elements isDirector, isOfficer, and
@@ -138,7 +156,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseBool_DigitZero_ReturnsFalseViaImplicitDefaultArm() {
+    public void ParseBool_DigitZero_ReturnsFalseViaImplicitDefaultArm()
+    {
         // Sibling pin to ParseBool_DigitOne_ReturnsTrue. The existing pin establishes
         // that "1" maps to true via the four-arm `is "1" or "true" or "True" or "TRUE"`
         // pattern match. This pin establishes that "0" — the explicit-negative encoding
@@ -178,7 +197,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseLong_DecimalString_FallsBackToParseDecimalAndTruncates() {
+    public void ParseLong_DecimalString_FallsBackToParseDecimalAndTruncates()
+    {
         // SEC Form 4 XML routinely reports fractional share counts in transactionShares
         // and sharesOwnedFollowingTransaction — partial RSU vests, dividend reinvestments,
         // and ESPP fractional allocations all emit values like "1234.5678" rather than
@@ -201,7 +221,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void SanitizeXml_PreservesAlreadyEscapedEntities_WhileEscapingBareAmpersand() {
+    public void SanitizeXml_PreservesAlreadyEscapedEntities_WhileEscapingBareAmpersand()
+    {
         // SEC Form 3/4 XML payloads routinely contain bare `&` characters in company and
         // owner names ("Smith & Jones") that would crash XDocument.Parse. SanitizeXml's regex
         // — `&(?!(amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)` — escapes those bare ampersands
@@ -214,7 +235,8 @@ public class InsiderTradingFilingProcessorTests {
         // when the parsed XML's `rptOwnerName` contains stray `amp;` characters in the DB.
         //
         // Inputs deliberately cover all six negative-lookahead alternatives plus a bare `&`.
-        var input = "<XML><doc><name>AT&amp;T &lt;raw&gt; &quot;x&quot; O&apos;Brien &#65; &#x1F; Smith & Jones</name></doc></XML>";
+        var input =
+            "<XML><doc><name>AT&amp;T &lt;raw&gt; &quot;x&quot; O&apos;Brien &#65; &#x1F; Smith & Jones</name></doc></XML>";
 
         var result = (string)SanitizeXmlMethod.Invoke(null, [input]);
 
@@ -231,7 +253,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseTransactionCode_SaleCodeS_ReturnsSale() {
+    public void ParseTransactionCode_SaleCodeS_ReturnsSale()
+    {
         // Sibling pin to ParseTransactionCode_PurchaseCodeP_ReturnsPurchase. The
         // existing P→Purchase test catches a P↔S swap (P→Sale fails the assertion),
         // but it does NOT catch an asymmetric regression that breaks only the S arm
@@ -257,7 +280,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseTransactionCode_AwardCodeA_ReturnsAward() {
+    public void ParseTransactionCode_AwardCodeA_ReturnsAward()
+    {
         // Third sibling in the ParseTransactionCode family (after P→Purchase and
         // s→Sale). Award (`A`) is the single highest-volume code in the entire SEC
         // Form 4 corpus — every quarterly RSU vest, every executive performance
@@ -291,7 +315,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseTransactionCode_PurchaseCodeP_ReturnsPurchase() {
+    public void ParseTransactionCode_PurchaseCodeP_ReturnsPurchase()
+    {
         // SEC Form 4 transaction codes are single letters that map to specific
         // insider-trade categories per §16 of the Exchange Act. ParseTransactionCode
         // is the switch that translates each wire letter to the domain
@@ -328,7 +353,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseTransactionCode_UnknownCodeLetter_ReturnsOther() {
+    public void ParseTransactionCode_UnknownCodeLetter_ReturnsOther()
+    {
         // Fourth pin in the ParseTransactionCode family. Existing pins cover P, S,
         // and A (each mapped to a concrete TransactionCode value). This pin covers
         // the `_ => TransactionCode.Other` default arm — the catch-all that ensures
@@ -363,7 +389,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseTransactionCode_ConversionCodeM_ReturnsConversion() {
+    public void ParseTransactionCode_ConversionCodeM_ReturnsConversion()
+    {
         // Fifth pin in the ParseTransactionCode family. Existing pins cover
         // the highest-volume codes (P/Purchase, S/Sale, A/Award) and the
         // default arm (Other). This pin covers `M => TransactionCode.Conversion` —
@@ -403,7 +430,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseTransactionCode_ExerciseCodeX_ReturnsExercise() {
+    public void ParseTransactionCode_ExerciseCodeX_ReturnsExercise()
+    {
         // Sixth pin in the ParseTransactionCode family. Existing pins cover
         // P/Purchase, S/Sale, A/Award, _/Other, and M/Conversion. This pin
         // covers `X => TransactionCode.Exercise` — the exercise of a
@@ -445,7 +473,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseTransactionCode_TaxPaymentCodeF_ReturnsTaxPayment() {
+    public void ParseTransactionCode_TaxPaymentCodeF_ReturnsTaxPayment()
+    {
         // Seventh pin in the ParseTransactionCode family. Existing pins cover
         // P/Purchase, S/Sale, A/Award, _/Other, M/Conversion, and X/Exercise.
         // This pin covers `F => TransactionCode.TaxPayment` — payment of
@@ -492,7 +521,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseTransactionCode_GiftCodeG_ReturnsGift() {
+    public void ParseTransactionCode_GiftCodeG_ReturnsGift()
+    {
         // Eighth pin in the ParseTransactionCode family. Existing pins cover
         // P/Purchase, S/Sale, A/Award, _/Other, M/Conversion, X/Exercise,
         // and F/TaxPayment. This pin covers `G => TransactionCode.Gift` —
@@ -541,7 +571,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseTransactionCode_DiscretionaryCodeW_ReturnsDiscretionary() {
+    public void ParseTransactionCode_DiscretionaryCodeW_ReturnsDiscretionary()
+    {
         // Ninth pin in the ParseTransactionCode family. Existing pins cover
         // P/Purchase, S/Sale, A/Award, _/Other, M/Conversion, X/Exercise,
         // F/TaxPayment, and G/Gift. This pin covers
@@ -589,7 +620,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseTransactionCode_ExpirationCodeE_ReturnsExpiration() {
+    public void ParseTransactionCode_ExpirationCodeE_ReturnsExpiration()
+    {
         // Tenth pin in the ParseTransactionCode family. Existing pins cover
         // P/Purchase, S/Sale, A/Award, _/Other, M/Conversion, X/Exercise,
         // F/TaxPayment, G/Gift, and W/Discretionary. This pin covers
@@ -640,7 +672,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseTransactionCode_InheritanceCodeI_ReturnsInheritance() {
+    public void ParseTransactionCode_InheritanceCodeI_ReturnsInheritance()
+    {
         // Eleventh pin in the ParseTransactionCode family, completing every
         // letter-arm of the switch. Existing pins cover P/Purchase, S/Sale,
         // A/Award, _/Other, M/Conversion, X/Exercise, F/TaxPayment, G/Gift,
@@ -697,7 +730,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseBool_LowercaseTrueLiteral_ReturnsTrueViaSecondArm() {
+    public void ParseBool_LowercaseTrueLiteral_ReturnsTrueViaSecondArm()
+    {
         // Third pin in the ParseBool family. Existing pins cover the
         // "1" arm (DigitOne) and the default-Negative arm
         // (DigitZero → false via implicit fall-through). This pin
@@ -751,7 +785,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseBool_TitleCaseTrueLiteral_ReturnsTrueViaThirdArm() {
+    public void ParseBool_TitleCaseTrueLiteral_ReturnsTrueViaThirdArm()
+    {
         // Fourth pin in the ParseBool family. Existing pins cover "1"
         // (DigitOne), "0" (DigitZero → default false), and lowercase
         // "true" (LowercaseTrue → second arm). This pin covers the
@@ -806,7 +841,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseBool_AllCapsTrueLiteral_ReturnsTrueViaFourthArm() {
+    public void ParseBool_AllCapsTrueLiteral_ReturnsTrueViaFourthArm()
+    {
         // Fifth and final pin in the ParseBool family. With this pin, all
         // five arms of the four-string-literal-plus-default pattern are
         // individually pinned: "1" (DigitOne), "0" (DigitZero → default
@@ -867,7 +903,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void ParseBool_NullInput_ReturnsFalseViaPatternMatchFallThrough() {
+    public void ParseBool_NullInput_ReturnsFalseViaPatternMatchFallThrough()
+    {
         // Sixth pin in the ParseBool family. The previous five pins cover the
         // four string-literal arms of `value is "1" or "true" or "True" or "TRUE"`
         // (DigitOne, LowercaseTrue, TitleCaseTrue, AllCapsTrue) plus the

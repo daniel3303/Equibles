@@ -6,9 +6,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Web;
 
-public class MarkdownExtensionsTests {
+public class MarkdownExtensionsTests
+{
     [Fact]
-    public void MarkdownToHtml_RawHtmlInInput_IsStrippedByDisableHtmlPipeline() {
+    public void MarkdownToHtml_RawHtmlInInput_IsStrippedByDisableHtmlPipeline()
+    {
         // The markdown rendered through this extension can originate from SEC filings,
         // earnings-call transcripts, and other ingested content that may contain raw
         // HTML — including potentially malicious payloads. The pipeline builder calls
@@ -23,7 +25,8 @@ public class MarkdownExtensionsTests {
         // form `&lt;script&gt;` which is inert).
         string captured = null;
         var htmlHelper = Substitute.For<IHtmlHelper>();
-        htmlHelper.Raw(Arg.Do<string>(s => captured = s))
+        htmlHelper
+            .Raw(Arg.Do<string>(s => captured = s))
             .Returns(callInfo => new HtmlString(callInfo.Arg<string>()));
 
         var markdown = "Hello <script>alert('xss')</script> world";
@@ -36,7 +39,8 @@ public class MarkdownExtensionsTests {
     }
 
     [Fact]
-    public void MarkdownToHtml_NullInput_ShortCircuitsToEmptyContentWithoutInvokingMarkdig() {
+    public void MarkdownToHtml_NullInput_ShortCircuitsToEmptyContentWithoutInvokingMarkdig()
+    {
         // Views render Markdown for stored content that may be absent (a missing
         // field, an unsaved record). The extension short-circuits null/empty
         // input to Raw(string.Empty) BEFORE building the Markdig pipeline —
@@ -46,7 +50,8 @@ public class MarkdownExtensionsTests {
         // fails this test instead.
         string captured = null;
         var htmlHelper = Substitute.For<IHtmlHelper>();
-        htmlHelper.Raw(Arg.Do<string>(s => captured = s))
+        htmlHelper
+            .Raw(Arg.Do<string>(s => captured = s))
             .Returns(callInfo => new HtmlString(callInfo.Arg<string>()));
 
         var result = htmlHelper.MarkdownToHtml(null);
@@ -56,7 +61,8 @@ public class MarkdownExtensionsTests {
     }
 
     [Fact]
-    public void MarkdownToHtml_PipeTableWithCascadedBlankLinesBetweenRows_RendersAsSingleTable() {
+    public void MarkdownToHtml_PipeTableWithCascadedBlankLinesBetweenRows_RendersAsSingleTable()
+    {
         // The existing single-blank-line pin proves the BlankLineBetweenPipeRows
         // regex replacement works for ONE adjacent pair. The production code
         // wraps that Replace in a do-while loop until the input stops changing:
@@ -90,7 +96,8 @@ public class MarkdownExtensionsTests {
         // a single table.
         string captured = null;
         var htmlHelper = Substitute.For<IHtmlHelper>();
-        htmlHelper.Raw(Arg.Do<string>(s => captured = s))
+        htmlHelper
+            .Raw(Arg.Do<string>(s => captured = s))
             .Returns(callInfo => new HtmlString(callInfo.Arg<string>()));
 
         var markdown = "| H1 | H2 |\n|----|----|\n| a  | b  |\n\n| c  | d  |\n\n| e  | f  |\n";
@@ -102,10 +109,12 @@ public class MarkdownExtensionsTests {
     }
 
     [Fact]
-    public void MarkdownToHtml_PipeTableWithBlankLineBetweenRows_RendersAsSingleTable() {
+    public void MarkdownToHtml_PipeTableWithBlankLineBetweenRows_RendersAsSingleTable()
+    {
         string captured = null;
         var htmlHelper = Substitute.For<IHtmlHelper>();
-        htmlHelper.Raw(Arg.Do<string>(s => captured = s))
+        htmlHelper
+            .Raw(Arg.Do<string>(s => captured = s))
             .Returns(callInfo => new HtmlString(callInfo.Arg<string>()));
 
         var markdown = "| H1 | H2 |\n|----|----|\n| a  | b  |\n\n| c  | d  |\n";

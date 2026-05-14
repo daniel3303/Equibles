@@ -9,26 +9,31 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Web;
 
-public class EnvAuthHandlerTests {
+public class EnvAuthHandlerTests
+{
     [Fact]
-    public void SchemeName_IsEnvAuth() {
+    public void SchemeName_IsEnvAuth()
+    {
         EnvAuthHandler.SchemeName.Should().Be("EnvAuth");
     }
 
     [Fact]
-    public void AnonymousUsername_IsAnonymous() {
+    public void AnonymousUsername_IsAnonymous()
+    {
         EnvAuthHandler.AnonymousUsername.Should().Be("anonymous");
     }
 
     [Fact]
-    public void GenerateToken_ReturnsNonEmptyString() {
+    public void GenerateToken_ReturnsNonEmptyString()
+    {
         var token = EnvAuthHandler.GenerateToken("user", "secret");
 
         token.Should().NotBeNullOrEmpty();
     }
 
     [Fact]
-    public void GenerateToken_SameInput_ProducesConsistentOutput() {
+    public void GenerateToken_SameInput_ProducesConsistentOutput()
+    {
         var token1 = EnvAuthHandler.GenerateToken("user", "secret");
         var token2 = EnvAuthHandler.GenerateToken("user", "secret");
 
@@ -36,7 +41,8 @@ public class EnvAuthHandlerTests {
     }
 
     [Fact]
-    public void GenerateToken_DifferentUsername_ProducesDifferentToken() {
+    public void GenerateToken_DifferentUsername_ProducesDifferentToken()
+    {
         var token1 = EnvAuthHandler.GenerateToken("alice", "secret");
         var token2 = EnvAuthHandler.GenerateToken("bob", "secret");
 
@@ -44,7 +50,8 @@ public class EnvAuthHandlerTests {
     }
 
     [Fact]
-    public void GenerateToken_DifferentSecret_ProducesDifferentToken() {
+    public void GenerateToken_DifferentSecret_ProducesDifferentToken()
+    {
         var token1 = EnvAuthHandler.GenerateToken("user", "secret1");
         var token2 = EnvAuthHandler.GenerateToken("user", "secret2");
 
@@ -52,7 +59,8 @@ public class EnvAuthHandlerTests {
     }
 
     [Fact]
-    public void GenerateToken_OutputIsValidBase64() {
+    public void GenerateToken_OutputIsValidBase64()
+    {
         var token = EnvAuthHandler.GenerateToken("user", "secret");
 
         var act = () => Convert.FromBase64String(token);
@@ -60,42 +68,50 @@ public class EnvAuthHandlerTests {
     }
 
     [Fact]
-    public void ConstantTimeEquals_EqualStrings_ReturnsTrue() {
+    public void ConstantTimeEquals_EqualStrings_ReturnsTrue()
+    {
         EnvAuthHandler.ConstantTimeEquals("hello", "hello").Should().BeTrue();
     }
 
     [Fact]
-    public void ConstantTimeEquals_DifferentStrings_ReturnsFalse() {
+    public void ConstantTimeEquals_DifferentStrings_ReturnsFalse()
+    {
         EnvAuthHandler.ConstantTimeEquals("hello", "world").Should().BeFalse();
     }
 
     [Fact]
-    public void ConstantTimeEquals_BothNull_ReturnsTrue() {
+    public void ConstantTimeEquals_BothNull_ReturnsTrue()
+    {
         EnvAuthHandler.ConstantTimeEquals(null!, null!).Should().BeTrue();
     }
 
     [Fact]
-    public void ConstantTimeEquals_OneNull_ReturnsFalse() {
+    public void ConstantTimeEquals_OneNull_ReturnsFalse()
+    {
         EnvAuthHandler.ConstantTimeEquals(null!, "hello").Should().BeFalse();
     }
 
     [Fact]
-    public void ConstantTimeEquals_OtherNull_ReturnsFalse() {
+    public void ConstantTimeEquals_OtherNull_ReturnsFalse()
+    {
         EnvAuthHandler.ConstantTimeEquals("hello", null!).Should().BeFalse();
     }
 
     [Fact]
-    public void ConstantTimeEquals_BothEmpty_ReturnsTrue() {
+    public void ConstantTimeEquals_BothEmpty_ReturnsTrue()
+    {
         EnvAuthHandler.ConstantTimeEquals("", "").Should().BeTrue();
     }
 
     [Fact]
-    public void ConstantTimeEquals_EmptyAndNonEmpty_ReturnsFalse() {
+    public void ConstantTimeEquals_EmptyAndNonEmpty_ReturnsFalse()
+    {
         EnvAuthHandler.ConstantTimeEquals("", "hello").Should().BeFalse();
     }
 
     [Fact]
-    public async Task HandleAuthenticateAsync_AuthDisabled_SucceedsAsAnonymousUser() {
+    public async Task HandleAuthenticateAsync_AuthDisabled_SucceedsAsAnonymousUser()
+    {
         // EnvAuthHandler.HandleAuthenticateAsync has four reachable paths:
         //   1. !IsEnabled              → Success(anonymous)
         //   2. IsEnabled, no cookie    → Fail("Not authenticated")
@@ -124,20 +140,33 @@ public class EnvAuthHandlerTests {
         var authSettings = Options.Create(new AuthSettings());
         var schemeOptions = Substitute.For<IOptionsMonitor<AuthenticationSchemeOptions>>();
         schemeOptions.Get(Arg.Any<string>()).Returns(new AuthenticationSchemeOptions());
-        var sut = new EnvAuthHandler(schemeOptions, NullLoggerFactory.Instance, UrlEncoder.Default, authSettings);
+        var sut = new EnvAuthHandler(
+            schemeOptions,
+            NullLoggerFactory.Instance,
+            UrlEncoder.Default,
+            authSettings
+        );
 
-        var scheme = new AuthenticationScheme(EnvAuthHandler.SchemeName, EnvAuthHandler.SchemeName, typeof(EnvAuthHandler));
+        var scheme = new AuthenticationScheme(
+            EnvAuthHandler.SchemeName,
+            EnvAuthHandler.SchemeName,
+            typeof(EnvAuthHandler)
+        );
         var httpContext = new DefaultHttpContext();
         await sut.InitializeAsync(scheme, httpContext);
         var result = await sut.AuthenticateAsync();
 
         result.Succeeded.Should().BeTrue();
         result.Principal.Should().NotBeNull();
-        result.Principal!.FindFirstValue(ClaimTypes.Name).Should().Be(EnvAuthHandler.AnonymousUsername);
+        result
+            .Principal!.FindFirstValue(ClaimTypes.Name)
+            .Should()
+            .Be(EnvAuthHandler.AnonymousUsername);
     }
 
     [Fact]
-    public async Task HandleAuthenticateAsync_AuthEnabledWithNoCookie_FailsWithNotAuthenticated() {
+    public async Task HandleAuthenticateAsync_AuthEnabledWithNoCookie_FailsWithNotAuthenticated()
+    {
         // Sibling pin to HandleAuthenticateAsync_AuthDisabled_SucceedsAsAnonymousUser.
         // That pin covers branch 1 (!IsEnabled → Success). This covers branch 2
         // (IsEnabled, no cookie → Fail("Not authenticated")).
@@ -162,15 +191,23 @@ public class EnvAuthHandlerTests {
         // Use a fresh DefaultHttpContext with no cookies attached. AuthenticateAsync
         // walks the cookie collection, finds the EnvAuth scheme cookie missing,
         // returns Fail.
-        var authSettings = Options.Create(new AuthSettings {
-            Username = "admin",
-            Password = "secret123",
-        });
+        var authSettings = Options.Create(
+            new AuthSettings { Username = "admin", Password = "secret123" }
+        );
         var schemeOptions = Substitute.For<IOptionsMonitor<AuthenticationSchemeOptions>>();
         schemeOptions.Get(Arg.Any<string>()).Returns(new AuthenticationSchemeOptions());
-        var sut = new EnvAuthHandler(schemeOptions, NullLoggerFactory.Instance, UrlEncoder.Default, authSettings);
+        var sut = new EnvAuthHandler(
+            schemeOptions,
+            NullLoggerFactory.Instance,
+            UrlEncoder.Default,
+            authSettings
+        );
 
-        var scheme = new AuthenticationScheme(EnvAuthHandler.SchemeName, EnvAuthHandler.SchemeName, typeof(EnvAuthHandler));
+        var scheme = new AuthenticationScheme(
+            EnvAuthHandler.SchemeName,
+            EnvAuthHandler.SchemeName,
+            typeof(EnvAuthHandler)
+        );
         var httpContext = new DefaultHttpContext();
         await sut.InitializeAsync(scheme, httpContext);
         var result = await sut.AuthenticateAsync();
@@ -181,7 +218,8 @@ public class EnvAuthHandlerTests {
     }
 
     [Fact]
-    public async Task HandleAuthenticateAsync_AuthEnabledWithInvalidCookie_FailsWithInvalidSession() {
+    public async Task HandleAuthenticateAsync_AuthEnabledWithInvalidCookie_FailsWithInvalidSession()
+    {
         // Third sibling in the HandleAuthenticateAsync branch family. Covers branch 3:
         // IsEnabled, cookie present but does NOT match the expected token → Fail("Invalid session").
         //
@@ -202,17 +240,26 @@ public class EnvAuthHandlerTests {
         // bogus value. The header form is `Cookie: EnvAuth=invalid-token-value`.
         // DefaultHttpContext.Request.Cookies parses this header into the collection
         // the handler reads via Request.Cookies[SchemeName].
-        var authSettings = Options.Create(new AuthSettings {
-            Username = "admin",
-            Password = "secret123",
-        });
+        var authSettings = Options.Create(
+            new AuthSettings { Username = "admin", Password = "secret123" }
+        );
         var schemeOptions = Substitute.For<IOptionsMonitor<AuthenticationSchemeOptions>>();
         schemeOptions.Get(Arg.Any<string>()).Returns(new AuthenticationSchemeOptions());
-        var sut = new EnvAuthHandler(schemeOptions, NullLoggerFactory.Instance, UrlEncoder.Default, authSettings);
+        var sut = new EnvAuthHandler(
+            schemeOptions,
+            NullLoggerFactory.Instance,
+            UrlEncoder.Default,
+            authSettings
+        );
 
-        var scheme = new AuthenticationScheme(EnvAuthHandler.SchemeName, EnvAuthHandler.SchemeName, typeof(EnvAuthHandler));
+        var scheme = new AuthenticationScheme(
+            EnvAuthHandler.SchemeName,
+            EnvAuthHandler.SchemeName,
+            typeof(EnvAuthHandler)
+        );
         var httpContext = new DefaultHttpContext();
-        httpContext.Request.Headers["Cookie"] = $"{EnvAuthHandler.SchemeName}=tampered-session-token";
+        httpContext.Request.Headers["Cookie"] =
+            $"{EnvAuthHandler.SchemeName}=tampered-session-token";
         await sut.InitializeAsync(scheme, httpContext);
         var result = await sut.AuthenticateAsync();
 
@@ -222,7 +269,8 @@ public class EnvAuthHandlerTests {
     }
 
     [Fact]
-    public async Task HandleAuthenticateAsync_AuthEnabledWithValidCookie_SucceedsAsConfiguredUser() {
+    public async Task HandleAuthenticateAsync_AuthEnabledWithValidCookie_SucceedsAsConfiguredUser()
+    {
         // Final sibling in the HandleAuthenticateAsync branch family. Covers branch 4:
         // IsEnabled, cookie matches expected token → Success(principal with Username).
         //
@@ -252,17 +300,29 @@ public class EnvAuthHandlerTests {
         const string password = "secret123";
         const string sessionSecret = "test-session-secret";
 
-        var authSettings = Options.Create(new AuthSettings {
-            Username = username,
-            Password = password,
-            SessionSecret = sessionSecret,
-        });
+        var authSettings = Options.Create(
+            new AuthSettings
+            {
+                Username = username,
+                Password = password,
+                SessionSecret = sessionSecret,
+            }
+        );
         var schemeOptions = Substitute.For<IOptionsMonitor<AuthenticationSchemeOptions>>();
         schemeOptions.Get(Arg.Any<string>()).Returns(new AuthenticationSchemeOptions());
-        var sut = new EnvAuthHandler(schemeOptions, NullLoggerFactory.Instance, UrlEncoder.Default, authSettings);
+        var sut = new EnvAuthHandler(
+            schemeOptions,
+            NullLoggerFactory.Instance,
+            UrlEncoder.Default,
+            authSettings
+        );
 
         var validToken = EnvAuthHandler.GenerateToken(username, sessionSecret);
-        var scheme = new AuthenticationScheme(EnvAuthHandler.SchemeName, EnvAuthHandler.SchemeName, typeof(EnvAuthHandler));
+        var scheme = new AuthenticationScheme(
+            EnvAuthHandler.SchemeName,
+            EnvAuthHandler.SchemeName,
+            typeof(EnvAuthHandler)
+        );
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Headers["Cookie"] = $"{EnvAuthHandler.SchemeName}={validToken}";
         await sut.InitializeAsync(scheme, httpContext);
@@ -274,7 +334,8 @@ public class EnvAuthHandlerTests {
     }
 
     [Fact]
-    public async Task HandleChallengeAsync_UrlWithQueryString_RedirectsToLoginWithEscapedReturnUrl() {
+    public async Task HandleChallengeAsync_UrlWithQueryString_RedirectsToLoginWithEscapedReturnUrl()
+    {
         // EnvAuthHandler.HandleChallengeAsync builds a 302 redirect to /Auth/Login
         // carrying the requested URL (path + query) as a ReturnUrl query parameter.
         // The implementation is:
@@ -306,9 +367,18 @@ public class EnvAuthHandlerTests {
         var authSettings = Options.Create(new AuthSettings());
         var schemeOptions = Substitute.For<IOptionsMonitor<AuthenticationSchemeOptions>>();
         schemeOptions.Get(Arg.Any<string>()).Returns(new AuthenticationSchemeOptions());
-        var sut = new EnvAuthHandler(schemeOptions, NullLoggerFactory.Instance, UrlEncoder.Default, authSettings);
+        var sut = new EnvAuthHandler(
+            schemeOptions,
+            NullLoggerFactory.Instance,
+            UrlEncoder.Default,
+            authSettings
+        );
 
-        var scheme = new AuthenticationScheme(EnvAuthHandler.SchemeName, EnvAuthHandler.SchemeName, typeof(EnvAuthHandler));
+        var scheme = new AuthenticationScheme(
+            EnvAuthHandler.SchemeName,
+            EnvAuthHandler.SchemeName,
+            typeof(EnvAuthHandler)
+        );
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Path = "/Foo";
         httpContext.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString("?bar=baz");
@@ -316,12 +386,15 @@ public class EnvAuthHandlerTests {
         await sut.ChallengeAsync(new AuthenticationProperties());
 
         httpContext.Response.StatusCode.Should().Be(302);
-        httpContext.Response.Headers.Location.ToString()
-            .Should().Be("/Auth/Login?ReturnUrl=%2FFoo%3Fbar%3Dbaz");
+        httpContext
+            .Response.Headers.Location.ToString()
+            .Should()
+            .Be("/Auth/Login?ReturnUrl=%2FFoo%3Fbar%3Dbaz");
     }
 
     [Fact]
-    public void ConstantTimeEquals_NullAndEmpty_ReturnsTrue() {
+    public void ConstantTimeEquals_NullAndEmpty_ReturnsTrue()
+    {
         // Both null and empty hash to the same value because the implementation
         // coalesces null to "" before hashing
         EnvAuthHandler.ConstantTimeEquals(null!, "").Should().BeTrue();

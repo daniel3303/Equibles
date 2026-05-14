@@ -5,13 +5,19 @@ using NSubstitute;
 
 namespace Equibles.IntegrationTests.Sec;
 
-public class EmbeddingClientTests {
+public class EmbeddingClientTests
+{
     [Fact]
-    public async Task GenerateEmbeddings_DisabledConfig_ReturnsEmptyWithoutHttpCall() {
+    public async Task GenerateEmbeddings_DisabledConfig_ReturnsEmptyWithoutHttpCall()
+    {
         var httpFactory = Substitute.For<IHttpClientFactory>();
         httpFactory.CreateClient(Arg.Any<string>()).Returns(new HttpClient());
         var config = Options.Create(new EmbeddingConfig { Enabled = false });
-        var sut = new EmbeddingClient(httpFactory, config, Substitute.For<ILogger<EmbeddingClient>>());
+        var sut = new EmbeddingClient(
+            httpFactory,
+            config,
+            Substitute.For<ILogger<EmbeddingClient>>()
+        );
 
         var result = await sut.GenerateEmbeddings(new List<string> { "any text" });
 
@@ -19,7 +25,8 @@ public class EmbeddingClientTests {
     }
 
     [Fact]
-    public async Task GenerateEmbeddings_EmptyTextList_ShortCircuitsBeforeConfigCheck() {
+    public async Task GenerateEmbeddings_EmptyTextList_ShortCircuitsBeforeConfigCheck()
+    {
         // The companion DisabledConfig test exercises the `!_config.IsConfigured`
         // half of the early-return OR. This sibling exercises the OTHER half —
         // `!texts.Any()` — so the regression "both halves were collapsed to the
@@ -30,12 +37,19 @@ public class EmbeddingClientTests {
         // path so the regression surfaces here.
         var httpFactory = Substitute.For<IHttpClientFactory>();
         httpFactory.CreateClient(Arg.Any<string>()).Returns(new HttpClient());
-        var config = Options.Create(new EmbeddingConfig {
-            Enabled = true,
-            BaseUrl = "http://localhost:11434",
-            ModelName = "nomic-embed-text",
-        });
-        var sut = new EmbeddingClient(httpFactory, config, Substitute.For<ILogger<EmbeddingClient>>());
+        var config = Options.Create(
+            new EmbeddingConfig
+            {
+                Enabled = true,
+                BaseUrl = "http://localhost:11434",
+                ModelName = "nomic-embed-text",
+            }
+        );
+        var sut = new EmbeddingClient(
+            httpFactory,
+            config,
+            Substitute.For<ILogger<EmbeddingClient>>()
+        );
 
         var result = await sut.GenerateEmbeddings([]);
 
@@ -43,7 +57,8 @@ public class EmbeddingClientTests {
     }
 
     [Fact]
-    public void Constructor_ConfiguredWithApiKey_AddsBearerAuthorizationHeaderToHttpClient() {
+    public void Constructor_ConfiguredWithApiKey_AddsBearerAuthorizationHeaderToHttpClient()
+    {
         // EmbeddingClient is shared between two deployment shapes: local Ollama (no
         // ApiKey, just BaseUrl) and hosted providers (e.g. OpenAI-compatible
         // endpoints behind an API key). The conditional `if (!string.IsNullOrEmpty
@@ -60,12 +75,15 @@ public class EmbeddingClientTests {
         var httpClient = new HttpClient();
         var httpFactory = Substitute.For<IHttpClientFactory>();
         httpFactory.CreateClient(Arg.Any<string>()).Returns(httpClient);
-        var config = Options.Create(new EmbeddingConfig {
-            Enabled = true,
-            BaseUrl = "http://example.invalid",
-            ModelName = "nomic-embed-text",
-            ApiKey = "sk-test-1234567890",
-        });
+        var config = Options.Create(
+            new EmbeddingConfig
+            {
+                Enabled = true,
+                BaseUrl = "http://example.invalid",
+                ModelName = "nomic-embed-text",
+                ApiKey = "sk-test-1234567890",
+            }
+        );
 
         _ = new EmbeddingClient(httpFactory, config, Substitute.For<ILogger<EmbeddingClient>>());
 
@@ -75,7 +93,8 @@ public class EmbeddingClientTests {
     }
 
     [Fact]
-    public async Task GenerateEmbedding_DisabledConfig_ReturnsNullForwardingFromBatchedShortCircuit() {
+    public async Task GenerateEmbedding_DisabledConfig_ReturnsNullForwardingFromBatchedShortCircuit()
+    {
         // GenerateEmbedding(string) is a thin wrapper that calls
         // GenerateEmbeddings([text]).FirstOrDefault(). When the config is
         // disabled, the batched call short-circuits to an empty list, and
@@ -87,7 +106,11 @@ public class EmbeddingClientTests {
         var httpFactory = Substitute.For<IHttpClientFactory>();
         httpFactory.CreateClient(Arg.Any<string>()).Returns(new HttpClient());
         var config = Options.Create(new EmbeddingConfig { Enabled = false });
-        var sut = new EmbeddingClient(httpFactory, config, Substitute.For<ILogger<EmbeddingClient>>());
+        var sut = new EmbeddingClient(
+            httpFactory,
+            config,
+            Substitute.For<ILogger<EmbeddingClient>>()
+        );
 
         var result = await sut.GenerateEmbedding("any text");
 

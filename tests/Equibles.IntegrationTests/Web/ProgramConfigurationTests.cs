@@ -22,23 +22,25 @@ namespace Equibles.IntegrationTests.Web;
 /// varying one knob per test.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class ProgramConfigurationTests {
+public class ProgramConfigurationTests
+{
     private readonly ParadeDbFixture _db;
 
     public ProgramConfigurationTests(ParadeDbFixture db) => _db = db;
 
     [Fact]
-    public async Task ConfigureServices_AuthIsEnabled_RegistersAuthenticatedUserFallbackPolicy() {
+    public async Task ConfigureServices_AuthIsEnabled_RegistersAuthenticatedUserFallbackPolicy()
+    {
         // Pins the `if (authSettings.IsEnabled) { … FallbackPolicy.RequireAuthenticatedUser … }`
         // TRUE branch. WebAppFixture (FunctionalTests) doesn't set Auth credentials, so
         // AuthSettings.IsEnabled (a computed `Username AND Password set` property) is false
         // and only the `else AddAuthorization()` arm runs end-to-end. Setting both credentials
         // flips IsEnabled to true; the fallback policy is then expected to deny anonymous —
         // the production safeguard for every endpoint not explicitly [AllowAnonymous].
-        await using var app = BuildHost("Development", overrides: new() {
-            ["Auth:Username"] = "test-user",
-            ["Auth:Password"] = "test-pass",
-        });
+        await using var app = BuildHost(
+            "Development",
+            overrides: new() { ["Auth:Username"] = "test-user", ["Auth:Password"] = "test-pass" }
+        );
 
         var policyProvider = app.Services.GetRequiredService<IAuthorizationPolicyProvider>();
         var fallback = await policyProvider.GetFallbackPolicyAsync();
@@ -48,7 +50,8 @@ public class ProgramConfigurationTests {
     }
 
     [Fact]
-    public async Task ConfigureServices_DataProtectionKeysDirectoryNotConfigured_FallsBackToAppKeysPath() {
+    public async Task ConfigureServices_DataProtectionKeysDirectoryNotConfigured_FallsBackToAppKeysPath()
+    {
         // Pins the `?? "/app/keys"` fallback. WebAppFixture always sets
         // DataProtection:KeysDirectory to a temp dir to avoid touching /app/keys on macOS/CI,
         // so the right-hand `??` arm is unexercised. Omit the config entirely and assert the
@@ -68,7 +71,8 @@ public class ProgramConfigurationTests {
     }
 
     [Fact]
-    public async Task ConfigurePipeline_NonDevelopmentEnvironment_RunsProductionExceptionHandlerBranch() {
+    public async Task ConfigurePipeline_NonDevelopmentEnvironment_RunsProductionExceptionHandlerBranch()
+    {
         // Pins the `if (!app.Environment.IsDevelopment()) { app.UseExceptionHandler("/Home/Error"); }`
         // branch. WebAppFixture hardcodes EnvironmentName="Development" so the production-side
         // middleware registration never runs. Driving Production explicitly and running
@@ -84,19 +88,29 @@ public class ProgramConfigurationTests {
     private WebApplication BuildHost(
         string environment,
         Dictionary<string, string> overrides = null,
-        bool omitKeysDirectoryConfig = false) {
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions {
-            ApplicationName = "Equibles.Web",
-            EnvironmentName = environment,
-            ContentRootPath = ResolveWebContentRoot(),
-        });
+        bool omitKeysDirectoryConfig = false
+    )
+    {
+        var builder = WebApplication.CreateBuilder(
+            new WebApplicationOptions
+            {
+                ApplicationName = "Equibles.Web",
+                EnvironmentName = environment,
+                ContentRootPath = ResolveWebContentRoot(),
+            }
+        );
         builder.Configuration["ConnectionStrings:DefaultConnection"] = _db.ConnectionString;
-        if (!omitKeysDirectoryConfig) {
+        if (!omitKeysDirectoryConfig)
+        {
             builder.Configuration["DataProtection:KeysDirectory"] = Path.Combine(
-                Path.GetTempPath(), $"equibles-keys-{Guid.NewGuid():N}");
+                Path.GetTempPath(),
+                $"equibles-keys-{Guid.NewGuid():N}"
+            );
         }
-        if (overrides != null) {
-            foreach (var kvp in overrides) {
+        if (overrides != null)
+        {
+            foreach (var kvp in overrides)
+            {
                 builder.Configuration[kvp.Key] = kvp.Value;
             }
         }
@@ -111,17 +125,21 @@ public class ProgramConfigurationTests {
         return app;
     }
 
-    private static string ResolveWebContentRoot() {
+    private static string ResolveWebContentRoot()
+    {
         // Walks up from the test bin directory until it finds the solution file, then
         // returns the Web project's source root. Matches WebAppFixture's resolution so the
         // same Razor/wwwroot contents are visible to both fixtures.
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Equibles.sln"))) {
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Equibles.sln")))
+        {
             dir = dir.Parent;
         }
-        if (dir is null) {
+        if (dir is null)
+        {
             throw new InvalidOperationException(
-                "Could not locate Equibles.sln from test bin directory — cannot resolve ContentRootPath.");
+                "Could not locate Equibles.sln from test bin directory — cannot resolve ContentRootPath."
+            );
         }
         return Path.Combine(dir.FullName, "src", "Equibles.Web");
     }

@@ -8,9 +8,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Cboe;
 
-public class CboeImportServiceTests {
+public class CboeImportServiceTests
+{
     [Fact]
-    public async Task Import_AllDownloadsEmpty_DoesNotCreateDbScope() {
+    public async Task Import_AllDownloadsEmpty_DoesNotCreateDbScope()
+    {
         // Each ImportPutCallRatio call short-circuits at `if (records.Count == 0) return`
         // before touching _scopeFactory.CreateScope(). Same pattern in ImportVixHistory.
         // The early-return matters because the scraper runs on a schedule against CBOE's
@@ -20,18 +22,21 @@ public class CboeImportServiceTests {
         // query above the count-check can't turn every CDN miss into a DB round-trip.
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         var cboeClient = Substitute.For<ICboeClient>();
-        cboeClient.DownloadPutCallRatios(Arg.Any<CboePutCallCsvType>())
+        cboeClient
+            .DownloadPutCallRatios(Arg.Any<CboePutCallCsvType>())
             .Returns(new List<CboePutCallRecord>());
         cboeClient.DownloadVixHistory().Returns(new List<CboeVixRecord>());
         var errorReporter = Substitute.For<ErrorReporter>(
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ILogger<ErrorReporter>>());
+            Substitute.For<ILogger<ErrorReporter>>()
+        );
 
         var sut = new CboeImportService(
             scopeFactory,
             Substitute.For<ILogger<CboeImportService>>(),
             cboeClient,
-            errorReporter);
+            errorReporter
+        );
 
         await sut.Import(CancellationToken.None);
 

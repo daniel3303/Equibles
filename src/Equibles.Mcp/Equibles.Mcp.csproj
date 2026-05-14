@@ -1,14 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <InternalsVisibleTo Include="Equibles.UnitTests" />
+    <InternalsVisibleTo Include="Equibles.IntegrationTests" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <InternalsVisibleTo Include="Equibles.UnitTests" />
-      <InternalsVisibleTo Include="Equibles.IntegrationTests" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <FrameworkReference Include="Microsoft.AspNetCore.App" />
-      <PackageReference Include="ModelContextProtocol.AspNetCore" />
-      <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
-    </ItemGroup>
-
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
 </Project>

@@ -14,23 +14,30 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// comparisons between the two stages stay apples-to-apples.
 /// </summary>
 [MemoryDiagnoser]
-public class SecDocumentHtmlToMarkdownConverterBenchmarks {
+public class SecDocumentHtmlToMarkdownConverterBenchmarks
+{
     private const int SectionCount = 40;
     private readonly SecDocumentHtmlToMarkdownConverter _sut = new();
     private string _input;
 
     [GlobalSetup]
-    public void Setup() {
+    public void Setup()
+    {
         // Post-normalization shape: plain HTML with headings, paragraphs, tables, and
         // ordered-list paragraphs. No envelope, no style attributes (the normalizer
         // already stripped those — the converter's own style-attribute regex pass is
         // a defensive belt-and-braces, not the common case).
         var html = new StringBuilder();
         html.Append("<body>");
-        for (var i = 0; i < SectionCount; i++) {
+        for (var i = 0; i < SectionCount; i++)
+        {
             html.Append($"<h2>Item {i}. Risk Factors</h2>");
-            html.Append("<p>The Company faces various risks that could materially affect its business, ")
-                .Append("financial condition, and results of operations. These risks include, but are not ")
+            html.Append(
+                    "<p>The Company faces various risks that could materially affect its business, "
+                )
+                .Append(
+                    "financial condition, and results of operations. These risks include, but are not "
+                )
                 .Append("limited to, the following items described below.</p>");
             html.Append("<table><thead><tr><th>Line</th><th>2025</th><th>2024</th></tr></thead>")
                 .Append("<tbody>")

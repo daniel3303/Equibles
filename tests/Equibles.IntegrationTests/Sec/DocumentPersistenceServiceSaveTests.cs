@@ -25,12 +25,16 @@ namespace Equibles.IntegrationTests.Sec;
 /// abort the save, and the in-memory tier would not catch it.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase {
-    public DocumentPersistenceServiceSaveTests(ParadeDbFixture fixture) : base(fixture) { }
+public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase
+{
+    public DocumentPersistenceServiceSaveTests(ParadeDbFixture fixture)
+        : base(fixture) { }
 
     [Fact]
-    public async Task Save_CommitsTransactionAndPersistsDocumentLinkedToCompanyAndContent() {
-        var apple = new CommonStock {
+    public async Task Save_CommitsTransactionAndPersistsDocumentLinkedToCompanyAndContent()
+    {
+        var apple = new CommonStock
+        {
             Id = Guid.NewGuid(),
             Ticker = "AAPL",
             Name = "Apple Inc.",
@@ -39,13 +43,17 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase {
         // FileManager is the unit under test's only non-DbContext collaborator — substitute it
         // so the test is independent of Equibles.Media.BusinessLogic; the persistence step is
         // what we want to verify, not the file-byte writing.
-        var savedFile = new File {
+        var savedFile = new File
+        {
             Id = Guid.NewGuid(),
             Name = "AAPL-2024-10K",
             Extension = "html",
             ContentType = "text/html",
             Size = 32,
-            FileContent = new FileContent { Bytes = "<html>line1\nline2\nline3</html>"u8.ToArray() },
+            FileContent = new FileContent
+            {
+                Bytes = "<html>line1\nline2\nline3</html>"u8.ToArray(),
+            },
         };
 
         // Seed via a separate DbContext to keep these rows out of the SUT context's tracker —
@@ -55,7 +63,8 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase {
         // tracked at all, the same navigation would lead EF to treat it as a fresh row and
         // insert it. Seeding through a separate context + fetching apple back via the SUT
         // context lands it as Unchanged.
-        await using (var seed = Fixture.CreateDbContext()) {
+        await using (var seed = Fixture.CreateDbContext())
+        {
             seed.Set<CommonStock>().Add(apple);
             seed.Set<File>().Add(savedFile);
             await seed.SaveChangesAsync();
@@ -68,7 +77,8 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase {
         savedFile = await DbContext.Set<File>().SingleAsync(f => f.Id == savedFile.Id);
 
         var fileManager = Substitute.For<IFileManager>();
-        fileManager.SaveFile(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<bool>())
+        fileManager
+            .SaveFile(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<bool>())
             .Returns(_ => Task.FromResult(savedFile));
 
         var sut = new DocumentPersistenceService(new DocumentRepository(DbContext), fileManager);
@@ -81,7 +91,8 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase {
             documentType: DocumentType.TenK,
             reportingDate: new DateOnly(2024, 3, 15),
             reportingForDate: new DateOnly(2023, 12, 31),
-            sourceUrl: "https://example.test/filing");
+            sourceUrl: "https://example.test/filing"
+        );
 
         await using var verify = Fixture.CreateDbContext();
         var saved = await verify.Set<Document>().SingleAsync(d => d.CommonStockId == apple.Id);

@@ -7,17 +7,20 @@ namespace Equibles.FunctionalTests.Tests;
 
 [Collection(FunctionalTestCollection.Name)]
 [Trait("Category", "Functional")]
-public class StatusShowNotFoundTests {
+public class StatusShowNotFoundTests
+{
     private readonly WebAppFixture _web;
     private readonly PlaywrightFixture _playwright;
 
-    public StatusShowNotFoundTests(WebAppFixture web, PlaywrightFixture playwright) {
+    public StatusShowNotFoundTests(WebAppFixture web, PlaywrightFixture playwright)
+    {
         _web = web;
         _playwright = playwright;
     }
 
     [Fact]
-    public async Task Show_GetForUnknownErrorId_RedirectsToIndexAndRendersFlashError() {
+    public async Task Show_GetForUnknownErrorId_RedirectsToIndexAndRendersFlashError()
+    {
         // StatusController.Show returns RedirectToAction(Index) + flash error when the id
         // resolves to no Error row. The redirect happens via 302 and the flash message
         // round-trips through Session — dropping the IFlashMessage call or returning a bare
@@ -32,11 +35,12 @@ public class StatusShowNotFoundTests {
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);
-        page.Url.Should().EndWith("/status",
-            "Show must redirect missing-error lookups to the Index action");
-        await Assertions.Expect(page.Locator(".alert-error").Filter(new() {
-                HasTextString = "Error not found.",
-            }))
+        page.Url.Should()
+            .EndWith("/status", "Show must redirect missing-error lookups to the Index action");
+        await Assertions
+            .Expect(
+                page.Locator(".alert-error").Filter(new() { HasTextString = "Error not found." })
+            )
             .ToHaveCountAsync(1);
     }
 }

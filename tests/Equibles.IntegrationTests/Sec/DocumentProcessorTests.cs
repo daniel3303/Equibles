@@ -11,20 +11,26 @@ using NSubstitute;
 
 namespace Equibles.IntegrationTests.Sec;
 
-public class DocumentProcessorTests {
-    private static DocumentProcessor CreateSut(IEmbeddingClient embeddingClient,
-        ILogger<DocumentProcessor> logger = null) {
+public class DocumentProcessorTests
+{
+    private static DocumentProcessor CreateSut(
+        IEmbeddingClient embeddingClient,
+        ILogger<DocumentProcessor> logger = null
+    )
+    {
         return new DocumentProcessor(
             Substitute.For<ChunkRepository>((Equibles.Data.EquiblesDbContext)null),
             Substitute.For<EmbeddingRepository>((Equibles.Data.EquiblesDbContext)null),
             embeddingClient,
             new ChunkingStrategy(new TokenCounter()),
             Options.Create(new EmbeddingConfig { ModelName = "test-model" }),
-            logger ?? Substitute.For<ILogger<DocumentProcessor>>());
+            logger ?? Substitute.For<ILogger<DocumentProcessor>>()
+        );
     }
 
     [Fact]
-    public async Task GenerateEmbeddings_AlreadyCancelledToken_DoesNotCallEmbeddingClient() {
+    public async Task GenerateEmbeddings_AlreadyCancelledToken_DoesNotCallEmbeddingClient()
+    {
         // GenerateEmbeddings groups chunks by document, then checks the
         // cancellation token at the top of each group. With a pre-cancelled
         // token it must break BEFORE calling _embeddingClient — the embedding
@@ -34,7 +40,8 @@ public class DocumentProcessorTests {
         // moves the cancellation check after the embedding call (or drops
         // it entirely) surfaces here instead of in production logs.
         var documentId = Guid.NewGuid();
-        var chunks = new List<Chunk> {
+        var chunks = new List<Chunk>
+        {
             new() { DocumentId = documentId, Content = "first" },
         };
 
@@ -49,7 +56,8 @@ public class DocumentProcessorTests {
     }
 
     [Fact]
-    public async Task ProcessDocuments_DocumentWithNullContent_LogsErrorAndContinuesBatch() {
+    public async Task ProcessDocuments_DocumentWithNullContent_LogsErrorAndContinuesBatch()
+    {
         // DocumentProcessor.ProcessDocuments is the worker's main loop —
         // SecScraperWorker hands it the whole queue of newly-fetched filings
         // each cycle. If a single document is missing its File envelope
@@ -75,8 +83,10 @@ public class DocumentProcessorTests {
         var logger = Substitute.For<ILogger<DocumentProcessor>>();
         var sut = CreateSut(Substitute.For<IEmbeddingClient>(), logger);
         var documentId = Guid.NewGuid();
-        var documents = new List<Document> {
-            new() {
+        var documents = new List<Document>
+        {
+            new()
+            {
                 Id = documentId,
                 CommonStock = new CommonStock { Name = "Test Co", Ticker = "TEST" },
                 Content = null,
@@ -86,35 +96,44 @@ public class DocumentProcessorTests {
         var act = () => sut.ProcessDocuments(documents, CancellationToken.None);
 
         await act.Should().NotThrowAsync();
-        logger.ReceivedCalls()
-            .Where(c => c.GetMethodInfo().Name == "Log"
-                && c.GetArguments().OfType<LogLevel>().FirstOrDefault() == LogLevel.Error)
-            .Should().ContainSingle();
+        logger
+            .ReceivedCalls()
+            .Where(c =>
+                c.GetMethodInfo().Name == "Log"
+                && c.GetArguments().OfType<LogLevel>().FirstOrDefault() == LogLevel.Error
+            )
+            .Should()
+            .ContainSingle();
     }
 
     [Fact]
-    public async Task GenerateEmbeddings_EmbeddingCountMismatch_Throws() {
+    public async Task GenerateEmbeddings_EmbeddingCountMismatch_Throws()
+    {
         var documentId = Guid.NewGuid();
-        var chunks = new List<Chunk> {
+        var chunks = new List<Chunk>
+        {
             new() { DocumentId = documentId, Content = "first" },
             new() { DocumentId = documentId, Content = "second" },
             new() { DocumentId = documentId, Content = "third" },
         };
 
         var embeddingClient = Substitute.For<IEmbeddingClient>();
-        embeddingClient.GenerateEmbeddings(Arg.Any<List<string>>())
+        embeddingClient
+            .GenerateEmbeddings(Arg.Any<List<string>>())
             .Returns(new List<float[]> { new float[] { 0.1f }, new float[] { 0.2f } });
 
         var sut = CreateSut(embeddingClient);
 
         var act = () => sut.GenerateEmbeddings(chunks, CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
             .WithMessage("Embedding count mismatch: expected 3, got 2");
     }
 
     [Fact]
-    public async Task GenerateEmbeddings_EmbeddingCountExceedsChunkCount_Throws() {
+    public async Task GenerateEmbeddings_EmbeddingCountExceedsChunkCount_Throws()
+    {
         // Sibling to the count-too-low pin above. The risk this catches is asymmetric
         // and unreachable from the existing sibling alone: the guard is
         // `if (embeddings.Count != chunks.Count) throw;` — a regression that swaps `!=`
@@ -139,20 +158,30 @@ public class DocumentProcessorTests {
         // guard from BOTH `<` AND `>` collapses; only one direction is caught by the
         // existing test.
         var documentId = Guid.NewGuid();
-        var chunks = new List<Chunk> {
+        var chunks = new List<Chunk>
+        {
             new() { DocumentId = documentId, Content = "first" },
             new() { DocumentId = documentId, Content = "second" },
         };
 
         var embeddingClient = Substitute.For<IEmbeddingClient>();
-        embeddingClient.GenerateEmbeddings(Arg.Any<List<string>>())
-            .Returns(new List<float[]> { new float[] { 0.1f }, new float[] { 0.2f }, new float[] { 0.3f } });
+        embeddingClient
+            .GenerateEmbeddings(Arg.Any<List<string>>())
+            .Returns(
+                new List<float[]>
+                {
+                    new float[] { 0.1f },
+                    new float[] { 0.2f },
+                    new float[] { 0.3f },
+                }
+            );
 
         var sut = CreateSut(embeddingClient);
 
         var act = () => sut.GenerateEmbeddings(chunks, CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
             .WithMessage("Embedding count mismatch: expected 2, got 3");
     }
 }

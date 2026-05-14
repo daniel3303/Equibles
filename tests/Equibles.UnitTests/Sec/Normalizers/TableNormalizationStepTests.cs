@@ -3,18 +3,21 @@ using Equibles.Sec.BusinessLogic.Normalizers;
 
 namespace Equibles.UnitTests.Sec.Normalizers;
 
-public class TableNormalizationStepTests {
-    private readonly HtmlParser _parser = new(new HtmlParserOptions {
-        IsAcceptingCustomElementsEverywhere = true
-    });
+public class TableNormalizationStepTests
+{
+    private readonly HtmlParser _parser = new(
+        new HtmlParserOptions { IsAcceptingCustomElementsEverywhere = true }
+    );
     private readonly TableNormalizationStep _step;
 
-    public TableNormalizationStepTests() {
+    public TableNormalizationStepTests()
+    {
         _step = new TableNormalizationStep(_parser);
     }
 
     [Fact]
-    public void Execute_NonNumericColspan_SkipsExpansionAndDoesNotThrow() {
+    public void Execute_NonNumericColspan_SkipsExpansionAndDoesNotThrow()
+    {
         // FixColspan guards every cell with `int.TryParse(colspanAttr) || colspanValue <= 1`
         // → `continue`. The TryParse half is load-bearing: SEC filings emitted by older
         // EDGAR converters and some hand-edited submissions sometimes carry malformed
@@ -37,7 +40,8 @@ public class TableNormalizationStepTests {
         // continue fired before RemoveAttribute), no new cells were inserted (proving
         // the for loop didn't run), and no exception escaped the Execute call.
         var doc = _parser.ParseDocument(
-            "<html><body><table><tr><td colspan=\"abc\">Cell</td></tr></table></body></html>");
+            "<html><body><table><tr><td colspan=\"abc\">Cell</td></tr></table></body></html>"
+        );
 
         var act = () => _step.Execute(doc);
 
@@ -49,7 +53,8 @@ public class TableNormalizationStepTests {
     }
 
     [Fact]
-    public void Execute_NonNumericRowspan_SkipsExpansionAndDoesNotThrow() {
+    public void Execute_NonNumericRowspan_SkipsExpansionAndDoesNotThrow()
+    {
         // Sibling to Execute_NonNumericColspan_SkipsExpansionAndDoesNotThrow.
         // FixRowspan is structurally separate from FixColspan but uses the
         // identical defensive guard:
@@ -75,7 +80,8 @@ public class TableNormalizationStepTests {
         // RemoveAttribute), no new rows are inserted (proving the for loop
         // didn't run), no exception escapes.
         var doc = _parser.ParseDocument(
-            "<html><body><table><tr><td rowspan=\"abc\">Cell</td></tr></table></body></html>");
+            "<html><body><table><tr><td rowspan=\"abc\">Cell</td></tr></table></body></html>"
+        );
 
         var act = () => _step.Execute(doc);
 
@@ -87,9 +93,11 @@ public class TableNormalizationStepTests {
     }
 
     [Fact]
-    public void Execute_ColspanExpansion_RemovesColspanAttribute() {
+    public void Execute_ColspanExpansion_RemovesColspanAttribute()
+    {
         var doc = _parser.ParseDocument(
-            "<html><body><table><tr><td colspan=\"3\">A</td></tr></table></body></html>");
+            "<html><body><table><tr><td colspan=\"3\">A</td></tr></table></body></html>"
+        );
 
         _step.Execute(doc);
 
@@ -103,12 +111,14 @@ public class TableNormalizationStepTests {
     }
 
     [Fact]
-    public void Execute_RowspanExpansion_RemovesRowspanAttribute() {
+    public void Execute_RowspanExpansion_RemovesRowspanAttribute()
+    {
         var doc = _parser.ParseDocument(
-            "<html><body><table>" +
-            "<tr><td rowspan=\"2\">A</td><td>B</td></tr>" +
-            "<tr><td>C</td></tr>" +
-            "</table></body></html>");
+            "<html><body><table>"
+                + "<tr><td rowspan=\"2\">A</td><td>B</td></tr>"
+                + "<tr><td>C</td></tr>"
+                + "</table></body></html>"
+        );
 
         _step.Execute(doc);
 
@@ -127,13 +137,15 @@ public class TableNormalizationStepTests {
     }
 
     [Fact]
-    public void Execute_EmptyRowRemoval_RemovesRowWithOnlyWhitespaceAndNbsp() {
+    public void Execute_EmptyRowRemoval_RemovesRowWithOnlyWhitespaceAndNbsp()
+    {
         var doc = _parser.ParseDocument(
-            "<html><body><table>" +
-            "<tr><td>Data</td></tr>" +
-            "<tr><td>&nbsp;</td></tr>" +
-            "<tr><td>   </td></tr>" +
-            "</table></body></html>");
+            "<html><body><table>"
+                + "<tr><td>Data</td></tr>"
+                + "<tr><td>&nbsp;</td></tr>"
+                + "<tr><td>   </td></tr>"
+                + "</table></body></html>"
+        );
 
         _step.Execute(doc);
 
@@ -143,12 +155,14 @@ public class TableNormalizationStepTests {
     }
 
     [Fact]
-    public void Execute_NonEmptyRowPreserved_KeepsRowsWithTextContent() {
+    public void Execute_NonEmptyRowPreserved_KeepsRowsWithTextContent()
+    {
         var doc = _parser.ParseDocument(
-            "<html><body><table>" +
-            "<tr><td>Row 1</td></tr>" +
-            "<tr><td>Row 2</td></tr>" +
-            "</table></body></html>");
+            "<html><body><table>"
+                + "<tr><td>Row 1</td></tr>"
+                + "<tr><td>Row 2</td></tr>"
+                + "</table></body></html>"
+        );
 
         _step.Execute(doc);
 
@@ -157,12 +171,14 @@ public class TableNormalizationStepTests {
     }
 
     [Fact]
-    public void Execute_EmptyColumnRemoval_RemovesColumnWhereAllCellsAreEmpty() {
+    public void Execute_EmptyColumnRemoval_RemovesColumnWhereAllCellsAreEmpty()
+    {
         var doc = _parser.ParseDocument(
-            "<html><body><table>" +
-            "<tr><td>A</td><td>&nbsp;</td><td>B</td></tr>" +
-            "<tr><td>C</td><td> </td><td>D</td></tr>" +
-            "</table></body></html>");
+            "<html><body><table>"
+                + "<tr><td>A</td><td>&nbsp;</td><td>B</td></tr>"
+                + "<tr><td>C</td><td> </td><td>D</td></tr>"
+                + "</table></body></html>"
+        );
 
         _step.Execute(doc);
 
@@ -181,13 +197,15 @@ public class TableNormalizationStepTests {
     }
 
     [Fact]
-    public void Execute_MixedTable_RemovesBothColspanAndRowspanAttributes() {
+    public void Execute_MixedTable_RemovesBothColspanAndRowspanAttributes()
+    {
         var doc = _parser.ParseDocument(
-            "<html><body><table>" +
-            "<tr><td colspan=\"2\">Header</td><td>X</td></tr>" +
-            "<tr><td rowspan=\"2\">Left</td><td>M1</td><td>M2</td></tr>" +
-            "<tr><td>N1</td><td>N2</td></tr>" +
-            "</table></body></html>");
+            "<html><body><table>"
+                + "<tr><td colspan=\"2\">Header</td><td>X</td></tr>"
+                + "<tr><td rowspan=\"2\">Left</td><td>M1</td><td>M2</td></tr>"
+                + "<tr><td>N1</td><td>N2</td></tr>"
+                + "</table></body></html>"
+        );
 
         _step.Execute(doc);
 
@@ -211,16 +229,18 @@ public class TableNormalizationStepTests {
     }
 
     [Fact]
-    public void Execute_EmptyRowRemoval_RemovesRowContainingOnlyWhitespaceSpan() {
+    public void Execute_EmptyRowRemoval_RemovesRowContainingOnlyWhitespaceSpan()
+    {
         // SEC filings frequently wrap whitespace in styled spans for layout
         // (e.g. <span style="color:red"> </span>). Those rows are visually
         // empty and should be stripped even though the cell's InnerHtml is
         // not literally whitespace or &nbsp;.
         var doc = _parser.ParseDocument(
-            "<html><body><table>" +
-            "<tr><td>Data</td></tr>" +
-            "<tr><td><span style=\"color:red\"> </span></td></tr>" +
-            "</table></body></html>");
+            "<html><body><table>"
+                + "<tr><td>Data</td></tr>"
+                + "<tr><td><span style=\"color:red\"> </span></td></tr>"
+                + "</table></body></html>"
+        );
 
         _step.Execute(doc);
 
@@ -230,7 +250,8 @@ public class TableNormalizationStepTests {
     }
 
     [Fact]
-    public void Execute_RowspanInTrailingColumnOverShorterRow_AppendsEmptyCellAtRowEnd() {
+    public void Execute_RowspanInTrailingColumnOverShorterRow_AppendsEmptyCellAtRowEnd()
+    {
         // When a rowspan in the LAST column of one row crosses into a subsequent
         // row that has FEWER cells, the column index used to splice in the empty
         // padding cell is past the end of that shorter row's cell list. The
@@ -251,10 +272,11 @@ public class TableNormalizationStepTests {
         // After normalization, row 2 must end up with TWO cells — D at index 0 and
         // an empty appended cell — and the rowspan attribute on C must be gone.
         var doc = _parser.ParseDocument(
-            "<html><body><table>" +
-            "<tr><td>A</td><td>B</td><td rowspan=\"2\">C</td></tr>" +
-            "<tr><td>D</td></tr>" +
-            "</table></body></html>");
+            "<html><body><table>"
+                + "<tr><td>A</td><td>B</td><td rowspan=\"2\">C</td></tr>"
+                + "<tr><td>D</td></tr>"
+                + "</table></body></html>"
+        );
 
         _step.Execute(doc);
 
@@ -270,9 +292,9 @@ public class TableNormalizationStepTests {
     }
 
     [Fact]
-    public void Execute_NoTables_DoesNotThrow() {
-        var doc = _parser.ParseDocument(
-            "<html><body><p>No tables here</p></body></html>");
+    public void Execute_NoTables_DoesNotThrow()
+    {
+        var doc = _parser.ParseDocument("<html><body><p>No tables here</p></body></html>");
 
         var act = () => _step.Execute(doc);
 

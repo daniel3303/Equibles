@@ -1,6 +1,7 @@
 namespace Equibles.Sec.HostedService.Models;
 
-public class ScrapingResult {
+public class ScrapingResult
+{
     public int CompaniesProcessed { get; set; }
     public int DocumentsFound { get; set; }
     public int DocumentsAdded { get; set; }

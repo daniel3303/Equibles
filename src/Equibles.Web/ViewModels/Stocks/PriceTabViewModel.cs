@@ -2,7 +2,8 @@ using Equibles.Yahoo.Data.Models;
 
 namespace Equibles.Web.ViewModels.Stocks;
 
-public class PriceTabViewModel {
+public class PriceTabViewModel
+{
     public string Ticker { get; set; }
     public List<DailyStockPrice> Prices { get; set; } = [];
 

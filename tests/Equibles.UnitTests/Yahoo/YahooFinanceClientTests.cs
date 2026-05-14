@@ -3,23 +3,38 @@ using Equibles.Integrations.Yahoo;
 
 namespace Equibles.UnitTests.Yahoo;
 
-public class YahooFinanceClientTests {
-    private static readonly MethodInfo ToUnixTimestampMethod = typeof(YahooFinanceClient)
-        .GetMethod("ToUnixTimestamp", BindingFlags.NonPublic | BindingFlags.Static);
+public class YahooFinanceClientTests
+{
+    private static readonly MethodInfo ToUnixTimestampMethod = typeof(YahooFinanceClient).GetMethod(
+        "ToUnixTimestamp",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
-    private static readonly MethodInfo FromUnixTimestampMethod = typeof(YahooFinanceClient)
-        .GetMethod("FromUnixTimestamp", BindingFlags.NonPublic | BindingFlags.Static);
+    private static readonly MethodInfo FromUnixTimestampMethod =
+        typeof(YahooFinanceClient).GetMethod(
+            "FromUnixTimestamp",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
-    private static readonly MethodInfo ApplyBrowserHeadersOnClientMethod = typeof(YahooFinanceClient)
-        .GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
-        .First(m => m.Name == "ApplyBrowserHeaders" && m.GetParameters()[0].ParameterType == typeof(HttpClient));
+    private static readonly MethodInfo ApplyBrowserHeadersOnClientMethod =
+        typeof(YahooFinanceClient)
+            .GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
+            .First(m =>
+                m.Name == "ApplyBrowserHeaders"
+                && m.GetParameters()[0].ParameterType == typeof(HttpClient)
+            );
 
-    private static readonly MethodInfo ApplyBrowserHeadersOnRequestMethod = typeof(YahooFinanceClient)
-        .GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
-        .First(m => m.Name == "ApplyBrowserHeaders" && m.GetParameters()[0].ParameterType == typeof(HttpRequestMessage));
+    private static readonly MethodInfo ApplyBrowserHeadersOnRequestMethod =
+        typeof(YahooFinanceClient)
+            .GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
+            .First(m =>
+                m.Name == "ApplyBrowserHeaders"
+                && m.GetParameters()[0].ParameterType == typeof(HttpRequestMessage)
+            );
 
     [Fact]
-    public void ApplyBrowserHeaders_OnHttpRequestMessage_AddsChromeUserAgentAndAcceptHeaders() {
+    public void ApplyBrowserHeaders_OnHttpRequestMessage_AddsChromeUserAgentAndAcceptHeaders()
+    {
         // The HttpClient-overload sibling (covered in PR #268) attaches headers on
         // `DefaultRequestHeaders` of the session-bootstrap client — only used for
         // the cookie/crumb handshake. The HttpRequestMessage overload is what runs
@@ -35,8 +50,10 @@ public class YahooFinanceClientTests {
         // and retry until it exhausts MaxRetries, masking the root cause as
         // "Yahoo session expired". Pin the per-request attach so the regression
         // surfaces at the right layer.
-        var request = new HttpRequestMessage(HttpMethod.Get,
-            "https://query1.finance.yahoo.com/v8/finance/chart/AAPL");
+        var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            "https://query1.finance.yahoo.com/v8/finance/chart/AAPL"
+        );
 
         ApplyBrowserHeadersOnRequestMethod.Invoke(null, [request]);
 
@@ -46,7 +63,8 @@ public class YahooFinanceClientTests {
     }
 
     [Fact]
-    public void ApplyBrowserHeaders_OnHttpClient_AddsChromeUserAgentAndAcceptHeaders() {
+    public void ApplyBrowserHeaders_OnHttpClient_AddsChromeUserAgentAndAcceptHeaders()
+    {
         // Yahoo Finance actively rejects requests that look like bots — `query1.finance.yahoo.com`
         // returns 401/403 without explanation when the User-Agent header is missing or
         // identifies as a typical HttpClient (".NET HttpClient/...") rather than a real
@@ -70,7 +88,8 @@ public class YahooFinanceClientTests {
     }
 
     [Fact]
-    public void ToUnixTimestamp_KnownUtcDate_ReturnsCorrectUnixSeconds() {
+    public void ToUnixTimestamp_KnownUtcDate_ReturnsCorrectUnixSeconds()
+    {
         // GetHistoricalPrices builds the chart URL with `?period1={ToUnixTimestamp(start)}`,
         // and Yahoo treats those parameters as Unix epoch seconds in UTC. ToUnixTimestamp
         // anchors the conversion by explicitly constructing the DateTime with
@@ -84,7 +103,8 @@ public class YahooFinanceClientTests {
     }
 
     [Fact]
-    public void FromUnixTimestamp_KnownUnixSeconds_ReturnsUtcCalendarDate() {
+    public void FromUnixTimestamp_KnownUnixSeconds_ReturnsUtcCalendarDate()
+    {
         // The chart response carries one Unix-epoch-seconds timestamp per OHLCV row.
         // FromUnixTimestamp converts it back to a DateOnly via `UnixEpoch.AddSeconds(...).UtcDateTime`
         // — drop the `.UtcDateTime` accessor and the implicit `.LocalDateTime` conversion
@@ -99,36 +119,42 @@ public class YahooFinanceClientTests {
         result.Should().Be(new DateOnly(2024, 1, 1));
     }
 
-
     [Fact]
-    public async Task GetHistoricalPrices_NullTicker_ThrowsArgumentException() {
+    public async Task GetHistoricalPrices_NullTicker_ThrowsArgumentException()
+    {
         var client = CreateClient();
 
-        var act = () => client.GetHistoricalPrices(null, new DateOnly(2020, 1, 1), new DateOnly(2020, 1, 31));
+        var act = () =>
+            client.GetHistoricalPrices(null, new DateOnly(2020, 1, 1), new DateOnly(2020, 1, 31));
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
     [Fact]
-    public async Task GetHistoricalPrices_EmptyTicker_ThrowsArgumentException() {
+    public async Task GetHistoricalPrices_EmptyTicker_ThrowsArgumentException()
+    {
         var client = CreateClient();
 
-        var act = () => client.GetHistoricalPrices("", new DateOnly(2020, 1, 1), new DateOnly(2020, 1, 31));
+        var act = () =>
+            client.GetHistoricalPrices("", new DateOnly(2020, 1, 1), new DateOnly(2020, 1, 31));
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
     [Fact]
-    public async Task GetHistoricalPrices_WhitespaceTicker_ThrowsArgumentException() {
+    public async Task GetHistoricalPrices_WhitespaceTicker_ThrowsArgumentException()
+    {
         var client = CreateClient();
 
-        var act = () => client.GetHistoricalPrices("   ", new DateOnly(2020, 1, 1), new DateOnly(2020, 1, 31));
+        var act = () =>
+            client.GetHistoricalPrices("   ", new DateOnly(2020, 1, 1), new DateOnly(2020, 1, 31));
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
     [Fact]
-    public async Task GetRecommendationTrends_NullTicker_ThrowsArgumentException() {
+    public async Task GetRecommendationTrends_NullTicker_ThrowsArgumentException()
+    {
         var client = CreateClient();
 
         var act = () => client.GetRecommendationTrends(null);
@@ -137,7 +163,8 @@ public class YahooFinanceClientTests {
     }
 
     [Fact]
-    public async Task GetRecommendationTrends_EmptyTicker_ThrowsArgumentException() {
+    public async Task GetRecommendationTrends_EmptyTicker_ThrowsArgumentException()
+    {
         var client = CreateClient();
 
         var act = () => client.GetRecommendationTrends("");
@@ -145,9 +172,11 @@ public class YahooFinanceClientTests {
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
-    private static YahooFinanceClient CreateClient() {
+    private static YahooFinanceClient CreateClient()
+    {
         return new YahooFinanceClient(
             new HttpClient(),
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<YahooFinanceClient>.Instance);
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<YahooFinanceClient>.Instance
+        );
     }
 }

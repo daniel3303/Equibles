@@ -8,12 +8,16 @@ namespace Equibles.UnitTests.Cftc;
 /// cftc.gov and writes to the database, so we exercise the pure-logic private
 /// date parser via reflection.
 /// </summary>
-public class CftcImportServiceTests {
-    private static readonly MethodInfo ParseDateMethod = typeof(CftcImportService)
-        .GetMethod("ParseDate", BindingFlags.NonPublic | BindingFlags.Static);
+public class CftcImportServiceTests
+{
+    private static readonly MethodInfo ParseDateMethod = typeof(CftcImportService).GetMethod(
+        "ParseDate",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
     [Fact]
-    public void ParseDate_LegacyYyMmDdFormat_Parses() {
+    public void ParseDate_LegacyYyMmDdFormat_Parses()
+    {
         // CFTC history files mix two date encodings: modern "Report_Date_as_YYYY-MM-DD"
         // and legacy "As_of_Date_In_Form_YYMMDD". ParseDate must fall back to the
         // legacy yyMMdd format after the yyyy-MM-dd attempt — without the fallback,
@@ -26,7 +30,8 @@ public class CftcImportServiceTests {
     }
 
     [Fact]
-    public void ParseDate_ModernYyyyMmDdFormat_Parses() {
+    public void ParseDate_ModernYyyyMmDdFormat_Parses()
+    {
         // Sibling pin to the legacy-format test above. The two tests together pin BOTH
         // date-format branches of ParseDate. The risk this catches is asymmetric and
         // unreachable from the legacy sibling alone: a regression that deletes (or
@@ -51,7 +56,8 @@ public class CftcImportServiceTests {
     }
 
     [Fact]
-    public void ParseDate_NullInput_ReturnsNullViaIsNullOrWhiteSpaceGuard() {
+    public void ParseDate_NullInput_ReturnsNullViaIsNullOrWhiteSpaceGuard()
+    {
         // ParseDate's first line is the defensive guard
         //   if (string.IsNullOrWhiteSpace(value)) return null;
         // Real CFTC rows occasionally carry null date values — empty columns from
@@ -81,7 +87,8 @@ public class CftcImportServiceTests {
     }
 
     [Fact]
-    public void ParseDate_UnparseableValue_ReturnsNull() {
+    public void ParseDate_UnparseableValue_ReturnsNull()
+    {
         // ImportYear's foreach skips malformed rows via `if (date == null) continue;`,
         // so returning null on bad input — rather than throwing — is the contract that
         // keeps the importer from crashing an entire year on a single bad row. A
@@ -93,7 +100,8 @@ public class CftcImportServiceTests {
     }
 
     [Fact]
-    public void ParseDate_ValidDateWithLeadingAndTrailingWhitespace_ParsesViaTrimBeforeTryParseExact() {
+    public void ParseDate_ValidDateWithLeadingAndTrailingWhitespace_ParsesViaTrimBeforeTryParseExact()
+    {
         // Fifth pin in the ParseDate family. Existing four pins cover:
         //   • Legacy yyMMdd format (no surrounding whitespace)
         //   • Modern yyyy-MM-dd format (no surrounding whitespace)

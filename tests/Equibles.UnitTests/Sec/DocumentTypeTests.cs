@@ -2,13 +2,15 @@ using Equibles.Sec.Data.Models;
 
 namespace Equibles.UnitTests.Sec;
 
-public class DocumentTypeTests {
+public class DocumentTypeTests
+{
     [Theory]
     [InlineData("TenK")]
     [InlineData("TenQ")]
     [InlineData("EightK")]
     [InlineData("FormFour")]
-    public void FromValue_ReturnsCorrectType(string value) {
+    public void FromValue_ReturnsCorrectType(string value)
+    {
         var result = DocumentType.FromValue(value);
 
         result.Should().NotBeNull();
@@ -19,7 +21,8 @@ public class DocumentTypeTests {
     [InlineData("tenk", "TenK")]
     [InlineData("TENK", "TenK")]
     [InlineData("eightk", "EightK")]
-    public void FromValue_IsCaseInsensitive(string input, string expectedValue) {
+    public void FromValue_IsCaseInsensitive(string input, string expectedValue)
+    {
         var result = DocumentType.FromValue(input);
 
         result.Should().NotBeNull();
@@ -27,7 +30,8 @@ public class DocumentTypeTests {
     }
 
     [Fact]
-    public void FromValue_UnknownValue_ReturnsNull() {
+    public void FromValue_UnknownValue_ReturnsNull()
+    {
         var result = DocumentType.FromValue("NonExistent");
 
         result.Should().BeNull();
@@ -40,7 +44,8 @@ public class DocumentTypeTests {
     [InlineData("20-F", "TwentyF")]
     [InlineData("4", "FormFour")]
     [InlineData("3", "FormThree")]
-    public void FromDisplayName_ReturnsCorrectType(string displayName, string expectedValue) {
+    public void FromDisplayName_ReturnsCorrectType(string displayName, string expectedValue)
+    {
         var result = DocumentType.FromDisplayName(displayName);
 
         result.Should().NotBeNull();
@@ -50,7 +55,8 @@ public class DocumentTypeTests {
     [Theory]
     [InlineData("10-k", "TenK")]
     [InlineData("8-K/a", "EightKa")]
-    public void FromDisplayName_IsCaseInsensitive(string input, string expectedValue) {
+    public void FromDisplayName_IsCaseInsensitive(string input, string expectedValue)
+    {
         var result = DocumentType.FromDisplayName(input);
 
         result.Should().NotBeNull();
@@ -58,26 +64,41 @@ public class DocumentTypeTests {
     }
 
     [Fact]
-    public void FromDisplayName_UnknownDisplayName_ReturnsNull() {
+    public void FromDisplayName_UnknownDisplayName_ReturnsNull()
+    {
         var result = DocumentType.FromDisplayName("99-Z");
 
         result.Should().BeNull();
     }
 
     [Fact]
-    public void GetAll_ContainsAllBuiltInTypes() {
+    public void GetAll_ContainsAllBuiltInTypes()
+    {
         var all = DocumentType.GetAll().ToList();
 
-        all.Should().Contain(new[] {
-            DocumentType.TenK, DocumentType.TenQ, DocumentType.EightK,
-            DocumentType.TenKa, DocumentType.TenQa, DocumentType.EightKa,
-            DocumentType.TwentyF, DocumentType.SixK, DocumentType.FortyF,
-            DocumentType.FormFour, DocumentType.FormThree, DocumentType.Other
-        });
+        all.Should()
+            .Contain(
+                new[]
+                {
+                    DocumentType.TenK,
+                    DocumentType.TenQ,
+                    DocumentType.EightK,
+                    DocumentType.TenKa,
+                    DocumentType.TenQa,
+                    DocumentType.EightKa,
+                    DocumentType.TwentyF,
+                    DocumentType.SixK,
+                    DocumentType.FortyF,
+                    DocumentType.FormFour,
+                    DocumentType.FormThree,
+                    DocumentType.Other,
+                }
+            );
     }
 
     [Fact]
-    public void ToString_ReturnsDisplayName() {
+    public void ToString_ReturnsDisplayName()
+    {
         DocumentType.TenK.ToString().Should().Be("10-K");
         DocumentType.EightK.ToString().Should().Be("8-K");
         DocumentType.FormFour.ToString().Should().Be("4");
@@ -85,7 +106,8 @@ public class DocumentTypeTests {
     }
 
     [Fact]
-    public void Equality_SameValueTypes_AreEqual() {
+    public void Equality_SameValueTypes_AreEqual()
+    {
         var type = DocumentType.FromValue("TenK");
 
         type.Should().Be(DocumentType.TenK);
@@ -94,13 +116,15 @@ public class DocumentTypeTests {
     }
 
     [Fact]
-    public void Equality_DifferentTypes_AreNotEqual() {
+    public void Equality_DifferentTypes_AreNotEqual()
+    {
         DocumentType.TenK.Should().NotBe(DocumentType.TenQ);
         DocumentType.TenK.Equals(DocumentType.TenQ).Should().BeFalse();
     }
 
     [Fact]
-    public void Equals_NonDocumentTypeObject_ReturnsFalseViaTypeCheck() {
+    public void Equals_NonDocumentTypeObject_ReturnsFalseViaTypeCheck()
+    {
         // Equals is overridden as `obj is DocumentType other && Value == other.Value`.
         // The Value-mismatch branch is pinned by `Equality_DifferentTypes_AreNotEqual`,
         // but the `obj is DocumentType` false leg (where obj is null or a foreign type)
@@ -113,17 +137,19 @@ public class DocumentTypeTests {
     }
 
     [Fact]
-    #pragma warning disable CS1718 // Intentional: testing custom == and != operators
-    public void Operators_EqualityAndInequality_Work() {
+#pragma warning disable CS1718 // Intentional: testing custom == and != operators
+    public void Operators_EqualityAndInequality_Work()
+    {
         (DocumentType.TenK == DocumentType.TenK).Should().BeTrue();
         (DocumentType.TenK != DocumentType.TenQ).Should().BeTrue();
         (DocumentType.TenK == DocumentType.TenQ).Should().BeFalse();
         (DocumentType.TenK != DocumentType.TenK).Should().BeFalse();
     }
-    #pragma warning restore CS1718
+#pragma warning restore CS1718
 
     [Fact]
-    public void Register_AddsNewType_FoundByFromValueAndFromDisplayName() {
+    public void Register_AddsNewType_FoundByFromValueAndFromDisplayName()
+    {
         var custom = new DocumentType("CustomFiling", "CUSTOM-1");
 
         DocumentType.Register(custom);
@@ -133,7 +159,8 @@ public class DocumentTypeTests {
     }
 
     [Fact]
-    public void Constructor_OmittedDisplayName_DefaultsToValue() {
+    public void Constructor_OmittedDisplayName_DefaultsToValue()
+    {
         // The ctor's `displayName ?? value` fallback lets callers register a
         // wire-style DocumentType where the human-facing label is the same as
         // the stable internal Value. Every built-in static instance passes an

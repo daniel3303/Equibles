@@ -6,9 +6,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Errors;
 
-public class ErrorReporterTests {
+public class ErrorReporterTests
+{
     [Fact]
-    public async Task Report_ScopeFactoryThrows_DoesNotPropagate() {
+    public async Task Report_ScopeFactoryThrows_DoesNotPropagate()
+    {
         // ErrorReporter.Report is called from inside `catch` blocks across every scraper
         // (CftcImportService, FtdImportService, DocumentScraper, CongressionalTradeSyncService,
         // SecScraperWorker, ...). If Report itself threw, the original failure path would
@@ -28,10 +30,13 @@ public class ErrorReporterTests {
         // by making CreateScope itself throw. CreateAsyncScope is an extension method
         // that calls CreateScope, so the throw propagates identically.
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
-        scopeFactory.CreateScope().Returns(_ => throw new InvalidOperationException("scope unavailable"));
+        scopeFactory
+            .CreateScope()
+            .Returns(_ => throw new InvalidOperationException("scope unavailable"));
         var sut = new ErrorReporter(scopeFactory, Substitute.For<ILogger<ErrorReporter>>());
 
-        var act = () => sut.Report(ErrorSource.CftcScraper, "TestContext", "test message", stackTrace: null);
+        var act = () =>
+            sut.Report(ErrorSource.CftcScraper, "TestContext", "test message", stackTrace: null);
 
         await act.Should().NotThrowAsync();
     }

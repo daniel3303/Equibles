@@ -6,9 +6,11 @@ using Microsoft.Extensions.Hosting;
 
 namespace Equibles.UnitTests.Holdings;
 
-public class HoldingsServiceCollectionExtensionsTests {
+public class HoldingsServiceCollectionExtensionsTests
+{
     [Fact]
-    public void AddHoldingsWorker_AutoWiresHoldingsImportService() {
+    public void AddHoldingsWorker_AutoWiresHoldingsImportService()
+    {
         // AddHoldingsWorker is the host's seam into auto-wiring for the
         // 13F-HR import pipeline. It registers HoldingsImportService (via
         // assembly scan from the [Service] attribute) and the
@@ -27,7 +29,8 @@ public class HoldingsServiceCollectionExtensionsTests {
     }
 
     [Fact]
-    public void AddHoldingsWorker_RegistersHoldingsScraperWorkerAsIHostedService() {
+    public void AddHoldingsWorker_RegistersHoldingsScraperWorkerAsIHostedService()
+    {
         // Sibling to AddHoldingsWorker_AutoWiresHoldingsImportService. The existing
         // pin asserts that the auto-wire scan picked up the import service (the
         // scoped collaborator). This pin asserts a structurally distinct binding:
@@ -79,8 +82,11 @@ public class HoldingsServiceCollectionExtensionsTests {
             .Where(d => d.ServiceType == typeof(IHostedService))
             .ToList();
 
-        hostedServiceDescriptors.Should().Contain(
-            d => d.ImplementationType == typeof(HoldingsScraperWorker),
-            "AddHostedService<HoldingsScraperWorker>() must register the worker as IHostedService so the quarterly 13F-HR import runs at startup");
+        hostedServiceDescriptors
+            .Should()
+            .Contain(
+                d => d.ImplementationType == typeof(HoldingsScraperWorker),
+                "AddHostedService<HoldingsScraperWorker>() must register the worker as IHostedService so the quarterly 13F-HR import runs at startup"
+            );
     }
 }

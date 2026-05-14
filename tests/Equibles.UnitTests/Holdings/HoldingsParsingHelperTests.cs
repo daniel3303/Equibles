@@ -5,9 +5,11 @@ using Equibles.Holdings.HostedService.Services;
 
 namespace Equibles.UnitTests.Holdings;
 
-public class HoldingsParsingHelperTests {
+public class HoldingsParsingHelperTests
+{
     [Fact]
-    public void FindEntry_LookupWithDifferentCase_FallsBackToCaseInsensitiveMatch() {
+    public void FindEntry_LookupWithDifferentCase_FallsBackToCaseInsensitiveMatch()
+    {
         // SEC publishes 13F-HR datasets where filename casing can shift
         // between periods (e.g. SUBMISSION.tsv in older dumps vs
         // submission.tsv in newer ones). The exact ZipArchive.GetEntry
@@ -17,7 +19,8 @@ public class HoldingsParsingHelperTests {
         // with a case-sensitive equality check) would silently make
         // every quarter where SEC swapped casing fail to import.
         using var stream = new MemoryStream();
-        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true)) {
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
             archive.CreateEntry("SUBMISSION.tsv");
         }
         stream.Position = 0;
@@ -30,7 +33,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void TryParseDateOnly_SecFormat_ReturnsExpectedDate() {
+    public void TryParseDateOnly_SecFormat_ReturnsExpectedDate()
+    {
         var success = HoldingsParsingHelper.TryParseDateOnly("15-MAR-2024", out var result);
 
         success.Should().BeTrue();
@@ -38,7 +42,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void TryParseDateOnly_IsoFormat_ParsesViaFirstBranchNotSecFallback() {
+    public void TryParseDateOnly_IsoFormat_ParsesViaFirstBranchNotSecFallback()
+    {
         // Sibling to `TryParseDateOnly_SecFormat_ReturnsExpectedDate`. The
         // existing pin covers the SECOND parse branch — the SEC
         // dd-MMM-yyyy `TryParseExact` fallback. This pin covers the FIRST
@@ -80,7 +85,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void ParseInvestmentDiscretion_DfndAbbreviation_ReturnsDefined() {
+    public void ParseInvestmentDiscretion_DfndAbbreviation_ReturnsDefined()
+    {
         // SEC 13F filings use abbreviated wire values for investment discretion:
         // "SOLE", "DFND" (defined investment discretion), and "OTR" (other). The C#
         // enum follows project standards by using full descriptive names — Sole,
@@ -101,7 +107,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void ParseInvestmentDiscretion_SoleAbbreviation_ReturnsSoleViaExplicitArmNotDefault() {
+    public void ParseInvestmentDiscretion_SoleAbbreviation_ReturnsSoleViaExplicitArmNotDefault()
+    {
         // Complement to ParseInvestmentDiscretion_UnrecognizedValue_FallsBackToSoleNotOther.
         // The recent default-arm pin asserts that UNKNOWN input falls through to Sole.
         // This pin asserts that the EXPLICIT "SOLE" arm also returns Sole — distinct
@@ -149,7 +156,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void ParseInvestmentDiscretion_OtrAbbreviation_ReturnsOther() {
+    public void ParseInvestmentDiscretion_OtrAbbreviation_ReturnsOther()
+    {
         // Sibling to `ParseInvestmentDiscretion_DfndAbbreviation_ReturnsDefined`.
         // Existing pin covers the DFND arm. This pin covers the OTR arm,
         // completing the three-mapped-arm-plus-default coverage matrix.
@@ -188,7 +196,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void ParseInvestmentDiscretion_UnrecognizedValue_FallsBackToSoleNotOther() {
+    public void ParseInvestmentDiscretion_UnrecognizedValue_FallsBackToSoleNotOther()
+    {
         // The third sibling in the ParseInvestmentDiscretion family. Existing pins
         // cover DFND → Defined and OTR → Other (the two arms whose return value
         // differs from the default). This pin covers the structurally distinct
@@ -245,7 +254,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void ResolveManagerName_AccessionNotInOtherManagers_ReturnsNull() {
+    public void ResolveManagerName_AccessionNotInOtherManagers_ReturnsNull()
+    {
         // 13F filings list co-filing managers in a separate `OTHERMANAGER2.tsv` table
         // keyed by AccessionNumber → SequenceNumber → ManagerName. The vast majority
         // of filings are single-manager (no co-filers) and never produce an
@@ -264,17 +274,23 @@ public class HoldingsParsingHelperTests {
         // Choose a non-null managerNumber so the early `if (managerNumber == null)`
         // guard doesn't short-circuit — that path is trivial, the TryGetValue
         // chain is the dangerous one.
-        var context = new ImportContext {
+        var context = new ImportContext
+        {
             OtherManagers = new Dictionary<string, Dictionary<int, string>>(),
         };
 
-        var result = HoldingsParsingHelper.ResolveManagerName(context, "0001234-25-000001", managerNumber: 2);
+        var result = HoldingsParsingHelper.ResolveManagerName(
+            context,
+            "0001234-25-000001",
+            managerNumber: 2
+        );
 
         result.Should().BeNull();
     }
 
     [Fact]
-    public void ParseOptionType_CallWireValue_ReturnsCallEnum() {
+    public void ParseOptionType_CallWireValue_ReturnsCallEnum()
+    {
         // Completes the ParseOptionType three-way coverage:
         //   - PUT → OptionType.Put         (sibling pin)
         //   - CALL → OptionType.Call       (this pin)
@@ -313,7 +329,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void ParseOptionType_PutWireValue_ReturnsPutEnum() {
+    public void ParseOptionType_PutWireValue_ReturnsPutEnum()
+    {
         // Sibling to `ParseOptionType_UnrecognizedValue_ReturnsNullNotADefaultEnumValue`.
         // The existing pin covers the null-default branch. This pin covers the
         // "PUT" → OptionType.Put mapped arm — the high-business-value happy path.
@@ -354,7 +371,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void ParseOptionType_UnrecognizedValue_ReturnsNullNotADefaultEnumValue() {
+    public void ParseOptionType_UnrecognizedValue_ReturnsNullNotADefaultEnumValue()
+    {
         // SEC 13F filings only carry an option-type wire value ("PUT" / "CALL") for actual
         // option positions; for the vast majority of holdings (common stock, ADRs, fund
         // shares, principal-denominated bonds) the field is empty or absent and `null`
@@ -379,7 +397,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void ParseShareType_PrincipalAbbreviation_ReturnsPrincipal() {
+    public void ParseShareType_PrincipalAbbreviation_ReturnsPrincipal()
+    {
         // SEC 13F filings use abbreviated wire values: "SH" for Shares, "PRN" for Principal.
         // The C# enum uses full descriptive names per project standards. ParseShareType is
         // the bridge that translates the wire abbreviation to the domain enum. The default
@@ -394,7 +413,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void ParseShareType_UnrecognizedValue_FallsBackToSharesNotPrincipal() {
+    public void ParseShareType_UnrecognizedValue_FallsBackToSharesNotPrincipal()
+    {
         // Sibling to ParseShareType_PrincipalAbbreviation_ReturnsPrincipal. The
         // existing pin covers the PRN → Principal arm (semantically distinct return
         // value from default). This pin covers the structurally distinct DEFAULT
@@ -462,7 +482,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void ParseShareType_ShAbbreviation_ReturnsSharesViaExplicitArmNotDefault() {
+    public void ParseShareType_ShAbbreviation_ReturnsSharesViaExplicitArmNotDefault()
+    {
         // Complement to ParseShareType_UnrecognizedValue_FallsBackToSharesNotPrincipal.
         // The recent default-arm pin asserts that UNK input falls through to Shares.
         // This pin asserts that the EXPLICIT "SH" arm also returns Shares — distinct

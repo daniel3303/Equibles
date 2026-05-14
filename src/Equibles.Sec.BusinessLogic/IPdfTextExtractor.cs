@@ -1,5 +1,6 @@
 namespace Equibles.Sec.BusinessLogic;
 
-public interface IPdfTextExtractor {
+public interface IPdfTextExtractor
+{
     string Extract(byte[] pdfBytes);
 }

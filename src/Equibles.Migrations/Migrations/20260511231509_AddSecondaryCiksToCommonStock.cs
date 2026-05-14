@@ -15,15 +15,14 @@ namespace Equibles.Migrations.Migrations
                 name: "SecondaryCiks",
                 table: "CommonStock",
                 type: "text[]",
-                nullable: true);
+                nullable: true
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "SecondaryCiks",
-                table: "CommonStock");
+            migrationBuilder.DropColumn(name: "SecondaryCiks", table: "CommonStock");
         }
     }
 }

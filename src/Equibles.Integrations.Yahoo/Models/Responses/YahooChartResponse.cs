@@ -3,12 +3,14 @@ using Newtonsoft.Json;
 namespace Equibles.Integrations.Yahoo.Models.Responses;
 
 // Root: { "chart": { "result": [...], "error": null } }
-public class YahooChartResponse {
+public class YahooChartResponse
+{
     [JsonProperty("chart")]
     public ChartContainer Chart { get; set; }
 }
 
-public class ChartContainer {
+public class ChartContainer
+{
     [JsonProperty("result")]
     public List<ChartResult> Result { get; set; } = [];
 
@@ -16,7 +18,8 @@ public class ChartContainer {
     public object Error { get; set; }
 }
 
-public class ChartResult {
+public class ChartResult
+{
     [JsonProperty("timestamp")]
     public List<long> Timestamp { get; set; } = [];
 
@@ -24,7 +27,8 @@ public class ChartResult {
     public ChartIndicators Indicators { get; set; }
 }
 
-public class ChartIndicators {
+public class ChartIndicators
+{
     [JsonProperty("quote")]
     public List<ChartQuote> Quote { get; set; } = [];
 
@@ -32,7 +36,8 @@ public class ChartIndicators {
     public List<ChartAdjClose> AdjClose { get; set; } = [];
 }
 
-public class ChartQuote {
+public class ChartQuote
+{
     [JsonProperty("open")]
     public List<decimal?> Open { get; set; } = [];
 
@@ -49,7 +54,8 @@ public class ChartQuote {
     public List<long?> Volume { get; set; } = [];
 }
 
-public class ChartAdjClose {
+public class ChartAdjClose
+{
     [JsonProperty("adjclose")]
     public List<decimal?> AdjustedClose { get; set; } = [];
 }

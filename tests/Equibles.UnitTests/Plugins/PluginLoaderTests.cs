@@ -8,12 +8,16 @@ namespace Equibles.UnitTests.Plugins;
 /// statically and walks <c>AppContext.BaseDirectory</c>, so we exercise the pure-logic
 /// private metadata probe via reflection.
 /// </summary>
-public class PluginLoaderTests {
-    private static readonly MethodInfo HasPluginAttributeMethod = typeof(PluginLoader)
-        .GetMethod("HasPluginAttribute", BindingFlags.NonPublic | BindingFlags.Static);
+public class PluginLoaderTests
+{
+    private static readonly MethodInfo HasPluginAttributeMethod = typeof(PluginLoader).GetMethod(
+        "HasPluginAttribute",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
     [Fact]
-    public void HasPluginAttribute_RealDllWithoutPluginAttribute_ReturnsFalse() {
+    public void HasPluginAttribute_RealDllWithoutPluginAttribute_ReturnsFalse()
+    {
         // The companion NonExistentFile test exercises the catch-all failure
         // path. This pins the *success* walk on a real PE file: open metadata,
         // enumerate assembly-level custom attributes, find none matching
@@ -32,7 +36,8 @@ public class PluginLoaderTests {
     }
 
     [Fact]
-    public void HasPluginAttribute_NonExistentFile_ReturnsFalse() {
+    public void HasPluginAttribute_NonExistentFile_ReturnsFalse()
+    {
         // PluginLoader walks every DLL in AppContext.BaseDirectory. Native libraries,
         // permission-blocked files, and DLLs deleted between Directory.GetFiles and
         // the metadata read are all real failure modes — the defensive try/catch
@@ -40,7 +45,10 @@ public class PluginLoaderTests {
         // crashing the whole plugin-discovery pass at startup. Pin the
         // exception-swallowing contract on a path that does not exist so a refactor
         // can't narrow the catch (or remove it) without a test failure.
-        var nonExistent = Path.Combine(Path.GetTempPath(), $"does-not-exist-{Guid.NewGuid():N}.dll");
+        var nonExistent = Path.Combine(
+            Path.GetTempPath(),
+            $"does-not-exist-{Guid.NewGuid():N}.dll"
+        );
 
         var result = (bool)HasPluginAttributeMethod.Invoke(null, [nonExistent]);
 

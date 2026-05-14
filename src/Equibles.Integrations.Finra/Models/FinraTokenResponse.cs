@@ -2,7 +2,8 @@ using Newtonsoft.Json;
 
 namespace Equibles.Integrations.Finra.Models;
 
-public class FinraTokenResponse {
+public class FinraTokenResponse
+{
     [JsonProperty("access_token")]
     public string AccessToken { get; set; }
 

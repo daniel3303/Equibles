@@ -15,21 +15,35 @@ namespace Equibles.UnitTests.Congress;
 /// Tests for <see cref="HouseDisclosureClient"/>. The public entry points pull PDFs from the
 /// House Clerk site, so we exercise the pure-logic private regex helpers via reflection.
 /// </summary>
-public class HouseDisclosureClientTests {
-    private static readonly MethodInfo ExtractTransactionTypeMethod = typeof(HouseDisclosureClient)
-        .GetMethod("ExtractTransactionType", BindingFlags.NonPublic | BindingFlags.Static);
+public class HouseDisclosureClientTests
+{
+    private static readonly MethodInfo ExtractTransactionTypeMethod =
+        typeof(HouseDisclosureClient).GetMethod(
+            "ExtractTransactionType",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
-    private static readonly MethodInfo RemoveTrailingTransactionTypeMethod = typeof(HouseDisclosureClient)
-        .GetMethod("RemoveTrailingTransactionType", BindingFlags.NonPublic | BindingFlags.Static);
+    private static readonly MethodInfo RemoveTrailingTransactionTypeMethod =
+        typeof(HouseDisclosureClient).GetMethod(
+            "RemoveTrailingTransactionType",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
-    private static readonly MethodInfo OwnerCodeRegexMethod = typeof(HouseDisclosureClient)
-        .GetMethod("OwnerCodeRegex", BindingFlags.NonPublic | BindingFlags.Static);
+    private static readonly MethodInfo OwnerCodeRegexMethod =
+        typeof(HouseDisclosureClient).GetMethod(
+            "OwnerCodeRegex",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
-    private static readonly MethodInfo DatePatternRegexMethod = typeof(HouseDisclosureClient)
-        .GetMethod("DatePatternRegex", BindingFlags.NonPublic | BindingFlags.Static);
+    private static readonly MethodInfo DatePatternRegexMethod =
+        typeof(HouseDisclosureClient).GetMethod(
+            "DatePatternRegex",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
     [Fact]
-    public void DatePatternRegex_MatchesMmDdYyyyDateInPdfLineText() {
+    public void DatePatternRegex_MatchesMmDdYyyyDateInPdfLineText()
+    {
         // DatePatternRegex pattern: `\b(\d{2}/\d{2}/\d{4})\b`. Used by
         // ParseTransactionLines to locate the transaction date within a PDF
         // text line that mixes owner code, asset description, transaction
@@ -59,7 +73,8 @@ public class HouseDisclosureClientTests {
     }
 
     [Fact]
-    public void OwnerCodeRegex_MatchesSpouseCodeSP_AndCapturesOwnerCode() {
+    public void OwnerCodeRegex_MatchesSpouseCodeSP_AndCapturesOwnerCode()
+    {
         // OwnerCodeRegex pattern: `^(SP|JT|DC|Self)\b` (case-insensitive).
         // The four alternatives are the four House PTR owner codes:
         //   • SP   — Spouse
@@ -95,7 +110,8 @@ public class HouseDisclosureClientTests {
     }
 
     [Fact]
-    public void OwnerCodeRegex_MatchesJointCodeJT_AndCapturesOwnerCode() {
+    public void OwnerCodeRegex_MatchesJointCodeJT_AndCapturesOwnerCode()
+    {
         // Second sibling in the OwnerCodeRegex alternation family. The existing
         // SP pin asserts the Spouse arm; this pin asserts the Joint arm — the
         // second-most-common House PTR owner code after Self.
@@ -146,7 +162,8 @@ public class HouseDisclosureClientTests {
     }
 
     [Fact]
-    public void OwnerCodeRegex_MatchesDependentChildCodeDC_AndCapturesOwnerCode() {
+    public void OwnerCodeRegex_MatchesDependentChildCodeDC_AndCapturesOwnerCode()
+    {
         // Third sibling in the OwnerCodeRegex alternation family. The existing
         // pins assert SP (Spouse) and JT (Joint). This pin asserts DC (Dependent
         // Child) — the third alternative in `^(SP|JT|DC|Self)\b`.
@@ -203,7 +220,8 @@ public class HouseDisclosureClientTests {
     }
 
     [Fact]
-    public void OwnerCodeRegex_MatchesMemberCodeSelf_AndCapturesOwnerCode() {
+    public void OwnerCodeRegex_MatchesMemberCodeSelf_AndCapturesOwnerCode()
+    {
         // Fourth and final sibling in the OwnerCodeRegex alternation family. With
         // this pin, all four alternatives in `^(SP|JT|DC|Self)\b` are individually
         // pinned: SP (Spouse), JT (Joint), DC (Dependent Child), Self (the member).
@@ -259,7 +277,8 @@ public class HouseDisclosureClientTests {
     }
 
     [Fact]
-    public void ExtractTransactionType_PurchaseTrailingP_ReturnsPurchase() {
+    public void ExtractTransactionType_PurchaseTrailingP_ReturnsPurchase()
+    {
         // House PTRs encode purchases as a trailing bare "P" (no qualifier). The
         // PurchaseTypeRegex (`\bP\s*$`) is the only matcher for that path — if a
         // regression typo'd it to `^P\b` (anchored to start) or dropped the
@@ -268,13 +287,15 @@ public class HouseDisclosureClientTests {
         // The companion Sale [Fact] covers the more complex SaleTypeRegex; this one
         // pins the simpler Purchase branch — equally load-bearing, currently
         // unpinned, and trivial to regress because the regex is one line away.
-        var result = (CongressTransactionType?)ExtractTransactionTypeMethod.Invoke(null, ["AAPL P"]);
+        var result = (CongressTransactionType?)
+            ExtractTransactionTypeMethod.Invoke(null, ["AAPL P"]);
 
         result.Should().Be(CongressTransactionType.Purchase);
     }
 
     [Fact]
-    public void ExtractTransactionType_LowercaseSaleS_StillReturnsSaleViaIgnoreCase() {
+    public void ExtractTransactionType_LowercaseSaleS_StillReturnsSaleViaIgnoreCase()
+    {
         // SaleTypeRegex is declared with `RegexOptions.IgnoreCase` — PurchaseTypeRegex
         // is NOT. The asymmetry is deliberate (House PTRs always emit uppercase "P"
         // and "S" so case-insensitivity has no production value for either, but the
@@ -294,26 +315,30 @@ public class HouseDisclosureClientTests {
         // modifier can't be removed silently. The companion bare-S pin already
         // proves uppercase "S" matches; this pin proves the case-insensitive
         // alternative also matches.
-        var result = (CongressTransactionType?)ExtractTransactionTypeMethod.Invoke(null, ["AAPL s"]);
+        var result = (CongressTransactionType?)
+            ExtractTransactionTypeMethod.Invoke(null, ["AAPL s"]);
 
         result.Should().Be(CongressTransactionType.Sale);
     }
 
     [Fact]
-    public void ExtractTransactionType_SaleWithPartialQualifier_ReturnsSale() {
+    public void ExtractTransactionType_SaleWithPartialQualifier_ReturnsSale()
+    {
         // House PTRs encode partial sales as "S (partial)" rather than bare "S".
         // The SaleTypeRegex must accept both forms — if a regression tightens it to
         // require the parenthetical (or, conversely, drops the optional group),
         // half the House sale transactions get classified as null and are silently
         // dropped by the importer. Pin the qualified-form match so the regex can't
         // narrow without a test failure.
-        var result = (CongressTransactionType?)ExtractTransactionTypeMethod.Invoke(null, ["AAPL S (partial)"]);
+        var result = (CongressTransactionType?)
+            ExtractTransactionTypeMethod.Invoke(null, ["AAPL S (partial)"]);
 
         result.Should().Be(CongressTransactionType.Sale);
     }
 
     [Fact]
-    public void ExtractTransactionType_SaleWithFullQualifier_ReturnsSale() {
+    public void ExtractTransactionType_SaleWithFullQualifier_ReturnsSale()
+    {
         // Sibling to the existing "S (partial)" pin. The SaleTypeRegex alternation
         // `(?:partial|full)` covers BOTH qualifier forms — a refactor that simplifies
         // the group to just `partial` (e.g. someone "cleaning up" what looks like an
@@ -326,13 +351,15 @@ public class HouseDisclosureClientTests {
         // Without this pin, a regex that only accepted one arm would compile cleanly,
         // pass the existing tests, and silently halve House sale visibility while
         // the partial-test would still report a green build.
-        var result = (CongressTransactionType?)ExtractTransactionTypeMethod.Invoke(null, ["TSLA S (full)"]);
+        var result = (CongressTransactionType?)
+            ExtractTransactionTypeMethod.Invoke(null, ["TSLA S (full)"]);
 
         result.Should().Be(CongressTransactionType.Sale);
     }
 
     [Fact]
-    public void ExtractTransactionType_BareSaleNoQualifier_ReturnsSale() {
+    public void ExtractTransactionType_BareSaleNoQualifier_ReturnsSale()
+    {
         // Completes the Sale/Purchase pin family. Existing pins cover:
         //   • bare "P"        → Purchase  (ExtractTransactionType_PurchaseTrailingP_…)
         //   • "S (partial)"   → Sale      (existing partial pin)
@@ -355,13 +382,15 @@ public class HouseDisclosureClientTests {
         //
         // Pin the bare-S case specifically so the optional-qualifier `?` modifier
         // can't be removed without a test failure.
-        var result = (CongressTransactionType?)ExtractTransactionTypeMethod.Invoke(null, ["AAPL S"]);
+        var result = (CongressTransactionType?)
+            ExtractTransactionTypeMethod.Invoke(null, ["AAPL S"]);
 
         result.Should().Be(CongressTransactionType.Sale);
     }
 
     [Fact]
-    public void RemoveTrailingTransactionType_SaleWithPartialQualifier_StripsSuffixAndQualifier() {
+    public void RemoveTrailingTransactionType_SaleWithPartialQualifier_StripsSuffixAndQualifier()
+    {
         // After ExtractTransactionType recognises the trailing "S (partial)" marker,
         // RemoveTrailingTransactionType has to strip it cleanly so the asset name
         // ("APPLE INC - COMMON STOCK") doesn't carry a dangling " S (partial)" tail
@@ -370,13 +399,18 @@ public class HouseDisclosureClientTests {
         // consumers (UI, MCP tools) display garbled asset names. Pin the
         // parenthetical-qualifier strip so the regex can't be loosened to a bare
         // "S" matcher that would leave the "(partial)" tail behind.
-        var result = (string)RemoveTrailingTransactionTypeMethod.Invoke(null, ["APPLE INC - COMMON STOCK S (partial)"]);
+        var result = (string)
+            RemoveTrailingTransactionTypeMethod.Invoke(
+                null,
+                ["APPLE INC - COMMON STOCK S (partial)"]
+            );
 
         result.Should().Be("APPLE INC - COMMON STOCK");
     }
 
     [Fact]
-    public void RemoveTrailingTransactionType_PurchaseTrailingP_StripsSuffix() {
+    public void RemoveTrailingTransactionType_PurchaseTrailingP_StripsSuffix()
+    {
         // Sibling to the existing Sale pin. RemoveTrailingTransactionType applies
         // BOTH SaleTypeRegex.Replace AND PurchaseTypeRegex.Replace in sequence —
         // the existing Sale pin only exercises the Sale arm. A regression that
@@ -392,13 +426,15 @@ public class HouseDisclosureClientTests {
         // changes its semantics. The PurchaseTypeRegex `\bP\s*$` is
         // intentionally case-sensitive (unlike SaleTypeRegex's IgnoreCase),
         // pin asserts the canonical capital-P form rather than mixed case.
-        var result = (string)RemoveTrailingTransactionTypeMethod.Invoke(null, ["MICROSOFT CORP - COMMON STOCK P"]);
+        var result = (string)
+            RemoveTrailingTransactionTypeMethod.Invoke(null, ["MICROSOFT CORP - COMMON STOCK P"]);
 
         result.Should().Be("MICROSOFT CORP - COMMON STOCK");
     }
 
     [Fact]
-    public async Task GetRecentTransactions_FdZipReturns404ForYear_ReturnsEmptyListWithoutThrowing() {
+    public async Task GetRecentTransactions_FdZipReturns404ForYear_ReturnsEmptyListWithoutThrowing()
+    {
         // First HTTP-coupled pin in this file. Every existing test targets a private
         // regex helper via reflection; the 51 missed lines in HouseDisclosureClient
         // sit in the public GetRecentTransactions flow and its private HTTP helpers
@@ -436,30 +472,45 @@ public class HouseDisclosureClientTests {
         // outer catch as a fallback.
         var handler = new ConstantStatusHandler(HttpStatusCode.NotFound);
         using var httpClient = new HttpClient(handler);
-        var sut = new HouseDisclosureClient(httpClient, Substitute.For<ILogger<HouseDisclosureClient>>());
+        var sut = new HouseDisclosureClient(
+            httpClient,
+            Substitute.For<ILogger<HouseDisclosureClient>>()
+        );
 
         var result = await sut.GetRecentTransactions(
             new DateOnly(2025, 1, 1),
             new DateOnly(2025, 12, 31),
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         result.Should().BeEmpty();
-        handler.Requests.Should().ContainSingle(
-            "only the year's FD ZIP should be requested — a 404 must not cascade into per-filing PDF downloads");
+        handler
+            .Requests.Should()
+            .ContainSingle(
+                "only the year's FD ZIP should be requested — a 404 must not cascade into per-filing PDF downloads"
+            );
     }
 
-    private sealed class ConstantStatusHandler : HttpMessageHandler {
+    private sealed class ConstantStatusHandler : HttpMessageHandler
+    {
         private readonly HttpStatusCode _statusCode;
         public List<string> Requests { get; } = new();
+
         public ConstantStatusHandler(HttpStatusCode statusCode) => _statusCode = statusCode;
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
             Requests.Add(request.RequestUri!.ToString());
             return Task.FromResult(new HttpResponseMessage(_statusCode));
         }
     }
 
     [Fact]
-    public async Task GetRecentTransactions_FdZipMissingExpectedXmlEntry_ReturnsEmptyListAndDoesNotRequestAnyPtrPdf() {
+    public async Task GetRecentTransactions_FdZipMissingExpectedXmlEntry_ReturnsEmptyListAndDoesNotRequestAnyPtrPdf()
+    {
         // Second HTTP-coupled pin in this file. Sibling to
         // GetRecentTransactions_FdZipReturns404ForYear_ReturnsEmptyListWithoutThrowing.
         // That test exercises the 404 short-circuit BEFORE the ZIP is opened.
@@ -511,23 +562,34 @@ public class HouseDisclosureClientTests {
         var zipBytes = BuildZipWithSingleEntry("wrongname.xml", "<irrelevant />");
         var handler = new BytesContentHandler(zipBytes, "application/zip");
         using var httpClient = new HttpClient(handler);
-        var sut = new HouseDisclosureClient(httpClient, Substitute.For<ILogger<HouseDisclosureClient>>());
+        var sut = new HouseDisclosureClient(
+            httpClient,
+            Substitute.For<ILogger<HouseDisclosureClient>>()
+        );
 
         var result = await sut.GetRecentTransactions(
             new DateOnly(2025, 1, 1),
             new DateOnly(2025, 12, 31),
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         result.Should().BeEmpty();
-        handler.Requests.Should().ContainSingle(
-            "the missing-XML-entry branch must not cascade into per-filing PTR PDF downloads");
-        handler.Requests[0].Should().Contain("2025FD.zip",
-            "only the year's FD ZIP URL should be requested");
+        handler
+            .Requests.Should()
+            .ContainSingle(
+                "the missing-XML-entry branch must not cascade into per-filing PTR PDF downloads"
+            );
+        handler
+            .Requests[0]
+            .Should()
+            .Contain("2025FD.zip", "only the year's FD ZIP URL should be requested");
     }
 
-    private static byte[] BuildZipWithSingleEntry(string entryName, string entryContent) {
+    private static byte[] BuildZipWithSingleEntry(string entryName, string entryContent)
+    {
         using var memory = new MemoryStream();
-        using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true)) {
+        using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
+        {
             var entry = archive.CreateEntry(entryName);
             using var writer = new StreamWriter(entry.Open());
             writer.Write(entryContent);
@@ -535,18 +597,27 @@ public class HouseDisclosureClientTests {
         return memory.ToArray();
     }
 
-    private sealed class BytesContentHandler : HttpMessageHandler {
+    private sealed class BytesContentHandler : HttpMessageHandler
+    {
         private readonly byte[] _content;
         private readonly string _contentType;
         public List<string> Requests { get; } = new();
-        public BytesContentHandler(byte[] content, string contentType) {
+
+        public BytesContentHandler(byte[] content, string contentType)
+        {
             _content = content;
             _contentType = contentType;
         }
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
             Requests.Add(request.RequestUri!.ToString());
-            var response = new HttpResponseMessage(HttpStatusCode.OK) {
-                Content = new ByteArrayContent(_content)
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(_content),
             };
             response.Content.Headers.ContentType = new MediaTypeHeaderValue(_contentType);
             return Task.FromResult(response);
@@ -554,7 +625,8 @@ public class HouseDisclosureClientTests {
     }
 
     [Fact]
-    public void ParseTransactionLines_RealisticHousePtrPurchaseLine_ProducesFullyPopulatedTransaction() {
+    public void ParseTransactionLines_RealisticHousePtrPurchaseLine_ProducesFullyPopulatedTransaction()
+    {
         // ParseTransactionLines is the central private orchestrator that ties together
         // every regex helper in this class (OwnerCodeRegex, DatePatternRegex,
         // PurchaseTypeRegex/SaleTypeRegex via ExtractTransactionType /
@@ -602,22 +674,30 @@ public class HouseDisclosureClientTests {
         // a fresh HttpClient and NullLogger suffice. The HouseFiling record is
         // positional: (MemberName, DocId, FilingDate, StateDst).
         var parseTransactionLines = typeof(HouseDisclosureClient).GetMethod(
-            "ParseTransactionLines", BindingFlags.NonPublic | BindingFlags.Instance);
+            "ParseTransactionLines",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        );
         var houseFilingType = typeof(HouseDisclosureClient).GetNestedType(
-            "HouseFiling", BindingFlags.NonPublic);
+            "HouseFiling",
+            BindingFlags.NonPublic
+        );
         var houseFilingCtor = houseFilingType.GetConstructors()[0];
 
-        var client = new HouseDisclosureClient(new HttpClient(), Substitute.For<ILogger<HouseDisclosureClient>>());
+        var client = new HouseDisclosureClient(
+            new HttpClient(),
+            Substitute.For<ILogger<HouseDisclosureClient>>()
+        );
         var filing = houseFilingCtor.Invoke([
             "Jane Doe",
             "20251234",
             new DateOnly(2025, 2, 1),
-            "CA01"
+            "CA01",
         ]);
 
         var lines = new[] { "SP APPLE INC (AAPL) P 01/14/2025 $1,001 - $15,000" };
 
-        var result = (List<DisclosureTransaction>)parseTransactionLines.Invoke(client, [lines, filing]);
+        var result =
+            (List<DisclosureTransaction>)parseTransactionLines.Invoke(client, [lines, filing]);
 
         result.Should().HaveCount(1);
         var tx = result[0];
@@ -634,7 +714,8 @@ public class HouseDisclosureClientTests {
     }
 
     [Fact]
-    public void RemoveTrailingTransactionType_SaleWithFullQualifier_StripsSuffixAndQualifier() {
+    public void RemoveTrailingTransactionType_SaleWithFullQualifier_StripsSuffixAndQualifier()
+    {
         // Sibling to the existing "S (partial)" pin in RemoveTrailingTransactionType.
         // The strip path uses SaleTypeRegex `\bS\s*(\((?:partial|full)\))?\s*$` which
         // accepts BOTH qualifiers in the `(?:partial|full)` alternation. The
@@ -668,7 +749,11 @@ public class HouseDisclosureClientTests {
         // Pin "S (full)" with a realistic asset string. Asserting the
         // cleanly-stripped output proves the full alternation arm in the
         // Replace pipeline still fires.
-        var result = (string)RemoveTrailingTransactionTypeMethod.Invoke(null, ["GOOGLE LLC - CLASS A COMMON S (full)"]);
+        var result = (string)
+            RemoveTrailingTransactionTypeMethod.Invoke(
+                null,
+                ["GOOGLE LLC - CLASS A COMMON S (full)"]
+            );
 
         result.Should().Be("GOOGLE LLC - CLASS A COMMON");
     }
@@ -676,21 +761,23 @@ public class HouseDisclosureClientTests {
     // ── Partial-branch fills ────────────────────────────────────────────
 
     [Fact]
-    public void ExtractTransactionType_TextThatMatchesNeitherSaleNorPurchase_ReturnsNull() {
+    public void ExtractTransactionType_TextThatMatchesNeitherSaleNorPurchase_ReturnsNull()
+    {
         // Pins the fall-through `return null` in ExtractTransactionType. Existing
         // pins cover only the Sale and Purchase return paths; neither evaluates
         // the second `if (PurchaseTypeRegex().IsMatch(text))` to false. Without
         // the fall-through, a regression that "tightens" PurchaseTypeRegex (or
         // re-orders the two ifs) could silently classify garbage text as a
         // Purchase by leaning on a default value.
-        var result = (CongressTransactionType?)ExtractTransactionTypeMethod.Invoke(
-            null, ["ACME WIDGETS COMMON STOCK"]);
+        var result = (CongressTransactionType?)
+            ExtractTransactionTypeMethod.Invoke(null, ["ACME WIDGETS COMMON STOCK"]);
 
         result.Should().BeNull();
     }
 
     [Fact]
-    public void ParseTransactionLines_LineWithNoAssetOrTickerAfterStrip_SkipsSilently() {
+    public void ParseTransactionLines_LineWithNoAssetOrTickerAfterStrip_SkipsSilently()
+    {
         // Pins the both-empty short-circuit:
         //   if (string.IsNullOrEmpty(assetName) && string.IsNullOrEmpty(ticker)) continue;
         // Existing reflection pin has both populated, so the AND=true arm never
@@ -700,23 +787,32 @@ public class HouseDisclosureClientTests {
         // the continue fires, and no transaction is recorded. Without the
         // guard, the row would persist with both AssetName and Ticker empty.
         var parseTransactionLines = typeof(HouseDisclosureClient).GetMethod(
-            "ParseTransactionLines", BindingFlags.NonPublic | BindingFlags.Instance);
+            "ParseTransactionLines",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        );
         var houseFilingType = typeof(HouseDisclosureClient).GetNestedType(
-            "HouseFiling", BindingFlags.NonPublic);
-        var filing = houseFilingType.GetConstructors()[0].Invoke([
-            "Jane Doe", "20251234", new DateOnly(2025, 2, 1), "CA01"
-        ]);
+            "HouseFiling",
+            BindingFlags.NonPublic
+        );
+        var filing = houseFilingType
+            .GetConstructors()[0]
+            .Invoke(["Jane Doe", "20251234", new DateOnly(2025, 2, 1), "CA01"]);
         using var httpClient = new HttpClient();
-        var client = new HouseDisclosureClient(httpClient, Substitute.For<ILogger<HouseDisclosureClient>>());
+        var client = new HouseDisclosureClient(
+            httpClient,
+            Substitute.For<ILogger<HouseDisclosureClient>>()
+        );
         var lines = new[] { "SP P 01/14/2025 $1,001 - $15,000" };
 
-        var result = (List<DisclosureTransaction>)parseTransactionLines.Invoke(client, [lines, filing]);
+        var result =
+            (List<DisclosureTransaction>)parseTransactionLines.Invoke(client, [lines, filing]);
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public void ParseTransactionLines_AssetWithoutParenthesizedTicker_RecordsTransactionWithNullTicker() {
+    public void ParseTransactionLines_AssetWithoutParenthesizedTicker_RecordsTransactionWithNullTicker()
+    {
         // Pins the `Ticker = ticker?.ToUpperInvariant()` null-conditional. The
         // null arm fires when the asset description carries no parenthesized
         // ticker — ExtractTickerFromAssetName returns null and the ticker
@@ -724,18 +820,26 @@ public class HouseDisclosureClientTests {
         // The existing "realistic" pin always supplies "APPLE INC (AAPL)" so the
         // ticker is never null at row-construction time.
         var parseTransactionLines = typeof(HouseDisclosureClient).GetMethod(
-            "ParseTransactionLines", BindingFlags.NonPublic | BindingFlags.Instance);
+            "ParseTransactionLines",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        );
         var houseFilingType = typeof(HouseDisclosureClient).GetNestedType(
-            "HouseFiling", BindingFlags.NonPublic);
-        var filing = houseFilingType.GetConstructors()[0].Invoke([
-            "Jane Doe", "20251234", new DateOnly(2025, 2, 1), "CA01"
-        ]);
+            "HouseFiling",
+            BindingFlags.NonPublic
+        );
+        var filing = houseFilingType
+            .GetConstructors()[0]
+            .Invoke(["Jane Doe", "20251234", new DateOnly(2025, 2, 1), "CA01"]);
         using var httpClient = new HttpClient();
-        var client = new HouseDisclosureClient(httpClient, Substitute.For<ILogger<HouseDisclosureClient>>());
+        var client = new HouseDisclosureClient(
+            httpClient,
+            Substitute.For<ILogger<HouseDisclosureClient>>()
+        );
         // No parens anywhere — ExtractTickerFromAssetName regex won't match.
         var lines = new[] { "SP APPLE INC COMMON STOCK P 01/14/2025 $1,001 - $15,000" };
 
-        var result = (List<DisclosureTransaction>)parseTransactionLines.Invoke(client, [lines, filing]);
+        var result =
+            (List<DisclosureTransaction>)parseTransactionLines.Invoke(client, [lines, filing]);
 
         result.Should().HaveCount(1);
         result[0].Ticker.Should().BeNull();
@@ -743,7 +847,8 @@ public class HouseDisclosureClientTests {
     }
 
     [Fact]
-    public void ParsePtrPdf_MalformedPdfBytes_ReturnsEmptyListWithoutThrowing() {
+    public void ParsePtrPdf_MalformedPdfBytes_ReturnsEmptyListWithoutThrowing()
+    {
         // ParsePtrPdf is the only callsite that wraps `PdfDocument.Open(pdfBytes)`
         // in a try/catch — Image #6 of the coverage report flags every line of the
         // try-body AND the catch-body as uncovered (lines 133-148). Until now this
@@ -775,29 +880,38 @@ public class HouseDisclosureClientTests {
         // the reflection Invoke call would surface a TargetInvocationException
         // and the test would fail.
         var parsePtrPdfMethod = typeof(HouseDisclosureClient).GetMethod(
-            "ParsePtrPdf", BindingFlags.NonPublic | BindingFlags.Instance);
+            "ParsePtrPdf",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        );
         var houseFilingType = typeof(HouseDisclosureClient).GetNestedType(
-            "HouseFiling", BindingFlags.NonPublic);
+            "HouseFiling",
+            BindingFlags.NonPublic
+        );
         var houseFilingCtor = houseFilingType.GetConstructors()[0];
         var filing = houseFilingCtor.Invoke([
             "Jane Doe",
             "20251234",
             new DateOnly(2025, 2, 1),
-            "CA01"
+            "CA01",
         ]);
         using var httpClient = new HttpClient();
-        var client = new HouseDisclosureClient(httpClient, Substitute.For<ILogger<HouseDisclosureClient>>());
+        var client = new HouseDisclosureClient(
+            httpClient,
+            Substitute.For<ILogger<HouseDisclosureClient>>()
+        );
         // Bytes that are unambiguously not a PDF — PdfPig's PdfDocument.Open
         // requires the `%PDF-` magic header in the first ~1024 bytes.
         var malformedBytes = new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04 };
 
-        var result = (List<DisclosureTransaction>)parsePtrPdfMethod.Invoke(client, [malformedBytes, filing]);
+        var result =
+            (List<DisclosureTransaction>)parsePtrPdfMethod.Invoke(client, [malformedBytes, filing]);
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task GetRecentTransactions_FdZipContainsOneMatchingFilingButPtrPdfIs404_EntersPerFilingForeachAndExitsCleanly() {
+    public async Task GetRecentTransactions_FdZipContainsOneMatchingFilingButPtrPdfIs404_EntersPerFilingForeachAndExitsCleanly()
+    {
         // Closes the last two coverlet branch-coverage partials in
         // HouseDisclosureClient — both inside DownloadAndParseFilingIndex /
         // GetRecentTransactions:
@@ -848,44 +962,60 @@ public class HouseDisclosureClientTests {
         var zipBytes = BuildZipWithSingleEntry($"{year}FD.xml", xml);
         var handler = new UrlRoutingHandler(zipBytes);
         using var httpClient = new HttpClient(handler);
-        var sut = new HouseDisclosureClient(httpClient, Substitute.For<ILogger<HouseDisclosureClient>>());
+        var sut = new HouseDisclosureClient(
+            httpClient,
+            Substitute.For<ILogger<HouseDisclosureClient>>()
+        );
 
         var result = await sut.GetRecentTransactions(
             new DateOnly(year, 1, 1),
             new DateOnly(year, 12, 31),
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         // Empty result confirms the PtR PDF 404 short-circuit fired (no
         // transactions parsed) AND the foreach actually iterated (otherwise
         // we'd have skipped the PDF request entirely).
         result.Should().BeEmpty();
-        handler.Requests.Should().HaveCount(2,
-            "one for the FD ZIP (with one matching filing inside) and one for the per-filing PtR PDF");
+        handler
+            .Requests.Should()
+            .HaveCount(
+                2,
+                "one for the FD ZIP (with one matching filing inside) and one for the per-filing PtR PDF"
+            );
         handler.Requests[0].Should().Contain($"{year}FD.zip");
         handler.Requests[1].Should().Contain($"ptr-pdfs/{year}/{docId}.pdf");
     }
 
-    private sealed class UrlRoutingHandler : HttpMessageHandler {
+    private sealed class UrlRoutingHandler : HttpMessageHandler
+    {
         private readonly byte[] _zipBytes;
         public List<string> Requests { get; } = new();
 
         public UrlRoutingHandler(byte[] zipBytes) => _zipBytes = zipBytes;
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
             var url = request.RequestUri!.ToString();
             Requests.Add(url);
 
             // FD ZIP — 200 + bytes
-            if (url.Contains("/financial-pdfs/") && url.EndsWith("FD.zip")) {
-                var response = new HttpResponseMessage(HttpStatusCode.OK) {
-                    Content = new ByteArrayContent(_zipBytes)
+            if (url.Contains("/financial-pdfs/") && url.EndsWith("FD.zip"))
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(_zipBytes),
                 };
                 response.Content.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
                 return Task.FromResult(response);
             }
 
             // PtR PDF — 404
-            if (url.Contains("/ptr-pdfs/")) {
+            if (url.Contains("/ptr-pdfs/"))
+            {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
             }
 

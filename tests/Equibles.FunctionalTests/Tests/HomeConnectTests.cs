@@ -7,17 +7,20 @@ namespace Equibles.FunctionalTests.Tests;
 
 [Collection(FunctionalTestCollection.Name)]
 [Trait("Category", "Functional")]
-public class HomeConnectTests {
+public class HomeConnectTests
+{
     private readonly WebAppFixture _web;
     private readonly PlaywrightFixture _playwright;
 
-    public HomeConnectTests(WebAppFixture web, PlaywrightFixture playwright) {
+    public HomeConnectTests(WebAppFixture web, PlaywrightFixture playwright)
+    {
         _web = web;
         _playwright = playwright;
     }
 
     [Fact]
-    public async Task Connect_GetWithoutApiKey_RendersEndpointAndOpenServerWarning() {
+    public async Task Connect_GetWithoutApiKey_RendersEndpointAndOpenServerWarning()
+    {
         // The page composes the MCP endpoint from Configuration["McpPort"] (defaulting to 8081)
         // + the live request host, then branches the body on whether McpApiKey is configured.
         // The fixture sets no McpApiKey, so the un-secured branch must render — that is the
@@ -36,6 +39,8 @@ public class HomeConnectTests {
         // so anchor on the suffix the controller controls.
         await Assertions.Expect(page.Locator("code").First).ToContainTextAsync(":8081/mcp");
 
-        await Assertions.Expect(page.Locator("text=MCP server is open to everyone")).ToBeVisibleAsync();
+        await Assertions
+            .Expect(page.Locator("text=MCP server is open to everyone"))
+            .ToBeVisibleAsync();
     }
 }

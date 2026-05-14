@@ -17,18 +17,28 @@ namespace Equibles.UnitTests.Sec;
 /// (List&lt;string&gt; SecondaryTickers). We test the private helper methods via
 /// reflection where possible.
 /// </summary>
-public class CompanySyncServiceTests {
-    private static readonly MethodInfo IsOperatingCompanyMethod = typeof(CompanySyncService)
-        .GetMethod("IsOperatingCompany", BindingFlags.NonPublic | BindingFlags.Instance);
+public class CompanySyncServiceTests
+{
+    private static readonly MethodInfo IsOperatingCompanyMethod =
+        typeof(CompanySyncService).GetMethod(
+            "IsOperatingCompany",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        );
 
-    private static readonly MethodInfo ParseCikMethod = typeof(CompanySyncService)
-        .GetMethod("ParseCik", BindingFlags.NonPublic | BindingFlags.Static);
+    private static readonly MethodInfo ParseCikMethod = typeof(CompanySyncService).GetMethod(
+        "ParseCik",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
-    private static readonly MethodInfo ShouldIncumbentWinMethod = typeof(CompanySyncService)
-        .GetMethod("ShouldIncumbentWin", BindingFlags.NonPublic | BindingFlags.Instance);
+    private static readonly MethodInfo ShouldIncumbentWinMethod =
+        typeof(CompanySyncService).GetMethod(
+            "ShouldIncumbentWin",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        );
 
     [Fact]
-    public async Task ShouldIncumbentWin_BothSidesMetadataNull_IncumbentWinsAsSafeDefault() {
+    public async Task ShouldIncumbentWin_BothSidesMetadataNull_IncumbentWinsAsSafeDefault()
+    {
         // Pin step 1 of the priority chain (steps 2 + 3 already pinned by the sibling
         // tests above). When SEC's submissions API returns null metadata for either or
         // both sides — most realistically a stale CIK that no longer resolves on SEC,
@@ -54,16 +64,27 @@ public class CompanySyncServiceTests {
         secEdgarClient.GetCompanyMetadata("200").Returns((CompanyMetadata)null);
 
         var service = CreateService(secEdgarClient: secEdgarClient);
-        var incoming = new CompanyInfo { Cik = "100", Name = "Mystery Filer", Tickers = ["X"] };
-        var incumbent = new Equibles.CommonStocks.Data.Models.CommonStock { Cik = "200", Ticker = "X" };
+        var incoming = new CompanyInfo
+        {
+            Cik = "100",
+            Name = "Mystery Filer",
+            Tickers = ["X"],
+        };
+        var incumbent = new Equibles.CommonStocks.Data.Models.CommonStock
+        {
+            Cik = "200",
+            Ticker = "X",
+        };
 
-        var result = await (Task<bool>)ShouldIncumbentWinMethod.Invoke(service, [incoming, incumbent]);
+        var result = await (Task<bool>)
+            ShouldIncumbentWinMethod.Invoke(service, [incoming, incumbent]);
 
         result.Should().BeTrue();
     }
 
     [Fact]
-    public async Task ShouldIncumbentWin_OperatingIncumbentVsEtfIncoming_IncumbentWinsRegardlessOfCik() {
+    public async Task ShouldIncumbentWin_OperatingIncumbentVsEtfIncoming_IncumbentWinsRegardlessOfCik()
+    {
         // Pin step 3 of the priority chain (step 2 IsListed already pinned by the
         // sibling test). When both sides are equally listed, `IsOperatingCompany`
         // breaks the tie: the OPERATING side wins. This matters because SEC's
@@ -82,22 +103,49 @@ public class CompanySyncServiceTests {
         // step 4 fallback would say incoming wins — only correct priority
         // ordering makes step 3 short-circuit before step 4.
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
-        secEdgarClient.GetCompanyMetadata("100")
-            .Returns(new CompanyMetadata { Cik = "100", EntityType = "ETF", Exchanges = ["NASDAQ"] });
-        secEdgarClient.GetCompanyMetadata("200")
-            .Returns(new CompanyMetadata { Cik = "200", EntityType = "operating", Exchanges = ["NASDAQ"] });
+        secEdgarClient
+            .GetCompanyMetadata("100")
+            .Returns(
+                new CompanyMetadata
+                {
+                    Cik = "100",
+                    EntityType = "ETF",
+                    Exchanges = ["NASDAQ"],
+                }
+            );
+        secEdgarClient
+            .GetCompanyMetadata("200")
+            .Returns(
+                new CompanyMetadata
+                {
+                    Cik = "200",
+                    EntityType = "operating",
+                    Exchanges = ["NASDAQ"],
+                }
+            );
 
         var service = CreateService(secEdgarClient: secEdgarClient);
-        var incoming = new CompanyInfo { Cik = "100", Name = "Leveraged ETF", Tickers = ["X"] };
-        var incumbent = new Equibles.CommonStocks.Data.Models.CommonStock { Cik = "200", Ticker = "X" };
+        var incoming = new CompanyInfo
+        {
+            Cik = "100",
+            Name = "Leveraged ETF",
+            Tickers = ["X"],
+        };
+        var incumbent = new Equibles.CommonStocks.Data.Models.CommonStock
+        {
+            Cik = "200",
+            Ticker = "X",
+        };
 
-        var result = await (Task<bool>)ShouldIncumbentWinMethod.Invoke(service, [incoming, incumbent]);
+        var result = await (Task<bool>)
+            ShouldIncumbentWinMethod.Invoke(service, [incoming, incumbent]);
 
         result.Should().BeTrue();
     }
 
     [Fact]
-    public async Task ShouldIncumbentWin_ListedIncumbentVsUnlistedIncoming_IncumbentWinsRegardlessOfCik() {
+    public async Task ShouldIncumbentWin_ListedIncumbentVsUnlistedIncoming_IncumbentWinsRegardlessOfCik()
+    {
         // ShouldIncumbentWin resolves ticker collisions through a priority chain:
         //   1. If either side's SEC metadata is missing → incumbent wins (safe default)
         //   2. If IsListed differs → the LISTED side wins
@@ -121,22 +169,49 @@ public class CompanySyncServiceTests {
         // wins (return true) DESPITE losing the CIK tiebreak — which is the exact
         // distinguishing case.
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
-        secEdgarClient.GetCompanyMetadata("100")
-            .Returns(new CompanyMetadata { Cik = "100", EntityType = "operating", Exchanges = ["OTC"] });
-        secEdgarClient.GetCompanyMetadata("200")
-            .Returns(new CompanyMetadata { Cik = "200", EntityType = "operating", Exchanges = ["NASDAQ"] });
+        secEdgarClient
+            .GetCompanyMetadata("100")
+            .Returns(
+                new CompanyMetadata
+                {
+                    Cik = "100",
+                    EntityType = "operating",
+                    Exchanges = ["OTC"],
+                }
+            );
+        secEdgarClient
+            .GetCompanyMetadata("200")
+            .Returns(
+                new CompanyMetadata
+                {
+                    Cik = "200",
+                    EntityType = "operating",
+                    Exchanges = ["NASDAQ"],
+                }
+            );
 
         var service = CreateService(secEdgarClient: secEdgarClient);
-        var incoming = new CompanyInfo { Cik = "100", Name = "Subsidiary Co", Tickers = ["X"] };
-        var incumbent = new Equibles.CommonStocks.Data.Models.CommonStock { Cik = "200", Ticker = "X" };
+        var incoming = new CompanyInfo
+        {
+            Cik = "100",
+            Name = "Subsidiary Co",
+            Tickers = ["X"],
+        };
+        var incumbent = new Equibles.CommonStocks.Data.Models.CommonStock
+        {
+            Cik = "200",
+            Ticker = "X",
+        };
 
-        var result = await (Task<bool>)ShouldIncumbentWinMethod.Invoke(service, [incoming, incumbent]);
+        var result = await (Task<bool>)
+            ShouldIncumbentWinMethod.Invoke(service, [incoming, incumbent]);
 
         result.Should().BeTrue();
     }
 
     [Fact]
-    public async Task ShouldIncumbentWin_BothListedBothOperatingLowerCikIncumbent_IncumbentWinsByCikTiebreak() {
+    public async Task ShouldIncumbentWin_BothListedBothOperatingLowerCikIncumbent_IncumbentWinsByCikTiebreak()
+    {
         // Pin step 4 of the ShouldIncumbentWin priority chain — the numerical CIK
         // tiebreak that fires when neither IsListed nor IsOperatingCompany
         // distinguishes the two sides. The three existing ShouldIncumbentWin pins
@@ -174,22 +249,49 @@ public class CompanySyncServiceTests {
         // older one. The `<=` direction (smaller-CIK-wins) is the load-bearing
         // ordering that this pin protects.
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
-        secEdgarClient.GetCompanyMetadata("999")
-            .Returns(new CompanyMetadata { Cik = "999", EntityType = "operating", Exchanges = ["NASDAQ"] });
-        secEdgarClient.GetCompanyMetadata("100")
-            .Returns(new CompanyMetadata { Cik = "100", EntityType = "operating", Exchanges = ["NASDAQ"] });
+        secEdgarClient
+            .GetCompanyMetadata("999")
+            .Returns(
+                new CompanyMetadata
+                {
+                    Cik = "999",
+                    EntityType = "operating",
+                    Exchanges = ["NASDAQ"],
+                }
+            );
+        secEdgarClient
+            .GetCompanyMetadata("100")
+            .Returns(
+                new CompanyMetadata
+                {
+                    Cik = "100",
+                    EntityType = "operating",
+                    Exchanges = ["NASDAQ"],
+                }
+            );
 
         var service = CreateService(secEdgarClient: secEdgarClient);
-        var incoming = new CompanyInfo { Cik = "999", Name = "New Filer", Tickers = ["X"] };
-        var incumbent = new Equibles.CommonStocks.Data.Models.CommonStock { Cik = "100", Ticker = "X" };
+        var incoming = new CompanyInfo
+        {
+            Cik = "999",
+            Name = "New Filer",
+            Tickers = ["X"],
+        };
+        var incumbent = new Equibles.CommonStocks.Data.Models.CommonStock
+        {
+            Cik = "100",
+            Ticker = "X",
+        };
 
-        var result = await (Task<bool>)ShouldIncumbentWinMethod.Invoke(service, [incoming, incumbent]);
+        var result = await (Task<bool>)
+            ShouldIncumbentWinMethod.Invoke(service, [incoming, incumbent]);
 
         result.Should().BeTrue();
     }
 
     [Fact]
-    public void ParseCik_UnparseableValue_ReturnsLongMaxValue() {
+    public void ParseCik_UnparseableValue_ReturnsLongMaxValue()
+    {
         // ShouldIncumbentWin breaks ticker-collision ties with
         //     `ParseCik(incumbent.Cik) <= ParseCik(incoming.Cik)`
         // — the smaller CIK wins. SEC sometimes serves non-numeric CIKs
@@ -206,14 +308,17 @@ public class CompanySyncServiceTests {
 
     private static CompanySyncService CreateService(
         ISecEdgarClient secEdgarClient = null,
-        WorkerOptions workerOptions = null) {
+        WorkerOptions workerOptions = null
+    )
+    {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         secEdgarClient ??= Substitute.For<ISecEdgarClient>();
         var options = Options.Create(workerOptions ?? new WorkerOptions());
         var logger = Substitute.For<ILogger<CompanySyncService>>();
         var errorReporter = Substitute.For<ErrorReporter>(
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ILogger<ErrorReporter>>());
+            Substitute.For<ILogger<ErrorReporter>>()
+        );
 
         return new CompanySyncService(scopeFactory, secEdgarClient, options, logger, errorReporter);
     }
@@ -223,9 +328,15 @@ public class CompanySyncServiceTests {
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task IsOperatingCompany_WithOperatingEntityType_ReturnsTrue() {
+    public async Task IsOperatingCompany_WithOperatingEntityType_ReturnsTrue()
+    {
         var service = CreateService();
-        var company = new CompanyInfo { Cik = "001", Name = "Apple Inc.", EntityType = "operating" };
+        var company = new CompanyInfo
+        {
+            Cik = "001",
+            Name = "Apple Inc.",
+            EntityType = "operating",
+        };
 
         var result = await (Task<bool>)IsOperatingCompanyMethod.Invoke(service, [company]);
 
@@ -233,9 +344,15 @@ public class CompanySyncServiceTests {
     }
 
     [Fact]
-    public async Task IsOperatingCompany_WithNonOperatingEntityType_ReturnsFalse() {
+    public async Task IsOperatingCompany_WithNonOperatingEntityType_ReturnsFalse()
+    {
         var service = CreateService();
-        var company = new CompanyInfo { Cik = "001", Name = "Some ETF", EntityType = "ETF" };
+        var company = new CompanyInfo
+        {
+            Cik = "001",
+            Name = "Some ETF",
+            EntityType = "ETF",
+        };
 
         var result = await (Task<bool>)IsOperatingCompanyMethod.Invoke(service, [company]);
 
@@ -243,12 +360,18 @@ public class CompanySyncServiceTests {
     }
 
     [Fact]
-    public async Task IsOperatingCompany_NullEntityType_FetchesFromApi() {
+    public async Task IsOperatingCompany_NullEntityType_FetchesFromApi()
+    {
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
         secEdgarClient.GetEntityType("001").Returns("operating");
 
         var service = CreateService(secEdgarClient: secEdgarClient);
-        var company = new CompanyInfo { Cik = "001", Name = "Apple Inc.", EntityType = null };
+        var company = new CompanyInfo
+        {
+            Cik = "001",
+            Name = "Apple Inc.",
+            EntityType = null,
+        };
 
         var result = await (Task<bool>)IsOperatingCompanyMethod.Invoke(service, [company]);
 
@@ -258,12 +381,18 @@ public class CompanySyncServiceTests {
     }
 
     [Fact]
-    public async Task IsOperatingCompany_NullEntityType_NonOperating_ReturnsFalse() {
+    public async Task IsOperatingCompany_NullEntityType_NonOperating_ReturnsFalse()
+    {
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
         secEdgarClient.GetEntityType("001").Returns("ETF");
 
         var service = CreateService(secEdgarClient: secEdgarClient);
-        var company = new CompanyInfo { Cik = "001", Name = "Some ETF", EntityType = null };
+        var company = new CompanyInfo
+        {
+            Cik = "001",
+            Name = "Some ETF",
+            EntityType = null,
+        };
 
         var result = await (Task<bool>)IsOperatingCompanyMethod.Invoke(service, [company]);
 
@@ -272,9 +401,15 @@ public class CompanySyncServiceTests {
     }
 
     [Fact]
-    public async Task IsOperatingCompany_CaseInsensitive_ReturnsTrue() {
+    public async Task IsOperatingCompany_CaseInsensitive_ReturnsTrue()
+    {
         var service = CreateService();
-        var company = new CompanyInfo { Cik = "001", Name = "Apple Inc.", EntityType = "Operating" };
+        var company = new CompanyInfo
+        {
+            Cik = "001",
+            Name = "Apple Inc.",
+            EntityType = "Operating",
+        };
 
         var result = await (Task<bool>)IsOperatingCompanyMethod.Invoke(service, [company]);
 
@@ -282,11 +417,17 @@ public class CompanySyncServiceTests {
     }
 
     [Fact]
-    public async Task IsOperatingCompany_ExistingEntityType_DoesNotCallApi() {
+    public async Task IsOperatingCompany_ExistingEntityType_DoesNotCallApi()
+    {
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
 
         var service = CreateService(secEdgarClient: secEdgarClient);
-        var company = new CompanyInfo { Cik = "001", Name = "Apple", EntityType = "operating" };
+        var company = new CompanyInfo
+        {
+            Cik = "001",
+            Name = "Apple",
+            EntityType = "operating",
+        };
 
         await (Task<bool>)IsOperatingCompanyMethod.Invoke(service, [company]);
 
@@ -298,10 +439,12 @@ public class CompanySyncServiceTests {
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task SyncCompaniesFromSecApi_ApiThrows_RethrowsException() {
+    public async Task SyncCompaniesFromSecApi_ApiThrows_RethrowsException()
+    {
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
-        secEdgarClient.GetActiveCompanies().Returns<List<CompanyInfo>>(
-            _ => throw new HttpRequestException("API unavailable"));
+        secEdgarClient
+            .GetActiveCompanies()
+            .Returns<List<CompanyInfo>>(_ => throw new HttpRequestException("API unavailable"));
 
         var service = CreateService(secEdgarClient: secEdgarClient);
 
@@ -321,7 +464,8 @@ public class CompanySyncServiceTests {
     [InlineData("ETF", false)]
     [InlineData("", false)]
     [InlineData(null, false)]
-    public void CompanyInfo_IsOperatingCompany_ClassifiesCorrectly(string entityType, bool expected) {
+    public void CompanyInfo_IsOperatingCompany_ClassifiesCorrectly(string entityType, bool expected)
+    {
         var company = new CompanyInfo { EntityType = entityType };
 
         company.IsOperatingCompany.Should().Be(expected);
@@ -332,12 +476,29 @@ public class CompanySyncServiceTests {
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void TickerFilter_WithConfiguredTickers_FiltersCompanies() {
+    public void TickerFilter_WithConfiguredTickers_FiltersCompanies()
+    {
         var workerOptions = new WorkerOptions { TickersToSync = ["AAPL", "MSFT"] };
-        var secCompanies = new List<CompanyInfo> {
-            new() { Cik = "001", Name = "Apple", Tickers = ["AAPL"] },
-            new() { Cik = "002", Name = "Microsoft", Tickers = ["MSFT"] },
-            new() { Cik = "003", Name = "Google", Tickers = ["GOOG"] },
+        var secCompanies = new List<CompanyInfo>
+        {
+            new()
+            {
+                Cik = "001",
+                Name = "Apple",
+                Tickers = ["AAPL"],
+            },
+            new()
+            {
+                Cik = "002",
+                Name = "Microsoft",
+                Tickers = ["MSFT"],
+            },
+            new()
+            {
+                Cik = "003",
+                Name = "Google",
+                Tickers = ["GOOG"],
+            },
         };
 
         // Replicate the exact filter logic from SyncCompaniesFromSecApi
@@ -350,11 +511,23 @@ public class CompanySyncServiceTests {
     }
 
     [Fact]
-    public void TickerFilter_EmptyTickersToSync_NoFiltering() {
+    public void TickerFilter_EmptyTickersToSync_NoFiltering()
+    {
         var workerOptions = new WorkerOptions();
-        var secCompanies = new List<CompanyInfo> {
-            new() { Cik = "001", Name = "Apple", Tickers = ["AAPL"] },
-            new() { Cik = "002", Name = "Microsoft", Tickers = ["MSFT"] },
+        var secCompanies = new List<CompanyInfo>
+        {
+            new()
+            {
+                Cik = "001",
+                Name = "Apple",
+                Tickers = ["AAPL"],
+            },
+            new()
+            {
+                Cik = "002",
+                Name = "Microsoft",
+                Tickers = ["MSFT"],
+            },
         };
 
         var shouldFilter = workerOptions.TickersToSync?.Count > 0;
@@ -364,10 +537,17 @@ public class CompanySyncServiceTests {
     }
 
     [Fact]
-    public void TickerFilter_CompanyWithMultipleTickers_MatchesAny() {
+    public void TickerFilter_CompanyWithMultipleTickers_MatchesAny()
+    {
         var workerOptions = new WorkerOptions { TickersToSync = ["BRK.B"] };
-        var secCompanies = new List<CompanyInfo> {
-            new() { Cik = "001", Name = "Berkshire", Tickers = ["BRK.A", "BRK.B"] },
+        var secCompanies = new List<CompanyInfo>
+        {
+            new()
+            {
+                Cik = "001",
+                Name = "Berkshire",
+                Tickers = ["BRK.A", "BRK.B"],
+            },
         };
 
         var filtered = secCompanies
@@ -378,10 +558,22 @@ public class CompanySyncServiceTests {
     }
 
     [Fact]
-    public void TickerFilter_CompanyWithNoTickers_SkippedByPrimaryTickerCheck() {
-        var secCompanies = new List<CompanyInfo> {
-            new() { Cik = "001", Name = "NoTickerCo", Tickers = [] },
-            new() { Cik = "002", Name = "Apple", Tickers = ["AAPL"] },
+    public void TickerFilter_CompanyWithNoTickers_SkippedByPrimaryTickerCheck()
+    {
+        var secCompanies = new List<CompanyInfo>
+        {
+            new()
+            {
+                Cik = "001",
+                Name = "NoTickerCo",
+                Tickers = [],
+            },
+            new()
+            {
+                Cik = "002",
+                Name = "Apple",
+                Tickers = ["AAPL"],
+            },
         };
 
         // Replicate the exact skip logic from SyncCompaniesFromSecApi

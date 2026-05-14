@@ -6,7 +6,8 @@ namespace Equibles.Sec.Data.Models;
 
 [Index(nameof(CommonStockId), nameof(SettlementDate), IsUnique = true)]
 [Index(nameof(SettlementDate))]
-public class FailToDeliver {
+public class FailToDeliver
+{
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 

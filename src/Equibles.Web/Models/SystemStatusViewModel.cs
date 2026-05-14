@@ -2,7 +2,8 @@ using Equibles.Errors.Data.Models;
 
 namespace Equibles.Web.Models;
 
-public class SystemStatusViewModel {
+public class SystemStatusViewModel
+{
     public bool DatabaseConnected { get; set; }
     public bool McpApiKeyConfigured { get; set; }
     public List<WorkerStatus> Workers { get; set; } = [];
@@ -24,7 +25,8 @@ public class SystemStatusViewModel {
     public int CboeVixDailyCount { get; set; }
 }
 
-public class WorkerStatus {
+public class WorkerStatus
+{
     public string Name { get; set; }
     public string Description { get; set; }
     public bool Active { get; set; }

@@ -24,25 +24,29 @@ namespace Equibles.IntegrationTests.Helpers;
 /// body running on the host's default culture and number assertions flake on non-en-US
 /// machines.
 /// </summary>
-public abstract class ParadeDbMcpTestBase : IAsyncLifetime {
+public abstract class ParadeDbMcpTestBase : IAsyncLifetime
+{
     private readonly CultureInfo _previousCulture;
     protected ParadeDbFixture Fixture { get; }
     protected EquiblesDbContext DbContext { get; private set; }
     protected ErrorManager ErrorManager { get; private set; }
 
-    protected ParadeDbMcpTestBase(ParadeDbFixture fixture) {
+    protected ParadeDbMcpTestBase(ParadeDbFixture fixture)
+    {
         Fixture = fixture;
         _previousCulture = CultureInfo.CurrentCulture;
         CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
     }
 
-    public virtual async Task InitializeAsync() {
+    public virtual async Task InitializeAsync()
+    {
         await Fixture.ResetAsync();
         DbContext = Fixture.CreateDbContext();
         ErrorManager = new ErrorManager(new ErrorRepository(DbContext));
     }
 
-    public virtual Task DisposeAsync() {
+    public virtual Task DisposeAsync()
+    {
         DbContext?.Dispose();
         CultureInfo.CurrentCulture = _previousCulture;
         return Task.CompletedTask;

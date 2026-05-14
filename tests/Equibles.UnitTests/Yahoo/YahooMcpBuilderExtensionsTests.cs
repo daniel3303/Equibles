@@ -6,9 +6,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Yahoo;
 
-public class YahooMcpBuilderExtensionsTests {
+public class YahooMcpBuilderExtensionsTests
+{
     [Fact]
-    public void AddStockPrices_RegistersAssemblyMcpModuleForStockPriceTools() {
+    public void AddStockPrices_RegistersAssemblyMcpModuleForStockPriceTools()
+    {
         // AddStockPrices wires the Yahoo Finance stock-price MCP tools
         // into the EquiblesMcpBuilder via AssemblyMcpModule<StockPriceTools>.
         // The marker type drives the AutoWiring assembly scan; a regression
@@ -21,7 +23,10 @@ public class YahooMcpBuilderExtensionsTests {
 
         builder.AddStockPrices();
 
-        builder.Modules.Should().ContainSingle()
-            .Which.Should().BeOfType<AssemblyMcpModule<StockPriceTools>>();
+        builder
+            .Modules.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeOfType<AssemblyMcpModule<StockPriceTools>>();
     }
 }

@@ -6,9 +6,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Cftc;
 
-public class CftcMcpBuilderExtensionsTests {
+public class CftcMcpBuilderExtensionsTests
+{
     [Fact]
-    public void AddCftc_RegistersAssemblyMcpModuleForCftcTools() {
+    public void AddCftc_RegistersAssemblyMcpModuleForCftcTools()
+    {
         // AddCftc wires the COT (Commitment of Traders) MCP tools into the
         // EquiblesMcpBuilder via AssemblyMcpModule<CftcTools>. The marker
         // type drives the AutoWiring assembly scan; a regression that
@@ -21,7 +23,10 @@ public class CftcMcpBuilderExtensionsTests {
 
         builder.AddCftc();
 
-        builder.Modules.Should().ContainSingle()
-            .Which.Should().BeOfType<AssemblyMcpModule<CftcTools>>();
+        builder
+            .Modules.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeOfType<AssemblyMcpModule<CftcTools>>();
     }
 }

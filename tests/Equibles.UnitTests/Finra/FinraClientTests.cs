@@ -5,9 +5,11 @@ using Microsoft.Extensions.Options;
 
 namespace Equibles.UnitTests.Finra;
 
-public class FinraClientTests {
+public class FinraClientTests
+{
     [Fact]
-    public void IsConfigured_ClientSecretSetButClientIdMissing_ReturnsFalse() {
+    public void IsConfigured_ClientSecretSetButClientIdMissing_ReturnsFalse()
+    {
         // FINRA's API uses OAuth2 client_credentials, where BOTH `ClientId` and
         // `ClientSecret` are required to obtain an access token. FinraClient.IsConfigured
         // gates the entire FINRA scraper via FinraScraperWorker.ValidateConfiguration —
@@ -28,14 +30,17 @@ public class FinraClientTests {
         // ClientId="" + ClientSecret="real-secret-here" is the precise asymmetric input
         // that distinguishes `&&` (returns false, correct) from `||` (returns true, buggy)
         // AND from a copy-paste where both legs check the same field (returns true, buggy).
-        var options = Options.Create(new FinraOptions { ClientId = "", ClientSecret = "real-secret-here" });
+        var options = Options.Create(
+            new FinraOptions { ClientId = "", ClientSecret = "real-secret-here" }
+        );
         var sut = new FinraClient(new HttpClient(), NullLogger<FinraClient>.Instance, options);
 
         sut.IsConfigured.Should().BeFalse();
     }
 
     [Fact]
-    public void IsConfigured_BothClientIdAndClientSecretSet_ReturnsTrue() {
+    public void IsConfigured_BothClientIdAndClientSecretSet_ReturnsTrue()
+    {
         // Sibling to both false-case pins above. The risk this catches is
         // asymmetric and unreachable from the existing pair: a regression
         // that hard-codes `IsConfigured => false` (defensive default during
@@ -61,14 +66,17 @@ public class FinraClientTests {
         // no operator-visible signal — the same failure mode the two
         // existing false-case pins were written to prevent, just via the
         // opposite-direction regression.
-        var options = Options.Create(new FinraOptions { ClientId = "real-id-here", ClientSecret = "real-secret-here" });
+        var options = Options.Create(
+            new FinraOptions { ClientId = "real-id-here", ClientSecret = "real-secret-here" }
+        );
         var sut = new FinraClient(new HttpClient(), NullLogger<FinraClient>.Instance, options);
 
         sut.IsConfigured.Should().BeTrue();
     }
 
     [Fact]
-    public void IsConfigured_ClientIdSetButClientSecretMissing_ReturnsFalse() {
+    public void IsConfigured_ClientIdSetButClientSecretMissing_ReturnsFalse()
+    {
         // Mirror to the existing ClientSecretSetButClientIdMissing test.
         // The sibling exercises the first leg of the `&&` (ClientId
         // missing → short-circuits to false before reading ClientSecret).
@@ -78,7 +86,9 @@ public class FinraClientTests {
         // a refactor that checks ClientId twice (or returns true after
         // the first leg passes) would silently let an environment with
         // only the public client id slip past ValidateConfiguration.
-        var options = Options.Create(new FinraOptions { ClientId = "real-id-here", ClientSecret = "" });
+        var options = Options.Create(
+            new FinraOptions { ClientId = "real-id-here", ClientSecret = "" }
+        );
         var sut = new FinraClient(new HttpClient(), NullLogger<FinraClient>.Instance, options);
 
         sut.IsConfigured.Should().BeFalse();

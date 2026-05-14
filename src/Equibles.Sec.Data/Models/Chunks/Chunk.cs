@@ -6,8 +6,16 @@ namespace Equibles.Sec.Data.Models.Chunks;
 
 [Index(nameof(DocumentId), nameof(Index), IsUnique = true)]
 [Index(nameof(DocumentType), IsUnique = false)]
-[Bm25Index(nameof(Id), nameof(Content), nameof(DocumentType), nameof(DocumentId), nameof(Ticker), nameof(ReportingDate))]
-public class Chunk {
+[Bm25Index(
+    nameof(Id),
+    nameof(Content),
+    nameof(DocumentType),
+    nameof(DocumentId),
+    nameof(Ticker),
+    nameof(ReportingDate)
+)]
+public class Chunk
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     /// <summary>

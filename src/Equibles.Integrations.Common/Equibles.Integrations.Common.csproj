@@ -1,7 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
-    <ItemGroup>
-      <PackageReference Include="Equibles.Core.AutoWiring" />
-    </ItemGroup>
-
+  <ItemGroup>
+    <PackageReference Include="Equibles.Core.AutoWiring" />
+  </ItemGroup>
 </Project>

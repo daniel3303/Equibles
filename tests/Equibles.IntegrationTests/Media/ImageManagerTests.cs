@@ -1,23 +1,26 @@
+using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data;
 using Equibles.Media.Repositories;
-using Equibles.IntegrationTests.Helpers;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace Equibles.IntegrationTests.Media;
 
-public class ImageManagerTests {
+public class ImageManagerTests
+{
     private readonly ImageManager _sut;
     private readonly ImageRepository _repository;
 
-    public ImageManagerTests() {
+    public ImageManagerTests()
+    {
         var context = TestDbContextFactory.Create(new MediaModuleConfiguration());
         _repository = new ImageRepository(context);
         _sut = new ImageManager(_repository);
     }
 
-    private static byte[] CreateMinimalPng(int width = 10, int height = 10) {
+    private static byte[] CreateMinimalPng(int width = 10, int height = 10)
+    {
         using var image = new Image<Rgba32>(width, height);
         using var stream = new MemoryStream();
         image.SaveAsPng(stream);
@@ -25,7 +28,8 @@ public class ImageManagerTests {
     }
 
     [Fact]
-    public async Task SaveImage_Png_SetsCorrectExtensionAndMime() {
+    public async Task SaveImage_Png_SetsCorrectExtensionAndMime()
+    {
         var content = CreateMinimalPng();
 
         var image = await _sut.SaveImage(content, "test.png", null, null);
@@ -36,7 +40,8 @@ public class ImageManagerTests {
     }
 
     [Fact]
-    public async Task SaveImage_Jpg_SetsJpegMime() {
+    public async Task SaveImage_Jpg_SetsJpegMime()
+    {
         using var img = new Image<Rgba32>(5, 5);
         using var stream = new MemoryStream();
         img.SaveAsJpeg(stream);
@@ -49,14 +54,16 @@ public class ImageManagerTests {
     }
 
     [Fact]
-    public async Task SaveImage_NoExtension_ThrowsArgumentException() {
+    public async Task SaveImage_NoExtension_ThrowsArgumentException()
+    {
         var act = () => _sut.SaveImage([0x01], "filename", null, null);
 
         await act.Should().ThrowAsync<ArgumentException>().WithMessage("*extension*");
     }
 
     [Fact]
-    public async Task SaveImage_SizeMatchesContentLength() {
+    public async Task SaveImage_SizeMatchesContentLength()
+    {
         var content = CreateMinimalPng();
 
         var image = await _sut.SaveImage(content, "test.png", null, null);
@@ -65,7 +72,8 @@ public class ImageManagerTests {
     }
 
     [Fact]
-    public async Task SaveImage_CapturesDimensions() {
+    public async Task SaveImage_CapturesDimensions()
+    {
         var content = CreateMinimalPng(20, 15);
 
         var image = await _sut.SaveImage(content, "test.png", null, null);
@@ -75,7 +83,8 @@ public class ImageManagerTests {
     }
 
     [Fact]
-    public async Task SaveImage_WithMaxWidth_ResizesImage() {
+    public async Task SaveImage_WithMaxWidth_ResizesImage()
+    {
         var content = CreateMinimalPng(100, 50);
 
         var image = await _sut.SaveImage(content, "test.png", maxWidth: 10, maxHeight: null);
@@ -85,7 +94,8 @@ public class ImageManagerTests {
     }
 
     [Fact]
-    public async Task SaveImage_WithMaxHeight_ResizesImage() {
+    public async Task SaveImage_WithMaxHeight_ResizesImage()
+    {
         var content = CreateMinimalPng(100, 50);
 
         var image = await _sut.SaveImage(content, "test.png", maxWidth: null, maxHeight: 10);
@@ -95,7 +105,8 @@ public class ImageManagerTests {
     }
 
     [Fact]
-    public async Task SaveImage_WithBothDimensions_ResizesToFit() {
+    public async Task SaveImage_WithBothDimensions_ResizesToFit()
+    {
         var content = CreateMinimalPng(100, 100);
 
         var image = await _sut.SaveImage(content, "test.png", maxWidth: 25, maxHeight: 25);
@@ -105,7 +116,8 @@ public class ImageManagerTests {
     }
 
     [Fact]
-    public async Task SaveImage_FileContentLinked() {
+    public async Task SaveImage_FileContentLinked()
+    {
         var content = CreateMinimalPng();
 
         var image = await _sut.SaveImage(content, "test.png", null, null);
@@ -116,7 +128,8 @@ public class ImageManagerTests {
     }
 
     [Fact]
-    public async Task SaveImage_EntityAddedToRepository() {
+    public async Task SaveImage_EntityAddedToRepository()
+    {
         var content = CreateMinimalPng();
 
         await _sut.SaveImage(content, "test.png", null, null);
@@ -126,14 +139,16 @@ public class ImageManagerTests {
     }
 
     [Fact]
-    public void DeleteImage_Null_DoesNotThrow() {
+    public void DeleteImage_Null_DoesNotThrow()
+    {
         var act = () => _sut.DeleteImage(null);
 
         act.Should().NotThrow();
     }
 
     [Fact]
-    public async Task DeleteImage_ExistingImage_RemovesFromRepository() {
+    public async Task DeleteImage_ExistingImage_RemovesFromRepository()
+    {
         var content = CreateMinimalPng();
         var image = await _sut.SaveImage(content, "test.png", null, null);
         await _repository.SaveChanges();

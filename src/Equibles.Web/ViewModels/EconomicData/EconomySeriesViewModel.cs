@@ -2,7 +2,8 @@ using Equibles.Fred.Data.Models;
 
 namespace Equibles.Web.ViewModels.EconomicData;
 
-public class EconomySeriesViewModel {
+public class EconomySeriesViewModel
+{
     public string SeriesId { get; set; }
     public string Title { get; set; }
     public FredSeriesCategory Category { get; set; }
@@ -26,7 +27,8 @@ public class EconomySeriesViewModel {
     public List<decimal?> Sma50 { get; set; } = [];
 }
 
-public class ObservationItem {
+public class ObservationItem
+{
     public DateOnly Date { get; set; }
     public decimal? Value { get; set; }
 }

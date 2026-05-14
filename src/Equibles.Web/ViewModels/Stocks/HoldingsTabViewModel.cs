@@ -2,7 +2,8 @@ using Equibles.Holdings.Data.Models;
 
 namespace Equibles.Web.ViewModels.Stocks;
 
-public class HoldingsTabViewModel {
+public class HoldingsTabViewModel
+{
     public List<InstitutionalHolding> Holdings { get; set; } = [];
     public List<DateOnly> AvailableDates { get; set; } = [];
     public DateOnly SelectedDate { get; set; }

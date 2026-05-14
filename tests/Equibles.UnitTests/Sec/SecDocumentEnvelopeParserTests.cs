@@ -2,9 +2,11 @@ using Equibles.Sec.BusinessLogic;
 
 namespace Equibles.UnitTests.Sec;
 
-public class SecDocumentEnvelopeParserTests {
+public class SecDocumentEnvelopeParserTests
+{
     [Fact]
-    public void TryExtractPaperPdfFilename_FilenameWithPathTraversal_RejectsAndReturnsFalse() {
+    public void TryExtractPaperPdfFilename_FilenameWithPathTraversal_RejectsAndReturnsFalse()
+    {
         // The parser pulls the candidate filename out of an SGML envelope body and the
         // caller uses it to compose an EDGAR URL (`/Archives/edgar/data/{cik}/{accession}/{filename}`).
         // The envelope is hostile-by-default: if SEC's CDN ever served — or a man-in-the-middle
@@ -30,14 +32,18 @@ public class SecDocumentEnvelopeParserTests {
             </SEC-DOCUMENT>
             """;
 
-        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(envelope, out var filename);
+        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(
+            envelope,
+            out var filename
+        );
 
         success.Should().BeFalse();
         filename.Should().BeEmpty();
     }
 
     [Fact]
-    public void TryExtractPaperPdfFilename_EmptyEnvelope_ReturnsFalseWithoutScanning() {
+    public void TryExtractPaperPdfFilename_EmptyEnvelope_ReturnsFalseWithoutScanning()
+    {
         // DocumentScraper invokes the parser on whatever the SEC EDGAR fetch
         // returned. A 404 or empty-body response yields an empty string —
         // the parser must short-circuit on null/empty BEFORE entering the
@@ -45,14 +51,18 @@ public class SecDocumentEnvelopeParserTests {
         // string in a tight loop. Pin the guard so a refactor that removes
         // it surfaces immediately. The companion happy-path and traversal
         // tests don't reach this branch.
-        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(string.Empty, out var filename);
+        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(
+            string.Empty,
+            out var filename
+        );
 
         success.Should().BeFalse();
         filename.Should().BeEmpty();
     }
 
     [Fact]
-    public void TryExtractPaperPdfFilename_MultiDocumentEnvelopeWithPdfInSecondBlock_ReturnsPdfFilename() {
+    public void TryExtractPaperPdfFilename_MultiDocumentEnvelopeWithPdfInSecondBlock_ReturnsPdfFilename()
+    {
         // SEC envelopes regularly bundle several DOCUMENT blocks — a primary HTML/XML
         // submission followed by exhibit attachments. When a paper filing's PDF is
         // attached as a later DOCUMENT (e.g. SEQUENCE 2 EX-99 alongside a SEQUENCE 1
@@ -91,14 +101,18 @@ public class SecDocumentEnvelopeParserTests {
             </SEC-DOCUMENT>
             """;
 
-        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(envelope, out var filename);
+        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(
+            envelope,
+            out var filename
+        );
 
         success.Should().BeTrue();
         filename.Should().Be("exhibit99.pdf");
     }
 
     [Fact]
-    public void TryExtractPaperPdfFilename_FilenameWithBackslashPathSeparator_RejectsAndReturnsFalse() {
+    public void TryExtractPaperPdfFilename_FilenameWithBackslashPathSeparator_RejectsAndReturnsFalse()
+    {
         // The existing path-traversal pin (#258) covers `../etc/passwd.pdf` — a Unix-style
         // traversal that fires both the leading-dot and forward-slash checks in
         // IsSafeFilename. This sibling pins the Windows-style backslash check in
@@ -126,14 +140,18 @@ public class SecDocumentEnvelopeParserTests {
             </SEC-DOCUMENT>
             """;
 
-        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(envelope, out var filename);
+        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(
+            envelope,
+            out var filename
+        );
 
         success.Should().BeFalse();
         filename.Should().BeEmpty();
     }
 
     [Fact]
-    public void TryExtractPaperPdfFilename_DocumentStartWithoutEndTag_ReturnsFalseInsteadOfThrowing() {
+    public void TryExtractPaperPdfFilename_DocumentStartWithoutEndTag_ReturnsFalseInsteadOfThrowing()
+    {
         // SEC EDGAR responses can be truncated by upstream proxies, transient TCP
         // resets, or partial reads on the scraper side. When the envelope body
         // contains `<DOCUMENT>` but no matching `</DOCUMENT>`, the loop's
@@ -163,14 +181,18 @@ public class SecDocumentEnvelopeParserTests {
             (truncated mid-stream — closing DOCUMENT tag never arrives)
             """;
 
-        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(envelope, out var filename);
+        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(
+            envelope,
+            out var filename
+        );
 
         success.Should().BeFalse();
         filename.Should().BeEmpty();
     }
 
     [Fact]
-    public void TryExtractPaperPdfFilename_FilenameStartingWithDotNoPathSeparators_RejectsAndReturnsFalse() {
+    public void TryExtractPaperPdfFilename_FilenameStartingWithDotNoPathSeparators_RejectsAndReturnsFalse()
+    {
         // IsSafeFilename's defensive guard has three independent arms:
         //   1. `value.Length == 0` → return false
         //   2. `value[0] == '.'` → return false (this pin)
@@ -218,14 +240,18 @@ public class SecDocumentEnvelopeParserTests {
             </SEC-DOCUMENT>
             """;
 
-        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(envelope, out var filename);
+        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(
+            envelope,
+            out var filename
+        );
 
         success.Should().BeFalse();
         filename.Should().BeEmpty();
     }
 
     [Fact]
-    public void TryExtractPaperPdfFilename_EnvelopeWrappingPdfDocument_ReturnsFilename() {
+    public void TryExtractPaperPdfFilename_EnvelopeWrappingPdfDocument_ReturnsFilename()
+    {
         var envelope = """
             <SEC-DOCUMENT>
             <SEC-HEADER>
@@ -245,7 +271,10 @@ public class SecDocumentEnvelopeParserTests {
             </SEC-DOCUMENT>
             """;
 
-        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(envelope, out var filename);
+        var success = SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(
+            envelope,
+            out var filename
+        );
 
         success.Should().BeTrue();
         filename.Should().Be("form6k.pdf");

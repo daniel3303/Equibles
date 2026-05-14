@@ -8,7 +8,8 @@ namespace Equibles.Errors.Data.Models;
 [Index(nameof(Seen))]
 [Index(nameof(CreationTime))]
 [Index(nameof(Source))]
-public class Error {
+public class Error
+{
     [Key]
     public Guid Id { get; set; } = Guid.NewGuid();
 

@@ -6,7 +6,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Equibles.Worker;
 
-public abstract class BaseScraperWorker : BackgroundService {
+public abstract class BaseScraperWorker : BackgroundService
+{
     protected readonly ILogger Logger;
     protected readonly IServiceScopeFactory ScopeFactory;
     protected readonly ErrorReporter ErrorReporter;
@@ -19,30 +20,47 @@ public abstract class BaseScraperWorker : BackgroundService {
         ILogger logger,
         IServiceScopeFactory scopeFactory,
         ErrorReporter errorReporter
-    ) {
+    )
+    {
         Logger = logger;
         ScopeFactory = scopeFactory;
         ErrorReporter = errorReporter;
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
-        if (!ValidateConfiguration()) return;
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        if (!ValidateConfiguration())
+            return;
 
-        while (!stoppingToken.IsCancellationRequested) {
+        while (!stoppingToken.IsCancellationRequested)
+        {
             Logger.LogInformation("{Worker} running at: {Time}", WorkerName, DateTimeOffset.Now);
 
-            try {
+            try
+            {
                 await DoWork(stoppingToken);
-            } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
                 Logger.LogInformation("{Worker} cancelled", WorkerName);
                 return;
-            } catch (Exception ex) {
+            }
+            catch (Exception ex)
+            {
                 Logger.LogCritical(ex, "Critical error in {Worker}", WorkerName);
-                await ErrorReporter.Report(ErrorSource, $"{WorkerName}.DoWork", ex.Message, ex.StackTrace);
+                await ErrorReporter.Report(
+                    ErrorSource,
+                    $"{WorkerName}.DoWork",
+                    ex.Message,
+                    ex.StackTrace
+                );
             }
 
-            Logger.LogInformation("{Worker} cycle complete. Sleeping for {Interval}",
-                WorkerName, SleepInterval);
+            Logger.LogInformation(
+                "{Worker} cycle complete. Sleeping for {Interval}",
+                WorkerName,
+                SleepInterval
+            );
             await Task.Delay(SleepInterval, stoppingToken);
         }
     }

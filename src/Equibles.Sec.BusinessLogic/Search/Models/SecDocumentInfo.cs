@@ -6,7 +6,8 @@ namespace Equibles.Sec.BusinessLogic.Search.Models;
 /// Lightweight data transfer object containing essential information about SEC documents.
 /// Used for listing documents without loading heavy entity relationships like chunks and file content.
 /// </summary>
-public class SecDocumentInfo {
+public class SecDocumentInfo
+{
     /// <summary>
     /// Unique identifier of the document in the database.
     /// </summary>

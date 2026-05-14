@@ -5,55 +5,82 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Equibles.Data.Extensions;
 
-public static class ServiceCollectionExtensions {
+public static class ServiceCollectionExtensions
+{
     public static IServiceCollection AddEquiblesDbContext(
         this IServiceCollection services,
         string connectionString,
         Action<EquiblesModuleBuilder> configureModules,
         Assembly migrationsAssembly = null,
         string migrationsAssemblyName = null,
-        TimeSpan? commandTimeout = null) {
+        TimeSpan? commandTimeout = null
+    )
+    {
         var moduleBuilder = new EquiblesModuleBuilder();
         configureModules(moduleBuilder);
 
-        foreach (var module in moduleBuilder.Modules) {
+        foreach (var module in moduleBuilder.Modules)
+        {
             services.AddSingleton<IModuleConfiguration>(module);
         }
 
-        services.AddDbContext<EquiblesDbContext>((sp, options) => {
-            options.UseNpgsql(connectionString, npgsql => {
-                npgsql.UseVector()
-                    .UseParadeDb()
-                    .UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
-                if (migrationsAssembly != null) {
-                    npgsql.MigrationsAssembly(migrationsAssembly);
-                } else if (migrationsAssemblyName != null) {
-                    npgsql.MigrationsAssembly(migrationsAssemblyName);
-                }
-                if (commandTimeout.HasValue) {
-                    npgsql.CommandTimeout((int)commandTimeout.Value.TotalSeconds);
-                }
-            });
-            options.UseLazyLoadingProxies();
-        });
+        services.AddDbContext<EquiblesDbContext>(
+            (sp, options) =>
+            {
+                options.UseNpgsql(
+                    connectionString,
+                    npgsql =>
+                    {
+                        npgsql
+                            .UseVector()
+                            .UseParadeDb()
+                            .UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+                        if (migrationsAssembly != null)
+                        {
+                            npgsql.MigrationsAssembly(migrationsAssembly);
+                        }
+                        else if (migrationsAssemblyName != null)
+                        {
+                            npgsql.MigrationsAssembly(migrationsAssemblyName);
+                        }
+                        if (commandTimeout.HasValue)
+                        {
+                            npgsql.CommandTimeout((int)commandTimeout.Value.TotalSeconds);
+                        }
+                    }
+                );
+                options.UseLazyLoadingProxies();
+            }
+        );
 
         return services;
     }
 
-    public static IServiceCollection AddAllRepositories(this IServiceCollection services) {
-        var assemblies = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(a => a.FullName != null && a.FullName.StartsWith("Equibles.", StringComparison.Ordinal))
+    public static IServiceCollection AddAllRepositories(this IServiceCollection services)
+    {
+        var assemblies = AppDomain
+            .CurrentDomain.GetAssemblies()
+            .Where(a =>
+                a.FullName != null && a.FullName.StartsWith("Equibles.", StringComparison.Ordinal)
+            )
             .ToArray();
         return services.AddRepositoriesFrom(assemblies);
     }
 
-    public static IServiceCollection AddRepositoriesFrom(this IServiceCollection services, params Assembly[] assemblies) {
-        foreach (var assembly in assemblies) {
+    public static IServiceCollection AddRepositoriesFrom(
+        this IServiceCollection services,
+        params Assembly[] assemblies
+    )
+    {
+        foreach (var assembly in assemblies)
+        {
             var repositories = assembly.DefinedTypes.Where(t =>
-                t is { IsClass: true, IsAbstract: false, IsInterface: false } &&
-                IsSubClassOfGenericType(t, typeof(BaseRepository<>)));
+                t is { IsClass: true, IsAbstract: false, IsInterface: false }
+                && IsSubClassOfGenericType(t, typeof(BaseRepository<>))
+            );
 
-            foreach (var repository in repositories) {
+            foreach (var repository in repositories)
+            {
                 services.Add(new ServiceDescriptor(repository, repository, ServiceLifetime.Scoped));
             }
         }
@@ -61,10 +88,13 @@ public static class ServiceCollectionExtensions {
         return services;
     }
 
-    private static bool IsSubClassOfGenericType(Type type, Type genericType) {
+    private static bool IsSubClassOfGenericType(Type type, Type genericType)
+    {
         var currentType = type;
-        while (currentType != null) {
-            if (currentType.IsGenericType && currentType.GetGenericTypeDefinition() == genericType) {
+        while (currentType != null)
+        {
+            if (currentType.IsGenericType && currentType.GetGenericTypeDefinition() == genericType)
+            {
                 return true;
             }
 

@@ -3,11 +3,13 @@ using Equibles.Sec.BusinessLogic.Normalizers;
 
 namespace Equibles.UnitTests.Sec.Normalizers;
 
-public class HeadingConversionStepTests {
+public class HeadingConversionStepTests
+{
     private readonly HeadingConversionStep _step = new();
     private readonly HtmlParser _parser = new();
 
-    private string Execute(string bodyHtml) {
+    private string Execute(string bodyHtml)
+    {
         var html = $"<html><body>{bodyHtml}</body></html>";
         var doc = _parser.ParseDocument(html);
         _step.Execute(doc);
@@ -15,28 +17,32 @@ public class HeadingConversionStepTests {
     }
 
     [Fact]
-    public void PartHeading_IsConvertedToH1() {
+    public void PartHeading_IsConvertedToH1()
+    {
         var result = Execute("<div><span>PART I</span></div>");
 
         result.Should().Contain("<h1>PART I</h1>");
     }
 
     [Fact]
-    public void ItemHeading_IsConvertedToH2() {
+    public void ItemHeading_IsConvertedToH2()
+    {
         var result = Execute("<div><span>ITEM 1. Business</span></div>");
 
         result.Should().Contain("<h2>ITEM 1. Business</h2>");
     }
 
     [Fact]
-    public void BoldSpan_IsConvertedToH3() {
+    public void BoldSpan_IsConvertedToH3()
+    {
         var result = Execute("<div><span style=\"font-weight:bold\">Revenue</span></div>");
 
         result.Should().Contain("<h3>Revenue</h3>");
     }
 
     [Fact]
-    public void SpanWithNestedBoldChild_InnerHtmlBranchTriggersH3Conversion() {
+    public void SpanWithNestedBoldChild_InnerHtmlBranchTriggersH3Conversion()
+    {
         // IsBoldSpan is two independent OR-arms:
         //   (a) span's own `style` attribute contains "font-weight:bold"
         //   (b) span's `innerHtml` (the serialized markup of its children) contains
@@ -59,28 +65,33 @@ public class HeadingConversionStepTests {
         // succeeds if every meaningful sibling passes the predicate, and there's only
         // one span here, so the H3 output is a direct signal that the innerHtml-bold
         // check fired.
-        var result = Execute("<div><span><font style=\"font-weight:bold\">Revenue</font></span></div>");
+        var result = Execute(
+            "<div><span><font style=\"font-weight:bold\">Revenue</font></span></div>"
+        );
 
         result.Should().Contain("<h3>");
         result.Should().Contain("Revenue");
     }
 
     [Fact]
-    public void AllUppercaseSpan_IsConvertedToH3() {
+    public void AllUppercaseSpan_IsConvertedToH3()
+    {
         var result = Execute("<div><span>REVENUE</span></div>");
 
         result.Should().Contain("<h3>REVENUE</h3>");
     }
 
     [Fact]
-    public void ItalicSpan_IsConvertedToH4() {
+    public void ItalicSpan_IsConvertedToH4()
+    {
         var result = Execute("<div><span style=\"font-style:italic\">Note: Important</span></div>");
 
         result.Should().Contain("<h4>Note: Important</h4>");
     }
 
     [Fact]
-    public void SpanWithNestedItalicChild_InnerHtmlBranchTriggersH4Conversion() {
+    public void SpanWithNestedItalicChild_InnerHtmlBranchTriggersH4Conversion()
+    {
         // IsItalicSpan mirrors the dual-arm structure of IsBoldSpan:
         //   (a) span's own `style` attribute contains "font-style:italic"
         //   (b) span's `innerHtml` (the serialized markup of its children)
@@ -104,32 +115,41 @@ public class HeadingConversionStepTests {
         // filing corpus. Pin the italic innerHtml branch with a nested
         // <font> italic child; the H4 promotion confirms IsItalicSpan
         // returned true via arm (b).
-        var result = Execute("<div><span><font style=\"font-style:italic\">Note: see Item 3</font></span></div>");
+        var result = Execute(
+            "<div><span><font style=\"font-style:italic\">Note: see Item 3</font></span></div>"
+        );
 
         result.Should().Contain("<h4>");
         result.Should().Contain("Note: see Item 3");
     }
 
     [Fact]
-    public void SpanInsideTable_IsNotConverted() {
-        var result = Execute("<table><tr><td><span style=\"font-weight:bold\">Revenue</span></td></tr></table>");
+    public void SpanInsideTable_IsNotConverted()
+    {
+        var result = Execute(
+            "<table><tr><td><span style=\"font-weight:bold\">Revenue</span></td></tr></table>"
+        );
 
         result.Should().NotContain("<h3>");
         result.Should().Contain("<span");
     }
 
     [Fact]
-    public void RegularSpanWithoutStyling_IsNotConverted() {
+    public void RegularSpanWithoutStyling_IsNotConverted()
+    {
         var result = Execute("<div><span>Some regular text here</span></div>");
 
-        result.Should().NotContain("<h1>")
+        result
+            .Should()
+            .NotContain("<h1>")
             .And.NotContain("<h2>")
             .And.NotContain("<h3>")
             .And.NotContain("<h4>");
     }
 
     [Fact]
-    public void SpanInsideParentWithCenterAlignment_IsConvertedToH3() {
+    public void SpanInsideParentWithCenterAlignment_IsConvertedToH3()
+    {
         // SEC filings frequently mark section labels by centering them at the
         // parent level (<div style="text-align:center"><span>Label</span></div>)
         // rather than on the span itself. IsCenterAligned reads both span and
@@ -141,14 +161,16 @@ public class HeadingConversionStepTests {
     }
 
     [Fact]
-    public void ParentheticalText_DoesNotTriggerHeading() {
+    public void ParentheticalText_DoesNotTriggerHeading()
+    {
         var result = Execute("<div><span>(continued)</span></div>");
 
         result.Should().NotContain("<h3>");
     }
 
     [Fact]
-    public void PartHeadingWithArabicNumeral_DoesNotBecomeH1() {
+    public void PartHeadingWithArabicNumeral_DoesNotBecomeH1()
+    {
         // SEC 10-K filings consistently use Roman numerals for PART headings —
         // PART I, PART II, PART III, PART IV. `IsPartHeading` enforces this by
         // checking `firstWord.All(char.IsLetter)` AFTER stripping the "PART "

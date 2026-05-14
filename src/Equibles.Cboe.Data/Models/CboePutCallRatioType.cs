@@ -2,7 +2,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Equibles.Cboe.Data.Models;
 
-public enum CboePutCallRatioType {
+public enum CboePutCallRatioType
+{
     [Display(Name = "Total Exchange")]
     Total,
 
@@ -16,5 +17,5 @@ public enum CboePutCallRatioType {
     Vix,
 
     [Display(Name = "ETP")]
-    Etp
+    Etp,
 }

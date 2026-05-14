@@ -12,8 +12,10 @@ using Serilog.Events;
 
 namespace Equibles.Web;
 
-public partial class Program {
-    public static async Task Main(string[] args) {
+public partial class Program
+{
+    public static async Task Main(string[] args)
+    {
         var builder = WebApplication.CreateBuilder(args);
         ConfigureServices(builder);
         var app = builder.Build();
@@ -22,11 +24,17 @@ public partial class Program {
         await app.RunAsync();
     }
 
-    public static void ConfigureServices(WebApplicationBuilder builder) {
-        builder.Services.AddSerilog(config => {
+    public static void ConfigureServices(WebApplicationBuilder builder)
+    {
+        builder.Services.AddSerilog(config =>
+        {
             config.ReadFrom.Configuration(builder.Configuration);
             var minLevel = builder.Configuration["MinimumLogLevel"];
-            if (!string.IsNullOrEmpty(minLevel) && Enum.TryParse<LogEventLevel>(minLevel, true, out var level)) {
+            if (
+                !string.IsNullOrEmpty(minLevel)
+                && Enum.TryParse<LogEventLevel>(minLevel, true, out var level)
+            )
+            {
                 config.MinimumLevel.Is(level);
             }
         });
@@ -34,42 +42,57 @@ public partial class Program {
         Equibles.Plugins.PluginLoader.LoadAll();
 
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-        builder.Services.AddEquiblesDbContext(connectionString,
+        builder.Services.AddEquiblesDbContext(
+            connectionString,
             modules => modules.AddAllModules(),
-            migrationsAssembly: typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly);
+            migrationsAssembly: typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly
+        );
         builder.Services.AddAllRepositories();
 
         builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();
         builder.Services.AutoWireServicesFrom<Equibles.Web.Services.StockTabService>();
 
-        var authSettings = builder.Configuration.GetSection("Auth").Get<AuthSettings>() ?? new AuthSettings();
+        var authSettings =
+            builder.Configuration.GetSection("Auth").Get<AuthSettings>() ?? new AuthSettings();
         builder.Services.Configure<AuthSettings>(builder.Configuration.GetSection("Auth"));
 
-        builder.Services.AddAuthentication(EnvAuthHandler.SchemeName)
-            .AddScheme<AuthenticationSchemeOptions, EnvAuthHandler>(EnvAuthHandler.SchemeName, null);
+        builder
+            .Services.AddAuthentication(EnvAuthHandler.SchemeName)
+            .AddScheme<AuthenticationSchemeOptions, EnvAuthHandler>(
+                EnvAuthHandler.SchemeName,
+                null
+            );
 
-        if (authSettings.IsEnabled) {
-            builder.Services.AddAuthorization(options => {
+        if (authSettings.IsEnabled)
+        {
+            builder.Services.AddAuthorization(options =>
+            {
                 options.FallbackPolicy = new AuthorizationPolicyBuilder()
                     .RequireAuthenticatedUser()
                     .Build();
             });
-        } else {
+        }
+        else
+        {
             builder.Services.AddAuthorization();
         }
 
-        builder.Services.Configure<RouteOptions>(options => {
+        builder.Services.Configure<RouteOptions>(options =>
+        {
             options.LowercaseUrls = true;
         });
 
         builder.Services.AddScoped<Equibles.Web.Filters.StatusBadgeFilter>();
-        builder.Services.AddControllersWithViews(options => {
+        builder
+            .Services.AddControllersWithViews(options =>
+            {
                 options.Filters.AddService<Equibles.Web.Filters.StatusBadgeFilter>();
             })
             .AddRazorRuntimeCompilation();
 
         var keysDirectory = builder.Configuration["DataProtection:KeysDirectory"] ?? "/app/keys";
-        builder.Services.AddDataProtection()
+        builder
+            .Services.AddDataProtection()
             .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
 
         builder.Services.AddHttpContextAccessor();
@@ -78,7 +101,8 @@ public partial class Program {
         builder.Services.AddHealthChecks();
     }
 
-    public static async Task ApplyMigrationsAsync(WebApplication app) {
+    public static async Task ApplyMigrationsAsync(WebApplication app)
+    {
         // Extended timeout for index rebuilds.
         using var scope = app.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
@@ -86,8 +110,10 @@ public partial class Program {
         await dbContext.Database.MigrateAsync();
     }
 
-    public static void ConfigurePipeline(WebApplication app) {
-        if (!app.Environment.IsDevelopment()) {
+    public static void ConfigurePipeline(WebApplication app)
+    {
+        if (!app.Environment.IsDevelopment())
+        {
             app.UseExceptionHandler("/Home/Error");
         }
 
@@ -98,8 +124,6 @@ public partial class Program {
         app.UseAuthorization();
 
         app.MapHealthChecks("/healthz").AllowAnonymous();
-        app.MapControllerRoute(
-            name: "default",
-            pattern: "{controller=Home}/{action=Index}/{id?}");
+        app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
     }
 }

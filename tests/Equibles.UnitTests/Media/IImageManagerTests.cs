@@ -2,9 +2,11 @@ using Equibles.Media.BusinessLogic;
 
 namespace Equibles.UnitTests.Media;
 
-public class IImageManagerTests {
+public class IImageManagerTests
+{
     [Fact]
-    public void AcceptedExtensionsString_JoinsExtensionsWithLeadingDotAndCommaSeparator() {
+    public void AcceptedExtensionsString_JoinsExtensionsWithLeadingDotAndCommaSeparator()
+    {
         // The interface's static helper exposes the upload-accept list in
         // the wire format browsers expect for <input type="file" accept="...">:
         // each extension prefixed with `.` and separated by `,`. Views and

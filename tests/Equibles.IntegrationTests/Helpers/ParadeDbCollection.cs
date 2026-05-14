@@ -8,6 +8,7 @@ namespace Equibles.IntegrationTests.Helpers;
 /// shared container outweighs the parallelism we'd buy by having one per class.
 /// </summary>
 [CollectionDefinition(Name)]
-public class ParadeDbCollection : ICollectionFixture<ParadeDbFixture> {
+public class ParadeDbCollection : ICollectionFixture<ParadeDbFixture>
+{
     public const string Name = "ParadeDb";
 }

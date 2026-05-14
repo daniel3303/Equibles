@@ -1,0 +1,8 @@
+# Revisions listed here are skipped by `git blame` so mass-formatting commits
+# don't pollute authorship. Activate locally with:
+#
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub honors this file automatically in the web UI.
+
+# Add the squash-merge SHA of the csharpier mass-format PR here once merged.

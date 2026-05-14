@@ -3,7 +3,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Cboe.Data.Models;
 
 [Index(nameof(Date), IsUnique = true)]
-public class CboeVixDaily {
+public class CboeVixDaily
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public DateOnly Date { get; set; }

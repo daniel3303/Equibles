@@ -1,6 +1,7 @@
 namespace Equibles.Integrations.Cftc.Models;
 
-public class CftcReportRecord {
+public class CftcReportRecord
+{
     public string MarketAndExchangeName { get; set; }
     public string ReportDate { get; set; }
     public string ContractMarketCode { get; set; }

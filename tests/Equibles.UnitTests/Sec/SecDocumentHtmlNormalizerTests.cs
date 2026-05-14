@@ -2,32 +2,37 @@ using Equibles.Sec.BusinessLogic;
 
 namespace Equibles.UnitTests.Sec;
 
-public class SecDocumentHtmlNormalizerTests {
+public class SecDocumentHtmlNormalizerTests
+{
     private readonly SecDocumentHtmlNormalizer _sut = new();
 
     [Fact]
-    public void Normalize_NullInput_ReturnsEmptyString() {
+    public void Normalize_NullInput_ReturnsEmptyString()
+    {
         var result = _sut.Normalize(null);
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public void Normalize_EmptyString_ReturnsEmptyString() {
+    public void Normalize_EmptyString_ReturnsEmptyString()
+    {
         var result = _sut.Normalize(string.Empty);
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public void Normalize_Whitespace_ReturnsEmptyString() {
+    public void Normalize_Whitespace_ReturnsEmptyString()
+    {
         var result = _sut.Normalize("   \t\n  ");
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public void Normalize_ValidSgmlWithKnownType_ReturnsNormalizedHtml() {
+    public void Normalize_ValidSgmlWithKnownType_ReturnsNormalizedHtml()
+    {
         var sgml = """
             <DOCUMENT>
             <TYPE>10-K
@@ -44,7 +49,8 @@ public class SecDocumentHtmlNormalizerTests {
     }
 
     [Fact]
-    public void Normalize_UnknownDocumentType_ReturnsEmptyString() {
+    public void Normalize_UnknownDocumentType_ReturnsEmptyString()
+    {
         var sgml = """
             <DOCUMENT>
             <TYPE>UNKNOWN-TYPE
@@ -61,7 +67,8 @@ public class SecDocumentHtmlNormalizerTests {
     }
 
     [Fact]
-    public void Normalize_ExhibitTypeUnder100_IsAllowed() {
+    public void Normalize_ExhibitTypeUnder100_IsAllowed()
+    {
         var sgml = """
             <DOCUMENT>
             <TYPE>EX-21
@@ -78,7 +85,8 @@ public class SecDocumentHtmlNormalizerTests {
     }
 
     [Fact]
-    public void Normalize_ExhibitTypeWithNonNumericSuffix_IsFilteredWithoutThrowing() {
+    public void Normalize_ExhibitTypeWithNonNumericSuffix_IsFilteredWithoutThrowing()
+    {
         // IsAllowedDocumentType's exhibit branch:
         //   if (documentType.StartsWith("EX-")) {
         //       var exNumberPart = documentType.Substring(3);
@@ -133,7 +141,8 @@ public class SecDocumentHtmlNormalizerTests {
     }
 
     [Fact]
-    public void Normalize_ExhibitTypeOver100_IsFiltered() {
+    public void Normalize_ExhibitTypeOver100_IsFiltered()
+    {
         var sgml = """
             <DOCUMENT>
             <TYPE>EX-999
@@ -150,7 +159,8 @@ public class SecDocumentHtmlNormalizerTests {
     }
 
     [Fact]
-    public void Normalize_FileWithoutAllowedExtension_IsFiltered() {
+    public void Normalize_FileWithoutAllowedExtension_IsFiltered()
+    {
         var sgml = """
             <DOCUMENT>
             <TYPE>10-K
@@ -167,7 +177,8 @@ public class SecDocumentHtmlNormalizerTests {
     }
 
     [Fact]
-    public void Normalize_MultipleDocuments_KeepsKnownFilterUnknown() {
+    public void Normalize_MultipleDocuments_KeepsKnownFilterUnknown()
+    {
         var sgml = """
             <DOCUMENT>
             <TYPE>10-K
@@ -192,7 +203,8 @@ public class SecDocumentHtmlNormalizerTests {
     }
 
     [Fact]
-    public void Normalize_BlockWithoutXbrlOrTextWrapper_FallsBackToFullBlock() {
+    public void Normalize_BlockWithoutXbrlOrTextWrapper_FallsBackToFullBlock()
+    {
         // ExtractAndFilterDocuments composes content as
         //   ExtractInnerContent("XBRL") ?? ExtractInnerContent("TEXT") ?? block.
         // The existing tests cover the XBRL and TEXT wrappers; the final
@@ -215,7 +227,8 @@ public class SecDocumentHtmlNormalizerTests {
     }
 
     [Fact]
-    public void Normalize_FilenameWithFullHtmlExtension_IsAllowed() {
+    public void Normalize_FilenameWithFullHtmlExtension_IsAllowed()
+    {
         // ExtractAndFilterDocuments gates each block on the filename's
         // extension via a three-arm OR:
         //   if (!filename.EndsWith(".htm")
@@ -269,7 +282,8 @@ public class SecDocumentHtmlNormalizerTests {
     }
 
     [Fact]
-    public void Normalize_FilenameWithTxtExtension_IsAllowed() {
+    public void Normalize_FilenameWithTxtExtension_IsAllowed()
+    {
         // Sibling to `Normalize_FilenameWithFullHtmlExtension_IsAllowed`.
         // Completes the three-arm OR coverage of ExtractAndFilterDocuments'
         // extension gate:
@@ -320,7 +334,8 @@ public class SecDocumentHtmlNormalizerTests {
     }
 
     [Fact]
-    public void Normalize_DocumentBlockMissingTypeElement_IsSilentlySkippedWithoutThrowingAndContinuesToNextBlock() {
+    public void Normalize_DocumentBlockMissingTypeElement_IsSilentlySkippedWithoutThrowingAndContinuesToNextBlock()
+    {
         // ExtractAndFilterDocuments gates each block on TYPE before invoking the
         // type-allowlist check:
         //   var typeText = ExtractSgmlTagValue(block, "TYPE");
@@ -413,7 +428,8 @@ public class SecDocumentHtmlNormalizerTests {
     }
 
     [Fact]
-    public void Normalize_XbrlWrappedContent_ExtractsFromXbrlTag() {
+    public void Normalize_XbrlWrappedContent_ExtractsFromXbrlTag()
+    {
         var sgml = """
             <DOCUMENT>
             <TYPE>10-K

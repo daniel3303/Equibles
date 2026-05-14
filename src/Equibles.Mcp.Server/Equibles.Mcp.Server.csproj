@@ -1,29 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Serilog.Exceptions" />
+    <PackageReference Include="Serilog.Exceptions.EntityFrameworkCore" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="ModelContextProtocol.AspNetCore" />
-      <PackageReference Include="Serilog" />
-      <PackageReference Include="Serilog.AspNetCore" />
-      <PackageReference Include="Serilog.Exceptions" />
-      <PackageReference Include="Serilog.Exceptions.EntityFrameworkCore" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <ProjectReference Include="..\Equibles.Mcp\Equibles.Mcp.csproj" />
-      <ProjectReference Include="..\Equibles.Holdings.Mcp\Equibles.Holdings.Mcp.csproj" />
-      <ProjectReference Include="..\Equibles.InsiderTrading.Mcp\Equibles.InsiderTrading.Mcp.csproj" />
-      <ProjectReference Include="..\Equibles.Sec.Mcp\Equibles.Sec.Mcp.csproj" />
-      <ProjectReference Include="..\Equibles.Fred.Mcp\Equibles.Fred.Mcp.csproj" />
-      <ProjectReference Include="..\Equibles.Congress.Repositories\Equibles.Congress.Repositories.csproj" />
-      <ProjectReference Include="..\Equibles.Finra.Repositories\Equibles.Finra.Repositories.csproj" />
-      <ProjectReference Include="..\Equibles.Media.Repositories\Equibles.Media.Repositories.csproj" />
-      <ProjectReference Include="..\Equibles.Yahoo.Repositories\Equibles.Yahoo.Repositories.csproj" />
-      <ProjectReference Include="..\Equibles.Cftc.Mcp\Equibles.Cftc.Mcp.csproj" />
-      <ProjectReference Include="..\Equibles.Cboe.Mcp\Equibles.Cboe.Mcp.csproj" />
-      <ProjectReference Include="..\Equibles.Congress.Mcp\Equibles.Congress.Mcp.csproj" />
-      <ProjectReference Include="..\Equibles.Finra.Mcp\Equibles.Finra.Mcp.csproj" />
-      <ProjectReference Include="..\Equibles.Yahoo.Mcp\Equibles.Yahoo.Mcp.csproj" />
-      <ProjectReference Include="..\Equibles.Plugins\Equibles.Plugins.csproj" />
-    </ItemGroup>
-
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.Mcp\Equibles.Mcp.csproj" />
+    <ProjectReference Include="..\Equibles.Holdings.Mcp\Equibles.Holdings.Mcp.csproj" />
+    <ProjectReference Include="..\Equibles.InsiderTrading.Mcp\Equibles.InsiderTrading.Mcp.csproj" />
+    <ProjectReference Include="..\Equibles.Sec.Mcp\Equibles.Sec.Mcp.csproj" />
+    <ProjectReference Include="..\Equibles.Fred.Mcp\Equibles.Fred.Mcp.csproj" />
+    <ProjectReference Include="..\Equibles.Congress.Repositories\Equibles.Congress.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.Finra.Repositories\Equibles.Finra.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.Media.Repositories\Equibles.Media.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.Yahoo.Repositories\Equibles.Yahoo.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.Cftc.Mcp\Equibles.Cftc.Mcp.csproj" />
+    <ProjectReference Include="..\Equibles.Cboe.Mcp\Equibles.Cboe.Mcp.csproj" />
+    <ProjectReference Include="..\Equibles.Congress.Mcp\Equibles.Congress.Mcp.csproj" />
+    <ProjectReference Include="..\Equibles.Finra.Mcp\Equibles.Finra.Mcp.csproj" />
+    <ProjectReference Include="..\Equibles.Yahoo.Mcp\Equibles.Yahoo.Mcp.csproj" />
+    <ProjectReference Include="..\Equibles.Plugins\Equibles.Plugins.csproj" />
+  </ItemGroup>
 </Project>

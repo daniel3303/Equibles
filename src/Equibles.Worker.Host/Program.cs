@@ -28,10 +28,15 @@ using Serilog.Events;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.Services.AddSerilog(config => {
+builder.Services.AddSerilog(config =>
+{
     config.ReadFrom.Configuration(builder.Configuration);
     var minLevel = builder.Configuration["MinimumLogLevel"];
-    if (!string.IsNullOrEmpty(minLevel) && Enum.TryParse<LogEventLevel>(minLevel, true, out var level)) {
+    if (
+        !string.IsNullOrEmpty(minLevel)
+        && Enum.TryParse<LogEventLevel>(minLevel, true, out var level)
+    )
+    {
         config.MinimumLevel.Is(level);
     }
 });
@@ -43,26 +48,34 @@ builder.Services.AddEquiblesDbContext(connectionString, modules => modules.AddAl
 builder.Services.AddAllRepositories();
 
 // Worker-specific configuration
-builder.Services.Configure<WorkerOptions>(
-    builder.Configuration.GetSection("Worker"));
+builder.Services.Configure<WorkerOptions>(builder.Configuration.GetSection("Worker"));
 builder.Services.Configure<DocumentScraperOptions>(
-    builder.Configuration.GetSection("DocumentScraper"));
+    builder.Configuration.GetSection("DocumentScraper")
+);
 builder.Services.Configure<Equibles.Integrations.Finra.Configuration.FinraOptions>(
-    builder.Configuration.GetSection("Finra"));
+    builder.Configuration.GetSection("Finra")
+);
 builder.Services.Configure<Equibles.Finra.HostedService.Configuration.FinraScraperOptions>(
-    builder.Configuration.GetSection("FinraScraper"));
+    builder.Configuration.GetSection("FinraScraper")
+);
 builder.Services.Configure<Equibles.Sec.HostedService.Configuration.FtdScraperOptions>(
-    builder.Configuration.GetSection("FtdScraper"));
+    builder.Configuration.GetSection("FtdScraper")
+);
 builder.Services.Configure<Equibles.Fred.HostedService.Configuration.FredScraperOptions>(
-    builder.Configuration.GetSection("FredScraper"));
+    builder.Configuration.GetSection("FredScraper")
+);
 builder.Services.Configure<Equibles.Integrations.Fred.Configuration.FredOptions>(
-    builder.Configuration.GetSection("Fred"));
+    builder.Configuration.GetSection("Fred")
+);
 builder.Services.Configure<Equibles.Yahoo.HostedService.Configuration.YahooPriceScraperOptions>(
-    builder.Configuration.GetSection("YahooPriceScraper"));
+    builder.Configuration.GetSection("YahooPriceScraper")
+);
 builder.Services.Configure<Equibles.Cftc.HostedService.Configuration.CftcScraperOptions>(
-    builder.Configuration.GetSection("CftcScraper"));
+    builder.Configuration.GetSection("CftcScraper")
+);
 builder.Services.Configure<Equibles.Cboe.HostedService.Configuration.CboeScraperOptions>(
-    builder.Configuration.GetSection("CboeScraper"));
+    builder.Configuration.GetSection("CboeScraper")
+);
 
 builder.Services.AddHttpClient();
 

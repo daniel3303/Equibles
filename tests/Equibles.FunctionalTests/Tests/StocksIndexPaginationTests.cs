@@ -8,17 +8,20 @@ namespace Equibles.FunctionalTests.Tests;
 
 [Collection(FunctionalTestCollection.Name)]
 [Trait("Category", "Functional")]
-public class StocksIndexPaginationTests {
+public class StocksIndexPaginationTests
+{
     private readonly WebAppFixture _web;
     private readonly PlaywrightFixture _playwright;
 
-    public StocksIndexPaginationTests(WebAppFixture web, PlaywrightFixture playwright) {
+    public StocksIndexPaginationTests(WebAppFixture web, PlaywrightFixture playwright)
+    {
         _web = web;
         _playwright = playwright;
     }
 
     [Fact]
-    public async Task Index_GetWithFiveHundredSeededStocks_PaginatesUniquelyAcrossAllTenPages() {
+    public async Task Index_GetWithFiveHundredSeededStocks_PaginatesUniquelyAcrossAllTenPages()
+    {
         // Seeds 500 alphabetically-named tickers and walks every paginated page in the browser.
         // The Index action sorts by Ticker, applies Skip/Take with pageSize=50, and renders an
         // anchor per row. At volume this surfaces three failure modes that a single-row smoke
@@ -31,14 +34,19 @@ public class StocksIndexPaginationTests {
         const int pageSize = 50;
         const int totalPages = totalStocks / pageSize;
 
-        await _web.ResetAndSeedAsync(async db => {
+        await _web.ResetAndSeedAsync(async db =>
+        {
             db.ChangeTracker.AutoDetectChangesEnabled = false;
-            for (var i = 0; i < totalStocks; i++) {
-                db.Add(new CommonStock {
-                    Ticker = $"TST{i:D5}",
-                    Name = $"Test Company {i:D5}",
-                    Cik = $"CIK{i:D7}",
-                });
+            for (var i = 0; i < totalStocks; i++)
+            {
+                db.Add(
+                    new CommonStock
+                    {
+                        Ticker = $"TST{i:D5}",
+                        Name = $"Test Company {i:D5}",
+                        Cik = $"CIK{i:D7}",
+                    }
+                );
             }
             await Task.CompletedTask;
         });
@@ -46,21 +54,33 @@ public class StocksIndexPaginationTests {
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
         var seenTickers = new HashSet<string>();
 
-        for (var pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
+        for (var pageNumber = 1; pageNumber <= totalPages; pageNumber++)
+        {
             var response = await page.GotoAsync($"/stocks?page={pageNumber}");
             response.Should().NotBeNull();
             response!.Status.Should().Be(200);
 
-            await Assertions.Expect(page.Locator("p").Filter(new() { HasTextString = "Browse" }))
+            await Assertions
+                .Expect(page.Locator("p").Filter(new() { HasTextString = "Browse" }))
                 .ToContainTextAsync($"{totalStocks:N0} US common stocks");
 
-            var rowTickers = await page.Locator("tbody tr.stock-row td:first-child a").AllInnerTextsAsync();
-            rowTickers.Should().HaveCount(pageSize,
-                $"page {pageNumber} of {totalPages} must render exactly {pageSize} rows");
+            var rowTickers = await page.Locator("tbody tr.stock-row td:first-child a")
+                .AllInnerTextsAsync();
+            rowTickers
+                .Should()
+                .HaveCount(
+                    pageSize,
+                    $"page {pageNumber} of {totalPages} must render exactly {pageSize} rows"
+                );
 
-            foreach (var ticker in rowTickers) {
-                seenTickers.Add(ticker).Should().BeTrue(
-                    $"ticker {ticker} appeared on more than one page — Index's OrderBy(Ticker) lacks a stable tiebreaker");
+            foreach (var ticker in rowTickers)
+            {
+                seenTickers
+                    .Add(ticker)
+                    .Should()
+                    .BeTrue(
+                        $"ticker {ticker} appeared on more than one page — Index's OrderBy(Ticker) lacks a stable tiebreaker"
+                    );
             }
         }
 

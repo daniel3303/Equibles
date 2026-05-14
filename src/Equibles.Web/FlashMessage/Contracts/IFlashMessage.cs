@@ -1,6 +1,7 @@
 namespace Equibles.Web.FlashMessage.Contracts;
 
-public interface IFlashMessage {
+public interface IFlashMessage
+{
     public List<IFlashMessageModel> Peek();
     public List<IFlashMessageModel> Retrieve();
     public void Clear();

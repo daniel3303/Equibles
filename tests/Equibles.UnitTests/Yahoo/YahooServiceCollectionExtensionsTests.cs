@@ -8,9 +8,11 @@ using Microsoft.Extensions.Hosting;
 
 namespace Equibles.UnitTests.Yahoo;
 
-public class YahooServiceCollectionExtensionsTests {
+public class YahooServiceCollectionExtensionsTests
+{
     [Fact]
-    public void AddYahooWorker_AutoWiresIYahooFinanceClientFromIntegrationsAssembly() {
+    public void AddYahooWorker_AutoWiresIYahooFinanceClientFromIntegrationsAssembly()
+    {
         // Sibling to `AddYahooWorker_RegistersIStockPriceProviderAsYahooStockPriceProviderScoped`.
         // The existing pin covers the EXPLICIT `services.AddScoped<IStockPriceProvider, ...>`
         // binding — the cross-module contract the Holdings valuation
@@ -55,7 +57,8 @@ public class YahooServiceCollectionExtensionsTests {
     }
 
     [Fact]
-    public void AddYahooWorker_RegistersIStockPriceProviderAsYahooStockPriceProviderScoped() {
+    public void AddYahooWorker_RegistersIStockPriceProviderAsYahooStockPriceProviderScoped()
+    {
         // AddYahooWorker is the host's seam into auto-wiring for daily price
         // ingest AND it explicitly binds the cross-module IStockPriceProvider
         // contract to YahooStockPriceProvider. The Holdings valuation pipeline
@@ -69,14 +72,17 @@ public class YahooServiceCollectionExtensionsTests {
 
         services.AddYahooWorker();
 
-        var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(IStockPriceProvider));
+        var descriptor = services.SingleOrDefault(d =>
+            d.ServiceType == typeof(IStockPriceProvider)
+        );
         descriptor.Should().NotBeNull();
         descriptor.ImplementationType.Should().Be(typeof(YahooStockPriceProvider));
         descriptor.Lifetime.Should().Be(ServiceLifetime.Scoped);
     }
 
     [Fact]
-    public void AddYahooWorker_RegistersYahooPriceScraperWorkerAsIHostedService() {
+    public void AddYahooWorker_RegistersYahooPriceScraperWorkerAsIHostedService()
+    {
         // Third sibling in the AddYahooWorker registration family. The two
         // existing pins cover the AutoWires scan (IYahooFinanceClient) and
         // the explicit IStockPriceProvider binding (the cross-module contract
@@ -130,8 +136,11 @@ public class YahooServiceCollectionExtensionsTests {
             .Where(d => d.ServiceType == typeof(IHostedService))
             .ToList();
 
-        hostedServiceDescriptors.Should().Contain(
-            d => d.ImplementationType == typeof(YahooPriceScraperWorker),
-            "AddHostedService<YahooPriceScraperWorker>() must register the worker as IHostedService so the daily Yahoo Finance price refresh runs at startup");
+        hostedServiceDescriptors
+            .Should()
+            .Contain(
+                d => d.ImplementationType == typeof(YahooPriceScraperWorker),
+                "AddHostedService<YahooPriceScraperWorker>() must register the worker as IHostedService so the daily Yahoo Finance price refresh runs at startup"
+            );
     }
 }

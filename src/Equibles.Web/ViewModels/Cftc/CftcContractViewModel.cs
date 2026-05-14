@@ -2,7 +2,8 @@ using Equibles.Cftc.Data.Models;
 
 namespace Equibles.Web.ViewModels.Cftc;
 
-public class CftcContractViewModel {
+public class CftcContractViewModel
+{
     public string MarketCode { get; set; }
     public string MarketName { get; set; }
     public CftcContractCategory Category { get; set; }
@@ -16,7 +17,8 @@ public class CftcContractViewModel {
     public long? LatestNonCommSpreads { get; set; }
 }
 
-public class CftcReportItem {
+public class CftcReportItem
+{
     public DateOnly ReportDate { get; set; }
     public long OpenInterest { get; set; }
     public long CommLong { get; set; }

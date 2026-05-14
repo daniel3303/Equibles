@@ -2,7 +2,8 @@ using Newtonsoft.Json;
 
 namespace Equibles.Integrations.Sec.Models.Responses;
 
-internal class CompanyTickersResponse {
+internal class CompanyTickersResponse
+{
     [JsonProperty("fields")]
     public List<string> Fields { get; set; } = [];
 

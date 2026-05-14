@@ -42,7 +42,8 @@ namespace Equibles.FunctionalTests.Fixtures;
 /// could pin the authenticated path by setting <c>builder.Configuration["McpApiKey"]</c>
 /// before <c>Program.ConfigureServices</c> runs.
 /// </summary>
-public class McpServerAppFixture : IAsyncLifetime {
+public class McpServerAppFixture : IAsyncLifetime
+{
     private readonly PostgreSqlContainer _db = new PostgreSqlBuilder()
         .WithImage("paradedb/paradedb:latest")
         .WithDatabase("equibles_functional_mcp")
@@ -62,7 +63,8 @@ public class McpServerAppFixture : IAsyncLifetime {
     /// </summary>
     public IServiceProvider Services => _app.Services;
 
-    public async Task InitializeAsync() {
+    public async Task InitializeAsync()
+    {
         // MCP tool output formats with :N0 / :F2 which honour CurrentCulture per-thread.
         // The Kestrel-served threads inherit DefaultThreadCurrentCulture; without pinning
         // invariant, dev/CI machines on non-en-US locales would render "175,50" / "50 000 000"
@@ -77,16 +79,20 @@ public class McpServerAppFixture : IAsyncLifetime {
         // database. For the test fixture, apply migrations explicitly via a separate
         // DbContext that knows about Equibles.Migrations.DesignTimeDbContextFactory's
         // assembly, mirroring the ParadeDbFixture pattern used by the integration tests.
-        await using (var migrationContext = BuildMigrationContext(_db.GetConnectionString())) {
+        await using (var migrationContext = BuildMigrationContext(_db.GetConnectionString()))
+        {
             migrationContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(5));
             await migrationContext.Database.MigrateAsync();
         }
 
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions {
-            ApplicationName = "Equibles.Mcp.Server",
-            ContentRootPath = ResolveMcpServerContentRoot(),
-            EnvironmentName = "Production",
-        });
+        var builder = WebApplication.CreateBuilder(
+            new WebApplicationOptions
+            {
+                ApplicationName = "Equibles.Mcp.Server",
+                ContentRootPath = ResolveMcpServerContentRoot(),
+                EnvironmentName = "Production",
+            }
+        );
 
         builder.Configuration["ConnectionStrings:DefaultConnection"] = _db.GetConnectionString();
 
@@ -94,7 +100,8 @@ public class McpServerAppFixture : IAsyncLifetime {
         // IHttpClientFactory lazily on first use and isn't registered at composition time.
         // Match that behaviour so the fixture's host build doesn't reject the composition
         // before any request is served.
-        builder.Host.UseDefaultServiceProvider(o => {
+        builder.Host.UseDefaultServiceProvider(o =>
+        {
             o.ValidateOnBuild = false;
             o.ValidateScopes = false;
         });
@@ -109,7 +116,9 @@ public class McpServerAppFixture : IAsyncLifetime {
         // _app.Urls.First() returns the literally-configured URL ("...:0") rather than the
         // OS-assigned port. Pull the resolved bound address from IServerAddressesFeature so
         // tests can connect to the actual listener.
-        var addresses = _app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>();
+        var addresses = _app
+            .Services.GetRequiredService<IServer>()
+            .Features.Get<IServerAddressesFeature>();
         BaseUrl = addresses.Addresses.First();
 
         // Snapshot user tables for Respawn to replay TRUNCATE on every reset. Excludes the
@@ -118,11 +127,15 @@ public class McpServerAppFixture : IAsyncLifetime {
         // SqlClient, so pass an explicit NpgsqlConnection.
         await using var respawnConnection = new NpgsqlConnection(_db.GetConnectionString());
         await respawnConnection.OpenAsync();
-        _respawner = await Respawner.CreateAsync(respawnConnection, new RespawnerOptions {
-            DbAdapter = DbAdapter.Postgres,
-            SchemasToInclude = ["public"],
-            TablesToIgnore = [new Respawn.Graph.Table("__EFMigrationsHistory")],
-        });
+        _respawner = await Respawner.CreateAsync(
+            respawnConnection,
+            new RespawnerOptions
+            {
+                DbAdapter = DbAdapter.Postgres,
+                SchemasToInclude = ["public"],
+                TablesToIgnore = [new Respawn.Graph.Table("__EFMigrationsHistory")],
+            }
+        );
     }
 
     /// <summary>
@@ -134,13 +147,16 @@ public class McpServerAppFixture : IAsyncLifetime {
     /// Call this from a test's <c>InitializeAsync</c> so each test starts from a known state.
     /// xUnit creates a fresh test class instance per test, so per-test isolation is automatic.
     /// </summary>
-    public async Task ResetAndSeedAsync(Func<EquiblesDbContext, Task> seed = null) {
-        await using (var resetConnection = new NpgsqlConnection(_db.GetConnectionString())) {
+    public async Task ResetAndSeedAsync(Func<EquiblesDbContext, Task> seed = null)
+    {
+        await using (var resetConnection = new NpgsqlConnection(_db.GetConnectionString()))
+        {
             await resetConnection.OpenAsync();
             await _respawner.ResetAsync(resetConnection);
         }
 
-        if (seed is null) return;
+        if (seed is null)
+            return;
 
         using var scope = _app.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
@@ -148,25 +164,35 @@ public class McpServerAppFixture : IAsyncLifetime {
         await dbContext.SaveChangesAsync();
     }
 
-    public async Task DisposeAsync() {
-        if (_app is not null) {
+    public async Task DisposeAsync()
+    {
+        if (_app is not null)
+        {
             await _app.StopAsync();
             await _app.DisposeAsync();
         }
         await _db.DisposeAsync();
     }
 
-    private static EquiblesDbContext BuildMigrationContext(string connectionString) {
+    private static EquiblesDbContext BuildMigrationContext(string connectionString)
+    {
         var optionsBuilder = new DbContextOptionsBuilder<EquiblesDbContext>();
-        optionsBuilder.UseNpgsql(connectionString, npgsql => {
-            npgsql.UseVector();
-            npgsql.UseParadeDb();
-            npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
-            npgsql.MigrationsAssembly(typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly);
-        });
+        optionsBuilder.UseNpgsql(
+            connectionString,
+            npgsql =>
+            {
+                npgsql.UseVector();
+                npgsql.UseParadeDb();
+                npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+                npgsql.MigrationsAssembly(
+                    typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly
+                );
+            }
+        );
         optionsBuilder.UseLazyLoadingProxies();
 
-        IModuleConfiguration[] modules = [
+        IModuleConfiguration[] modules =
+        [
             new CommonStocksModuleConfiguration(),
             new HoldingsModuleConfiguration(),
             new InsiderTradingModuleConfiguration(),
@@ -184,14 +210,18 @@ public class McpServerAppFixture : IAsyncLifetime {
         return new EquiblesDbContext(optionsBuilder.Options, modules);
     }
 
-    private static string ResolveMcpServerContentRoot() {
+    private static string ResolveMcpServerContentRoot()
+    {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Equibles.sln"))) {
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Equibles.sln")))
+        {
             dir = dir.Parent;
         }
-        if (dir is null) {
+        if (dir is null)
+        {
             throw new InvalidOperationException(
-                "Could not locate Equibles.sln from test bin directory — fixture cannot resolve ContentRootPath.");
+                "Could not locate Equibles.sln from test bin directory — fixture cannot resolve ContentRootPath."
+            );
         }
         return Path.Combine(dir.FullName, "src", "Equibles.Mcp.Server");
     }

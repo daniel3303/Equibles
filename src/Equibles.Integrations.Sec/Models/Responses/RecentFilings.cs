@@ -2,7 +2,8 @@ using Newtonsoft.Json;
 
 namespace Equibles.Integrations.Sec.Models.Responses;
 
-internal class RecentFilings {
+internal class RecentFilings
+{
     [JsonProperty("accessionNumber")]
     public List<string> AccessionNumber { get; set; } = [];
 

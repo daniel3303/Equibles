@@ -4,7 +4,8 @@ namespace Equibles.Cboe.Data.Models;
 
 [Index(nameof(RatioType), nameof(Date), IsUnique = true)]
 [Index(nameof(Date))]
-public class CboePutCallRatio {
+public class CboePutCallRatio
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public CboePutCallRatioType RatioType { get; set; }

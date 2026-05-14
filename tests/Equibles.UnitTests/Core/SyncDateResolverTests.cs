@@ -3,9 +3,11 @@ using Equibles.Worker;
 
 namespace Equibles.UnitTests.Core;
 
-public class SyncDateResolverTests {
+public class SyncDateResolverTests
+{
     [Fact]
-    public void Resolve_NonDefaultLatestDate_ReturnsNextDay() {
+    public void Resolve_NonDefaultLatestDate_ReturnsNextDay()
+    {
         var latest = new DateOnly(2025, 6, 14);
 
         var result = SyncDateResolver.Resolve(latest, new WorkerOptions());
@@ -14,7 +16,8 @@ public class SyncDateResolverTests {
     }
 
     [Fact]
-    public void Resolve_DefaultLatestAndConfiguredMinSyncDate_ReturnsOperatorValue() {
+    public void Resolve_DefaultLatestAndConfiguredMinSyncDate_ReturnsOperatorValue()
+    {
         // Operators override the baked-in 2020-01-01 fallback by setting
         // WorkerOptions.MinSyncDate — typically to either backfill further back
         // (e.g. CFTC COT history from 1986) or to constrain a brand-new deployment
@@ -39,7 +42,8 @@ public class SyncDateResolverTests {
     }
 
     [Fact]
-    public void Resolve_DefaultLatestAndNullMinSyncDate_ReturnsBakedDefaultMinDate() {
+    public void Resolve_DefaultLatestAndNullMinSyncDate_ReturnsBakedDefaultMinDate()
+    {
         // Every domain worker that resolves its sync window through this helper
         // (Yahoo prices, FRED, CFTC, FTD) depends on the empty-DB fallback when
         // the operator hasn't set WorkerOptions.MinSyncDate. The fallback is a

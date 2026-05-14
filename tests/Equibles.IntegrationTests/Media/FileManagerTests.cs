@@ -1,22 +1,25 @@
+using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data;
 using Equibles.Media.Repositories;
-using Equibles.IntegrationTests.Helpers;
 
 namespace Equibles.IntegrationTests.Media;
 
-public class FileManagerTests {
+public class FileManagerTests
+{
     private readonly FileManager _sut;
     private readonly FileRepository _repository;
 
-    public FileManagerTests() {
+    public FileManagerTests()
+    {
         var context = TestDbContextFactory.Create(new MediaModuleConfiguration());
         _repository = new FileRepository(context);
         _sut = new FileManager(_repository);
     }
 
     [Fact]
-    public async Task SaveFile_Pdf_SetsCorrectExtensionAndMime() {
+    public async Task SaveFile_Pdf_SetsCorrectExtensionAndMime()
+    {
         var file = await _sut.SaveFile([0x01, 0x02], "document.pdf");
 
         file.Extension.Should().Be("pdf");
@@ -25,7 +28,8 @@ public class FileManagerTests {
     }
 
     [Fact]
-    public async Task SaveFile_Jpg_SetsImageJpegMime() {
+    public async Task SaveFile_Jpg_SetsImageJpegMime()
+    {
         var file = await _sut.SaveFile([0x01], "photo.jpg");
 
         file.Extension.Should().Be("jpg");
@@ -33,7 +37,8 @@ public class FileManagerTests {
     }
 
     [Fact]
-    public async Task SaveFile_Png_SetsImagePngMime() {
+    public async Task SaveFile_Png_SetsImagePngMime()
+    {
         var file = await _sut.SaveFile([0x01], "image.png");
 
         file.Extension.Should().Be("png");
@@ -41,7 +46,8 @@ public class FileManagerTests {
     }
 
     [Fact]
-    public async Task SaveFile_Txt_SetsTextPlainMime() {
+    public async Task SaveFile_Txt_SetsTextPlainMime()
+    {
         var file = await _sut.SaveFile([0x01], "readme.txt");
 
         file.Extension.Should().Be("txt");
@@ -49,7 +55,8 @@ public class FileManagerTests {
     }
 
     [Fact]
-    public async Task SaveFile_UnknownExtension_FallsBackToApplicationOctetStream() {
+    public async Task SaveFile_UnknownExtension_FallsBackToApplicationOctetStream()
+    {
         // SaveFile derives Content-Type from MimeTypeMap.GetMimeType(extension).
         // Every existing test (.pdf, .jpg, .png, .txt) hits a mapped entry, so
         // the fallback path — `if (string.IsNullOrEmpty(contentType))
@@ -73,14 +80,16 @@ public class FileManagerTests {
     }
 
     [Fact]
-    public async Task SaveFile_NoExtension_ThrowsArgumentException() {
+    public async Task SaveFile_NoExtension_ThrowsArgumentException()
+    {
         var act = () => _sut.SaveFile([0x01], "filename");
 
         await act.Should().ThrowAsync<ArgumentException>().WithMessage("*extension*");
     }
 
     [Fact]
-    public async Task SaveFile_SizeMatchesContentLength() {
+    public async Task SaveFile_SizeMatchesContentLength()
+    {
         var content = new byte[42];
 
         var file = await _sut.SaveFile(content, "data.pdf");
@@ -89,7 +98,8 @@ public class FileManagerTests {
     }
 
     [Fact]
-    public async Task SaveFile_FileContentLinked() {
+    public async Task SaveFile_FileContentLinked()
+    {
         var content = new byte[] { 1, 2, 3 };
 
         var file = await _sut.SaveFile(content, "test.pdf");
@@ -100,7 +110,8 @@ public class FileManagerTests {
     }
 
     [Fact]
-    public async Task SaveFile_EntityAddedToRepository() {
+    public async Task SaveFile_EntityAddedToRepository()
+    {
         await _sut.SaveFile([0x01], "test.pdf");
         await _repository.SaveChanges();
 
@@ -108,14 +119,16 @@ public class FileManagerTests {
     }
 
     [Fact]
-    public void DeleteFile_Null_DoesNotThrow() {
+    public void DeleteFile_Null_DoesNotThrow()
+    {
         var act = () => _sut.DeleteFile(null);
 
         act.Should().NotThrow();
     }
 
     [Fact]
-    public async Task DeleteFile_SavedFile_RemovesItFromRepository() {
+    public async Task DeleteFile_SavedFile_RemovesItFromRepository()
+    {
         // The companion DeleteFile_Null test only exercises the early
         // null guard. Without this, the actual delete branch is unpinned —
         // a refactor that "simplifies" DeleteFile to a no-op (or

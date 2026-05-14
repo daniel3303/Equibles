@@ -6,7 +6,8 @@ namespace Equibles.Yahoo.Data.Models;
 
 [Index(nameof(CommonStockId), nameof(Date), IsUnique = true)]
 [Index(nameof(Date))]
-public class DailyStockPrice {
+public class DailyStockPrice
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid CommonStockId { get; set; }

@@ -4,9 +4,11 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Equibles.UnitTests.Worker;
 
-public class ServiceCollectionExtensionsTests {
+public class ServiceCollectionExtensionsTests
+{
     [Fact]
-    public void AddWorkerServices_RegistersTickerMapServiceViaAutoWiring() {
+    public void AddWorkerServices_RegistersTickerMapServiceViaAutoWiring()
+    {
         // AddWorkerServices is the host's seam into auto-wiring — it scans
         // the Equibles.Worker assembly and registers every [Service]-
         // attributed type. The composition root (Equibles.Worker.Host)

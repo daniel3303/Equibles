@@ -31,7 +31,8 @@ namespace Equibles.IntegrationTests.Helpers;
 /// <see cref="ResetAsync"/> from its <see cref="IAsyncLifetime.InitializeAsync"/> to guarantee
 /// a clean state without re-running migrations.
 /// </summary>
-public class ParadeDbFixture : IAsyncLifetime {
+public class ParadeDbFixture : IAsyncLifetime
+{
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
         .WithImage("paradedb/paradedb:latest")
         .WithDatabase("equibles_integration")
@@ -43,11 +44,13 @@ public class ParadeDbFixture : IAsyncLifetime {
 
     public string ConnectionString { get; private set; }
 
-    public async Task InitializeAsync() {
+    public async Task InitializeAsync()
+    {
         await _container.StartAsync();
         ConnectionString = _container.GetConnectionString();
 
-        await using (var ctx = CreateDbContext()) {
+        await using (var ctx = CreateDbContext())
+        {
             // Production timeout: SetCommandTimeout for paranoid index rebuilds. Tests don't need
             // the hour-long ceiling, but a few minutes guards against a slow container on a
             // first-run cold start where Postgres is still warming up its shared buffers.
@@ -60,14 +63,19 @@ public class ParadeDbFixture : IAsyncLifetime {
         // state survives resets so we never re-apply migrations between tests.
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.OpenAsync();
-        _respawner = await Respawner.CreateAsync(connection, new RespawnerOptions {
-            DbAdapter = DbAdapter.Postgres,
-            SchemasToInclude = ["public"],
-            TablesToIgnore = [new Respawn.Graph.Table("__EFMigrationsHistory")],
-        });
+        _respawner = await Respawner.CreateAsync(
+            connection,
+            new RespawnerOptions
+            {
+                DbAdapter = DbAdapter.Postgres,
+                SchemasToInclude = ["public"],
+                TablesToIgnore = [new Respawn.Graph.Table("__EFMigrationsHistory")],
+            }
+        );
     }
 
-    public async Task DisposeAsync() {
+    public async Task DisposeAsync()
+    {
         await _container.DisposeAsync();
     }
 
@@ -77,17 +85,25 @@ public class ParadeDbFixture : IAsyncLifetime {
     /// and the migrations assembly so any future <c>MigrateAsync</c> call (e.g., reset)
     /// uses the same migration set.
     /// </summary>
-    public EquiblesDbContext CreateDbContext() {
+    public EquiblesDbContext CreateDbContext()
+    {
         var optionsBuilder = new DbContextOptionsBuilder<EquiblesDbContext>();
-        optionsBuilder.UseNpgsql(ConnectionString, npgsql => {
-            npgsql.UseVector();
-            npgsql.UseParadeDb();
-            npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
-            npgsql.MigrationsAssembly(typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly);
-        });
+        optionsBuilder.UseNpgsql(
+            ConnectionString,
+            npgsql =>
+            {
+                npgsql.UseVector();
+                npgsql.UseParadeDb();
+                npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+                npgsql.MigrationsAssembly(
+                    typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly
+                );
+            }
+        );
         optionsBuilder.UseLazyLoadingProxies();
 
-        IModuleConfiguration[] modules = [
+        IModuleConfiguration[] modules =
+        [
             new CommonStocksModuleConfiguration(),
             new HoldingsModuleConfiguration(),
             new InsiderTradingModuleConfiguration(),
@@ -110,7 +126,8 @@ public class ParadeDbFixture : IAsyncLifetime {
     /// history intact. Call from a test's <c>InitializeAsync</c> so each test starts from
     /// an empty database without paying the migration cost again.
     /// </summary>
-    public async Task ResetAsync() {
+    public async Task ResetAsync()
+    {
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.OpenAsync();
         await _respawner.ResetAsync(connection);

@@ -8,13 +8,15 @@ namespace Equibles.UnitTests.Integrations.Sec;
 /// The class is <c>internal</c> and the project has no <c>InternalsVisibleTo</c>,
 /// so we invoke <c>GetFormName</c> through reflection.
 /// </summary>
-public class DocumentTypeExtensionsTests {
-    private static readonly MethodInfo GetFormNameMethod = typeof(DocumentTypeFilter).Assembly
-        .GetType("Equibles.Integrations.Sec.Extensions.DocumentTypeExtensions")
+public class DocumentTypeExtensionsTests
+{
+    private static readonly MethodInfo GetFormNameMethod = typeof(DocumentTypeFilter)
+        .Assembly.GetType("Equibles.Integrations.Sec.Extensions.DocumentTypeExtensions")
         .GetMethod("GetFormName", BindingFlags.Public | BindingFlags.Static);
 
     [Fact]
-    public void GetFormName_UndefinedEnumValue_FallsBackToToStringNumericRepresentation() {
+    public void GetFormName_UndefinedEnumValue_FallsBackToToStringNumericRepresentation()
+    {
         // GetFormName chains `?.GetCustomAttribute<DisplayAttribute>()?.Name ??
         // documentType.ToString()`. When the enum value isn't a defined
         // member, GetField returns null, the attribute lookup short-circuits,
@@ -34,7 +36,8 @@ public class DocumentTypeExtensionsTests {
     }
 
     [Fact]
-    public void GetFormName_FormFour_ReturnsSecWireValue() {
+    public void GetFormName_FormFour_ReturnsSecWireValue()
+    {
         // SecEdgarClient filters EDGAR API responses by `f.Form == documentType.Value.GetFormName()`.
         // The C# enum value `FormFour` carries `[Display(Name = "4")]`, and SEC's wire format for
         // the Form 4 insider-transaction filing is the literal string "4". If GetFormName ever

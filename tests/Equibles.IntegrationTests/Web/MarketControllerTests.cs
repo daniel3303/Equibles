@@ -10,9 +10,11 @@ using NSubstitute;
 
 namespace Equibles.IntegrationTests.Web;
 
-public class MarketControllerTests {
+public class MarketControllerTests
+{
     [Fact]
-    public async Task PutCallRatio_UnknownTypeString_ReturnsNotFound() {
+    public async Task PutCallRatio_UnknownTypeString_ReturnsNotFound()
+    {
         // The route accepts {type} as a raw string and converts to CboePutCallRatioType
         // via Enum.TryParse. A regression that drops the TryParse guard would either
         // throw or fall through to a 200 with empty data — both are worse than 404
@@ -20,7 +22,11 @@ public class MarketControllerTests {
         using var ctx = TestDbContextFactory.Create(new CboeModuleConfiguration());
         var putCallRepo = new CboePutCallRatioRepository(ctx);
         var vixRepo = new CboeVixDailyRepository(ctx);
-        var sut = new MarketController(putCallRepo, vixRepo, Substitute.For<ILogger<MarketController>>());
+        var sut = new MarketController(
+            putCallRepo,
+            vixRepo,
+            Substitute.For<ILogger<MarketController>>()
+        );
 
         var result = await sut.PutCallRatio("not-a-real-ratio-type");
 
@@ -28,24 +34,33 @@ public class MarketControllerTests {
     }
 
     [Fact]
-    public async Task PutCallRatio_SingleRecord_RendersViewWithNullStdDev() {
+    public async Task PutCallRatio_SingleRecord_RendersViewWithNullStdDev()
+    {
         // DescriptiveStatistics.StandardDeviation returns NaN for a single-value sample
         // and casting NaN to decimal throws OverflowException. The action must guard the
         // cast and surface a null StdDev rather than 500-ing.
         using var ctx = TestDbContextFactory.Create(new CboeModuleConfiguration());
-        ctx.Set<CboePutCallRatio>().Add(new CboePutCallRatio {
-            RatioType = CboePutCallRatioType.Equity,
-            Date = new DateOnly(2025, 1, 2),
-            CallVolume = 1_000_000,
-            PutVolume = 750_000,
-            TotalVolume = 1_750_000,
-            PutCallRatio = 0.75m
-        });
+        ctx.Set<CboePutCallRatio>()
+            .Add(
+                new CboePutCallRatio
+                {
+                    RatioType = CboePutCallRatioType.Equity,
+                    Date = new DateOnly(2025, 1, 2),
+                    CallVolume = 1_000_000,
+                    PutVolume = 750_000,
+                    TotalVolume = 1_750_000,
+                    PutCallRatio = 0.75m,
+                }
+            );
         await ctx.SaveChangesAsync();
 
         var putCallRepo = new CboePutCallRatioRepository(ctx);
         var vixRepo = new CboeVixDailyRepository(ctx);
-        var sut = new MarketController(putCallRepo, vixRepo, Substitute.For<ILogger<MarketController>>());
+        var sut = new MarketController(
+            putCallRepo,
+            vixRepo,
+            Substitute.For<ILogger<MarketController>>()
+        );
 
         var result = await sut.PutCallRatio("equity");
 

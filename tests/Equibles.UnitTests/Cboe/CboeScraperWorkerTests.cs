@@ -9,9 +9,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Cboe;
 
-public class CboeScraperWorkerTests {
+public class CboeScraperWorkerTests
+{
     [Fact]
-    public void Constructor_AppliesSleepIntervalHoursFromOptionsAsTimeSpanHours() {
+    public void Constructor_AppliesSleepIntervalHoursFromOptionsAsTimeSpanHours()
+    {
         // CboeScraperWorker reads CboeScraperOptions.SleepIntervalHours
         // (inherited from ScraperOptions, default 24h) and stores it as a
         // TimeSpan via FromHours. CBOE publishes VIX and put/call data
@@ -26,14 +28,17 @@ public class CboeScraperWorkerTests {
             Substitute.For<IServiceScopeFactory>(),
             Substitute.For<ErrorReporter>(
                 Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()),
-            options);
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            options
+        );
 
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(6));
     }
 
     [Fact]
-    public void WorkerName_IsCboeScraper() {
+    public void WorkerName_IsCboeScraper()
+    {
         // WorkerName flows into BaseScraperWorker's startup/shutdown log output:
         //   _logger.LogInformation("Starting {WorkerName}", WorkerName);
         //   _logger.LogInformation("{WorkerName} stopped", WorkerName);
@@ -61,14 +66,17 @@ public class CboeScraperWorkerTests {
             Substitute.For<IServiceScopeFactory>(),
             Substitute.For<ErrorReporter>(
                 Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()),
-            options);
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            options
+        );
 
         sut.InvokeWorkerName().Should().Be("CBOE scraper");
     }
 
     [Fact]
-    public void ErrorSource_IsCboeScraper() {
+    public void ErrorSource_IsCboeScraper()
+    {
         // CboeScraperWorker pulls VIX history and put/call ratios from cboe.com —
         // a different upstream and data product from every other scraper. The
         // base `BaseScraperWorker` hands this enum value to `ErrorReporter.Report`
@@ -85,18 +93,22 @@ public class CboeScraperWorkerTests {
             Substitute.For<IServiceScopeFactory>(),
             Substitute.For<ErrorReporter>(
                 Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()),
-            options);
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            options
+        );
 
         sut.InvokeErrorSource().Should().Be(ErrorSource.CboeScraper);
     }
 
-    private sealed class TestableCboeScraperWorker : CboeScraperWorker {
+    private sealed class TestableCboeScraperWorker : CboeScraperWorker
+    {
         public TestableCboeScraperWorker(
             ILogger<CboeScraperWorker> logger,
             IServiceScopeFactory scopeFactory,
             ErrorReporter errorReporter,
-            IOptions<CboeScraperOptions> options)
+            IOptions<CboeScraperOptions> options
+        )
             : base(logger, scopeFactory, errorReporter, options) { }
 
         public TimeSpan InvokeSleepInterval() => SleepInterval;

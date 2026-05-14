@@ -6,11 +6,13 @@ using Equibles.IntegrationTests.Helpers;
 
 namespace Equibles.IntegrationTests.Errors;
 
-public class ErrorManagerTests {
+public class ErrorManagerTests
+{
     private readonly ErrorManager _sut;
     private readonly ErrorRepository _repository;
 
-    public ErrorManagerTests() {
+    public ErrorManagerTests()
+    {
         var context = TestDbContextFactory.Create(new ErrorsModuleConfiguration());
         _repository = new ErrorRepository(context);
         _sut = new ErrorManager(_repository);
@@ -19,8 +21,15 @@ public class ErrorManagerTests {
     // ── Create ──────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Create_NormalStrings_PersistsAllFields() {
-        await _sut.Create(ErrorSource.McpTool, "TestContext", "Test message", "stack trace", "request");
+    public async Task Create_NormalStrings_PersistsAllFields()
+    {
+        await _sut.Create(
+            ErrorSource.McpTool,
+            "TestContext",
+            "Test message",
+            "stack trace",
+            "request"
+        );
 
         var errors = _repository.GetAll().ToList();
         errors.Should().HaveCount(1);
@@ -33,7 +42,8 @@ public class ErrorManagerTests {
     }
 
     [Fact]
-    public async Task Create_ContextExceeds128Chars_TruncatesTo128() {
+    public async Task Create_ContextExceeds128Chars_TruncatesTo128()
+    {
         var longContext = new string('x', 200);
 
         await _sut.Create(ErrorSource.Other, longContext, "msg", null);
@@ -43,7 +53,8 @@ public class ErrorManagerTests {
     }
 
     [Fact]
-    public async Task Create_ContextExactly128Chars_NotTruncated() {
+    public async Task Create_ContextExactly128Chars_NotTruncated()
+    {
         var context = new string('x', 128);
 
         await _sut.Create(ErrorSource.Other, context, "msg", null);
@@ -54,7 +65,8 @@ public class ErrorManagerTests {
     }
 
     [Fact]
-    public async Task Create_NullContext_DefaultsToUnknown() {
+    public async Task Create_NullContext_DefaultsToUnknown()
+    {
         await _sut.Create(ErrorSource.Other, null, "msg", null);
 
         var error = _repository.GetAll().Single();
@@ -62,7 +74,8 @@ public class ErrorManagerTests {
     }
 
     [Fact]
-    public async Task Create_EmptyContext_StoresEmptyString() {
+    public async Task Create_EmptyContext_StoresEmptyString()
+    {
         await _sut.Create(ErrorSource.Other, "", "msg", null);
 
         var error = _repository.GetAll().Single();
@@ -70,7 +83,8 @@ public class ErrorManagerTests {
     }
 
     [Fact]
-    public async Task Create_EmptyMessage_StoresEmptyString() {
+    public async Task Create_EmptyMessage_StoresEmptyString()
+    {
         await _sut.Create(ErrorSource.Other, "ctx", "", null);
 
         var error = _repository.GetAll().Single();
@@ -78,7 +92,8 @@ public class ErrorManagerTests {
     }
 
     [Fact]
-    public async Task Create_MessageExceeds512Chars_TruncatesTo512() {
+    public async Task Create_MessageExceeds512Chars_TruncatesTo512()
+    {
         var longMessage = new string('m', 600);
 
         await _sut.Create(ErrorSource.Other, "ctx", longMessage, null);
@@ -88,7 +103,8 @@ public class ErrorManagerTests {
     }
 
     [Fact]
-    public async Task Create_MessageExactly512Chars_NotTruncated() {
+    public async Task Create_MessageExactly512Chars_NotTruncated()
+    {
         var message = new string('m', 512);
 
         await _sut.Create(ErrorSource.Other, "ctx", message, null);
@@ -99,7 +115,8 @@ public class ErrorManagerTests {
     }
 
     [Fact]
-    public async Task Create_NullMessage_DefaultsToNoMessageProvided() {
+    public async Task Create_NullMessage_DefaultsToNoMessageProvided()
+    {
         await _sut.Create(ErrorSource.Other, "ctx", null, null);
 
         var error = _repository.GetAll().Single();
@@ -107,7 +124,8 @@ public class ErrorManagerTests {
     }
 
     [Fact]
-    public async Task Create_RequestSummaryExceeds512Chars_TruncatesTo512() {
+    public async Task Create_RequestSummaryExceeds512Chars_TruncatesTo512()
+    {
         var longSummary = new string('r', 600);
 
         await _sut.Create(ErrorSource.Other, "ctx", "msg", null, longSummary);
@@ -117,7 +135,8 @@ public class ErrorManagerTests {
     }
 
     [Fact]
-    public async Task Create_NullRequestSummary_RemainsNull() {
+    public async Task Create_NullRequestSummary_RemainsNull()
+    {
         await _sut.Create(ErrorSource.Other, "ctx", "msg", null);
 
         var error = _repository.GetAll().Single();
@@ -125,7 +144,8 @@ public class ErrorManagerTests {
     }
 
     [Fact]
-    public async Task Create_StackTracePassesThrough_NoTruncation() {
+    public async Task Create_StackTracePassesThrough_NoTruncation()
+    {
         var longStack = new string('s', 5000);
 
         await _sut.Create(ErrorSource.Other, "ctx", "msg", longStack);
@@ -137,7 +157,8 @@ public class ErrorManagerTests {
     // ── MarkAsSeen ──────────────────────────────────────────────────────
 
     [Fact]
-    public async Task MarkAsSeen_SetsSeenToTrue() {
+    public async Task MarkAsSeen_SetsSeenToTrue()
+    {
         await _sut.Create(ErrorSource.Other, "ctx", "msg", null);
         var error = _repository.GetAll().Single();
         error.Seen.Should().BeFalse();
@@ -150,7 +171,8 @@ public class ErrorManagerTests {
     // ── Delete ──────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Delete_RemovesEntity() {
+    public async Task Delete_RemovesEntity()
+    {
         await _sut.Create(ErrorSource.Other, "ctx", "msg", null);
         var error = _repository.GetAll().Single();
 

@@ -8,9 +8,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Congress;
 
-public class CongressionalTradeSyncServiceTests {
+public class CongressionalTradeSyncServiceTests
+{
     [Fact]
-    public async Task SyncAll_MinSyncDateBeforeStockAct_ClampsFromDateTo20120401() {
+    public async Task SyncAll_MinSyncDateBeforeStockAct_ClampsFromDateTo20120401()
+    {
         // Congressional trade disclosures only exist from the STOCK Act's effective date
         // (2012-04-01). If an operator configures WorkerOptions.MinSyncDate to anything
         // earlier (e.g. a fresh deployment defaulting to the start of historical financial
@@ -35,12 +37,18 @@ public class CongressionalTradeSyncServiceTests {
         scopeFactory.CreateScope().Returns(scope);
         var errorReporter = Substitute.For<ErrorReporter>(
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ILogger<ErrorReporter>>());
-        var workerOptions = Options.Create(new WorkerOptions {
-            MinSyncDate = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-        });
+            Substitute.For<ILogger<ErrorReporter>>()
+        );
+        var workerOptions = Options.Create(
+            new WorkerOptions { MinSyncDate = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc) }
+        );
 
-        var sut = new CongressionalTradeSyncService(scopeFactory, workerOptions, logger, errorReporter);
+        var sut = new CongressionalTradeSyncService(
+            scopeFactory,
+            workerOptions,
+            logger,
+            errorReporter
+        );
 
         await sut.SyncAll(CancellationToken.None);
 
@@ -48,16 +56,20 @@ public class CongressionalTradeSyncServiceTests {
         // DateOnly.ToString() on the rendered message uses the host's short-date pattern
         // (e.g. "04/01/2012" on en-US, "01/04/2012" on en-GB), which would make a text
         // match flaky across machines.
-        logger.Received().Log(
-            LogLevel.Information,
-            Arg.Any<EventId>(),
-            Arg.Is<object>(state => StateContainsFrom(state, new DateOnly(2012, 4, 1))),
-            Arg.Any<Exception>(),
-            Arg.Any<Func<object, Exception, string>>());
+        logger
+            .Received()
+            .Log(
+                LogLevel.Information,
+                Arg.Any<EventId>(),
+                Arg.Is<object>(state => StateContainsFrom(state, new DateOnly(2012, 4, 1))),
+                Arg.Any<Exception>(),
+                Arg.Any<Func<object, Exception, string>>()
+            );
     }
 
     [Fact]
-    public async Task SyncAll_NullMinSyncDate_DefaultsToNinetyDayLookback() {
+    public async Task SyncAll_NullMinSyncDate_DefaultsToNinetyDayLookback()
+    {
         // Sibling to the STOCK-Act-clamp pin above. The risk this catches is the
         // PRODUCTION-DEFAULT branch of the same expression:
         //   var fromDate = _workerOptions.MinSyncDate.HasValue
@@ -93,36 +105,55 @@ public class CongressionalTradeSyncServiceTests {
         scopeFactory.CreateScope().Returns(scope);
         var errorReporter = Substitute.For<ErrorReporter>(
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ILogger<ErrorReporter>>());
+            Substitute.For<ILogger<ErrorReporter>>()
+        );
         var workerOptions = Options.Create(new WorkerOptions { MinSyncDate = null });
 
         var expectedFromUpper = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
         var expectedFromLower = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-91));
 
-        var sut = new CongressionalTradeSyncService(scopeFactory, workerOptions, logger, errorReporter);
+        var sut = new CongressionalTradeSyncService(
+            scopeFactory,
+            workerOptions,
+            logger,
+            errorReporter
+        );
 
         await sut.SyncAll(CancellationToken.None);
 
-        logger.Received().Log(
-            LogLevel.Information,
-            Arg.Any<EventId>(),
-            Arg.Is<object>(state => StateContainsFromInRange(state, expectedFromLower, expectedFromUpper)),
-            Arg.Any<Exception>(),
-            Arg.Any<Func<object, Exception, string>>());
+        logger
+            .Received()
+            .Log(
+                LogLevel.Information,
+                Arg.Any<EventId>(),
+                Arg.Is<object>(state =>
+                    StateContainsFromInRange(state, expectedFromLower, expectedFromUpper)
+                ),
+                Arg.Any<Exception>(),
+                Arg.Any<Func<object, Exception, string>>()
+            );
     }
 
-    private static bool StateContainsFrom(object state, DateOnly expected) {
-        if (state is not IReadOnlyList<KeyValuePair<string, object>> values) return false;
-        foreach (var kv in values) {
-            if (kv.Key == "From" && kv.Value is DateOnly d && d == expected) return true;
+    private static bool StateContainsFrom(object state, DateOnly expected)
+    {
+        if (state is not IReadOnlyList<KeyValuePair<string, object>> values)
+            return false;
+        foreach (var kv in values)
+        {
+            if (kv.Key == "From" && kv.Value is DateOnly d && d == expected)
+                return true;
         }
         return false;
     }
 
-    private static bool StateContainsFromInRange(object state, DateOnly lower, DateOnly upper) {
-        if (state is not IReadOnlyList<KeyValuePair<string, object>> values) return false;
-        foreach (var kv in values) {
-            if (kv.Key == "From" && kv.Value is DateOnly d && d >= lower && d <= upper) return true;
+    private static bool StateContainsFromInRange(object state, DateOnly lower, DateOnly upper)
+    {
+        if (state is not IReadOnlyList<KeyValuePair<string, object>> values)
+            return false;
+        foreach (var kv in values)
+        {
+            if (kv.Key == "From" && kv.Value is DateOnly d && d >= lower && d <= upper)
+                return true;
         }
         return false;
     }

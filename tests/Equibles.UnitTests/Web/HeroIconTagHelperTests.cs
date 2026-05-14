@@ -4,9 +4,11 @@ using Microsoft.AspNetCore.Razor.TagHelpers;
 
 namespace Equibles.UnitTests.Web;
 
-public class HeroIconTagHelperTests {
+public class HeroIconTagHelperTests
+{
     [Fact]
-    public void Process_SolidAttributeOnKnownIcon_RendersInlineSvgWithoutSurroundingIconTag() {
+    public void Process_SolidAttributeOnKnownIcon_RendersInlineSvgWithoutSurroundingIconTag()
+    {
         // The companion UnknownIconName test only exercises the outline-default
         // suppress path. This pins three things the tag helper must do for a
         // known icon when `solid="true"` is set: (1) take the Solid branch of
@@ -20,12 +22,14 @@ public class HeroIconTagHelperTests {
         var context = new TagHelperContext(
             new TagHelperAttributeList(),
             new Dictionary<object, object>(),
-            uniqueId: "test");
+            uniqueId: "test"
+        );
         var output = new TagHelperOutput(
             "icon",
             new TagHelperAttributeList(),
             getChildContentAsync: (useCachedResult, encoder) =>
-                Task.FromResult<TagHelperContent>(new DefaultTagHelperContent()));
+                Task.FromResult<TagHelperContent>(new DefaultTagHelperContent())
+        );
 
         sut.Process(context, output);
 
@@ -36,7 +40,8 @@ public class HeroIconTagHelperTests {
     }
 
     [Fact]
-    public void Process_KnownIconWithDefaultSolidFalse_RendersOutlineStyledSvgWithStrokeAndFillNone() {
+    public void Process_KnownIconWithDefaultSolidFalse_RendersOutlineStyledSvgWithStrokeAndFillNone()
+    {
         // Sibling pin to Process_SolidAttributeOnKnownIcon. The existing solid pin
         // asserts that with `solid="true"`, the rendered SVG carries
         // `fill="currentColor"` — the marker of the Solid style. It says NOTHING
@@ -84,12 +89,14 @@ public class HeroIconTagHelperTests {
         var context = new TagHelperContext(
             new TagHelperAttributeList(),
             new Dictionary<object, object>(),
-            uniqueId: "test");
+            uniqueId: "test"
+        );
         var output = new TagHelperOutput(
             "icon",
             new TagHelperAttributeList(),
             getChildContentAsync: (useCachedResult, encoder) =>
-                Task.FromResult<TagHelperContent>(new DefaultTagHelperContent()));
+                Task.FromResult<TagHelperContent>(new DefaultTagHelperContent())
+        );
 
         sut.Process(context, output);
 
@@ -101,17 +108,20 @@ public class HeroIconTagHelperTests {
     }
 
     [Fact]
-    public void Process_UnknownIconName_SuppressesOutput() {
+    public void Process_UnknownIconName_SuppressesOutput()
+    {
         var sut = new HeroIconTagHelper { Name = "this-icon-does-not-exist" };
         var context = new TagHelperContext(
             new TagHelperAttributeList(),
             new Dictionary<object, object>(),
-            uniqueId: "test");
+            uniqueId: "test"
+        );
         var output = new TagHelperOutput(
             "icon",
             new TagHelperAttributeList(),
             getChildContentAsync: (useCachedResult, encoder) =>
-                Task.FromResult<TagHelperContent>(new DefaultTagHelperContent()));
+                Task.FromResult<TagHelperContent>(new DefaultTagHelperContent())
+        );
 
         sut.Process(context, output);
 

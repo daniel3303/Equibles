@@ -9,17 +9,20 @@ namespace Equibles.FunctionalTests.Tests;
 
 [Collection(FunctionalTestCollection.Name)]
 [Trait("Category", "Functional")]
-public class StocksCongressionalTradesSeededTests {
+public class StocksCongressionalTradesSeededTests
+{
     private readonly WebAppFixture _web;
     private readonly PlaywrightFixture _playwright;
 
-    public StocksCongressionalTradesSeededTests(WebAppFixture web, PlaywrightFixture playwright) {
+    public StocksCongressionalTradesSeededTests(WebAppFixture web, PlaywrightFixture playwright)
+    {
         _web = web;
         _playwright = playwright;
     }
 
     [Fact]
-    public async Task CongressionalTrades_GetForStockWithSeededTrades_RendersFormattedAmountsAcrossEachCompactBranch() {
+    public async Task CongressionalTrades_GetForStockWithSeededTrades_RendersFormattedAmountsAcrossEachCompactBranch()
+    {
         // Pins _CongressionalTradesTab.cshtml's non-empty branch + its @functions
         // FormatAmount / FormatCompact helpers, which the empty-state test cannot exercise.
         // FormatCompact has three thresholds (>=1M → "{x}M", >=1K → "{x}K", else "{N0}"):
@@ -29,51 +32,67 @@ public class StocksCongressionalTradesSeededTests {
         var memberId = Guid.NewGuid();
         var transactionDate = new DateOnly(2026, 3, 15);
 
-        await _web.ResetAndSeedAsync(async db => {
-            db.Add(new CommonStock {
-                Id = stockId,
-                Ticker = "AAPL",
-                Name = "Apple Inc.",
-                Cik = "0000320193",
-            });
-            db.Add(new CongressMember {
-                Id = memberId,
-                Name = "Jane Senator",
-                Position = CongressPosition.Senator,
-            });
-            db.Add(new CongressionalTrade {
-                CommonStockId = stockId,
-                CongressMemberId = memberId,
-                TransactionDate = transactionDate,
-                FilingDate = transactionDate.AddDays(2),
-                TransactionType = CongressTransactionType.Purchase,
-                OwnerType = "Self",
-                AssetName = "AAPL Common Stock — million-range",
-                AmountFrom = 2_000_000,
-                AmountTo = 5_000_000,
-            });
-            db.Add(new CongressionalTrade {
-                CommonStockId = stockId,
-                CongressMemberId = memberId,
-                TransactionDate = transactionDate.AddDays(-1),
-                FilingDate = transactionDate.AddDays(1),
-                TransactionType = CongressTransactionType.Sale,
-                OwnerType = "Spouse",
-                AssetName = "AAPL Common Stock — thousand-range",
-                AmountFrom = 1_000,
-                AmountTo = 15_000,
-            });
-            db.Add(new CongressionalTrade {
-                CommonStockId = stockId,
-                CongressMemberId = memberId,
-                TransactionDate = transactionDate.AddDays(-2),
-                FilingDate = transactionDate,
-                TransactionType = CongressTransactionType.Purchase,
-                OwnerType = "Self",
-                AssetName = "AAPL Common Stock — below-thousand",
-                AmountFrom = 100,
-                AmountTo = 999,
-            });
+        await _web.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new CommonStock
+                {
+                    Id = stockId,
+                    Ticker = "AAPL",
+                    Name = "Apple Inc.",
+                    Cik = "0000320193",
+                }
+            );
+            db.Add(
+                new CongressMember
+                {
+                    Id = memberId,
+                    Name = "Jane Senator",
+                    Position = CongressPosition.Senator,
+                }
+            );
+            db.Add(
+                new CongressionalTrade
+                {
+                    CommonStockId = stockId,
+                    CongressMemberId = memberId,
+                    TransactionDate = transactionDate,
+                    FilingDate = transactionDate.AddDays(2),
+                    TransactionType = CongressTransactionType.Purchase,
+                    OwnerType = "Self",
+                    AssetName = "AAPL Common Stock — million-range",
+                    AmountFrom = 2_000_000,
+                    AmountTo = 5_000_000,
+                }
+            );
+            db.Add(
+                new CongressionalTrade
+                {
+                    CommonStockId = stockId,
+                    CongressMemberId = memberId,
+                    TransactionDate = transactionDate.AddDays(-1),
+                    FilingDate = transactionDate.AddDays(1),
+                    TransactionType = CongressTransactionType.Sale,
+                    OwnerType = "Spouse",
+                    AssetName = "AAPL Common Stock — thousand-range",
+                    AmountFrom = 1_000,
+                    AmountTo = 15_000,
+                }
+            );
+            db.Add(
+                new CongressionalTrade
+                {
+                    CommonStockId = stockId,
+                    CongressMemberId = memberId,
+                    TransactionDate = transactionDate.AddDays(-2),
+                    FilingDate = transactionDate,
+                    TransactionType = CongressTransactionType.Purchase,
+                    OwnerType = "Self",
+                    AssetName = "AAPL Common Stock — below-thousand",
+                    AmountFrom = 100,
+                    AmountTo = 999,
+                }
+            );
             await Task.CompletedTask;
         });
 
@@ -84,7 +103,8 @@ public class StocksCongressionalTradesSeededTests {
         response!.Status.Should().Be(200);
 
         // Non-empty branch executed — the empty-state h3 must NOT be present.
-        await Assertions.Expect(page.Locator("h3").Filter(new() { HasTextString = "No Congressional Trades" }))
+        await Assertions
+            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Congressional Trades" }))
             .ToHaveCountAsync(0);
 
         var rows = page.Locator("table tbody tr");

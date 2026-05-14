@@ -10,35 +10,54 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.IntegrationTests.Yahoo;
 
-public class DailyStockPriceRepositoryTests : IDisposable {
+public class DailyStockPriceRepositoryTests : IDisposable
+{
     private readonly EquiblesDbContext _dbContext;
     private readonly DailyStockPriceRepository _repository;
     private readonly CommonStock _apple;
     private readonly CommonStock _microsoft;
 
-    public DailyStockPriceRepositoryTests() {
+    public DailyStockPriceRepositoryTests()
+    {
         _dbContext = TestDbContextFactory.Create(
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
         _repository = new DailyStockPriceRepository(_dbContext);
 
-        _apple = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL", Name = "Apple Inc." };
-        _microsoft = new CommonStock { Id = Guid.NewGuid(), Ticker = "MSFT", Name = "Microsoft Corp." };
+        _apple = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+        };
+        _microsoft = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "MSFT",
+            Name = "Microsoft Corp.",
+        };
         _dbContext.Set<CommonStock>().AddRange(_apple, _microsoft);
         _dbContext.SaveChanges();
     }
 
-    public void Dispose() {
+    public void Dispose()
+    {
         _dbContext.Dispose();
     }
 
     private DailyStockPrice CreatePrice(
-        CommonStock stock, DateOnly date,
-        decimal close = 150m, decimal open = 148m,
-        decimal high = 152m, decimal low = 147m, long volume = 1_000_000
-    ) {
-        return new DailyStockPrice {
+        CommonStock stock,
+        DateOnly date,
+        decimal close = 150m,
+        decimal open = 148m,
+        decimal high = 152m,
+        decimal low = 147m,
+        long volume = 1_000_000
+    )
+    {
+        return new DailyStockPrice
+        {
             Id = Guid.NewGuid(),
             CommonStockId = stock.Id,
             Date = date,
@@ -51,7 +70,8 @@ public class DailyStockPriceRepositoryTests : IDisposable {
         };
     }
 
-    private async Task SeedPrices(params DailyStockPrice[] prices) {
+    private async Task SeedPrices(params DailyStockPrice[] prices)
+    {
         _dbContext.Set<DailyStockPrice>().AddRange(prices);
         await _dbContext.SaveChangesAsync();
     }
@@ -59,7 +79,8 @@ public class DailyStockPriceRepositoryTests : IDisposable {
     // ── GetByStock (all prices) ────────────────────────────────────────
 
     [Fact]
-    public async Task GetByStock_ReturnsPricesForRequestedStock() {
+    public async Task GetByStock_ReturnsPricesForRequestedStock()
+    {
         await SeedPrices(
             CreatePrice(_apple, new DateOnly(2026, 1, 2), close: 180m),
             CreatePrice(_apple, new DateOnly(2026, 1, 3), close: 182m),
@@ -73,10 +94,9 @@ public class DailyStockPriceRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByStock_ReturnsEmpty_WhenStockHasNoPrices() {
-        await SeedPrices(
-            CreatePrice(_apple, new DateOnly(2026, 1, 2), close: 180m)
-        );
+    public async Task GetByStock_ReturnsEmpty_WhenStockHasNoPrices()
+    {
+        await SeedPrices(CreatePrice(_apple, new DateOnly(2026, 1, 2), close: 180m));
 
         var result = await _repository.GetByStock(_microsoft).ToListAsync();
 
@@ -84,7 +104,8 @@ public class DailyStockPriceRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByStock_DoesNotReturnPricesFromOtherStocks() {
+    public async Task GetByStock_DoesNotReturnPricesFromOtherStocks()
+    {
         await SeedPrices(
             CreatePrice(_apple, new DateOnly(2026, 1, 2), close: 180m),
             CreatePrice(_microsoft, new DateOnly(2026, 1, 2), close: 400m),
@@ -100,7 +121,8 @@ public class DailyStockPriceRepositoryTests : IDisposable {
     // ── GetByStock (date range) ────────────────────────────────────────
 
     [Fact]
-    public async Task GetByStock_WithDateRange_FiltersCorrectly() {
+    public async Task GetByStock_WithDateRange_FiltersCorrectly()
+    {
         await SeedPrices(
             CreatePrice(_apple, new DateOnly(2026, 1, 1), close: 175m),
             CreatePrice(_apple, new DateOnly(2026, 1, 5), close: 180m),
@@ -117,7 +139,8 @@ public class DailyStockPriceRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByStock_WithDateRange_IncludesBoundaryDates() {
+    public async Task GetByStock_WithDateRange_IncludesBoundaryDates()
+    {
         var startDate = new DateOnly(2026, 3, 1);
         var endDate = new DateOnly(2026, 3, 31);
 
@@ -128,16 +151,15 @@ public class DailyStockPriceRepositoryTests : IDisposable {
             CreatePrice(_apple, new DateOnly(2026, 4, 1), close: 200m)
         );
 
-        var result = await _repository
-            .GetByStock(_apple, startDate, endDate)
-            .ToListAsync();
+        var result = await _repository.GetByStock(_apple, startDate, endDate).ToListAsync();
 
         result.Should().HaveCount(2);
         result.Select(p => p.Date).Should().BeEquivalentTo([startDate, endDate]);
     }
 
     [Fact]
-    public async Task GetByStock_WithDateRange_ReturnsEmpty_WhenNoPricesInRange() {
+    public async Task GetByStock_WithDateRange_ReturnsEmpty_WhenNoPricesInRange()
+    {
         await SeedPrices(
             CreatePrice(_apple, new DateOnly(2026, 1, 1), close: 175m),
             CreatePrice(_apple, new DateOnly(2026, 1, 31), close: 195m)
@@ -151,7 +173,8 @@ public class DailyStockPriceRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByStock_WithDateRange_ExcludesOtherStocks() {
+    public async Task GetByStock_WithDateRange_ExcludesOtherStocks()
+    {
         var date = new DateOnly(2026, 1, 5);
 
         await SeedPrices(
@@ -159,18 +182,16 @@ public class DailyStockPriceRepositoryTests : IDisposable {
             CreatePrice(_microsoft, date, close: 400m)
         );
 
-        var result = await _repository
-            .GetByStock(_apple, date, date)
-            .ToListAsync();
+        var result = await _repository.GetByStock(_apple, date, date).ToListAsync();
 
-        result.Should().ContainSingle()
-            .Which.Close.Should().Be(180m);
+        result.Should().ContainSingle().Which.Close.Should().Be(180m);
     }
 
     // ── GetLatestDate ──────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetLatestDate_ReturnsMostRecentDateForStock() {
+    public async Task GetLatestDate_ReturnsMostRecentDateForStock()
+    {
         await SeedPrices(
             CreatePrice(_apple, new DateOnly(2026, 1, 1)),
             CreatePrice(_apple, new DateOnly(2026, 3, 15)),
@@ -179,15 +200,13 @@ public class DailyStockPriceRepositoryTests : IDisposable {
 
         var result = await _repository.GetLatestDate(_apple).ToListAsync();
 
-        result.Should().ContainSingle()
-            .Which.Should().Be(new DateOnly(2026, 3, 15));
+        result.Should().ContainSingle().Which.Should().Be(new DateOnly(2026, 3, 15));
     }
 
     [Fact]
-    public async Task GetLatestDate_ReturnsEmpty_WhenStockHasNoPrices() {
-        await SeedPrices(
-            CreatePrice(_apple, new DateOnly(2026, 1, 1))
-        );
+    public async Task GetLatestDate_ReturnsEmpty_WhenStockHasNoPrices()
+    {
+        await SeedPrices(CreatePrice(_apple, new DateOnly(2026, 1, 1)));
 
         var result = await _repository.GetLatestDate(_microsoft).ToListAsync();
 
@@ -195,7 +214,8 @@ public class DailyStockPriceRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetLatestDate_IgnoresDatesFromOtherStocks() {
+    public async Task GetLatestDate_IgnoresDatesFromOtherStocks()
+    {
         await SeedPrices(
             CreatePrice(_apple, new DateOnly(2026, 1, 10)),
             CreatePrice(_microsoft, new DateOnly(2026, 3, 20))
@@ -203,14 +223,14 @@ public class DailyStockPriceRepositoryTests : IDisposable {
 
         var result = await _repository.GetLatestDate(_apple).ToListAsync();
 
-        result.Should().ContainSingle()
-            .Which.Should().Be(new DateOnly(2026, 1, 10));
+        result.Should().ContainSingle().Which.Should().Be(new DateOnly(2026, 1, 10));
     }
 
     // ── GetLatestDateAcrossAllStocks ───────────────────────────────────
 
     [Fact]
-    public async Task GetLatestDateAcrossAllStocks_ReturnsMostRecentDateOverall() {
+    public async Task GetLatestDateAcrossAllStocks_ReturnsMostRecentDateOverall()
+    {
         await SeedPrices(
             CreatePrice(_apple, new DateOnly(2026, 1, 10)),
             CreatePrice(_apple, new DateOnly(2026, 2, 5)),
@@ -219,19 +239,20 @@ public class DailyStockPriceRepositoryTests : IDisposable {
 
         var result = await _repository.GetLatestDateAcrossAllStocks().ToListAsync();
 
-        result.Should().ContainSingle()
-            .Which.Should().Be(new DateOnly(2026, 3, 1));
+        result.Should().ContainSingle().Which.Should().Be(new DateOnly(2026, 3, 1));
     }
 
     [Fact]
-    public async Task GetLatestDateAcrossAllStocks_ReturnsEmpty_WhenNoPricesExist() {
+    public async Task GetLatestDateAcrossAllStocks_ReturnsEmpty_WhenNoPricesExist()
+    {
         var result = await _repository.GetLatestDateAcrossAllStocks().ToListAsync();
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task GetLatestDateAcrossAllStocks_ReturnsSingleDate_WhenMultipleStocksShareIt() {
+    public async Task GetLatestDateAcrossAllStocks_ReturnsSingleDate_WhenMultipleStocksShareIt()
+    {
         var latestDate = new DateOnly(2026, 3, 15);
 
         await SeedPrices(
@@ -242,38 +263,57 @@ public class DailyStockPriceRepositoryTests : IDisposable {
 
         var result = await _repository.GetLatestDateAcrossAllStocks().ToListAsync();
 
-        result.Should().ContainSingle()
-            .Which.Should().Be(latestDate);
+        result.Should().ContainSingle().Which.Should().Be(latestDate);
     }
 }
 
-public class YahooStockPriceProviderTests : IDisposable {
+public class YahooStockPriceProviderTests : IDisposable
+{
     private readonly EquiblesDbContext _dbContext;
     private readonly YahooStockPriceProvider _provider;
     private readonly CommonStock _apple;
     private readonly CommonStock _microsoft;
     private readonly CommonStock _google;
 
-    public YahooStockPriceProviderTests() {
+    public YahooStockPriceProviderTests()
+    {
         _dbContext = TestDbContextFactory.Create(
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
         _provider = new YahooStockPriceProvider(_dbContext);
 
-        _apple = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL", Name = "Apple Inc." };
-        _microsoft = new CommonStock { Id = Guid.NewGuid(), Ticker = "MSFT", Name = "Microsoft Corp." };
-        _google = new CommonStock { Id = Guid.NewGuid(), Ticker = "GOOG", Name = "Alphabet Inc." };
+        _apple = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+        };
+        _microsoft = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "MSFT",
+            Name = "Microsoft Corp.",
+        };
+        _google = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "GOOG",
+            Name = "Alphabet Inc.",
+        };
         _dbContext.Set<CommonStock>().AddRange(_apple, _microsoft, _google);
         _dbContext.SaveChanges();
     }
 
-    public void Dispose() {
+    public void Dispose()
+    {
         _dbContext.Dispose();
     }
 
-    private DailyStockPrice CreatePrice(CommonStock stock, DateOnly date, decimal close) {
-        return new DailyStockPrice {
+    private DailyStockPrice CreatePrice(CommonStock stock, DateOnly date, decimal close)
+    {
+        return new DailyStockPrice
+        {
             Id = Guid.NewGuid(),
             CommonStockId = stock.Id,
             Date = date,
@@ -286,7 +326,8 @@ public class YahooStockPriceProviderTests : IDisposable {
         };
     }
 
-    private async Task SeedPrices(params DailyStockPrice[] prices) {
+    private async Task SeedPrices(params DailyStockPrice[] prices)
+    {
         _dbContext.Set<DailyStockPrice>().AddRange(prices);
         await _dbContext.SaveChangesAsync();
     }
@@ -294,7 +335,8 @@ public class YahooStockPriceProviderTests : IDisposable {
     // ── Exact date match ───────────────────────────────────────────────
 
     [Fact]
-    public async Task GetClosingPrices_ReturnsPriceForExactDate() {
+    public async Task GetClosingPrices_ReturnsPriceForExactDate()
+    {
         var date = new DateOnly(2026, 3, 2);
         await SeedPrices(CreatePrice(_apple, date, 180m));
 
@@ -305,17 +347,12 @@ public class YahooStockPriceProviderTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetClosingPrices_ReturnsMultiplePricesForExactDates() {
+    public async Task GetClosingPrices_ReturnsMultiplePricesForExactDates()
+    {
         var date = new DateOnly(2026, 3, 2);
-        await SeedPrices(
-            CreatePrice(_apple, date, 180m),
-            CreatePrice(_microsoft, date, 400m)
-        );
+        await SeedPrices(CreatePrice(_apple, date, 180m), CreatePrice(_microsoft, date, 400m));
 
-        var result = await _provider.GetClosingPrices([
-            (_apple.Id, date),
-            (_microsoft.Id, date),
-        ]);
+        var result = await _provider.GetClosingPrices([(_apple.Id, date), (_microsoft.Id, date)]);
 
         result.Should().HaveCount(2);
         result[(_apple.Id, date)].Should().Be(180m);
@@ -325,7 +362,8 @@ public class YahooStockPriceProviderTests : IDisposable {
     // ── Fallback to nearest prior date ─────────────────────────────────
 
     [Fact]
-    public async Task GetClosingPrices_FallsBackToNearestPriorDate_WithinLookbackWindow() {
+    public async Task GetClosingPrices_FallsBackToNearestPriorDate_WithinLookbackWindow()
+    {
         // Price exists 3 days before the requested date (within 7-day window)
         var priceDate = new DateOnly(2026, 3, 10);
         var requestDate = new DateOnly(2026, 3, 13);
@@ -339,13 +377,14 @@ public class YahooStockPriceProviderTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetClosingPrices_PicksClosestPriorDate_WhenMultipleCandidatesExist() {
+    public async Task GetClosingPrices_PicksClosestPriorDate_WhenMultipleCandidatesExist()
+    {
         var requestDate = new DateOnly(2026, 3, 15);
 
         await SeedPrices(
-            CreatePrice(_apple, new DateOnly(2026, 3, 9), 170m),   // 6 days prior
-            CreatePrice(_apple, new DateOnly(2026, 3, 12), 175m),  // 3 days prior (closest)
-            CreatePrice(_apple, new DateOnly(2026, 3, 10), 172m)   // 5 days prior
+            CreatePrice(_apple, new DateOnly(2026, 3, 9), 170m), // 6 days prior
+            CreatePrice(_apple, new DateOnly(2026, 3, 12), 175m), // 3 days prior (closest)
+            CreatePrice(_apple, new DateOnly(2026, 3, 10), 172m) // 5 days prior
         );
 
         var result = await _provider.GetClosingPrices([(_apple.Id, requestDate)]);
@@ -355,7 +394,8 @@ public class YahooStockPriceProviderTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetClosingPrices_FallsBackToExactly7DaysPrior() {
+    public async Task GetClosingPrices_FallsBackToExactly7DaysPrior()
+    {
         // Price at the boundary of the 7-day lookback window
         var priceDate = new DateOnly(2026, 3, 8);
         var requestDate = new DateOnly(2026, 3, 15);
@@ -371,7 +411,8 @@ public class YahooStockPriceProviderTests : IDisposable {
     // ── No price within window ─────────────────────────────────────────
 
     [Fact]
-    public async Task GetClosingPrices_ReturnsEmpty_WhenNoPriceWithinLookbackWindow() {
+    public async Task GetClosingPrices_ReturnsEmpty_WhenNoPriceWithinLookbackWindow()
+    {
         // Price exists 8 days before the requested date (outside 7-day window)
         var priceDate = new DateOnly(2026, 3, 7);
         var requestDate = new DateOnly(2026, 3, 15);
@@ -384,7 +425,8 @@ public class YahooStockPriceProviderTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetClosingPrices_ReturnsEmpty_WhenNoPricesExistForStock() {
+    public async Task GetClosingPrices_ReturnsEmpty_WhenNoPricesExistForStock()
+    {
         var requestDate = new DateOnly(2026, 3, 15);
 
         var result = await _provider.GetClosingPrices([(_apple.Id, requestDate)]);
@@ -393,7 +435,8 @@ public class YahooStockPriceProviderTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetClosingPrices_IgnoresFuturePrices() {
+    public async Task GetClosingPrices_IgnoresFuturePrices()
+    {
         var requestDate = new DateOnly(2026, 3, 10);
         var futureDate = new DateOnly(2026, 3, 12);
 
@@ -407,17 +450,15 @@ public class YahooStockPriceProviderTests : IDisposable {
     // ── Batch handling ─────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetClosingPrices_HandlesBatchWithMixedResults() {
+    public async Task GetClosingPrices_HandlesBatchWithMixedResults()
+    {
         var date = new DateOnly(2026, 3, 10);
         await SeedPrices(
             CreatePrice(_apple, date, 180m)
-            // No price for Microsoft
+        // No price for Microsoft
         );
 
-        var result = await _provider.GetClosingPrices([
-            (_apple.Id, date),
-            (_microsoft.Id, date),
-        ]);
+        var result = await _provider.GetClosingPrices([(_apple.Id, date), (_microsoft.Id, date)]);
 
         result.Should().ContainSingle();
         result.Should().ContainKey((_apple.Id, date));
@@ -425,7 +466,8 @@ public class YahooStockPriceProviderTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetClosingPrices_HandlesMultipleDatesForSameStock() {
+    public async Task GetClosingPrices_HandlesMultipleDatesForSameStock()
+    {
         await SeedPrices(
             CreatePrice(_apple, new DateOnly(2026, 1, 10), 170m),
             CreatePrice(_apple, new DateOnly(2026, 2, 10), 180m),
@@ -445,7 +487,8 @@ public class YahooStockPriceProviderTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetClosingPrices_HandlesMultipleStocksWithDifferentDates() {
+    public async Task GetClosingPrices_HandlesMultipleStocksWithDifferentDates()
+    {
         await SeedPrices(
             CreatePrice(_apple, new DateOnly(2026, 3, 5), 180m),
             CreatePrice(_microsoft, new DateOnly(2026, 3, 10), 400m),
@@ -467,28 +510,28 @@ public class YahooStockPriceProviderTests : IDisposable {
     // ── Edge cases ─────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetClosingPrices_EmptyRequests_ReturnsEmptyDictionary() {
+    public async Task GetClosingPrices_EmptyRequests_ReturnsEmptyDictionary()
+    {
         var result = await _provider.GetClosingPrices([]);
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task GetClosingPrices_DuplicateRequests_ReturnsSingleEntry() {
+    public async Task GetClosingPrices_DuplicateRequests_ReturnsSingleEntry()
+    {
         var date = new DateOnly(2026, 3, 10);
         await SeedPrices(CreatePrice(_apple, date, 180m));
 
-        var result = await _provider.GetClosingPrices([
-            (_apple.Id, date),
-            (_apple.Id, date),
-        ]);
+        var result = await _provider.GetClosingPrices([(_apple.Id, date), (_apple.Id, date)]);
 
         result.Should().ContainSingle();
         result[(_apple.Id, date)].Should().Be(180m);
     }
 
     [Fact]
-    public async Task GetClosingPrices_PreferExactDate_OverEarlierDates() {
+    public async Task GetClosingPrices_PreferExactDate_OverEarlierDates()
+    {
         var requestDate = new DateOnly(2026, 3, 10);
 
         await SeedPrices(
@@ -502,14 +545,13 @@ public class YahooStockPriceProviderTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetClosingPrices_SupportsCancellation() {
+    public async Task GetClosingPrices_SupportsCancellation()
+    {
         var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var act = async () => await _provider.GetClosingPrices(
-            [(_apple.Id, new DateOnly(2026, 3, 10))],
-            cts.Token
-        );
+        var act = async () =>
+            await _provider.GetClosingPrices([(_apple.Id, new DateOnly(2026, 3, 10))], cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }

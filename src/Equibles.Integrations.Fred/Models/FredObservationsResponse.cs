@@ -2,7 +2,8 @@ using Newtonsoft.Json;
 
 namespace Equibles.Integrations.Fred.Models;
 
-public class FredObservationsResponse {
+public class FredObservationsResponse
+{
     [JsonProperty("realtime_start")]
     public string RealtimeStart { get; set; }
 
@@ -28,7 +29,8 @@ public class FredObservationsResponse {
     public List<FredObservationRecord> Observations { get; set; } = [];
 }
 
-public class FredObservationRecord {
+public class FredObservationRecord
+{
     [JsonProperty("date")]
     public string Date { get; set; }
 

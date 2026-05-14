@@ -113,8 +113,10 @@ public class ErrorSourceTests
 
     private static ErrorSource GetStaticInstance(string fieldName)
     {
-        var field = typeof(ErrorSource).GetField(fieldName,
-            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+        var field = typeof(ErrorSource).GetField(
+            fieldName,
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static
+        );
 
         return field?.GetValue(null) as ErrorSource
             ?? throw new ArgumentException($"No static field '{fieldName}' found on ErrorSource");

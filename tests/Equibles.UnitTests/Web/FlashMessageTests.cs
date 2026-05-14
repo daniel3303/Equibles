@@ -6,70 +6,81 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Equibles.UnitTests.Web;
 
-public class FlashMessageModelTests {
+public class FlashMessageModelTests
+{
     [Fact]
-    public void Constructor_DefaultType_IsSuccess() {
+    public void Constructor_DefaultType_IsSuccess()
+    {
         var model = new FlashMessageModel();
 
         model.Type.Should().Be(FlashMessageType.Success);
     }
 
     [Fact]
-    public void Constructor_DefaultIsHtml_IsFalse() {
+    public void Constructor_DefaultIsHtml_IsFalse()
+    {
         var model = new FlashMessageModel();
 
         model.IsHtml.Should().BeFalse();
     }
 
     [Fact]
-    public void Constructor_DefaultTitle_IsNull() {
+    public void Constructor_DefaultTitle_IsNull()
+    {
         var model = new FlashMessageModel();
 
         model.Title.Should().BeNull();
     }
 
     [Fact]
-    public void Constructor_DefaultMessage_IsNull() {
+    public void Constructor_DefaultMessage_IsNull()
+    {
         var model = new FlashMessageModel();
 
         model.Message.Should().BeNull();
     }
 
     [Fact]
-    public void Properties_CanSetTitle() {
+    public void Properties_CanSetTitle()
+    {
         var model = new FlashMessageModel { Title = "Test Title" };
 
         model.Title.Should().Be("Test Title");
     }
 
     [Fact]
-    public void Properties_CanSetMessage() {
+    public void Properties_CanSetMessage()
+    {
         var model = new FlashMessageModel { Message = "Something happened" };
 
         model.Message.Should().Be("Something happened");
     }
 
     [Fact]
-    public void Properties_CanSetType() {
+    public void Properties_CanSetType()
+    {
         var model = new FlashMessageModel { Type = FlashMessageType.Error };
 
         model.Type.Should().Be(FlashMessageType.Error);
     }
 
     [Fact]
-    public void Properties_CanSetIsHtml() {
+    public void Properties_CanSetIsHtml()
+    {
         var model = new FlashMessageModel { IsHtml = true };
 
         model.IsHtml.Should().BeTrue();
     }
 
     [Fact]
-    public void Properties_CanSetAllAtOnce() {
-        var model = new FlashMessageModel {
+    public void Properties_CanSetAllAtOnce()
+    {
+        var model = new FlashMessageModel
+        {
             Title = "Alert",
             Message = "<b>Bold</b>",
             Type = FlashMessageType.Warning,
-            IsHtml = true
+            IsHtml = true,
         };
 
         model.Title.Should().Be("Alert");
@@ -79,19 +90,23 @@ public class FlashMessageModelTests {
     }
 }
 
-public class FlashMessageTypeTests {
+public class FlashMessageTypeTests
+{
     [Theory]
     [InlineData(FlashMessageType.Info, "Information")]
     [InlineData(FlashMessageType.Warning, "Warning")]
     [InlineData(FlashMessageType.Error, "Error")]
     [InlineData(FlashMessageType.Success, "Success")]
-    public void NameForHumans_ReturnsDisplayAttributeName(FlashMessageType type, string expected) {
+    public void NameForHumans_ReturnsDisplayAttributeName(FlashMessageType type, string expected)
+    {
         type.NameForHumans().Should().Be(expected);
     }
 
     [Fact]
-    public void AllValues_HaveDisplayAttribute() {
-        foreach (var value in Enum.GetValues<FlashMessageType>()) {
+    public void AllValues_HaveDisplayAttribute()
+    {
+        foreach (var value in Enum.GetValues<FlashMessageType>())
+        {
             var act = () => value.NameForHumans();
             act.Should().NotThrow();
             value.NameForHumans().Should().NotBeNullOrEmpty();
@@ -99,23 +114,28 @@ public class FlashMessageTypeTests {
     }
 
     [Fact]
-    public void Enum_HasFourValues() {
+    public void Enum_HasFourValues()
+    {
         Enum.GetValues<FlashMessageType>().Should().HaveCount(4);
     }
 }
 
-public class JsonFlashMessageSerializerTests {
+public class JsonFlashMessageSerializerTests
+{
     private readonly JsonFlashMessageSerializer _serializer = new();
 
     [Fact]
-    public void Serialize_SingleMessage_ProducesValidJson() {
-        var messages = new List<IFlashMessageModel> {
-            new FlashMessageModel {
+    public void Serialize_SingleMessage_ProducesValidJson()
+    {
+        var messages = new List<IFlashMessageModel>
+        {
+            new FlashMessageModel
+            {
                 Title = "Done",
                 Message = "Saved successfully",
                 Type = FlashMessageType.Success,
-                IsHtml = false
-            }
+                IsHtml = false,
+            },
         };
 
         var json = _serializer.Serialize(messages);
@@ -125,14 +145,17 @@ public class JsonFlashMessageSerializerTests {
     }
 
     [Fact]
-    public void Serialize_SingleMessage_ContainsExpectedProperties() {
-        var messages = new List<IFlashMessageModel> {
-            new FlashMessageModel {
+    public void Serialize_SingleMessage_ContainsExpectedProperties()
+    {
+        var messages = new List<IFlashMessageModel>
+        {
+            new FlashMessageModel
+            {
                 Title = "Done",
                 Message = "Saved successfully",
                 Type = FlashMessageType.Success,
-                IsHtml = false
-            }
+                IsHtml = false,
+            },
         };
 
         var json = _serializer.Serialize(messages);
@@ -142,7 +165,8 @@ public class JsonFlashMessageSerializerTests {
     }
 
     [Fact]
-    public void Serialize_EmptyList_ProducesEmptyJsonArray() {
+    public void Serialize_EmptyList_ProducesEmptyJsonArray()
+    {
         var messages = new List<IFlashMessageModel>();
 
         var json = _serializer.Serialize(messages);
@@ -151,12 +175,14 @@ public class JsonFlashMessageSerializerTests {
     }
 
     [Fact]
-    public void Deserialize_RoundTrip_PreservesAllProperties() {
-        var original = new FlashMessageModel {
+    public void Deserialize_RoundTrip_PreservesAllProperties()
+    {
+        var original = new FlashMessageModel
+        {
             Title = "Alert",
             Message = "Something went wrong",
             Type = FlashMessageType.Error,
-            IsHtml = true
+            IsHtml = true,
         };
         var messages = new List<IFlashMessageModel> { original };
 
@@ -171,11 +197,13 @@ public class JsonFlashMessageSerializerTests {
     }
 
     [Fact]
-    public void Deserialize_MultipleMessages_PreservesOrder() {
-        var messages = new List<IFlashMessageModel> {
+    public void Deserialize_MultipleMessages_PreservesOrder()
+    {
+        var messages = new List<IFlashMessageModel>
+        {
             new FlashMessageModel { Message = "First", Type = FlashMessageType.Info },
             new FlashMessageModel { Message = "Second", Type = FlashMessageType.Warning },
-            new FlashMessageModel { Message = "Third", Type = FlashMessageType.Error }
+            new FlashMessageModel { Message = "Third", Type = FlashMessageType.Error },
         };
 
         var json = _serializer.Serialize(messages);
@@ -191,9 +219,11 @@ public class JsonFlashMessageSerializerTests {
     }
 
     [Fact]
-    public void Deserialize_RoundTrip_PreservesIsHtmlFalse() {
-        var messages = new List<IFlashMessageModel> {
-            new FlashMessageModel { Message = "Plain text", IsHtml = false }
+    public void Deserialize_RoundTrip_PreservesIsHtmlFalse()
+    {
+        var messages = new List<IFlashMessageModel>
+        {
+            new FlashMessageModel { Message = "Plain text", IsHtml = false },
         };
 
         var json = _serializer.Serialize(messages);
@@ -203,9 +233,11 @@ public class JsonFlashMessageSerializerTests {
     }
 
     [Fact]
-    public void Deserialize_RoundTrip_PreservesNullTitle() {
-        var messages = new List<IFlashMessageModel> {
-            new FlashMessageModel { Message = "No title" }
+    public void Deserialize_RoundTrip_PreservesNullTitle()
+    {
+        var messages = new List<IFlashMessageModel>
+        {
+            new FlashMessageModel { Message = "No title" },
         };
 
         var json = _serializer.Serialize(messages);
@@ -215,7 +247,8 @@ public class JsonFlashMessageSerializerTests {
     }
 
     [Fact]
-    public void Deserialize_EmptyJsonArray_ReturnsEmptyList() {
+    public void Deserialize_EmptyJsonArray_ReturnsEmptyList()
+    {
         var result = _serializer.Deserialize("[]");
 
         result.Should().NotBeNull();
@@ -223,7 +256,8 @@ public class JsonFlashMessageSerializerTests {
     }
 
     [Fact]
-    public void Deserialize_NullJsonLiteral_ReturnsNullWithoutThrowing() {
+    public void Deserialize_NullJsonLiteral_ReturnsNullWithoutThrowing()
+    {
         // TempData persists the serialized payload as a string; some
         // serializer paths emit the literal "null" JSON token when no
         // messages were ever queued. JsonSerializer.Deserialize<T>("null")
@@ -240,31 +274,35 @@ public class JsonFlashMessageSerializerTests {
     }
 
     [Fact]
-    public void Deserialize_AllFlashMessageTypes_RoundTripCorrectly() {
+    public void Deserialize_AllFlashMessageTypes_RoundTripCorrectly()
+    {
         var messages = Enum.GetValues<FlashMessageType>()
-            .Select(t => (IFlashMessageModel)new FlashMessageModel {
-                Message = $"Type: {t}",
-                Type = t
-            })
+            .Select(t =>
+                (IFlashMessageModel)new FlashMessageModel { Message = $"Type: {t}", Type = t }
+            )
             .ToList();
 
         var json = _serializer.Serialize(messages);
         var result = _serializer.Deserialize(json);
 
         result.Should().HaveCount(messages.Count);
-        for (var i = 0; i < messages.Count; i++) {
+        for (var i = 0; i < messages.Count; i++)
+        {
             result[i].Type.Should().Be(messages[i].Type);
             result[i].Message.Should().Be(messages[i].Message);
         }
     }
 
     [Fact]
-    public void Deserialize_HtmlContent_IsPreserved() {
-        var messages = new List<IFlashMessageModel> {
-            new FlashMessageModel {
+    public void Deserialize_HtmlContent_IsPreserved()
+    {
+        var messages = new List<IFlashMessageModel>
+        {
+            new FlashMessageModel
+            {
                 Message = "<strong>Important</strong> <a href=\"/link\">click here</a>",
-                IsHtml = true
-            }
+                IsHtml = true,
+            },
         };
 
         var json = _serializer.Serialize(messages);
@@ -275,33 +313,43 @@ public class JsonFlashMessageSerializerTests {
     }
 }
 
-public class FlashMessageExtensionsTests {
+public class FlashMessageExtensionsTests
+{
     [Fact]
-    public void AddFlashMessage_RegistersIFlashMessage() {
+    public void AddFlashMessage_RegistersIFlashMessage()
+    {
         var services = new ServiceCollection();
 
         services.AddFlashMessage();
 
-        services.Should().Contain(sd =>
-            sd.ServiceType == typeof(IFlashMessage) &&
-            sd.ImplementationType == typeof(Equibles.Web.FlashMessage.FlashMessage) &&
-            sd.Lifetime == ServiceLifetime.Transient);
+        services
+            .Should()
+            .Contain(sd =>
+                sd.ServiceType == typeof(IFlashMessage)
+                && sd.ImplementationType == typeof(Equibles.Web.FlashMessage.FlashMessage)
+                && sd.Lifetime == ServiceLifetime.Transient
+            );
     }
 
     [Fact]
-    public void AddFlashMessage_RegistersIFlashMessageSerializer() {
+    public void AddFlashMessage_RegistersIFlashMessageSerializer()
+    {
         var services = new ServiceCollection();
 
         services.AddFlashMessage();
 
-        services.Should().Contain(sd =>
-            sd.ServiceType == typeof(IFlashMessageSerializer) &&
-            sd.ImplementationType == typeof(JsonFlashMessageSerializer) &&
-            sd.Lifetime == ServiceLifetime.Transient);
+        services
+            .Should()
+            .Contain(sd =>
+                sd.ServiceType == typeof(IFlashMessageSerializer)
+                && sd.ImplementationType == typeof(JsonFlashMessageSerializer)
+                && sd.Lifetime == ServiceLifetime.Transient
+            );
     }
 
     [Fact]
-    public void AddFlashMessage_RegistersExactlyTwoServices() {
+    public void AddFlashMessage_RegistersExactlyTwoServices()
+    {
         var services = new ServiceCollection();
 
         services.AddFlashMessage();
@@ -310,7 +358,8 @@ public class FlashMessageExtensionsTests {
     }
 
     [Fact]
-    public void AddFlashMessage_CalledTwice_RegistersDuplicates() {
+    public void AddFlashMessage_CalledTwice_RegistersDuplicates()
+    {
         var services = new ServiceCollection();
 
         services.AddFlashMessage();

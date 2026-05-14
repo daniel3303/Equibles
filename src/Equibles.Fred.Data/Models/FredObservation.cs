@@ -4,7 +4,8 @@ namespace Equibles.Fred.Data.Models;
 
 [Index(nameof(FredSeriesId), nameof(Date), IsUnique = true)]
 [Index(nameof(Date))]
-public class FredObservation {
+public class FredObservation
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid FredSeriesId { get; set; }

@@ -8,33 +8,40 @@ namespace Equibles.UnitTests.Integrations;
 /// Tests for <see cref="CboeClient"/>. The public entry points hit cdn.cboe.com,
 /// so we exercise the pure-logic private CSV parser via reflection.
 /// </summary>
-public class CboeClientTests {
-    private static readonly MethodInfo ParsePutCallCsvMethod = typeof(CboeClient)
-        .GetMethod("ParsePutCallCsv", BindingFlags.NonPublic | BindingFlags.Static);
+public class CboeClientTests
+{
+    private static readonly MethodInfo ParsePutCallCsvMethod = typeof(CboeClient).GetMethod(
+        "ParsePutCallCsv",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
-    private static readonly MethodInfo ParseVixCsvMethod = typeof(CboeClient)
-        .GetMethod("ParseVixCsv", BindingFlags.NonPublic | BindingFlags.Static);
+    private static readonly MethodInfo ParseVixCsvMethod = typeof(CboeClient).GetMethod(
+        "ParseVixCsv",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
     [Fact]
-    public void ParsePutCallCsv_RowWithUnparseableDate_IsSkipped() {
+    public void ParsePutCallCsv_RowWithUnparseableDate_IsSkipped()
+    {
         // The CBOE CSV occasionally carries narrative rows ("Disclaimer:...") between
         // the header and real data. ParsePutCallCsv must skip any row whose first
         // field doesn't match the MM/dd/yyyy exact-format date. If a regression
         // loosened TryParseExact (e.g. switched to TryParse), narrative rows would
         // be parsed as DateTime.MinValue and silently flood the database with junk
         // ratio records. Pin the skip path on a non-date row.
-        var csv = "Date,Call Volume,Put Volume,Total Volume,P/C Ratio\n" +
-                  "Disclaimer: data provided by CBOE,,,,\n" +
-                  "01/15/2025,100000,80000,200000,0.80\n";
+        var csv =
+            "Date,Call Volume,Put Volume,Total Volume,P/C Ratio\n"
+            + "Disclaimer: data provided by CBOE,,,,\n"
+            + "01/15/2025,100000,80000,200000,0.80\n";
 
         var records = (List<CboePutCallRecord>)ParsePutCallCsvMethod.Invoke(null, [csv]);
 
-        records.Should().ContainSingle()
-            .Which.Date.Should().Be(new DateOnly(2025, 1, 15));
+        records.Should().ContainSingle().Which.Date.Should().Be(new DateOnly(2025, 1, 15));
     }
 
     [Fact]
-    public void ParsePutCallCsv_RowWithFewerThanFiveFields_IsSkippedWithoutThrowing() {
+    public void ParsePutCallCsv_RowWithFewerThanFiveFields_IsSkippedWithoutThrowing()
+    {
         // The CBOE put/call CSV expects rows of the form
         //   Date,CallVolume,PutVolume,TotalVolume,P/C Ratio
         // Real CBOE feeds occasionally emit truncated rows during data outages
@@ -62,18 +69,19 @@ public class CboeClientTests {
         // and no exception escapes ParsePutCallCsv. The single-record
         // assertion on the valid date proves the parser CONTINUED past the
         // malformed row instead of aborting.
-        var csv = "Date,Call Volume,Put Volume,Total Volume,P/C Ratio\n" +
-                  "01/15/2025,100\n" +
-                  "01/16/2025,100000,80000,200000,0.80\n";
+        var csv =
+            "Date,Call Volume,Put Volume,Total Volume,P/C Ratio\n"
+            + "01/15/2025,100\n"
+            + "01/16/2025,100000,80000,200000,0.80\n";
 
         var records = (List<CboePutCallRecord>)ParsePutCallCsvMethod.Invoke(null, [csv]);
 
-        records.Should().ContainSingle()
-            .Which.Date.Should().Be(new DateOnly(2025, 1, 16));
+        records.Should().ContainSingle().Which.Date.Should().Be(new DateOnly(2025, 1, 16));
     }
 
     [Fact]
-    public void ParseVixCsv_RowWithFewerThanFiveFields_IsSkippedWithoutThrowing() {
+    public void ParseVixCsv_RowWithFewerThanFiveFields_IsSkippedWithoutThrowing()
+    {
         // Sibling to ParsePutCallCsv_RowWithFewerThanFiveFields_IsSkippedWithoutThrowing.
         // Same defensive pattern — `if (fields.Length < 5) continue;` — but in a
         // structurally distinct parser. The VIX history CSV occasionally emits
@@ -94,18 +102,19 @@ public class CboeClientTests {
         // row. The valid row parses, the short row is silently skipped, no
         // exception escapes. Single-record assertion proves the parser
         // CONTINUED past the malformed row rather than aborting.
-        var csv = "DATE,OPEN,HIGH,LOW,CLOSE\n" +
-                  "01/02/2020,13.46\n" +
-                  "01/03/2020,13.72,14.49,13.51,14.02\n";
+        var csv =
+            "DATE,OPEN,HIGH,LOW,CLOSE\n"
+            + "01/02/2020,13.46\n"
+            + "01/03/2020,13.72,14.49,13.51,14.02\n";
 
         var records = (List<CboeVixRecord>)ParseVixCsvMethod.Invoke(null, [csv]);
 
-        records.Should().ContainSingle()
-            .Which.Date.Should().Be(new DateOnly(2020, 1, 3));
+        records.Should().ContainSingle().Which.Date.Should().Be(new DateOnly(2020, 1, 3));
     }
 
     [Fact]
-    public void ParseLong_ValueWithEmbeddedThousandsSeparators_ReturnsParsedLongWithoutCommas() {
+    public void ParseLong_ValueWithEmbeddedThousandsSeparators_ReturnsParsedLongWithoutCommas()
+    {
         // ParseLong (used by ParsePutCallCsv for Call/Put/TotalVolume columns)
         // strips commas BEFORE long.TryParse:
         //   `long.TryParse(value.Replace(",", ""), InvariantCulture, ...)`
@@ -138,7 +147,10 @@ public class CboeClientTests {
         // tokenization concerns. The existing parse-skip pins exercise the
         // CSV path; this pin protects the inner ParseLong contract that
         // ParsePutCallCsv depends on.
-        var parseLong = typeof(CboeClient).GetMethod("ParseLong", BindingFlags.NonPublic | BindingFlags.Static);
+        var parseLong = typeof(CboeClient).GetMethod(
+            "ParseLong",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
         var result = (long?)parseLong!.Invoke(null, ["1,234,567"]);
 
@@ -146,7 +158,8 @@ public class CboeClientTests {
     }
 
     [Fact]
-    public void ParsePutCallCsv_FullyPopulatedRow_MapsEachFieldToTheCorrectRecordColumn() {
+    public void ParsePutCallCsv_FullyPopulatedRow_MapsEachFieldToTheCorrectRecordColumn()
+    {
         // Every existing ParsePutCallCsv pin proves a REJECTION path:
         //   • RowWithUnparseableDate → skipped (the disclaimer-row scenario)
         //   • RowWithFewerThanFiveFields → skipped (truncated-row defence)
@@ -211,8 +224,8 @@ public class CboeClientTests {
         // is NOT call+put so a "compute Total from Call+Put" lazy
         // refactor also fails). PutCallRatio 2.0 is a fractional value
         // that distinguishes ParseDecimal from ParseLong.
-        var csv = "Date,Call Volume,Put Volume,Total Volume,P/C Ratio\n" +
-                  "12/25/2024,100,200,300,2.0\n";
+        var csv =
+            "Date,Call Volume,Put Volume,Total Volume,P/C Ratio\n" + "12/25/2024,100,200,300,2.0\n";
 
         var records = (List<CboePutCallRecord>)ParsePutCallCsvMethod.Invoke(null, [csv]);
 
@@ -226,7 +239,8 @@ public class CboeClientTests {
     }
 
     [Fact]
-    public void ParseVixCsv_RowWithUnparseableOhlcDecimal_IsSkipped() {
+    public void ParseVixCsv_RowWithUnparseableOhlcDecimal_IsSkipped()
+    {
         // The CBOE VIX history CSV occasionally carries rows where one of the
         // OHLC columns is blank or "N/A" (early history before VIX listed
         // intraday open/high/low — only close was published). ParseVixCsv
@@ -238,19 +252,26 @@ public class CboeClientTests {
         // the decimal-skip fall-through — pin it on a row whose High column
         // is non-numeric while the date is valid, and assert the next valid
         // row still parses so we know we hit `continue` and not `return`.
-        var csv = "DATE,OPEN,HIGH,LOW,CLOSE\n" +
-                  "01/02/2020,13.46,N/A,13.20,12.47\n" +
-                  "01/03/2020,13.72,14.49,13.51,14.02\n";
+        var csv =
+            "DATE,OPEN,HIGH,LOW,CLOSE\n"
+            + "01/02/2020,13.46,N/A,13.20,12.47\n"
+            + "01/03/2020,13.72,14.49,13.51,14.02\n";
 
         var records = (List<CboeVixRecord>)ParseVixCsvMethod.Invoke(null, [csv]);
 
-        records.Should().ContainSingle()
-            .Which.Should().BeEquivalentTo(new CboeVixRecord {
-                Date = new DateOnly(2020, 1, 3),
-                Open = 13.72m,
-                High = 14.49m,
-                Low = 13.51m,
-                Close = 14.02m
-            });
+        records
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(
+                new CboeVixRecord
+                {
+                    Date = new DateOnly(2020, 1, 3),
+                    Open = 13.72m,
+                    High = 14.49m,
+                    Low = 13.51m,
+                    Close = 14.02m,
+                }
+            );
     }
 }

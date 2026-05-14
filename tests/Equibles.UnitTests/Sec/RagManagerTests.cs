@@ -5,9 +5,11 @@ using Equibles.Sec.Data.Models.Chunks;
 
 namespace Equibles.UnitTests.Sec;
 
-public class RagManagerTests {
+public class RagManagerTests
+{
     [Fact]
-    public async Task BuildContext_ChunksFromSameDocumentOutOfOrder_OutputsByStartPositionAscending() {
+    public async Task BuildContext_ChunksFromSameDocumentOutOfOrder_OutputsByStartPositionAscending()
+    {
         // RagManager.BuildContext groups chunks per (Ticker, DocumentType, ReportingDate) and
         // emits each group's excerpts ordered by Chunk.StartPosition. The order matters: the
         // assembled string is fed to an LLM, and disordered excerpts produce non-sequential
@@ -27,15 +29,38 @@ public class RagManagerTests {
         // "Excerpt 3 (line ~30)", "Excerpt 2 (line ~50)" — but importantly the *content* must
         // appear at positions matching StartPosition ascending: "FIRST" → "SECOND" → "THIRD".
         var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
-        var document = new Document {
+        var document = new Document
+        {
             CommonStock = stock,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2024, 12, 31),
         };
-        var chunks = new List<Chunk> {
-            new() { Index = 0, StartPosition = 500, StartLineNumber = 50, Content = "THIRD excerpt", Document = document },
-            new() { Index = 1, StartPosition = 100, StartLineNumber = 10, Content = "FIRST excerpt", Document = document },
-            new() { Index = 2, StartPosition = 300, StartLineNumber = 30, Content = "SECOND excerpt", Document = document },
+        var chunks = new List<Chunk>
+        {
+            new()
+            {
+                Index = 0,
+                StartPosition = 500,
+                StartLineNumber = 50,
+                Content = "THIRD excerpt",
+                Document = document,
+            },
+            new()
+            {
+                Index = 1,
+                StartPosition = 100,
+                StartLineNumber = 10,
+                Content = "FIRST excerpt",
+                Document = document,
+            },
+            new()
+            {
+                Index = 2,
+                StartPosition = 300,
+                StartLineNumber = 30,
+                Content = "SECOND excerpt",
+                Document = document,
+            },
         };
 
         var sut = new RagManager(chunkRepository: null, commonStockRepository: null, logger: null);
@@ -52,7 +77,8 @@ public class RagManagerTests {
     }
 
     [Fact]
-    public async Task BuildContext_EmptyChunkList_ReturnsNoDocumentsFoundMessage() {
+    public async Task BuildContext_EmptyChunkList_ReturnsNoDocumentsFoundMessage()
+    {
         // Sibling to the StartPosition-ordering pin above. The risk this catches is
         // asymmetric and unreachable from the existing test: `BuildContext` begins
         // with an early guard

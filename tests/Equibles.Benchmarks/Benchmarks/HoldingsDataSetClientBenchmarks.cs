@@ -11,13 +11,16 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// it's a clean baseline for tracking allocation regressions as new format periods are added.
 /// </summary>
 [MemoryDiagnoser]
-public class HoldingsDataSetClientBenchmarks {
+public class HoldingsDataSetClientBenchmarks
+{
     private static readonly DateTime FullBackfillStart = new(2013, 1, 1);
     private static readonly DateTime IncrementalStart = DateTime.UtcNow.AddYears(-1);
 
     [Benchmark(Baseline = true)]
-    public List<string> FullBackfill() => HoldingsDataSetClient.GetDataSetFileNames(FullBackfillStart);
+    public List<string> FullBackfill() =>
+        HoldingsDataSetClient.GetDataSetFileNames(FullBackfillStart);
 
     [Benchmark]
-    public List<string> IncrementalSync() => HoldingsDataSetClient.GetDataSetFileNames(IncrementalStart);
+    public List<string> IncrementalSync() =>
+        HoldingsDataSetClient.GetDataSetFileNames(IncrementalStart);
 }

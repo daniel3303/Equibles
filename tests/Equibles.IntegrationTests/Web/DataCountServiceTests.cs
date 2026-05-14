@@ -1,3 +1,7 @@
+using Equibles.Cboe.Data;
+using Equibles.Cboe.Repositories;
+using Equibles.Cftc.Data;
+using Equibles.Cftc.Repositories;
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -14,28 +18,26 @@ using Equibles.Holdings.Repositories;
 using Equibles.InsiderTrading.Data;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Repositories;
+using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.Data;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
-using Equibles.IntegrationTests.Helpers;
 using Equibles.Web.Services;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.Repositories;
-using Equibles.Cftc.Data;
-using Equibles.Cftc.Repositories;
-using Equibles.Cboe.Data;
-using Equibles.Cboe.Repositories;
 using File = Equibles.Media.Data.Models.File;
 
 namespace Equibles.IntegrationTests.Web;
 
-public class DataCountServiceTests : IDisposable {
+public class DataCountServiceTests : IDisposable
+{
     private readonly EquiblesDbContext _dbContext;
     private readonly DataCountService _service;
 
-    public DataCountServiceTests() {
+    public DataCountServiceTests()
+    {
         _dbContext = TestDbContextFactory.Create(
             new CommonStocksModuleConfiguration(),
             new MediaModuleConfiguration(),
@@ -64,14 +66,21 @@ public class DataCountServiceTests : IDisposable {
         );
     }
 
-    public void Dispose() {
+    public void Dispose()
+    {
         _dbContext.Dispose();
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────
 
-    private CommonStock CreateStock(string ticker = "AAPL", string name = "Apple Inc.", string cik = null) {
-        var stock = new CommonStock {
+    private CommonStock CreateStock(
+        string ticker = "AAPL",
+        string name = "Apple Inc.",
+        string cik = null
+    )
+    {
+        var stock = new CommonStock
+        {
             Id = Guid.NewGuid(),
             Ticker = ticker,
             Name = name,
@@ -81,8 +90,10 @@ public class DataCountServiceTests : IDisposable {
         return stock;
     }
 
-    private File CreateFile() {
-        return new File {
+    private File CreateFile()
+    {
+        return new File
+        {
             Id = Guid.NewGuid(),
             Name = "filing",
             Extension = "html",
@@ -92,8 +103,10 @@ public class DataCountServiceTests : IDisposable {
         };
     }
 
-    private InsiderOwner CreateInsiderOwner(string name = "John Doe", string ownerCik = null) {
-        var owner = new InsiderOwner {
+    private InsiderOwner CreateInsiderOwner(string name = "John Doe", string ownerCik = null)
+    {
+        var owner = new InsiderOwner
+        {
             Id = Guid.NewGuid(),
             Name = name,
             OwnerCik = ownerCik ?? Guid.NewGuid().ToString()[..10],
@@ -102,8 +115,10 @@ public class DataCountServiceTests : IDisposable {
         return owner;
     }
 
-    private CongressMember CreateCongressMember(string name = "Jane Smith") {
-        var member = new CongressMember {
+    private CongressMember CreateCongressMember(string name = "Jane Smith")
+    {
+        var member = new CongressMember
+        {
             Id = Guid.NewGuid(),
             Name = name,
             Position = CongressPosition.Senator,
@@ -112,8 +127,13 @@ public class DataCountServiceTests : IDisposable {
         return member;
     }
 
-    private InstitutionalHolder CreateInstitutionalHolder(string name = "Vanguard", string cik = null) {
-        var holder = new InstitutionalHolder {
+    private InstitutionalHolder CreateInstitutionalHolder(
+        string name = "Vanguard",
+        string cik = null
+    )
+    {
+        var holder = new InstitutionalHolder
+        {
             Id = Guid.NewGuid(),
             Name = name,
             Cik = cik ?? Guid.NewGuid().ToString()[..10],
@@ -122,8 +142,13 @@ public class DataCountServiceTests : IDisposable {
         return holder;
     }
 
-    private FredSeries CreateFredSeries(string seriesId = "GDP", string title = "Gross Domestic Product") {
-        var series = new FredSeries {
+    private FredSeries CreateFredSeries(
+        string seriesId = "GDP",
+        string title = "Gross Domestic Product"
+    )
+    {
+        var series = new FredSeries
+        {
             Id = Guid.NewGuid(),
             SeriesId = seriesId,
             Title = title,
@@ -135,14 +160,16 @@ public class DataCountServiceTests : IDisposable {
     // ── GetStockCount ───────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetStockCount_EmptyDatabase_ReturnsZero() {
+    public async Task GetStockCount_EmptyDatabase_ReturnsZero()
+    {
         var result = await _service.GetStockCount();
 
         result.Should().Be(0);
     }
 
     [Fact]
-    public async Task GetStockCount_WithStocks_ReturnsCorrectCount() {
+    public async Task GetStockCount_WithStocks_ReturnsCorrectCount()
+    {
         CreateStock("AAPL", "Apple Inc.", "0000320193");
         CreateStock("MSFT", "Microsoft Corp.", "0000789019");
         CreateStock("GOOG", "Alphabet Inc.", "0001652044");
@@ -156,32 +183,42 @@ public class DataCountServiceTests : IDisposable {
     // ── GetDocumentCount ────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetDocumentCount_EmptyDatabase_ReturnsZero() {
+    public async Task GetDocumentCount_EmptyDatabase_ReturnsZero()
+    {
         var result = await _service.GetDocumentCount();
 
         result.Should().Be(0);
     }
 
     [Fact]
-    public async Task GetDocumentCount_WithDocuments_ReturnsCorrectCount() {
+    public async Task GetDocumentCount_WithDocuments_ReturnsCorrectCount()
+    {
         var stock = CreateStock();
 
-        _dbContext.Set<Document>().AddRange(
-            new Document {
-                CommonStock = stock, CommonStockId = stock.Id,
-                DocumentType = DocumentType.TenK,
-                ReportingDate = new DateOnly(2025, 1, 15),
-                ReportingForDate = new DateOnly(2024, 12, 31),
-                Content = CreateFile(), SourceUrl = "https://sec.gov/1",
-            },
-            new Document {
-                CommonStock = stock, CommonStockId = stock.Id,
-                DocumentType = DocumentType.TenQ,
-                ReportingDate = new DateOnly(2025, 4, 15),
-                ReportingForDate = new DateOnly(2025, 3, 31),
-                Content = CreateFile(), SourceUrl = "https://sec.gov/2",
-            }
-        );
+        _dbContext
+            .Set<Document>()
+            .AddRange(
+                new Document
+                {
+                    CommonStock = stock,
+                    CommonStockId = stock.Id,
+                    DocumentType = DocumentType.TenK,
+                    ReportingDate = new DateOnly(2025, 1, 15),
+                    ReportingForDate = new DateOnly(2024, 12, 31),
+                    Content = CreateFile(),
+                    SourceUrl = "https://sec.gov/1",
+                },
+                new Document
+                {
+                    CommonStock = stock,
+                    CommonStockId = stock.Id,
+                    DocumentType = DocumentType.TenQ,
+                    ReportingDate = new DateOnly(2025, 4, 15),
+                    ReportingForDate = new DateOnly(2025, 3, 31),
+                    Content = CreateFile(),
+                    SourceUrl = "https://sec.gov/2",
+                }
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.GetDocumentCount();
@@ -192,37 +229,59 @@ public class DataCountServiceTests : IDisposable {
     // ── GetInsiderTransactionCount ──────────────────────────────────────
 
     [Fact]
-    public async Task GetInsiderTransactionCount_EmptyDatabase_ReturnsZero() {
+    public async Task GetInsiderTransactionCount_EmptyDatabase_ReturnsZero()
+    {
         var result = await _service.GetInsiderTransactionCount();
 
         result.Should().Be(0);
     }
 
     [Fact]
-    public async Task GetInsiderTransactionCount_WithTransactions_ReturnsCorrectCount() {
+    public async Task GetInsiderTransactionCount_WithTransactions_ReturnsCorrectCount()
+    {
         var stock = CreateStock();
         var owner = CreateInsiderOwner();
 
-        _dbContext.Set<InsiderTransaction>().AddRange(
-            new InsiderTransaction {
-                CommonStockId = stock.Id, InsiderOwnerId = owner.Id,
-                FilingDate = new DateOnly(2025, 3, 1), TransactionDate = new DateOnly(2025, 2, 28),
-                TransactionCode = TransactionCode.Purchase, Shares = 1000, PricePerShare = 150m,
-                SecurityTitle = "Common Stock", AccessionNumber = "0001-25-000001",
-            },
-            new InsiderTransaction {
-                CommonStockId = stock.Id, InsiderOwnerId = owner.Id,
-                FilingDate = new DateOnly(2025, 3, 15), TransactionDate = new DateOnly(2025, 3, 14),
-                TransactionCode = TransactionCode.Sale, Shares = 500, PricePerShare = 155m,
-                SecurityTitle = "Common Stock", AccessionNumber = "0001-25-000002",
-            },
-            new InsiderTransaction {
-                CommonStockId = stock.Id, InsiderOwnerId = owner.Id,
-                FilingDate = new DateOnly(2025, 4, 1), TransactionDate = new DateOnly(2025, 3, 31),
-                TransactionCode = TransactionCode.Purchase, Shares = 2000, PricePerShare = 148m,
-                SecurityTitle = "Common Stock", AccessionNumber = "0001-25-000003",
-            }
-        );
+        _dbContext
+            .Set<InsiderTransaction>()
+            .AddRange(
+                new InsiderTransaction
+                {
+                    CommonStockId = stock.Id,
+                    InsiderOwnerId = owner.Id,
+                    FilingDate = new DateOnly(2025, 3, 1),
+                    TransactionDate = new DateOnly(2025, 2, 28),
+                    TransactionCode = TransactionCode.Purchase,
+                    Shares = 1000,
+                    PricePerShare = 150m,
+                    SecurityTitle = "Common Stock",
+                    AccessionNumber = "0001-25-000001",
+                },
+                new InsiderTransaction
+                {
+                    CommonStockId = stock.Id,
+                    InsiderOwnerId = owner.Id,
+                    FilingDate = new DateOnly(2025, 3, 15),
+                    TransactionDate = new DateOnly(2025, 3, 14),
+                    TransactionCode = TransactionCode.Sale,
+                    Shares = 500,
+                    PricePerShare = 155m,
+                    SecurityTitle = "Common Stock",
+                    AccessionNumber = "0001-25-000002",
+                },
+                new InsiderTransaction
+                {
+                    CommonStockId = stock.Id,
+                    InsiderOwnerId = owner.Id,
+                    FilingDate = new DateOnly(2025, 4, 1),
+                    TransactionDate = new DateOnly(2025, 3, 31),
+                    TransactionCode = TransactionCode.Purchase,
+                    Shares = 2000,
+                    PricePerShare = 148m,
+                    SecurityTitle = "Common Stock",
+                    AccessionNumber = "0001-25-000003",
+                }
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.GetInsiderTransactionCount();
@@ -233,31 +292,45 @@ public class DataCountServiceTests : IDisposable {
     // ── GetCongressionalTradeCount ──────────────────────────────────────
 
     [Fact]
-    public async Task GetCongressionalTradeCount_EmptyDatabase_ReturnsZero() {
+    public async Task GetCongressionalTradeCount_EmptyDatabase_ReturnsZero()
+    {
         var result = await _service.GetCongressionalTradeCount();
 
         result.Should().Be(0);
     }
 
     [Fact]
-    public async Task GetCongressionalTradeCount_WithTrades_ReturnsCorrectCount() {
+    public async Task GetCongressionalTradeCount_WithTrades_ReturnsCorrectCount()
+    {
         var stock = CreateStock();
         var member = CreateCongressMember();
 
-        _dbContext.Set<CongressionalTrade>().AddRange(
-            new CongressionalTrade {
-                CommonStockId = stock.Id, CongressMemberId = member.Id,
-                TransactionDate = new DateOnly(2025, 1, 10), FilingDate = new DateOnly(2025, 2, 1),
-                TransactionType = CongressTransactionType.Purchase,
-                AssetName = "Apple Inc. Common Stock", AmountFrom = 1001, AmountTo = 15000,
-            },
-            new CongressionalTrade {
-                CommonStockId = stock.Id, CongressMemberId = member.Id,
-                TransactionDate = new DateOnly(2025, 3, 20), FilingDate = new DateOnly(2025, 4, 5),
-                TransactionType = CongressTransactionType.Sale,
-                AssetName = "Apple Inc. Options", AmountFrom = 15001, AmountTo = 50000,
-            }
-        );
+        _dbContext
+            .Set<CongressionalTrade>()
+            .AddRange(
+                new CongressionalTrade
+                {
+                    CommonStockId = stock.Id,
+                    CongressMemberId = member.Id,
+                    TransactionDate = new DateOnly(2025, 1, 10),
+                    FilingDate = new DateOnly(2025, 2, 1),
+                    TransactionType = CongressTransactionType.Purchase,
+                    AssetName = "Apple Inc. Common Stock",
+                    AmountFrom = 1001,
+                    AmountTo = 15000,
+                },
+                new CongressionalTrade
+                {
+                    CommonStockId = stock.Id,
+                    CongressMemberId = member.Id,
+                    TransactionDate = new DateOnly(2025, 3, 20),
+                    FilingDate = new DateOnly(2025, 4, 5),
+                    TransactionType = CongressTransactionType.Sale,
+                    AssetName = "Apple Inc. Options",
+                    AmountFrom = 15001,
+                    AmountTo = 50000,
+                }
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.GetCongressionalTradeCount();
@@ -268,37 +341,59 @@ public class DataCountServiceTests : IDisposable {
     // ── GetInstitutionalHoldingCount ────────────────────────────────────
 
     [Fact]
-    public async Task GetInstitutionalHoldingCount_EmptyDatabase_ReturnsZero() {
+    public async Task GetInstitutionalHoldingCount_EmptyDatabase_ReturnsZero()
+    {
         var result = await _service.GetInstitutionalHoldingCount();
 
         result.Should().Be(0);
     }
 
     [Fact]
-    public async Task GetInstitutionalHoldingCount_WithHoldings_ReturnsCorrectCount() {
+    public async Task GetInstitutionalHoldingCount_WithHoldings_ReturnsCorrectCount()
+    {
         var stock = CreateStock();
         var holder = CreateInstitutionalHolder();
 
-        _dbContext.Set<InstitutionalHolding>().AddRange(
-            new InstitutionalHolding {
-                CommonStockId = stock.Id, InstitutionalHolderId = holder.Id,
-                FilingDate = new DateOnly(2025, 2, 14), ReportDate = new DateOnly(2024, 12, 31),
-                Value = 500_000, Shares = 10_000, ShareType = ShareType.Shares,
-                TitleOfClass = "COM", AccessionNumber = "0001-25-000010",
-            },
-            new InstitutionalHolding {
-                CommonStockId = stock.Id, InstitutionalHolderId = holder.Id,
-                FilingDate = new DateOnly(2025, 5, 15), ReportDate = new DateOnly(2025, 3, 31),
-                Value = 600_000, Shares = 11_000, ShareType = ShareType.Shares,
-                TitleOfClass = "COM", AccessionNumber = "0001-25-000011",
-            },
-            new InstitutionalHolding {
-                CommonStockId = stock.Id, InstitutionalHolderId = holder.Id,
-                FilingDate = new DateOnly(2025, 8, 14), ReportDate = new DateOnly(2025, 6, 30),
-                Value = 700_000, Shares = 12_000, ShareType = ShareType.Shares,
-                TitleOfClass = "COM", AccessionNumber = "0001-25-000012",
-            }
-        );
+        _dbContext
+            .Set<InstitutionalHolding>()
+            .AddRange(
+                new InstitutionalHolding
+                {
+                    CommonStockId = stock.Id,
+                    InstitutionalHolderId = holder.Id,
+                    FilingDate = new DateOnly(2025, 2, 14),
+                    ReportDate = new DateOnly(2024, 12, 31),
+                    Value = 500_000,
+                    Shares = 10_000,
+                    ShareType = ShareType.Shares,
+                    TitleOfClass = "COM",
+                    AccessionNumber = "0001-25-000010",
+                },
+                new InstitutionalHolding
+                {
+                    CommonStockId = stock.Id,
+                    InstitutionalHolderId = holder.Id,
+                    FilingDate = new DateOnly(2025, 5, 15),
+                    ReportDate = new DateOnly(2025, 3, 31),
+                    Value = 600_000,
+                    Shares = 11_000,
+                    ShareType = ShareType.Shares,
+                    TitleOfClass = "COM",
+                    AccessionNumber = "0001-25-000011",
+                },
+                new InstitutionalHolding
+                {
+                    CommonStockId = stock.Id,
+                    InstitutionalHolderId = holder.Id,
+                    FilingDate = new DateOnly(2025, 8, 14),
+                    ReportDate = new DateOnly(2025, 6, 30),
+                    Value = 700_000,
+                    Shares = 12_000,
+                    ShareType = ShareType.Shares,
+                    TitleOfClass = "COM",
+                    AccessionNumber = "0001-25-000012",
+                }
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.GetInstitutionalHoldingCount();
@@ -309,26 +404,36 @@ public class DataCountServiceTests : IDisposable {
     // ── GetFailToDeliverCount ───────────────────────────────────────────
 
     [Fact]
-    public async Task GetFailToDeliverCount_EmptyDatabase_ReturnsZero() {
+    public async Task GetFailToDeliverCount_EmptyDatabase_ReturnsZero()
+    {
         var result = await _service.GetFailToDeliverCount();
 
         result.Should().Be(0);
     }
 
     [Fact]
-    public async Task GetFailToDeliverCount_WithRecords_ReturnsCorrectCount() {
+    public async Task GetFailToDeliverCount_WithRecords_ReturnsCorrectCount()
+    {
         var stock = CreateStock();
 
-        _dbContext.Set<FailToDeliver>().AddRange(
-            new FailToDeliver {
-                CommonStockId = stock.Id, SettlementDate = new DateOnly(2025, 1, 2),
-                Quantity = 50_000, Price = 150.25m,
-            },
-            new FailToDeliver {
-                CommonStockId = stock.Id, SettlementDate = new DateOnly(2025, 1, 3),
-                Quantity = 30_000, Price = 151.50m,
-            }
-        );
+        _dbContext
+            .Set<FailToDeliver>()
+            .AddRange(
+                new FailToDeliver
+                {
+                    CommonStockId = stock.Id,
+                    SettlementDate = new DateOnly(2025, 1, 2),
+                    Quantity = 50_000,
+                    Price = 150.25m,
+                },
+                new FailToDeliver
+                {
+                    CommonStockId = stock.Id,
+                    SettlementDate = new DateOnly(2025, 1, 3),
+                    Quantity = 30_000,
+                    Price = 151.50m,
+                }
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.GetFailToDeliverCount();
@@ -339,27 +444,40 @@ public class DataCountServiceTests : IDisposable {
     // ── GetFredObservationCount ─────────────────────────────────────────
 
     [Fact]
-    public async Task GetFredObservationCount_EmptyDatabase_ReturnsZero() {
+    public async Task GetFredObservationCount_EmptyDatabase_ReturnsZero()
+    {
         var result = await _service.GetFredObservationCount();
 
         result.Should().Be(0);
     }
 
     [Fact]
-    public async Task GetFredObservationCount_WithObservations_ReturnsCorrectCount() {
+    public async Task GetFredObservationCount_WithObservations_ReturnsCorrectCount()
+    {
         var series = CreateFredSeries();
 
-        _dbContext.Set<FredObservation>().AddRange(
-            new FredObservation {
-                FredSeriesId = series.Id, Date = new DateOnly(2025, 1, 1), Value = 28_000.5m,
-            },
-            new FredObservation {
-                FredSeriesId = series.Id, Date = new DateOnly(2025, 4, 1), Value = 28_500.0m,
-            },
-            new FredObservation {
-                FredSeriesId = series.Id, Date = new DateOnly(2025, 7, 1), Value = 29_000.0m,
-            }
-        );
+        _dbContext
+            .Set<FredObservation>()
+            .AddRange(
+                new FredObservation
+                {
+                    FredSeriesId = series.Id,
+                    Date = new DateOnly(2025, 1, 1),
+                    Value = 28_000.5m,
+                },
+                new FredObservation
+                {
+                    FredSeriesId = series.Id,
+                    Date = new DateOnly(2025, 4, 1),
+                    Value = 28_500.0m,
+                },
+                new FredObservation
+                {
+                    FredSeriesId = series.Id,
+                    Date = new DateOnly(2025, 7, 1),
+                    Value = 29_000.0m,
+                }
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.GetFredObservationCount();
@@ -370,28 +488,44 @@ public class DataCountServiceTests : IDisposable {
     // ── GetDailyStockPriceCount ─────────────────────────────────────────
 
     [Fact]
-    public async Task GetDailyStockPriceCount_EmptyDatabase_ReturnsZero() {
+    public async Task GetDailyStockPriceCount_EmptyDatabase_ReturnsZero()
+    {
         var result = await _service.GetDailyStockPriceCount();
 
         result.Should().Be(0);
     }
 
     [Fact]
-    public async Task GetDailyStockPriceCount_WithPrices_ReturnsCorrectCount() {
+    public async Task GetDailyStockPriceCount_WithPrices_ReturnsCorrectCount()
+    {
         var stock = CreateStock();
 
-        _dbContext.Set<DailyStockPrice>().AddRange(
-            new DailyStockPrice {
-                CommonStockId = stock.Id, Date = new DateOnly(2025, 3, 24),
-                Open = 170.00m, High = 172.50m, Low = 169.50m,
-                Close = 171.25m, AdjustedClose = 171.25m, Volume = 45_000_000,
-            },
-            new DailyStockPrice {
-                CommonStockId = stock.Id, Date = new DateOnly(2025, 3, 25),
-                Open = 171.25m, High = 173.00m, Low = 170.00m,
-                Close = 172.50m, AdjustedClose = 172.50m, Volume = 50_000_000,
-            }
-        );
+        _dbContext
+            .Set<DailyStockPrice>()
+            .AddRange(
+                new DailyStockPrice
+                {
+                    CommonStockId = stock.Id,
+                    Date = new DateOnly(2025, 3, 24),
+                    Open = 170.00m,
+                    High = 172.50m,
+                    Low = 169.50m,
+                    Close = 171.25m,
+                    AdjustedClose = 171.25m,
+                    Volume = 45_000_000,
+                },
+                new DailyStockPrice
+                {
+                    CommonStockId = stock.Id,
+                    Date = new DateOnly(2025, 3, 25),
+                    Open = 171.25m,
+                    High = 173.00m,
+                    Low = 170.00m,
+                    Close = 172.50m,
+                    AdjustedClose = 172.50m,
+                    Volume = 50_000_000,
+                }
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.GetDailyStockPriceCount();

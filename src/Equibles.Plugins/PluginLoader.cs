@@ -13,61 +13,83 @@ namespace Equibles.Plugins;
 /// </list>
 /// Call <see cref="LoadAll"/> at startup before any reflection-based discovery (AddAllModules, AddAllRepositories).
 /// </summary>
-public static class PluginLoader {
+public static class PluginLoader
+{
     private static Assembly[] _loaded;
 
-    public static Assembly[] LoadAll() {
-        if (_loaded != null) return _loaded;
+    public static Assembly[] LoadAll()
+    {
+        if (_loaded != null)
+            return _loaded;
 
         // The same simple name can appear more than once in AppDomain.CurrentDomain.GetAssemblies()
         // — for example, the xunit visual studio adapter is loaded both as the VSTest host and
         // again via the WebApplicationFactory bin folder during functional tests. ToDictionary
         // without a duplicate-tolerant aggregation throws; keep the first instance and skip the rest.
-        var alreadyLoaded = AppDomain.CurrentDomain.GetAssemblies()
+        var alreadyLoaded = AppDomain
+            .CurrentDomain.GetAssemblies()
             .GroupBy(a => a.GetName().Name)
             .ToDictionary(g => g.Key, g => g.First());
         var plugins = new List<Assembly>(alreadyLoaded.Values);
 
-        foreach (var dll in Directory.GetFiles(AppContext.BaseDirectory, "*.dll")) {
-            try {
+        foreach (var dll in Directory.GetFiles(AppContext.BaseDirectory, "*.dll"))
+        {
+            try
+            {
                 var assemblyName = AssemblyName.GetAssemblyName(dll);
-                if (alreadyLoaded.ContainsKey(assemblyName.Name)) continue;
+                if (alreadyLoaded.ContainsKey(assemblyName.Name))
+                    continue;
 
                 var fileName = Path.GetFileName(dll);
-                var isEquibles = fileName.StartsWith("Equibles.", StringComparison.OrdinalIgnoreCase);
+                var isEquibles = fileName.StartsWith(
+                    "Equibles.",
+                    StringComparison.OrdinalIgnoreCase
+                );
 
-                if (!isEquibles && !HasPluginAttribute(dll)) continue;
+                if (!isEquibles && !HasPluginAttribute(dll))
+                    continue;
 
                 var assembly = AssemblyLoadContext.Default.LoadFromAssemblyName(assemblyName);
                 plugins.Add(assembly);
                 alreadyLoaded[assemblyName.Name] = assembly;
-            } catch (BadImageFormatException) { }
+            }
+            catch (BadImageFormatException) { }
         }
 
         _loaded = plugins.ToArray();
         return _loaded;
     }
 
-    private static bool HasPluginAttribute(string dllPath) {
-        try {
+    private static bool HasPluginAttribute(string dllPath)
+    {
+        try
+        {
             using var stream = File.OpenRead(dllPath);
             using var peReader = new PEReader(stream);
-            if (!peReader.HasMetadata) return false;
+            if (!peReader.HasMetadata)
+                return false;
 
             var reader = peReader.GetMetadataReader();
-            foreach (var handle in reader.GetAssemblyDefinition().GetCustomAttributes()) {
+            foreach (var handle in reader.GetAssemblyDefinition().GetCustomAttributes())
+            {
                 var attr = reader.GetCustomAttribute(handle);
-                if (attr.Constructor.Kind != HandleKind.MemberReference) continue;
+                if (attr.Constructor.Kind != HandleKind.MemberReference)
+                    continue;
 
                 var ctor = reader.GetMemberReference((MemberReferenceHandle)attr.Constructor);
-                if (ctor.Parent.Kind != HandleKind.TypeReference) continue;
+                if (ctor.Parent.Kind != HandleKind.TypeReference)
+                    continue;
 
                 var typeRef = reader.GetTypeReference((TypeReferenceHandle)ctor.Parent);
-                if (reader.GetString(typeRef.Namespace) == "Equibles.Plugins"
-                    && reader.GetString(typeRef.Name) == nameof(EquiblesPluginAttribute))
+                if (
+                    reader.GetString(typeRef.Namespace) == "Equibles.Plugins"
+                    && reader.GetString(typeRef.Name) == nameof(EquiblesPluginAttribute)
+                )
                     return true;
             }
-        } catch {
+        }
+        catch
+        {
             return false;
         }
 

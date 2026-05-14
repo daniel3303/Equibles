@@ -14,23 +14,30 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// currency consolidation) — not just the cheap "extract envelope" path.
 /// </summary>
 [MemoryDiagnoser]
-public class SecDocumentHtmlNormalizerBenchmarks {
+public class SecDocumentHtmlNormalizerBenchmarks
+{
     private const int SectionCount = 40;
     private readonly SecDocumentHtmlNormalizer _sut = new();
     private string _input;
 
     [GlobalSetup]
-    public void Setup() {
+    public void Setup()
+    {
         // Build a SEC SGML envelope wrapping a body with ~40 sections — headings,
         // paragraphs, tables, lists, and currency runs. The body intentionally mixes
         // every shape the normalizer's pipeline rewrites; a body of pure paragraphs
         // would skip most steps and underreport the real cost.
         var body = new StringBuilder();
         body.Append("<html><body>");
-        for (var i = 0; i < SectionCount; i++) {
+        for (var i = 0; i < SectionCount; i++)
+        {
             body.Append($"<p style=\"font-weight:bold;font-size:14pt\">ITEM {i}. RISK FACTORS</p>");
-            body.Append("<p>The Company faces various risks that could materially affect its business, ")
-                .Append("financial condition, and results of operations. These risks include, but are not ")
+            body.Append(
+                    "<p>The Company faces various risks that could materially affect its business, "
+                )
+                .Append(
+                    "financial condition, and results of operations. These risks include, but are not "
+                )
                 .Append("limited to, the following items described below.</p>");
             body.Append("<table><tr><td>Revenue</td><td>$1,234</td><td>$987</td></tr>")
                 .Append("<tr><td>Cost</td><td>$456</td><td>$321</td></tr>")

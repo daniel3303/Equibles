@@ -10,9 +10,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Fred;
 
-public class FredScraperWorkerTests {
+public class FredScraperWorkerTests
+{
     [Fact]
-    public void ValidateConfiguration_FredClientNotConfigured_ReturnsFalse() {
+    public void ValidateConfiguration_FredClientNotConfigured_ReturnsFalse()
+    {
         // The FRED scraper hits api.stlouisfed.org, which requires an API key on every
         // request and returns 400 without one. Unlike the SEC scrapers (which gate on
         // a raw IConfiguration key), FredScraperWorker delegates the check to the
@@ -33,14 +35,19 @@ public class FredScraperWorkerTests {
         var sut = new TestableFredScraperWorker(
             Substitute.For<ILogger<FredScraperWorker>>(),
             scopeFactory,
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
-            Options.Create(new FredScraperOptions()));
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            Options.Create(new FredScraperOptions())
+        );
 
         sut.InvokeValidateConfiguration().Should().BeFalse();
     }
 
     [Fact]
-    public void ValidateConfiguration_FredClientConfigured_ReturnsTrue() {
+    public void ValidateConfiguration_FredClientConfigured_ReturnsTrue()
+    {
         // Sibling to the false-case pin above. The risk this catches is asymmetric
         // and unreachable from the not-configured sibling alone: a regression that
         // hard-codes `ValidateConfiguration => false` (defensive default during a
@@ -72,14 +79,19 @@ public class FredScraperWorkerTests {
         var sut = new TestableFredScraperWorker(
             Substitute.For<ILogger<FredScraperWorker>>(),
             scopeFactory,
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
-            Options.Create(new FredScraperOptions()));
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            Options.Create(new FredScraperOptions())
+        );
 
         sut.InvokeValidateConfiguration().Should().BeTrue();
     }
 
     [Fact]
-    public void Constructor_AppliesSleepIntervalHoursFromOptionsAsTimeSpanHours() {
+    public void Constructor_AppliesSleepIntervalHoursFromOptionsAsTimeSpanHours()
+    {
         // FredScraperWorker reads FredScraperOptions.SleepIntervalHours
         // (inherited from ScraperOptions, default 24h) and stores it as a
         // TimeSpan via FromHours. FRED economic series update on varying
@@ -94,14 +106,19 @@ public class FredScraperWorkerTests {
         var sut = new TestableFredScraperWorker(
             Substitute.For<ILogger<FredScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
-            options);
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            options
+        );
 
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(6));
     }
 
     [Fact]
-    public void ErrorSource_IsFredScraper() {
+    public void ErrorSource_IsFredScraper()
+    {
         // FredScraperWorker pulls macro economic series from api.stlouisfed.org —
         // a different upstream and quota envelope from every other scraper. When
         // BaseScraperWorker's catch-all reports a failure, it tags the error with
@@ -119,14 +136,19 @@ public class FredScraperWorkerTests {
         var sut = new TestableFredScraperWorker(
             Substitute.For<ILogger<FredScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
-            options);
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            options
+        );
 
         sut.InvokeErrorSource().Should().Be(ErrorSource.FredScraper);
     }
 
     [Fact]
-    public void WorkerName_IsFredScraper() {
+    public void WorkerName_IsFredScraper()
+    {
         // Sixth WorkerName pin in the natural-extension family (CBOE, Holdings, SEC
         // filing, FTD, Document processor, and now FRED). WorkerName flows into
         // BaseScraperWorker's structured log scope and shows up in every Serilog
@@ -144,18 +166,24 @@ public class FredScraperWorkerTests {
         var sut = new TestableFredScraperWorker(
             Substitute.For<ILogger<FredScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
-            options);
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            options
+        );
 
         sut.InvokeWorkerName().Should().Be("FRED scraper");
     }
 
-    private sealed class TestableFredScraperWorker : FredScraperWorker {
+    private sealed class TestableFredScraperWorker : FredScraperWorker
+    {
         public TestableFredScraperWorker(
             ILogger<FredScraperWorker> logger,
             IServiceScopeFactory scopeFactory,
             ErrorReporter errorReporter,
-            IOptions<FredScraperOptions> options)
+            IOptions<FredScraperOptions> options
+        )
             : base(logger, scopeFactory, errorReporter, options) { }
 
         public bool InvokeValidateConfiguration() => ValidateConfiguration();

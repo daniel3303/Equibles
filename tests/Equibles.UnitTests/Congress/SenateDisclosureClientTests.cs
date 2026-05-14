@@ -10,12 +10,17 @@ namespace Equibles.UnitTests.Congress;
 /// Playwright browser against efdsearch.senate.gov, so we exercise the pure-logic
 /// private row-parser via reflection.
 /// </summary>
-public class SenateDisclosureClientTests {
-    private static readonly MethodInfo ParseReportRowMethod = typeof(SenateDisclosureClient)
-        .GetMethod("ParseReportRow", BindingFlags.NonPublic | BindingFlags.Instance);
+public class SenateDisclosureClientTests
+{
+    private static readonly MethodInfo ParseReportRowMethod =
+        typeof(SenateDisclosureClient).GetMethod(
+            "ParseReportRow",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        );
 
     [Fact]
-    public void ParseReportRow_AbsoluteUrlOutsideSenateBase_IsRejectedAndReturnsNull() {
+    public void ParseReportRow_AbsoluteUrlOutsideSenateBase_IsRejectedAndReturnsNull()
+    {
         // The Senate disclosure feed delivers report links inside row HTML. Most are
         // relative paths (`/search/view/...`) that ParseReportRow prefixes with BaseUrl,
         // but the parser also accepts already-absolute URLs (`reportPath.StartsWith("http")`).
@@ -29,7 +34,8 @@ public class SenateDisclosureClientTests {
         // collapses the if/else into "always prepend BaseUrl" (which would silently
         // mangle absolute URLs but ALSO accept them) is caught.
         var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
-        var row = new List<string> {
+        var row = new List<string>
+        {
             "Jane",
             "Doe",
             "filed",
@@ -43,7 +49,8 @@ public class SenateDisclosureClientTests {
     }
 
     [Fact]
-    public void ParseReportRow_ValidRowWithRelativeUrl_ReturnsReportWithBaseUrlPrepended() {
+    public void ParseReportRow_ValidRowWithRelativeUrl_ReturnsReportWithBaseUrlPrepended()
+    {
         // The two existing pins (cross-origin absolute URL, paper-filing path) are
         // both REJECTION paths — they prove ParseReportRow refuses bad inputs. Neither
         // proves the method actually ACCEPTS well-formed inputs. A regression that
@@ -69,7 +76,8 @@ public class SenateDisclosureClientTests {
         // is fully pinned: rejects cross-origin, rejects paper, accepts valid
         // electronic Senate filings.
         var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
-        var row = new List<string> {
+        var row = new List<string>
+        {
             "Jane",
             "Doe",
             "filed",
@@ -83,13 +91,16 @@ public class SenateDisclosureClientTests {
         var resultType = result.GetType();
         ((string)resultType.GetProperty("MemberName").GetValue(result)).Should().Be("Jane Doe");
         ((string)resultType.GetProperty("ReportUrl").GetValue(result))
-            .Should().Be("https://efdsearch.senate.gov/search/view/ptr/abc-123/");
+            .Should()
+            .Be("https://efdsearch.senate.gov/search/view/ptr/abc-123/");
         ((DateOnly)resultType.GetProperty("DateSubmitted").GetValue(result))
-            .Should().Be(new DateOnly(2024, 1, 15));
+            .Should()
+            .Be(new DateOnly(2024, 1, 15));
     }
 
     [Fact]
-    public void ParseReportRow_LinkCellWithoutAnchorTag_ReturnsNullInsteadOfFakeReportPointingAtBaseUrl() {
+    public void ParseReportRow_LinkCellWithoutAnchorTag_ReturnsNullInsteadOfFakeReportPointingAtBaseUrl()
+    {
         // ParseReportRow extracts the report URL from row[3] using
         //   var hrefMatch = HrefRegex().Match(linkHtml);
         //   if (!hrefMatch.Success) return null;
@@ -115,7 +126,8 @@ public class SenateDisclosureClientTests {
         // Pin the no-anchor case with a plain-text link cell so a refactor that drops
         // the guard surfaces here rather than as silent home-page fetches in production.
         var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
-        var row = new List<string> {
+        var row = new List<string>
+        {
             "John",
             "Doe",
             "filed",
@@ -129,7 +141,8 @@ public class SenateDisclosureClientTests {
     }
 
     [Fact]
-    public void ParseReportRow_RowWithUnparseableDate_ReturnsNullInsteadOfThrowing() {
+    public void ParseReportRow_RowWithUnparseableDate_ReturnsNullInsteadOfThrowing()
+    {
         // Fifth pin in the ParseReportRow family. Existing pins cover:
         //   • cross-origin absolute URL → null
         //   • paper-filing URL → null
@@ -154,7 +167,8 @@ public class SenateDisclosureClientTests {
         // branch. Pin with a clearly-unparseable value ("not-a-date") so a regex/
         // culture-flexibility regression doesn't accidentally parse it.
         var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
-        var row = new List<string> {
+        var row = new List<string>
+        {
             "Jane",
             "Doe",
             "filed",
@@ -168,7 +182,8 @@ public class SenateDisclosureClientTests {
     }
 
     [Fact]
-    public void ParseReportRow_PaperFilingUrl_ReturnsNull() {
+    public void ParseReportRow_PaperFilingUrl_ReturnsNull()
+    {
         // Senate disclosures come in two flavours: HTML electronic filings (parseable) and
         // scanned-PDF "paper" filings (unparseable). ParseReportRow skips paper filings by
         // looking for "/view/paper/" in the report URL. If a regression dropped the check
@@ -176,7 +191,8 @@ public class SenateDisclosureClientTests {
         // FetchAndParseReport, fail mid-flight, and either flood the error log or crash
         // the scrape. Pin the skip so a refactor can't quietly let paper filings through.
         var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
-        var row = new List<string> {
+        var row = new List<string>
+        {
             "John",
             "Doe",
             "filed",
@@ -190,7 +206,8 @@ public class SenateDisclosureClientTests {
     }
 
     [Fact]
-    public void ParseReportRow_RowWithFewerThanFiveColumns_ReturnsNullInsteadOfIndexOutOfRange() {
+    public void ParseReportRow_RowWithFewerThanFiveColumns_ReturnsNullInsteadOfIndexOutOfRange()
+    {
         // Seventh pin in the ParseReportRow rejection family. The method opens with
         //   if (row.Count < 5) return null;
         // — a load-bearing length guard before the subsequent row[0]/row[1]/row[3]/row[4]
@@ -224,7 +241,8 @@ public class SenateDisclosureClientTests {
         // .Should().BeNull() can't observe (it asserts on a return value the
         // exception prevents from existing).
         var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
-        var row = new List<string> {
+        var row = new List<string>
+        {
             "Jane",
             "Doe",
             "filed",
@@ -238,7 +256,8 @@ public class SenateDisclosureClientTests {
     }
 
     [Fact]
-    public void ParseReportRow_BothFirstAndLastNameEmpty_ReturnsNull() {
+    public void ParseReportRow_BothFirstAndLastNameEmpty_ReturnsNull()
+    {
         // Sixth pin in the ParseReportRow rejection family. Covers the empty-name
         // guard: `if (string.IsNullOrEmpty(memberName)) return null;` where
         // memberName = $"{firstName} {lastName}".Trim().
@@ -261,7 +280,8 @@ public class SenateDisclosureClientTests {
         // strings (the JSON-likely shape; nulls are also possible but ?.Trim
         // on "" is the same as ?.Trim on null after the ?? "" coalesce).
         var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
-        var row = new List<string> {
+        var row = new List<string>
+        {
             "",
             "",
             "filed",
@@ -277,7 +297,8 @@ public class SenateDisclosureClientTests {
     // ── Partial-branch fills ────────────────────────────────────────────
 
     [Fact]
-    public void ParseReportRow_NullFirstAndLastNameCells_HandlesNullsAndReturnsNull() {
+    public void ParseReportRow_NullFirstAndLastNameCells_HandlesNullsAndReturnsNull()
+    {
         // Pins the null arms of:
         //   var firstName = row[0]?.Trim() ?? "";
         //   var lastName  = row[1]?.Trim() ?? "";
@@ -289,7 +310,8 @@ public class SenateDisclosureClientTests {
         // without exception, proves the two null-safe operators handled the
         // null inputs without dereferencing.
         var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
-        var row = new List<string> {
+        var row = new List<string>
+        {
             null,
             null,
             "filed",
@@ -304,7 +326,8 @@ public class SenateDisclosureClientTests {
     }
 
     [Fact]
-    public void ParseReportRow_NullLinkCell_HandlesNullAndReturnsNull() {
+    public void ParseReportRow_NullLinkCell_HandlesNullAndReturnsNull()
+    {
         // Pins the null arm of `var linkHtml = row[3] ?? "";`. Existing pins
         // always supply a string for row[3] (whether or not it contains an
         // anchor), so the `??` right-side has never fired. With the row[3]
@@ -312,13 +335,7 @@ public class SenateDisclosureClientTests {
         // succeeds=false, and the method returns null at the !Success guard.
         // Without the `?? ""`, HrefRegex.Match(null) throws ArgumentNullException.
         var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
-        var row = new List<string> {
-            "Jane",
-            "Doe",
-            "filed",
-            null,
-            "2024-01-15",
-        };
+        var row = new List<string> { "Jane", "Doe", "filed", null, "2024-01-15" };
 
         var act = () => ParseReportRowMethod.Invoke(sut, [row]);
 
@@ -327,7 +344,8 @@ public class SenateDisclosureClientTests {
     }
 
     [Fact]
-    public void ParseReportRow_NullDateCell_HandlesNullAndReturnsNull() {
+    public void ParseReportRow_NullDateCell_HandlesNullAndReturnsNull()
+    {
         // Pins the null arm of `row[4]?.Trim()` inside
         //   if (!DateOnly.TryParse(row[4]?.Trim(), out var dateSubmitted)) { ... }
         // The unparseable-date sibling supplies a non-null garbage string so
@@ -336,7 +354,8 @@ public class SenateDisclosureClientTests {
         // returns false, the method logs the debug message and returns null.
         // Without the `?.`, Trim() would NRE on the null reference.
         var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
-        var row = new List<string> {
+        var row = new List<string>
+        {
             "Jane",
             "Doe",
             "filed",

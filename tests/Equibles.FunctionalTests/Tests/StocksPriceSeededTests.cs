@@ -9,17 +9,20 @@ namespace Equibles.FunctionalTests.Tests;
 
 [Collection(FunctionalTestCollection.Name)]
 [Trait("Category", "Functional")]
-public class StocksPriceSeededTests {
+public class StocksPriceSeededTests
+{
     private readonly WebAppFixture _web;
     private readonly PlaywrightFixture _playwright;
 
-    public StocksPriceSeededTests(WebAppFixture web, PlaywrightFixture playwright) {
+    public StocksPriceSeededTests(WebAppFixture web, PlaywrightFixture playwright)
+    {
         _web = web;
         _playwright = playwright;
     }
 
     [Fact]
-    public async Task Price_GetForStockWithLotsOfSeededHistory_RendersIndicatorChartsAndSummaryStats() {
+    public async Task Price_GetForStockWithLotsOfSeededHistory_RendersIndicatorChartsAndSummaryStats()
+    {
         // Seeds 300 days of daily prices — past SMA200's 200-day window AND past the
         // TakeLast(252) "52W high/low" boundary the view uses — so every indicator in
         // StockTabService.LoadPriceTab + TechnicalIndicatorService (SMA20/50/200, RSI14,
@@ -41,13 +44,17 @@ public class StocksPriceSeededTests {
         var endDate = new DateOnly(2026, 1, 30);
         var startDate = endDate.AddDays(-(totalSeededDays - 1));
 
-        await _web.ResetAndSeedAsync(async db => {
-            db.Add(new CommonStock {
-                Id = stockId,
-                Ticker = "AAPL",
-                Name = "Apple Inc.",
-                Cik = "0000320193",
-            });
+        await _web.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new CommonStock
+                {
+                    Id = stockId,
+                    Ticker = "AAPL",
+                    Name = "Apple Inc.",
+                    Cik = "0000320193",
+                }
+            );
 
             db.ChangeTracker.AutoDetectChangesEnabled = false;
             // i=0 is the OLDEST seeded day, i=totalSeededDays-1 the NEWEST — matches the
@@ -55,18 +62,22 @@ public class StocksPriceSeededTests {
             // assumptions. Close = 100 + i gives a strictly-increasing series so the
             // newest close (i=299) is deterministic and SMA/RSI/MACD all produce non-NaN
             // values without special-casing.
-            for (var i = 0; i < totalSeededDays; i++) {
+            for (var i = 0; i < totalSeededDays; i++)
+            {
                 var close = 100m + i;
-                db.Add(new DailyStockPrice {
-                    CommonStockId = stockId,
-                    Date = startDate.AddDays(i),
-                    Open = close - 0.5m,
-                    High = close + 1m,
-                    Low = close - 1m,
-                    Close = close,
-                    AdjustedClose = close,
-                    Volume = 1_000_000L + i,
-                });
+                db.Add(
+                    new DailyStockPrice
+                    {
+                        CommonStockId = stockId,
+                        Date = startDate.AddDays(i),
+                        Open = close - 0.5m,
+                        High = close + 1m,
+                        Low = close - 1m,
+                        Close = close,
+                        AdjustedClose = close,
+                        Volume = 1_000_000L + i,
+                    }
+                );
             }
             await Task.CompletedTask;
         });
@@ -77,24 +88,30 @@ public class StocksPriceSeededTests {
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);
 
-        await Assertions.Expect(page.Locator("h3").Filter(new() { HasTextString = "No Price Data" }))
+        await Assertions
+            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Price Data" }))
             .ToHaveCountAsync(0);
-        await Assertions.Expect(page.Locator("h3").Filter(new() { HasTextString = "Price & Moving Averages" }))
+        await Assertions
+            .Expect(page.Locator("h3").Filter(new() { HasTextString = "Price & Moving Averages" }))
             .ToHaveCountAsync(1);
 
         // Data Range text is rendered as `{first.Date} — {last.Date}` (em-dash). The text
         // is built from Model.Prices.First()/Last() — LoadPriceTab uses OrderBy(Date), so
         // these have to match the seeded boundaries end-to-end.
         var newestClose = 100m + (totalSeededDays - 1);
-        await Assertions.Expect(
-                page.Locator("div.font-mono.text-xs").Filter(new() {
-                    HasTextString = $"{startDate:yyyy-MM-dd} — {endDate:yyyy-MM-dd}",
-                }))
+        await Assertions
+            .Expect(
+                page.Locator("div.font-mono.text-xs")
+                    .Filter(
+                        new() { HasTextString = $"{startDate:yyyy-MM-dd} — {endDate:yyyy-MM-dd}" }
+                    )
+            )
             .ToHaveCountAsync(1);
-        await Assertions.Expect(
-                page.Locator("div.font-mono.font-semibold").Filter(new() {
-                    HasTextString = $"${newestClose:N2}",
-                }))
+        await Assertions
+            .Expect(
+                page.Locator("div.font-mono.font-semibold")
+                    .Filter(new() { HasTextString = $"${newestClose:N2}" })
+            )
             .ToHaveCountAsync(1);
     }
 }

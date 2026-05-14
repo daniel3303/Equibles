@@ -1,6 +1,7 @@
 namespace Equibles.Web.ViewModels.Market;
 
-public class VixViewModel {
+public class VixViewModel
+{
     public List<VixDailyItem> Records { get; set; } = [];
 
     // Statistics
@@ -15,7 +16,8 @@ public class VixViewModel {
     public List<decimal?> Sma50 { get; set; } = [];
 }
 
-public class VixDailyItem {
+public class VixDailyItem
+{
     public DateOnly Date { get; set; }
     public decimal Open { get; set; }
     public decimal High { get; set; }

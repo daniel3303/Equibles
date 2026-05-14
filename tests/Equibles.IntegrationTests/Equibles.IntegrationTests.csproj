@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
@@ -89,5 +88,4 @@
     <ProjectReference Include="..\..\src\Equibles.Migrations\Equibles.Migrations.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Mcp.Server\Equibles.Mcp.Server.csproj" />
   </ItemGroup>
-
 </Project>

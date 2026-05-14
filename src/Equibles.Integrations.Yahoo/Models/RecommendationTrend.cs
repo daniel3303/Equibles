@@ -1,6 +1,7 @@
 namespace Equibles.Integrations.Yahoo.Models;
 
-public class RecommendationTrend {
+public class RecommendationTrend
+{
     public string Period { get; set; }
     public int StrongBuy { get; set; }
     public int Buy { get; set; }

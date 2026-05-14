@@ -7,9 +7,11 @@ using Microsoft.Extensions.Hosting;
 
 namespace Equibles.UnitTests.Fred;
 
-public class FredServiceCollectionExtensionsTests {
+public class FredServiceCollectionExtensionsTests
+{
     [Fact]
-    public void AddFredWorker_AutoWiresIFredClientFromIntegrationsAssembly() {
+    public void AddFredWorker_AutoWiresIFredClientFromIntegrationsAssembly()
+    {
         // Sibling to `AddFredWorker_AutoWiresFredImportService`. The
         // existing pin covers the FIRST `AutoWireServicesFrom` call —
         // the hosted-service assembly scan that registers FredImportService.
@@ -49,7 +51,8 @@ public class FredServiceCollectionExtensionsTests {
     }
 
     [Fact]
-    public void AddFredWorker_AutoWiresFredImportService() {
+    public void AddFredWorker_AutoWiresFredImportService()
+    {
         // AddFredWorker is the host's seam into auto-wiring for the FRED
         // macroeconomic series pipeline. It scans BOTH the hosted-service
         // assembly AND Equibles.Integrations.Fred (for the HTTP client),
@@ -67,7 +70,8 @@ public class FredServiceCollectionExtensionsTests {
     }
 
     [Fact]
-    public void AddFredWorker_RegistersFredScraperWorkerAsIHostedService() {
+    public void AddFredWorker_RegistersFredScraperWorkerAsIHostedService()
+    {
         // Third sibling in the AddFredWorker registration family. The two
         // existing pins cover the AutoWireServicesFrom scans (FredImportService
         // and IFredClient). This pin covers the structurally distinct
@@ -111,8 +115,11 @@ public class FredServiceCollectionExtensionsTests {
             .Where(d => d.ServiceType == typeof(IHostedService))
             .ToList();
 
-        hostedServiceDescriptors.Should().Contain(
-            d => d.ImplementationType == typeof(FredScraperWorker),
-            "AddHostedService<FredScraperWorker>() must register the worker as IHostedService so the FRED macroeconomic series fetch runs at startup");
+        hostedServiceDescriptors
+            .Should()
+            .Contain(
+                d => d.ImplementationType == typeof(FredScraperWorker),
+                "AddHostedService<FredScraperWorker>() must register the worker as IHostedService so the FRED macroeconomic series fetch runs at startup"
+            );
     }
 }

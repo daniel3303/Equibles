@@ -8,7 +8,8 @@ using Microsoft.Extensions.Options;
 
 namespace Equibles.Sec.HostedService;
 
-public class FtdScraperWorker : BaseScraperWorker {
+public class FtdScraperWorker : BaseScraperWorker
+{
     private readonly IConfiguration _configuration;
 
     protected override string WorkerName => "FTD scraper";
@@ -21,20 +22,27 @@ public class FtdScraperWorker : BaseScraperWorker {
         ErrorReporter errorReporter,
         IOptions<FtdScraperOptions> options,
         IConfiguration configuration
-    ) : base(logger, scopeFactory, errorReporter) {
+    )
+        : base(logger, scopeFactory, errorReporter)
+    {
         SleepInterval = TimeSpan.FromHours(options.Value.SleepIntervalHours);
         _configuration = configuration;
     }
 
-    protected override bool ValidateConfiguration() {
-        if (string.IsNullOrEmpty(_configuration["Sec:ContactEmail"])) {
-            Logger.LogWarning("FTD Scraper stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file.");
+    protected override bool ValidateConfiguration()
+    {
+        if (string.IsNullOrEmpty(_configuration["Sec:ContactEmail"]))
+        {
+            Logger.LogWarning(
+                "FTD Scraper stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file."
+            );
             return false;
         }
         return true;
     }
 
-    protected override async Task DoWork(CancellationToken stoppingToken) {
+    protected override async Task DoWork(CancellationToken stoppingToken)
+    {
         await using var scope = ScopeFactory.CreateAsyncScope();
         var ftdService = scope.ServiceProvider.GetRequiredService<FtdImportService>();
         await ftdService.Import(stoppingToken);

@@ -13,16 +13,28 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// both the "has Display" path and the fallback for callers without the attribute.
 /// </summary>
 [MemoryDiagnoser]
-public class EnumExtensionsBenchmarks {
-    private enum Decorated {
-        [Display(Name = "Total Exchange")] TotalExchange,
-        [Display(Name = "Equity")] Equity,
-        [Display(Name = "Index")] Index,
-        [Display(Name = "VIX")] Vix,
-        [Display(Name = "ETP")] Etp,
+public class EnumExtensionsBenchmarks
+{
+    private enum Decorated
+    {
+        [Display(Name = "Total Exchange")]
+        TotalExchange,
+
+        [Display(Name = "Equity")]
+        Equity,
+
+        [Display(Name = "Index")]
+        Index,
+
+        [Display(Name = "VIX")]
+        Vix,
+
+        [Display(Name = "ETP")]
+        Etp,
     }
 
-    private enum Plain {
+    private enum Plain
+    {
         Buy,
         Sell,
         Hold,
@@ -33,20 +45,24 @@ public class EnumExtensionsBenchmarks {
     private static readonly Plain[] PlainValues = Enum.GetValues<Plain>();
 
     [Benchmark]
-    public int RenderDecoratedEnumNames() {
+    public int RenderDecoratedEnumNames()
+    {
         var total = 0;
-        for (var i = 0; i < DecoratedValues.Length; i++) {
+        for (var i = 0; i < DecoratedValues.Length; i++)
+        {
             total += DecoratedValues[i].NameForHumans().Length;
         }
         return total;
     }
 
     [Benchmark]
-    public int RenderPlainEnumNames() {
+    public int RenderPlainEnumNames()
+    {
         // Fallback path — no [Display] attribute, returns ToString(). Still pays the reflection
         // cost because the attribute lookup happens before the null-coalesce.
         var total = 0;
-        for (var i = 0; i < PlainValues.Length; i++) {
+        for (var i = 0; i < PlainValues.Length; i++)
+        {
             total += PlainValues[i].NameForHumans().Length;
         }
         return total;

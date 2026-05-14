@@ -5,7 +5,8 @@ namespace Equibles.Cftc.Data.Models;
 
 [Index(nameof(MarketCode), IsUnique = true)]
 [Index(nameof(Category))]
-public class CftcContract {
+public class CftcContract
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     [Required]

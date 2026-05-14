@@ -7,17 +7,20 @@ namespace Equibles.FunctionalTests.Tests;
 
 [Collection(FunctionalTestCollection.Name)]
 [Trait("Category", "Functional")]
-public class HomeErrorTests {
+public class HomeErrorTests
+{
     private readonly WebAppFixture _web;
     private readonly PlaywrightFixture _playwright;
 
-    public HomeErrorTests(WebAppFixture web, PlaywrightFixture playwright) {
+    public HomeErrorTests(WebAppFixture web, PlaywrightFixture playwright)
+    {
         _web = web;
         _playwright = playwright;
     }
 
     [Fact]
-    public async Task Error_GetWith404_ReturnsNotFoundStatusAndPageNotFoundCopy() {
+    public async Task Error_GetWith404_ReturnsNotFoundStatusAndPageNotFoundCopy()
+    {
         // HomeController.Error sets Response.StatusCode from the route value and switches
         // ViewData["Title"]/["Description"] on the same value. This pins the 404 branch:
         // both the wire status and the rendered copy must match the switch arms. A regression

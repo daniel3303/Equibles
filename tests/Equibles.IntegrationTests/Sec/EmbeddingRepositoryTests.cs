@@ -27,17 +27,26 @@ namespace Equibles.IntegrationTests.Sec;
 /// to run against real data instead of short-circuiting on an empty result set.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class EmbeddingRepositoryTests : ParadeDbMcpTestBase {
+public class EmbeddingRepositoryTests : ParadeDbMcpTestBase
+{
     private const string Model = "test-embedding-model-v1";
 
-    public EmbeddingRepositoryTests(ParadeDbFixture fixture) : base(fixture) { }
+    public EmbeddingRepositoryTests(ParadeDbFixture fixture)
+        : base(fixture) { }
 
     [Fact]
-    public async Task SearchSimilar_OrdersByCosineDistanceFromQueryVector() {
+    public async Task SearchSimilar_OrdersByCosineDistanceFromQueryVector()
+    {
         var sut = new EmbeddingRepository(DbContext);
 
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL", Name = "Apple Inc." };
-        var file = new File {
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+        };
+        var file = new File
+        {
             Id = Guid.NewGuid(),
             Name = "10K",
             Extension = "html",
@@ -45,7 +54,8 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase {
             Size = 2,
             FileContent = new FileContent { Bytes = [0x01, 0x02] },
         };
-        var document = new Document {
+        var document = new Document
+        {
             Id = Guid.NewGuid(),
             CommonStockId = stock.Id,
             ContentId = file.Id,
@@ -58,12 +68,24 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase {
 
         // Three unit-basis vectors so the expected cosine ordering is unambiguous:
         // a query of [0.9, 0.1, 0] sits closest to the X axis, then the Y axis, then Z.
-        var chunkX = MakeChunkWithEmbedding(document, content: "x-axis", index: 0,
-            vector: new Vector(new ReadOnlyMemory<float>(new[] { 1f, 0f, 0f })));
-        var chunkY = MakeChunkWithEmbedding(document, content: "y-axis", index: 1,
-            vector: new Vector(new ReadOnlyMemory<float>(new[] { 0f, 1f, 0f })));
-        var chunkZ = MakeChunkWithEmbedding(document, content: "z-axis", index: 2,
-            vector: new Vector(new ReadOnlyMemory<float>(new[] { 0f, 0f, 1f })));
+        var chunkX = MakeChunkWithEmbedding(
+            document,
+            content: "x-axis",
+            index: 0,
+            vector: new Vector(new ReadOnlyMemory<float>(new[] { 1f, 0f, 0f }))
+        );
+        var chunkY = MakeChunkWithEmbedding(
+            document,
+            content: "y-axis",
+            index: 1,
+            vector: new Vector(new ReadOnlyMemory<float>(new[] { 0f, 1f, 0f }))
+        );
+        var chunkZ = MakeChunkWithEmbedding(
+            document,
+            content: "z-axis",
+            index: 2,
+            vector: new Vector(new ReadOnlyMemory<float>(new[] { 0f, 0f, 1f }))
+        );
 
         DbContext.Set<CommonStock>().Add(stock);
         DbContext.Set<File>().Add(file);
@@ -82,15 +104,24 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase {
         var results = await sut.SearchSimilar(queryVector, Model, maxResults: 3);
 
         results.Should().HaveCount(3);
-        results[0].ChunkId.Should().Be(chunkX.chunk.Id, "the x-axis vector is the nearest to the query");
+        results[0]
+            .ChunkId.Should()
+            .Be(chunkX.chunk.Id, "the x-axis vector is the nearest to the query");
         results[1].ChunkId.Should().Be(chunkY.chunk.Id, "the y-axis vector is second-nearest");
-        results[2].ChunkId.Should().Be(chunkZ.chunk.Id, "the z-axis vector is the farthest (orthogonal to the query)");
+        results[2]
+            .ChunkId.Should()
+            .Be(chunkZ.chunk.Id, "the z-axis vector is the farthest (orthogonal to the query)");
     }
 
     private static (Chunk chunk, Embedding embedding) MakeChunkWithEmbedding(
-        Document document, string content, int index, Vector vector
-    ) {
-        var chunk = new Chunk {
+        Document document,
+        string content,
+        int index,
+        Vector vector
+    )
+    {
+        var chunk = new Chunk
+        {
             Id = Guid.NewGuid(),
             DocumentId = document.Id,
             Content = content,
@@ -104,7 +135,8 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase {
             // and DateOnly.ToDateTime defaults to Unspecified — force UTC explicitly.
             ReportingDate = document.ReportingDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
         };
-        var embedding = new Embedding {
+        var embedding = new Embedding
+        {
             Id = Guid.NewGuid(),
             ChunkId = chunk.Id,
             Model = Model,

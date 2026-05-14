@@ -6,7 +6,8 @@ using Microsoft.Extensions.Configuration;
 
 namespace Equibles.Sec.HostedService;
 
-public class SecScraperWorker : BaseScraperWorker {
+public class SecScraperWorker : BaseScraperWorker
+{
     private readonly IConfiguration _configuration;
 
     protected override string WorkerName => "SEC filing scraper";
@@ -18,28 +19,40 @@ public class SecScraperWorker : BaseScraperWorker {
         IServiceScopeFactory scopeFactory,
         ErrorReporter errorReporter,
         IConfiguration configuration
-    ) : base(logger, scopeFactory, errorReporter) {
+    )
+        : base(logger, scopeFactory, errorReporter)
+    {
         _configuration = configuration;
     }
 
-    protected override bool ValidateConfiguration() {
-        if (string.IsNullOrEmpty(_configuration["Sec:ContactEmail"])) {
-            Logger.LogWarning("SEC Filing Scraper stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file.");
+    protected override bool ValidateConfiguration()
+    {
+        if (string.IsNullOrEmpty(_configuration["Sec:ContactEmail"]))
+        {
+            Logger.LogWarning(
+                "SEC Filing Scraper stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file."
+            );
             return false;
         }
         return true;
     }
 
-    protected override async Task DoWork(CancellationToken stoppingToken) {
+    protected override async Task DoWork(CancellationToken stoppingToken)
+    {
         await using var scope = ScopeFactory.CreateAsyncScope();
         var documentScraper = scope.ServiceProvider.GetRequiredService<IDocumentScraper>();
         var result = await documentScraper.ScrapeDocuments(stoppingToken);
 
         Logger.LogInformation(
             "Document scraping completed. Companies: {Companies}, Documents added: {Added}, Errors: {Errors}, Duration: {Duration}",
-            result.CompaniesProcessed, result.DocumentsAdded, result.Errors, result.Duration);
+            result.CompaniesProcessed,
+            result.DocumentsAdded,
+            result.Errors,
+            result.Duration
+        );
 
-        if (result.Errors > 0) {
+        if (result.Errors > 0)
+        {
             Logger.LogWarning("Scraping completed with {ErrorCount} errors", result.Errors);
         }
     }

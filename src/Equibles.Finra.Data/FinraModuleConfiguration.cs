@@ -3,8 +3,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Finra.Data;
 
-public class FinraModuleConfiguration : Equibles.Data.IModuleConfiguration {
-    public void ConfigureEntities(ModelBuilder builder) {
+public class FinraModuleConfiguration : Equibles.Data.IModuleConfiguration
+{
+    public void ConfigureEntities(ModelBuilder builder)
+    {
         builder.Entity<DailyShortVolume>();
         builder.Entity<ShortInterest>();
     }

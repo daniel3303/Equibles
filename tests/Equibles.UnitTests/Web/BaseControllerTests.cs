@@ -8,9 +8,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Web;
 
-public class BaseControllerTests {
+public class BaseControllerTests
+{
     [Fact]
-    public void GetReturnUrl_ExternalUrlInQueryString_IsRejectedAndReturnsNull() {
+    public void GetReturnUrl_ExternalUrlInQueryString_IsRejectedAndReturnsNull()
+    {
         // GetReturnUrl is shared by every concrete controller that wants to honour a
         // ?ReturnUrl= round-trip — most importantly the Auth flow's post-login redirect.
         // The `Url.IsLocalUrl(returnUrl)` filter is the only thing standing between this
@@ -25,17 +27,20 @@ public class BaseControllerTests {
         var sut = new TestableBaseController();
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Method = "GET";
-        httpContext.Request.QueryString = new QueryString("?ReturnUrl=https%3A%2F%2Fevil.com%2Fphish");
+        httpContext.Request.QueryString = new QueryString(
+            "?ReturnUrl=https%3A%2F%2Fevil.com%2Fphish"
+        );
 
         var urlHelper = Substitute.For<IUrlHelper>();
-        urlHelper.IsLocalUrl(Arg.Any<string>()).Returns(callInfo => {
-            var url = callInfo.Arg<string>();
-            return !string.IsNullOrEmpty(url) && url.StartsWith("/") && !url.StartsWith("//");
-        });
+        urlHelper
+            .IsLocalUrl(Arg.Any<string>())
+            .Returns(callInfo =>
+            {
+                var url = callInfo.Arg<string>();
+                return !string.IsNullOrEmpty(url) && url.StartsWith("/") && !url.StartsWith("//");
+            });
 
-        sut.ControllerContext = new ControllerContext {
-            HttpContext = httpContext,
-        };
+        sut.ControllerContext = new ControllerContext { HttpContext = httpContext };
         sut.Url = urlHelper;
 
         var result = sut.InvokeGetReturnUrl();
@@ -44,7 +49,8 @@ public class BaseControllerTests {
     }
 
     [Fact]
-    public void GetReturnUrl_LocalUrlPostedInForm_ReturnsTheUrl() {
+    public void GetReturnUrl_LocalUrlPostedInForm_ReturnsTheUrl()
+    {
         // GetReturnUrl checks the FORM body first (`Request.HasFormContentType &&
         // Request.Form.ContainsKey("ReturnUrl")`) before falling back to the query
         // string. The login flow relies on this: the login view renders the
@@ -63,15 +69,18 @@ public class BaseControllerTests {
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Method = "POST";
         httpContext.Request.ContentType = "application/x-www-form-urlencoded";
-        httpContext.Request.Form = new FormCollection(new Dictionary<string, StringValues> {
-            ["ReturnUrl"] = "/Stocks/Details/42",
-        });
+        httpContext.Request.Form = new FormCollection(
+            new Dictionary<string, StringValues> { ["ReturnUrl"] = "/Stocks/Details/42" }
+        );
 
         var urlHelper = Substitute.For<IUrlHelper>();
-        urlHelper.IsLocalUrl(Arg.Any<string>()).Returns(callInfo => {
-            var url = callInfo.Arg<string>();
-            return !string.IsNullOrEmpty(url) && url.StartsWith("/") && !url.StartsWith("//");
-        });
+        urlHelper
+            .IsLocalUrl(Arg.Any<string>())
+            .Returns(callInfo =>
+            {
+                var url = callInfo.Arg<string>();
+                return !string.IsNullOrEmpty(url) && url.StartsWith("/") && !url.StartsWith("//");
+            });
 
         sut.ControllerContext = new ControllerContext { HttpContext = httpContext };
         sut.Url = urlHelper;
@@ -82,7 +91,8 @@ public class BaseControllerTests {
     }
 
     [Fact]
-    public void GetReturnUrl_LocalUrlInQueryString_IsAcceptedAndReturned() {
+    public void GetReturnUrl_LocalUrlInQueryString_IsAcceptedAndReturned()
+    {
         // Completes the GetReturnUrl 4-cell coverage matrix
         // (source × outcome) — source ∈ {form, query}, outcome ∈
         // {accepted-local-url, rejected-external-or-null}:
@@ -131,10 +141,13 @@ public class BaseControllerTests {
         httpContext.Request.QueryString = new QueryString("?ReturnUrl=%2FStocks%2FDetails%2F42");
 
         var urlHelper = Substitute.For<IUrlHelper>();
-        urlHelper.IsLocalUrl(Arg.Any<string>()).Returns(callInfo => {
-            var url = callInfo.Arg<string>();
-            return !string.IsNullOrEmpty(url) && url.StartsWith("/") && !url.StartsWith("//");
-        });
+        urlHelper
+            .IsLocalUrl(Arg.Any<string>())
+            .Returns(callInfo =>
+            {
+                var url = callInfo.Arg<string>();
+                return !string.IsNullOrEmpty(url) && url.StartsWith("/") && !url.StartsWith("//");
+            });
 
         sut.ControllerContext = new ControllerContext { HttpContext = httpContext };
         sut.Url = urlHelper;
@@ -145,7 +158,8 @@ public class BaseControllerTests {
     }
 
     [Fact]
-    public void InitSseStream_SetsContentTypeAndDisablesNginxBuffering() {
+    public void InitSseStream_SetsContentTypeAndDisablesNginxBuffering()
+    {
         // InitSseStream prepares a response for Server-Sent Events. The three
         // headers it sets are load-bearing: text/event-stream is the SSE
         // content type, no-cache prevents downstream caches from holding
@@ -167,7 +181,8 @@ public class BaseControllerTests {
     }
 
     [Fact]
-    public async Task WriteSseEvent_FormatsEventLineWithDoubleNewlineTerminatorAndJsonPayload() {
+    public async Task WriteSseEvent_FormatsEventLineWithDoubleNewlineTerminatorAndJsonPayload()
+    {
         // Sibling to the InitSseStream pin above. The two helpers form a contract:
         // InitSseStream prepares the response headers, WriteSseEvent writes
         // individual events. The existing test pins the headers; this one pins
@@ -220,16 +235,23 @@ public class BaseControllerTests {
         using var reader = new StreamReader(responseBody);
         var written = await reader.ReadToEndAsync();
 
-        written.Should().Be("event: progress\ndata: {\"CompaniesProcessed\":42,\"Message\":\"Halfway done\"}\n\n");
+        written
+            .Should()
+            .Be(
+                "event: progress\ndata: {\"CompaniesProcessed\":42,\"Message\":\"Halfway done\"}\n\n"
+            );
     }
 
-    private sealed class TestableBaseController : BaseController {
-        public TestableBaseController() : base(Substitute.For<ILogger<BaseController>>()) { }
+    private sealed class TestableBaseController : BaseController
+    {
+        public TestableBaseController()
+            : base(Substitute.For<ILogger<BaseController>>()) { }
 
         public string InvokeGetReturnUrl() => GetReturnUrl();
 
         public void InvokeInitSseStream() => InitSseStream();
 
-        public Task InvokeWriteSseEvent(string eventType, object data) => WriteSseEvent(eventType, data);
+        public Task InvokeWriteSseEvent(string eventType, object data) =>
+            WriteSseEvent(eventType, data);
     }
 }

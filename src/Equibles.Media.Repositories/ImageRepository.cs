@@ -3,9 +3,8 @@ using Equibles.Media.Data.Models;
 
 namespace Equibles.Media.Repositories;
 
-public class ImageRepository : BaseRepository<Image> {
-
-    public ImageRepository(EquiblesDbContext dbContext) : base(dbContext) {
-
-    }
+public class ImageRepository : BaseRepository<Image>
+{
+    public ImageRepository(EquiblesDbContext dbContext)
+        : base(dbContext) { }
 }

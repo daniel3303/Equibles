@@ -10,9 +10,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Finra;
 
-public class FinraScraperWorkerTests {
+public class FinraScraperWorkerTests
+{
     [Fact]
-    public void ValidateConfiguration_FinraClientNotConfigured_ReturnsFalse() {
+    public void ValidateConfiguration_FinraClientNotConfigured_ReturnsFalse()
+    {
         // FinraScraperWorker drives the daily-short-volume and short-interest scrapes
         // against the FINRA API, which uses OAuth2 client credentials. When the API key
         // and secret aren't configured, every HTTP attempt fails — and the worker would
@@ -40,14 +42,19 @@ public class FinraScraperWorkerTests {
         var sut = new TestableFinraScraperWorker(
             Substitute.For<ILogger<FinraScraperWorker>>(),
             scopeFactory,
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
-            Options.Create(new FinraScraperOptions()));
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            Options.Create(new FinraScraperOptions())
+        );
 
         sut.InvokeValidateConfiguration().Should().BeFalse();
     }
 
     [Fact]
-    public void ValidateConfiguration_FinraClientConfigured_ReturnsTrue() {
+    public void ValidateConfiguration_FinraClientConfigured_ReturnsTrue()
+    {
         // Sibling to the false-case pin above. The risk this catches is asymmetric
         // and unreachable from the not-configured sibling alone: a regression that
         // hard-codes `ValidateConfiguration => false` (defensive default during a
@@ -81,14 +88,19 @@ public class FinraScraperWorkerTests {
         var sut = new TestableFinraScraperWorker(
             Substitute.For<ILogger<FinraScraperWorker>>(),
             scopeFactory,
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
-            Options.Create(new FinraScraperOptions()));
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            Options.Create(new FinraScraperOptions())
+        );
 
         sut.InvokeValidateConfiguration().Should().BeTrue();
     }
 
     [Fact]
-    public void Constructor_AppliesSleepIntervalHoursFromOptionsAsTimeSpanHours() {
+    public void Constructor_AppliesSleepIntervalHoursFromOptionsAsTimeSpanHours()
+    {
         // FinraScraperWorker reads FinraScraperOptions.SleepIntervalHours
         // (inherited from ScraperOptions, default 24h) and stores it as a
         // TimeSpan via FromHours. Daily short volume publishes T+1 and
@@ -102,14 +114,19 @@ public class FinraScraperWorkerTests {
         var sut = new TestableFinraScraperWorker(
             Substitute.For<ILogger<FinraScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
-            options);
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            options
+        );
 
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(12));
     }
 
     [Fact]
-    public void ErrorSource_IsFinraScraper() {
+    public void ErrorSource_IsFinraScraper()
+    {
         // FinraScraperWorker drives the daily-short-volume and short-interest scrapes
         // against the FINRA API — a different upstream, auth model (OAuth2), and quota
         // envelope from every other scraper. When BaseScraperWorker's catch-all reports
@@ -126,14 +143,19 @@ public class FinraScraperWorkerTests {
         var sut = new TestableFinraScraperWorker(
             Substitute.For<ILogger<FinraScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
-            options);
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            options
+        );
 
         sut.InvokeErrorSource().Should().Be(ErrorSource.FinraScraper);
     }
 
     [Fact]
-    public void WorkerName_IsFinraScraper() {
+    public void WorkerName_IsFinraScraper()
+    {
         // Eighth WorkerName pin in the natural-extension family (CBOE, Holdings,
         // SEC filing, FTD, Document processor, FRED, Yahoo price, and now FINRA).
         // WorkerName flows into BaseScraperWorker's structured log scope and shows
@@ -153,18 +175,22 @@ public class FinraScraperWorkerTests {
             Substitute.For<IServiceScopeFactory>(),
             Substitute.For<ErrorReporter>(
                 Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()),
-            options);
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            options
+        );
 
         sut.InvokeWorkerName().Should().Be("FINRA scraper");
     }
 
-    private sealed class TestableFinraScraperWorker : FinraScraperWorker {
+    private sealed class TestableFinraScraperWorker : FinraScraperWorker
+    {
         public TestableFinraScraperWorker(
             ILogger<FinraScraperWorker> logger,
             IServiceScopeFactory scopeFactory,
             ErrorReporter errorReporter,
-            IOptions<FinraScraperOptions> options)
+            IOptions<FinraScraperOptions> options
+        )
             : base(logger, scopeFactory, errorReporter, options) { }
 
         public bool InvokeValidateConfiguration() => ValidateConfiguration();

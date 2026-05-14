@@ -18,15 +18,18 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// pipeline does not always strip cleanly.
 /// </summary>
 [MemoryDiagnoser]
-public class ChunkingStrategyCleanTextBenchmarks {
+public class ChunkingStrategyCleanTextBenchmarks
+{
     private readonly ChunkingStrategy _sut = new(new TokenCounter());
     private string _input;
 
     [GlobalSetup]
-    public void Setup() {
+    public void Setup()
+    {
         // ~4 KB of post-Markdown text with residual inline HTML — representative of the
         // worst-case shape CleanText sees in production (clean prose is the cheap path).
-        var fragments = new[] {
+        var fragments = new[]
+        {
             "The Company reported <strong>strong</strong> revenue growth during the fiscal quarter.",
             "Operating expenses increased <em>modestly</em> compared to the prior <span>year</span> period.",
             "Net income rose driven by higher product margins and <strong>lower</strong> interest costs.",
@@ -36,7 +39,8 @@ public class ChunkingStrategyCleanTextBenchmarks {
         };
         var builder = new StringBuilder(4_096 + 128);
         var i = 0;
-        while (builder.Length < 4_096) {
+        while (builder.Length < 4_096)
+        {
             builder.Append(fragments[i % fragments.Length]).Append("    \n  ");
             i++;
         }

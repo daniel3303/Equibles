@@ -3,9 +3,11 @@ using Equibles.Holdings.HostedService.Services;
 
 namespace Equibles.IntegrationTests.Holdings;
 
-public class HoldingsParsingHelperTests {
+public class HoldingsParsingHelperTests
+{
     [Fact]
-    public void TryParseDateOnly_SecDdMmmYyyyFormat_ParsesCorrectlyAfterIsoLegRejects() {
+    public void TryParseDateOnly_SecDdMmmYyyyFormat_ParsesCorrectlyAfterIsoLegRejects()
+    {
         // 13F SUBMISSION.tsv routinely emits dates in SEC's classic `dd-MMM-yyyy` form
         // (`30-SEP-2024`) — not the ISO format `DateOnly.TryParse` natively recognises. The
         // parser tries the ISO leg first, falls back to `dd-MMM-yyyy` (invariant culture),
@@ -27,7 +29,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void ParseInvestmentDiscretion_OtrAbbreviation_ReturnsOther() {
+    public void ParseInvestmentDiscretion_OtrAbbreviation_ReturnsOther()
+    {
         // 13F INFOTABLE.tsv encodes "Other" discretion as the four-character code OTR — not
         // OTH, OTHR, or OTHER as a developer reading SEC's plain-English column header might
         // guess. The DFND branch is already pinned by the sibling [Fact], but OTR has the
@@ -41,7 +44,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void ParseInvestmentDiscretion_DfndAbbreviation_ReturnsDefined() {
+    public void ParseInvestmentDiscretion_DfndAbbreviation_ReturnsDefined()
+    {
         // 13F INFOTABLE.tsv encodes the discretion column as a four-character SEC
         // abbreviation: SOLE / DFND / OTR. The first two map 1:1 (`Sole`, `Other`) but `DFND`
         // is the surprising one — it expands to `Defined`, not `Default` (a developer
@@ -57,7 +61,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void ResolveManagerName_AccessionAndSequenceFoundInOtherManagers_ReturnsMappedName() {
+    public void ResolveManagerName_AccessionAndSequenceFoundInOtherManagers_ReturnsMappedName()
+    {
         // 13F-HR filings can carry multiple managers per accession — the primary filing
         // manager from SUBMISSION.tsv plus zero-or-more "other managers" listed in
         // OTHERMANAGER2.tsv keyed by `(ACCESSION_NUMBER, SEQUENCENUMBER)`. During INFOTABLE
@@ -71,9 +76,14 @@ public class HoldingsParsingHelperTests {
         // sequence-numbered managers, asks for sequence 2, asserts the second name comes
         // back. Covers (a) the outer dictionary hit, (b) the inner dictionary hit, (c) the
         // exact sequence-number selection (not e.g. first-in-iteration order).
-        var context = new ImportContext {
-            OtherManagers = new Dictionary<string, Dictionary<int, string>>(StringComparer.OrdinalIgnoreCase) {
-                ["ACC-001"] = new() {
+        var context = new ImportContext
+        {
+            OtherManagers = new Dictionary<string, Dictionary<int, string>>(
+                StringComparer.OrdinalIgnoreCase
+            )
+            {
+                ["ACC-001"] = new()
+                {
                     [1] = "Capital Group Companies, Inc.",
                     [2] = "Capital Research Global Investors",
                 },
@@ -86,7 +96,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void ParseShareType_PrnAbbreviation_ReturnsPrincipal() {
+    public void ParseShareType_PrnAbbreviation_ReturnsPrincipal()
+    {
         // 13F INFOTABLE.tsv encodes the share-quantity unit in column SSHPRNAMTTYPE with
         // exactly two valid values: `SH` (equity share count) and `PRN` (principal amount —
         // bond face value). PRN is the surprising one — a developer expanding the
@@ -105,7 +116,8 @@ public class HoldingsParsingHelperTests {
     }
 
     [Fact]
-    public void ParseOptionType_CallString_ReturnsCall() {
+    public void ParseOptionType_CallString_ReturnsCall()
+    {
         // 13F INFOTABLE.tsv column PUTCALL distinguishes derivative holdings: blank for
         // direct equity, `PUT` for put options, `CALL` for call options. The parser returns
         // `OptionType?` — null for the blank/unknown case, distinct enum values for the

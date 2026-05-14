@@ -11,16 +11,19 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// captures only the buffer overhead, not the EF Core insert cost on the other side.
 /// </summary>
 [MemoryDiagnoser]
-public class BatchPersisterBenchmarks {
+public class BatchPersisterBenchmarks
+{
     private const int ItemCount = 10_000;
     private const int BatchSize = 500;
     private int[] _items;
     private static readonly Func<List<int>, Task> NoopFlush = _ => Task.CompletedTask;
 
     [GlobalSetup]
-    public void Setup() {
+    public void Setup()
+    {
         _items = new int[ItemCount];
-        for (var i = 0; i < ItemCount; i++) _items[i] = i;
+        for (var i = 0; i < ItemCount; i++)
+            _items[i] = i;
     }
 
     [Benchmark]

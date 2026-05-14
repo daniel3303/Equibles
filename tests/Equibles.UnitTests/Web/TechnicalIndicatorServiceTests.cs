@@ -2,19 +2,21 @@ using Equibles.Web.Services;
 
 namespace Equibles.UnitTests.Web;
 
-public class TechnicalIndicatorServiceTests {
-
+public class TechnicalIndicatorServiceTests
+{
     #region ComputeSma
 
     [Fact]
-    public void ComputeSma_EmptyList_ReturnsEmptyList() {
+    public void ComputeSma_EmptyList_ReturnsEmptyList()
+    {
         var result = TechnicalIndicatorService.ComputeSma([], 5);
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public void ComputeSma_SingleElement_Period1_ReturnsTheElement() {
+    public void ComputeSma_SingleElement_Period1_ReturnsTheElement()
+    {
         var result = TechnicalIndicatorService.ComputeSma([42m], 1);
 
         result.Should().HaveCount(1);
@@ -22,7 +24,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeSma_SingleElement_PeriodGreaterThan1_ReturnsNull() {
+    public void ComputeSma_SingleElement_PeriodGreaterThan1_ReturnsNull()
+    {
         var result = TechnicalIndicatorService.ComputeSma([42m], 3);
 
         result.Should().HaveCount(1);
@@ -30,7 +33,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeSma_ExactPeriodLength_ReturnsSingleValue() {
+    public void ComputeSma_ExactPeriodLength_ReturnsSingleValue()
+    {
         // 3 elements, period 3 => first two null, third is average
         var prices = new List<decimal> { 10m, 20m, 30m };
         var result = TechnicalIndicatorService.ComputeSma(prices, 3);
@@ -42,21 +46,35 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeSma_LongerThanPeriod_ReturnsRollingAverage() {
+    public void ComputeSma_LongerThanPeriod_ReturnsRollingAverage()
+    {
         var prices = new List<decimal> { 2m, 4m, 6m, 8m, 10m };
         var result = TechnicalIndicatorService.ComputeSma(prices, 3);
 
         result.Should().HaveCount(5);
         result[0].Should().BeNull();
         result[1].Should().BeNull();
-        result[2].Should().Be(4m);     // (2+4+6)/3 = 4
-        result[3].Should().Be(6m);     // (4+6+8)/3 = 6
-        result[4].Should().Be(8m);     // (6+8+10)/3 = 8
+        result[2].Should().Be(4m); // (2+4+6)/3 = 4
+        result[3].Should().Be(6m); // (4+6+8)/3 = 6
+        result[4].Should().Be(8m); // (6+8+10)/3 = 8
     }
 
     [Fact]
-    public void ComputeSma_KnownValues_VerifyMathematicalCorrectness() {
-        var prices = new List<decimal> { 22.27m, 22.19m, 22.08m, 22.17m, 22.18m, 22.13m, 22.23m, 22.43m, 22.24m, 22.29m };
+    public void ComputeSma_KnownValues_VerifyMathematicalCorrectness()
+    {
+        var prices = new List<decimal>
+        {
+            22.27m,
+            22.19m,
+            22.08m,
+            22.17m,
+            22.18m,
+            22.13m,
+            22.23m,
+            22.43m,
+            22.24m,
+            22.29m,
+        };
         var result = TechnicalIndicatorService.ComputeSma(prices, 5);
 
         result.Should().HaveCount(10);
@@ -85,7 +103,8 @@ public class TechnicalIndicatorServiceTests {
     [InlineData(1)]
     [InlineData(3)]
     [InlineData(10)]
-    public void ComputeSma_ResultLength_AlwaysMatchesInputLength(int period) {
+    public void ComputeSma_ResultLength_AlwaysMatchesInputLength(int period)
+    {
         var prices = new List<decimal> { 1m, 2m, 3m, 4m, 5m, 6m, 7m };
         var result = TechnicalIndicatorService.ComputeSma(prices, period);
 
@@ -96,7 +115,8 @@ public class TechnicalIndicatorServiceTests {
     [InlineData(3, 2)] // period 3 => first 2 nulls
     [InlineData(5, 4)] // period 5 => first 4 nulls
     [InlineData(1, 0)] // period 1 => no nulls
-    public void ComputeSma_NullPadding_HasCorrectNullCount(int period, int expectedNulls) {
+    public void ComputeSma_NullPadding_HasCorrectNullCount(int period, int expectedNulls)
+    {
         var prices = new List<decimal> { 1m, 2m, 3m, 4m, 5m, 6m, 7m, 8m, 9m, 10m };
         var result = TechnicalIndicatorService.ComputeSma(prices, period);
 
@@ -105,7 +125,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeSma_Period1_ReturnsPricesThemselves() {
+    public void ComputeSma_Period1_ReturnsPricesThemselves()
+    {
         var prices = new List<decimal> { 5m, 10m, 15m };
         var result = TechnicalIndicatorService.ComputeSma(prices, 1);
 
@@ -113,7 +134,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeSma_RoundsToFourDecimalPlaces() {
+    public void ComputeSma_RoundsToFourDecimalPlaces()
+    {
         // 1+2+3 = 6 / 3 = 2 (exact), but let's pick values that produce rounding
         var prices = new List<decimal> { 1m, 1m, 1m, 2m }; // period 3
         var result = TechnicalIndicatorService.ComputeSma(prices, 3);
@@ -127,14 +149,16 @@ public class TechnicalIndicatorServiceTests {
     #region ComputeEma
 
     [Fact]
-    public void ComputeEma_EmptyList_ReturnsEmptyList() {
+    public void ComputeEma_EmptyList_ReturnsEmptyList()
+    {
         var result = TechnicalIndicatorService.ComputeEma([], 5);
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public void ComputeEma_SingleElement_Period1_ReturnsTheElement() {
+    public void ComputeEma_SingleElement_Period1_ReturnsTheElement()
+    {
         var result = TechnicalIndicatorService.ComputeEma([42m], 1);
 
         result.Should().HaveCount(1);
@@ -142,7 +166,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeEma_SingleElement_PeriodGreaterThan1_ReturnsNull() {
+    public void ComputeEma_SingleElement_PeriodGreaterThan1_ReturnsNull()
+    {
         var result = TechnicalIndicatorService.ComputeEma([42m], 3);
 
         result.Should().HaveCount(1);
@@ -150,7 +175,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeEma_SeedValueIsSma() {
+    public void ComputeEma_SeedValueIsSma()
+    {
         // For period 3, the first EMA value (index 2) should be SMA of first 3 elements
         var prices = new List<decimal> { 10m, 20m, 30m };
         var result = TechnicalIndicatorService.ComputeEma(prices, 3);
@@ -159,7 +185,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeEma_VerifyMultiplierCalculation() {
+    public void ComputeEma_VerifyMultiplierCalculation()
+    {
         // Period=3, multiplier = 2/(3+1) = 0.5
         // Prices: [10, 20, 30, 40]
         // Index 0,1: null
@@ -175,9 +202,22 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeEma_KnownValues_VerifyMathematicalCorrectness() {
+    public void ComputeEma_KnownValues_VerifyMathematicalCorrectness()
+    {
         // Period=5, multiplier = 2/(5+1) = 1/3
-        var prices = new List<decimal> { 22.27m, 22.19m, 22.08m, 22.17m, 22.18m, 22.13m, 22.23m, 22.43m, 22.24m, 22.29m };
+        var prices = new List<decimal>
+        {
+            22.27m,
+            22.19m,
+            22.08m,
+            22.17m,
+            22.18m,
+            22.13m,
+            22.23m,
+            22.43m,
+            22.24m,
+            22.29m,
+        };
         var result = TechnicalIndicatorService.ComputeEma(prices, 5);
 
         result.Should().HaveCount(10);
@@ -199,7 +239,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeEma_ExactPeriodLength_ReturnsSingleNonNullValue() {
+    public void ComputeEma_ExactPeriodLength_ReturnsSingleNonNullValue()
+    {
         var prices = new List<decimal> { 5m, 10m, 15m };
         var result = TechnicalIndicatorService.ComputeEma(prices, 3);
 
@@ -212,7 +253,8 @@ public class TechnicalIndicatorServiceTests {
     [InlineData(1)]
     [InlineData(3)]
     [InlineData(10)]
-    public void ComputeEma_ResultLength_AlwaysMatchesInputLength(int period) {
+    public void ComputeEma_ResultLength_AlwaysMatchesInputLength(int period)
+    {
         var prices = new List<decimal> { 1m, 2m, 3m, 4m, 5m, 6m, 7m, 8m, 9m, 10m, 11m, 12m };
         var result = TechnicalIndicatorService.ComputeEma(prices, period);
 
@@ -220,7 +262,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeEma_RoundsToFourDecimalPlaces() {
+    public void ComputeEma_RoundsToFourDecimalPlaces()
+    {
         // Period=3, multiplier=0.5
         // Prices: [1, 1, 1, 2]
         // Index 2: SMA = 1
@@ -245,7 +288,20 @@ public class TechnicalIndicatorServiceTests {
         // Index 5: (6-4)*0.5+4=5
         // All exact. Let's use non-trivial values.
         // Period=10, multiplier=2/11
-        var prices = new List<decimal> { 22.27m, 22.19m, 22.08m, 22.17m, 22.18m, 22.13m, 22.23m, 22.43m, 22.24m, 22.29m, 22.15m };
+        var prices = new List<decimal>
+        {
+            22.27m,
+            22.19m,
+            22.08m,
+            22.17m,
+            22.18m,
+            22.13m,
+            22.23m,
+            22.43m,
+            22.24m,
+            22.29m,
+            22.15m,
+        };
         var result = TechnicalIndicatorService.ComputeEma(prices, 10);
 
         // Index 9: SMA = (22.27+22.19+22.08+22.17+22.18+22.13+22.23+22.43+22.24+22.29)/10
@@ -259,7 +315,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeEma_ConstantPrices_AllValuesEqualPrice() {
+    public void ComputeEma_ConstantPrices_AllValuesEqualPrice()
+    {
         var prices = new List<decimal> { 50m, 50m, 50m, 50m, 50m, 50m };
         var result = TechnicalIndicatorService.ComputeEma(prices, 3);
 
@@ -275,14 +332,16 @@ public class TechnicalIndicatorServiceTests {
     #region ComputeRsi
 
     [Fact]
-    public void ComputeRsi_EmptyList_ReturnsEmptyList() {
+    public void ComputeRsi_EmptyList_ReturnsEmptyList()
+    {
         var result = TechnicalIndicatorService.ComputeRsi([]);
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public void ComputeRsi_FewerThanPeriodPlusOneElements_ReturnsAllNulls() {
+    public void ComputeRsi_FewerThanPeriodPlusOneElements_ReturnsAllNulls()
+    {
         // Default period=14, need >14 elements. With exactly 14, all null.
         var prices = Enumerable.Range(1, 14).Select(x => (decimal)x).ToList();
         var result = TechnicalIndicatorService.ComputeRsi(prices);
@@ -292,7 +351,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeRsi_ExactlyPeriodPlusOneElements_ReturnsAllNulls() {
+    public void ComputeRsi_ExactlyPeriodPlusOneElements_ReturnsAllNulls()
+    {
         // count == period => branch: prices.Count <= period => all null
         // With default period=14, need exactly 14 elements => all null
         var prices = Enumerable.Range(1, 14).Select(x => (decimal)x).ToList();
@@ -303,7 +363,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeRsi_AllGains_ReturnsRsi100() {
+    public void ComputeRsi_AllGains_ReturnsRsi100()
+    {
         // Prices that only go up => avgLoss=0 => rs=100 => RSI = 100 - 100/101 = 99.01
         // Wait, let's re-read: rs = avgLoss == 0 ? 100m : avgGain / avgLoss
         // RSI = 100 - 100/(1+100) = 100 - 100/101 = 100 - 0.990099.. = 99.0099.. => rounded to 99.01
@@ -326,7 +387,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeRsi_AllLosses_ReturnsRsiNearZero() {
+    public void ComputeRsi_AllLosses_ReturnsRsiNearZero()
+    {
         // Prices only go down => avgGain=0 => rs = 0/avgLoss = 0
         // RSI = 100 - 100/(1+0) = 100 - 100 = 0
         var prices = new List<decimal> { 20m, 19m, 18m, 17m, 16m };
@@ -343,7 +405,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeRsi_MixedChanges_VerifyKnownValues() {
+    public void ComputeRsi_MixedChanges_VerifyKnownValues()
+    {
         // Using period=3 for manual calculation
         // Prices: [44, 44.34, 44.09, 43.61, 44.33]
         var prices = new List<decimal> { 44m, 44.34m, 44.09m, 43.61m, 44.33m };
@@ -366,7 +429,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeRsi_NullPadding_HasCorrectPattern() {
+    public void ComputeRsi_NullPadding_HasCorrectPattern()
+    {
         // With period=3, count=6: index 0 is null (no change), index 1-2 null (lookback), index 3 is first RSI
         var prices = new List<decimal> { 10m, 11m, 12m, 11m, 13m, 12m };
         var result = TechnicalIndicatorService.ComputeRsi(prices, 3);
@@ -384,7 +448,8 @@ public class TechnicalIndicatorServiceTests {
     [InlineData(3)]
     [InlineData(5)]
     [InlineData(14)]
-    public void ComputeRsi_ResultLength_AlwaysMatchesInputLength(int period) {
+    public void ComputeRsi_ResultLength_AlwaysMatchesInputLength(int period)
+    {
         // Need count > period
         var prices = Enumerable.Range(1, period + 5).Select(x => (decimal)x).ToList();
         var result = TechnicalIndicatorService.ComputeRsi(prices, period);
@@ -393,7 +458,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeRsi_ConstantPrices_AllZeroChanges() {
+    public void ComputeRsi_ConstantPrices_AllZeroChanges()
+    {
         // All changes are 0 => avgGain=0, avgLoss=0
         // rs = 100 (avgLoss==0 branch) => RSI = 99.01
         var prices = new List<decimal> { 50m, 50m, 50m, 50m, 50m };
@@ -404,7 +470,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeRsi_DefaultPeriodIs14() {
+    public void ComputeRsi_DefaultPeriodIs14()
+    {
         // Provide 16 prices (>14), verify first RSI appears at index 14
         var prices = Enumerable.Range(1, 16).Select(x => (decimal)x).ToList();
         var result = TechnicalIndicatorService.ComputeRsi(prices);
@@ -412,7 +479,8 @@ public class TechnicalIndicatorServiceTests {
         result.Should().HaveCount(16);
 
         // Indices 0..13 should be null (index 0 = no change, 1..13 = lookback)
-        for (var i = 0; i < 14; i++) {
+        for (var i = 0; i < 14; i++)
+        {
             result[i].Should().BeNull($"index {i} should be null during lookback");
         }
 
@@ -421,7 +489,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeRsi_RoundsToTwoDecimalPlaces() {
+    public void ComputeRsi_RoundsToTwoDecimalPlaces()
+    {
         // Construct a scenario that produces a non-round RSI
         // period=3, prices: [100, 101, 100, 101]
         // changes: [_, +1, -1, +1]
@@ -448,7 +517,8 @@ public class TechnicalIndicatorServiceTests {
     #region ComputeMacd
 
     [Fact]
-    public void ComputeMacd_EmptyList_ReturnsEmptyLists() {
+    public void ComputeMacd_EmptyList_ReturnsEmptyLists()
+    {
         var (line, signal, histogram) = TechnicalIndicatorService.ComputeMacd([]);
 
         line.Should().BeEmpty();
@@ -457,7 +527,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeMacd_ResultLengths_AlwaysMatchInputLength() {
+    public void ComputeMacd_ResultLengths_AlwaysMatchInputLength()
+    {
         var prices = Enumerable.Range(1, 50).Select(x => (decimal)x).ToList();
         var (line, signal, histogram) = TechnicalIndicatorService.ComputeMacd(prices);
 
@@ -467,21 +538,31 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeMacd_MacdLine_IsFastEmaMinusSlowEma() {
+    public void ComputeMacd_MacdLine_IsFastEmaMinusSlowEma()
+    {
         // Use small periods for testability: fast=2, slow=4, signal=2
         var prices = new List<decimal> { 10m, 20m, 30m, 40m, 50m, 60m };
 
-        var (line, _, _) = TechnicalIndicatorService.ComputeMacd(prices, fastPeriod: 2, slowPeriod: 4, signalPeriod: 2);
+        var (line, _, _) = TechnicalIndicatorService.ComputeMacd(
+            prices,
+            fastPeriod: 2,
+            slowPeriod: 4,
+            signalPeriod: 2
+        );
 
         // Compute expected fast EMA (period=2, multiplier = 2/3)
         var fastEma = TechnicalIndicatorService.ComputeEma(prices, 2);
         // Compute expected slow EMA (period=4, multiplier = 2/5)
         var slowEma = TechnicalIndicatorService.ComputeEma(prices, 4);
 
-        for (var i = 0; i < prices.Count; i++) {
-            if (fastEma[i] == null || slowEma[i] == null) {
+        for (var i = 0; i < prices.Count; i++)
+        {
+            if (fastEma[i] == null || slowEma[i] == null)
+            {
                 line[i].Should().BeNull($"index {i}: either fast or slow EMA is null");
-            } else {
+            }
+            else
+            {
                 var expected = Math.Round(fastEma[i].Value - slowEma[i].Value, 4);
                 line[i].Should().Be(expected, $"index {i}: MACD line = fast EMA - slow EMA");
             }
@@ -489,14 +570,16 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeMacd_NullPadding_FirstNonNullAtSlowPeriodMinusOne() {
+    public void ComputeMacd_NullPadding_FirstNonNullAtSlowPeriodMinusOne()
+    {
         // With default params (12/26/9), slow period is 26.
         // Slow EMA first non-null at index 25, fast at index 11.
         // MACD line first non-null at index 25 (when both are available).
         var prices = Enumerable.Range(1, 40).Select(x => (decimal)x).ToList();
         var (line, _, _) = TechnicalIndicatorService.ComputeMacd(prices);
 
-        for (var i = 0; i < 25; i++) {
+        for (var i = 0; i < 25; i++)
+        {
             line[i].Should().BeNull($"index {i} should be null (before slow EMA is available)");
         }
 
@@ -504,12 +587,18 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeMacd_SignalLine_IsEmaOfMacdLine() {
+    public void ComputeMacd_SignalLine_IsEmaOfMacdLine()
+    {
         // Use fast=2, slow=3, signal=2 for manageable hand-calculation
         // Prices: [10, 20, 30, 40, 50, 60, 70]
         var prices = new List<decimal> { 10m, 20m, 30m, 40m, 50m, 60m, 70m };
 
-        var (line, signal, _) = TechnicalIndicatorService.ComputeMacd(prices, fastPeriod: 2, slowPeriod: 3, signalPeriod: 2);
+        var (line, signal, _) = TechnicalIndicatorService.ComputeMacd(
+            prices,
+            fastPeriod: 2,
+            slowPeriod: 3,
+            signalPeriod: 2
+        );
 
         // Fast EMA (period=2, mult=2/3):
         //   [0]=null, [1]=15 (SMA), [2]=(30-15)*2/3+15=25, [3]=(40-25)*2/3+25=35, [4]=(50-35)*2/3+35=45, [5]=(60-45)*2/3+45=55, [6]=(70-55)*2/3+55=65
@@ -532,15 +621,27 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeMacd_Histogram_IsMacdMinusSignal() {
+    public void ComputeMacd_Histogram_IsMacdMinusSignal()
+    {
         var prices = new List<decimal> { 10m, 20m, 30m, 40m, 50m, 60m, 70m };
 
-        var (line, signal, histogram) = TechnicalIndicatorService.ComputeMacd(prices, fastPeriod: 2, slowPeriod: 3, signalPeriod: 2);
+        var (line, signal, histogram) = TechnicalIndicatorService.ComputeMacd(
+            prices,
+            fastPeriod: 2,
+            slowPeriod: 3,
+            signalPeriod: 2
+        );
 
-        for (var i = 0; i < prices.Count; i++) {
-            if (line[i] == null || signal[i] == null) {
-                histogram[i].Should().BeNull($"index {i}: histogram null when MACD or signal is null");
-            } else {
+        for (var i = 0; i < prices.Count; i++)
+        {
+            if (line[i] == null || signal[i] == null)
+            {
+                histogram[i]
+                    .Should()
+                    .BeNull($"index {i}: histogram null when MACD or signal is null");
+            }
+            else
+            {
                 var expected = Math.Round(line[i].Value - signal[i].Value, 4);
                 histogram[i].Should().Be(expected, $"index {i}: histogram = MACD - signal");
             }
@@ -548,7 +649,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeMacd_DefaultParameters_AreCorrect() {
+    public void ComputeMacd_DefaultParameters_AreCorrect()
+    {
         // Verify default params: fast=12, slow=26, signal=9
         // By checking that the first MACD value appears at index 25 (slow period - 1)
         // and signal first appears at slow period - 1 + signal period - 1 = 25 + 8 = 33
@@ -571,7 +673,8 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeMacd_ConstantPrices_MacdLineIsZero() {
+    public void ComputeMacd_ConstantPrices_MacdLineIsZero()
+    {
         // When all prices are equal, fast EMA = slow EMA = price => MACD = 0
         var prices = Enumerable.Repeat(100m, 40).ToList();
         var (line, signal, histogram) = TechnicalIndicatorService.ComputeMacd(prices);
@@ -587,11 +690,17 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeMacd_KnownValues_VerifyWithSmallPeriods() {
+    public void ComputeMacd_KnownValues_VerifyWithSmallPeriods()
+    {
         // fast=2 (mult=2/3), slow=4 (mult=2/5), signal=3 (mult=2/4=0.5)
         var prices = new List<decimal> { 10m, 12m, 11m, 14m, 13m, 16m, 15m, 18m };
 
-        var (line, signal, histogram) = TechnicalIndicatorService.ComputeMacd(prices, fastPeriod: 2, slowPeriod: 4, signalPeriod: 3);
+        var (line, signal, histogram) = TechnicalIndicatorService.ComputeMacd(
+            prices,
+            fastPeriod: 2,
+            slowPeriod: 4,
+            signalPeriod: 3
+        );
 
         // Fast EMA (period=2, mult=2/3):
         //   [0]=null
@@ -651,12 +760,18 @@ public class TechnicalIndicatorServiceTests {
     }
 
     [Fact]
-    public void ComputeMacd_InsufficientDataForSignal_SignalAndHistogramNull() {
+    public void ComputeMacd_InsufficientDataForSignal_SignalAndHistogramNull()
+    {
         // With fast=2, slow=3, signal=5 and only 5 prices:
         // MACD non-null from index 2 => only 3 MACD values (indices 2,3,4)
         // Signal needs 5 values => never enough => signal stays null
         var prices = new List<decimal> { 10m, 20m, 30m, 40m, 50m };
-        var (line, signal, histogram) = TechnicalIndicatorService.ComputeMacd(prices, fastPeriod: 2, slowPeriod: 3, signalPeriod: 5);
+        var (line, signal, histogram) = TechnicalIndicatorService.ComputeMacd(
+            prices,
+            fastPeriod: 2,
+            slowPeriod: 3,
+            signalPeriod: 5
+        );
 
         // MACD line has values from index 2
         line[2].Should().NotBeNull();

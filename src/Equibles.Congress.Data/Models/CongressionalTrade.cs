@@ -7,11 +7,18 @@ namespace Equibles.Congress.Data.Models;
 
 [Index(nameof(CommonStockId), nameof(TransactionDate))]
 [Index(nameof(CongressMemberId), nameof(TransactionDate))]
-[Index(nameof(CommonStockId), nameof(CongressMemberId), nameof(TransactionDate),
-    nameof(TransactionType), nameof(AssetName), IsUnique = true)]
+[Index(
+    nameof(CommonStockId),
+    nameof(CongressMemberId),
+    nameof(TransactionDate),
+    nameof(TransactionType),
+    nameof(AssetName),
+    IsUnique = true
+)]
 [Index(nameof(FilingDate))]
 [Index(nameof(TransactionDate))]
-public class CongressionalTrade {
+public class CongressionalTrade
+{
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 

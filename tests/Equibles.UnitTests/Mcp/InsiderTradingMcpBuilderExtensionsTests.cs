@@ -6,9 +6,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Mcp;
 
-public class InsiderTradingMcpBuilderExtensionsTests {
+public class InsiderTradingMcpBuilderExtensionsTests
+{
     [Fact]
-    public void AddInsiderTrading_RegistersAssemblyMcpModuleForInsiderTradingTools() {
+    public void AddInsiderTrading_RegistersAssemblyMcpModuleForInsiderTradingTools()
+    {
         // AddInsiderTrading wires the SEC Form 3/4/5 insider-trading MCP
         // tools into the EquiblesMcpBuilder via
         // AssemblyMcpModule<InsiderTradingTools>. The marker type drives
@@ -22,7 +24,10 @@ public class InsiderTradingMcpBuilderExtensionsTests {
 
         builder.AddInsiderTrading();
 
-        builder.Modules.Should().ContainSingle()
-            .Which.Should().BeOfType<AssemblyMcpModule<InsiderTradingTools>>();
+        builder
+            .Modules.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeOfType<AssemblyMcpModule<InsiderTradingTools>>();
     }
 }
