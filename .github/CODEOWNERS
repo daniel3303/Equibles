@@ -1,0 +1,7 @@
+# Code owners — automatically requested as reviewers when matching files change.
+# Reference: https://docs.github.com/en/repositories/managing-your-repositories-settings-and-customizations/customizing-your-repository/about-code-owners
+#
+# Order is significant — the last matching pattern wins.
+
+# Default owner for everything in the repo.
+*                              @daniel3303
