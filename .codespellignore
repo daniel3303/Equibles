@@ -1,2 +1,25 @@
-# Words codespell should not flag. Add one per line, lowercase.
-# Format: <misspelling>  → use the word verbatim, no replacement column.
+# Words codespell should not flag. One per line, lowercase.
+# Format: list the literal word codespell flagged (it suggests replacements;
+# we tell it to leave these alone).
+
+# "unparseable" — common variant spelling of "unparsable"; both are correct
+# and we use the former consistently in test names and assertions.
+unparseable
+
+# "COO" — Chief Operating Officer; appears as the literal officer title in SEC
+# Form 3/4 test fixtures. codespell suggests "COUP" (coup d'état).
+coo
+
+# "commNet" / "nonCommNet" — variable names for "commercial net" /
+# "non-commercial net" positions in CFTC futures data. codespell flags as
+# "comment".
+commnet
+noncommnet
+
+# "Anual" — intentional misspelling inside a test comment that documents a
+# typo-class regression we explicitly test for.
+anual
+
+# "nD" — substring inside identifiers in src/Equibles.Web/package-lock.json
+# (e.g. "andDate", date hashes). codespell suggests "and"/"2nd".
+nd
