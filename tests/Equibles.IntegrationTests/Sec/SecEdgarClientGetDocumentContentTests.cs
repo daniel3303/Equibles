@@ -42,7 +42,8 @@ public class SecEdgarClientGetDocumentContentTests
         var content = await sut.GetDocumentContent("0000320193-25-000001", "320193");
 
         content.Should().Be(body);
-        handler.LastUrl.Should()
+        handler
+            .LastUrl.Should()
             .Be("https://www.sec.gov/Archives/edgar/data/0000320193/0000320193-25-000001.txt");
     }
 
