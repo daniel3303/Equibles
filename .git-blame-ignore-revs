@@ -5,4 +5,5 @@
 #
 # GitHub honors this file automatically in the web UI.
 
-# Add the squash-merge SHA of the csharpier mass-format PR here once merged.
+# PR #484 — chore: add csharpier and format codebase
+64c1514915ee2d0140b020bc9106868a5766c581
