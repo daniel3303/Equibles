@@ -92,7 +92,7 @@ public class EmbeddingClient : IEmbeddingClient
             var singlePayload = new { model = _config.ModelName, input = batch[0] };
 
             var singleJson = JsonSerializer.Serialize(singlePayload);
-            var singleContent = new StringContent(
+            using var singleContent = new StringContent(
                 singleJson,
                 System.Text.Encoding.UTF8,
                 "application/json"
@@ -116,7 +116,11 @@ public class EmbeddingClient : IEmbeddingClient
             var payload = new { model = _config.ModelName, input = text };
 
             var json = JsonSerializer.Serialize(payload);
-            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            using var content = new StringContent(
+                json,
+                System.Text.Encoding.UTF8,
+                "application/json"
+            );
 
             var response = await _httpClient.PostAsync("/api/embed", content);
             response.EnsureSuccessStatusCode();
