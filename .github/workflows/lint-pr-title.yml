@@ -1,0 +1,36 @@
+name: Lint PR Title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate Conventional Commit format
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Allowed prefixes. Keep aligned with CONTRIBUTING.md examples.
+          types: |
+            feat
+            fix
+            chore
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            revert
+          # Subject must start lowercase to stay consistent with the rest of git log.
+          subjectPattern: ^[a-z].+$
+          subjectPatternError: |
+            The PR title subject must start with a lowercase letter.
+            Got: "{subject}"
