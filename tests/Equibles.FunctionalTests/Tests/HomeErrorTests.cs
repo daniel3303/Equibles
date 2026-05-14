@@ -34,4 +34,22 @@ public class HomeErrorTests
 
         await Assertions.Expect(page.Locator("h1")).ToHaveTextAsync("Page Not Found");
     }
+
+    [Fact]
+    public async Task Error_GetWithUnmappedStatusCode_FallsThroughToSomethingWentWrong()
+    {
+        // HomeController.Error has three switch arms: 404, 429, and a default fall-through
+        // for everything else ("Something Went Wrong"). The existing test only pins the 404
+        // arm. Hits the route with 500 to prove the default arm runs end-to-end — the wire
+        // status code echoes back AND the fall-through copy renders. Without this, a regression
+        // that removes the `_ =>` default would silently render an empty title for any 5xx.
+        var page = await _playwright.NewPageAsync(_web.BaseUrl);
+
+        var response = await page.GotoAsync("/home/error/500");
+
+        response.Should().NotBeNull();
+        response!.Status.Should().Be(500);
+
+        await Assertions.Expect(page.Locator("h1")).ToHaveTextAsync("Something Went Wrong");
+    }
 }
