@@ -82,9 +82,30 @@ public class EconomicDataShowTests
                     SeasonalAdjustment = "Not Seasonally Adjusted",
                 }
             );
-            db.Add(new FredObservation { FredSeriesId = seriesId, Date = new DateOnly(2025, 1, 2), Value = 4.55m });
-            db.Add(new FredObservation { FredSeriesId = seriesId, Date = new DateOnly(2025, 1, 3), Value = 4.60m });
-            db.Add(new FredObservation { FredSeriesId = seriesId, Date = new DateOnly(2025, 1, 6), Value = 4.58m });
+            db.Add(
+                new FredObservation
+                {
+                    FredSeriesId = seriesId,
+                    Date = new DateOnly(2025, 1, 2),
+                    Value = 4.55m,
+                }
+            );
+            db.Add(
+                new FredObservation
+                {
+                    FredSeriesId = seriesId,
+                    Date = new DateOnly(2025, 1, 3),
+                    Value = 4.60m,
+                }
+            );
+            db.Add(
+                new FredObservation
+                {
+                    FredSeriesId = seriesId,
+                    Date = new DateOnly(2025, 1, 6),
+                    Value = 4.58m,
+                }
+            );
             await Task.CompletedTask;
         });
 
