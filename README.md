@@ -1,6 +1,7 @@
 # Equibles
 
 [![CI](https://github.com/daniel3303/Equibles/actions/workflows/ci.yml/badge.svg)](https://github.com/daniel3303/Equibles/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/daniel3303/Equibles/actions/workflows/codeql.yml/badge.svg)](https://github.com/daniel3303/Equibles/actions/workflows/codeql.yml)
 [![codecov](https://codecov.io/github/daniel3303/Equibles/graph/badge.svg?token=ggkiHVv92U)](https://codecov.io/github/daniel3303/Equibles)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
