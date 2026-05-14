@@ -11,6 +11,11 @@ permissions:
   contents: read
   checks: write
 
+# Cancel superseded runs on the same PR / branch.
+concurrency:
+  group: functional-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   functional:
     runs-on: ubuntu-latest
