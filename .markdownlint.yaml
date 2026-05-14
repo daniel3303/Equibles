@@ -1,0 +1,20 @@
+# Markdownlint rules.
+# Reference: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+
+default: true
+
+# MD013 — line length. Long URLs and tables routinely exceed limits; not worth
+# the noise.
+MD013: false
+
+# MD024 — duplicate headings. CHANGELOG.md repeats "### Added", "### Fixed"
+# under each version section by design.
+MD024: false
+
+# MD033 — inline HTML. We use <details>/<summary> in PR templates and the
+# occasional <kbd>/<sub> in docs.
+MD033: false
+
+# MD041 — first line must be a top-level heading. PR/issue templates start with
+# H2 by convention.
+MD041: false

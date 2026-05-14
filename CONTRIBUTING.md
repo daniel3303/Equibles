@@ -45,6 +45,20 @@ Thanks for your interest in contributing! This guide covers how to get started, 
 
    EF Core migrations run automatically on startup.
 
+5. **Install the pre-commit hooks** (recommended). They run CSharpier, markdownlint, codespell, and a few hygiene checks before every commit:
+
+   ```bash
+   # Restore CSharpier (and other .NET tools)
+   dotnet tool restore
+
+   # Install hooks — pick whichever tool you prefer
+   prek install -f       # https://prek.j178.dev — Rust port, faster
+   # or: pre-commit install --install-hooks
+
+   # Run once across the repo
+   prek run --all-files
+   ```
+
 ## Submitting Changes
 
 1. Create a feature branch from `main`:
