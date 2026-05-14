@@ -1,19 +1,20 @@
+using Equibles.Cboe.Repositories;
+using Equibles.Cftc.Repositories;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Fred.Repositories;
-using Equibles.Yahoo.Repositories;
-using Equibles.Cftc.Repositories;
-using Equibles.Cboe.Repositories;
 using Equibles.Holdings.Repositories;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Sec.Repositories;
+using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Web.Services;
 
 [Service]
-public class DataCountService {
+public class DataCountService
+{
     private readonly CommonStockRepository _commonStockRepository;
     private readonly DocumentRepository _documentRepository;
     private readonly InsiderTransactionRepository _insiderTransactionRepository;
@@ -38,7 +39,8 @@ public class DataCountService {
         CftcPositionReportRepository cftcPositionReportRepository,
         CboePutCallRatioRepository cboePutCallRatioRepository,
         CboeVixDailyRepository cboeVixDailyRepository
-    ) {
+    )
+    {
         _commonStockRepository = commonStockRepository;
         _documentRepository = documentRepository;
         _insiderTransactionRepository = insiderTransactionRepository;
@@ -52,11 +54,9 @@ public class DataCountService {
         _cboeVixDailyRepository = cboeVixDailyRepository;
     }
 
-    public async Task<int> GetStockCount() =>
-        await _commonStockRepository.GetAll().CountAsync();
+    public async Task<int> GetStockCount() => await _commonStockRepository.GetAll().CountAsync();
 
-    public async Task<int> GetDocumentCount() =>
-        await _documentRepository.GetAll().CountAsync();
+    public async Task<int> GetDocumentCount() => await _documentRepository.GetAll().CountAsync();
 
     public async Task<int> GetInsiderTransactionCount() =>
         await _insiderTransactionRepository.GetAll().CountAsync();

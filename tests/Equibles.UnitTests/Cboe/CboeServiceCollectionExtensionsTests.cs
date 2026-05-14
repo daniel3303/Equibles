@@ -7,9 +7,11 @@ using Microsoft.Extensions.Hosting;
 
 namespace Equibles.UnitTests.Cboe;
 
-public class CboeServiceCollectionExtensionsTests {
+public class CboeServiceCollectionExtensionsTests
+{
     [Fact]
-    public void AddCboeWorker_RegistersCboeScraperWorkerAsIHostedService() {
+    public void AddCboeWorker_RegistersCboeScraperWorkerAsIHostedService()
+    {
         // Sibling to `AddCboeWorker_AutoWiresCboeImportService` and
         // `AddCboeWorker_AutoWiresICboeClientFromIntegrationsAssembly`.
         // The existing pins cover the two auto-wire scans — they prove
@@ -57,13 +59,17 @@ public class CboeServiceCollectionExtensionsTests {
             .Where(d => d.ServiceType == typeof(IHostedService))
             .ToList();
 
-        hostedServiceDescriptors.Should().Contain(
-            d => d.ImplementationType == typeof(CboeScraperWorker),
-            "AddHostedService<CboeScraperWorker>() must register the worker as IHostedService so the daily VIX + put/call ratio import runs at startup");
+        hostedServiceDescriptors
+            .Should()
+            .Contain(
+                d => d.ImplementationType == typeof(CboeScraperWorker),
+                "AddHostedService<CboeScraperWorker>() must register the worker as IHostedService so the daily VIX + put/call ratio import runs at startup"
+            );
     }
 
     [Fact]
-    public void AddCboeWorker_AutoWiresCboeImportService() {
+    public void AddCboeWorker_AutoWiresCboeImportService()
+    {
         // AddCboeWorker is the host's seam into auto-wiring for the CBOE
         // VIX + put/call-ratio import pipeline. It scans BOTH the
         // hosted-service assembly AND Equibles.Integrations.Cboe (for the
@@ -82,7 +88,8 @@ public class CboeServiceCollectionExtensionsTests {
     }
 
     [Fact]
-    public void AddCboeWorker_AutoWiresICboeClientFromIntegrationsAssembly() {
+    public void AddCboeWorker_AutoWiresICboeClientFromIntegrationsAssembly()
+    {
         // Sibling to `AddCboeWorker_AutoWiresCboeImportService`. The existing
         // pin covers the first `AutoWireServicesFrom<CboeImportService>()`
         // call — the hosted-service assembly scan. AddCboeWorker has a

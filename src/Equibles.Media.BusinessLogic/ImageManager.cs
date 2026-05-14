@@ -9,13 +9,14 @@ using SixLabors.ImageSharp.Processing.Processors.Transforms;
 namespace Equibles.Media.BusinessLogic;
 
 [Service(ServiceLifetime.Scoped, typeof(IImageManager))]
-public class ImageManager : IImageManager {
+public class ImageManager : IImageManager
+{
     private readonly ImageRepository _imageRepository;
 
-    public ImageManager(ImageRepository imageRepository) {
+    public ImageManager(ImageRepository imageRepository)
+    {
         _imageRepository = imageRepository;
     }
-
 
     /**
      * <summary>
@@ -28,30 +29,42 @@ public class ImageManager : IImageManager {
      * <param name="maxHeight">The maximum height of the image. 0 to keep the aspect ratio.</param>
      * <returns>The saved image object.</returns>
      */
-    public async Task<Image> SaveImage(byte[] content, string fileName, int? maxWidth, int? maxHeight) {
+    public async Task<Image> SaveImage(
+        byte[] content,
+        string fileName,
+        int? maxWidth,
+        int? maxHeight
+    )
+    {
         // Gets the file extension from the file name
         var fileExtension = Path.GetExtension(fileName)?.TrimStart('.');
 
         // Gets the file name without extension
         var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(fileName);
 
-        if (string.IsNullOrEmpty(fileExtension)) {
+        if (string.IsNullOrEmpty(fileExtension))
+        {
             throw new ArgumentException("The file extension cannot be null or empty.");
         }
 
         // Get the content type from the file extension
         var contentType = MimeTypeMap.GetMimeType(fileExtension);
-        if (string.IsNullOrEmpty(contentType)) {
+        if (string.IsNullOrEmpty(contentType))
+        {
             contentType = "application/octet-stream";
         }
 
         using var contentStream = new MemoryStream(content);
         using var imageProcessor = await SixLabors.ImageSharp.Image.LoadAsync(contentStream);
-        if (maxWidth != null || maxHeight != null) {
-            imageProcessor.Mutate(i => i.Resize(maxWidth ?? 0, maxHeight ?? 0, new BicubicResampler()));
+        if (maxWidth != null || maxHeight != null)
+        {
+            imageProcessor.Mutate(i =>
+                i.Resize(maxWidth ?? 0, maxHeight ?? 0, new BicubicResampler())
+            );
         }
 
-        var image = new Image() {
+        var image = new Image()
+        {
             Extension = fileExtension,
             Name = fileNameWithoutExtension,
             Size = content.Length,
@@ -60,10 +73,7 @@ public class ImageManager : IImageManager {
             Width = imageProcessor.Width,
         };
 
-        image.FileContent = new FileContent() {
-            File = image,
-            Bytes = content,
-        };
+        image.FileContent = new FileContent() { File = image, Bytes = content };
         _imageRepository.Add(image);
         return image;
     }
@@ -72,8 +82,10 @@ public class ImageManager : IImageManager {
     /// Saves an image to the database and returns the image object. The db context is not saved.
     /// </summary>
     /// <param name="image">The image file.</param>
-    public void DeleteImage(Image image) {
-        if (image == null) return;
+    public void DeleteImage(Image image)
+    {
+        if (image == null)
+            return;
         _imageRepository.Delete(image);
     }
 }

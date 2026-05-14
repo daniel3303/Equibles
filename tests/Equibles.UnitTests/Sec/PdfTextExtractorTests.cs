@@ -6,9 +6,11 @@ using UglyToad.PdfPig.Writer;
 
 namespace Equibles.UnitTests.Sec;
 
-public class PdfTextExtractorTests {
+public class PdfTextExtractorTests
+{
     [Fact]
-    public void Extract_ValidPdfWithText_ReturnsExtractedTextContainingEmbeddedString() {
+    public void Extract_ValidPdfWithText_ReturnsExtractedTextContainingEmbeddedString()
+    {
         // Pin the happy path. Every existing test in this file targets an early-
         // return branch:
         //   • Extract_NullBytes_ReturnsEmptyWithoutLogging       — null guard
@@ -77,21 +79,28 @@ public class PdfTextExtractorTests {
 
         var builder = new PdfDocumentBuilder();
         var page = builder.AddPage(595, 842);
-        var font = builder.AddStandard14Font(UglyToad.PdfPig.Fonts.Standard14Fonts.Standard14Font.Helvetica);
+        var font = builder.AddStandard14Font(
+            UglyToad.PdfPig.Fonts.Standard14Fonts.Standard14Font.Helvetica
+        );
         page.AddText("PdfTextExtractor happy path sentinel", 12, new PdfPoint(50, 750), font);
         var pdfBytes = builder.Build();
 
         var result = sut.Extract(pdfBytes);
 
         result.Should().Contain("PdfTextExtractor happy path sentinel");
-        logger.ReceivedCalls()
-            .Any(c => c.GetMethodInfo().Name == "Log"
-                && c.GetArguments().OfType<LogLevel>().FirstOrDefault() == LogLevel.Warning)
-            .Should().BeFalse("a successful extraction must not log a warning");
+        logger
+            .ReceivedCalls()
+            .Any(c =>
+                c.GetMethodInfo().Name == "Log"
+                && c.GetArguments().OfType<LogLevel>().FirstOrDefault() == LogLevel.Warning
+            )
+            .Should()
+            .BeFalse("a successful extraction must not log a warning");
     }
 
     [Fact]
-    public void Extract_MalformedBytes_ReturnsEmptyAndLogsWarning() {
+    public void Extract_MalformedBytes_ReturnsEmptyAndLogsWarning()
+    {
         var logger = Substitute.For<ILogger<PdfTextExtractor>>();
         var sut = new PdfTextExtractor(logger);
         var notAPdf = new byte[] { 0x47, 0x49, 0x46, 0x38, 0x39, 0x61 }; // "GIF89a" magic
@@ -99,14 +108,19 @@ public class PdfTextExtractorTests {
         var result = sut.Extract(notAPdf);
 
         result.Should().BeEmpty();
-        logger.ReceivedCalls()
-            .Any(c => c.GetMethodInfo().Name == "Log"
-                && c.GetArguments().OfType<LogLevel>().FirstOrDefault() == LogLevel.Warning)
-            .Should().BeTrue();
+        logger
+            .ReceivedCalls()
+            .Any(c =>
+                c.GetMethodInfo().Name == "Log"
+                && c.GetArguments().OfType<LogLevel>().FirstOrDefault() == LogLevel.Warning
+            )
+            .Should()
+            .BeTrue();
     }
 
     [Fact]
-    public void Extract_EmptyBytes_ReturnsEmptyWithoutLogging() {
+    public void Extract_EmptyBytes_ReturnsEmptyWithoutLogging()
+    {
         // The guard at the top of Extract short-circuits on BOTH null and
         // Length == 0. Without the Length == 0 branch, an empty byte[] would
         // reach PdfPig, throw, hit the catch handler, and log a warning on
@@ -119,13 +133,12 @@ public class PdfTextExtractorTests {
         var result = sut.Extract([]);
 
         result.Should().BeEmpty();
-        logger.ReceivedCalls()
-            .Any(c => c.GetMethodInfo().Name == "Log")
-            .Should().BeFalse();
+        logger.ReceivedCalls().Any(c => c.GetMethodInfo().Name == "Log").Should().BeFalse();
     }
 
     [Fact]
-    public void Extract_NullBytes_ReturnsEmptyWithoutLogging() {
+    public void Extract_NullBytes_ReturnsEmptyWithoutLogging()
+    {
         // Extract is called from the SEC paper-PDF fallback in DocumentScraper:
         // when SecDocumentEnvelopeParser locates a PDF filename but the artifact
         // fetch returns no bytes, the caller may hand us a null. The early
@@ -139,8 +152,6 @@ public class PdfTextExtractorTests {
         var result = sut.Extract(null);
 
         result.Should().BeEmpty();
-        logger.ReceivedCalls()
-            .Any(c => c.GetMethodInfo().Name == "Log")
-            .Should().BeFalse();
+        logger.ReceivedCalls().Any(c => c.GetMethodInfo().Name == "Log").Should().BeFalse();
     }
 }

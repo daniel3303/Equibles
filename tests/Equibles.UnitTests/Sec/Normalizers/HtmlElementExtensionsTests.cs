@@ -3,9 +3,11 @@ using Equibles.Sec.BusinessLogic.Normalizers;
 
 namespace Equibles.UnitTests.Sec.Normalizers;
 
-public class HtmlElementExtensionsTests {
+public class HtmlElementExtensionsTests
+{
     [Fact]
-    public void DirectChildCells_RowMixingTdAndTh_ReturnsBothTagsInDocumentOrder() {
+    public void DirectChildCells_RowMixingTdAndTh_ReturnsBothTagsInDocumentOrder()
+    {
         // DirectChildCells filters a `<tr>`'s direct children to the
         // OR-pattern `c.LocalName is "td" or "th"`. The TableNormalizationStep
         // tests exercise this helper indirectly through full-table normalization,
@@ -47,7 +49,8 @@ public class HtmlElementExtensionsTests {
         // catches an arm drop without false-failing on a cosmetic OR
         // reordering.
         var doc = new HtmlParser().ParseDocument(
-            "<html><body><table><tr id=\"row\"><th>Label</th><td>Value</td></tr></table></body></html>");
+            "<html><body><table><tr id=\"row\"><th>Label</th><td>Value</td></tr></table></body></html>"
+        );
         var row = doc.GetElementById("row")!;
 
         var cells = HtmlElementExtensions.DirectChildCells(row);
@@ -58,7 +61,8 @@ public class HtmlElementExtensionsTests {
     }
 
     [Fact]
-    public void InsertAfter_RefNodeHasNextSibling_NewNodeInsertedBetweenThem() {
+    public void InsertAfter_RefNodeHasNextSibling_NewNodeInsertedBetweenThem()
+    {
         // Sibling to `InsertAfter_RefNodeIsLastChild_AppendsAtEnd`. The
         // existing pin covers the EDGE case: refNode.NextSibling is null,
         // so `parent.InsertBefore(newNode, null)` falls through to append-
@@ -95,7 +99,8 @@ public class HtmlElementExtensionsTests {
         // NextSibling identity is the pre-existing "third" element pins
         // both relations.
         var doc = new HtmlParser().ParseDocument(
-            "<html><body><div id=\"p\"><span id=\"first\"></span><span id=\"second\"></span><span id=\"third\"></span></div></body></html>");
+            "<html><body><div id=\"p\"><span id=\"first\"></span><span id=\"second\"></span><span id=\"third\"></span></div></body></html>"
+        );
         var parent = doc.GetElementById("p")!;
         var refNode = doc.GetElementById("second")!;
         var newNode = doc.CreateElement("em");
@@ -109,8 +114,11 @@ public class HtmlElementExtensionsTests {
     }
 
     [Fact]
-    public void InsertAfter_RefNodeIsLastChild_AppendsAtEnd() {
-        var doc = new HtmlParser().ParseDocument("<html><body><div id=\"p\"><span id=\"first\"></span></div></body></html>");
+    public void InsertAfter_RefNodeIsLastChild_AppendsAtEnd()
+    {
+        var doc = new HtmlParser().ParseDocument(
+            "<html><body><div id=\"p\"><span id=\"first\"></span></div></body></html>"
+        );
         var parent = doc.GetElementById("p")!;
         var refNode = doc.GetElementById("first")!;
         var newNode = doc.CreateElement("em");

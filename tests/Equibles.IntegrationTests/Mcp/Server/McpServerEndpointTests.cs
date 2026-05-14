@@ -14,27 +14,33 @@ namespace Equibles.IntegrationTests.Mcp.Server;
 /// Congress, ShortData, StockPrices).
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class McpServerEndpointTests : IAsyncLifetime {
+public class McpServerEndpointTests : IAsyncLifetime
+{
     private readonly ParadeDbFixture _paradeDb;
     private McpServerFixture _serverFixture;
 
-    public McpServerEndpointTests(ParadeDbFixture paradeDb) {
+    public McpServerEndpointTests(ParadeDbFixture paradeDb)
+    {
         _paradeDb = paradeDb;
     }
 
-    public async Task InitializeAsync() {
+    public async Task InitializeAsync()
+    {
         _serverFixture = new McpServerFixture(_paradeDb);
         await _serverFixture.InitializeAsync();
     }
 
-    public async Task DisposeAsync() {
-        if (_serverFixture is not null) {
+    public async Task DisposeAsync()
+    {
+        if (_serverFixture is not null)
+        {
             await ((IAsyncLifetime)_serverFixture).DisposeAsync();
         }
     }
 
     [Fact]
-    public async Task ListTools_ServerHostedInProcessOverHttp_ReturnsToolsFromEveryRegisteredModule() {
+    public async Task ListTools_ServerHostedInProcessOverHttp_ReturnsToolsFromEveryRegisteredModule()
+    {
         // The MCP client SDK speaks the streamable-HTTP transport — handshake (initialize)
         // followed by JSON-RPC framed requests. WebApplicationFactory's CreateClient() returns
         // an HttpClient bound to the in-process TestServer pipeline, so passing it to
@@ -50,11 +56,13 @@ public class McpServerEndpointTests : IAsyncLifetime {
         httpClient.BaseAddress = new Uri("http://localhost/");
 
         var transport = new HttpClientTransport(
-            new HttpClientTransportOptions {
+            new HttpClientTransportOptions
+            {
                 Endpoint = new Uri("http://localhost/mcp"),
                 TransportMode = HttpTransportMode.StreamableHttp,
             },
-            httpClient);
+            httpClient
+        );
 
         await using var client = await McpClient.CreateAsync(transport);
         var tools = await client.ListToolsAsync();

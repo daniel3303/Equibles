@@ -1,6 +1,7 @@
 namespace Equibles.Media.Data.Models;
 
-public class FileContent {
+public class FileContent
+{
     public Guid Id { get; set; } = Guid.NewGuid();
     public byte[] Bytes { get; set; } = [];
 

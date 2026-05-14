@@ -2,16 +2,19 @@ using Equibles.CommonStocks.Data.Models;
 
 namespace Equibles.UnitTests.Models;
 
-public class CommonStockModelTests {
+public class CommonStockModelTests
+{
     [Fact]
-    public void NewInstance_ShouldHaveNonEmptyGuid() {
+    public void NewInstance_ShouldHaveNonEmptyGuid()
+    {
         var stock = new CommonStock();
 
         stock.Id.Should().NotBe(Guid.Empty);
     }
 
     [Fact]
-    public void TwoInstances_ShouldHaveDifferentGuids() {
+    public void TwoInstances_ShouldHaveDifferentGuids()
+    {
         var stock1 = new CommonStock();
         var stock2 = new CommonStock();
 
@@ -19,7 +22,8 @@ public class CommonStockModelTests {
     }
 
     [Fact]
-    public void SecondaryTickers_ShouldDefaultToEmptyList() {
+    public void SecondaryTickers_ShouldDefaultToEmptyList()
+    {
         var stock = new CommonStock();
 
         stock.SecondaryTickers.Should().NotBeNull();
@@ -27,7 +31,8 @@ public class CommonStockModelTests {
     }
 
     [Fact]
-    public void SecondaryTickers_CanBeSetAndRetrieved() {
+    public void SecondaryTickers_CanBeSetAndRetrieved()
+    {
         var stock = new CommonStock();
         var tickers = new List<string> { "AAPL", "GOOG" };
 
@@ -37,7 +42,8 @@ public class CommonStockModelTests {
     }
 
     [Fact]
-    public void SecondaryCiks_ExplicitlySetToNull_GetterReturnsEmptyListNotNull() {
+    public void SecondaryCiks_ExplicitlySetToNull_GetterReturnsEmptyListNotNull()
+    {
         // The SecondaryCiks getter uses `field ?? []` so callers can rely on
         // a non-null collection even when EF Core (or a deserializer) writes
         // back a null. The default initializer protects the no-set path; the
@@ -53,7 +59,8 @@ public class CommonStockModelTests {
     }
 
     [Fact]
-    public void StringProperties_ShouldDefaultToNull() {
+    public void StringProperties_ShouldDefaultToNull()
+    {
         var stock = new CommonStock();
 
         stock.Ticker.Should().BeNull();
@@ -65,32 +72,37 @@ public class CommonStockModelTests {
     }
 
     [Fact]
-    public void MarketCapitalization_ShouldDefaultToZero() {
+    public void MarketCapitalization_ShouldDefaultToZero()
+    {
         var stock = new CommonStock();
 
         stock.MarketCapitalization.Should().Be(0);
     }
 
     [Fact]
-    public void SharesOutStanding_ShouldDefaultToZero() {
+    public void SharesOutStanding_ShouldDefaultToZero()
+    {
         var stock = new CommonStock();
 
         stock.SharesOutStanding.Should().Be(0);
     }
 
     [Fact]
-    public void IndustryId_ShouldDefaultToNull() {
+    public void IndustryId_ShouldDefaultToNull()
+    {
         var stock = new CommonStock();
 
         stock.IndustryId.Should().BeNull();
     }
 
     [Fact]
-    public void Properties_CanBeSetAndReadBack() {
+    public void Properties_CanBeSetAndReadBack()
+    {
         var id = Guid.NewGuid();
         var industryId = Guid.NewGuid();
 
-        var stock = new CommonStock {
+        var stock = new CommonStock
+        {
             Id = id,
             Ticker = "MSFT",
             Name = "Microsoft Corporation",
@@ -101,7 +113,7 @@ public class CommonStockModelTests {
             SharesOutStanding = 7_500_000_000,
             SecondaryTickers = ["MSFT.L"],
             Cusip = "594918104",
-            IndustryId = industryId
+            IndustryId = industryId,
         };
 
         stock.Id.Should().Be(id);

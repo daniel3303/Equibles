@@ -4,8 +4,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Equibles.Fred.HostedService.Extensions;
 
-public static class ServiceCollectionExtensions {
-    public static IServiceCollection AddFredWorker(this IServiceCollection services) {
+public static class ServiceCollectionExtensions
+{
+    public static IServiceCollection AddFredWorker(this IServiceCollection services)
+    {
         services.AutoWireServicesFrom<FredImportService>();
         services.AutoWireServicesFrom<Equibles.Integrations.Fred.FredClient>();
 

@@ -4,11 +4,13 @@ using System.ComponentModel;
 namespace Equibles.Sec.Data.Models;
 
 [TypeConverter(typeof(DocumentTypeConverter))]
-public class DocumentType {
+public class DocumentType
+{
     public string Value { get; }
     public string DisplayName { get; }
 
-    public DocumentType(string value, string displayName = null) {
+    public DocumentType(string value, string displayName = null)
+    {
         Value = value;
         DisplayName = displayName ?? value;
     }
@@ -27,7 +29,8 @@ public class DocumentType {
     public static readonly DocumentType Other = new("Other", "Other");
 
     private static readonly ConcurrentDictionary<string, DocumentType> AllByValue = new(
-        new[] {
+        new[]
+        {
             new KeyValuePair<string, DocumentType>(TenK.Value, TenK),
             new KeyValuePair<string, DocumentType>(TenQ.Value, TenQ),
             new KeyValuePair<string, DocumentType>(EightK.Value, EightK),
@@ -39,11 +42,14 @@ public class DocumentType {
             new KeyValuePair<string, DocumentType>(FortyF.Value, FortyF),
             new KeyValuePair<string, DocumentType>(FormFour.Value, FormFour),
             new KeyValuePair<string, DocumentType>(FormThree.Value, FormThree),
-            new KeyValuePair<string, DocumentType>(Other.Value, Other)
-        }, StringComparer.OrdinalIgnoreCase);
+            new KeyValuePair<string, DocumentType>(Other.Value, Other),
+        },
+        StringComparer.OrdinalIgnoreCase
+    );
 
     private static readonly ConcurrentDictionary<string, DocumentType> AllByDisplayName = new(
-        new[] {
+        new[]
+        {
             new KeyValuePair<string, DocumentType>(TenK.DisplayName, TenK),
             new KeyValuePair<string, DocumentType>(TenQ.DisplayName, TenQ),
             new KeyValuePair<string, DocumentType>(EightK.DisplayName, EightK),
@@ -55,27 +61,36 @@ public class DocumentType {
             new KeyValuePair<string, DocumentType>(FortyF.DisplayName, FortyF),
             new KeyValuePair<string, DocumentType>(FormFour.DisplayName, FormFour),
             new KeyValuePair<string, DocumentType>(FormThree.DisplayName, FormThree),
-            new KeyValuePair<string, DocumentType>(Other.DisplayName, Other)
-        }, StringComparer.OrdinalIgnoreCase);
+            new KeyValuePair<string, DocumentType>(Other.DisplayName, Other),
+        },
+        StringComparer.OrdinalIgnoreCase
+    );
 
-    public static DocumentType FromValue(string value) {
+    public static DocumentType FromValue(string value)
+    {
         return AllByValue.GetValueOrDefault(value);
     }
 
-    public static DocumentType FromDisplayName(string displayName) {
+    public static DocumentType FromDisplayName(string displayName)
+    {
         return AllByDisplayName.GetValueOrDefault(displayName);
     }
 
     public static IEnumerable<DocumentType> GetAll() => AllByValue.Values;
 
-    public static void Register(DocumentType type) {
+    public static void Register(DocumentType type)
+    {
         AllByValue.TryAdd(type.Value, type);
         AllByDisplayName.TryAdd(type.DisplayName, type);
     }
 
     public override string ToString() => DisplayName;
+
     public override bool Equals(object obj) => obj is DocumentType other && Value == other.Value;
+
     public override int GetHashCode() => Value.GetHashCode();
+
     public static bool operator ==(DocumentType left, DocumentType right) => Equals(left, right);
+
     public static bool operator !=(DocumentType left, DocumentType right) => !Equals(left, right);
 }

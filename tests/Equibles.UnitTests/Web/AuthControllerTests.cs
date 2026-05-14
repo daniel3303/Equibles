@@ -13,7 +13,8 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Web;
 
-public class AuthControllerTests {
+public class AuthControllerTests
+{
     private const string ValidUsername = "admin";
     private const string ValidPassword = "secret123";
     private const string SessionSecret = "test-session-secret";
@@ -21,7 +22,8 @@ public class AuthControllerTests {
     private readonly IFlashMessage _flashMessage;
     private readonly ILogger<BaseController> _logger;
 
-    public AuthControllerTests() {
+    public AuthControllerTests()
+    {
         _flashMessage = Substitute.For<IFlashMessage>();
         _logger = Substitute.For<ILogger<BaseController>>();
     }
@@ -29,65 +31,73 @@ public class AuthControllerTests {
     private AuthController CreateController(
         AuthSettings authSettings,
         ClaimsPrincipal? user = null,
-        bool isHttps = false) {
+        bool isHttps = false
+    )
+    {
         var options = Options.Create(authSettings);
         var controller = new AuthController(_logger, options, _flashMessage);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Scheme = isHttps ? "https" : "http";
 
-        if (user != null) {
+        if (user != null)
+        {
             httpContext.User = user;
         }
 
         var tempData = Substitute.For<ITempDataDictionary>();
 
         var urlHelper = Substitute.For<IUrlHelper>();
-        urlHelper.IsLocalUrl(Arg.Any<string>()).Returns(callInfo => {
-            var url = callInfo.Arg<string>();
-            return !string.IsNullOrEmpty(url) && url.StartsWith("/");
-        });
+        urlHelper
+            .IsLocalUrl(Arg.Any<string>())
+            .Returns(callInfo =>
+            {
+                var url = callInfo.Arg<string>();
+                return !string.IsNullOrEmpty(url) && url.StartsWith("/");
+            });
 
-        controller.ControllerContext = new ControllerContext {
-            HttpContext = httpContext
-        };
+        controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
         controller.TempData = tempData;
         controller.Url = urlHelper;
 
         return controller;
     }
 
-    private static AuthSettings EnabledAuthSettings() => new() {
-        Username = ValidUsername,
-        Password = ValidPassword,
-        SessionSecret = SessionSecret
-    };
+    private static AuthSettings EnabledAuthSettings() =>
+        new()
+        {
+            Username = ValidUsername,
+            Password = ValidPassword,
+            SessionSecret = SessionSecret,
+        };
 
-    private static AuthSettings DisabledAuthSettings() => new() {
-        Username = null!,
-        Password = null!
-    };
+    private static AuthSettings DisabledAuthSettings() =>
+        new() { Username = null!, Password = null! };
 
-    private static ClaimsPrincipal AuthenticatedUser(string username = ValidUsername) {
+    private static ClaimsPrincipal AuthenticatedUser(string username = ValidUsername)
+    {
         var claims = new[] { new Claim(ClaimTypes.Name, username) };
         var identity = new ClaimsIdentity(claims, EnvAuthHandler.SchemeName);
         return new ClaimsPrincipal(identity);
     }
 
-    private static ClaimsPrincipal AnonymousUser() {
+    private static ClaimsPrincipal AnonymousUser()
+    {
         var claims = new[] { new Claim(ClaimTypes.Name, EnvAuthHandler.AnonymousUsername) };
         var identity = new ClaimsIdentity(claims, EnvAuthHandler.SchemeName);
         return new ClaimsPrincipal(identity);
     }
 
-    private static ClaimsPrincipal UnauthenticatedUser() {
+    private static ClaimsPrincipal UnauthenticatedUser()
+    {
         return new ClaimsPrincipal(new ClaimsIdentity());
     }
 
     // ── Login GET ──────────────────────────────────────────────────────
 
     [Fact]
-    public void LoginGet_AuthEnabled_UnauthenticatedUser_ReturnsView() {
+    public void LoginGet_AuthEnabled_UnauthenticatedUser_ReturnsView()
+    {
         var controller = CreateController(EnabledAuthSettings(), UnauthenticatedUser());
 
         var result = controller.Login(returnUrl: null!);
@@ -96,7 +106,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginGet_AuthEnabled_SetsReturnUrlInViewData() {
+    public void LoginGet_AuthEnabled_SetsReturnUrlInViewData()
+    {
         var controller = CreateController(EnabledAuthSettings(), UnauthenticatedUser());
 
         controller.Login(returnUrl: "/stocks");
@@ -105,7 +116,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginGet_AuthEnabled_AnonymousUser_ReturnsView() {
+    public void LoginGet_AuthEnabled_AnonymousUser_ReturnsView()
+    {
         var controller = CreateController(EnabledAuthSettings(), AnonymousUser());
 
         var result = controller.Login(returnUrl: null!);
@@ -114,7 +126,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginGet_AuthEnabled_AuthenticatedUser_RedirectsToHome() {
+    public void LoginGet_AuthEnabled_AuthenticatedUser_RedirectsToHome()
+    {
         var controller = CreateController(EnabledAuthSettings(), AuthenticatedUser());
 
         var result = controller.Login(returnUrl: null!);
@@ -126,7 +139,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginGet_AuthDisabled_RedirectsToHome() {
+    public void LoginGet_AuthDisabled_RedirectsToHome()
+    {
         var controller = CreateController(DisabledAuthSettings());
 
         var result = controller.Login(returnUrl: null!);
@@ -140,7 +154,8 @@ public class AuthControllerTests {
     // ── Login POST ─────────────────────────────────────────────────────
 
     [Fact]
-    public void LoginPost_ValidCredentials_RedirectsToHome() {
+    public void LoginPost_ValidCredentials_RedirectsToHome()
+    {
         var controller = CreateController(EnabledAuthSettings());
 
         var result = controller.Login(ValidUsername, ValidPassword, returnUrl: null!);
@@ -152,7 +167,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginPost_ValidCredentials_SetsCookie() {
+    public void LoginPost_ValidCredentials_SetsCookie()
+    {
         var controller = CreateController(EnabledAuthSettings());
 
         controller.Login(ValidUsername, ValidPassword, returnUrl: null!);
@@ -162,7 +178,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginPost_ValidCredentials_CookieSetsHttpOnlyAndSameSiteStrictFlags() {
+    public void LoginPost_ValidCredentials_CookieSetsHttpOnlyAndSameSiteStrictFlags()
+    {
         // The session cookie carries the only credential the browser will replay on every
         // subsequent request, so its two hardening flags are load-bearing:
         //   - HttpOnly: blocks document.cookie access from injected JS, the difference
@@ -186,7 +203,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginPost_ValidCredentials_CookieContainsExpectedToken() {
+    public void LoginPost_ValidCredentials_CookieContainsExpectedToken()
+    {
         var controller = CreateController(EnabledAuthSettings());
         var expectedToken = EnvAuthHandler.GenerateToken(ValidUsername, SessionSecret);
 
@@ -197,7 +215,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginPost_ValidCredentials_WithLocalReturnUrl_RedirectsToReturnUrl() {
+    public void LoginPost_ValidCredentials_WithLocalReturnUrl_RedirectsToReturnUrl()
+    {
         var controller = CreateController(EnabledAuthSettings());
 
         var result = controller.Login(ValidUsername, ValidPassword, returnUrl: "/dashboard");
@@ -208,7 +227,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginPost_ValidCredentials_WithNonLocalReturnUrl_RedirectsToHome() {
+    public void LoginPost_ValidCredentials_WithNonLocalReturnUrl_RedirectsToHome()
+    {
         var controller = CreateController(EnabledAuthSettings());
 
         var result = controller.Login(ValidUsername, ValidPassword, returnUrl: "https://evil.com");
@@ -220,7 +240,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginPost_InvalidUsername_ReturnsView() {
+    public void LoginPost_InvalidUsername_ReturnsView()
+    {
         var controller = CreateController(EnabledAuthSettings());
 
         var result = controller.Login("wrong", ValidPassword, returnUrl: null!);
@@ -229,7 +250,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginPost_InvalidPassword_ReturnsView() {
+    public void LoginPost_InvalidPassword_ReturnsView()
+    {
         var controller = CreateController(EnabledAuthSettings());
 
         var result = controller.Login(ValidUsername, "wrong", returnUrl: null!);
@@ -238,16 +260,20 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginPost_InvalidCredentials_ShowsErrorFlashMessage() {
+    public void LoginPost_InvalidCredentials_ShowsErrorFlashMessage()
+    {
         var controller = CreateController(EnabledAuthSettings());
 
         controller.Login("wrong", "wrong", returnUrl: null!);
 
-        _flashMessage.Received(1).Error("Invalid username or password.", Arg.Any<string>(), Arg.Any<bool>());
+        _flashMessage
+            .Received(1)
+            .Error("Invalid username or password.", Arg.Any<string>(), Arg.Any<bool>());
     }
 
     [Fact]
-    public void LoginPost_InvalidCredentials_PreservesReturnUrlInViewData() {
+    public void LoginPost_InvalidCredentials_PreservesReturnUrlInViewData()
+    {
         var controller = CreateController(EnabledAuthSettings());
 
         controller.Login("wrong", "wrong", returnUrl: "/stocks");
@@ -256,7 +282,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginPost_InvalidCredentials_DoesNotSetCookie() {
+    public void LoginPost_InvalidCredentials_DoesNotSetCookie()
+    {
         var controller = CreateController(EnabledAuthSettings());
 
         controller.Login("wrong", "wrong", returnUrl: null!);
@@ -266,7 +293,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginPost_AuthDisabled_RedirectsToHome() {
+    public void LoginPost_AuthDisabled_RedirectsToHome()
+    {
         var controller = CreateController(DisabledAuthSettings());
 
         var result = controller.Login("any", "any", returnUrl: null!);
@@ -278,7 +306,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginPost_AuthDisabled_DoesNotSetCookie() {
+    public void LoginPost_AuthDisabled_DoesNotSetCookie()
+    {
         var controller = CreateController(DisabledAuthSettings());
 
         controller.Login("any", "any", returnUrl: null!);
@@ -288,7 +317,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginPost_AuthDisabled_DoesNotShowFlashMessage() {
+    public void LoginPost_AuthDisabled_DoesNotShowFlashMessage()
+    {
         var controller = CreateController(DisabledAuthSettings());
 
         controller.Login("any", "any", returnUrl: null!);
@@ -299,7 +329,8 @@ public class AuthControllerTests {
     // ── Logout ─────────────────────────────────────────────────────────
 
     [Fact]
-    public void Logout_RedirectsToHome() {
+    public void Logout_RedirectsToHome()
+    {
         var controller = CreateController(EnabledAuthSettings());
 
         var result = controller.Logout();
@@ -311,7 +342,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void Logout_DeletesCookie() {
+    public void Logout_DeletesCookie()
+    {
         var controller = CreateController(EnabledAuthSettings());
 
         controller.Logout();
@@ -325,17 +357,21 @@ public class AuthControllerTests {
     // ── Cookie Settings ────────────────────────────────────────────────
 
     [Fact]
-    public void LoginPost_ValidCredentials_CookieIsHttpOnly() {
+    public void LoginPost_ValidCredentials_CookieIsHttpOnly()
+    {
         var controller = CreateController(EnabledAuthSettings());
 
         controller.Login(ValidUsername, ValidPassword, returnUrl: null!);
 
         var cookies = controller.HttpContext.Response.Headers["Set-Cookie"].ToString();
-        cookies.Should().Contain("httponly", because: "auth cookies must be HttpOnly to prevent XSS");
+        cookies
+            .Should()
+            .Contain("httponly", because: "auth cookies must be HttpOnly to prevent XSS");
     }
 
     [Fact]
-    public void LoginPost_ValidCredentials_HttpRequest_CookieIsNotSecure() {
+    public void LoginPost_ValidCredentials_HttpRequest_CookieIsNotSecure()
+    {
         var controller = CreateController(EnabledAuthSettings(), isHttps: false);
 
         controller.Login(ValidUsername, ValidPassword, returnUrl: null!);
@@ -345,7 +381,8 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginPost_ValidCredentials_HttpsRequest_CookieIsSecure() {
+    public void LoginPost_ValidCredentials_HttpsRequest_CookieIsSecure()
+    {
         var controller = CreateController(EnabledAuthSettings(), isHttps: true);
 
         controller.Login(ValidUsername, ValidPassword, returnUrl: null!);
@@ -355,27 +392,37 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public void LoginPost_ValidCredentials_CookieSameSiteIsStrict() {
+    public void LoginPost_ValidCredentials_CookieSameSiteIsStrict()
+    {
         var controller = CreateController(EnabledAuthSettings());
 
         controller.Login(ValidUsername, ValidPassword, returnUrl: null!);
 
         var cookies = controller.HttpContext.Response.Headers["Set-Cookie"].ToString();
-        cookies.Should().Contain("samesite=strict", because: "auth cookies must use SameSite=Strict for CSRF protection");
+        cookies
+            .Should()
+            .Contain(
+                "samesite=strict",
+                because: "auth cookies must use SameSite=Strict for CSRF protection"
+            );
     }
 
     [Fact]
-    public void LoginPost_ValidCredentials_CookieHasMaxAge() {
+    public void LoginPost_ValidCredentials_CookieHasMaxAge()
+    {
         var controller = CreateController(EnabledAuthSettings());
 
         controller.Login(ValidUsername, ValidPassword, returnUrl: null!);
 
         var cookies = controller.HttpContext.Response.Headers["Set-Cookie"].ToString();
-        cookies.Should().Contain("max-age=", because: "cookie should have an expiration via max-age");
+        cookies
+            .Should()
+            .Contain("max-age=", because: "cookie should have an expiration via max-age");
     }
 
     [Fact]
-    public void LoginPost_ValidCredentials_CookieMaxAgeIsSevenDays() {
+    public void LoginPost_ValidCredentials_CookieMaxAgeIsSevenDays()
+    {
         var controller = CreateController(EnabledAuthSettings());
 
         controller.Login(ValidUsername, ValidPassword, returnUrl: null!);

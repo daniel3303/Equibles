@@ -1,17 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <InternalsVisibleTo Include="Equibles.UnitTests" />
+    <InternalsVisibleTo Include="Equibles.IntegrationTests" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <InternalsVisibleTo Include="Equibles.UnitTests" />
-      <InternalsVisibleTo Include="Equibles.IntegrationTests" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <PackageReference Include="Microsoft.EntityFrameworkCore" />
-      <PackageReference Include="Microsoft.EntityFrameworkCore.Proxies" />
-      <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
-      <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
-      <PackageReference Include="Pgvector.EntityFrameworkCore" />
-      <PackageReference Include="Equibles.ParadeDB.EntityFrameworkCore" />
-    </ItemGroup>
-
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Proxies" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Pgvector.EntityFrameworkCore" />
+    <PackageReference Include="Equibles.ParadeDB.EntityFrameworkCore" />
+  </ItemGroup>
 </Project>

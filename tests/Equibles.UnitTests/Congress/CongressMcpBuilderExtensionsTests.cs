@@ -6,9 +6,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Congress;
 
-public class CongressMcpBuilderExtensionsTests {
+public class CongressMcpBuilderExtensionsTests
+{
     [Fact]
-    public void AddCongress_RegistersAssemblyMcpModuleForCongressTools() {
+    public void AddCongress_RegistersAssemblyMcpModuleForCongressTools()
+    {
         // AddCongress wires the House/Senate disclosure MCP tools into the
         // EquiblesMcpBuilder via AssemblyMcpModule<CongressTools>. The
         // marker type drives the AutoWiring assembly scan; a regression
@@ -21,7 +23,10 @@ public class CongressMcpBuilderExtensionsTests {
 
         builder.AddCongress();
 
-        builder.Modules.Should().ContainSingle()
-            .Which.Should().BeOfType<AssemblyMcpModule<CongressTools>>();
+        builder
+            .Modules.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeOfType<AssemblyMcpModule<CongressTools>>();
     }
 }

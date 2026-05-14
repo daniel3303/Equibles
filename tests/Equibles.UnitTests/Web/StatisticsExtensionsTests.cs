@@ -2,9 +2,11 @@ using Equibles.Web.Extensions;
 
 namespace Equibles.UnitTests.Web;
 
-public class StatisticsExtensionsTests {
+public class StatisticsExtensionsTests
+{
     [Fact]
-    public void SafeRound_NaN_ReturnsNullInsteadOfThrowingOnDecimalCast() {
+    public void SafeRound_NaN_ReturnsNullInsteadOfThrowingOnDecimalCast()
+    {
         // MathNet.Numerics.Statistics.DescriptiveStatistics.StandardDeviation returns
         // double.NaN for any single-value sample — a realistic shape coming out of
         // TechnicalIndicatorService when an instrument has only one closing price in
@@ -23,7 +25,8 @@ public class StatisticsExtensionsTests {
     }
 
     [Fact]
-    public void SafeRound_PositiveInfinity_ReturnsNullInsteadOfThrowingOnDecimalCast() {
+    public void SafeRound_PositiveInfinity_ReturnsNullInsteadOfThrowingOnDecimalCast()
+    {
         // Sibling to the NaN pin above. The risk this catches is asymmetric and
         // unreachable from the NaN test alone: the guard is `double.IsFinite(value)`,
         // which returns FALSE for `NaN`, `PositiveInfinity`, AND `NegativeInfinity`.
@@ -50,7 +53,8 @@ public class StatisticsExtensionsTests {
     }
 
     [Fact]
-    public void SafeRound_NegativeInfinity_ReturnsNullInsteadOfThrowingOnDecimalCast() {
+    public void SafeRound_NegativeInfinity_ReturnsNullInsteadOfThrowingOnDecimalCast()
+    {
         // Completes the SafeRound non-finite triple. The existing pins cover
         // NaN and PositiveInfinity. NegativeInfinity is the third value that
         // `double.IsFinite` rejects and the third value that triggers
@@ -87,7 +91,8 @@ public class StatisticsExtensionsTests {
     }
 
     [Fact]
-    public void SafeRound_FiniteValue_ReturnsRoundedDecimalAtRequestedPrecision() {
+    public void SafeRound_FiniteValue_ReturnsRoundedDecimalAtRequestedPrecision()
+    {
         // Fourth pin in the SafeRound family. The existing three pins all cover
         // REJECTION paths — NaN, +Infinity, -Infinity all return null. None
         // proves the SUCCESS path: that a finite double `value` returns
@@ -180,7 +185,8 @@ public class StatisticsExtensionsTests {
     }
 
     [Fact]
-    public void ComputeSma_AlignsToInput_FirstWindowSlotsAreNullThenRoundedSma() {
+    public void ComputeSma_AlignsToInput_FirstWindowSlotsAreNullThenRoundedSma()
+    {
         // ComputeSma is consumed by view models that overlay SMA series on price
         // charts; alignment to the original prices array matters because the
         // chart's x-axis is indexed by trading day. The first (period-1)

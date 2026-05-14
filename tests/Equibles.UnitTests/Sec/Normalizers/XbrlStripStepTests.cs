@@ -3,14 +3,17 @@ using Equibles.Sec.BusinessLogic.Normalizers;
 
 namespace Equibles.UnitTests.Sec.Normalizers;
 
-public class XbrlStripStepTests {
+public class XbrlStripStepTests
+{
     private readonly HtmlParser _parser = new();
     private readonly XbrlStripStep _step = new();
 
     [Fact]
-    public void Execute_RemovesIxHeaderElement() {
+    public void Execute_RemovesIxHeaderElement()
+    {
         var doc = _parser.ParseDocument(
-            "<html><body><ix:header>hidden XBRL context</ix:header><p>visible</p></body></html>");
+            "<html><body><ix:header>hidden XBRL context</ix:header><p>visible</p></body></html>"
+        );
 
         _step.Execute(doc);
 
@@ -20,9 +23,11 @@ public class XbrlStripStepTests {
     }
 
     [Fact]
-    public void Execute_RemovesEmptyParentDivOfIxHeader() {
+    public void Execute_RemovesEmptyParentDivOfIxHeader()
+    {
         var doc = _parser.ParseDocument(
-            "<html><body><div><ix:header>hidden</ix:header></div><p>keep</p></body></html>");
+            "<html><body><div><ix:header>hidden</ix:header></div><p>keep</p></body></html>"
+        );
 
         _step.Execute(doc);
 
@@ -30,9 +35,11 @@ public class XbrlStripStepTests {
     }
 
     [Fact]
-    public void Execute_RemovesDeiNamespacedElements() {
+    public void Execute_RemovesDeiNamespacedElements()
+    {
         var doc = _parser.ParseDocument(
-            "<html><body><dei:entityRegistrantName>Acme Corp</dei:entityRegistrantName><p>content</p></body></html>");
+            "<html><body><dei:entityRegistrantName>Acme Corp</dei:entityRegistrantName><p>content</p></body></html>"
+        );
 
         _step.Execute(doc);
 
@@ -42,9 +49,11 @@ public class XbrlStripStepTests {
     }
 
     [Fact]
-    public void Execute_RemovesXbrliElements() {
+    public void Execute_RemovesXbrliElements()
+    {
         var doc = _parser.ParseDocument(
-            "<html><body><xbrli:context id=\"c1\">context data</xbrli:context><p>visible</p></body></html>");
+            "<html><body><xbrli:context id=\"c1\">context data</xbrli:context><p>visible</p></body></html>"
+        );
 
         _step.Execute(doc);
 
@@ -54,9 +63,11 @@ public class XbrlStripStepTests {
     }
 
     [Fact]
-    public void Execute_UnwrapsIxNonFractionPreservingText() {
+    public void Execute_UnwrapsIxNonFractionPreservingText()
+    {
         var doc = _parser.ParseDocument(
-            "<html><body><p>Revenue: <ix:nonfraction name=\"us-gaap:Revenue\">1,234,567</ix:nonfraction></p></body></html>");
+            "<html><body><p>Revenue: <ix:nonfraction name=\"us-gaap:Revenue\">1,234,567</ix:nonfraction></p></body></html>"
+        );
 
         _step.Execute(doc);
 
@@ -66,9 +77,11 @@ public class XbrlStripStepTests {
     }
 
     [Fact]
-    public void Execute_UnwrapsIxNonNumericPreservingChildren() {
+    public void Execute_UnwrapsIxNonNumericPreservingChildren()
+    {
         var doc = _parser.ParseDocument(
-            "<html><body><ix:nonNumeric name=\"us-gaap:Note\"><span>Note text</span><em>emphasis</em></ix:nonNumeric></body></html>");
+            "<html><body><ix:nonNumeric name=\"us-gaap:Note\"><span>Note text</span><em>emphasis</em></ix:nonNumeric></body></html>"
+        );
 
         _step.Execute(doc);
 
@@ -78,7 +91,8 @@ public class XbrlStripStepTests {
     }
 
     [Fact]
-    public void Execute_DivContainingIxHeaderAndSubstantiveContent_KeepsDivAndRemovesOnlyHeader() {
+    public void Execute_DivContainingIxHeaderAndSubstantiveContent_KeepsDivAndRemovesOnlyHeader()
+    {
         // The sibling `Execute_RemovesEmptyParentDivOfIxHeader` test covers the empty-
         // parent-div cleanup branch — when the div wraps ONLY the XBRL header and
         // becomes whitespace-only after the header is removed, the div is dropped too.
@@ -93,7 +107,8 @@ public class XbrlStripStepTests {
         // common case for inline-XBRL 10-K layouts. Pin the preservation branch so the
         // regression surfaces here rather than as a SEC filing with its body missing.
         var doc = _parser.ParseDocument(
-            "<html><body><div><ix:header>hidden XBRL context</ix:header><p>Revenue increased 12%</p></div></body></html>");
+            "<html><body><div><ix:header>hidden XBRL context</ix:header><p>Revenue increased 12%</p></div></body></html>"
+        );
 
         _step.Execute(doc);
 
@@ -104,8 +119,10 @@ public class XbrlStripStepTests {
     }
 
     [Fact]
-    public void Execute_LeavesRegularHtmlElementsUntouched() {
-        const string html = "<html><body><div><h1>Title</h1><p>Paragraph</p><table><tr><td>Cell</td></tr></table></div></body></html>";
+    public void Execute_LeavesRegularHtmlElementsUntouched()
+    {
+        const string html =
+            "<html><body><div><h1>Title</h1><p>Paragraph</p><table><tr><td>Cell</td></tr></table></div></body></html>";
         var doc = _parser.ParseDocument(html);
 
         _step.Execute(doc);
@@ -117,7 +134,8 @@ public class XbrlStripStepTests {
     }
 
     [Fact]
-    public void Execute_EmptyDocument_DoesNotThrow() {
+    public void Execute_EmptyDocument_DoesNotThrow()
+    {
         var doc = _parser.ParseDocument("<html><body></body></html>");
 
         var act = () => _step.Execute(doc);

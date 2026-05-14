@@ -9,9 +9,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Yahoo;
 
-public class YahooPriceScraperWorkerTests {
+public class YahooPriceScraperWorkerTests
+{
     [Fact]
-    public void Constructor_AppliesSleepIntervalHoursFromOptionsAsTimeSpanHours() {
+    public void Constructor_AppliesSleepIntervalHoursFromOptionsAsTimeSpanHours()
+    {
         // YahooPriceScraperWorker reads YahooPriceScraperOptions.SleepIntervalHours
         // (inherited from ScraperOptions, default 24h) and stores it as a
         // TimeSpan via FromHours. Daily-close prices update once per
@@ -27,14 +29,17 @@ public class YahooPriceScraperWorkerTests {
             Substitute.For<IServiceScopeFactory>(),
             Substitute.For<ErrorReporter>(
                 Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()),
-            options);
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            options
+        );
 
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(8));
     }
 
     [Fact]
-    public void ErrorSource_IsYahooPriceScraper() {
+    public void ErrorSource_IsYahooPriceScraper()
+    {
         // YahooPriceScraperWorker pulls daily-close prices from Yahoo Finance —
         // a different upstream, auth model (browser-impersonation cookies/crumb),
         // and rate-limit envelope from every other scraper in the system. When
@@ -57,14 +62,17 @@ public class YahooPriceScraperWorkerTests {
             Substitute.For<IServiceScopeFactory>(),
             Substitute.For<ErrorReporter>(
                 Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()),
-            options);
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            options
+        );
 
         sut.InvokeErrorSource().Should().Be(ErrorSource.YahooPriceScraper);
     }
 
     [Fact]
-    public void WorkerName_IsYahooPriceScraper() {
+    public void WorkerName_IsYahooPriceScraper()
+    {
         // Seventh WorkerName pin in the natural-extension family (CBOE, Holdings,
         // SEC filing, FTD, Document processor, FRED, and now Yahoo price).
         // WorkerName flows into BaseScraperWorker's structured log scope and shows
@@ -85,18 +93,22 @@ public class YahooPriceScraperWorkerTests {
             Substitute.For<IServiceScopeFactory>(),
             Substitute.For<ErrorReporter>(
                 Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()),
-            options);
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            options
+        );
 
         sut.InvokeWorkerName().Should().Be("Yahoo price scraper");
     }
 
-    private sealed class TestableYahooPriceScraperWorker : YahooPriceScraperWorker {
+    private sealed class TestableYahooPriceScraperWorker : YahooPriceScraperWorker
+    {
         public TestableYahooPriceScraperWorker(
             ILogger<YahooPriceScraperWorker> logger,
             IServiceScopeFactory scopeFactory,
             ErrorReporter errorReporter,
-            IOptions<YahooPriceScraperOptions> options)
+            IOptions<YahooPriceScraperOptions> options
+        )
             : base(logger, scopeFactory, errorReporter, options) { }
 
         public TimeSpan InvokeSleepInterval() => SleepInterval;

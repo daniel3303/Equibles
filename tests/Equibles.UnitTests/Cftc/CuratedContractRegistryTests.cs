@@ -2,9 +2,11 @@ using Equibles.Cftc.HostedService.Services;
 
 namespace Equibles.UnitTests.Cftc;
 
-public class CuratedContractRegistryTests {
+public class CuratedContractRegistryTests
+{
     [Fact]
-    public void Contracts_MarketCodes_AreUniqueCaseInsensitive() {
+    public void Contracts_MarketCodes_AreUniqueCaseInsensitive()
+    {
         // CftcImportService.Import builds the curated lookup with
         //     CuratedContractRegistry.Contracts.ToDictionary(c => c.MarketCode.Trim(), StringComparer.OrdinalIgnoreCase)
         // If two entries share a MarketCode (case-insensitive, trimmed), that call throws
@@ -14,8 +16,8 @@ public class CuratedContractRegistryTests {
         // notice when the dashboard shows stale data. Pin the uniqueness invariant so a
         // copy-paste mistake adding a duplicate market code is caught at test time, not in
         // production logs days later.
-        var duplicates = CuratedContractRegistry.Contracts
-            .GroupBy(c => c.MarketCode.Trim(), StringComparer.OrdinalIgnoreCase)
+        var duplicates = CuratedContractRegistry
+            .Contracts.GroupBy(c => c.MarketCode.Trim(), StringComparer.OrdinalIgnoreCase)
             .Where(g => g.Count() > 1)
             .Select(g => g.Key)
             .ToList();
@@ -24,7 +26,8 @@ public class CuratedContractRegistryTests {
     }
 
     [Fact]
-    public void Contracts_ContainsEminiSP500WithExactCftcMarketCode13874A() {
+    public void Contracts_ContainsEminiSP500WithExactCftcMarketCode13874A()
+    {
         // CFTC publishes Commitments of Traders position data keyed by exact MarketCode
         // strings — these are immutable identifiers like SEC CIKs. The E-mini S&P 500
         // (CME) market code is "13874A" specifically — the trailing "A" distinguishes
@@ -45,8 +48,9 @@ public class CuratedContractRegistryTests {
         // typo'd either field is caught. The display name flows into the dashboard's
         // contract-picker dropdown; a regression there would mis-label the contract
         // for analysts.
-        var contract = CuratedContractRegistry.Contracts
-            .SingleOrDefault(c => c.MarketCode == "13874A");
+        var contract = CuratedContractRegistry.Contracts.SingleOrDefault(c =>
+            c.MarketCode == "13874A"
+        );
 
         contract.Should().NotBeNull();
         contract!.DisplayName.Should().Be("E-mini S&P 500 (CME)");

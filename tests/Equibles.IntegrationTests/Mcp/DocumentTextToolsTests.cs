@@ -11,32 +11,46 @@ using File = Equibles.Media.Data.Models.File;
 namespace Equibles.IntegrationTests.Mcp;
 
 [Collection(ParadeDbCollection.Name)]
-public class DocumentTextToolsTests : ParadeDbMcpTestBase {
-    public DocumentTextToolsTests(ParadeDbFixture fixture) : base(fixture) { }
+public class DocumentTextToolsTests : ParadeDbMcpTestBase
+{
+    public DocumentTextToolsTests(ParadeDbFixture fixture)
+        : base(fixture) { }
 
-    private DocumentTextTools Sut() => new(
-        new DocumentRepository(DbContext),
-        ErrorManager,
-        NullLogger<DocumentTextTools>());
+    private DocumentTextTools Sut() =>
+        new(new DocumentRepository(DbContext), ErrorManager, NullLogger<DocumentTextTools>());
 
-    private async Task<Document> SeedDocument(string content, string ticker = "AAPL", string companyName = "Apple Inc") {
-        var stock = new CommonStock {
-            Ticker = ticker, Name = companyName,
+    private async Task<Document> SeedDocument(
+        string content,
+        string ticker = "AAPL",
+        string companyName = "Apple Inc"
+    )
+    {
+        var stock = new CommonStock
+        {
+            Ticker = ticker,
+            Name = companyName,
             Cik = Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString(),
         };
         DbContext.Set<CommonStock>().Add(stock);
 
         var fileContent = new FileContent { Bytes = Encoding.UTF8.GetBytes(content) };
-        var file = new File {
-            Name = "filing", Extension = "txt", ContentType = "text/plain",
-            Size = fileContent.Bytes.Length, FileContent = fileContent,
+        var file = new File
+        {
+            Name = "filing",
+            Extension = "txt",
+            ContentType = "text/plain",
+            Size = fileContent.Bytes.Length,
+            FileContent = fileContent,
         };
         fileContent.FileId = file.Id;
         DbContext.Set<File>().Add(file);
 
-        var document = new Document {
-            CommonStock = stock, CommonStockId = stock.Id,
-            Content = file, ContentId = file.Id,
+        var document = new Document
+        {
+            CommonStock = stock,
+            CommonStockId = stock.Id,
+            Content = file,
+            ContentId = file.Id,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2025, 3, 15),
             ReportingForDate = new DateOnly(2024, 12, 31),
@@ -50,8 +64,11 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase {
     // ── SearchDocumentKeyword ───────────────────────────────────────────
 
     [Fact]
-    public async Task SearchDocumentKeyword_KeywordFound_ReturnsMatchesWithContext() {
-        var doc = await SeedDocument("Line one\nRevenue was $100M\nLine three\nRevenue increased\nLine five");
+    public async Task SearchDocumentKeyword_KeywordFound_ReturnsMatchesWithContext()
+    {
+        var doc = await SeedDocument(
+            "Line one\nRevenue was $100M\nLine three\nRevenue increased\nLine five"
+        );
 
         var result = await Sut().SearchDocumentKeyword(doc.Id, "Revenue");
 
@@ -61,7 +78,8 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task SearchDocumentKeyword_CaseInsensitive_FindsMatches() {
+    public async Task SearchDocumentKeyword_CaseInsensitive_FindsMatches()
+    {
         var doc = await SeedDocument("First line\nTotal REVENUE was high\nLast line");
 
         var result = await Sut().SearchDocumentKeyword(doc.Id, "revenue");
@@ -71,7 +89,8 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task SearchDocumentKeyword_NotFound_ReturnsNoMatchesMessage() {
+    public async Task SearchDocumentKeyword_NotFound_ReturnsNoMatchesMessage()
+    {
         var doc = await SeedDocument("Line one\nLine two\nLine three");
 
         var result = await Sut().SearchDocumentKeyword(doc.Id, "nonexistent");
@@ -81,7 +100,8 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task SearchDocumentKeyword_DocumentNotFound_ReturnsNotFoundMessage() {
+    public async Task SearchDocumentKeyword_DocumentNotFound_ReturnsNotFoundMessage()
+    {
         var missingId = Guid.NewGuid();
 
         var result = await Sut().SearchDocumentKeyword(missingId, "test");
@@ -90,7 +110,8 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task SearchDocumentKeyword_MaxResultsRespected_LimitsMatches() {
+    public async Task SearchDocumentKeyword_MaxResultsRespected_LimitsMatches()
+    {
         var lines = Enumerable.Range(1, 50).Select(i => $"Revenue line {i}").ToArray();
         var doc = await SeedDocument(string.Join("\n", lines));
 
@@ -100,7 +121,8 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task SearchDocumentKeyword_IncludesContextLines() {
+    public async Task SearchDocumentKeyword_IncludesContextLines()
+    {
         var doc = await SeedDocument("Before line\nTarget keyword here\nAfter line");
 
         var result = await Sut().SearchDocumentKeyword(doc.Id, "keyword");
@@ -111,8 +133,13 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task SearchDocumentKeyword_IncludesDocumentMetadata() {
-        var doc = await SeedDocument("Some keyword content", ticker: "MSFT", companyName: "Microsoft Corp");
+    public async Task SearchDocumentKeyword_IncludesDocumentMetadata()
+    {
+        var doc = await SeedDocument(
+            "Some keyword content",
+            ticker: "MSFT",
+            companyName: "Microsoft Corp"
+        );
 
         var result = await Sut().SearchDocumentKeyword(doc.Id, "keyword");
 
@@ -124,7 +151,8 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase {
     // ── ReadDocumentLines ───────────────────────────────────────────────
 
     [Fact]
-    public async Task ReadDocumentLines_ValidRange_ReturnsNumberedLines() {
+    public async Task ReadDocumentLines_ValidRange_ReturnsNumberedLines()
+    {
         var doc = await SeedDocument("Line 1\nLine 2\nLine 3\nLine 4\nLine 5");
 
         var result = await Sut().ReadDocumentLines(doc.Id, 2, 4);
@@ -138,7 +166,8 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task ReadDocumentLines_EntireDocument_ReturnsAllLines() {
+    public async Task ReadDocumentLines_EntireDocument_ReturnsAllLines()
+    {
         var doc = await SeedDocument("Alpha\nBravo\nCharlie");
 
         var result = await Sut().ReadDocumentLines(doc.Id, 1, 3);
@@ -150,7 +179,8 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task ReadDocumentLines_StartLineBelowOne_ClampedToOne() {
+    public async Task ReadDocumentLines_StartLineBelowOne_ClampedToOne()
+    {
         var doc = await SeedDocument("Line 1\nLine 2\nLine 3");
 
         var result = await Sut().ReadDocumentLines(doc.Id, -5, 2);
@@ -161,7 +191,8 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task ReadDocumentLines_EndLineBeyondTotal_ClampedToTotal() {
+    public async Task ReadDocumentLines_EndLineBeyondTotal_ClampedToTotal()
+    {
         var doc = await SeedDocument("Line 1\nLine 2\nLine 3");
 
         var result = await Sut().ReadDocumentLines(doc.Id, 2, 100);
@@ -172,7 +203,8 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task ReadDocumentLines_StartAfterEnd_ReturnsInvalidRangeMessage() {
+    public async Task ReadDocumentLines_StartAfterEnd_ReturnsInvalidRangeMessage()
+    {
         var doc = await SeedDocument("Line 1\nLine 2\nLine 3");
 
         var result = await Sut().ReadDocumentLines(doc.Id, 5, 2);
@@ -181,7 +213,8 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task ReadDocumentLines_DocumentNotFound_ReturnsNotFoundMessage() {
+    public async Task ReadDocumentLines_DocumentNotFound_ReturnsNotFoundMessage()
+    {
         var missingId = Guid.NewGuid();
 
         var result = await Sut().ReadDocumentLines(missingId, 1, 10);
@@ -190,7 +223,8 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task ReadDocumentLines_IncludesDocumentMetadata() {
+    public async Task ReadDocumentLines_IncludesDocumentMetadata()
+    {
         var doc = await SeedDocument("Content here", ticker: "GOOG", companyName: "Alphabet Inc");
 
         var result = await Sut().ReadDocumentLines(doc.Id, 1, 1);
@@ -201,7 +235,8 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task ReadDocumentLines_LinesAreNumbered() {
+    public async Task ReadDocumentLines_LinesAreNumbered()
+    {
         var doc = await SeedDocument("Alpha\nBravo\nCharlie");
 
         var result = await Sut().ReadDocumentLines(doc.Id, 1, 3);
@@ -212,7 +247,8 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task ReadDocumentLines_SingleLine_ReturnsOneLine() {
+    public async Task ReadDocumentLines_SingleLine_ReturnsOneLine()
+    {
         var doc = await SeedDocument("Line 1\nLine 2\nLine 3");
 
         var result = await Sut().ReadDocumentLines(doc.Id, 2, 2);

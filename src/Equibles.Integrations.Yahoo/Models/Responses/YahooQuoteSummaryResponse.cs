@@ -3,12 +3,14 @@ using Newtonsoft.Json;
 namespace Equibles.Integrations.Yahoo.Models.Responses;
 
 // Root: { "quoteSummary": { "result": [...], "error": null } }
-public class YahooQuoteSummaryResponse {
+public class YahooQuoteSummaryResponse
+{
     [JsonProperty("quoteSummary")]
     public QuoteSummaryContainer QuoteSummary { get; set; }
 }
 
-public class QuoteSummaryContainer {
+public class QuoteSummaryContainer
+{
     [JsonProperty("result")]
     public List<QuoteSummaryResult> Result { get; set; } = [];
 
@@ -16,7 +18,8 @@ public class QuoteSummaryContainer {
     public object Error { get; set; }
 }
 
-public class QuoteSummaryResult {
+public class QuoteSummaryResult
+{
     [JsonProperty("recommendationTrend")]
     public RecommendationTrendContainer RecommendationTrend { get; set; }
 
@@ -24,7 +27,8 @@ public class QuoteSummaryResult {
     public DefaultKeyStatisticsContainer DefaultKeyStatistics { get; set; }
 }
 
-public class DefaultKeyStatisticsContainer {
+public class DefaultKeyStatisticsContainer
+{
     [JsonProperty("sharesOutstanding")]
     public YahooRawValue SharesOutstanding { get; set; }
 
@@ -32,17 +36,20 @@ public class DefaultKeyStatisticsContainer {
     public YahooRawValue EnterpriseValue { get; set; }
 }
 
-public class YahooRawValue {
+public class YahooRawValue
+{
     [JsonProperty("raw")]
     public long Raw { get; set; }
 }
 
-public class RecommendationTrendContainer {
+public class RecommendationTrendContainer
+{
     [JsonProperty("trend")]
     public List<RecommendationTrendRecord> Trend { get; set; } = [];
 }
 
-public class RecommendationTrendRecord {
+public class RecommendationTrendRecord
+{
     [JsonProperty("period")]
     public string Period { get; set; }
 

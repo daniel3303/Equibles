@@ -7,18 +7,21 @@ using Equibles.Worker;
 
 namespace Equibles.IntegrationTests.Integrations;
 
-public class TickerMapServiceTests : IDisposable {
+public class TickerMapServiceTests : IDisposable
+{
     private readonly EquiblesDbContext _dbContext;
     private readonly CommonStockRepository _stockRepo;
     private readonly TickerMapService _service;
     private readonly TickerMapService _clientEvalService;
 
-    public TickerMapServiceTests() {
+    public TickerMapServiceTests()
+    {
         _dbContext = TestDbContextFactory.Create(new CommonStocksModuleConfiguration());
         _stockRepo = new CommonStockRepository(_dbContext);
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), _stockRepo));
+            (typeof(CommonStockRepository), _stockRepo)
+        );
         _service = new TickerMapService(scopeFactory);
 
         // Separate service backed by a repository that forces client evaluation,
@@ -26,16 +29,20 @@ public class TickerMapServiceTests : IDisposable {
         // by the EF Core in-memory provider.
         var clientEvalRepo = new ClientEvalStockRepository(_dbContext);
         var clientEvalScopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), clientEvalRepo));
+            (typeof(CommonStockRepository), clientEvalRepo)
+        );
         _clientEvalService = new TickerMapService(clientEvalScopeFactory);
     }
 
-    public void Dispose() {
+    public void Dispose()
+    {
         _dbContext.Dispose();
     }
 
-    private static CommonStock CreateStock(string ticker, string name, string cik = null) {
-        return new CommonStock {
+    private static CommonStock CreateStock(string ticker, string name, string cik = null)
+    {
+        return new CommonStock
+        {
             Id = Guid.NewGuid(),
             Ticker = ticker,
             Name = name,
@@ -43,7 +50,8 @@ public class TickerMapServiceTests : IDisposable {
         };
     }
 
-    private async Task SeedStocks(params CommonStock[] stocks) {
+    private async Task SeedStocks(params CommonStock[] stocks)
+    {
         _stockRepo.AddRange(stocks);
         await _stockRepo.SaveChanges();
     }
@@ -51,14 +59,16 @@ public class TickerMapServiceTests : IDisposable {
     // ── Build with no stocks ───────────────────────────────────────────
 
     [Fact]
-    public async Task Build_NoStocksExist_ReturnsEmptyDictionary() {
+    public async Task Build_NoStocksExist_ReturnsEmptyDictionary()
+    {
         var result = await _service.Build(null, CancellationToken.None);
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task Build_EmptyTickerList_NoStocks_ReturnsEmptyDictionary() {
+    public async Task Build_EmptyTickerList_NoStocks_ReturnsEmptyDictionary()
+    {
         var result = await _service.Build([], CancellationToken.None);
 
         result.Should().BeEmpty();
@@ -67,7 +77,8 @@ public class TickerMapServiceTests : IDisposable {
     // ── Build returns all stocks when no filter ────────────────────────
 
     [Fact]
-    public async Task Build_NullTickerList_ReturnsAllStocks() {
+    public async Task Build_NullTickerList_ReturnsAllStocks()
+    {
         var apple = CreateStock("AAPL", "Apple Inc");
         var msft = CreateStock("MSFT", "Microsoft Corp");
         await SeedStocks(apple, msft);
@@ -80,7 +91,8 @@ public class TickerMapServiceTests : IDisposable {
     }
 
     [Fact]
-    public async Task Build_EmptyTickerList_ReturnsAllStocks() {
+    public async Task Build_EmptyTickerList_ReturnsAllStocks()
+    {
         var apple = CreateStock("AAPL", "Apple Inc");
         var goog = CreateStock("GOOG", "Alphabet Inc");
         await SeedStocks(apple, goog);
@@ -97,7 +109,8 @@ public class TickerMapServiceTests : IDisposable {
     // SecondaryTickers.Any() which the in-memory provider cannot translate.
 
     [Fact]
-    public async Task Build_WithTickerFilter_ReturnsOnlyMatchingStocks() {
+    public async Task Build_WithTickerFilter_ReturnsOnlyMatchingStocks()
+    {
         var apple = CreateStock("AAPL", "Apple Inc");
         var msft = CreateStock("MSFT", "Microsoft Corp");
         var goog = CreateStock("GOOG", "Alphabet Inc");
@@ -112,19 +125,20 @@ public class TickerMapServiceTests : IDisposable {
     }
 
     [Fact]
-    public async Task Build_WithSingleTickerFilter_ReturnsSingleMapping() {
+    public async Task Build_WithSingleTickerFilter_ReturnsSingleMapping()
+    {
         var apple = CreateStock("AAPL", "Apple Inc");
         var msft = CreateStock("MSFT", "Microsoft Corp");
         await SeedStocks(apple, msft);
 
         var result = await _clientEvalService.Build(["MSFT"], CancellationToken.None);
 
-        result.Should().ContainSingle()
-            .Which.Key.Should().Be("MSFT");
+        result.Should().ContainSingle().Which.Key.Should().Be("MSFT");
     }
 
     [Fact]
-    public async Task Build_WithNonExistentTicker_ReturnsEmptyDictionary() {
+    public async Task Build_WithNonExistentTicker_ReturnsEmptyDictionary()
+    {
         var apple = CreateStock("AAPL", "Apple Inc");
         await SeedStocks(apple);
 
@@ -136,7 +150,8 @@ public class TickerMapServiceTests : IDisposable {
     // ── Build maps ticker to correct ID ───────────────────────────────
 
     [Fact]
-    public async Task Build_MapsTickerToCorrectId() {
+    public async Task Build_MapsTickerToCorrectId()
+    {
         var apple = CreateStock("AAPL", "Apple Inc");
         var msft = CreateStock("MSFT", "Microsoft Corp");
         var goog = CreateStock("GOOG", "Alphabet Inc");
@@ -152,7 +167,8 @@ public class TickerMapServiceTests : IDisposable {
     // ── Case-insensitive dictionary ───────────────────────────────────
 
     [Fact]
-    public async Task Build_ReturnsCaseInsensitiveDictionary() {
+    public async Task Build_ReturnsCaseInsensitiveDictionary()
+    {
         var apple = CreateStock("AAPL", "Apple Inc");
         await SeedStocks(apple);
 
@@ -167,22 +183,24 @@ public class TickerMapServiceTests : IDisposable {
     // ── Build with secondary tickers ──────────────────────────────────
 
     [Fact]
-    public async Task Build_FilterMatchesSecondaryTicker_IncludesStock() {
+    public async Task Build_FilterMatchesSecondaryTicker_IncludesStock()
+    {
         var brk = CreateStock("BRK.A", "Berkshire Hathaway");
         brk.SecondaryTickers = ["BRK.B"];
         await SeedStocks(brk);
 
         var result = await _clientEvalService.Build(["BRK.B"], CancellationToken.None);
 
-        result.Should().ContainSingle()
-            .Which.Value.Should().Be(brk.Id);
+        result.Should().ContainSingle().Which.Value.Should().Be(brk.Id);
     }
 
     // ── Build handles many stocks ─────────────────────────────────────
 
     [Fact]
-    public async Task Build_ManyStocks_ReturnsCompleteMapping() {
-        var stocks = Enumerable.Range(1, 50)
+    public async Task Build_ManyStocks_ReturnsCompleteMapping()
+    {
+        var stocks = Enumerable
+            .Range(1, 50)
             .Select(i => CreateStock($"T{i:D4}", $"Company {i}"))
             .ToArray();
         await SeedStocks(stocks);
@@ -190,16 +208,17 @@ public class TickerMapServiceTests : IDisposable {
         var result = await _service.Build(null, CancellationToken.None);
 
         result.Should().HaveCount(50);
-        foreach (var stock in stocks) {
-            result.Should().ContainKey(stock.Ticker)
-                .WhoseValue.Should().Be(stock.Id);
+        foreach (var stock in stocks)
+        {
+            result.Should().ContainKey(stock.Ticker).WhoseValue.Should().Be(stock.Id);
         }
     }
 
     // ── CancellationToken is respected ────────────────────────────────
 
     [Fact]
-    public async Task Build_CancelledToken_ThrowsOperationCancelled() {
+    public async Task Build_CancelledToken_ThrowsOperationCancelled()
+    {
         var apple = CreateStock("AAPL", "Apple Inc");
         await SeedStocks(apple);
 
@@ -214,7 +233,8 @@ public class TickerMapServiceTests : IDisposable {
     // ── Separate Build calls reflect DB mutations ─────────────────────
 
     [Fact]
-    public async Task Build_CalledAfterNewStockAdded_ReflectsNewData() {
+    public async Task Build_CalledAfterNewStockAdded_ReflectsNewData()
+    {
         var apple = CreateStock("AAPL", "Apple Inc");
         await SeedStocks(apple);
 
@@ -230,7 +250,8 @@ public class TickerMapServiceTests : IDisposable {
     }
 
     [Fact]
-    public async Task Build_CalledAfterStockRemoved_ReflectsRemoval() {
+    public async Task Build_CalledAfterStockRemoved_ReflectsRemoval()
+    {
         var apple = CreateStock("AAPL", "Apple Inc");
         var msft = CreateStock("MSFT", "Microsoft Corp");
         await SeedStocks(apple, msft);
@@ -242,21 +263,23 @@ public class TickerMapServiceTests : IDisposable {
         await _stockRepo.SaveChanges();
 
         var secondResult = await _service.Build(null, CancellationToken.None);
-        secondResult.Should().ContainSingle()
-            .Which.Key.Should().Be("MSFT");
+        secondResult.Should().ContainSingle().Which.Key.Should().Be("MSFT");
     }
 
     // ── Filter with mix of existing and non-existing tickers ──────────
 
     [Fact]
-    public async Task Build_FilterWithMixedExistingAndNonExisting_ReturnsOnlyExisting() {
+    public async Task Build_FilterWithMixedExistingAndNonExisting_ReturnsOnlyExisting()
+    {
         var apple = CreateStock("AAPL", "Apple Inc");
         await SeedStocks(apple);
 
-        var result = await _clientEvalService.Build(["AAPL", "NOPE", "FAKE"], CancellationToken.None);
+        var result = await _clientEvalService.Build(
+            ["AAPL", "NOPE", "FAKE"],
+            CancellationToken.None
+        );
 
-        result.Should().ContainSingle()
-            .Which.Key.Should().Be("AAPL");
+        result.Should().ContainSingle().Which.Key.Should().Be("AAPL");
     }
 
     /// <summary>
@@ -266,10 +289,13 @@ public class TickerMapServiceTests : IDisposable {
     /// so GetAll returns a TestAsyncQueryable that supports both LINQ-to-Objects
     /// evaluation and IAsyncEnumerable for EF Core async methods.
     /// </summary>
-    private sealed class ClientEvalStockRepository : CommonStockRepository {
-        public ClientEvalStockRepository(EquiblesDbContext dbContext) : base(dbContext) { }
+    private sealed class ClientEvalStockRepository : CommonStockRepository
+    {
+        public ClientEvalStockRepository(EquiblesDbContext dbContext)
+            : base(dbContext) { }
 
-        public override IQueryable<CommonStock> GetAll() {
+        public override IQueryable<CommonStock> GetAll()
+        {
             return new TestAsyncQueryable<CommonStock>(base.GetAll().ToList());
         }
     }

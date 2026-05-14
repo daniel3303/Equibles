@@ -1,6 +1,7 @@
 namespace Equibles.Integrations.Common.RateLimiter;
 
-public interface IRateLimiter {
+public interface IRateLimiter
+{
     Task WaitAsync();
     void PauseFor(TimeSpan duration);
 }

@@ -23,29 +23,35 @@ namespace Equibles.IntegrationTests.Mcp.Server;
 /// without honouring the configured key trips the second.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class McpServerApiKeyAuthTests : IAsyncLifetime {
+public class McpServerApiKeyAuthTests : IAsyncLifetime
+{
     private const string ApiKey = "integration-test-mcp-api-key";
 
     private readonly ParadeDbFixture _paradeDb;
     private AuthenticatedMcpServerFixture _serverFixture;
 
-    public McpServerApiKeyAuthTests(ParadeDbFixture paradeDb) {
+    public McpServerApiKeyAuthTests(ParadeDbFixture paradeDb)
+    {
         _paradeDb = paradeDb;
     }
 
-    public async Task InitializeAsync() {
+    public async Task InitializeAsync()
+    {
         _serverFixture = new AuthenticatedMcpServerFixture(_paradeDb, ApiKey);
         await _serverFixture.InitializeAsync();
     }
 
-    public async Task DisposeAsync() {
-        if (_serverFixture is not null) {
+    public async Task DisposeAsync()
+    {
+        if (_serverFixture is not null)
+        {
             await ((IAsyncLifetime)_serverFixture).DisposeAsync();
         }
     }
 
     [Fact]
-    public async Task McpEndpoint_WithApiKeyConfigured_RejectsAnonymousAndAcceptsBearerAuthenticated() {
+    public async Task McpEndpoint_WithApiKeyConfigured_RejectsAnonymousAndAcceptsBearerAuthenticated()
+    {
         // Anonymous request: ApiKeyMiddleware must reject before MCP layer sees the body. We
         // POST a non-empty payload so a "no body / framing error" inside the MCP transport
         // can't be confused with the 401 the gate is supposed to produce.
@@ -54,41 +60,58 @@ public class McpServerApiKeyAuthTests : IAsyncLifetime {
 
         using var anonResponse = await anonymousClient.PostAsync(
             "/mcp",
-            new StringContent("{}", Encoding.UTF8, "application/json"));
+            new StringContent("{}", Encoding.UTF8, "application/json")
+        );
 
-        anonResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
-            "ApiKeyMiddleware must guard /mcp when McpApiKey is configured");
+        anonResponse
+            .StatusCode.Should()
+            .Be(
+                HttpStatusCode.Unauthorized,
+                "ApiKeyMiddleware must guard /mcp when McpApiKey is configured"
+            );
 
         // Authenticated request: real MCP client handshake + tools/list must succeed. The
         // SDK's HttpClientTransport reuses whatever HttpClient we hand it, so a default
         // Authorization header carries through every JSON-RPC POST it issues.
         var authClient = _serverFixture.CreateClient();
         authClient.BaseAddress = new Uri("http://localhost/");
-        authClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ApiKey);
+        authClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            ApiKey
+        );
 
         var transport = new HttpClientTransport(
-            new HttpClientTransportOptions {
+            new HttpClientTransportOptions
+            {
                 Endpoint = new Uri("http://localhost/mcp"),
                 TransportMode = HttpTransportMode.StreamableHttp,
             },
-            authClient);
+            authClient
+        );
 
         await using var client = await McpClient.CreateAsync(transport);
         var tools = await client.ListToolsAsync();
 
-        tools.Should().NotBeEmpty(
-            "Bearer-authenticated requests must reach the MCP protocol layer and enumerate registered tools");
+        tools
+            .Should()
+            .NotBeEmpty(
+                "Bearer-authenticated requests must reach the MCP protocol layer and enumerate registered tools"
+            );
     }
 }
 
-internal class AuthenticatedMcpServerFixture : McpServerFixture {
+internal class AuthenticatedMcpServerFixture : McpServerFixture
+{
     private readonly string _apiKey;
 
-    public AuthenticatedMcpServerFixture(ParadeDbFixture paradeDb, string apiKey) : base(paradeDb) {
+    public AuthenticatedMcpServerFixture(ParadeDbFixture paradeDb, string apiKey)
+        : base(paradeDb)
+    {
         _apiKey = apiKey;
     }
 
-    protected override void ConfigureWebHost(IWebHostBuilder builder) {
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
         base.ConfigureWebHost(builder);
         // SimpleApiKeyValidator reads "McpApiKey" from IConfiguration at construction;
         // setting it via UseSetting before the host is built mirrors the production

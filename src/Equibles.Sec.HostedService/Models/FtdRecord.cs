@@ -1,6 +1,7 @@
 namespace Equibles.Sec.HostedService.Models;
 
-internal class FtdRecord {
+internal class FtdRecord
+{
     public DateOnly SettlementDate { get; set; }
     public string Cusip { get; set; }
     public string Symbol { get; set; }

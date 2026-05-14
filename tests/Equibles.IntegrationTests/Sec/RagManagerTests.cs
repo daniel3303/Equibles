@@ -1,29 +1,37 @@
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.Sec.BusinessLogic.Search;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
-using Equibles.CommonStocks.Repositories;
 using Equibles.Sec.Repositories;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
 namespace Equibles.IntegrationTests.Sec;
 
-public class RagManagerTests {
+public class RagManagerTests
+{
     private static Chunk MakeChunk(
-        string ticker = "AAPL", string companyName = "Apple Inc",
-        string content = "Sample content", int index = 0,
-        int startPosition = 0, int startLineNumber = 0,
-        DateOnly? reportingDate = null, DocumentType documentType = null
-    ) {
+        string ticker = "AAPL",
+        string companyName = "Apple Inc",
+        string content = "Sample content",
+        int index = 0,
+        int startPosition = 0,
+        int startLineNumber = 0,
+        DateOnly? reportingDate = null,
+        DocumentType documentType = null
+    )
+    {
         var stock = new CommonStock { Ticker = ticker, Name = companyName };
-        var doc = new Document {
+        var doc = new Document
+        {
             CommonStock = stock,
             CommonStockId = stock.Id,
             DocumentType = documentType ?? DocumentType.TenK,
             ReportingDate = reportingDate ?? new DateOnly(2024, 3, 15),
         };
-        return new Chunk {
+        return new Chunk
+        {
             Document = doc,
             DocumentId = doc.Id,
             Content = content,
@@ -35,17 +43,20 @@ public class RagManagerTests {
         };
     }
 
-    private static RagManager CreateSut() {
+    private static RagManager CreateSut()
+    {
         return new RagManager(
             Substitute.For<ChunkRepository>((Equibles.Data.EquiblesDbContext)null),
             Substitute.For<CommonStockRepository>((Equibles.Data.EquiblesDbContext)null),
-            Substitute.For<ILogger<RagManager>>());
+            Substitute.For<ILogger<RagManager>>()
+        );
     }
 
     // ── BuildContext ────────────────────────────────────────────────────
 
     [Fact]
-    public async Task BuildContext_EmptyList_ReturnsNoDocumentsMessage() {
+    public async Task BuildContext_EmptyList_ReturnsNoDocumentsMessage()
+    {
         var sut = CreateSut();
 
         var result = await sut.BuildContext([]);
@@ -54,7 +65,8 @@ public class RagManagerTests {
     }
 
     [Fact]
-    public async Task BuildContext_SingleChunk_FormatsWithHeader() {
+    public async Task BuildContext_SingleChunk_FormatsWithHeader()
+    {
         var sut = CreateSut();
         var chunk = MakeChunk(content: "Revenue was $100M", startLineNumber: 42);
 
@@ -67,20 +79,36 @@ public class RagManagerTests {
     }
 
     [Fact]
-    public async Task BuildContext_MultipleChunksSameDocument_GroupedTogether() {
+    public async Task BuildContext_MultipleChunksSameDocument_GroupedTogether()
+    {
         var sut = CreateSut();
         var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc" };
-        var doc = new Document {
-            CommonStock = stock, CommonStockId = stock.Id,
-            DocumentType = DocumentType.TenK, ReportingDate = new DateOnly(2024, 3, 15),
+        var doc = new Document
+        {
+            CommonStock = stock,
+            CommonStockId = stock.Id,
+            DocumentType = DocumentType.TenK,
+            ReportingDate = new DateOnly(2024, 3, 15),
         };
-        var chunk1 = new Chunk {
-            Document = doc, DocumentId = doc.Id, Content = "First section",
-            Index = 0, StartPosition = 0, DocumentType = doc.DocumentType, Ticker = "AAPL",
+        var chunk1 = new Chunk
+        {
+            Document = doc,
+            DocumentId = doc.Id,
+            Content = "First section",
+            Index = 0,
+            StartPosition = 0,
+            DocumentType = doc.DocumentType,
+            Ticker = "AAPL",
         };
-        var chunk2 = new Chunk {
-            Document = doc, DocumentId = doc.Id, Content = "Second section",
-            Index = 1, StartPosition = 100, DocumentType = doc.DocumentType, Ticker = "AAPL",
+        var chunk2 = new Chunk
+        {
+            Document = doc,
+            DocumentId = doc.Id,
+            Content = "Second section",
+            Index = 1,
+            StartPosition = 100,
+            DocumentType = doc.DocumentType,
+            Ticker = "AAPL",
         };
 
         var result = await sut.BuildContext([chunk2, chunk1]);
@@ -95,10 +123,15 @@ public class RagManagerTests {
     }
 
     [Fact]
-    public async Task BuildContext_ChunksFromDifferentCompanies_SeparateHeaders() {
+    public async Task BuildContext_ChunksFromDifferentCompanies_SeparateHeaders()
+    {
         var sut = CreateSut();
         var appleChunk = MakeChunk(ticker: "AAPL", companyName: "Apple Inc", content: "Apple data");
-        var googleChunk = MakeChunk(ticker: "GOOG", companyName: "Alphabet Inc", content: "Google data");
+        var googleChunk = MakeChunk(
+            ticker: "GOOG",
+            companyName: "Alphabet Inc",
+            content: "Google data"
+        );
 
         var result = await sut.BuildContext([appleChunk, googleChunk]);
 
@@ -107,7 +140,8 @@ public class RagManagerTests {
     }
 
     [Fact]
-    public async Task BuildContext_WhitespaceOnlyChunk_Skipped() {
+    public async Task BuildContext_WhitespaceOnlyChunk_Skipped()
+    {
         var sut = CreateSut();
         var validChunk = MakeChunk(content: "Real content");
         var emptyChunk = MakeChunk(content: "   ");
@@ -119,7 +153,8 @@ public class RagManagerTests {
     }
 
     [Fact]
-    public async Task BuildContext_ZeroStartLineNumber_OmitsLineReference() {
+    public async Task BuildContext_ZeroStartLineNumber_OmitsLineReference()
+    {
         var sut = CreateSut();
         var chunk = MakeChunk(content: "Some text", startLineNumber: 0);
 

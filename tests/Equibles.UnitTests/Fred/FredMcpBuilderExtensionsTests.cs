@@ -6,9 +6,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Fred;
 
-public class FredMcpBuilderExtensionsTests {
+public class FredMcpBuilderExtensionsTests
+{
     [Fact]
-    public void AddFred_RegistersAssemblyMcpModuleForFredTools() {
+    public void AddFred_RegistersAssemblyMcpModuleForFredTools()
+    {
         // AddFred wires the FRED macroeconomic-series MCP tools into the
         // EquiblesMcpBuilder via AssemblyMcpModule<FredTools>. The marker
         // type drives the AutoWiring assembly scan; a regression that
@@ -21,7 +23,10 @@ public class FredMcpBuilderExtensionsTests {
 
         builder.AddFred();
 
-        builder.Modules.Should().ContainSingle()
-            .Which.Should().BeOfType<AssemblyMcpModule<FredTools>>();
+        builder
+            .Modules.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeOfType<AssemblyMcpModule<FredTools>>();
     }
 }

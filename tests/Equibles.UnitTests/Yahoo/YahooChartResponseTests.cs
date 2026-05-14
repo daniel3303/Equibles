@@ -3,32 +3,34 @@ using Newtonsoft.Json;
 
 namespace Equibles.UnitTests.Yahoo;
 
-public class YahooChartResponseTests {
+public class YahooChartResponseTests
+{
     private const string SampleChartJson = """
-    {
-      "chart": {
-        "result": [{
-          "timestamp": [1585569600, 1585656000, 1585742400],
-          "indicators": {
-            "quote": [{
-              "open": [130.25, 132.50, 135.00],
-              "high": [137.98, 134.20, 138.50],
-              "low": [129.89, 131.00, 133.50],
-              "close": [137.06, 133.75, 137.50],
-              "volume": [5765400, 4321000, 6100200]
+        {
+          "chart": {
+            "result": [{
+              "timestamp": [1585569600, 1585656000, 1585742400],
+              "indicators": {
+                "quote": [{
+                  "open": [130.25, 132.50, 135.00],
+                  "high": [137.98, 134.20, 138.50],
+                  "low": [129.89, 131.00, 133.50],
+                  "close": [137.06, 133.75, 137.50],
+                  "volume": [5765400, 4321000, 6100200]
+                }],
+                "adjclose": [{
+                  "adjclose": [136.50, 133.20, 137.00]
+                }]
+              }
             }],
-            "adjclose": [{
-              "adjclose": [136.50, 133.20, 137.00]
-            }]
+            "error": null
           }
-        }],
-        "error": null
-      }
-    }
-    """;
+        }
+        """;
 
     [Fact]
-    public void Deserialize_ValidChartJson_ParsesAllFields() {
+    public void Deserialize_ValidChartJson_ParsesAllFields()
+    {
         var response = JsonConvert.DeserializeObject<YahooChartResponse>(SampleChartJson);
 
         response.Should().NotBeNull();
@@ -42,7 +44,8 @@ public class YahooChartResponseTests {
     }
 
     [Fact]
-    public void Deserialize_ValidChartJson_ParsesQuoteArrays() {
+    public void Deserialize_ValidChartJson_ParsesQuoteArrays()
+    {
         var response = JsonConvert.DeserializeObject<YahooChartResponse>(SampleChartJson);
         var quote = response.Chart.Result[0].Indicators.Quote[0];
 
@@ -55,7 +58,8 @@ public class YahooChartResponseTests {
     }
 
     [Fact]
-    public void Deserialize_ValidChartJson_ParsesAdjustedClose() {
+    public void Deserialize_ValidChartJson_ParsesAdjustedClose()
+    {
         var response = JsonConvert.DeserializeObject<YahooChartResponse>(SampleChartJson);
         var adjClose = response.Chart.Result[0].Indicators.AdjClose[0];
 
@@ -64,30 +68,31 @@ public class YahooChartResponseTests {
     }
 
     [Fact]
-    public void Deserialize_NullValuesInQuote_ParsesAsNulls() {
+    public void Deserialize_NullValuesInQuote_ParsesAsNulls()
+    {
         // Yahoo returns null for market holidays or missing data points
         var json = """
-        {
-          "chart": {
-            "result": [{
-              "timestamp": [1585569600, 1585656000],
-              "indicators": {
-                "quote": [{
-                  "open": [130.25, null],
-                  "high": [137.98, null],
-                  "low": [129.89, null],
-                  "close": [137.06, null],
-                  "volume": [5765400, null]
+            {
+              "chart": {
+                "result": [{
+                  "timestamp": [1585569600, 1585656000],
+                  "indicators": {
+                    "quote": [{
+                      "open": [130.25, null],
+                      "high": [137.98, null],
+                      "low": [129.89, null],
+                      "close": [137.06, null],
+                      "volume": [5765400, null]
+                    }],
+                    "adjclose": [{
+                      "adjclose": [136.50, null]
+                    }]
+                  }
                 }],
-                "adjclose": [{
-                  "adjclose": [136.50, null]
-                }]
+                "error": null
               }
-            }],
-            "error": null
-          }
-        }
-        """;
+            }
+            """;
 
         var response = JsonConvert.DeserializeObject<YahooChartResponse>(json);
         var quote = response.Chart.Result[0].Indicators.Quote[0];
@@ -98,15 +103,16 @@ public class YahooChartResponseTests {
     }
 
     [Fact]
-    public void Deserialize_EmptyResult_ParsesWithEmptyList() {
+    public void Deserialize_EmptyResult_ParsesWithEmptyList()
+    {
         var json = """
-        {
-          "chart": {
-            "result": [],
-            "error": null
-          }
-        }
-        """;
+            {
+              "chart": {
+                "result": [],
+                "error": null
+              }
+            }
+            """;
 
         var response = JsonConvert.DeserializeObject<YahooChartResponse>(json);
 
@@ -114,26 +120,27 @@ public class YahooChartResponseTests {
     }
 
     [Fact]
-    public void Deserialize_NoAdjClose_IndicatorsStillParse() {
+    public void Deserialize_NoAdjClose_IndicatorsStillParse()
+    {
         var json = """
-        {
-          "chart": {
-            "result": [{
-              "timestamp": [1585569600],
-              "indicators": {
-                "quote": [{
-                  "open": [130.25],
-                  "high": [137.98],
-                  "low": [129.89],
-                  "close": [137.06],
-                  "volume": [5765400]
-                }]
+            {
+              "chart": {
+                "result": [{
+                  "timestamp": [1585569600],
+                  "indicators": {
+                    "quote": [{
+                      "open": [130.25],
+                      "high": [137.98],
+                      "low": [129.89],
+                      "close": [137.06],
+                      "volume": [5765400]
+                    }]
+                  }
+                }],
+                "error": null
               }
-            }],
-            "error": null
-          }
-        }
-        """;
+            }
+            """;
 
         var response = JsonConvert.DeserializeObject<YahooChartResponse>(json);
         var result = response.Chart.Result[0];

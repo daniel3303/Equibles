@@ -10,9 +10,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Holdings;
 
-public class HoldingsScraperWorkerTests {
+public class HoldingsScraperWorkerTests
+{
     [Fact]
-    public void ValidateConfiguration_SecContactEmailMissing_ReturnsFalse() {
+    public void ValidateConfiguration_SecContactEmailMissing_ReturnsFalse()
+    {
         // The Holdings scraper pulls 13F filings from SEC EDGAR, which requires a User-Agent
         // header with a contact email; without it the request is silently 403'd. ValidateConfiguration
         // is the startup guard that prevents the worker from looping uselessly when the operator
@@ -24,15 +26,20 @@ public class HoldingsScraperWorkerTests {
         var sut = new TestableHoldingsScraperWorker(
             Substitute.For<ILogger<HoldingsScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
             Options.Create(new WorkerOptions()),
-            config);
+            config
+        );
 
         sut.InvokeValidateConfiguration().Should().BeFalse();
     }
 
     [Fact]
-    public void ValidateConfiguration_SecContactEmailConfigured_ReturnsTrue() {
+    public void ValidateConfiguration_SecContactEmailConfigured_ReturnsTrue()
+    {
         // Sibling to the false-case pin above. The risk this pin catches is asymmetric
         // and unreachable from the empty-email sibling alone: a regression that hard-codes
         // `ValidateConfiguration => false` (defensive default during refactor, or copy-paste
@@ -50,22 +57,27 @@ public class HoldingsScraperWorkerTests {
         // pin without a clear failure mode — the SEC actually inspects User-Agent strings
         // and rejects implausible contact emails.
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> {
-                ["Sec:ContactEmail"] = "equibles-bot@example.com"
-            })
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["Sec:ContactEmail"] = "equibles-bot@example.com" }
+            )
             .Build();
         var sut = new TestableHoldingsScraperWorker(
             Substitute.For<ILogger<HoldingsScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
             Options.Create(new WorkerOptions()),
-            config);
+            config
+        );
 
         sut.InvokeValidateConfiguration().Should().BeTrue();
     }
 
     [Fact]
-    public void SleepInterval_IsTwentyFourHours() {
+    public void SleepInterval_IsTwentyFourHours()
+    {
         // The Holdings scraper pulls SEC EDGAR's quarterly 13F filing data sets —
         // by SEC mandate institutions report quarterly within 45 days of quarter
         // end, so new data lands at most a few times per quarter. The 24-hour
@@ -80,19 +92,26 @@ public class HoldingsScraperWorkerTests {
         // DB query — and a tighter interval would burn DB time + SEC quota
         // for zero benefit (no new 13Fs to fetch). Pin the literal value so any
         // future cadence change is a deliberate test update.
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string>()).Build();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>())
+            .Build();
         var sut = new TestableHoldingsScraperWorker(
             Substitute.For<ILogger<HoldingsScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
             Options.Create(new WorkerOptions()),
-            config);
+            config
+        );
 
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(24));
     }
 
     [Fact]
-    public void ErrorSource_IsHoldingsScraper() {
+    public void ErrorSource_IsHoldingsScraper()
+    {
         // BaseScraperWorker tags every error it reports through ErrorReporter
         // with this worker's `ErrorSource` value — the tag is what routes
         // operator alerts to the right oncall dashboard and the right team.
@@ -115,19 +134,26 @@ public class HoldingsScraperWorkerTests {
         // ErrorSource.HoldingsScraper, but the worker lives under the SEC
         // umbrella alongside the other ContactEmail-gated workers, so a
         // careless harmonization is plausible).
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string>()).Build();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>())
+            .Build();
         var sut = new TestableHoldingsScraperWorker(
             Substitute.For<ILogger<HoldingsScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
             Options.Create(new WorkerOptions()),
-            config);
+            config
+        );
 
         sut.InvokeErrorSource().Should().Be(ErrorSource.HoldingsScraper);
     }
 
     [Fact]
-    public void WorkerName_IsHoldingsScraper() {
+    public void WorkerName_IsHoldingsScraper()
+    {
         // Second WorkerName pin in the codebase (CboeScraperWorker is the first).
         // WorkerName flows into BaseScraperWorker's startup/shutdown log output and
         // heartbeat lines that operator runbooks grep for. A rename here would break
@@ -145,24 +171,32 @@ public class HoldingsScraperWorkerTests {
         //
         // Triple (ErrorSource → routing, SleepInterval → cadence, WorkerName →
         // operator visibility) is now complete for this worker.
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string>()).Build();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>())
+            .Build();
         var sut = new TestableHoldingsScraperWorker(
             Substitute.For<ILogger<HoldingsScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
             Options.Create(new WorkerOptions()),
-            config);
+            config
+        );
 
         sut.InvokeWorkerName().Should().Be("Holdings scraper");
     }
 
-    private sealed class TestableHoldingsScraperWorker : HoldingsScraperWorker {
+    private sealed class TestableHoldingsScraperWorker : HoldingsScraperWorker
+    {
         public TestableHoldingsScraperWorker(
             ILogger<HoldingsScraperWorker> logger,
             IServiceScopeFactory scopeFactory,
             ErrorReporter errorReporter,
             IOptions<WorkerOptions> workerOptions,
-            IConfiguration configuration)
+            IConfiguration configuration
+        )
             : base(logger, scopeFactory, errorReporter, workerOptions, configuration) { }
 
         public bool InvokeValidateConfiguration() => ValidateConfiguration();

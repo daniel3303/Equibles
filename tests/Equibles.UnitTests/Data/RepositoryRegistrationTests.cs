@@ -4,9 +4,11 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Equibles.UnitTests.Data;
 
-public class RepositoryRegistrationTests {
+public class RepositoryRegistrationTests
+{
     [Fact]
-    public void AddRepositoriesFrom_AssemblyContainingBaseRepositorySubclass_RegistersItAsScoped() {
+    public void AddRepositoriesFrom_AssemblyContainingBaseRepositorySubclass_RegistersItAsScoped()
+    {
         // AddRepositoriesFrom auto-discovers every concrete BaseRepository<T> subclass in the
         // given assembly and binds it to itself with Scoped lifetime. The lifetime is the
         // load-bearing part — Singleton would leak DbContext across requests, Transient would

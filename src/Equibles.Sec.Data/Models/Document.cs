@@ -10,7 +10,8 @@ namespace Equibles.Sec.Data.Models;
 [Index(nameof(DocumentType), IsUnique = false)]
 [Index(nameof(ReportingDate), IsUnique = false)]
 [Index(nameof(ReportingForDate), IsUnique = false)]
-public class Document {
+public class Document
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid CommonStockId { get; set; }
@@ -36,7 +37,6 @@ public class Document {
 
     [MaxLength(500)]
     public string SourceUrl { get; set; }
-
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }

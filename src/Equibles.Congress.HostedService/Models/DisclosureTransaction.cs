@@ -2,7 +2,8 @@ using Equibles.Congress.Data.Models;
 
 namespace Equibles.Congress.HostedService.Models;
 
-public class DisclosureTransaction {
+public class DisclosureTransaction
+{
     public required string MemberName { get; init; }
     public CongressPosition Position { get; init; }
     public string Ticker { get; init; }

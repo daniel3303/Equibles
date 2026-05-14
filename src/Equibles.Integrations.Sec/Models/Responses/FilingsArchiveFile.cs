@@ -2,7 +2,8 @@ using Newtonsoft.Json;
 
 namespace Equibles.Integrations.Sec.Models.Responses;
 
-internal class FilingsArchiveFile {
+internal class FilingsArchiveFile
+{
     [JsonProperty("name")]
     public string Name { get; set; }
 

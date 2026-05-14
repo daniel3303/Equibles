@@ -11,7 +11,8 @@ public class CurrencyConsolidationStepTests
     [Fact]
     public void DollarColumnFollowedByEmptyColumn_RemovesCurrencyColumnAndAddsNote()
     {
-        var html = @"<html><body><table>
+        var html =
+            @"<html><body><table>
   <tr><td>$</td><td></td><td>100</td></tr>
   <tr><td>$</td><td></td><td>200</td></tr>
 </table></body></html>";
@@ -36,7 +37,8 @@ public class CurrencyConsolidationStepTests
     [Fact]
     public void TableWithoutCurrencySymbols_NoChanges()
     {
-        var html = @"<html><body><table>
+        var html =
+            @"<html><body><table>
   <tr><td>Name</td><td>Value</td></tr>
   <tr><td>Apple</td><td>100</td></tr>
 </table></body></html>";
@@ -52,7 +54,8 @@ public class CurrencyConsolidationStepTests
     [Fact]
     public void EurColumnFollowedByEmptyColumn_AddsEuroNote()
     {
-        var html = @"<html><body><table>
+        var html =
+            @"<html><body><table>
   <tr><td>€</td><td></td><td>500</td></tr>
   <tr><td>€</td><td></td><td>600</td></tr>
 </table></body></html>";
@@ -88,7 +91,8 @@ public class CurrencyConsolidationStepTests
         // than the glyph (e.g. "USD" header above an empty cell). Pin the code
         // path so a refactor that drops the `|| text.Contains(code)` half of
         // the OR can't silently break detection of textual-code columns.
-        var html = @"<html><body><table>
+        var html =
+            @"<html><body><table>
   <tr><td>USD</td><td></td><td>100</td></tr>
   <tr><td>USD</td><td></td><td>200</td></tr>
 </table></body></html>";
@@ -125,7 +129,8 @@ public class CurrencyConsolidationStepTests
         // every other [Fact] in this file, and then silently leave every real SEC
         // statement's $ column intact while emitting a misleading "All values are in
         // US Dollars" note below an unchanged table.
-        var html = @"<html><body><table>
+        var html =
+            @"<html><body><table>
   <tr><td>Revenue</td><td>$</td><td></td><td>100</td></tr>
   <tr><td>Expenses</td><td>$</td><td></td><td>200</td></tr>
 </table></body></html>";
@@ -187,7 +192,8 @@ public class CurrencyConsolidationStepTests
         // now — they'd duplicate the structural assertion this one makes. Pick
         // GBP as the highest-business-value representative of the
         // non-dollar/non-euro tail.
-        var html = @"<html><body><table>
+        var html =
+            @"<html><body><table>
   <tr><td>£</td><td></td><td>1000</td></tr>
   <tr><td>£</td><td></td><td>2000</td></tr>
 </table></body></html>";
@@ -233,7 +239,8 @@ public class CurrencyConsolidationStepTests
         // The textual-code path also exercises the OR's right arm
         // independently of the symbol arm — a complementary pin to the
         // existing USD test that already uses "USD" textual code.
-        var html = @"<html><body><table>
+        var html =
+            @"<html><body><table>
   <tr><td>JPY</td><td></td><td>10000</td></tr>
   <tr><td>JPY</td><td></td><td>20000</td></tr>
 </table></body></html>";
@@ -284,7 +291,8 @@ public class CurrencyConsolidationStepTests
         //   - JPY via `JPY` textual code (3-letter ISO branch)
         //   - INR via `₹` symbol (3-byte UTF-8 codepoint)
         // Any single-pattern simplification refactor fails at least one.
-        var html = @"<html><body><table>
+        var html =
+            @"<html><body><table>
   <tr><td>₹</td><td></td><td>50000</td></tr>
   <tr><td>₹</td><td></td><td>75000</td></tr>
 </table></body></html>";
@@ -301,7 +309,8 @@ public class CurrencyConsolidationStepTests
     [Fact]
     public void CurrencySymbolIsRemovedFromConsolidatedText()
     {
-        var html = @"<html><body><table>
+        var html =
+            @"<html><body><table>
   <tr><td>$</td><td></td><td>100</td></tr>
 </table></body></html>";
 
@@ -309,9 +318,7 @@ public class CurrencyConsolidationStepTests
 
         _sut.Execute(doc);
 
-        var allCellTexts = doc.QuerySelectorAll("td")
-            .Select(c => c.TextContent)
-            .ToList();
+        var allCellTexts = doc.QuerySelectorAll("td").Select(c => c.TextContent).ToList();
 
         allCellTexts.Should().NotContain(t => t.Contains("$"));
     }

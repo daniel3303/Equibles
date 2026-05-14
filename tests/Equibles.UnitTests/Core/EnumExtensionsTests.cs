@@ -5,14 +5,17 @@ using Equibles.InsiderTrading.Data.Models;
 
 namespace Equibles.UnitTests.Core;
 
-public class EnumExtensionsTests {
+public class EnumExtensionsTests
+{
     [Fact]
-    public void NameForHumans_WhenDisplayNameMatchesValueName_ReturnsDisplayName() {
+    public void NameForHumans_WhenDisplayNameMatchesValueName_ReturnsDisplayName()
+    {
         TransactionCode.Purchase.NameForHumans().Should().Be("Purchase");
     }
 
     [Fact]
-    public void NameForHumans_WhenDisplayNameDiffersFromValueName_ReturnsDisplayName() {
+    public void NameForHumans_WhenDisplayNameDiffersFromValueName_ReturnsDisplayName()
+    {
         TransactionCode.TaxPayment.NameForHumans().Should().Be("Tax Payment");
     }
 
@@ -21,7 +24,10 @@ public class EnumExtensionsTests {
     [InlineData(TransactionCode.Sale, "Sale")]
     [InlineData(TransactionCode.TaxPayment, "Tax Payment")]
     public void NameForHumans_TransactionCode_ReturnsExpectedDisplayName(
-        TransactionCode value, string expected) {
+        TransactionCode value,
+        string expected
+    )
+    {
         value.NameForHumans().Should().Be(expected);
     }
 
@@ -31,7 +37,10 @@ public class EnumExtensionsTests {
     [InlineData(FredSeriesCategory.CorporateBondSpreads, "Corporate Bond Spreads")]
     [InlineData(FredSeriesCategory.ExchangeRates, "Exchange Rates")]
     public void NameForHumans_FredSeriesCategory_ReturnsMultiWordDisplayName(
-        FredSeriesCategory value, string expected) {
+        FredSeriesCategory value,
+        string expected
+    )
+    {
         value.NameForHumans().Should().Be(expected);
     }
 
@@ -39,12 +48,16 @@ public class EnumExtensionsTests {
     [InlineData(CongressPosition.Representative, "Representative")]
     [InlineData(CongressPosition.Senator, "Senator")]
     public void NameForHumans_CongressPosition_ReturnsExpectedDisplayName(
-        CongressPosition value, string expected) {
+        CongressPosition value,
+        string expected
+    )
+    {
         value.NameForHumans().Should().Be(expected);
     }
 
     [Fact]
-    public void NameForHumans_EnumValueWithoutDisplayAttribute_FallsBackToToString() {
+    public void NameForHumans_EnumValueWithoutDisplayAttribute_FallsBackToToString()
+    {
         // Project standards require [Display(Name = "...")] on every enum
         // value (see dotnet-standards), so the fallback only fires for
         // legacy enums or new ones added without the convention. Every
@@ -58,7 +71,8 @@ public class EnumExtensionsTests {
         WithoutDisplay.SomeValue.NameForHumans().Should().Be("SomeValue");
     }
 
-    private enum WithoutDisplay {
+    private enum WithoutDisplay
+    {
         SomeValue,
     }
 }

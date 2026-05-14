@@ -1,7 +1,7 @@
-using Equibles.Sec.BusinessLogic.Processing;
-using Equibles.Sec.BusinessLogic.Embeddings;
-using Equibles.Core.AutoWiring;
 using Equibles.CommonStocks.Repositories;
+using Equibles.Core.AutoWiring;
+using Equibles.Sec.BusinessLogic.Embeddings;
+using Equibles.Sec.BusinessLogic.Processing;
 using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -9,7 +9,8 @@ using Microsoft.Extensions.Options;
 namespace Equibles.Sec.HostedService.Services;
 
 [Service]
-public class DocumentManager {
+public class DocumentManager
+{
     private const int DefaultLoadSize = 1024;
 
     private readonly DocumentRepository _documentRepository;
@@ -25,7 +26,8 @@ public class DocumentManager {
         IDocumentProcessor documentProcessor,
         IOptions<EmbeddingConfig> embeddingConfig,
         ILogger<DocumentManager> logger
-    ) {
+    )
+    {
         _documentRepository = documentRepository;
         _chunkRepository = chunkRepository;
         _documentProcessor = documentProcessor;
@@ -34,8 +36,10 @@ public class DocumentManager {
         _logger = logger;
     }
 
-    public async Task<bool> ChunkDocumentBatch(CancellationToken cancellationToken) {
-        var pendingDocuments = await _documentRepository.GetAll()
+    public async Task<bool> ChunkDocumentBatch(CancellationToken cancellationToken)
+    {
+        var pendingDocuments = await _documentRepository
+            .GetAll()
             .Include(d => d.CommonStock)
             .Include(d => d.Content)
             .Where(d => !d.Chunks.Any() && d.Content != null)
@@ -43,25 +47,33 @@ public class DocumentManager {
             .Take(_loadSize)
             .ToListAsync(cancellationToken);
 
-        if (!pendingDocuments.Any()) return false;
+        if (!pendingDocuments.Any())
+            return false;
 
         _logger.LogInformation("Chunking {Count} documents", pendingDocuments.Count);
         await _documentProcessor.ProcessDocuments(pendingDocuments, cancellationToken);
         return true;
     }
 
-    public async Task<bool> GenerateEmbeddingBatch(CancellationToken cancellationToken) {
-        if (!_embeddingConfig.IsConfigured) return false;
+    public async Task<bool> GenerateEmbeddingBatch(CancellationToken cancellationToken)
+    {
+        if (!_embeddingConfig.IsConfigured)
+            return false;
 
-        var chunksWithoutEmbeddings = await _chunkRepository.GetAll()
+        var chunksWithoutEmbeddings = await _chunkRepository
+            .GetAll()
             .Where(c => !c.Embeddings.Any())
             .OrderBy(c => c.CreationTime)
             .Take(_loadSize)
             .ToListAsync(cancellationToken);
 
-        if (!chunksWithoutEmbeddings.Any()) return false;
+        if (!chunksWithoutEmbeddings.Any())
+            return false;
 
-        _logger.LogInformation("Generating embeddings for {Count} chunks", chunksWithoutEmbeddings.Count);
+        _logger.LogInformation(
+            "Generating embeddings for {Count} chunks",
+            chunksWithoutEmbeddings.Count
+        );
         await _documentProcessor.GenerateEmbeddings(chunksWithoutEmbeddings, cancellationToken);
         return true;
     }

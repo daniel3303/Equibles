@@ -13,18 +13,21 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// across all three indicators.
 /// </summary>
 [MemoryDiagnoser]
-public class TechnicalIndicatorServiceEmaBenchmarks {
+public class TechnicalIndicatorServiceEmaBenchmarks
+{
     private const int PriceCount = 1_008;
     private const int Period = 26;
     private List<decimal> _prices;
 
     [GlobalSetup]
-    public void Setup() {
+    public void Setup()
+    {
         // Identical shape to TechnicalIndicatorServiceBenchmarks/TechnicalIndicatorServiceRsiBenchmarks:
         // ~4 trading years of slow drift plus a sinusoidal component. The 26-period matches
         // MACD's slow EMA, so this benchmark measures one of the exact instances MACD composes.
         _prices = new List<decimal>(PriceCount);
-        for (var i = 0; i < PriceCount; i++) {
+        for (var i = 0; i < PriceCount; i++)
+        {
             var drift = i * 0.05m;
             var wave = (decimal)Math.Sin(i / 12.0) * 3m;
             _prices.Add(100m + drift + wave);

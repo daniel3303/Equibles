@@ -9,17 +9,20 @@ namespace Equibles.FunctionalTests.Tests;
 
 [Collection(FunctionalTestCollection.Name)]
 [Trait("Category", "Functional")]
-public class StocksInsiderTradingSeededTests {
+public class StocksInsiderTradingSeededTests
+{
     private readonly WebAppFixture _web;
     private readonly PlaywrightFixture _playwright;
 
-    public StocksInsiderTradingSeededTests(WebAppFixture web, PlaywrightFixture playwright) {
+    public StocksInsiderTradingSeededTests(WebAppFixture web, PlaywrightFixture playwright)
+    {
         _web = web;
         _playwright = playwright;
     }
 
     [Fact]
-    public async Task InsiderTrading_GetForStockWithLotsOfSeededTransactions_RendersMostRecent100WithIncludedInsiderName() {
+    public async Task InsiderTrading_GetForStockWithLotsOfSeededTransactions_RendersMostRecent100WithIncludedInsiderName()
+    {
         // Seeds 200 InsiderTransaction rows across 200 distinct TransactionDates so the page
         // has more than StockTabService.LoadInsiderTradingTab's Take(100) cap. Five
         // InsiderOwners are seeded with distinct CIKs so each row's Include navigation has
@@ -37,18 +40,24 @@ public class StocksInsiderTradingSeededTests {
         var stockId = Guid.NewGuid();
         var endDate = new DateOnly(2026, 1, 31);
 
-        await _web.ResetAndSeedAsync(async db => {
-            db.Add(new CommonStock {
-                Id = stockId,
-                Ticker = "AAPL",
-                Name = "Apple Inc.",
-                Cik = "0000320193",
-            });
+        await _web.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new CommonStock
+                {
+                    Id = stockId,
+                    Ticker = "AAPL",
+                    Name = "Apple Inc.",
+                    Cik = "0000320193",
+                }
+            );
 
             db.ChangeTracker.AutoDetectChangesEnabled = false;
             var owners = new InsiderOwner[ownerCount];
-            for (var o = 0; o < ownerCount; o++) {
-                owners[o] = new InsiderOwner {
+            for (var o = 0; o < ownerCount; o++)
+            {
+                owners[o] = new InsiderOwner
+                {
                     OwnerCik = $"I{o:D7}",
                     Name = $"Test Insider {o + 1:D2}",
                     IsOfficer = true,
@@ -57,19 +66,23 @@ public class StocksInsiderTradingSeededTests {
                 db.Add(owners[o]);
             }
 
-            for (var i = 0; i < totalSeededTransactions; i++) {
-                db.Add(new InsiderTransaction {
-                    CommonStockId = stockId,
-                    InsiderOwnerId = owners[i % ownerCount].Id,
-                    TransactionDate = endDate.AddDays(-i),
-                    FilingDate = endDate.AddDays(-i).AddDays(2),
-                    TransactionCode = TransactionCode.Purchase,
-                    Shares = 1_000 + i,
-                    PricePerShare = 100m + i,
-                    AcquiredDisposed = AcquiredDisposed.Acquired,
-                    SharesOwnedAfter = 10_000 + i,
-                    OwnershipNature = OwnershipNature.Direct,
-                });
+            for (var i = 0; i < totalSeededTransactions; i++)
+            {
+                db.Add(
+                    new InsiderTransaction
+                    {
+                        CommonStockId = stockId,
+                        InsiderOwnerId = owners[i % ownerCount].Id,
+                        TransactionDate = endDate.AddDays(-i),
+                        FilingDate = endDate.AddDays(-i).AddDays(2),
+                        TransactionCode = TransactionCode.Purchase,
+                        Shares = 1_000 + i,
+                        PricePerShare = 100m + i,
+                        AcquiredDisposed = AcquiredDisposed.Acquired,
+                        SharesOwnedAfter = 10_000 + i,
+                        OwnershipNature = OwnershipNature.Direct,
+                    }
+                );
             }
             await Task.CompletedTask;
         });
@@ -80,7 +93,8 @@ public class StocksInsiderTradingSeededTests {
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);
 
-        await Assertions.Expect(page.Locator("h3").Filter(new() { HasTextString = "No Insider Trading Data" }))
+        await Assertions
+            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Insider Trading Data" }))
             .ToHaveCountAsync(0);
 
         var rows = page.Locator("table tbody tr");
@@ -89,14 +103,14 @@ public class StocksInsiderTradingSeededTests {
         // The view renders OrderByDescending(TransactionDate), so the first row's date column
         // must be the most-recent seeded date — proves Take(100) selected the newest rows,
         // not the oldest.
-        await Assertions.Expect(rows.First.Locator("td").Nth(0))
+        await Assertions
+            .Expect(rows.First.Locator("td").Nth(0))
             .ToHaveTextAsync(endDate.ToString("yyyy-MM-dd"));
 
         // i=0 (most recent) was assigned owner index 0 → "Test Insider 01". Asserting the
         // insider-name cell carries this value proves the .Include(t => t.InsiderOwner)
         // executed end-to-end — without the Include the view's `t.InsiderOwner?.Name ??
         // "Unknown"` fallback would render "Unknown" for every row.
-        await Assertions.Expect(rows.First.Locator("td").Nth(1))
-            .ToHaveTextAsync("Test Insider 01");
+        await Assertions.Expect(rows.First.Locator("td").Nth(1)).ToHaveTextAsync("Test Insider 01");
     }
 }

@@ -8,7 +8,8 @@ using Microsoft.Extensions.Options;
 
 namespace Equibles.Finra.HostedService;
 
-public class FinraScraperWorker : BaseScraperWorker {
+public class FinraScraperWorker : BaseScraperWorker
+{
     protected override string WorkerName => "FINRA scraper";
     protected override TimeSpan SleepInterval { get; }
     protected override ErrorSource ErrorSource => ErrorSource.FinraScraper;
@@ -18,30 +19,39 @@ public class FinraScraperWorker : BaseScraperWorker {
         IServiceScopeFactory scopeFactory,
         ErrorReporter errorReporter,
         IOptions<FinraScraperOptions> options
-    ) : base(logger, scopeFactory, errorReporter) {
+    )
+        : base(logger, scopeFactory, errorReporter)
+    {
         SleepInterval = TimeSpan.FromHours(options.Value.SleepIntervalHours);
     }
 
-    protected override bool ValidateConfiguration() {
+    protected override bool ValidateConfiguration()
+    {
         using var scope = ScopeFactory.CreateScope();
         var finraClient = scope.ServiceProvider.GetRequiredService<IFinraClient>();
-        if (!finraClient.IsConfigured) {
+        if (!finraClient.IsConfigured)
+        {
             Logger.LogWarning("FINRA Scraper stopped: FINRA API credentials not configured.");
             return false;
         }
         return true;
     }
 
-    protected override async Task DoWork(CancellationToken stoppingToken) {
+    protected override async Task DoWork(CancellationToken stoppingToken)
+    {
         Logger.LogInformation("Starting daily short volume import");
-        await using (var scope = ScopeFactory.CreateAsyncScope()) {
-            var shortVolumeService = scope.ServiceProvider.GetRequiredService<ShortVolumeImportService>();
+        await using (var scope = ScopeFactory.CreateAsyncScope())
+        {
+            var shortVolumeService =
+                scope.ServiceProvider.GetRequiredService<ShortVolumeImportService>();
             await shortVolumeService.Import(stoppingToken);
         }
 
         Logger.LogInformation("Starting short interest import");
-        await using (var scope = ScopeFactory.CreateAsyncScope()) {
-            var shortInterestService = scope.ServiceProvider.GetRequiredService<ShortInterestImportService>();
+        await using (var scope = ScopeFactory.CreateAsyncScope())
+        {
+            var shortInterestService =
+                scope.ServiceProvider.GetRequiredService<ShortInterestImportService>();
             await shortInterestService.Import(stoppingToken);
         }
     }

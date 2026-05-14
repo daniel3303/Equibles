@@ -28,10 +28,10 @@ using Equibles.Holdings.Data.Models;
 using Equibles.InsiderTrading.Data;
 using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.InsiderTrading.Data.Models;
+using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.Data;
 using Equibles.Media.Data.Extensions;
 using Equibles.Sec.Data.Extensions;
-using Equibles.IntegrationTests.Helpers;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Data.Extensions;
 using Equibles.Yahoo.Data.Models;
@@ -40,14 +40,17 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Equibles.IntegrationTests.Data;
 
-public class ServiceCollectionExtensionsTests {
+public class ServiceCollectionExtensionsTests
+{
     [Fact]
-    public void AddEquiblesDbContext_RegistersDbContextInServiceProvider() {
+    public void AddEquiblesDbContext_RegistersDbContextInServiceProvider()
+    {
         var services = new ServiceCollection();
 
         services.AddEquiblesDbContext(
             "Host=localhost;Database=test",
-            modules => modules.AddCommonStocks());
+            modules => modules.AddCommonStocks()
+        );
 
         var provider = services.BuildServiceProvider();
         var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(EquiblesDbContext));
@@ -57,16 +60,19 @@ public class ServiceCollectionExtensionsTests {
     }
 
     [Fact]
-    public void AddEquiblesDbContext_RegistersModuleConfigurationsAsSingletons() {
+    public void AddEquiblesDbContext_RegistersModuleConfigurationsAsSingletons()
+    {
         var services = new ServiceCollection();
 
         services.AddEquiblesDbContext(
             "Host=localhost;Database=test",
-            modules => {
+            modules =>
+            {
                 modules.AddCommonStocks();
                 modules.AddErrors();
                 modules.AddMedia();
-            });
+            }
+        );
 
         var moduleDescriptors = services
             .Where(d => d.ServiceType == typeof(IModuleConfiguration))
@@ -77,18 +83,21 @@ public class ServiceCollectionExtensionsTests {
     }
 
     [Fact]
-    public void AddEquiblesDbContext_WithMultipleModules_RegistersAllModuleConfigurations() {
+    public void AddEquiblesDbContext_WithMultipleModules_RegistersAllModuleConfigurations()
+    {
         var services = new ServiceCollection();
 
         services.AddEquiblesDbContext(
             "Host=localhost;Database=test",
-            modules => {
+            modules =>
+            {
                 modules.AddCommonStocks();
                 modules.AddHoldings(); // also adds CommonStocks, but dedup prevents double
                 modules.AddCongress(); // also adds CommonStocks
                 modules.AddErrors();
                 modules.AddFred();
-            });
+            }
+        );
 
         var moduleDescriptors = services
             .Where(d => d.ServiceType == typeof(IModuleConfiguration))
@@ -108,30 +117,38 @@ public class ServiceCollectionExtensionsTests {
     }
 
     [Fact]
-    public void AddEquiblesDbContext_ReturnsServiceCollection_ForFluentChaining() {
+    public void AddEquiblesDbContext_ReturnsServiceCollection_ForFluentChaining()
+    {
         var services = new ServiceCollection();
 
         var result = services.AddEquiblesDbContext(
             "Host=localhost;Database=test",
-            modules => modules.AddCommonStocks());
+            modules => modules.AddCommonStocks()
+        );
 
         result.Should().BeSameAs(services);
     }
 }
 
-public class ModuleBuilderExtensionTests {
+public class ModuleBuilderExtensionTests
+{
     [Fact]
-    public void AddCommonStocks_RegistersCommonStocksModuleConfiguration() {
+    public void AddCommonStocks_RegistersCommonStocksModuleConfiguration()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.AddCommonStocks();
 
-        builder.Modules.Should().ContainSingle()
-            .Which.Should().BeOfType<CommonStocksModuleConfiguration>();
+        builder
+            .Modules.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeOfType<CommonStocksModuleConfiguration>();
     }
 
     [Fact]
-    public void AddHoldings_RegistersBothHoldingsAndCommonStocksModules() {
+    public void AddHoldings_RegistersBothHoldingsAndCommonStocksModules()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.AddHoldings();
@@ -142,7 +159,8 @@ public class ModuleBuilderExtensionTests {
     }
 
     [Fact]
-    public void AddInsiderTrading_RegistersBothInsiderTradingAndCommonStocksModules() {
+    public void AddInsiderTrading_RegistersBothInsiderTradingAndCommonStocksModules()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.AddInsiderTrading();
@@ -153,7 +171,8 @@ public class ModuleBuilderExtensionTests {
     }
 
     [Fact]
-    public void AddCongress_RegistersBothCongressAndCommonStocksModules() {
+    public void AddCongress_RegistersBothCongressAndCommonStocksModules()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.AddCongress();
@@ -164,7 +183,8 @@ public class ModuleBuilderExtensionTests {
     }
 
     [Fact]
-    public void AddSec_RegistersSecMediaAndCommonStocksModules() {
+    public void AddSec_RegistersSecMediaAndCommonStocksModules()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.AddSec();
@@ -176,37 +196,46 @@ public class ModuleBuilderExtensionTests {
     }
 
     [Fact]
-    public void AddMedia_RegistersMediaModuleConfiguration() {
+    public void AddMedia_RegistersMediaModuleConfiguration()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.AddMedia();
 
-        builder.Modules.Should().ContainSingle()
-            .Which.Should().BeOfType<MediaModuleConfiguration>();
+        builder
+            .Modules.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeOfType<MediaModuleConfiguration>();
     }
 
     [Fact]
-    public void AddErrors_RegistersErrorsModuleConfiguration() {
+    public void AddErrors_RegistersErrorsModuleConfiguration()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.AddErrors();
 
-        builder.Modules.Should().ContainSingle()
-            .Which.Should().BeOfType<ErrorsModuleConfiguration>();
+        builder
+            .Modules.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeOfType<ErrorsModuleConfiguration>();
     }
 
     [Fact]
-    public void AddFred_RegistersFredModuleConfiguration() {
+    public void AddFred_RegistersFredModuleConfiguration()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.AddFred();
 
-        builder.Modules.Should().ContainSingle()
-            .Which.Should().BeOfType<FredModuleConfiguration>();
+        builder.Modules.Should().ContainSingle().Which.Should().BeOfType<FredModuleConfiguration>();
     }
 
     [Fact]
-    public void AddFinra_RegistersBothFinraAndCommonStocksModules() {
+    public void AddFinra_RegistersBothFinraAndCommonStocksModules()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.AddFinra();
@@ -217,7 +246,8 @@ public class ModuleBuilderExtensionTests {
     }
 
     [Fact]
-    public void AddYahoo_RegistersBothYahooAndCommonStocksModules() {
+    public void AddYahoo_RegistersBothYahooAndCommonStocksModules()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.AddYahoo();
@@ -228,27 +258,28 @@ public class ModuleBuilderExtensionTests {
     }
 
     [Fact]
-    public void AddCftc_RegistersCftcModuleConfiguration() {
+    public void AddCftc_RegistersCftcModuleConfiguration()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.AddCftc();
 
-        builder.Modules.Should().ContainSingle()
-            .Which.Should().BeOfType<CftcModuleConfiguration>();
+        builder.Modules.Should().ContainSingle().Which.Should().BeOfType<CftcModuleConfiguration>();
     }
 
     [Fact]
-    public void AddCboe_RegistersCboeModuleConfiguration() {
+    public void AddCboe_RegistersCboeModuleConfiguration()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.AddCboe();
 
-        builder.Modules.Should().ContainSingle()
-            .Which.Should().BeOfType<CboeModuleConfiguration>();
+        builder.Modules.Should().ContainSingle().Which.Should().BeOfType<CboeModuleConfiguration>();
     }
 
     [Fact]
-    public void AllModuleExtensions_WithDependencyOverlap_DoNotDuplicateCommonStocks() {
+    public void AllModuleExtensions_WithDependencyOverlap_DoNotDuplicateCommonStocks()
+    {
         var builder = new EquiblesModuleBuilder();
 
         builder.AddCommonStocks();
@@ -262,10 +293,12 @@ public class ModuleBuilderExtensionTests {
     }
 
     [Fact]
-    public void AllModuleExtensions_ReturnBuilder_ForFluentChaining() {
+    public void AllModuleExtensions_ReturnBuilder_ForFluentChaining()
+    {
         var builder = new EquiblesModuleBuilder();
 
-        builder.AddCommonStocks()
+        builder
+            .AddCommonStocks()
             .AddHoldings()
             .AddInsiderTrading()
             .AddCongress()
@@ -276,7 +309,8 @@ public class ModuleBuilderExtensionTests {
             .AddYahoo()
             .AddCftc()
             .AddCboe()
-            .Should().BeSameAs(builder);
+            .Should()
+            .BeSameAs(builder);
     }
 }
 
@@ -287,27 +321,32 @@ public class ModuleBuilderExtensionTests {
 /// SEC module uses <see cref="SecTestModuleConfiguration"/> to avoid pgvector types
 /// that are incompatible with the InMemory provider.
 /// </summary>
-public class ModuleConfigurationTests : IDisposable {
+public class ModuleConfigurationTests : IDisposable
+{
     private EquiblesDbContext _dbContext;
 
-    public void Dispose() {
+    public void Dispose()
+    {
         _dbContext?.Dispose();
     }
 
-    private EquiblesDbContext CreateContext(params IModuleConfiguration[] modules) {
+    private EquiblesDbContext CreateContext(params IModuleConfiguration[] modules)
+    {
         _dbContext = TestDbContextFactory.Create(modules);
         return _dbContext;
     }
 
     [Fact]
-    public void CommonStocksModuleConfiguration_ConfigureEntities_DoesNotThrow() {
+    public void CommonStocksModuleConfiguration_ConfigureEntities_DoesNotThrow()
+    {
         var act = () => CreateContext(new CommonStocksModuleConfiguration());
 
         act.Should().NotThrow();
     }
 
     [Fact]
-    public void CommonStocksModuleConfiguration_EntitiesAreDiscoverable() {
+    public void CommonStocksModuleConfiguration_EntitiesAreDiscoverable()
+    {
         var context = CreateContext(new CommonStocksModuleConfiguration());
 
         context.Set<CommonStock>().Should().NotBeNull();
@@ -315,81 +354,95 @@ public class ModuleConfigurationTests : IDisposable {
     }
 
     [Fact]
-    public void HoldingsModuleConfiguration_ConfigureEntities_DoesNotThrow() {
-        var act = () => CreateContext(
-            new CommonStocksModuleConfiguration(),
-            new HoldingsModuleConfiguration());
+    public void HoldingsModuleConfiguration_ConfigureEntities_DoesNotThrow()
+    {
+        var act = () =>
+            CreateContext(new CommonStocksModuleConfiguration(), new HoldingsModuleConfiguration());
 
         act.Should().NotThrow();
     }
 
     [Fact]
-    public void HoldingsModuleConfiguration_EntitiesAreDiscoverable() {
+    public void HoldingsModuleConfiguration_EntitiesAreDiscoverable()
+    {
         var context = CreateContext(
             new CommonStocksModuleConfiguration(),
-            new HoldingsModuleConfiguration());
+            new HoldingsModuleConfiguration()
+        );
 
         context.Set<InstitutionalHolder>().Should().NotBeNull();
         context.Set<InstitutionalHolding>().Should().NotBeNull();
     }
 
     [Fact]
-    public void InsiderTradingModuleConfiguration_ConfigureEntities_DoesNotThrow() {
-        var act = () => CreateContext(
-            new CommonStocksModuleConfiguration(),
-            new InsiderTradingModuleConfiguration());
+    public void InsiderTradingModuleConfiguration_ConfigureEntities_DoesNotThrow()
+    {
+        var act = () =>
+            CreateContext(
+                new CommonStocksModuleConfiguration(),
+                new InsiderTradingModuleConfiguration()
+            );
 
         act.Should().NotThrow();
     }
 
     [Fact]
-    public void InsiderTradingModuleConfiguration_EntitiesAreDiscoverable() {
+    public void InsiderTradingModuleConfiguration_EntitiesAreDiscoverable()
+    {
         var context = CreateContext(
             new CommonStocksModuleConfiguration(),
-            new InsiderTradingModuleConfiguration());
+            new InsiderTradingModuleConfiguration()
+        );
 
         context.Set<InsiderOwner>().Should().NotBeNull();
         context.Set<InsiderTransaction>().Should().NotBeNull();
     }
 
     [Fact]
-    public void CongressModuleConfiguration_ConfigureEntities_DoesNotThrow() {
-        var act = () => CreateContext(
-            new CommonStocksModuleConfiguration(),
-            new CongressModuleConfiguration());
+    public void CongressModuleConfiguration_ConfigureEntities_DoesNotThrow()
+    {
+        var act = () =>
+            CreateContext(new CommonStocksModuleConfiguration(), new CongressModuleConfiguration());
 
         act.Should().NotThrow();
     }
 
     [Fact]
-    public void CongressModuleConfiguration_EntitiesAreDiscoverable() {
+    public void CongressModuleConfiguration_EntitiesAreDiscoverable()
+    {
         var context = CreateContext(
             new CommonStocksModuleConfiguration(),
-            new CongressModuleConfiguration());
+            new CongressModuleConfiguration()
+        );
 
         context.Set<CongressMember>().Should().NotBeNull();
         context.Set<CongressionalTrade>().Should().NotBeNull();
     }
 
     [Fact]
-    public void SecTestModuleConfiguration_ConfigureEntities_DoesNotThrow() {
-        var act = () => CreateContext(
-            new CommonStocksModuleConfiguration(),
-            new MediaModuleConfiguration(),
-            new SecTestModuleConfiguration());
+    public void SecTestModuleConfiguration_ConfigureEntities_DoesNotThrow()
+    {
+        var act = () =>
+            CreateContext(
+                new CommonStocksModuleConfiguration(),
+                new MediaModuleConfiguration(),
+                new SecTestModuleConfiguration()
+            );
 
         act.Should().NotThrow();
     }
 
     [Fact]
-    public void MediaModuleConfiguration_ConfigureEntities_DoesNotThrow() {
+    public void MediaModuleConfiguration_ConfigureEntities_DoesNotThrow()
+    {
         var act = () => CreateContext(new MediaModuleConfiguration());
 
         act.Should().NotThrow();
     }
 
     [Fact]
-    public void MediaModuleConfiguration_EntitiesAreDiscoverable() {
+    public void MediaModuleConfiguration_EntitiesAreDiscoverable()
+    {
         var context = CreateContext(new MediaModuleConfiguration());
 
         context.Set<Equibles.Media.Data.Models.File>().Should().NotBeNull();
@@ -398,28 +451,32 @@ public class ModuleConfigurationTests : IDisposable {
     }
 
     [Fact]
-    public void ErrorsModuleConfiguration_ConfigureEntities_DoesNotThrow() {
+    public void ErrorsModuleConfiguration_ConfigureEntities_DoesNotThrow()
+    {
         var act = () => CreateContext(new ErrorsModuleConfiguration());
 
         act.Should().NotThrow();
     }
 
     [Fact]
-    public void ErrorsModuleConfiguration_EntitiesAreDiscoverable() {
+    public void ErrorsModuleConfiguration_EntitiesAreDiscoverable()
+    {
         var context = CreateContext(new ErrorsModuleConfiguration());
 
         context.Set<Error>().Should().NotBeNull();
     }
 
     [Fact]
-    public void FredModuleConfiguration_ConfigureEntities_DoesNotThrow() {
+    public void FredModuleConfiguration_ConfigureEntities_DoesNotThrow()
+    {
         var act = () => CreateContext(new FredModuleConfiguration());
 
         act.Should().NotThrow();
     }
 
     [Fact]
-    public void FredModuleConfiguration_EntitiesAreDiscoverable() {
+    public void FredModuleConfiguration_EntitiesAreDiscoverable()
+    {
         var context = CreateContext(new FredModuleConfiguration());
 
         context.Set<FredSeries>().Should().NotBeNull();
@@ -427,51 +484,57 @@ public class ModuleConfigurationTests : IDisposable {
     }
 
     [Fact]
-    public void FinraModuleConfiguration_ConfigureEntities_DoesNotThrow() {
-        var act = () => CreateContext(
-            new CommonStocksModuleConfiguration(),
-            new FinraModuleConfiguration());
+    public void FinraModuleConfiguration_ConfigureEntities_DoesNotThrow()
+    {
+        var act = () =>
+            CreateContext(new CommonStocksModuleConfiguration(), new FinraModuleConfiguration());
 
         act.Should().NotThrow();
     }
 
     [Fact]
-    public void FinraModuleConfiguration_EntitiesAreDiscoverable() {
+    public void FinraModuleConfiguration_EntitiesAreDiscoverable()
+    {
         var context = CreateContext(
             new CommonStocksModuleConfiguration(),
-            new FinraModuleConfiguration());
+            new FinraModuleConfiguration()
+        );
 
         context.Set<DailyShortVolume>().Should().NotBeNull();
         context.Set<ShortInterest>().Should().NotBeNull();
     }
 
     [Fact]
-    public void YahooModuleConfiguration_ConfigureEntities_DoesNotThrow() {
-        var act = () => CreateContext(
-            new CommonStocksModuleConfiguration(),
-            new YahooModuleConfiguration());
+    public void YahooModuleConfiguration_ConfigureEntities_DoesNotThrow()
+    {
+        var act = () =>
+            CreateContext(new CommonStocksModuleConfiguration(), new YahooModuleConfiguration());
 
         act.Should().NotThrow();
     }
 
     [Fact]
-    public void YahooModuleConfiguration_EntitiesAreDiscoverable() {
+    public void YahooModuleConfiguration_EntitiesAreDiscoverable()
+    {
         var context = CreateContext(
             new CommonStocksModuleConfiguration(),
-            new YahooModuleConfiguration());
+            new YahooModuleConfiguration()
+        );
 
         context.Set<DailyStockPrice>().Should().NotBeNull();
     }
 
     [Fact]
-    public void CftcModuleConfiguration_ConfigureEntities_DoesNotThrow() {
+    public void CftcModuleConfiguration_ConfigureEntities_DoesNotThrow()
+    {
         var act = () => CreateContext(new CftcModuleConfiguration());
 
         act.Should().NotThrow();
     }
 
     [Fact]
-    public void CftcModuleConfiguration_EntitiesAreDiscoverable() {
+    public void CftcModuleConfiguration_EntitiesAreDiscoverable()
+    {
         var context = CreateContext(new CftcModuleConfiguration());
 
         context.Set<CftcContract>().Should().NotBeNull();
@@ -479,14 +542,16 @@ public class ModuleConfigurationTests : IDisposable {
     }
 
     [Fact]
-    public void CboeModuleConfiguration_ConfigureEntities_DoesNotThrow() {
+    public void CboeModuleConfiguration_ConfigureEntities_DoesNotThrow()
+    {
         var act = () => CreateContext(new CboeModuleConfiguration());
 
         act.Should().NotThrow();
     }
 
     [Fact]
-    public void CboeModuleConfiguration_EntitiesAreDiscoverable() {
+    public void CboeModuleConfiguration_EntitiesAreDiscoverable()
+    {
         var context = CreateContext(new CboeModuleConfiguration());
 
         context.Set<CboePutCallRatio>().Should().NotBeNull();
@@ -494,28 +559,32 @@ public class ModuleConfigurationTests : IDisposable {
     }
 
     [Fact]
-    public void AllModulesComposed_ConfigureEntities_DoesNotThrow() {
+    public void AllModulesComposed_ConfigureEntities_DoesNotThrow()
+    {
         // Uses SecTestModuleConfiguration instead of SecModuleConfiguration
         // because Chunk/Embedding use pgvector types unsupported by InMemory provider
-        var act = () => CreateContext(
-            new CommonStocksModuleConfiguration(),
-            new HoldingsModuleConfiguration(),
-            new InsiderTradingModuleConfiguration(),
-            new CongressModuleConfiguration(),
-            new SecTestModuleConfiguration(),
-            new MediaModuleConfiguration(),
-            new ErrorsModuleConfiguration(),
-            new FredModuleConfiguration(),
-            new FinraModuleConfiguration(),
-            new YahooModuleConfiguration(),
-            new CftcModuleConfiguration(),
-            new CboeModuleConfiguration());
+        var act = () =>
+            CreateContext(
+                new CommonStocksModuleConfiguration(),
+                new HoldingsModuleConfiguration(),
+                new InsiderTradingModuleConfiguration(),
+                new CongressModuleConfiguration(),
+                new SecTestModuleConfiguration(),
+                new MediaModuleConfiguration(),
+                new ErrorsModuleConfiguration(),
+                new FredModuleConfiguration(),
+                new FinraModuleConfiguration(),
+                new YahooModuleConfiguration(),
+                new CftcModuleConfiguration(),
+                new CboeModuleConfiguration()
+            );
 
         act.Should().NotThrow();
     }
 
     [Fact]
-    public void AllModulesComposed_CanAddAndQueryEntities() {
+    public void AllModulesComposed_CanAddAndQueryEntities()
+    {
         var context = CreateContext(
             new CommonStocksModuleConfiguration(),
             new HoldingsModuleConfiguration(),
@@ -528,13 +597,15 @@ public class ModuleConfigurationTests : IDisposable {
             new FinraModuleConfiguration(),
             new YahooModuleConfiguration(),
             new CftcModuleConfiguration(),
-            new CboeModuleConfiguration());
+            new CboeModuleConfiguration()
+        );
 
-        var stock = new CommonStock {
+        var stock = new CommonStock
+        {
             Id = Guid.NewGuid(),
             Ticker = "TEST",
             Name = "Test Corp",
-            Cik = "0000000001"
+            Cik = "0000000001",
         };
         context.Set<CommonStock>().Add(stock);
         context.SaveChanges();

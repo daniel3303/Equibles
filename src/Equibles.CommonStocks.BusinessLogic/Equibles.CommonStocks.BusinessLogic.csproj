@@ -1,12 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Equibles.Core.AutoWiring" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="Equibles.Core.AutoWiring" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
-      <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
-    </ItemGroup>
-
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
+    <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
+  </ItemGroup>
 </Project>

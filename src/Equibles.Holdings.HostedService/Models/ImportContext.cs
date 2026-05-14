@@ -3,7 +3,8 @@ using Equibles.Holdings.HostedService.Services;
 
 namespace Equibles.Holdings.HostedService.Models;
 
-public class ImportContext {
+public class ImportContext
+{
     // Immutable inputs
     public TsvParser TsvParser { get; init; }
     public ZipArchive Archive { get; init; }

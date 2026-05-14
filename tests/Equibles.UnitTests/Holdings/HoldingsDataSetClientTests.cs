@@ -7,9 +7,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Holdings;
 
-public class HoldingsDataSetClientTests {
+public class HoldingsDataSetClientTests
+{
     [Fact]
-    public async Task DownloadDataSet_ProducedStream_BuildsRequestUrlFromBaseAndOpensReturnedStreamAsZipArchive() {
+    public async Task DownloadDataSet_ProducedStream_BuildsRequestUrlFromBaseAndOpensReturnedStreamAsZipArchive()
+    {
         // The whole `DownloadDataSet` body is a tight three-step contract:
         //   1. Compose the request URL as `{BaseUrl}/{fileName}`
         //   2. Pump the SEC-returned Stream into a MemoryStream so the caller
@@ -39,10 +41,12 @@ public class HoldingsDataSetClientTests {
         // returned ZipArchive surfaces the entry we put in the fixture.
         // The pair of assertions catches all three regression classes above.
         var fileName = "2024q3_form13f.zip";
-        var expectedUrl = $"https://www.sec.gov/files/structureddata/data/form-13f-data-sets/{fileName}";
+        var expectedUrl =
+            $"https://www.sec.gov/files/structureddata/data/form-13f-data-sets/{fileName}";
 
         var zipBytes = new MemoryStream();
-        using (var archive = new ZipArchive(zipBytes, ZipArchiveMode.Create, leaveOpen: true)) {
+        using (var archive = new ZipArchive(zipBytes, ZipArchiveMode.Create, leaveOpen: true))
+        {
             archive.CreateEntry("SUBMISSION.tsv");
         }
         zipBytes.Position = 0;
@@ -57,12 +61,12 @@ public class HoldingsDataSetClientTests {
         using var result = await sut.DownloadDataSet(fileName, CancellationToken.None);
 
         capturedUrl.Should().Be(expectedUrl);
-        result.Entries.Should().ContainSingle()
-            .Which.Name.Should().Be("SUBMISSION.tsv");
+        result.Entries.Should().ContainSingle().Which.Name.Should().Be("SUBMISSION.tsv");
     }
 
     [Fact]
-    public void GetDataSetFileNames_StartDateBeforeEarliestAvailable_ClampsToQ2_2013() {
+    public void GetDataSetFileNames_StartDateBeforeEarliestAvailable_ClampsToQ2_2013()
+    {
         var result = HoldingsDataSetClient.GetDataSetFileNames(new DateTime(2010, 1, 1));
 
         result.Should().Contain("2013q2_form13f.zip");
@@ -70,7 +74,8 @@ public class HoldingsDataSetClientTests {
     }
 
     [Fact]
-    public void GetDataSetFileNames_StartIn2024_EmitsLowercaseMonthInNewFormatFilename() {
+    public void GetDataSetFileNames_StartIn2024_EmitsLowercaseMonthInNewFormatFilename()
+    {
         // SEC switched the 13F structured data set naming in 2024 from `{year}q{quarter}_form13f.zip`
         // to a date-range form `{ddMMMyyyy}-{ddMMMyyyy}_form13f.zip` where the month abbreviation
         // MUST be lowercase (the SEC's CDN matches the URL case-sensitively — `01Jan2024-...`
@@ -89,7 +94,8 @@ public class HoldingsDataSetClientTests {
     }
 
     [Fact]
-    public void GetDataSetFileNames_DecToFebPeriodSpanningNonLeapYear_UsesFeb28() {
+    public void GetDataSetFileNames_DecToFebPeriodSpanningNonLeapYear_UsesFeb28()
+    {
         // The regular post-2024 cycle ends each year with a Dec→Feb period whose
         // last day depends on whether the FOLLOWING calendar year is a leap year:
         //   periods.Add((new DateOnly(year, 12, 1),
@@ -128,7 +134,8 @@ public class HoldingsDataSetClientTests {
     }
 
     [Fact]
-    public void GetNewFormatPeriods_DecToFebPeriodSpanningLeapYear_UsesFeb29() {
+    public void GetNewFormatPeriods_DecToFebPeriodSpanningLeapYear_UsesFeb29()
+    {
         // Sibling to `GetDataSetFileNames_DecToFebPeriodSpanningNonLeapYear_UsesFeb28`.
         // That pin covers the IsLeapYear=false arm of the Dec→Feb ternary:
         //   new DateOnly(year + 1, 2, DateTime.IsLeapYear(year + 1) ? 29 : 28))
@@ -165,7 +172,9 @@ public class HoldingsDataSetClientTests {
         // The pair (non-leap from 2025-01-01 + leap from injected 2029-01-01)
         // covers both arms.
         var method = typeof(HoldingsDataSetClient).GetMethod(
-            "GetNewFormatPeriods", BindingFlags.NonPublic | BindingFlags.Static);
+            "GetNewFormatPeriods",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
         var fakeNow = new DateTime(2029, 1, 1);
 
         var result = (List<string>)method!.Invoke(null, [2024, fakeNow]);
@@ -174,7 +183,8 @@ public class HoldingsDataSetClientTests {
     }
 
     [Fact]
-    public void GetDataSetFileNames_StartIn2024_EmitsSepNovPeriodWith30NovEndDay() {
+    public void GetDataSetFileNames_StartIn2024_EmitsSepNovPeriodWith30NovEndDay()
+    {
         // Pin the Sep-Nov regular-cycle period. The post-2024 GetNewFormatPeriods
         // table adds four entries per year — Mar-May, Jun-Aug, Sep-Nov, Dec-Feb(+1):
         //   periods.Add((new DateOnly(year, 3, 1), new DateOnly(year, 5, 31)));
@@ -227,7 +237,8 @@ public class HoldingsDataSetClientTests {
     }
 
     [Fact]
-    public void GetDataSetFileNames_StartIn2014_ProducesOldQuarterlyFormatFilename() {
+    public void GetDataSetFileNames_StartIn2014_ProducesOldQuarterlyFormatFilename()
+    {
         // The SEC publishes Form 13F data sets under exact-cased filenames that the
         // downloader concatenates onto the BaseUrl verbatim. For 2013-2023 the format
         // is `{year}q{quarter}_form13f.zip` (lowercase `q`). A refactor that changed

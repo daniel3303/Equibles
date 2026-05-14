@@ -3,15 +3,19 @@ using Microsoft.Extensions.Configuration;
 
 namespace Equibles.UnitTests.Mcp;
 
-public class SimpleApiKeyValidatorTests {
+public class SimpleApiKeyValidatorTests
+{
     [Fact]
-    public async Task IsValid_EnabledWithMismatchedKey_ReturnsFalse() {
+    public async Task IsValid_EnabledWithMismatchedKey_ReturnsFalse()
+    {
         // The validator hashes the configured key on construction and compares
         // it to the hashed candidate via FixedTimeEquals. Pin the rejection
         // path so a regression that bypasses the comparison (or swaps the
         // equality direction) can't silently accept arbitrary tokens.
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> { ["McpApiKey"] = "correct-secret" })
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["McpApiKey"] = "correct-secret" }
+            )
             .Build();
         var sut = new SimpleApiKeyValidator(config);
 
@@ -21,7 +25,8 @@ public class SimpleApiKeyValidatorTests {
     }
 
     [Fact]
-    public async Task IsValid_EnabledWithMatchingKey_ReturnsTrue() {
+    public async Task IsValid_EnabledWithMatchingKey_ReturnsTrue()
+    {
         // Sibling pins exist for the two rejection paths: mismatched key → false,
         // and disabled mode (no key configured) → true. The remaining branch — the
         // actual success path, where IsEnabled is true AND the supplied key matches
@@ -39,7 +44,9 @@ public class SimpleApiKeyValidatorTests {
         // production consequence (every valid MCP client being locked out) is
         // exactly the kind of silent regression CI must catch.
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> { ["McpApiKey"] = "correct-secret" })
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["McpApiKey"] = "correct-secret" }
+            )
             .Build();
         var sut = new SimpleApiKeyValidator(config);
 
@@ -48,7 +55,8 @@ public class SimpleApiKeyValidatorTests {
     }
 
     [Fact]
-    public async Task IsValid_EnabledWithNullApiKey_ReturnsFalseWithoutThrowing() {
+    public async Task IsValid_EnabledWithNullApiKey_ReturnsFalseWithoutThrowing()
+    {
         // SimpleApiKeyValidator.IsValid does
         //   `var apiKeyHash = SHA256.HashData(Encoding.UTF8.GetBytes(apiKey ?? ""));`
         // The `?? ""` coalesce is load-bearing defensive code with two
@@ -87,7 +95,9 @@ public class SimpleApiKeyValidatorTests {
         // thrown exception fails the test before reaching the
         // assertion).
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> { ["McpApiKey"] = "correct-secret" })
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["McpApiKey"] = "correct-secret" }
+            )
             .Build();
         var sut = new SimpleApiKeyValidator(config);
 
@@ -97,7 +107,8 @@ public class SimpleApiKeyValidatorTests {
     }
 
     [Fact]
-    public async Task IsValid_DisabledModeWithMissingApiKeyConfig_AcceptsAnyToken() {
+    public async Task IsValid_DisabledModeWithMissingApiKeyConfig_AcceptsAnyToken()
+    {
         // When McpApiKey is unset (typical for local dev / docker-compose
         // without auth), IsEnabled is false and IsValid must short-circuit to
         // true for ANY input — including empty strings — so the MCP server

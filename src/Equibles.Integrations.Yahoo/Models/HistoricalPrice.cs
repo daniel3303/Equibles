@@ -1,6 +1,7 @@
 namespace Equibles.Integrations.Yahoo.Models;
 
-public class HistoricalPrice {
+public class HistoricalPrice
+{
     public DateOnly Date { get; set; }
     public decimal Open { get; set; }
     public decimal High { get; set; }

@@ -4,7 +4,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.Data.Models;
 
 [Owned]
-public class HoldingManagerEntry {
+public class HoldingManagerEntry
+{
     public int? ManagerNumber { get; set; }
 
     [MaxLength(256)]

@@ -4,7 +4,8 @@ namespace Equibles.Cftc.Data.Models;
 
 [Index(nameof(CftcContractId), nameof(ReportDate), IsUnique = true)]
 [Index(nameof(ReportDate))]
-public class CftcPositionReport {
+public class CftcPositionReport
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid CftcContractId { get; set; }

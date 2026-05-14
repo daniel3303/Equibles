@@ -17,19 +17,25 @@ namespace Equibles.FunctionalTests.Tests;
 /// helper so the host build path matches what runs in <c>docker compose</c>.
 /// </summary>
 [Trait("Category", "Functional")]
-public class McpServerEndpointTests : IClassFixture<McpServerAppFixture> {
+public class McpServerEndpointTests : IClassFixture<McpServerAppFixture>
+{
     private readonly McpServerAppFixture _fixture;
 
-    public McpServerEndpointTests(McpServerAppFixture fixture) {
+    public McpServerEndpointTests(McpServerAppFixture fixture)
+    {
         _fixture = fixture;
     }
 
     [Fact]
-    public async Task ListTools_KestrelHostedMcpServer_ReturnsToolsViaRealHttpExchange() {
-        var transport = new HttpClientTransport(new HttpClientTransportOptions {
-            Endpoint = new Uri($"{_fixture.BaseUrl.TrimEnd('/')}/mcp"),
-            TransportMode = HttpTransportMode.StreamableHttp,
-        });
+    public async Task ListTools_KestrelHostedMcpServer_ReturnsToolsViaRealHttpExchange()
+    {
+        var transport = new HttpClientTransport(
+            new HttpClientTransportOptions
+            {
+                Endpoint = new Uri($"{_fixture.BaseUrl.TrimEnd('/')}/mcp"),
+                TransportMode = HttpTransportMode.StreamableHttp,
+            }
+        );
 
         await using var client = await McpClient.CreateAsync(transport);
         var tools = await client.ListToolsAsync();
@@ -42,7 +48,8 @@ public class McpServerEndpointTests : IClassFixture<McpServerAppFixture> {
     }
 
     [Fact]
-    public async Task CallTool_GetTopHoldersForUnseededTicker_ReturnsTextContentViaToolsCallTransport() {
+    public async Task CallTool_GetTopHoldersForUnseededTicker_ReturnsTextContentViaToolsCallTransport()
+    {
         // The sibling test proves tools/list works. This one drives the SECOND half of the MCP
         // protocol surface: tools/call. Without this, we'd be claiming "MCP works" while
         // having only verified that the server can advertise its tool list — the actual
@@ -62,23 +69,32 @@ public class McpServerEndpointTests : IClassFixture<McpServerAppFixture> {
         // through the framework as a content block. A regression in the MCP wire-up
         // (wrong serializer, missing tool registration, broken middleware) would fail
         // here even though tools/list would still succeed.
-        var transport = new HttpClientTransport(new HttpClientTransportOptions {
-            Endpoint = new Uri($"{_fixture.BaseUrl.TrimEnd('/')}/mcp"),
-            TransportMode = HttpTransportMode.StreamableHttp,
-        });
+        var transport = new HttpClientTransport(
+            new HttpClientTransportOptions
+            {
+                Endpoint = new Uri($"{_fixture.BaseUrl.TrimEnd('/')}/mcp"),
+                TransportMode = HttpTransportMode.StreamableHttp,
+            }
+        );
 
         await using var client = await McpClient.CreateAsync(transport);
         var tools = await client.ListToolsAsync();
         var getTopHolders = tools.First(t => t.Name == "GetTopHolders");
 
-        var result = await getTopHolders.CallAsync(new Dictionary<string, object> {
-            ["ticker"] = "UNSEEDED_TICKER"
-        });
+        var result = await getTopHolders.CallAsync(
+            new Dictionary<string, object> { ["ticker"] = "UNSEEDED_TICKER" }
+        );
 
-        result.IsError.Should().NotBe(true,
-            "the tool returns a human-readable miss for unknown tickers, not a JSON-RPC error");
+        result
+            .IsError.Should()
+            .NotBe(
+                true,
+                "the tool returns a human-readable miss for unknown tickers, not a JSON-RPC error"
+            );
         var textBlocks = result.Content.OfType<TextContentBlock>().ToList();
-        textBlocks.Should().NotBeEmpty("the tool must respond through the MCP transport as TextContent");
+        textBlocks
+            .Should()
+            .NotBeEmpty("the tool must respond through the MCP transport as TextContent");
         textBlocks[0].Text.Should().NotBeNullOrWhiteSpace();
     }
 }

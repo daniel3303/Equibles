@@ -11,18 +11,26 @@ namespace Equibles.UnitTests.Sec;
 /// against SEC EDGAR; we exercise the pure-logic private static URL helpers via
 /// reflection — same pattern as YahooFinanceClientTests and CftcClientTests.
 /// </summary>
-public class SecEdgarClientTests {
-    private static readonly MethodInfo FormatCikMethod = typeof(SecEdgarClient)
-        .GetMethod("FormatCik", BindingFlags.NonPublic | BindingFlags.Static);
+public class SecEdgarClientTests
+{
+    private static readonly MethodInfo FormatCikMethod = typeof(SecEdgarClient).GetMethod(
+        "FormatCik",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
-    private static readonly MethodInfo GetDocumentUrlMethod = typeof(SecEdgarClient)
-        .GetMethod("GetDocumentUrl", BindingFlags.NonPublic | BindingFlags.Static);
+    private static readonly MethodInfo GetDocumentUrlMethod = typeof(SecEdgarClient).GetMethod(
+        "GetDocumentUrl",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
-    private static readonly MethodInfo GetRetryDelayMethod = typeof(SecEdgarClient)
-        .GetMethod("GetRetryDelay", BindingFlags.NonPublic | BindingFlags.Instance);
+    private static readonly MethodInfo GetRetryDelayMethod = typeof(SecEdgarClient).GetMethod(
+        "GetRetryDelay",
+        BindingFlags.NonPublic | BindingFlags.Instance
+    );
 
     [Fact]
-    public void GetRetryDelay_RetryAfterDeltaLongerThanMaxRetryDelay_CapsAtMaxRetryDelay() {
+    public void GetRetryDelay_RetryAfterDeltaLongerThanMaxRetryDelay_CapsAtMaxRetryDelay()
+    {
         // SEC EDGAR's load balancer occasionally returns Retry-After headers asking
         // clients to back off for hours (e.g. during an outage SEC has sent values
         // like 3600s — 1 hour — and longer windows have been observed during the
@@ -49,7 +57,11 @@ public class SecEdgarClientTests {
         // when Retry-After is honoured — pass 0.
         using var httpClient = new HttpClient();
         var configuration = new ConfigurationBuilder().Build();
-        var sut = new SecEdgarClient(httpClient, NullLogger<SecEdgarClient>.Instance, configuration);
+        var sut = new SecEdgarClient(
+            httpClient,
+            NullLogger<SecEdgarClient>.Instance,
+            configuration
+        );
 
         using var response = new HttpResponseMessage(System.Net.HttpStatusCode.TooManyRequests);
         response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromHours(24));
@@ -60,7 +72,8 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
-    public void FormatCik_ShortCik_PadsLeftToTenDigitsWithZeros() {
+    public void FormatCik_ShortCik_PadsLeftToTenDigitsWithZeros()
+    {
         // SEC EDGAR's archive URLs require the CIK in a specific 10-digit
         // zero-padded form: `/Archives/edgar/data/{0000320193}/...` for
         // Apple's real CIK `320193`. The unpadded form (`320193`) returns
@@ -93,7 +106,8 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
-    public void GetDocumentUrl_EmptyCik_ReturnsEmptyStringInsteadOfMalformedUrl() {
+    public void GetDocumentUrl_EmptyCik_ReturnsEmptyStringInsteadOfMalformedUrl()
+    {
         // GetDocumentUrl's first line is the defensive guard
         //   `if (string.IsNullOrEmpty(cik) || string.IsNullOrEmpty(accessionNumber))
         //        return string.Empty;`
@@ -120,7 +134,8 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
-    public void GetRetryDelay_RetryAfterDeltaWithinCap_ReturnsDeltaAsIsNotMaxRetryDelay() {
+    public void GetRetryDelay_RetryAfterDeltaWithinCap_ReturnsDeltaAsIsNotMaxRetryDelay()
+    {
         // Sibling to GetRetryDelay_RetryAfterDeltaLongerThanMaxRetryDelay_CapsAtMaxRetryDelay.
         // That pin catches the cap branch (`delta > MaxRetryDelay ? MaxRetryDelay : delta`)
         // on a 24-hour Retry-After. This pin catches the OTHER side of the same ternary:
@@ -143,7 +158,11 @@ public class SecEdgarClientTests {
         // 5-minute MaxRetryDelay.
         using var httpClient = new HttpClient();
         var configuration = new ConfigurationBuilder().Build();
-        var sut = new SecEdgarClient(httpClient, NullLogger<SecEdgarClient>.Instance, configuration);
+        var sut = new SecEdgarClient(
+            httpClient,
+            NullLogger<SecEdgarClient>.Instance,
+            configuration
+        );
 
         using var response = new HttpResponseMessage(System.Net.HttpStatusCode.TooManyRequests);
         response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(30));
@@ -154,7 +173,8 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
-    public void GetRetryDelay_NoRetryAfterHeader_UsesExponentialBackoffFormulaTwoToAttemptPlusOne() {
+    public void GetRetryDelay_NoRetryAfterHeader_UsesExponentialBackoffFormulaTwoToAttemptPlusOne()
+    {
         // Third pin in the GetRetryDelay family. Existing pins cover the two
         // RetryAfter.Delta ternary arms (cap and within-cap). This pin covers
         // path 3: when the response has NO Retry-After header (SEC's 429s
@@ -184,7 +204,11 @@ public class SecEdgarClientTests {
         // header (the production-default 429 shape from SEC).
         using var httpClient = new HttpClient();
         var configuration = new ConfigurationBuilder().Build();
-        var sut = new SecEdgarClient(httpClient, NullLogger<SecEdgarClient>.Instance, configuration);
+        var sut = new SecEdgarClient(
+            httpClient,
+            NullLogger<SecEdgarClient>.Instance,
+            configuration
+        );
 
         using var response = new HttpResponseMessage(System.Net.HttpStatusCode.InternalServerError);
 
@@ -194,7 +218,8 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
-    public void GetDocumentUrl_ValidCikAndAccession_ComposesSecArchiveTxtUrlWithPaddedCik() {
+    public void GetDocumentUrl_ValidCikAndAccession_ComposesSecArchiveTxtUrlWithPaddedCik()
+    {
         // Sibling to the FormatCik pin above. GetDocumentUrl composes the
         // exact URL the caller hands to HttpClient.GetAsync to fetch a
         // filing's raw text envelope. SEC's CDN matches the URL byte-for-
@@ -227,13 +252,19 @@ public class SecEdgarClientTests {
         //
         // Pin with Apple's CIK and a realistic accession number; assert
         // the literal output so a 1-character drift surfaces.
-        var result = (string)GetDocumentUrlMethod.Invoke(null, ["320193", "0000320193-25-000001-index"]);
+        var result = (string)
+            GetDocumentUrlMethod.Invoke(null, ["320193", "0000320193-25-000001-index"]);
 
-        result.Should().Be("https://www.sec.gov/Archives/edgar/data/0000320193/0000320193-25-000001-index.txt");
+        result
+            .Should()
+            .Be(
+                "https://www.sec.gov/Archives/edgar/data/0000320193/0000320193-25-000001-index.txt"
+            );
     }
 
     [Fact]
-    public void GetRetryDelay_RetryAfterAbsoluteDateInFuture_ReturnsWaitUntilThatDate() {
+    public void GetRetryDelay_RetryAfterAbsoluteDateInFuture_ReturnsWaitUntilThatDate()
+    {
         // Fourth pin in the GetRetryDelay family. Existing pins cover the three
         // Delta paths (cap, within-cap, no header → exponential backoff). This
         // pin covers path 4: RFC 7231 §7.1.3 permits Retry-After to carry an
@@ -272,7 +303,11 @@ public class SecEdgarClientTests {
         // that's the dominant non-determinism here.
         using var httpClient = new HttpClient();
         var configuration = new ConfigurationBuilder().Build();
-        var sut = new SecEdgarClient(httpClient, NullLogger<SecEdgarClient>.Instance, configuration);
+        var sut = new SecEdgarClient(
+            httpClient,
+            NullLogger<SecEdgarClient>.Instance,
+            configuration
+        );
 
         var retryAt = DateTimeOffset.UtcNow.AddMinutes(2);
         using var response = new HttpResponseMessage(System.Net.HttpStatusCode.TooManyRequests);
@@ -284,7 +319,8 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
-    public void GetRetryDelay_RetryAfterAbsoluteDateInPast_FallsThroughToExponentialBackoff() {
+    public void GetRetryDelay_RetryAfterAbsoluteDateInPast_FallsThroughToExponentialBackoff()
+    {
         // Sibling to `GetRetryDelay_RetryAfterAbsoluteDateInFuture_ReturnsWaitUntilThatDate`.
         // The future-date pin covers the Date-branch happy path. This pin
         // covers the SAFETY GUARD inside that branch:
@@ -328,7 +364,11 @@ public class SecEdgarClientTests {
         // the test isn't flaky on slow CI.
         using var httpClient = new HttpClient();
         var configuration = new ConfigurationBuilder().Build();
-        var sut = new SecEdgarClient(httpClient, NullLogger<SecEdgarClient>.Instance, configuration);
+        var sut = new SecEdgarClient(
+            httpClient,
+            NullLogger<SecEdgarClient>.Instance,
+            configuration
+        );
 
         var retryAt = DateTimeOffset.UtcNow.AddDays(-1);
         using var response = new HttpResponseMessage(System.Net.HttpStatusCode.TooManyRequests);
@@ -340,7 +380,8 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
-    public void FilterFilings_DocumentTypeSpecified_ReturnsOnlyMatchingFormViaGetFormNameMapping() {
+    public void FilterFilings_DocumentTypeSpecified_ReturnsOnlyMatchingFormViaGetFormNameMapping()
+    {
         // First pin in the FilterFilings family. SecEdgarClient.FilterFilings is the
         // private static three-clause AND filter that GetCompanyFilings applies to
         // SEC's per-CIK filing list:
@@ -407,24 +448,45 @@ public class SecEdgarClientTests {
         // Use reflection on the private static method, matching the style of
         // the other test helpers in this file. Pass empty AccessionNumber/Cik
         // strings — only Form matters for this assertion.
-        var filterFilingsMethod = typeof(SecEdgarClient)
-            .GetMethod("FilterFilings", BindingFlags.NonPublic | BindingFlags.Static);
-        var filings = new List<Equibles.Integrations.Sec.Models.FilingData> {
-            new() { Form = "10-K", AccessionNumber = "0001-10K", Cik = "320193" },
-            new() { Form = "10-Q", AccessionNumber = "0002-10Q", Cik = "320193" },
-            new() { Form = "8-K",  AccessionNumber = "0003-8K",  Cik = "320193" }
+        var filterFilingsMethod = typeof(SecEdgarClient).GetMethod(
+            "FilterFilings",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        var filings = new List<Equibles.Integrations.Sec.Models.FilingData>
+        {
+            new()
+            {
+                Form = "10-K",
+                AccessionNumber = "0001-10K",
+                Cik = "320193",
+            },
+            new()
+            {
+                Form = "10-Q",
+                AccessionNumber = "0002-10Q",
+                Cik = "320193",
+            },
+            new()
+            {
+                Form = "8-K",
+                AccessionNumber = "0003-8K",
+                Cik = "320193",
+            },
         };
 
-        var result = (List<Equibles.Integrations.Sec.Models.FilingData>)filterFilingsMethod.Invoke(
-            null,
-            [filings, Equibles.Integrations.Sec.Models.DocumentTypeFilter.TenK, null, null]);
+        var result =
+            (List<Equibles.Integrations.Sec.Models.FilingData>)
+                filterFilingsMethod.Invoke(
+                    null,
+                    [filings, Equibles.Integrations.Sec.Models.DocumentTypeFilter.TenK, null, null]
+                );
 
-        result.Should().ContainSingle()
-            .Which.Form.Should().Be("10-K");
+        result.Should().ContainSingle().Which.Form.Should().Be("10-K");
     }
 
     [Fact]
-    public void FilterFilings_FromDateSpecified_ExcludesBeforeAndIncludesOnOrAfterBoundary() {
+    public void FilterFilings_FromDateSpecified_ExcludesBeforeAndIncludesOnOrAfterBoundary()
+    {
         // Sibling pin to FilterFilings_DocumentTypeSpecified_…. FilterFilings has
         // three independent clauses joined by &&:
         //   (!documentType.HasValue || f.Form == documentType.Value.GetFormName()) &&
@@ -468,28 +530,47 @@ public class SecEdgarClientTests {
         // 1 record (only 06-14). Drop clause: 3 records. Short-circuit fail:
         // 0 records. All four regression classes distinguished by record count
         // and AccessionNumber identity.
-        var filterFilingsMethod = typeof(SecEdgarClient)
-            .GetMethod("FilterFilings", BindingFlags.NonPublic | BindingFlags.Static);
-        var filings = new List<Equibles.Integrations.Sec.Models.FilingData> {
-            new() { Form = "10-K", AccessionNumber = "0001", Cik = "320193",
-                    FilingDate = new DateOnly(2024, 6, 14) },
-            new() { Form = "10-K", AccessionNumber = "0002", Cik = "320193",
-                    FilingDate = new DateOnly(2024, 6, 15) },
-            new() { Form = "10-K", AccessionNumber = "0003", Cik = "320193",
-                    FilingDate = new DateOnly(2024, 6, 16) },
+        var filterFilingsMethod = typeof(SecEdgarClient).GetMethod(
+            "FilterFilings",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        var filings = new List<Equibles.Integrations.Sec.Models.FilingData>
+        {
+            new()
+            {
+                Form = "10-K",
+                AccessionNumber = "0001",
+                Cik = "320193",
+                FilingDate = new DateOnly(2024, 6, 14),
+            },
+            new()
+            {
+                Form = "10-K",
+                AccessionNumber = "0002",
+                Cik = "320193",
+                FilingDate = new DateOnly(2024, 6, 15),
+            },
+            new()
+            {
+                Form = "10-K",
+                AccessionNumber = "0003",
+                Cik = "320193",
+                FilingDate = new DateOnly(2024, 6, 16),
+            },
         };
         DateOnly? fromDate = new DateOnly(2024, 6, 15);
 
-        var result = (List<Equibles.Integrations.Sec.Models.FilingData>)filterFilingsMethod.Invoke(
-            null,
-            [filings, null, fromDate, null]);
+        var result =
+            (List<Equibles.Integrations.Sec.Models.FilingData>)
+                filterFilingsMethod.Invoke(null, [filings, null, fromDate, null]);
 
         result.Should().HaveCount(2);
         result.Select(f => f.AccessionNumber).Should().BeEquivalentTo(["0002", "0003"]);
     }
 
     [Fact]
-    public void FilterFilings_ToDateSpecified_ExcludesAfterAndIncludesOnOrBeforeBoundary() {
+    public void FilterFilings_ToDateSpecified_ExcludesAfterAndIncludesOnOrBeforeBoundary()
+    {
         // Final sibling in the FilterFilings clause-triple. The previous two pins
         // cover documentType + fromDate. This pin covers the third clause
         // (toDate + `<=`). With this pin the three-clause contract is
@@ -529,21 +610,39 @@ public class SecEdgarClientTests {
         // would still fail one of the two pins, since the boundary filings are
         // at different dates and the asymmetric clause structure (`>=` vs `<=`)
         // distinguishes them.
-        var filterFilingsMethod = typeof(SecEdgarClient)
-            .GetMethod("FilterFilings", BindingFlags.NonPublic | BindingFlags.Static);
-        var filings = new List<Equibles.Integrations.Sec.Models.FilingData> {
-            new() { Form = "10-K", AccessionNumber = "0001", Cik = "320193",
-                    FilingDate = new DateOnly(2024, 6, 14) },
-            new() { Form = "10-K", AccessionNumber = "0002", Cik = "320193",
-                    FilingDate = new DateOnly(2024, 6, 15) },
-            new() { Form = "10-K", AccessionNumber = "0003", Cik = "320193",
-                    FilingDate = new DateOnly(2024, 6, 16) },
+        var filterFilingsMethod = typeof(SecEdgarClient).GetMethod(
+            "FilterFilings",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        var filings = new List<Equibles.Integrations.Sec.Models.FilingData>
+        {
+            new()
+            {
+                Form = "10-K",
+                AccessionNumber = "0001",
+                Cik = "320193",
+                FilingDate = new DateOnly(2024, 6, 14),
+            },
+            new()
+            {
+                Form = "10-K",
+                AccessionNumber = "0002",
+                Cik = "320193",
+                FilingDate = new DateOnly(2024, 6, 15),
+            },
+            new()
+            {
+                Form = "10-K",
+                AccessionNumber = "0003",
+                Cik = "320193",
+                FilingDate = new DateOnly(2024, 6, 16),
+            },
         };
         DateOnly? toDate = new DateOnly(2024, 6, 15);
 
-        var result = (List<Equibles.Integrations.Sec.Models.FilingData>)filterFilingsMethod.Invoke(
-            null,
-            [filings, null, null, toDate]);
+        var result =
+            (List<Equibles.Integrations.Sec.Models.FilingData>)
+                filterFilingsMethod.Invoke(null, [filings, null, null, toDate]);
 
         result.Should().HaveCount(2);
         result.Select(f => f.AccessionNumber).Should().BeEquivalentTo(["0001", "0002"]);

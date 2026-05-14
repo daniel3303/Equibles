@@ -5,7 +5,8 @@ namespace Equibles.Fred.Data.Models;
 
 [Index(nameof(SeriesId), IsUnique = true)]
 [Index(nameof(Category))]
-public class FredSeries {
+public class FredSeries
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     [Required]

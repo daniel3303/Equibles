@@ -8,7 +8,8 @@ namespace Equibles.CommonStocks.Data.Models;
 [Index(nameof(Cik), IsUnique = true)]
 [Index(nameof(Cusip))]
 [Index(nameof(IndustryId))]
-public class CommonStock {
+public class CommonStock
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     [MaxLength(16)]
@@ -29,12 +30,14 @@ public class CommonStock {
     public double MarketCapitalization { get; set; }
     public long SharesOutStanding { get; set; }
 
-    public List<string> SecondaryTickers {
+    public List<string> SecondaryTickers
+    {
         get => field ?? [];
         set;
     } = [];
 
-    public List<string> SecondaryCiks {
+    public List<string> SecondaryCiks
+    {
         get => field ?? [];
         set;
     } = [];

@@ -2,12 +2,14 @@ using Newtonsoft.Json;
 
 namespace Equibles.Integrations.Fred.Models;
 
-public class FredSeriesResponse {
+public class FredSeriesResponse
+{
     [JsonProperty("seriess")]
     public List<FredSeriesRecord> Series { get; set; } = [];
 }
 
-public class FredSeriesRecord {
+public class FredSeriesRecord
+{
     [JsonProperty("id")]
     public string Id { get; set; }
 

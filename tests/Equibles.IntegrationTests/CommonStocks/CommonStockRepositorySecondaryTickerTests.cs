@@ -19,16 +19,20 @@ namespace Equibles.IntegrationTests.CommonStocks;
 /// in-memory integration tiers catching it.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class CommonStockRepositorySecondaryTickerTests : ParadeDbMcpTestBase {
-    public CommonStockRepositorySecondaryTickerTests(ParadeDbFixture fixture) : base(fixture) { }
+public class CommonStockRepositorySecondaryTickerTests : ParadeDbMcpTestBase
+{
+    public CommonStockRepositorySecondaryTickerTests(ParadeDbFixture fixture)
+        : base(fixture) { }
 
     [Fact]
-    public async Task GetByTicker_QueryMatchesSecondaryTicker_ReturnsStockWithMatchingSecondaryEntry() {
+    public async Task GetByTicker_QueryMatchesSecondaryTicker_ReturnsStockWithMatchingSecondaryEntry()
+    {
         // META renamed from FB in 2022 — production keeps "FB" as a secondary ticker so
         // historical queries against FB still resolve to the current META row. If
         // Postgres array-Contains translation regresses, this lookup returns null and
         // every MCP tool call against FB silently reports "Stock not found".
-        var meta = new CommonStock {
+        var meta = new CommonStock
+        {
             Id = Guid.NewGuid(),
             Ticker = "META",
             Name = "Meta Platforms Inc.",
@@ -36,7 +40,8 @@ public class CommonStockRepositorySecondaryTickerTests : ParadeDbMcpTestBase {
         };
         // Distractor row with no overlapping tickers — ensures the WHERE clause filters
         // correctly rather than just returning the first row in the table.
-        var apple = new CommonStock {
+        var apple = new CommonStock
+        {
             Id = Guid.NewGuid(),
             Ticker = "AAPL",
             Name = "Apple Inc.",
@@ -51,7 +56,16 @@ public class CommonStockRepositorySecondaryTickerTests : ParadeDbMcpTestBase {
 
         var result = await sut.GetByTicker("FB");
 
-        result.Should().NotBeNull("the secondary-ticker branch of the WHERE clause must match the FB → META mapping");
-        result!.Ticker.Should().Be("META", "GetByTicker returns the row whose primary OR secondary list contains the query");
+        result
+            .Should()
+            .NotBeNull(
+                "the secondary-ticker branch of the WHERE clause must match the FB → META mapping"
+            );
+        result!
+            .Ticker.Should()
+            .Be(
+                "META",
+                "GetByTicker returns the row whose primary OR secondary list contains the query"
+            );
     }
 }

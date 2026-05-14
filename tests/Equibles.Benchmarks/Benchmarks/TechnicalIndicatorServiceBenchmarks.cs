@@ -11,16 +11,19 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// slow drift plus a sinusoidal component, so the EMA recurrence stays non-degenerate.
 /// </summary>
 [MemoryDiagnoser]
-public class TechnicalIndicatorServiceBenchmarks {
+public class TechnicalIndicatorServiceBenchmarks
+{
     private const int PriceCount = 1_008;
     private List<decimal> _prices;
 
     [GlobalSetup]
-    public void Setup() {
+    public void Setup()
+    {
         // 100 + small daily drift + sinusoidal oscillation. Flat input would degenerate the
         // EMA recurrence; pure random would make cross-commit comparisons too noisy.
         _prices = new List<decimal>(PriceCount);
-        for (var i = 0; i < PriceCount; i++) {
+        for (var i = 0; i < PriceCount; i++)
+        {
             var drift = i * 0.05m;
             var wave = (decimal)Math.Sin(i / 12.0) * 3m;
             _prices.Add(100m + drift + wave);
@@ -28,7 +31,8 @@ public class TechnicalIndicatorServiceBenchmarks {
     }
 
     [Benchmark]
-    public int ComputeMacd() {
+    public int ComputeMacd()
+    {
         var (line, signal, histogram) = TechnicalIndicatorService.ComputeMacd(_prices);
         return line.Count + signal.Count + histogram.Count;
     }

@@ -9,7 +9,8 @@ namespace Equibles.InsiderTrading.Data.Models;
 [Index(nameof(AccessionNumber), nameof(TransactionOrder), IsUnique = true)]
 [Index(nameof(FilingDate))]
 [Index(nameof(TransactionDate))]
-public class InsiderTransaction {
+public class InsiderTransaction
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid InsiderOwnerId { get; set; }

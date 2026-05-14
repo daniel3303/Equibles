@@ -12,13 +12,15 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// found-quickly and full-scan paths are exercised here because production traffic hits both.
 /// </summary>
 [MemoryDiagnoser]
-public class SecDocumentEnvelopeParserBenchmarks {
+public class SecDocumentEnvelopeParserBenchmarks
+{
     private const int BlockCount = 8;
     private string _envelopeWithPdf;
     private string _envelopeWithoutPdf;
 
     [GlobalSetup]
-    public void Setup() {
+    public void Setup()
+    {
         // A realistic PAPER envelope: multiple DOCUMENT blocks, one of which is the PDF. The
         // parser scans block-by-block from the start, so placing the PDF near the end forces
         // every block to be examined — the cost we actually want to measure.
@@ -37,10 +39,12 @@ public class SecDocumentEnvelopeParserBenchmarks {
     public bool ScansEnvelopeWithNoPdf() =>
         SecDocumentEnvelopeParser.TryExtractPaperPdfFilename(_envelopeWithoutPdf, out _);
 
-    private static string BuildEnvelope(int includePdfAt) {
+    private static string BuildEnvelope(int includePdfAt)
+    {
         var sb = new StringBuilder();
         sb.Append("<SEC-DOCUMENT>0000320193-25-000001.txt : 20250101\n");
-        for (var i = 0; i < BlockCount; i++) {
+        for (var i = 0; i < BlockCount; i++)
+        {
             var isPdf = i == includePdfAt;
             sb.Append("<DOCUMENT>\n");
             sb.Append("<TYPE>").Append(isPdf ? "PAPER" : "EX-99.1").Append('\n');
@@ -50,7 +54,8 @@ public class SecDocumentEnvelopeParserBenchmarks {
             sb.Append("<TEXT>\n");
             // A few hundred bytes of body content per block to keep IndexOf walking realistic
             // distances between tag markers — empty bodies underreport the true scan cost.
-            for (var j = 0; j < 6; j++) {
+            for (var j = 0; j < 6; j++)
+            {
                 sb.Append("Lorem ipsum dolor sit amet, consectetur adipiscing elit. ")
                     .Append("Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n");
             }

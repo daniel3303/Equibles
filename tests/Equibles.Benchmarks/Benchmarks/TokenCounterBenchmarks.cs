@@ -13,7 +13,8 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// so we can watch both fixed overhead and per-token scaling.
 /// </summary>
 [MemoryDiagnoser]
-public class TokenCounterBenchmarks {
+public class TokenCounterBenchmarks
+{
     private readonly TokenCounter _sut = new();
     private string _text;
 
@@ -25,19 +26,39 @@ public class TokenCounterBenchmarks {
     public int CharCount { get; set; }
 
     [GlobalSetup]
-    public void Setup() {
+    public void Setup()
+    {
         // Build a deterministic, vocabulary-realistic input — random ASCII bytes
         // tokenise pathologically (one token per char), and a constant repeated word
         // tokenises sub-realistically (encoder collapses runs). Cycling through a
         // small bag of plain English words approximates real prose density.
-        var bag = new[] {
-            "the", "company", "reported", "revenue", "growth", "during", "fiscal",
-            "quarter", "ended", "December", "compared", "prior", "year", "period",
-            "increased", "operating", "expenses", "decreased", "net", "income"
+        var bag = new[]
+        {
+            "the",
+            "company",
+            "reported",
+            "revenue",
+            "growth",
+            "during",
+            "fiscal",
+            "quarter",
+            "ended",
+            "December",
+            "compared",
+            "prior",
+            "year",
+            "period",
+            "increased",
+            "operating",
+            "expenses",
+            "decreased",
+            "net",
+            "income",
         };
         var builder = new StringBuilder(CharCount + 16);
         var i = 0;
-        while (builder.Length < CharCount) {
+        while (builder.Length < CharCount)
+        {
             builder.Append(bag[i % bag.Length]).Append(' ');
             i++;
         }

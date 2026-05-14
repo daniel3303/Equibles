@@ -3,11 +3,13 @@ using Equibles.Sec.BusinessLogic.Normalizers;
 
 namespace Equibles.UnitTests.Sec.Normalizers;
 
-public class ListConversionStepTests {
+public class ListConversionStepTests
+{
     private readonly ListConversionStep _step = new();
     private readonly HtmlParser _parser = new();
 
-    private string Execute(string bodyHtml) {
+    private string Execute(string bodyHtml)
+    {
         var html = $"<html><body>{bodyHtml}</body></html>";
         var doc = _parser.ParseDocument(html);
         _step.Execute(doc);
@@ -15,7 +17,8 @@ public class ListConversionStepTests {
     }
 
     [Fact]
-    public void SingleItemWrapper_ConvertsToUlWithOneLi() {
+    public void SingleItemWrapper_ConvertsToUlWithOneLi()
+    {
         var input = """
             <div class="item-list-element-wrapper">
               <span>•</span>
@@ -32,7 +35,8 @@ public class ListConversionStepTests {
     }
 
     [Fact]
-    public void MultipleConsecutiveWrappers_ConvertToSingleUlWithMultipleLi() {
+    public void MultipleConsecutiveWrappers_ConvertToSingleUlWithMultipleLi()
+    {
         var input = """
             <div class="item-list-element-wrapper">
               <span>•</span>
@@ -56,7 +60,8 @@ public class ListConversionStepTests {
     }
 
     [Fact]
-    public void BulletSpans_AreRemovedFromListItems() {
+    public void BulletSpans_AreRemovedFromListItems()
+    {
         var input = """
             <div class="item-list-element-wrapper">
               <span>•</span>
@@ -71,7 +76,8 @@ public class ListConversionStepTests {
     }
 
     [Fact]
-    public void MiddleDotBulletSpans_AreRemovedFromListItems() {
+    public void MiddleDotBulletSpans_AreRemovedFromListItems()
+    {
         // ConvertItemToListItem's bullet matcher is the three-arm pattern
         //   `s.TextContent.Trim() is "•" or "·" or "-"`
         // The existing `BulletSpans_AreRemovedFromListItems` test only
@@ -111,7 +117,8 @@ public class ListConversionStepTests {
     }
 
     [Fact]
-    public void ContentFromInlineDisplayDiv_IsPreservedInLi() {
+    public void ContentFromInlineDisplayDiv_IsPreservedInLi()
+    {
         var input = """
             <div class="item-list-element-wrapper">
               <span>-</span>
@@ -126,7 +133,8 @@ public class ListConversionStepTests {
     }
 
     [Fact]
-    public void NonConsecutiveWrappers_BecomeSeparateLists() {
+    public void NonConsecutiveWrappers_BecomeSeparateLists()
+    {
         var input = """
             <div class="item-list-element-wrapper">
               <span>•</span>
@@ -147,7 +155,8 @@ public class ListConversionStepTests {
     }
 
     [Fact]
-    public void NoItemWrappers_NoChanges() {
+    public void NoItemWrappers_NoChanges()
+    {
         var input = "<p>Regular paragraph content</p>";
 
         var result = Execute(input);
@@ -157,7 +166,8 @@ public class ListConversionStepTests {
     }
 
     [Fact]
-    public void WrapperWithoutInlineDisplayDiv_FallsBackToCloningContentSpans() {
+    public void WrapperWithoutInlineDisplayDiv_FallsBackToCloningContentSpans()
+    {
         // When the item wrapper has no <div style="display:inline"> content
         // container, the converter falls back to cloning the non-bullet
         // spans into the <li>. This pins the fallback path so SEC filings
@@ -178,7 +188,8 @@ public class ListConversionStepTests {
     }
 
     [Fact]
-    public void EmptyDocument_NoError() {
+    public void EmptyDocument_NoError()
+    {
         var result = Execute(string.Empty);
 
         result.Should().NotBeNull();

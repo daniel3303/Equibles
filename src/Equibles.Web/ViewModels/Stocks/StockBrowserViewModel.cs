@@ -1,6 +1,7 @@
 namespace Equibles.Web.ViewModels.Stocks;
 
-public class StockBrowserViewModel {
+public class StockBrowserViewModel
+{
     public List<StockListItemViewModel> Stocks { get; set; } = [];
     public string Search { get; set; }
     public int Page { get; set; } = 1;

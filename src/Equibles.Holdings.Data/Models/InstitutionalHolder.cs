@@ -5,7 +5,8 @@ namespace Equibles.Holdings.Data.Models;
 
 [Index(nameof(Cik), IsUnique = true)]
 [Index(nameof(Name))]
-public class InstitutionalHolder {
+public class InstitutionalHolder
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     [MaxLength(16)]

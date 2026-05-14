@@ -16,13 +16,15 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// backlog the scraper churns through on a cold start.
 /// </summary>
 [MemoryDiagnoser]
-public class DisclosureParsingHelperBenchmarks {
+public class DisclosureParsingHelperBenchmarks
+{
     private const int RowCount = 40;
 
     private string _html;
 
     [GlobalSetup]
-    public void Setup() {
+    public void Setup()
+    {
         // Build a Senate-shaped disclosure page: one table with the headers the
         // helper looks for, then N rows alternating between purchase / sale, with
         // realistic ticker/amount/asset values. The empty-sentinel "--" is included
@@ -38,7 +40,8 @@ public class DisclosureParsingHelperBenchmarks {
             .Append("<th>Transaction Type</th>")
             .Append("<th>Amount</th>")
             .Append("</tr></thead><tbody>");
-        for (var i = 0; i < RowCount; i++) {
+        for (var i = 0; i < RowCount; i++)
+        {
             var date = new DateOnly(2025, 1 + (i % 12), 1 + (i % 27));
             var type = i % 2 == 0 ? "Purchase" : "Sale (Full)";
             var owner = i % 3 == 0 ? "--" : "Self";
@@ -60,10 +63,13 @@ public class DisclosureParsingHelperBenchmarks {
 
     [Benchmark]
     public int ParseTransactionsFromHtml() =>
-        DisclosureParsingHelper.ParseTransactionsFromHtml(
-            _html,
-            memberName: "John Doe",
-            position: CongressPosition.Senator,
-            filingDate: new DateOnly(2025, 6, 1),
-            logger: NullLogger.Instance).Count;
+        DisclosureParsingHelper
+            .ParseTransactionsFromHtml(
+                _html,
+                memberName: "John Doe",
+                position: CongressPosition.Senator,
+                filingDate: new DateOnly(2025, 6, 1),
+                logger: NullLogger.Instance
+            )
+            .Count;
 }

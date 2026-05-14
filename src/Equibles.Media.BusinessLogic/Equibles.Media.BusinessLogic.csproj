@@ -1,13 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Equibles.Core.AutoWiring" />
+    <PackageReference Include="MimeTypeMapOfficial" />
+    <PackageReference Include="SixLabors.ImageSharp" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="Equibles.Core.AutoWiring" />
-      <PackageReference Include="MimeTypeMapOfficial" />
-      <PackageReference Include="SixLabors.ImageSharp" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <ProjectReference Include="..\Equibles.Media.Repositories\Equibles.Media.Repositories.csproj" />
-    </ItemGroup>
-
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.Media.Repositories\Equibles.Media.Repositories.csproj" />
+  </ItemGroup>
 </Project>

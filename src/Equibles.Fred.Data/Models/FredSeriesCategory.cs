@@ -2,7 +2,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Equibles.Fred.Data.Models;
 
-public enum FredSeriesCategory {
+public enum FredSeriesCategory
+{
     [Display(Name = "Interest Rates")]
     InterestRates,
 
@@ -34,5 +35,5 @@ public enum FredSeriesCategory {
     ExchangeRates,
 
     [Display(Name = "Market")]
-    Market
+    Market,
 }

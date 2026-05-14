@@ -3,8 +3,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.IntegrationTests.Helpers;
 
-public static class TestDbContextFactory {
-    public static EquiblesDbContext Create(params IModuleConfiguration[] modules) {
+public static class TestDbContextFactory
+{
+    public static EquiblesDbContext Create(params IModuleConfiguration[] modules)
+    {
         var options = new DbContextOptionsBuilder<EquiblesDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .EnableServiceProviderCaching(false)

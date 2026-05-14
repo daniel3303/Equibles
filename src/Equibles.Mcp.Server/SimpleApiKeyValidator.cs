@@ -4,21 +4,23 @@ using Equibles.Mcp.Contracts;
 
 namespace Equibles.Mcp.Server;
 
-public class SimpleApiKeyValidator : IApiKeyValidator {
+public class SimpleApiKeyValidator : IApiKeyValidator
+{
     private readonly byte[] _configuredKeyHash;
 
     public bool IsEnabled { get; }
 
-    public SimpleApiKeyValidator(IConfiguration configuration) {
+    public SimpleApiKeyValidator(IConfiguration configuration)
+    {
         var key = configuration["McpApiKey"] ?? "";
         IsEnabled = !string.IsNullOrEmpty(key);
-        _configuredKeyHash = IsEnabled
-            ? SHA256.HashData(Encoding.UTF8.GetBytes(key))
-            : [];
+        _configuredKeyHash = IsEnabled ? SHA256.HashData(Encoding.UTF8.GetBytes(key)) : [];
     }
 
-    public Task<bool> IsValid(string apiKey) {
-        if (!IsEnabled) {
+    public Task<bool> IsValid(string apiKey)
+    {
+        if (!IsEnabled)
+        {
             return Task.FromResult(true);
         }
 

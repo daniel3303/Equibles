@@ -5,9 +5,11 @@ using Microsoft.Extensions.Options;
 
 namespace Equibles.UnitTests.Fred;
 
-public class FredClientTests {
+public class FredClientTests
+{
     [Fact]
-    public void IsConfigured_EmptyApiKey_ReturnsFalse() {
+    public void IsConfigured_EmptyApiKey_ReturnsFalse()
+    {
         // FRED's API requires every request to carry `api_key={key}` in the query string —
         // missing or empty keys are rejected with HTTP 400 by api.stlouisfed.org. FredClient.IsConfigured
         // is the gate that FredScraperWorker.ValidateConfiguration consults: a `false` here
@@ -29,7 +31,8 @@ public class FredClientTests {
     }
 
     [Fact]
-    public void IsConfigured_NonEmptyApiKey_ReturnsTrue() {
+    public void IsConfigured_NonEmptyApiKey_ReturnsTrue()
+    {
         // Sibling to the false-case pin above. The risk this pin catches is asymmetric
         // and unreachable from the empty-key sibling alone: a regression that hard-codes
         // `IsConfigured => false` (e.g. a defensive default added during a refactor, or
@@ -45,7 +48,9 @@ public class FredClientTests {
         // here). Pick a realistic API-key-shaped value rather than just "x" so a
         // future refactor that adds key-format validation (length, charset) won't
         // silently invalidate this pin without a clear failure mode.
-        var options = Options.Create(new FredOptions { ApiKey = "abcdef0123456789abcdef0123456789" });
+        var options = Options.Create(
+            new FredOptions { ApiKey = "abcdef0123456789abcdef0123456789" }
+        );
         var sut = new FredClient(new HttpClient(), NullLogger<FredClient>.Instance, options);
 
         sut.IsConfigured.Should().BeTrue();

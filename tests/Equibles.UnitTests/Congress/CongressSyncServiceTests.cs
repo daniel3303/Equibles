@@ -20,19 +20,25 @@ namespace Equibles.UnitTests.Congress;
 /// private methods via reflection: <c>BuildTrades</c> (mapping + matching) and the
 /// transaction-filtering behaviour that determines which disclosures become trades.
 /// </summary>
-public class CongressSyncServiceTests {
+public class CongressSyncServiceTests
+{
     // ── Reflection helpers ──────────────────────────────────────────────
 
-    private static readonly MethodInfo BuildTradesMethod = typeof(CongressionalTradeSyncService)
-        .GetMethod("BuildTrades", BindingFlags.NonPublic | BindingFlags.Instance)!;
+    private static readonly MethodInfo BuildTradesMethod =
+        typeof(CongressionalTradeSyncService).GetMethod(
+            "BuildTrades",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        )!;
 
-    private static CongressionalTradeSyncService CreateService() {
+    private static CongressionalTradeSyncService CreateService()
+    {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         var options = Options.Create(new WorkerOptions());
         var logger = Substitute.For<ILogger<CongressionalTradeSyncService>>();
         var errorReporter = Substitute.For<ErrorReporter>(
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ILogger<ErrorReporter>>());
+            Substitute.For<ILogger<ErrorReporter>>()
+        );
 
         return new CongressionalTradeSyncService(scopeFactory, options, logger, errorReporter);
     }
@@ -42,15 +48,18 @@ public class CongressSyncServiceTests {
         List<DisclosureTransaction> matched,
         Dictionary<string, CongressMember> members,
         Dictionary<string, CommonStock> stocks
-    ) {
-        return (List<CongressionalTrade>)BuildTradesMethod.Invoke(
-            service, [matched, members, stocks])!;
+    )
+    {
+        return (List<CongressionalTrade>)
+            BuildTradesMethod.Invoke(service, [matched, members, stocks])!;
     }
 
     // ── Factory helpers ─────────────────────────────────────────────────
 
-    private static CommonStock CreateStock(string ticker = "AAPL", string name = "Apple Inc.") {
-        return new CommonStock {
+    private static CommonStock CreateStock(string ticker = "AAPL", string name = "Apple Inc.")
+    {
+        return new CommonStock
+        {
             Id = Guid.NewGuid(),
             Ticker = ticker,
             Name = name,
@@ -60,8 +69,10 @@ public class CongressSyncServiceTests {
     private static CongressMember CreateMember(
         string name = "Nancy Pelosi",
         CongressPosition position = CongressPosition.Representative
-    ) {
-        return new CongressMember {
+    )
+    {
+        return new CongressMember
+        {
             Id = Guid.NewGuid(),
             Name = name,
             Position = position,
@@ -79,9 +90,11 @@ public class CongressSyncServiceTests {
         string ownerType = "Self",
         long amountFrom = 1_001,
         long amountTo = 15_000
-    ) {
+    )
+    {
         var date = txDate ?? new DateOnly(2024, 6, 15);
-        return new DisclosureTransaction {
+        return new DisclosureTransaction
+        {
             MemberName = memberName,
             Position = position,
             Ticker = ticker,
@@ -100,7 +113,8 @@ public class CongressSyncServiceTests {
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void BuildTrades_SingleTransaction_MapsAllFieldsCorrectly() {
+    public void BuildTrades_SingleTransaction_MapsAllFieldsCorrectly()
+    {
         var service = CreateService();
         var stock = CreateStock("AAPL", "Apple Inc.");
         var member = CreateMember("Nancy Pelosi", CongressPosition.Representative);
@@ -114,11 +128,14 @@ public class CongressSyncServiceTests {
             assetName: "Apple Inc Common Stock",
             ownerType: "Self",
             amountFrom: 1_001,
-            amountTo: 15_000);
+            amountTo: 15_000
+        );
 
         var members = new Dictionary<string, CongressMember> { ["Nancy Pelosi"] = member };
         var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
-            { ["AAPL"] = stock };
+        {
+            ["AAPL"] = stock,
+        };
 
         var result = InvokeBuildTrades(service, [tx], members, stocks);
 
@@ -136,7 +153,8 @@ public class CongressSyncServiceTests {
     }
 
     [Fact]
-    public void BuildTrades_SaleTransaction_MapsTransactionTypeCorrectly() {
+    public void BuildTrades_SaleTransaction_MapsTransactionTypeCorrectly()
+    {
         var service = CreateService();
         var stock = CreateStock("MSFT");
         var member = CreateMember("Tommy Tuberville", CongressPosition.Senator);
@@ -144,16 +162,22 @@ public class CongressSyncServiceTests {
         var tx = CreateTransaction(
             memberName: "Tommy Tuberville",
             ticker: "MSFT",
-            type: CongressTransactionType.Sale);
+            type: CongressTransactionType.Sale
+        );
 
         var members = new Dictionary<string, CongressMember> { ["Tommy Tuberville"] = member };
         var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
-            { ["MSFT"] = stock };
+        {
+            ["MSFT"] = stock,
+        };
 
         var result = InvokeBuildTrades(service, [tx], members, stocks);
 
-        result.Should().ContainSingle()
-            .Which.TransactionType.Should().Be(CongressTransactionType.Sale);
+        result
+            .Should()
+            .ContainSingle()
+            .Which.TransactionType.Should()
+            .Be(CongressTransactionType.Sale);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -161,26 +185,36 @@ public class CongressSyncServiceTests {
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void BuildTrades_MultipleTransactions_BuildsAll() {
+    public void BuildTrades_MultipleTransactions_BuildsAll()
+    {
         var service = CreateService();
         var apple = CreateStock("AAPL", "Apple Inc.");
         var msft = CreateStock("MSFT", "Microsoft Corp.");
         var pelosi = CreateMember("Nancy Pelosi");
         var tuberville = CreateMember("Tommy Tuberville", CongressPosition.Senator);
 
-        var transactions = new List<DisclosureTransaction> {
+        var transactions = new List<DisclosureTransaction>
+        {
             CreateTransaction(memberName: "Nancy Pelosi", ticker: "AAPL"),
-            CreateTransaction(memberName: "Tommy Tuberville", ticker: "MSFT",
-                type: CongressTransactionType.Sale),
-            CreateTransaction(memberName: "Nancy Pelosi", ticker: "MSFT",
-                txDate: new DateOnly(2024, 7, 1)),
+            CreateTransaction(
+                memberName: "Tommy Tuberville",
+                ticker: "MSFT",
+                type: CongressTransactionType.Sale
+            ),
+            CreateTransaction(
+                memberName: "Nancy Pelosi",
+                ticker: "MSFT",
+                txDate: new DateOnly(2024, 7, 1)
+            ),
         };
 
-        var members = new Dictionary<string, CongressMember> {
+        var members = new Dictionary<string, CongressMember>
+        {
             ["Nancy Pelosi"] = pelosi,
             ["Tommy Tuberville"] = tuberville,
         };
-        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase) {
+        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
+        {
             ["AAPL"] = apple,
             ["MSFT"] = msft,
         };
@@ -199,7 +233,8 @@ public class CongressSyncServiceTests {
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void BuildTrades_MemberNotInDictionary_SkipsTransaction() {
+    public void BuildTrades_MemberNotInDictionary_SkipsTransaction()
+    {
         var service = CreateService();
         var stock = CreateStock("AAPL");
 
@@ -207,7 +242,9 @@ public class CongressSyncServiceTests {
 
         var members = new Dictionary<string, CongressMember>(); // empty — member not found
         var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
-            { ["AAPL"] = stock };
+        {
+            ["AAPL"] = stock,
+        };
 
         var result = InvokeBuildTrades(service, [tx], members, stocks);
 
@@ -215,24 +252,27 @@ public class CongressSyncServiceTests {
     }
 
     [Fact]
-    public void BuildTrades_SomeMembersMissing_OnlyBuildsMatchedOnes() {
+    public void BuildTrades_SomeMembersMissing_OnlyBuildsMatchedOnes()
+    {
         var service = CreateService();
         var stock = CreateStock("AAPL");
         var pelosi = CreateMember("Nancy Pelosi");
 
-        var transactions = new List<DisclosureTransaction> {
+        var transactions = new List<DisclosureTransaction>
+        {
             CreateTransaction(memberName: "Nancy Pelosi", ticker: "AAPL"),
             CreateTransaction(memberName: "Ghost Member", ticker: "AAPL"),
         };
 
         var members = new Dictionary<string, CongressMember> { ["Nancy Pelosi"] = pelosi };
         var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
-            { ["AAPL"] = stock };
+        {
+            ["AAPL"] = stock,
+        };
 
         var result = InvokeBuildTrades(service, transactions, members, stocks);
 
-        result.Should().ContainSingle()
-            .Which.CongressMemberId.Should().Be(pelosi.Id);
+        result.Should().ContainSingle().Which.CongressMemberId.Should().Be(pelosi.Id);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -240,7 +280,8 @@ public class CongressSyncServiceTests {
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void BuildTrades_EmptyTransactionList_ReturnsEmpty() {
+    public void BuildTrades_EmptyTransactionList_ReturnsEmpty()
+    {
         var service = CreateService();
         var members = new Dictionary<string, CongressMember>();
         var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase);
@@ -255,7 +296,8 @@ public class CongressSyncServiceTests {
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void BuildTrades_ZeroAmounts_MapsCorrectly() {
+    public void BuildTrades_ZeroAmounts_MapsCorrectly()
+    {
         var service = CreateService();
         var stock = CreateStock("TSLA");
         var member = CreateMember("Dan Crenshaw");
@@ -264,11 +306,14 @@ public class CongressSyncServiceTests {
             memberName: "Dan Crenshaw",
             ticker: "TSLA",
             amountFrom: 0,
-            amountTo: 0);
+            amountTo: 0
+        );
 
         var members = new Dictionary<string, CongressMember> { ["Dan Crenshaw"] = member };
         var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
-            { ["TSLA"] = stock };
+        {
+            ["TSLA"] = stock,
+        };
 
         var result = InvokeBuildTrades(service, [tx], members, stocks);
 
@@ -278,7 +323,8 @@ public class CongressSyncServiceTests {
     }
 
     [Fact]
-    public void BuildTrades_LargeAmounts_MapsCorrectly() {
+    public void BuildTrades_LargeAmounts_MapsCorrectly()
+    {
         var service = CreateService();
         var stock = CreateStock("NVDA");
         var member = CreateMember("Nancy Pelosi");
@@ -287,11 +333,14 @@ public class CongressSyncServiceTests {
             memberName: "Nancy Pelosi",
             ticker: "NVDA",
             amountFrom: 1_000_001,
-            amountTo: 5_000_000);
+            amountTo: 5_000_000
+        );
 
         var members = new Dictionary<string, CongressMember> { ["Nancy Pelosi"] = member };
         var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
-            { ["NVDA"] = stock };
+        {
+            ["NVDA"] = stock,
+        };
 
         var result = InvokeBuildTrades(service, [tx], members, stocks);
 
@@ -305,25 +354,24 @@ public class CongressSyncServiceTests {
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void BuildTrades_EmptyAssetName_MapsEmptyString() {
+    public void BuildTrades_EmptyAssetName_MapsEmptyString()
+    {
         var service = CreateService();
         var stock = CreateStock("AAPL");
         var member = CreateMember("Nancy Pelosi");
 
-        var tx = CreateTransaction(
-            memberName: "Nancy Pelosi",
-            ticker: "AAPL",
-            assetName: null);
+        var tx = CreateTransaction(memberName: "Nancy Pelosi", ticker: "AAPL", assetName: null);
 
         var members = new Dictionary<string, CongressMember> { ["Nancy Pelosi"] = member };
         var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
-            { ["AAPL"] = stock };
+        {
+            ["AAPL"] = stock,
+        };
 
         var result = InvokeBuildTrades(service, [tx], members, stocks);
 
         // The service uses `tx.AssetName ?? ""` so null becomes empty string
-        result.Should().ContainSingle()
-            .Which.AssetName.Should().BeEmpty();
+        result.Should().ContainSingle().Which.AssetName.Should().BeEmpty();
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -333,13 +381,16 @@ public class CongressSyncServiceTests {
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void TickerMatching_TransactionsWithTrackedTickers_AreIncluded() {
-        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase) {
+    public void TickerMatching_TransactionsWithTrackedTickers_AreIncluded()
+    {
+        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
+        {
             ["AAPL"] = CreateStock("AAPL"),
             ["MSFT"] = CreateStock("MSFT"),
         };
 
-        var transactions = new List<DisclosureTransaction> {
+        var transactions = new List<DisclosureTransaction>
+        {
             CreateTransaction(ticker: "AAPL"),
             CreateTransaction(ticker: "MSFT"),
         };
@@ -352,12 +403,15 @@ public class CongressSyncServiceTests {
     }
 
     [Fact]
-    public void TickerMatching_TransactionsWithUntrackedTickers_AreExcluded() {
-        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase) {
+    public void TickerMatching_TransactionsWithUntrackedTickers_AreExcluded()
+    {
+        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
+        {
             ["AAPL"] = CreateStock("AAPL"),
         };
 
-        var transactions = new List<DisclosureTransaction> {
+        var transactions = new List<DisclosureTransaction>
+        {
             CreateTransaction(ticker: "AAPL"),
             CreateTransaction(ticker: "GOOG"),
             CreateTransaction(ticker: "TSLA"),
@@ -367,17 +421,19 @@ public class CongressSyncServiceTests {
             .Where(t => !string.IsNullOrEmpty(t.Ticker) && stocks.ContainsKey(t.Ticker))
             .ToList();
 
-        matched.Should().ContainSingle()
-            .Which.Ticker.Should().Be("AAPL");
+        matched.Should().ContainSingle().Which.Ticker.Should().Be("AAPL");
     }
 
     [Fact]
-    public void TickerMatching_NullOrEmptyTicker_IsExcluded() {
-        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase) {
+    public void TickerMatching_NullOrEmptyTicker_IsExcluded()
+    {
+        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
+        {
             ["AAPL"] = CreateStock("AAPL"),
         };
 
-        var transactions = new List<DisclosureTransaction> {
+        var transactions = new List<DisclosureTransaction>
+        {
             CreateTransaction(ticker: null),
             CreateTransaction(ticker: ""),
             CreateTransaction(ticker: "AAPL"),
@@ -391,12 +447,15 @@ public class CongressSyncServiceTests {
     }
 
     [Fact]
-    public void TickerMatching_CaseInsensitive_MatchesLowercaseTicker() {
-        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase) {
+    public void TickerMatching_CaseInsensitive_MatchesLowercaseTicker()
+    {
+        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
+        {
             ["AAPL"] = CreateStock("AAPL"),
         };
 
-        var transactions = new List<DisclosureTransaction> {
+        var transactions = new List<DisclosureTransaction>
+        {
             CreateTransaction(ticker: "aapl"),
             CreateTransaction(ticker: "Aapl"),
             CreateTransaction(ticker: "AAPL"),
@@ -410,10 +469,12 @@ public class CongressSyncServiceTests {
     }
 
     [Fact]
-    public void TickerMatching_NoTrackedStocks_ReturnsEmpty() {
+    public void TickerMatching_NoTrackedStocks_ReturnsEmpty()
+    {
         var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase);
 
-        var transactions = new List<DisclosureTransaction> {
+        var transactions = new List<DisclosureTransaction>
+        {
             CreateTransaction(ticker: "AAPL"),
             CreateTransaction(ticker: "MSFT"),
         };
@@ -426,12 +487,15 @@ public class CongressSyncServiceTests {
     }
 
     [Fact]
-    public void TickerMatching_AllTransactionsHaveNullTickers_ReturnsEmpty() {
-        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase) {
+    public void TickerMatching_AllTransactionsHaveNullTickers_ReturnsEmpty()
+    {
+        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
+        {
             ["AAPL"] = CreateStock("AAPL"),
         };
 
-        var transactions = new List<DisclosureTransaction> {
+        var transactions = new List<DisclosureTransaction>
+        {
             CreateTransaction(ticker: null),
             CreateTransaction(ticker: null),
         };
@@ -451,53 +515,77 @@ public class CongressSyncServiceTests {
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void BuildTrades_DuplicateTransactions_ProducesSameCompositeKey() {
+    public void BuildTrades_DuplicateTransactions_ProducesSameCompositeKey()
+    {
         var service = CreateService();
         var stock = CreateStock("AAPL");
         var member = CreateMember("Nancy Pelosi");
 
         var tx1 = CreateTransaction(
-            memberName: "Nancy Pelosi", ticker: "AAPL",
+            memberName: "Nancy Pelosi",
+            ticker: "AAPL",
             type: CongressTransactionType.Purchase,
             txDate: new DateOnly(2024, 6, 15),
-            assetName: "Apple Inc Common Stock");
+            assetName: "Apple Inc Common Stock"
+        );
         var tx2 = CreateTransaction(
-            memberName: "Nancy Pelosi", ticker: "AAPL",
+            memberName: "Nancy Pelosi",
+            ticker: "AAPL",
             type: CongressTransactionType.Purchase,
             txDate: new DateOnly(2024, 6, 15),
-            assetName: "Apple Inc Common Stock");
+            assetName: "Apple Inc Common Stock"
+        );
 
         var members = new Dictionary<string, CongressMember> { ["Nancy Pelosi"] = member };
         var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
-            { ["AAPL"] = stock };
+        {
+            ["AAPL"] = stock,
+        };
 
         var result = InvokeBuildTrades(service, [tx1, tx2], members, stocks);
 
         // Both trades should produce the same composite key
         result.Should().HaveCount(2);
-        var key1 = (result[0].CommonStockId, result[0].CongressMemberId,
-            result[0].TransactionDate, result[0].TransactionType, result[0].AssetName);
-        var key2 = (result[1].CommonStockId, result[1].CongressMemberId,
-            result[1].TransactionDate, result[1].TransactionType, result[1].AssetName);
+        var key1 = (
+            result[0].CommonStockId,
+            result[0].CongressMemberId,
+            result[0].TransactionDate,
+            result[0].TransactionType,
+            result[0].AssetName
+        );
+        var key2 = (
+            result[1].CommonStockId,
+            result[1].CongressMemberId,
+            result[1].TransactionDate,
+            result[1].TransactionType,
+            result[1].AssetName
+        );
         key1.Should().Be(key2);
     }
 
     [Fact]
-    public void BuildTrades_DifferentDates_ProduceDifferentCompositeKeys() {
+    public void BuildTrades_DifferentDates_ProduceDifferentCompositeKeys()
+    {
         var service = CreateService();
         var stock = CreateStock("AAPL");
         var member = CreateMember("Nancy Pelosi");
 
         var tx1 = CreateTransaction(
-            memberName: "Nancy Pelosi", ticker: "AAPL",
-            txDate: new DateOnly(2024, 6, 15));
+            memberName: "Nancy Pelosi",
+            ticker: "AAPL",
+            txDate: new DateOnly(2024, 6, 15)
+        );
         var tx2 = CreateTransaction(
-            memberName: "Nancy Pelosi", ticker: "AAPL",
-            txDate: new DateOnly(2024, 7, 20));
+            memberName: "Nancy Pelosi",
+            ticker: "AAPL",
+            txDate: new DateOnly(2024, 7, 20)
+        );
 
         var members = new Dictionary<string, CongressMember> { ["Nancy Pelosi"] = member };
         var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
-            { ["AAPL"] = stock };
+        {
+            ["AAPL"] = stock,
+        };
 
         var result = InvokeBuildTrades(service, [tx1, tx2], members, stocks);
 
@@ -506,61 +594,80 @@ public class CongressSyncServiceTests {
     }
 
     [Fact]
-    public void BuildTrades_DifferentTransactionTypes_ProduceDifferentCompositeKeys() {
+    public void BuildTrades_DifferentTransactionTypes_ProduceDifferentCompositeKeys()
+    {
         var service = CreateService();
         var stock = CreateStock("AAPL");
         var member = CreateMember("Nancy Pelosi");
 
         var purchase = CreateTransaction(
-            memberName: "Nancy Pelosi", ticker: "AAPL",
+            memberName: "Nancy Pelosi",
+            ticker: "AAPL",
             type: CongressTransactionType.Purchase,
             txDate: new DateOnly(2024, 6, 15),
-            assetName: "Apple Inc");
+            assetName: "Apple Inc"
+        );
         var sale = CreateTransaction(
-            memberName: "Nancy Pelosi", ticker: "AAPL",
+            memberName: "Nancy Pelosi",
+            ticker: "AAPL",
             type: CongressTransactionType.Sale,
             txDate: new DateOnly(2024, 6, 15),
-            assetName: "Apple Inc");
+            assetName: "Apple Inc"
+        );
 
         var members = new Dictionary<string, CongressMember> { ["Nancy Pelosi"] = member };
         var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
-            { ["AAPL"] = stock };
+        {
+            ["AAPL"] = stock,
+        };
 
         var result = InvokeBuildTrades(service, [purchase, sale], members, stocks);
 
         result.Should().HaveCount(2);
-        result.Select(t => t.TransactionType).Should().BeEquivalentTo(
-            [CongressTransactionType.Purchase, CongressTransactionType.Sale]);
+        result
+            .Select(t => t.TransactionType)
+            .Should()
+            .BeEquivalentTo([CongressTransactionType.Purchase, CongressTransactionType.Sale]);
     }
 
     [Fact]
-    public void BuildTrades_DifferentAssetNames_ProduceDifferentCompositeKeys() {
+    public void BuildTrades_DifferentAssetNames_ProduceDifferentCompositeKeys()
+    {
         var service = CreateService();
         var stock = CreateStock("AAPL");
         var member = CreateMember("Nancy Pelosi");
 
         var tx1 = CreateTransaction(
-            memberName: "Nancy Pelosi", ticker: "AAPL",
+            memberName: "Nancy Pelosi",
+            ticker: "AAPL",
             txDate: new DateOnly(2024, 6, 15),
-            assetName: "Apple Inc Common Stock");
+            assetName: "Apple Inc Common Stock"
+        );
         var tx2 = CreateTransaction(
-            memberName: "Nancy Pelosi", ticker: "AAPL",
+            memberName: "Nancy Pelosi",
+            ticker: "AAPL",
             txDate: new DateOnly(2024, 6, 15),
-            assetName: "Apple Inc Call Options");
+            assetName: "Apple Inc Call Options"
+        );
 
         var members = new Dictionary<string, CongressMember> { ["Nancy Pelosi"] = member };
         var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
-            { ["AAPL"] = stock };
+        {
+            ["AAPL"] = stock,
+        };
 
         var result = InvokeBuildTrades(service, [tx1, tx2], members, stocks);
 
         result.Should().HaveCount(2);
-        result.Select(t => t.AssetName).Should().BeEquivalentTo(
-            ["Apple Inc Common Stock", "Apple Inc Call Options"]);
+        result
+            .Select(t => t.AssetName)
+            .Should()
+            .BeEquivalentTo(["Apple Inc Common Stock", "Apple Inc Call Options"]);
     }
 
     [Fact]
-    public void BuildTrades_DifferentMembers_ProduceDifferentCompositeKeys() {
+    public void BuildTrades_DifferentMembers_ProduceDifferentCompositeKeys()
+    {
         var service = CreateService();
         var stock = CreateStock("AAPL");
         var pelosi = CreateMember("Nancy Pelosi");
@@ -569,18 +676,20 @@ public class CongressSyncServiceTests {
         var tx1 = CreateTransaction(memberName: "Nancy Pelosi", ticker: "AAPL");
         var tx2 = CreateTransaction(memberName: "Tommy Tuberville", ticker: "AAPL");
 
-        var members = new Dictionary<string, CongressMember> {
+        var members = new Dictionary<string, CongressMember>
+        {
             ["Nancy Pelosi"] = pelosi,
             ["Tommy Tuberville"] = tuberville,
         };
         var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
-            { ["AAPL"] = stock };
+        {
+            ["AAPL"] = stock,
+        };
 
         var result = InvokeBuildTrades(service, [tx1, tx2], members, stocks);
 
         result.Should().HaveCount(2);
-        result.Select(t => t.CongressMemberId).Should().BeEquivalentTo(
-            [pelosi.Id, tuberville.Id]);
+        result.Select(t => t.CongressMemberId).Should().BeEquivalentTo([pelosi.Id, tuberville.Id]);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -589,8 +698,10 @@ public class CongressSyncServiceTests {
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void MemberDedup_MultipleTransactionsSameMember_ProducesOneMember() {
-        var transactions = new List<DisclosureTransaction> {
+    public void MemberDedup_MultipleTransactionsSameMember_ProducesOneMember()
+    {
+        var transactions = new List<DisclosureTransaction>
+        {
             CreateTransaction(memberName: "Nancy Pelosi", ticker: "AAPL"),
             CreateTransaction(memberName: "Nancy Pelosi", ticker: "MSFT"),
             CreateTransaction(memberName: "Nancy Pelosi", ticker: "GOOG"),
@@ -603,13 +714,14 @@ public class CongressSyncServiceTests {
             .Select(t => new CongressMember { Name = t.MemberName, Position = t.Position })
             .ToList();
 
-        distinctMembers.Should().ContainSingle()
-            .Which.Name.Should().Be("Nancy Pelosi");
+        distinctMembers.Should().ContainSingle().Which.Name.Should().Be("Nancy Pelosi");
     }
 
     [Fact]
-    public void MemberDedup_DifferentMembers_ProducesDistinctEntries() {
-        var transactions = new List<DisclosureTransaction> {
+    public void MemberDedup_DifferentMembers_ProducesDistinctEntries()
+    {
+        var transactions = new List<DisclosureTransaction>
+        {
             CreateTransaction(memberName: "Nancy Pelosi", ticker: "AAPL"),
             CreateTransaction(memberName: "Tommy Tuberville", ticker: "MSFT"),
             CreateTransaction(memberName: "Dan Crenshaw", ticker: "GOOG"),
@@ -623,19 +735,29 @@ public class CongressSyncServiceTests {
             .ToList();
 
         distinctMembers.Should().HaveCount(3);
-        distinctMembers.Select(m => m.Name).Should()
+        distinctMembers
+            .Select(m => m.Name)
+            .Should()
             .BeEquivalentTo(["Nancy Pelosi", "Tommy Tuberville", "Dan Crenshaw"]);
     }
 
     [Fact]
-    public void MemberDedup_SameMemberDifferentPositions_TakesFirst() {
+    public void MemberDedup_SameMemberDifferentPositions_TakesFirst()
+    {
         // A member could theoretically appear with different positions
         // across Senate and House disclosures. The GroupBy takes the first.
-        var transactions = new List<DisclosureTransaction> {
-            CreateTransaction(memberName: "Some Member",
-                position: CongressPosition.Senator, ticker: "AAPL"),
-            CreateTransaction(memberName: "Some Member",
-                position: CongressPosition.Representative, ticker: "MSFT"),
+        var transactions = new List<DisclosureTransaction>
+        {
+            CreateTransaction(
+                memberName: "Some Member",
+                position: CongressPosition.Senator,
+                ticker: "AAPL"
+            ),
+            CreateTransaction(
+                memberName: "Some Member",
+                position: CongressPosition.Representative,
+                ticker: "MSFT"
+            ),
         };
 
         var distinctMembers = transactions
@@ -654,20 +776,23 @@ public class CongressSyncServiceTests {
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void FullPipeline_MatchAndBuild_OnlyTrackedTickersProduceTrades() {
+    public void FullPipeline_MatchAndBuild_OnlyTrackedTickersProduceTrades()
+    {
         var service = CreateService();
         var apple = CreateStock("AAPL", "Apple Inc.");
         var pelosi = CreateMember("Nancy Pelosi");
 
-        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase) {
+        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
+        {
             ["AAPL"] = apple,
         };
 
-        var allTransactions = new List<DisclosureTransaction> {
+        var allTransactions = new List<DisclosureTransaction>
+        {
             CreateTransaction(memberName: "Nancy Pelosi", ticker: "AAPL"),
             CreateTransaction(memberName: "Nancy Pelosi", ticker: "GOOG"), // untracked
-            CreateTransaction(memberName: "Nancy Pelosi", ticker: null),   // no ticker
-            CreateTransaction(memberName: "Nancy Pelosi", ticker: ""),     // empty ticker
+            CreateTransaction(memberName: "Nancy Pelosi", ticker: null), // no ticker
+            CreateTransaction(memberName: "Nancy Pelosi", ticker: ""), // empty ticker
         };
 
         // Step 1: filter (same as ProcessTransactions)
@@ -685,7 +810,8 @@ public class CongressSyncServiceTests {
     }
 
     [Fact]
-    public void FullPipeline_MultipleMembers_MultipleStocks_BuildsCorrectly() {
+    public void FullPipeline_MultipleMembers_MultipleStocks_BuildsCorrectly()
+    {
         var service = CreateService();
         var apple = CreateStock("AAPL", "Apple Inc.");
         var msft = CreateStock("MSFT", "Microsoft Corp.");
@@ -693,18 +819,31 @@ public class CongressSyncServiceTests {
         var pelosi = CreateMember("Nancy Pelosi");
         var tuberville = CreateMember("Tommy Tuberville", CongressPosition.Senator);
 
-        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase) {
-            ["AAPL"] = apple, ["MSFT"] = msft, ["NVDA"] = nvda,
+        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["AAPL"] = apple,
+            ["MSFT"] = msft,
+            ["NVDA"] = nvda,
         };
 
-        var transactions = new List<DisclosureTransaction> {
-            CreateTransaction(memberName: "Nancy Pelosi", ticker: "AAPL",
-                type: CongressTransactionType.Purchase),
-            CreateTransaction(memberName: "Nancy Pelosi", ticker: "NVDA",
+        var transactions = new List<DisclosureTransaction>
+        {
+            CreateTransaction(
+                memberName: "Nancy Pelosi",
+                ticker: "AAPL",
+                type: CongressTransactionType.Purchase
+            ),
+            CreateTransaction(
+                memberName: "Nancy Pelosi",
+                ticker: "NVDA",
                 type: CongressTransactionType.Purchase,
-                txDate: new DateOnly(2024, 7, 1)),
-            CreateTransaction(memberName: "Tommy Tuberville", ticker: "MSFT",
-                type: CongressTransactionType.Sale),
+                txDate: new DateOnly(2024, 7, 1)
+            ),
+            CreateTransaction(
+                memberName: "Tommy Tuberville",
+                ticker: "MSFT",
+                type: CongressTransactionType.Sale
+            ),
             CreateTransaction(memberName: "Tommy Tuberville", ticker: "GOOG"), // untracked
         };
 
@@ -712,7 +851,8 @@ public class CongressSyncServiceTests {
             .Where(t => !string.IsNullOrEmpty(t.Ticker) && stocks.ContainsKey(t.Ticker))
             .ToList();
 
-        var members = new Dictionary<string, CongressMember> {
+        var members = new Dictionary<string, CongressMember>
+        {
             ["Nancy Pelosi"] = pelosi,
             ["Tommy Tuberville"] = tuberville,
         };
@@ -723,14 +863,18 @@ public class CongressSyncServiceTests {
         result.Count(t => t.CongressMemberId == pelosi.Id).Should().Be(2);
         result.Count(t => t.CongressMemberId == tuberville.Id).Should().Be(1);
 
-        result.Single(t => t.CongressMemberId == tuberville.Id)
-            .TransactionType.Should().Be(CongressTransactionType.Sale);
+        result
+            .Single(t => t.CongressMemberId == tuberville.Id)
+            .TransactionType.Should()
+            .Be(CongressTransactionType.Sale);
     }
 
     [Fact]
-    public void FullPipeline_EmptyTransactions_ProducesNoTrades() {
+    public void FullPipeline_EmptyTransactions_ProducesNoTrades()
+    {
         var service = CreateService();
-        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase) {
+        var stocks = new Dictionary<string, CommonStock>(StringComparer.OrdinalIgnoreCase)
+        {
             ["AAPL"] = CreateStock("AAPL"),
         };
 
@@ -749,7 +893,8 @@ public class CongressSyncServiceTests {
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void WorkerOptions_MinSyncDateSet_UsesConfiguredDate() {
+    public void WorkerOptions_MinSyncDateSet_UsesConfiguredDate()
+    {
         var options = new WorkerOptions { MinSyncDate = new DateTime(2023, 1, 1) };
 
         var fromDate = options.MinSyncDate.HasValue
@@ -760,7 +905,8 @@ public class CongressSyncServiceTests {
     }
 
     [Fact]
-    public void WorkerOptions_MinSyncDateNull_DefaultsTo90DaysBack() {
+    public void WorkerOptions_MinSyncDateNull_DefaultsTo90DaysBack()
+    {
         var options = new WorkerOptions { MinSyncDate = null };
 
         var fromDate = options.MinSyncDate.HasValue
@@ -772,7 +918,8 @@ public class CongressSyncServiceTests {
     }
 
     [Fact]
-    public void WorkerOptions_TickersToSync_EmptyList_DefaultBehavior() {
+    public void WorkerOptions_TickersToSync_EmptyList_DefaultBehavior()
+    {
         var options = new WorkerOptions();
 
         options.TickersToSync.Should().BeEmpty();
@@ -781,7 +928,8 @@ public class CongressSyncServiceTests {
     }
 
     [Fact]
-    public void WorkerOptions_TickersToSync_WithValues_ShouldFilter() {
+    public void WorkerOptions_TickersToSync_WithValues_ShouldFilter()
+    {
         var options = new WorkerOptions { TickersToSync = ["AAPL", "MSFT"] };
 
         var shouldFilterByTickers = options.TickersToSync?.Count > 0;

@@ -10,9 +10,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Sec;
 
-public class FtdScraperWorkerTests {
+public class FtdScraperWorkerTests
+{
     [Fact]
-    public void ValidateConfiguration_SecContactEmailMissing_ReturnsFalse() {
+    public void ValidateConfiguration_SecContactEmailMissing_ReturnsFalse()
+    {
         // The FTD scraper hits SEC's failure-to-deliver feed, which rejects requests
         // whose User-Agent lacks a contact email with a silent 403. ValidateConfiguration
         // is the startup guard that prevents the worker from looping uselessly when the
@@ -25,15 +27,20 @@ public class FtdScraperWorkerTests {
         var sut = new TestableFtdScraperWorker(
             Substitute.For<ILogger<FtdScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
             Options.Create(new FtdScraperOptions()),
-            config);
+            config
+        );
 
         sut.InvokeValidateConfiguration().Should().BeFalse();
     }
 
     [Fact]
-    public void ValidateConfiguration_SecContactEmailConfigured_ReturnsTrue() {
+    public void ValidateConfiguration_SecContactEmailConfigured_ReturnsTrue()
+    {
         // Sibling to the false-case pin above. The risk this catches is asymmetric and
         // unreachable from the empty-email sibling alone: a regression that hard-codes
         // `ValidateConfiguration => false` (defensive default during a refactor, or
@@ -53,22 +60,27 @@ public class FtdScraperWorkerTests {
         // `IsNullOrEmpty` check from BOTH inversion (caught by the false sibling) AND
         // constant-return regressions (caught only here).
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> {
-                ["Sec:ContactEmail"] = "equibles-bot@example.com"
-            })
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["Sec:ContactEmail"] = "equibles-bot@example.com" }
+            )
             .Build();
         var sut = new TestableFtdScraperWorker(
             Substitute.For<ILogger<FtdScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
             Options.Create(new FtdScraperOptions()),
-            config);
+            config
+        );
 
         sut.InvokeValidateConfiguration().Should().BeTrue();
     }
 
     [Fact]
-    public void Constructor_AppliesSleepIntervalHoursFromOptionsAsTimeSpanHours() {
+    public void Constructor_AppliesSleepIntervalHoursFromOptionsAsTimeSpanHours()
+    {
         // FtdScraperWorker reads FtdScraperOptions.SleepIntervalHours
         // (inherited from ScraperOptions, default 24h) and stores it as a
         // TimeSpan via FromHours. SEC publishes the FTD list ~bi-weekly,
@@ -85,15 +97,20 @@ public class FtdScraperWorkerTests {
         var sut = new TestableFtdScraperWorker(
             Substitute.For<ILogger<FtdScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
             options,
-            config);
+            config
+        );
 
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(4));
     }
 
     [Fact]
-    public void ErrorSource_IsFtdScraper() {
+    public void ErrorSource_IsFtdScraper()
+    {
         // BaseScraperWorker passes the `ErrorSource` property to `ErrorReporter.Report`
         // every time it catches an exception in the scrape loop. The reporter uses that
         // enum value as the routing key for the GitHub-issue tracker: errors tagged
@@ -107,19 +124,26 @@ public class FtdScraperWorkerTests {
         // is invisible to existing tests because they only exercise the static helpers
         // and ValidateConfiguration. Pin the literal value so the next reordering or
         // copy-paste must update this test deliberately.
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string>()).Build();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>())
+            .Build();
         var sut = new TestableFtdScraperWorker(
             Substitute.For<ILogger<FtdScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
             Options.Create(new FtdScraperOptions()),
-            config);
+            config
+        );
 
         sut.InvokeErrorSource().Should().Be(ErrorSource.FtdScraper);
     }
 
     [Fact]
-    public void WorkerName_IsFtdScraper() {
+    public void WorkerName_IsFtdScraper()
+    {
         // Fourth WorkerName pin (after CBOE, Holdings, SEC filing). Completes the
         // ErrorSource / SleepInterval / WorkerName triple for FtdScraperWorker.
         //
@@ -139,24 +163,32 @@ public class FtdScraperWorkerTests {
         // that filter for the exact "FTD scraper" prefix. The dashboards
         // tracking failure-to-deliver download cadence would silently stop
         // updating until someone noticed the FTD chart was missing.
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string>()).Build();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>())
+            .Build();
         var sut = new TestableFtdScraperWorker(
             Substitute.For<ILogger<FtdScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
             Options.Create(new FtdScraperOptions()),
-            config);
+            config
+        );
 
         sut.InvokeWorkerName().Should().Be("FTD scraper");
     }
 
-    private sealed class TestableFtdScraperWorker : FtdScraperWorker {
+    private sealed class TestableFtdScraperWorker : FtdScraperWorker
+    {
         public TestableFtdScraperWorker(
             ILogger<FtdScraperWorker> logger,
             IServiceScopeFactory scopeFactory,
             ErrorReporter errorReporter,
             IOptions<FtdScraperOptions> options,
-            IConfiguration configuration)
+            IConfiguration configuration
+        )
             : base(logger, scopeFactory, errorReporter, options, configuration) { }
 
         public bool InvokeValidateConfiguration() => ValidateConfiguration();

@@ -6,7 +6,8 @@ namespace Equibles.Finra.Data.Models;
 
 [Index(nameof(CommonStockId), nameof(Date), IsUnique = true)]
 [Index(nameof(Date))]
-public class DailyShortVolume {
+public class DailyShortVolume
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid CommonStockId { get; set; }

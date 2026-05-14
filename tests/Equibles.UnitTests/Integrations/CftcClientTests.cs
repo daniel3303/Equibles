@@ -8,24 +8,36 @@ namespace Equibles.UnitTests.Integrations;
 /// Tests for <see cref="CftcClient"/>. The public entry point downloads ZIPs from
 /// cftc.gov, so we exercise the pure-logic private CSV splitter via reflection.
 /// </summary>
-public class CftcClientTests {
-    private static readonly MethodInfo SplitCsvLineMethod = typeof(CftcClient)
-        .GetMethod("SplitCsvLine", BindingFlags.NonPublic | BindingFlags.Static);
+public class CftcClientTests
+{
+    private static readonly MethodInfo SplitCsvLineMethod = typeof(CftcClient).GetMethod(
+        "SplitCsvLine",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
-    private static readonly MethodInfo ParseLongMethod = typeof(CftcClient)
-        .GetMethod("ParseLong", BindingFlags.NonPublic | BindingFlags.Static);
+    private static readonly MethodInfo ParseLongMethod = typeof(CftcClient).GetMethod(
+        "ParseLong",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
-    private static readonly MethodInfo BuildColumnIndexMethod = typeof(CftcClient)
-        .GetMethod("BuildColumnIndex", BindingFlags.NonPublic | BindingFlags.Static);
+    private static readonly MethodInfo BuildColumnIndexMethod = typeof(CftcClient).GetMethod(
+        "BuildColumnIndex",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
-    private static readonly MethodInfo ParseLineMethod = typeof(CftcClient)
-        .GetMethod("ParseLine", BindingFlags.NonPublic | BindingFlags.Static);
+    private static readonly MethodInfo ParseLineMethod = typeof(CftcClient).GetMethod(
+        "ParseLine",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
-    private static readonly MethodInfo GetFieldMethod = typeof(CftcClient)
-        .GetMethod("GetField", BindingFlags.NonPublic | BindingFlags.Static);
+    private static readonly MethodInfo GetFieldMethod = typeof(CftcClient).GetMethod(
+        "GetField",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
     [Fact]
-    public void GetField_ColumnIndexExceedsRowLength_ReturnsNullInsteadOfIndexOutOfRange() {
+    public void GetField_ColumnIndexExceedsRowLength_ReturnsNullInsteadOfIndexOutOfRange()
+    {
         // GetField's bounds guard is `!columnIndex.TryGetValue(...) || idx >= fields.Length`.
         // The TryGetValue branch fires when the column name is absent from the header.
         // The `idx >= fields.Length` branch fires when the COLUMN exists in the header
@@ -52,17 +64,21 @@ public class CftcClientTests {
         // Construction: header with 6 columns (so the index has entries at positions
         // 0..5), data row with only 2 fields. Asking for the "Pct_of_OI_Comm_Short_All"
         // at index 5 must return null safely.
-        var headerLine = "Market_and_Exchange_Names,CFTC_Contract_Market_Code,Open_Interest_All,NonComm_Positions_Long_All,Comm_Positions_Long_All,Pct_of_OI_Comm_Short_All";
-        var columnIndex = (Dictionary<string, int>)BuildColumnIndexMethod.Invoke(null, [headerLine]);
+        var headerLine =
+            "Market_and_Exchange_Names,CFTC_Contract_Market_Code,Open_Interest_All,NonComm_Positions_Long_All,Comm_Positions_Long_All,Pct_of_OI_Comm_Short_All";
+        var columnIndex =
+            (Dictionary<string, int>)BuildColumnIndexMethod.Invoke(null, [headerLine]);
         var truncatedFields = new[] { "WHEAT-SRW - CHICAGO BOARD OF TRADE", "001602" };
 
-        var result = (string)GetFieldMethod.Invoke(null, [truncatedFields, columnIndex, "Pct_of_OI_Comm_Short_All"]);
+        var result = (string)
+            GetFieldMethod.Invoke(null, [truncatedFields, columnIndex, "Pct_of_OI_Comm_Short_All"]);
 
         result.Should().BeNull();
     }
 
     [Fact]
-    public void ParseLine_LegacyDateColumnOnly_FallsBackToAsOfDateInFormYyMmDd() {
+    public void ParseLine_LegacyDateColumnOnly_FallsBackToAsOfDateInFormYyMmDd()
+    {
         // CFTC's COT history files mix two CSV schemas across the decades-long backfill:
         //   • Modern (post-2010ish): "Report_Date_as_YYYY-MM-DD" column with ISO dates
         //     like "2025-01-15".
@@ -87,7 +103,8 @@ public class CftcClientTests {
         // ParseLine reads the value verbatim and leaves date-string format
         // interpretation to the downstream ParseDate helper.
         var headerLine = "CFTC_Contract_Market_Code,As_of_Date_In_Form_YYMMDD";
-        var columnIndex = (Dictionary<string, int>)BuildColumnIndexMethod.Invoke(null, [headerLine]);
+        var columnIndex =
+            (Dictionary<string, int>)BuildColumnIndexMethod.Invoke(null, [headerLine]);
         var line = "001602,250115";
 
         var record = (CftcReportRecord)ParseLineMethod.Invoke(null, [line, columnIndex]);
@@ -98,7 +115,8 @@ public class CftcClientTests {
     }
 
     [Fact]
-    public void ParseLine_BothModernAndLegacyDateColumnsPresent_PrefersModernViaCoalesceOperandOrder() {
+    public void ParseLine_BothModernAndLegacyDateColumnsPresent_PrefersModernViaCoalesceOperandOrder()
+    {
         // Sibling to ParseLine_LegacyDateColumnOnly_FallsBackToAsOfDateInFormYyMmDd. That
         // pin asserts the FALLBACK behavior — when the modern "Report_Date_as_YYYY-MM-DD"
         // column is absent, ParseLine reads from the legacy "As_of_Date_In_Form_YYMMDD"
@@ -168,8 +186,10 @@ public class CftcClientTests {
         // arm (separately pinned in GetField_CellEmptyAfterTrim) doesn't fire
         // for either column. Assertion compares against the modern wire-format
         // string verbatim, which can ONLY hold for `modern ?? legacy` order.
-        var headerLine = "CFTC_Contract_Market_Code,Report_Date_as_YYYY-MM-DD,As_of_Date_In_Form_YYMMDD";
-        var columnIndex = (Dictionary<string, int>)BuildColumnIndexMethod.Invoke(null, [headerLine]);
+        var headerLine =
+            "CFTC_Contract_Market_Code,Report_Date_as_YYYY-MM-DD,As_of_Date_In_Form_YYMMDD";
+        var columnIndex =
+            (Dictionary<string, int>)BuildColumnIndexMethod.Invoke(null, [headerLine]);
         var line = "001602,2025-01-15,250115";
 
         var record = (CftcReportRecord)ParseLineMethod.Invoke(null, [line, columnIndex]);
@@ -179,7 +199,8 @@ public class CftcClientTests {
     }
 
     [Fact]
-    public void BuildColumnIndex_QuotedHeaderName_IndexedWithoutQuotes() {
+    public void BuildColumnIndex_QuotedHeaderName_IndexedWithoutQuotes()
+    {
         // CFTC's COT history CSVs ship header rows in two flavours that vary by year:
         // bare (`Open_Interest_All`) and double-quoted (`"Open_Interest_All"`). The
         // downstream ParseLine looks up each column by its bare-string name through
@@ -199,7 +220,8 @@ public class CftcClientTests {
     }
 
     [Fact]
-    public void ParseLong_ValueWithThousandSeparatorCommas_StripsAndParses() {
+    public void ParseLong_ValueWithThousandSeparatorCommas_StripsAndParses()
+    {
         // CFTC's legacy COT history files format every numeric position column
         // (Open_Interest_All, NonComm_Positions_*, Comm_Positions_*, etc.) with
         // thousand-separator commas: "1,234,567". ParseLong strips those commas
@@ -214,7 +236,8 @@ public class CftcClientTests {
     }
 
     [Fact]
-    public void ParseInt_ValueWithThousandSeparatorCommas_StripsAndParses() {
+    public void ParseInt_ValueWithThousandSeparatorCommas_StripsAndParses()
+    {
         // Sibling to `ParseLong_ValueWithThousandSeparatorCommas_StripsAndParses`.
         // ParseInt and ParseLong share the same defensive idiom —
         //   `value.Replace(",", "")` BEFORE int/long.TryParse —
@@ -252,7 +275,10 @@ public class CftcClientTests {
         // percentages are always sub-100 and never carry thousands
         // separators in CFTC's wire format. That asymmetry is captured
         // by NOT pinning ParseDecimal here.
-        var parseInt = typeof(CftcClient).GetMethod("ParseInt", BindingFlags.NonPublic | BindingFlags.Static);
+        var parseInt = typeof(CftcClient).GetMethod(
+            "ParseInt",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
         var result = (int?)parseInt!.Invoke(null, ["12,345"]);
 
@@ -260,7 +286,8 @@ public class CftcClientTests {
     }
 
     [Fact]
-    public void GetField_CellEmptyAfterTrim_ReturnsNullSoReportDateFallbackEngages() {
+    public void GetField_CellEmptyAfterTrim_ReturnsNullSoReportDateFallbackEngages()
+    {
         // Sibling pin to GetField_ColumnIndexExceedsRowLength_ReturnsNullInsteadOfIndexOutOfRange.
         // GetField has THREE distinct return-null paths:
         //   1. Column name not in index           → `!columnIndex.TryGetValue(...)`
@@ -298,17 +325,24 @@ public class CftcClientTests {
         // Pin: a row with a whitespace-only cell at the index of a real column. The
         // returned value must be null (so `??` would fall through), NOT empty string,
         // NOT whitespace.
-        var headerLine = "CFTC_Contract_Market_Code,Report_Date_as_YYYY-MM-DD,As_of_Date_In_Form_YYMMDD";
-        var columnIndex = (Dictionary<string, int>)BuildColumnIndexMethod.Invoke(null, [headerLine]);
+        var headerLine =
+            "CFTC_Contract_Market_Code,Report_Date_as_YYYY-MM-DD,As_of_Date_In_Form_YYMMDD";
+        var columnIndex =
+            (Dictionary<string, int>)BuildColumnIndexMethod.Invoke(null, [headerLine]);
         var fieldsWithBlankModernDate = new[] { "001602", "   ", "250115" };
 
-        var modernResult = (string)GetFieldMethod.Invoke(null, [fieldsWithBlankModernDate, columnIndex, "Report_Date_as_YYYY-MM-DD"]);
+        var modernResult = (string)
+            GetFieldMethod.Invoke(
+                null,
+                [fieldsWithBlankModernDate, columnIndex, "Report_Date_as_YYYY-MM-DD"]
+            );
 
         modernResult.Should().BeNull();
     }
 
     [Fact]
-    public void SplitCsvLine_QuotedFieldWithEmbeddedComma_KeepsFieldIntact() {
+    public void SplitCsvLine_QuotedFieldWithEmbeddedComma_KeepsFieldIntact()
+    {
         // CFTC market names routinely contain commas (e.g. the market name
         // "WHEAT-SRW - CHICAGO BOARD OF TRADE, CBOT"). The split must honour
         // double quotes and keep the comma-bearing field as one cell —

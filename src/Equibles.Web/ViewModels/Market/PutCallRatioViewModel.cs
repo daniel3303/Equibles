@@ -2,7 +2,8 @@ using Equibles.Cboe.Data.Models;
 
 namespace Equibles.Web.ViewModels.Market;
 
-public class PutCallRatioViewModel {
+public class PutCallRatioViewModel
+{
     public CboePutCallRatioType Type { get; set; }
     public string DisplayName { get; set; }
     public List<PutCallRatioItem> Records { get; set; } = [];
@@ -17,7 +18,8 @@ public class PutCallRatioViewModel {
     public decimal? PreviousRatio { get; set; }
 }
 
-public class PutCallRatioItem {
+public class PutCallRatioItem
+{
     public DateOnly Date { get; set; }
     public long? CallVolume { get; set; }
     public long? PutVolume { get; set; }

@@ -14,9 +14,11 @@ namespace Equibles.UnitTests.Sec;
 /// ChunkDocumentBatch uses .Include(d => d.Chunks) which requires PostgreSQL (pgvector),
 /// so we focus on the embedding configuration logic and GenerateEmbeddingBatch guard clauses.
 /// </summary>
-public class DocumentManagerTests {
+public class DocumentManagerTests
+{
     [Fact]
-    public async Task GenerateEmbeddingBatch_EmbeddingsNotConfigured_ReturnsFalse() {
+    public async Task GenerateEmbeddingBatch_EmbeddingsNotConfigured_ReturnsFalse()
+    {
         var embeddingConfig = Options.Create(new EmbeddingConfig { Enabled = false });
         var logger = Substitute.For<ILogger<DocumentManager>>();
         var processor = Substitute.For<IDocumentProcessor>();
@@ -26,17 +28,22 @@ public class DocumentManagerTests {
         var result = await sut.GenerateEmbeddingBatch(CancellationToken.None);
 
         result.Should().BeFalse();
-        await processor.DidNotReceive().GenerateEmbeddings(
-            Arg.Any<List<Chunk>>(), Arg.Any<CancellationToken>());
+        await processor
+            .DidNotReceive()
+            .GenerateEmbeddings(Arg.Any<List<Chunk>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task GenerateEmbeddingBatch_EnabledButNoBaseUrl_ReturnsFalse() {
-        var embeddingConfig = Options.Create(new EmbeddingConfig {
-            Enabled = true,
-            BaseUrl = null,
-            ModelName = "all-MiniLM-L6-v2"
-        });
+    public async Task GenerateEmbeddingBatch_EnabledButNoBaseUrl_ReturnsFalse()
+    {
+        var embeddingConfig = Options.Create(
+            new EmbeddingConfig
+            {
+                Enabled = true,
+                BaseUrl = null,
+                ModelName = "all-MiniLM-L6-v2",
+            }
+        );
         var logger = Substitute.For<ILogger<DocumentManager>>();
         var processor = Substitute.For<IDocumentProcessor>();
 
@@ -48,12 +55,16 @@ public class DocumentManagerTests {
     }
 
     [Fact]
-    public async Task GenerateEmbeddingBatch_EnabledButNoModelName_ReturnsFalse() {
-        var embeddingConfig = Options.Create(new EmbeddingConfig {
-            Enabled = true,
-            BaseUrl = "http://localhost:8080",
-            ModelName = null
-        });
+    public async Task GenerateEmbeddingBatch_EnabledButNoModelName_ReturnsFalse()
+    {
+        var embeddingConfig = Options.Create(
+            new EmbeddingConfig
+            {
+                Enabled = true,
+                BaseUrl = "http://localhost:8080",
+                ModelName = null,
+            }
+        );
         var logger = Substitute.For<ILogger<DocumentManager>>();
         var processor = Substitute.For<IDocumentProcessor>();
 
@@ -69,8 +80,10 @@ public class DocumentManagerTests {
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void EmbeddingConfig_AllFieldsSet_IsConfiguredTrue() {
-        var config = new EmbeddingConfig {
+    public void EmbeddingConfig_AllFieldsSet_IsConfiguredTrue()
+    {
+        var config = new EmbeddingConfig
+        {
             Enabled = true,
             BaseUrl = "http://localhost:8080",
             ModelName = "all-MiniLM-L6-v2",
@@ -81,8 +94,10 @@ public class DocumentManagerTests {
     }
 
     [Fact]
-    public void EmbeddingConfig_DisabledWithAllFields_IsConfiguredFalse() {
-        var config = new EmbeddingConfig {
+    public void EmbeddingConfig_DisabledWithAllFields_IsConfiguredFalse()
+    {
+        var config = new EmbeddingConfig
+        {
             Enabled = false,
             BaseUrl = "http://localhost:8080",
             ModelName = "all-MiniLM-L6-v2",
@@ -92,7 +107,8 @@ public class DocumentManagerTests {
     }
 
     [Fact]
-    public void EmbeddingConfig_DefaultBatchSize_Is10() {
+    public void EmbeddingConfig_DefaultBatchSize_Is10()
+    {
         var config = new EmbeddingConfig();
 
         config.BatchSize.Should().Be(10);
@@ -105,8 +121,14 @@ public class DocumentManagerTests {
     [InlineData(true, null, "model", false)]
     [InlineData(false, "http://localhost", "model", false)]
     public void EmbeddingConfig_IsConfigured_CombinationMatrix(
-        bool enabled, string baseUrl, string modelName, bool expected) {
-        var config = new EmbeddingConfig {
+        bool enabled,
+        string baseUrl,
+        string modelName,
+        bool expected
+    )
+    {
+        var config = new EmbeddingConfig
+        {
             Enabled = enabled,
             BaseUrl = baseUrl,
             ModelName = modelName,

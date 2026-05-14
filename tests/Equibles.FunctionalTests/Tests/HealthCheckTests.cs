@@ -6,17 +6,20 @@ namespace Equibles.FunctionalTests.Tests;
 
 [Collection(FunctionalTestCollection.Name)]
 [Trait("Category", "Functional")]
-public class HealthCheckTests {
+public class HealthCheckTests
+{
     private readonly WebAppFixture _web;
     private readonly PlaywrightFixture _playwright;
 
-    public HealthCheckTests(WebAppFixture web, PlaywrightFixture playwright) {
+    public HealthCheckTests(WebAppFixture web, PlaywrightFixture playwright)
+    {
         _web = web;
         _playwright = playwright;
     }
 
     [Fact]
-    public async Task Healthz_Get_ReturnsHealthyStatus() {
+    public async Task Healthz_Get_ReturnsHealthyStatus()
+    {
         // Smoke test: drives a real browser through the full Kestrel + EF Core + ParadeDB stack
         // to /healthz. Catches regressions that unit and integration tests can't:
         //   - missing AddHealthChecks() / MapHealthChecks() wiring

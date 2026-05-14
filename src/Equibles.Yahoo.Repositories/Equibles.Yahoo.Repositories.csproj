@@ -1,8 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
-    <ItemGroup>
-      <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
-      <ProjectReference Include="..\Equibles.Yahoo.Data\Equibles.Yahoo.Data.csproj" />
-    </ItemGroup>
-
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
+    <ProjectReference Include="..\Equibles.Yahoo.Data\Equibles.Yahoo.Data.csproj" />
+  </ItemGroup>
 </Project>

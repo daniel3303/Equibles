@@ -2,9 +2,11 @@ using Equibles.Integrations.Sec.Models;
 
 namespace Equibles.UnitTests.Integrations.Sec;
 
-public class CompanyMetadataTests {
+public class CompanyMetadataTests
+{
     [Fact]
-    public void IsListed_ExchangeListNyseAlongsideOtc_ReturnsTrue() {
+    public void IsListed_ExchangeListNyseAlongsideOtc_ReturnsTrue()
+    {
         // Sibling to `IsListed_OtcOnlyExchanges_ReturnsFalse`. The existing pin
         // proves the rejection path — that OTC alone doesn't count as listed.
         // The acceptance path — that ANY non-OTC, non-whitespace exchange flips
@@ -35,16 +37,14 @@ public class CompanyMetadataTests {
         // proves the Any-arm fires for the NYSE entry; the existing OTC-
         // only sibling proves the same predicate rejects OTC alone. Pair
         // covers both directions.
-        var metadata = new CompanyMetadata {
-            Cik = "1234567",
-            Exchanges = ["NYSE", "OTC"],
-        };
+        var metadata = new CompanyMetadata { Cik = "1234567", Exchanges = ["NYSE", "OTC"] };
 
         metadata.IsListed.Should().BeTrue();
     }
 
     [Fact]
-    public void IsOperatingCompany_InvestmentCompanyEntityType_ReturnsFalse() {
+    public void IsOperatingCompany_InvestmentCompanyEntityType_ReturnsFalse()
+    {
         // `CompanyMetadata.IsOperatingCompany` is the FIRST-tier tiebreaker in
         // `CompanySyncService.ShouldIncumbentWin` (operating-status precedes the
         // listing-status precedes the CIK numerical tiebreak). The predicate is
@@ -79,16 +79,14 @@ public class CompanyMetadataTests {
         // would have matched substring "investment company" partially) AND
         // (b) the predicate's polarity is correct (matched = false for
         // non-operating).
-        var metadata = new CompanyMetadata {
-            Cik = "1234567",
-            EntityType = "investment company",
-        };
+        var metadata = new CompanyMetadata { Cik = "1234567", EntityType = "investment company" };
 
         metadata.IsOperatingCompany.Should().BeFalse();
     }
 
     [Fact]
-    public void IsOperatingCompany_OperatingTypeWithMixedCase_ReturnsTrueViaCaseInsensitiveCompare() {
+    public void IsOperatingCompany_OperatingTypeWithMixedCase_ReturnsTrueViaCaseInsensitiveCompare()
+    {
         // Sibling to `IsOperatingCompany_InvestmentCompanyEntityType_ReturnsFalse`.
         // The predicate uses `OrdinalIgnoreCase` so any casing variation of
         // "operating" — SEC's submissions doc has emitted "Operating",
@@ -124,16 +122,14 @@ public class CompanyMetadataTests {
         // Pin mixed-case "Operating" (capital O, lowercase rest — the
         // most common SEC wire form per their submissions-doc schema).
         // Asserting true proves the OrdinalIgnoreCase comparer fires.
-        var metadata = new CompanyMetadata {
-            Cik = "1234567",
-            EntityType = "Operating",
-        };
+        var metadata = new CompanyMetadata { Cik = "1234567", EntityType = "Operating" };
 
         metadata.IsOperatingCompany.Should().BeTrue();
     }
 
     [Fact]
-    public void IsListed_OtcOnlyExchanges_ReturnsFalse() {
+    public void IsListed_OtcOnlyExchanges_ReturnsFalse()
+    {
         // `CompanyMetadata.IsListed` powers the second-tier tiebreaker in
         // `CompanySyncService.ShouldIncumbentWin` — when two SEC filers race for the same
         // ticker, the LISTED company beats the unlisted one before falling through to the
@@ -150,10 +146,7 @@ public class CompanyMetadataTests {
         // listed CommonStock with a subsidiary CIK that has no actual trading data. Pin
         // OTC-only → false with a lowercase variant in the list so the case-insensitive
         // comparison is also exercised.
-        var metadata = new CompanyMetadata {
-            Cik = "1234567",
-            Exchanges = ["otc"],
-        };
+        var metadata = new CompanyMetadata { Cik = "1234567", Exchanges = ["otc"] };
 
         metadata.IsListed.Should().BeFalse();
     }

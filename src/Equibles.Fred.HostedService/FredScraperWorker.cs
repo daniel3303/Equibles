@@ -8,7 +8,8 @@ using Microsoft.Extensions.Options;
 
 namespace Equibles.Fred.HostedService;
 
-public class FredScraperWorker : BaseScraperWorker {
+public class FredScraperWorker : BaseScraperWorker
+{
     protected override string WorkerName => "FRED scraper";
     protected override TimeSpan SleepInterval { get; }
     protected override ErrorSource ErrorSource => ErrorSource.FredScraper;
@@ -18,21 +19,28 @@ public class FredScraperWorker : BaseScraperWorker {
         IServiceScopeFactory scopeFactory,
         ErrorReporter errorReporter,
         IOptions<FredScraperOptions> options
-    ) : base(logger, scopeFactory, errorReporter) {
+    )
+        : base(logger, scopeFactory, errorReporter)
+    {
         SleepInterval = TimeSpan.FromHours(options.Value.SleepIntervalHours);
     }
 
-    protected override bool ValidateConfiguration() {
+    protected override bool ValidateConfiguration()
+    {
         using var scope = ScopeFactory.CreateScope();
         var fredClient = scope.ServiceProvider.GetRequiredService<IFredClient>();
-        if (!fredClient.IsConfigured) {
-            Logger.LogWarning("FRED Scraper stopped: FRED__ApiKey not configured. Set it in your .env file.");
+        if (!fredClient.IsConfigured)
+        {
+            Logger.LogWarning(
+                "FRED Scraper stopped: FRED__ApiKey not configured. Set it in your .env file."
+            );
             return false;
         }
         return true;
     }
 
-    protected override async Task DoWork(CancellationToken stoppingToken) {
+    protected override async Task DoWork(CancellationToken stoppingToken)
+    {
         await using var scope = ScopeFactory.CreateAsyncScope();
         var importService = scope.ServiceProvider.GetRequiredService<FredImportService>();
         await importService.Import(stoppingToken);

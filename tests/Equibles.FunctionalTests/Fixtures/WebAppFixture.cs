@@ -27,7 +27,8 @@ namespace Equibles.FunctionalTests.Fixtures;
 /// is automatic. Respawn truncates every user table in <c>public</c> between calls while
 /// keeping the migration history intact.
 /// </summary>
-public class WebAppFixture : IAsyncLifetime {
+public class WebAppFixture : IAsyncLifetime
+{
     private readonly PostgreSqlContainer _db = new PostgreSqlBuilder()
         .WithImage("paradedb/paradedb:latest")
         .WithDatabase("equibles_functional")
@@ -48,21 +49,28 @@ public class WebAppFixture : IAsyncLifetime {
     /// </summary>
     public IServiceProvider Services => _app.Services;
 
-    public async Task InitializeAsync() {
+    public async Task InitializeAsync()
+    {
         await _db.StartAsync();
 
         // Per-fixture ephemeral keys directory. The production default (/app/keys) doesn't exist
         // on dev/CI hosts and would crash AddDataProtection at startup.
-        _keysDirectory = Path.Combine(Path.GetTempPath(), $"equibles-functional-keys-{Guid.NewGuid():N}");
+        _keysDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"equibles-functional-keys-{Guid.NewGuid():N}"
+        );
         Directory.CreateDirectory(_keysDirectory);
 
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions {
-            ApplicationName = "Equibles.Web",
-            // Content root must point at the Web project's source dir so Views/, wwwroot/, and
-            // AddRazorRuntimeCompilation can find their files relative to it.
-            ContentRootPath = ResolveWebContentRoot(),
-            EnvironmentName = "Development",
-        });
+        var builder = WebApplication.CreateBuilder(
+            new WebApplicationOptions
+            {
+                ApplicationName = "Equibles.Web",
+                // Content root must point at the Web project's source dir so Views/, wwwroot/, and
+                // AddRazorRuntimeCompilation can find their files relative to it.
+                ContentRootPath = ResolveWebContentRoot(),
+                EnvironmentName = "Development",
+            }
+        );
 
         builder.Configuration["ConnectionStrings:DefaultConnection"] = _db.GetConnectionString();
         builder.Configuration["DataProtection:KeysDirectory"] = _keysDirectory;
@@ -83,21 +91,34 @@ public class WebAppFixture : IAsyncLifetime {
         // an explicit NpgsqlConnection and pass it through.
         await using var respawnConnection = new NpgsqlConnection(_db.GetConnectionString());
         await respawnConnection.OpenAsync();
-        _respawner = await Respawner.CreateAsync(respawnConnection, new RespawnerOptions {
-            DbAdapter = DbAdapter.Postgres,
-            SchemasToInclude = ["public"],
-            TablesToIgnore = [new Respawn.Graph.Table("__EFMigrationsHistory")],
-        });
+        _respawner = await Respawner.CreateAsync(
+            respawnConnection,
+            new RespawnerOptions
+            {
+                DbAdapter = DbAdapter.Postgres,
+                SchemasToInclude = ["public"],
+                TablesToIgnore = [new Respawn.Graph.Table("__EFMigrationsHistory")],
+            }
+        );
     }
 
-    public async Task DisposeAsync() {
-        if (_app is not null) {
+    public async Task DisposeAsync()
+    {
+        if (_app is not null)
+        {
             await _app.StopAsync();
             await _app.DisposeAsync();
         }
         await _db.DisposeAsync();
-        if (_keysDirectory is not null && Directory.Exists(_keysDirectory)) {
-            try { Directory.Delete(_keysDirectory, recursive: true); } catch { /* best-effort */ }
+        if (_keysDirectory is not null && Directory.Exists(_keysDirectory))
+        {
+            try
+            {
+                Directory.Delete(_keysDirectory, recursive: true);
+            }
+            catch
+            { /* best-effort */
+            }
         }
     }
 
@@ -111,14 +132,17 @@ public class WebAppFixture : IAsyncLifetime {
     /// instantiates the class once per test, so seeding does not leak across tests in the same
     /// class.
     /// </summary>
-    public async Task ResetAndSeedAsync(Func<EquiblesDbContext, Task> seed = null) {
+    public async Task ResetAndSeedAsync(Func<EquiblesDbContext, Task> seed = null)
+    {
         // Same Postgres caveat as fixture init — Respawn's string overload defaults to SqlClient.
-        await using (var resetConnection = new NpgsqlConnection(_db.GetConnectionString())) {
+        await using (var resetConnection = new NpgsqlConnection(_db.GetConnectionString()))
+        {
             await resetConnection.OpenAsync();
             await _respawner.ResetAsync(resetConnection);
         }
 
-        if (seed is null) return;
+        if (seed is null)
+            return;
 
         using var scope = _app.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
@@ -126,16 +150,20 @@ public class WebAppFixture : IAsyncLifetime {
         await dbContext.SaveChangesAsync();
     }
 
-    private static string ResolveWebContentRoot() {
+    private static string ResolveWebContentRoot()
+    {
         // Walk up from the test bin directory until we find Equibles.sln, then resolve the Web
         // project's source root. Works under both `dotnet test` and `dotnet test --output …`.
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Equibles.sln"))) {
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Equibles.sln")))
+        {
             dir = dir.Parent;
         }
-        if (dir is null) {
+        if (dir is null)
+        {
             throw new InvalidOperationException(
-                "Could not locate Equibles.sln from test bin directory — fixture cannot resolve ContentRootPath.");
+                "Could not locate Equibles.sln from test bin directory — fixture cannot resolve ContentRootPath."
+            );
         }
         return Path.Combine(dir.FullName, "src", "Equibles.Web");
     }

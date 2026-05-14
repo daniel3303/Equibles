@@ -1,19 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Equibles.Core.AutoWiring" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
+    <PackageReference Include="Newtonsoft.Json" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="Equibles.Core.AutoWiring" />
-      <PackageReference Include="Microsoft.Extensions.Hosting" />
-      <PackageReference Include="Microsoft.Extensions.Http" />
-      <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
-      <PackageReference Include="Newtonsoft.Json" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
-      <ProjectReference Include="..\Equibles.Fred.Repositories\Equibles.Fred.Repositories.csproj" />
-      <ProjectReference Include="..\Equibles.Integrations.Fred\Equibles.Integrations.Fred.csproj" />
-      <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
-      <ProjectReference Include="..\Equibles.Worker\Equibles.Worker.csproj" />
-    </ItemGroup>
-
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
+    <ProjectReference Include="..\Equibles.Fred.Repositories\Equibles.Fred.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.Integrations.Fred\Equibles.Integrations.Fred.csproj" />
+    <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
+    <ProjectReference Include="..\Equibles.Worker\Equibles.Worker.csproj" />
+  </ItemGroup>
 </Project>

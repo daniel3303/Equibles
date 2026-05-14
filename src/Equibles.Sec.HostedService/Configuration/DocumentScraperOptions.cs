@@ -2,12 +2,14 @@ using Equibles.Sec.Data.Models;
 
 namespace Equibles.Sec.HostedService.Configuration;
 
-public class DocumentScraperOptions {
-    public List<DocumentType> DocumentTypesToSync { get; set; } = [
+public class DocumentScraperOptions
+{
+    public List<DocumentType> DocumentTypesToSync { get; set; } =
+    [
         DocumentType.TenK,
         DocumentType.TenQ,
         DocumentType.EightK,
         DocumentType.FormFour,
-        DocumentType.FormThree
+        DocumentType.FormThree,
     ];
 }

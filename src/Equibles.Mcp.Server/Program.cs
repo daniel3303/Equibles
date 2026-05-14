@@ -32,8 +32,10 @@ using Serilog.Events;
 
 namespace Equibles.Mcp.Server;
 
-public partial class Program {
-    public static async Task Main(string[] args) {
+public partial class Program
+{
+    public static async Task Main(string[] args)
+    {
         var builder = WebApplication.CreateBuilder(args);
         ConfigureServices(builder);
         var app = builder.Build();
@@ -41,11 +43,17 @@ public partial class Program {
         await app.RunAsync();
     }
 
-    public static void ConfigureServices(WebApplicationBuilder builder) {
-        builder.Services.AddSerilog(config => {
+    public static void ConfigureServices(WebApplicationBuilder builder)
+    {
+        builder.Services.AddSerilog(config =>
+        {
             config.ReadFrom.Configuration(builder.Configuration);
             var minLevel = builder.Configuration["MinimumLogLevel"];
-            if (!string.IsNullOrEmpty(minLevel) && Enum.TryParse<LogEventLevel>(minLevel, true, out var level)) {
+            if (
+                !string.IsNullOrEmpty(minLevel)
+                && Enum.TryParse<LogEventLevel>(minLevel, true, out var level)
+            )
+            {
                 config.MinimumLevel.Is(level);
             }
         });
@@ -59,7 +67,8 @@ public partial class Program {
         builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();
         builder.Services.AutoWireServicesFrom<Equibles.Sec.BusinessLogic.Search.RagManager>();
 
-        builder.Services.AddEquiblesMcp(mcp => {
+        builder.Services.AddEquiblesMcp(mcp =>
+        {
             mcp.AddHoldings();
             mcp.AddInsiderTrading();
             mcp.AddFred();
@@ -74,17 +83,23 @@ public partial class Program {
         builder.Services.AddSingleton<IApiKeyValidator, SimpleApiKeyValidator>();
     }
 
-    public static async Task ApplyMigrationsAsync(WebApplication app) {
+    public static async Task ApplyMigrationsAsync(WebApplication app)
+    {
         using var scope = app.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
         dbContext.Database.SetCommandTimeout(TimeSpan.FromHours(1));
         await dbContext.Database.MigrateAsync();
     }
 
-    public static void ConfigurePipeline(WebApplication app) {
-        app.UseWhen(ctx => ctx.Request.Path.StartsWithSegments("/mcp"), branch => {
-            branch.UseMiddleware<ApiKeyMiddleware>();
-        });
+    public static void ConfigurePipeline(WebApplication app)
+    {
+        app.UseWhen(
+            ctx => ctx.Request.Path.StartsWithSegments("/mcp"),
+            branch =>
+            {
+                branch.UseMiddleware<ApiKeyMiddleware>();
+            }
+        );
 
         app.MapMcp("/mcp");
     }

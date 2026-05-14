@@ -1,5 +1,4 @@
 using System.Net;
-using Newtonsoft.Json;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Common.RateLimiter;
 using Equibles.Integrations.Sec.Contracts;
@@ -9,13 +8,18 @@ using Equibles.Integrations.Sec.Models.Responses;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 
 namespace Equibles.Integrations.Sec;
 
 [Service(ServiceLifetime.Scoped, typeof(ISecEdgarClient))]
-public class SecEdgarClient : ISecEdgarClient {
+public class SecEdgarClient : ISecEdgarClient
+{
     // SEC has undocumented rolling-window rate limits beyond the 10 req/s rule; use 4 req/s for sustained scraping
-    private static readonly IRateLimiter RateLimiter = new RateLimiter(maxRequests: 4, timeWindow: TimeSpan.FromSeconds(1));
+    private static readonly IRateLimiter RateLimiter = new RateLimiter(
+        maxRequests: 4,
+        timeWindow: TimeSpan.FromSeconds(1)
+    );
     private const int MaxRetries = 10;
     private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(5);
 
@@ -25,23 +29,38 @@ public class SecEdgarClient : ISecEdgarClient {
     private const string BaseUrl = "https://data.sec.gov";
     private const string FilesBaseUrl = "https://www.sec.gov";
 
-    public SecEdgarClient(HttpClient httpClient, ILogger<SecEdgarClient> logger, IConfiguration configuration) {
+    public SecEdgarClient(
+        HttpClient httpClient,
+        ILogger<SecEdgarClient> logger,
+        IConfiguration configuration
+    )
+    {
         _httpClient = httpClient;
         _logger = logger;
 
         var contactEmail = configuration["Sec:ContactEmail"];
-        if (!string.IsNullOrEmpty(contactEmail)) {
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", $"Equibles Open Source/1.0 ({contactEmail})");
-        } else {
-            _logger.LogWarning("Sec:ContactEmail not configured — SEC EDGAR requests will be blocked (403). " +
-                               "Set SEC_CONTACT_EMAIL in your .env file.");
+        if (!string.IsNullOrEmpty(contactEmail))
+        {
+            _httpClient.DefaultRequestHeaders.Add(
+                "User-Agent",
+                $"Equibles Open Source/1.0 ({contactEmail})"
+            );
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Sec:ContactEmail not configured — SEC EDGAR requests will be blocked (403). "
+                    + "Set SEC_CONTACT_EMAIL in your .env file."
+            );
         }
 
         _httpClient.Timeout = TimeSpan.FromMinutes(2);
     }
 
-    public async Task<List<CompanyInfo>> GetActiveCompanies() {
-        try {
+    public async Task<List<CompanyInfo>> GetActiveCompanies()
+    {
+        try
+        {
             var url = $"{FilesBaseUrl}/files/company_tickers_exchange.json";
             _logger.LogInformation("Requesting: {Url}", url);
 
@@ -53,21 +72,29 @@ public class SecEdgarClient : ISecEdgarClient {
 
             var companies = ParseCompaniesFromResponse(companiesResponse);
 
-            _logger.LogInformation("Successfully retrieved {Count} active companies", companies.Count);
+            _logger.LogInformation(
+                "Successfully retrieved {Count} active companies",
+                companies.Count
+            );
             return companies;
-        } catch (Exception ex) {
+        }
+        catch (Exception ex)
+        {
             _logger.LogError(ex, "Error retrieving active companies");
             throw;
         }
     }
 
-    public async Task<string> GetEntityType(string cik) {
+    public async Task<string> GetEntityType(string cik)
+    {
         var metadata = await GetCompanyMetadata(cik);
         return metadata?.EntityType;
     }
 
-    public async Task<CompanyMetadata> GetCompanyMetadata(string cik) {
-        try {
+    public async Task<CompanyMetadata> GetCompanyMetadata(string cik)
+    {
+        try
+        {
             var formattedCik = FormatCik(cik);
             var url = BuildUrl($"/submissions/CIK{formattedCik}.json");
 
@@ -80,32 +107,47 @@ public class SecEdgarClient : ISecEdgarClient {
             if (apiResponse == null)
                 return null;
 
-            return new CompanyMetadata {
+            return new CompanyMetadata
+            {
                 Cik = cik,
                 EntityType = apiResponse.EntityType,
-                Exchanges = apiResponse.Exchanges ?? []
+                Exchanges = apiResponse.Exchanges ?? [],
             };
-        } catch (HttpRequestException ex) {
+        }
+        catch (HttpRequestException ex)
+        {
             // HTTP errors (including exhausted 429 retries) propagate to caller
             _logger.LogError(ex, "HTTP error retrieving metadata for CIK: {Cik}", cik);
             throw;
-        } catch (Exception ex) {
+        }
+        catch (Exception ex)
+        {
             // Non-HTTP errors (deserialization, etc.) — return null as "not found"
             _logger.LogError(ex, "Error retrieving metadata for CIK: {Cik}", cik);
             return null;
         }
     }
 
-    public async Task<List<FilingData>> GetCompanyFilings(string cik, DocumentTypeFilter? documentType = null, DateOnly? fromDate = null, DateOnly? toDate = null) {
-        try {
+    public async Task<List<FilingData>> GetCompanyFilings(
+        string cik,
+        DocumentTypeFilter? documentType = null,
+        DateOnly? fromDate = null,
+        DateOnly? toDate = null
+    )
+    {
+        try
+        {
             var formattedCik = FormatCik(cik);
             var url = BuildUrl($"/submissions/CIK{formattedCik}.json");
 
             string content;
-            if (_cachedContent != null && _cachedContent.Url == url) {
+            if (_cachedContent != null && _cachedContent.Url == url)
+            {
                 _logger.LogInformation("Using cached content for URL: {Url}", url);
                 content = _cachedContent.Content;
-            } else {
+            }
+            else
+            {
                 using var response = await SendWithRetryAsync(url);
                 response.EnsureSuccessStatusCode();
 
@@ -118,7 +160,12 @@ public class SecEdgarClient : ISecEdgarClient {
             var filings = MapToFilingData(apiResponse?.Filings?.Recent, cik);
 
             // Fetch older filings from archive files (SEC paginates older filings into separate JSON files)
-            var archiveFilings = await GetArchiveFilings(apiResponse?.Filings, cik, fromDate, toDate);
+            var archiveFilings = await GetArchiveFilings(
+                apiResponse?.Filings,
+                cik,
+                fromDate,
+                toDate
+            );
             filings.AddRange(archiveFilings);
 
             // Deduplicate in case recent and archive ranges overlap
@@ -126,40 +173,69 @@ public class SecEdgarClient : ISecEdgarClient {
 
             var filteredFilings = FilterFilings(filings, documentType, fromDate, toDate);
 
-            _logger.LogInformation("Successfully retrieved {Count} filings for CIK: {Cik}", filteredFilings.Count,
-                formattedCik);
+            _logger.LogInformation(
+                "Successfully retrieved {Count} filings for CIK: {Cik}",
+                filteredFilings.Count,
+                formattedCik
+            );
             return filteredFilings;
-        } catch (Exception ex) {
+        }
+        catch (Exception ex)
+        {
             _logger.LogError(ex, "Error retrieving filings for CIK: {Cik}", cik);
             throw;
         }
     }
 
-    private async Task<List<FilingData>> GetArchiveFilings(FilingsContainer filings, string cik, DateOnly? fromDate, DateOnly? toDate) {
+    private async Task<List<FilingData>> GetArchiveFilings(
+        FilingsContainer filings,
+        string cik,
+        DateOnly? fromDate,
+        DateOnly? toDate
+    )
+    {
         if (filings?.Files == null || filings.Files.Count == 0)
             return [];
 
         var result = new List<FilingData>();
 
-        foreach (var archiveFile in filings.Files) {
+        foreach (var archiveFile in filings.Files)
+        {
             // Skip archive files whose date range is entirely outside the requested window
-            if (fromDate.HasValue
+            if (
+                fromDate.HasValue
                 && DateOnly.TryParse(archiveFile.FilingTo, out var archiveTo)
-                && archiveTo < fromDate.Value) {
-                _logger.LogDebug("Skipping archive {File} — all filings before {FromDate}", archiveFile.Name, fromDate);
+                && archiveTo < fromDate.Value
+            )
+            {
+                _logger.LogDebug(
+                    "Skipping archive {File} — all filings before {FromDate}",
+                    archiveFile.Name,
+                    fromDate
+                );
                 continue;
             }
 
-            if (toDate.HasValue
+            if (
+                toDate.HasValue
                 && DateOnly.TryParse(archiveFile.FilingFrom, out var archiveFrom)
-                && archiveFrom > toDate.Value) {
-                _logger.LogDebug("Skipping archive {File} — all filings after {ToDate}", archiveFile.Name, toDate);
+                && archiveFrom > toDate.Value
+            )
+            {
+                _logger.LogDebug(
+                    "Skipping archive {File} — all filings after {ToDate}",
+                    archiveFile.Name,
+                    toDate
+                );
                 continue;
             }
 
             var archiveUrl = BuildUrl($"/submissions/{archiveFile.Name}");
-            _logger.LogInformation("Fetching archive filings from {File} ({Count} filings)",
-                archiveFile.Name, archiveFile.FilingCount);
+            _logger.LogInformation(
+                "Fetching archive filings from {File} ({Count} filings)",
+                archiveFile.Name,
+                archiveFile.FilingCount
+            );
 
             using var response = await SendWithRetryAsync(archiveUrl);
             response.EnsureSuccessStatusCode();
@@ -172,7 +248,8 @@ public class SecEdgarClient : ISecEdgarClient {
         return result;
     }
 
-    public async Task<string> GetDocumentContent(FilingData filing) {
+    public async Task<string> GetDocumentContent(FilingData filing)
+    {
         if (filing == null)
             throw new ArgumentNullException(nameof(filing), "Filing data cannot be null");
 
@@ -182,8 +259,10 @@ public class SecEdgarClient : ISecEdgarClient {
         return await GetDocumentContent(filing.AccessionNumber, filing.Cik);
     }
 
-    public async Task<string> GetDocumentContent(string accessionNumber, string cik) {
-        try {
+    public async Task<string> GetDocumentContent(string accessionNumber, string cik)
+    {
+        try
+        {
             var url = GetDocumentUrl(cik, accessionNumber);
 
             _logger.LogInformation("Requesting document: {Url}", url);
@@ -193,25 +272,44 @@ public class SecEdgarClient : ISecEdgarClient {
 
             var content = await response.Content.ReadAsStringAsync();
 
-            _logger.LogInformation("Successfully retrieved document content ({Length} characters)", content.Length);
+            _logger.LogInformation(
+                "Successfully retrieved document content ({Length} characters)",
+                content.Length
+            );
             return content;
-        } catch (Exception ex) {
-            _logger.LogError(ex, "Error retrieving document content for accession: {AccessionNumber}, CIK: {Cik}",
-                accessionNumber, cik);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error retrieving document content for accession: {AccessionNumber}, CIK: {Cik}",
+                accessionNumber,
+                cik
+            );
             throw;
         }
     }
 
-
-    public async Task<byte[]> GetDocumentFileBytes(string cik, string accessionNumber, string filename, CancellationToken cancellationToken = default) {
-        if (string.IsNullOrEmpty(cik) || string.IsNullOrEmpty(accessionNumber) || string.IsNullOrEmpty(filename))
+    public async Task<byte[]> GetDocumentFileBytes(
+        string cik,
+        string accessionNumber,
+        string filename,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (
+            string.IsNullOrEmpty(cik)
+            || string.IsNullOrEmpty(accessionNumber)
+            || string.IsNullOrEmpty(filename)
+        )
             throw new ArgumentException("cik, accessionNumber and filename are required");
 
         // Per-file URL uses unpadded CIK and the accession number with dashes removed.
         // Padded CIK works too but triggers a 301 redirect; skip the extra hop.
         var unpaddedCik = cik.TrimStart('0');
         var accessionNoDashes = accessionNumber.Replace("-", string.Empty);
-        var url = $"{FilesBaseUrl}/Archives/edgar/data/{unpaddedCik}/{accessionNoDashes}/{Uri.EscapeDataString(filename)}";
+        var url =
+            $"{FilesBaseUrl}/Archives/edgar/data/{unpaddedCik}/{accessionNoDashes}/{Uri.EscapeDataString(filename)}";
 
         _logger.LogInformation("Requesting filing artifact: {Url}", url);
 
@@ -219,7 +317,8 @@ public class SecEdgarClient : ISecEdgarClient {
 
         // 404 means the parsed filename does not match a published artifact (renamed, case
         // mismatch, etc.). Return empty so the caller can warn-and-skip rather than retry-loop.
-        if (response.StatusCode == HttpStatusCode.NotFound) {
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
             _logger.LogWarning("Filing artifact not found at {Url}", url);
             return [];
         }
@@ -229,48 +328,73 @@ public class SecEdgarClient : ISecEdgarClient {
         return await response.Content.ReadAsByteArrayAsync(cancellationToken);
     }
 
-    public async Task<Stream> DownloadStream(string url) {
+    public async Task<Stream> DownloadStream(string url)
+    {
         var response = await SendWithRetryAsync(url, HttpCompletionOption.ResponseHeadersRead);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStreamAsync();
     }
 
-    private Task<HttpResponseMessage> SendWithRetryAsync(string url, CancellationToken cancellationToken = default) =>
-        SendWithRetryAsync(url, HttpCompletionOption.ResponseContentRead, cancellationToken);
+    private Task<HttpResponseMessage> SendWithRetryAsync(
+        string url,
+        CancellationToken cancellationToken = default
+    ) => SendWithRetryAsync(url, HttpCompletionOption.ResponseContentRead, cancellationToken);
 
-    private async Task<HttpResponseMessage> SendWithRetryAsync(string url, HttpCompletionOption completionOption, CancellationToken cancellationToken = default) {
-        for (var attempt = 0; attempt <= MaxRetries; attempt++) {
+    private async Task<HttpResponseMessage> SendWithRetryAsync(
+        string url,
+        HttpCompletionOption completionOption,
+        CancellationToken cancellationToken = default
+    )
+    {
+        for (var attempt = 0; attempt <= MaxRetries; attempt++)
+        {
             await RateLimiter.WaitAsync();
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var response = await _httpClient.GetAsync(url, completionOption, cancellationToken);
             sw.Stop();
 
-            _logger.LogDebug("SEC request {StatusCode} {Elapsed}ms {Url}",
-                (int)response.StatusCode, sw.ElapsedMilliseconds, url);
+            _logger.LogDebug(
+                "SEC request {StatusCode} {Elapsed}ms {Url}",
+                (int)response.StatusCode,
+                sw.ElapsedMilliseconds,
+                url
+            );
 
-            if (response.StatusCode == HttpStatusCode.TooManyRequests) {
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
+            {
                 var delay = GetRetryDelay(response, attempt);
 
                 _logger.LogWarning(
                     "SEC EDGAR rate limited (429) for {Url}, pausing for {Delay}s (attempt {Attempt}/{Max})",
-                    url, delay.TotalSeconds, attempt + 1, MaxRetries);
+                    url,
+                    delay.TotalSeconds,
+                    attempt + 1,
+                    MaxRetries
+                );
 
                 RateLimiter.PauseFor(delay);
 
-                if (attempt < MaxRetries) {
+                if (attempt < MaxRetries)
+                {
                     response.Dispose();
                     await Task.Delay(delay, cancellationToken);
                     continue;
                 }
             }
 
-            if ((int)response.StatusCode >= 500 && attempt < MaxRetries) {
+            if ((int)response.StatusCode >= 500 && attempt < MaxRetries)
+            {
                 var delay = GetRetryDelay(response, attempt);
 
                 _logger.LogWarning(
                     "SEC EDGAR server error ({StatusCode}) for {Url}, retrying in {Delay}s (attempt {Attempt}/{Max})",
-                    (int)response.StatusCode, url, delay.TotalSeconds, attempt + 1, MaxRetries);
+                    (int)response.StatusCode,
+                    url,
+                    delay.TotalSeconds,
+                    attempt + 1,
+                    MaxRetries
+                );
 
                 response.Dispose();
                 await Task.Delay(delay, cancellationToken);
@@ -280,17 +404,23 @@ public class SecEdgarClient : ISecEdgarClient {
             return response;
         }
 
-        throw new HttpRequestException($"Max retries ({MaxRetries}) exceeded for SEC EDGAR request: {url}");
+        throw new HttpRequestException(
+            $"Max retries ({MaxRetries}) exceeded for SEC EDGAR request: {url}"
+        );
     }
 
-    private TimeSpan GetRetryDelay(HttpResponseMessage response, int attempt) {
-        if (response.Headers.RetryAfter?.Delta is { } delta) {
+    private TimeSpan GetRetryDelay(HttpResponseMessage response, int attempt)
+    {
+        if (response.Headers.RetryAfter?.Delta is { } delta)
+        {
             return delta > MaxRetryDelay ? MaxRetryDelay : delta;
         }
 
-        if (response.Headers.RetryAfter?.Date is { } date) {
+        if (response.Headers.RetryAfter?.Date is { } date)
+        {
             var wait = date - DateTimeOffset.UtcNow;
-            if (wait > TimeSpan.Zero) {
+            if (wait > TimeSpan.Zero)
+            {
                 return wait > MaxRetryDelay ? MaxRetryDelay : wait;
             }
         }
@@ -300,7 +430,8 @@ public class SecEdgarClient : ISecEdgarClient {
         return backoff > MaxRetryDelay ? MaxRetryDelay : backoff;
     }
 
-    private static List<CompanyInfo> ParseCompaniesFromResponse(CompanyTickersResponse response) {
+    private static List<CompanyInfo> ParseCompaniesFromResponse(CompanyTickersResponse response)
+    {
         if (response?.Fields == null || response.Data == null)
             return [];
 
@@ -317,7 +448,8 @@ public class SecEdgarClient : ISecEdgarClient {
         // The first ticker per CIK is the primary.
         var companiesByCik = new Dictionary<string, CompanyInfo>();
 
-        foreach (var row in response.Data) {
+        foreach (var row in response.Data)
+        {
             if (row.Count <= Math.Max(Math.Max(cikIndex, nameIndex), tickerIndex))
                 continue;
 
@@ -328,13 +460,17 @@ public class SecEdgarClient : ISecEdgarClient {
             if (string.IsNullOrEmpty(cik) || string.IsNullOrEmpty(ticker))
                 continue;
 
-            if (companiesByCik.TryGetValue(cik, out var existing)) {
+            if (companiesByCik.TryGetValue(cik, out var existing))
+            {
                 existing.Tickers.Add(ticker);
-            } else {
-                companiesByCik[cik] = new CompanyInfo {
+            }
+            else
+            {
+                companiesByCik[cik] = new CompanyInfo
+                {
                     Cik = cik,
                     Name = name ?? string.Empty,
-                    Tickers = [ticker]
+                    Tickers = [ticker],
                 };
             }
         }
@@ -342,41 +478,58 @@ public class SecEdgarClient : ISecEdgarClient {
         return companiesByCik.Values.ToList();
     }
 
-    private static List<FilingData> MapToFilingData(RecentFilings recent, string cik) {
+    private static List<FilingData> MapToFilingData(RecentFilings recent, string cik)
+    {
         if (recent == null || recent.AccessionNumber.Count == 0)
             return [];
 
         var filings = new List<FilingData>();
 
-        for (var i = 0; i < recent.AccessionNumber.Count; i++) {
+        for (var i = 0; i < recent.AccessionNumber.Count; i++)
+        {
             var accessionNumber = recent.AccessionNumber[i];
-            filings.Add(new FilingData {
-                Cik = cik,
-                AccessionNumber = accessionNumber,
-                FilingDate = DateOnly.TryParse(recent.FilingDate[i], out var fd) ? fd : DateOnly.MinValue,
-                ReportDate = DateOnly.TryParse(recent.ReportDate[i], out var rd) ? rd : DateOnly.MinValue,
-                Form = recent.Form[i],
-                PrimaryDocument = recent.PrimaryDocument[i],
-                Description = recent.PrimaryDocDescription[i],
-                DocumentUrl = GetDocumentUrl(cik, accessionNumber)
-            });
+            filings.Add(
+                new FilingData
+                {
+                    Cik = cik,
+                    AccessionNumber = accessionNumber,
+                    FilingDate = DateOnly.TryParse(recent.FilingDate[i], out var fd)
+                        ? fd
+                        : DateOnly.MinValue,
+                    ReportDate = DateOnly.TryParse(recent.ReportDate[i], out var rd)
+                        ? rd
+                        : DateOnly.MinValue,
+                    Form = recent.Form[i],
+                    PrimaryDocument = recent.PrimaryDocument[i],
+                    Description = recent.PrimaryDocDescription[i],
+                    DocumentUrl = GetDocumentUrl(cik, accessionNumber),
+                }
+            );
         }
 
         return filings;
     }
 
-    private static List<FilingData> FilterFilings(List<FilingData> filings, DocumentTypeFilter? documentType,
-        DateOnly? fromDate, DateOnly? toDate
-    ) {
-        return filings.Where(f =>
-            (!documentType.HasValue || f.Form == documentType.Value.GetFormName()) &&
-            (!fromDate.HasValue || f.FilingDate >= fromDate.Value) &&
-            (!toDate.HasValue || f.FilingDate <= toDate.Value)
-        ).ToList();
+    private static List<FilingData> FilterFilings(
+        List<FilingData> filings,
+        DocumentTypeFilter? documentType,
+        DateOnly? fromDate,
+        DateOnly? toDate
+    )
+    {
+        return filings
+            .Where(f =>
+                (!documentType.HasValue || f.Form == documentType.Value.GetFormName())
+                && (!fromDate.HasValue || f.FilingDate >= fromDate.Value)
+                && (!toDate.HasValue || f.FilingDate <= toDate.Value)
+            )
+            .ToList();
     }
 
-    private static string GetDocumentUrl(string cik, string accessionNumber) {
-        if (string.IsNullOrEmpty(cik) || string.IsNullOrEmpty(accessionNumber)) {
+    private static string GetDocumentUrl(string cik, string accessionNumber)
+    {
+        if (string.IsNullOrEmpty(cik) || string.IsNullOrEmpty(accessionNumber))
+        {
             return string.Empty;
         }
 
@@ -386,11 +539,13 @@ public class SecEdgarClient : ISecEdgarClient {
         return $"https://www.sec.gov/Archives/edgar/data/{formattedCik}/{accessionNumber}.txt";
     }
 
-    private static string FormatCik(string cik) {
+    private static string FormatCik(string cik)
+    {
         return cik.PadLeft(10, '0');
     }
 
-    private static string BuildUrl(string endpoint) {
+    private static string BuildUrl(string endpoint)
+    {
         return $"{BaseUrl}{endpoint}";
     }
 

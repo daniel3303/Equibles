@@ -2,13 +2,13 @@ using System.Text;
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
+using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
-using Equibles.IntegrationTests.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using NSubstitute;
@@ -16,10 +16,12 @@ using File = Equibles.Media.Data.Models.File;
 
 namespace Equibles.IntegrationTests.Sec;
 
-public class DocumentPersistenceServiceTests : IDisposable {
+public class DocumentPersistenceServiceTests : IDisposable
+{
     private readonly EquiblesDbContext _dbContext;
 
-    public DocumentPersistenceServiceTests() {
+    public DocumentPersistenceServiceTests()
+    {
         // Production DocumentPersistenceService.Save opens an EF Core transaction via
         // BaseRepository.CreateTransaction. The InMemory provider raises
         // InMemoryEventId.TransactionIgnoredWarning by default — and the *default*
@@ -34,20 +36,26 @@ public class DocumentPersistenceServiceTests : IDisposable {
             .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
 
-        _dbContext = new EquiblesDbContext(options, new IModuleConfiguration[] {
-            new CommonStocksModuleConfiguration(),
-            new MediaModuleConfiguration(),
-            new SecTestModuleConfiguration(),
-        });
+        _dbContext = new EquiblesDbContext(
+            options,
+            new IModuleConfiguration[]
+            {
+                new CommonStocksModuleConfiguration(),
+                new MediaModuleConfiguration(),
+                new SecTestModuleConfiguration(),
+            }
+        );
         _dbContext.Database.EnsureCreated();
     }
 
-    public void Dispose() {
+    public void Dispose()
+    {
         _dbContext.Dispose();
     }
 
     [Fact]
-    public async Task Save_MultiLineContent_PersistsDocumentWithLineCountFromUtf8SplitOnLf() {
+    public async Task Save_MultiLineContent_PersistsDocumentWithLineCountFromUtf8SplitOnLf()
+    {
         // DocumentPersistenceService.Save derives LineCount with the formula
         //   Encoding.UTF8.GetString(content).Split('\n').Length
         // and persists that value on the Document. Downstream consumers — most visibly
@@ -64,11 +72,18 @@ public class DocumentPersistenceServiceTests : IDisposable {
         //   (3) The file persisted to IFileManager is the SAME object stored on
         //       Document.Content — wiring this assignment wrong would save the bytes but
         //       point the Document at a different / null file.
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL", Name = "Apple Inc.", SecondaryTickers = [] };
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            SecondaryTickers = [],
+        };
         _dbContext.Set<CommonStock>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
-        var savedFile = new File {
+        var savedFile = new File
+        {
             Id = Guid.NewGuid(),
             Name = "filing-10k",
             Extension = "html",
@@ -77,7 +92,8 @@ public class DocumentPersistenceServiceTests : IDisposable {
             FileContent = new FileContent { Bytes = [] },
         };
         var fileManager = Substitute.For<IFileManager>();
-        fileManager.SaveFile(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<bool>())
+        fileManager
+            .SaveFile(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<bool>())
             .Returns(savedFile);
 
         var documentRepo = new DocumentRepository(_dbContext);
@@ -92,7 +108,8 @@ public class DocumentPersistenceServiceTests : IDisposable {
             documentType: DocumentType.TenK,
             reportingDate: new DateOnly(2025, 3, 15),
             reportingForDate: new DateOnly(2024, 12, 31),
-            sourceUrl: "https://sec.gov/example");
+            sourceUrl: "https://sec.gov/example"
+        );
 
         var persisted = await _dbContext.Set<Document>().SingleAsync();
         persisted.LineCount.Should().Be(3);

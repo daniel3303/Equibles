@@ -2,7 +2,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Equibles.Media.Data.Models;
 
-public class File {
+public class File
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     [StringLength(256)]

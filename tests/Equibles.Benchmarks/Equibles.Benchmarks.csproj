@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
@@ -19,5 +18,4 @@
     <ProjectReference Include="..\..\src\Equibles.Sec.BusinessLogic\Equibles.Sec.BusinessLogic.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Web\Equibles.Web.csproj" />
   </ItemGroup>
-
 </Project>

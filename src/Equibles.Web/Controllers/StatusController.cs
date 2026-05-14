@@ -12,7 +12,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Web.Controllers;
 
-public class StatusController : BaseController {
+public class StatusController : BaseController
+{
     private readonly ErrorRepository _errorRepository;
     private readonly ErrorManager _errorManager;
     private readonly IFlashMessage _flashMessage;
@@ -28,7 +29,9 @@ public class StatusController : BaseController {
         EquiblesDbContext dbContext,
         DataCountService dataCountService,
         ILogger<StatusController> logger
-    ) : base(logger) {
+    )
+        : base(logger)
+    {
         _errorRepository = errorRepository;
         _errorManager = errorManager;
         _flashMessage = flashMessage;
@@ -37,14 +40,16 @@ public class StatusController : BaseController {
         _dataCountService = dataCountService;
     }
 
-    public override void OnActionExecuting(ActionExecutingContext context) {
+    public override void OnActionExecuting(ActionExecutingContext context)
+    {
         base.OnActionExecuting(context);
         ViewData["Menu"] = "Status";
         ViewData["Title"] = "Status";
     }
 
     [HttpGet]
-    public async Task<IActionResult> Index(string search, string source) {
+    public async Task<IActionResult> Index(string search, string source)
+    {
         var status = await BuildStatus();
 
         // MCP API key
@@ -52,7 +57,8 @@ public class StatusController : BaseController {
 
         // Filtered errors for the table
         var query = _errorRepository.Search(search);
-        if (!string.IsNullOrEmpty(source)) {
+        if (!string.IsNullOrEmpty(source))
+        {
             var errorSource = new ErrorSource(source);
             query = query.Where(e => e.Source == errorSource);
         }
@@ -68,9 +74,11 @@ public class StatusController : BaseController {
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<IActionResult> Show(Guid id) {
+    public async Task<IActionResult> Show(Guid id)
+    {
         var error = await _errorRepository.Get(id);
-        if (error == null) {
+        if (error == null)
+        {
             _flashMessage.Error("Error not found.");
             return RedirectToAction(nameof(Index));
         }
@@ -80,9 +88,11 @@ public class StatusController : BaseController {
 
     [HttpPost("{id:guid}/MarkAsSeen")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> MarkAsSeen(Guid id) {
+    public async Task<IActionResult> MarkAsSeen(Guid id)
+    {
         var error = await _errorRepository.Get(id);
-        if (error == null) {
+        if (error == null)
+        {
             _flashMessage.Error("Error not found.");
             return RedirectToAction(nameof(Index));
         }
@@ -95,9 +105,11 @@ public class StatusController : BaseController {
 
     [HttpPost("{id:guid}/Delete")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Delete(Guid id) {
+    public async Task<IActionResult> Delete(Guid id)
+    {
         var error = await _errorRepository.Get(id);
-        if (error == null) {
+        if (error == null)
+        {
             _flashMessage.Error("Error not found.");
             return RedirectToAction(nameof(Index));
         }
@@ -109,58 +121,75 @@ public class StatusController : BaseController {
     }
 
     [HttpGet]
-    public async Task<IActionResult> Data() {
+    public async Task<IActionResult> Data()
+    {
         var status = await BuildStatus();
         var workers = status.Workers;
 
-        return Json(new {
-            status.DatabaseConnected,
-            DataCounts = new Dictionary<string, int> {
-                ["StockCount"] = status.StockCount,
-                ["DocumentCount"] = status.DocumentCount,
-                ["InsiderTransactionCount"] = status.InsiderTransactionCount,
-                ["CongressionalTradeCount"] = status.CongressionalTradeCount,
-                ["InstitutionalHoldingCount"] = status.InstitutionalHoldingCount,
-                ["FailToDeliverCount"] = status.FailToDeliverCount,
-                ["FredObservationCount"] = status.FredObservationCount,
-                ["DailyStockPriceCount"] = status.DailyStockPriceCount,
-                ["CftcPositionReportCount"] = status.CftcPositionReportCount,
-                ["CboePutCallRatioCount"] = status.CboePutCallRatioCount,
-                ["CboeVixDailyCount"] = status.CboeVixDailyCount
-            },
-            Workers = workers.Select(w => new { w.Name, w.Active, w.Reason }),
-            status.TotalErrorCount,
-            status.UnseenErrorCount,
-            ActiveWorkerCount = workers.Count(w => w.Active),
-            TotalWorkerCount = workers.Count
-        });
+        return Json(
+            new
+            {
+                status.DatabaseConnected,
+                DataCounts = new Dictionary<string, int>
+                {
+                    ["StockCount"] = status.StockCount,
+                    ["DocumentCount"] = status.DocumentCount,
+                    ["InsiderTransactionCount"] = status.InsiderTransactionCount,
+                    ["CongressionalTradeCount"] = status.CongressionalTradeCount,
+                    ["InstitutionalHoldingCount"] = status.InstitutionalHoldingCount,
+                    ["FailToDeliverCount"] = status.FailToDeliverCount,
+                    ["FredObservationCount"] = status.FredObservationCount,
+                    ["DailyStockPriceCount"] = status.DailyStockPriceCount,
+                    ["CftcPositionReportCount"] = status.CftcPositionReportCount,
+                    ["CboePutCallRatioCount"] = status.CboePutCallRatioCount,
+                    ["CboeVixDailyCount"] = status.CboeVixDailyCount,
+                },
+                Workers = workers.Select(w => new
+                {
+                    w.Name,
+                    w.Active,
+                    w.Reason,
+                }),
+                status.TotalErrorCount,
+                status.UnseenErrorCount,
+                ActiveWorkerCount = workers.Count(w => w.Active),
+                TotalWorkerCount = workers.Count,
+            }
+        );
     }
 
     [HttpPost("DeleteAll")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteAll() {
+    public async Task<IActionResult> DeleteAll()
+    {
         await _errorManager.DeleteAll();
 
         _flashMessage.Success("All errors deleted.");
         return RedirectToAction(nameof(Index));
     }
 
-    private async Task<SystemStatusViewModel> BuildStatus() {
+    private async Task<SystemStatusViewModel> BuildStatus()
+    {
         var status = new SystemStatusViewModel();
 
-        try {
+        try
+        {
             await _dbContext.Database.CanConnectAsync();
             status.DatabaseConnected = true;
-        } catch {
+        }
+        catch
+        {
             status.DatabaseConnected = false;
         }
 
-        if (status.DatabaseConnected) {
+        if (status.DatabaseConnected)
+        {
             status.StockCount = await _dataCountService.GetStockCount();
             status.DocumentCount = await _dataCountService.GetDocumentCount();
             status.InsiderTransactionCount = await _dataCountService.GetInsiderTransactionCount();
             status.CongressionalTradeCount = await _dataCountService.GetCongressionalTradeCount();
-            status.InstitutionalHoldingCount = await _dataCountService.GetInstitutionalHoldingCount();
+            status.InstitutionalHoldingCount =
+                await _dataCountService.GetInstitutionalHoldingCount();
             status.FailToDeliverCount = await _dataCountService.GetFailToDeliverCount();
             status.FredObservationCount = await _dataCountService.GetFredObservationCount();
             status.DailyStockPriceCount = await _dataCountService.GetDailyStockPriceCount();
@@ -176,7 +205,8 @@ public class StatusController : BaseController {
         return status;
     }
 
-    private List<WorkerStatus> BuildWorkerStatuses() {
+    private List<WorkerStatus> BuildWorkerStatuses()
+    {
         var secConfigured = !string.IsNullOrEmpty(_configuration["Sec:ContactEmail"]);
         var finraConfigured = !string.IsNullOrEmpty(_configuration["Finra:ClientId"]);
         var fredConfigured = !string.IsNullOrEmpty(_configuration["Fred:ApiKey"]);
@@ -184,64 +214,75 @@ public class StatusController : BaseController {
         var embeddingBaseUrl = _configuration["Embedding:BaseUrl"];
         var embeddingModel = _configuration["Embedding:ModelName"];
 
-        return [
-            new WorkerStatus {
+        return
+        [
+            new WorkerStatus
+            {
                 Name = "SEC Scraper",
-                Description = "Filings (10-K, 10-Q, 8-K, Form 3/4), document processing, institutional holdings (13F-HR), and fails-to-deliver",
+                Description =
+                    "Filings (10-K, 10-Q, 8-K, Form 3/4), document processing, institutional holdings (13F-HR), and fails-to-deliver",
                 Active = secConfigured,
                 Reason = secConfigured
                     ? "SEC contact email configured"
-                    : "SEC_CONTACT_EMAIL not set — required by SEC EDGAR fair access policy"
+                    : "SEC_CONTACT_EMAIL not set — required by SEC EDGAR fair access policy",
             },
-            new WorkerStatus {
+            new WorkerStatus
+            {
                 Name = "FINRA Scraper",
                 Description = "Daily short volume and short interest",
                 Active = finraConfigured,
                 Reason = finraConfigured
                     ? "FINRA API credentials configured"
-                    : "Finra:ClientId not set — get a free key at developer.finra.org"
+                    : "Finra:ClientId not set — get a free key at developer.finra.org",
             },
-            new WorkerStatus {
+            new WorkerStatus
+            {
                 Name = "Congressional Trade Scraper",
                 Description = "House and Senate stock trade disclosures",
                 Active = true,
-                Reason = "Always active"
+                Reason = "Always active",
             },
-            new WorkerStatus {
+            new WorkerStatus
+            {
                 Name = "FRED Scraper",
-                Description = "Economic indicators from the Federal Reserve (interest rates, inflation, employment, GDP)",
+                Description =
+                    "Economic indicators from the Federal Reserve (interest rates, inflation, employment, GDP)",
                 Active = fredConfigured,
                 Reason = fredConfigured
                     ? "FRED API key configured"
-                    : "Fred:ApiKey not set — get a free key at fred.stlouisfed.org/docs/api/api_key.html"
+                    : "Fred:ApiKey not set — get a free key at fred.stlouisfed.org/docs/api/api_key.html",
             },
-            new WorkerStatus {
+            new WorkerStatus
+            {
                 Name = "Yahoo Price Scraper",
                 Description = "Daily OHLCV stock prices with technical indicators (SMA, RSI, MACD)",
                 Active = true,
-                Reason = "Always active — no API key required"
+                Reason = "Always active — no API key required",
             },
-            new WorkerStatus {
+            new WorkerStatus
+            {
                 Name = "CFTC Scraper",
                 Description = "Commitments of Traders futures positioning data",
                 Active = true,
-                Reason = "Always active — no API key required"
+                Reason = "Always active — no API key required",
             },
-            new WorkerStatus {
+            new WorkerStatus
+            {
                 Name = "CBOE Scraper",
                 Description = "VIX volatility index and put/call ratios",
                 Active = true,
-                Reason = "Always active — no API key required"
+                Reason = "Always active — no API key required",
             },
-            new WorkerStatus {
+            new WorkerStatus
+            {
                 Name = "Embedding Generator",
                 Description = "Vector embeddings for semantic search over SEC filings",
                 Active = embeddingEnabled && !string.IsNullOrEmpty(embeddingBaseUrl),
-                Reason = !embeddingEnabled
-                    ? "Disabled (Embedding:Enabled = false)"
+                Reason =
+                    !embeddingEnabled ? "Disabled (Embedding:Enabled = false)"
                     : string.IsNullOrEmpty(embeddingBaseUrl)
                         ? "No embedding server configured (Embedding:BaseUrl)"
-                        : $"Model: {embeddingModel ?? "not set"}, Server: {embeddingBaseUrl}"
+                    : $"Model: {embeddingModel ?? "not set"}, Server: {embeddingBaseUrl}",
             },
         ];
     }

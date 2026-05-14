@@ -2,7 +2,8 @@ using Newtonsoft.Json;
 
 namespace Equibles.Integrations.Finra.Models;
 
-public class ShortInterestRecord {
+public class ShortInterestRecord
+{
     [JsonProperty("settlementDate")]
     public string SettlementDate { get; set; }
 

@@ -4,9 +4,9 @@ using Equibles.Cftc.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
-using Equibles.IntegrationTests.Helpers;
 using Equibles.Integrations.Cftc.Contracts;
 using Equibles.Integrations.Cftc.Models;
+using Equibles.IntegrationTests.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -25,24 +25,30 @@ namespace Equibles.IntegrationTests.Cftc;
 /// file (which only pins the pure-logic <c>ParseDate</c> branches via reflection).
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class CftcImportServiceFullPipelineTests : IAsyncLifetime {
+public class CftcImportServiceFullPipelineTests : IAsyncLifetime
+{
     private readonly ParadeDbFixture _fixture;
     private readonly List<EquiblesDbContext> _contexts = [];
 
-    public CftcImportServiceFullPipelineTests(ParadeDbFixture fixture) {
+    public CftcImportServiceFullPipelineTests(ParadeDbFixture fixture)
+    {
         _fixture = fixture;
     }
 
-    public async Task InitializeAsync() {
+    public async Task InitializeAsync()
+    {
         await _fixture.ResetAsync();
     }
 
-    public Task DisposeAsync() {
-        foreach (var ctx in _contexts) ctx.Dispose();
+    public Task DisposeAsync()
+    {
+        foreach (var ctx in _contexts)
+            ctx.Dispose();
         return Task.CompletedTask;
     }
 
-    private EquiblesDbContext FreshContext() {
+    private EquiblesDbContext FreshContext()
+    {
         var ctx = _fixture.CreateDbContext();
         _contexts.Add(ctx);
         return ctx;
@@ -55,21 +61,31 @@ public class CftcImportServiceFullPipelineTests : IAsyncLifetime {
     /// importer pulls out of a scope therefore gets its own context, so saves don't
     /// fight for the same change-tracker.
     /// </summary>
-    private IServiceScopeFactory CreateScopeFactory() {
+    private IServiceScopeFactory CreateScopeFactory()
+    {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
-        scopeFactory.CreateScope().Returns(_ => {
-            var ctx = FreshContext();
-            var sp = Substitute.For<IServiceProvider>();
-            sp.GetService(typeof(CftcContractRepository)).Returns(new CftcContractRepository(ctx));
-            sp.GetService(typeof(CftcPositionReportRepository)).Returns(new CftcPositionReportRepository(ctx));
-            var scope = Substitute.For<IServiceScope>();
-            scope.ServiceProvider.Returns(sp);
-            return scope;
-        });
+        scopeFactory
+            .CreateScope()
+            .Returns(_ =>
+            {
+                var ctx = FreshContext();
+                var sp = Substitute.For<IServiceProvider>();
+                sp.GetService(typeof(CftcContractRepository))
+                    .Returns(new CftcContractRepository(ctx));
+                sp.GetService(typeof(CftcPositionReportRepository))
+                    .Returns(new CftcPositionReportRepository(ctx));
+                var scope = Substitute.For<IServiceScope>();
+                scope.ServiceProvider.Returns(sp);
+                return scope;
+            });
         return scopeFactory;
     }
 
-    private CftcImportService CreateImporter(ICftcClient cftcClient, WorkerOptions workerOptions = null) {
+    private CftcImportService CreateImporter(
+        ICftcClient cftcClient,
+        WorkerOptions workerOptions = null
+    )
+    {
         return new CftcImportService(
             CreateScopeFactory(),
             Substitute.For<ILogger<CftcImportService>>(),
@@ -77,11 +93,14 @@ public class CftcImportServiceFullPipelineTests : IAsyncLifetime {
             Options.Create(workerOptions ?? new WorkerOptions()),
             Substitute.For<ErrorReporter>(
                 Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()));
+                Substitute.For<ILogger<ErrorReporter>>()
+            )
+        );
     }
 
     [Fact]
-    public async Task Import_DownloadsCuratedRecords_PersistsContractsAndReportsAndDropsNonCuratedRows() {
+    public async Task Import_DownloadsCuratedRecords_PersistsContractsAndReportsAndDropsNonCuratedRows()
+    {
         // Pins the full Import pipeline end-to-end:
         //   EnsureContractsExist (auto-insert every curated contract the DB doesn't yet have) →
         //   DetermineStartYear (no global latest date, fall back to MinSyncDate.Year) →
@@ -110,10 +129,12 @@ public class CftcImportServiceFullPipelineTests : IAsyncLifetime {
         // subsequent iterations. Years other than target return an empty list — also
         // pins the empty-records early-exit in ImportYear (`if (filtered.Count == 0) return`).
         const int targetYear = 2025;
-        var records = new List<CftcReportRecord> {
-            new() {
-                ContractMarketCode = "001602",                  // curated — Wheat-SRW (CBOT)
-                ReportDate = "2025-03-04",                      // modern format
+        var records = new List<CftcReportRecord>
+        {
+            new()
+            {
+                ContractMarketCode = "001602", // curated — Wheat-SRW (CBOT)
+                ReportDate = "2025-03-04", // modern format
                 OpenInterest = 500_000,
                 NonCommLong = 200_000,
                 NonCommShort = 150_000,
@@ -125,9 +146,10 @@ public class CftcImportServiceFullPipelineTests : IAsyncLifetime {
                 NonRptLong = 70_000,
                 NonRptShort = 100_000,
             },
-            new() {
-                ContractMarketCode = "067651",                  // curated — Crude Oil, Light Sweet (NYMEX)
-                ReportDate = "250311",                          // legacy YYMMDD → 2025-03-11
+            new()
+            {
+                ContractMarketCode = "067651", // curated — Crude Oil, Light Sweet (NYMEX)
+                ReportDate = "250311", // legacy YYMMDD → 2025-03-11
                 OpenInterest = 1_000_000,
                 NonCommLong = 400_000,
                 NonCommShort = 350_000,
@@ -139,20 +161,23 @@ public class CftcImportServiceFullPipelineTests : IAsyncLifetime {
                 NonRptLong = 150_000,
                 NonRptShort = 150_000,
             },
-            new() {
-                ContractMarketCode = "999999",                  // NOT curated — must be filtered out
+            new()
+            {
+                ContractMarketCode = "999999", // NOT curated — must be filtered out
                 ReportDate = "2025-03-04",
                 OpenInterest = 1,
             },
         };
 
         var cftcClient = Substitute.For<ICftcClient>();
-        cftcClient.DownloadYearlyReport(Arg.Any<int>())
+        cftcClient
+            .DownloadYearlyReport(Arg.Any<int>())
             .Returns(call => (int)call[0] == targetYear ? records : []);
 
-        var sut = CreateImporter(cftcClient, new WorkerOptions {
-            MinSyncDate = new DateTime(targetYear, 1, 1),
-        });
+        var sut = CreateImporter(
+            cftcClient,
+            new WorkerOptions { MinSyncDate = new DateTime(targetYear, 1, 1) }
+        );
 
         await sut.Import(CancellationToken.None);
 
@@ -165,8 +190,12 @@ public class CftcImportServiceFullPipelineTests : IAsyncLifetime {
         crude.MarketName.Should().Be("Crude Oil, Light Sweet (NYMEX)");
 
         // Non-curated code did NOT spawn a contract row — the registry is the only source.
-        var nonCurated = await verify.Set<CftcContract>().FirstOrDefaultAsync(c => c.MarketCode == "999999");
-        nonCurated.Should().BeNull("curated-lookup filter must keep non-registry codes out of CftcContract");
+        var nonCurated = await verify
+            .Set<CftcContract>()
+            .FirstOrDefaultAsync(c => c.MarketCode == "999999");
+        nonCurated
+            .Should()
+            .BeNull("curated-lookup filter must keep non-registry codes out of CftcContract");
 
         // Only the two curated rows survived the filter, with dates correctly parsed via BOTH branches.
         var reports = await verify.Set<CftcPositionReport>().ToListAsync();
@@ -178,8 +207,12 @@ public class CftcImportServiceFullPipelineTests : IAsyncLifetime {
         wheatReport.NonCommLong.Should().Be(200_000);
 
         var crudeReport = reports.Single(r => r.CftcContractId == crude.Id);
-        crudeReport.ReportDate.Should().Be(new DateOnly(2025, 3, 11),
-            "legacy YYMMDD branch of ParseDate must resolve 250311 → 2025-03-11");
+        crudeReport
+            .ReportDate.Should()
+            .Be(
+                new DateOnly(2025, 3, 11),
+                "legacy YYMMDD branch of ParseDate must resolve 250311 → 2025-03-11"
+            );
         crudeReport.OpenInterest.Should().Be(1_000_000);
 
         // UpdateContractMetadata wrote LatestReportDate on every contract that received rows.

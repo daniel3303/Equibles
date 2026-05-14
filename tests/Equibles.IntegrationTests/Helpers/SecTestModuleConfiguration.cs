@@ -11,14 +11,18 @@ namespace Equibles.IntegrationTests.Helpers;
 /// the EF Core InMemory provider cannot construct. We explicitly ignore those
 /// navigation properties so EF Core does not auto-discover them.
 /// </summary>
-public class SecTestModuleConfiguration : Equibles.Data.IModuleConfiguration {
-    public void ConfigureEntities(ModelBuilder builder) {
+public class SecTestModuleConfiguration : Equibles.Data.IModuleConfiguration
+{
+    public void ConfigureEntities(ModelBuilder builder)
+    {
         var docTypeConversion =
-            new Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DocumentType, string>(
-                v => v.Value,
-                v => DocumentType.FromValue(v) ?? new DocumentType(v));
+            new Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<
+                DocumentType,
+                string
+            >(v => v.Value, v => DocumentType.FromValue(v) ?? new DocumentType(v));
 
-        builder.Entity<Document>(b => {
+        builder.Entity<Document>(b =>
+        {
             b.Property(e => e.DocumentType).HasConversion(docTypeConversion);
             b.Ignore(e => e.Chunks);
         });

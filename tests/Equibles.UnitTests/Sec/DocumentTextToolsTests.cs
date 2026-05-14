@@ -9,12 +9,16 @@ namespace Equibles.UnitTests.Sec;
 /// reflection — the same pattern used by YahooFinanceClientTests for its private
 /// static ToUnixTimestamp / FromUnixTimestamp helpers.
 /// </summary>
-public class DocumentTextToolsTests {
-    private static readonly MethodInfo HighlightKeywordMethod = typeof(DocumentTextTools)
-        .GetMethod("HighlightKeyword", BindingFlags.NonPublic | BindingFlags.Static);
+public class DocumentTextToolsTests
+{
+    private static readonly MethodInfo HighlightKeywordMethod = typeof(DocumentTextTools).GetMethod(
+        "HighlightKeyword",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
     [Fact]
-    public void HighlightKeyword_KeywordOccursWithDifferentCasing_HighlightsAllOccurrencesPreservingOriginalCase() {
+    public void HighlightKeyword_KeywordOccursWithDifferentCasing_HighlightsAllOccurrencesPreservingOriginalCase()
+    {
         // SearchDocumentKeyword is the MCP tool's keyword-in-document search entry
         // point: it returns snippet lines with every matched keyword wrapped in
         // markdown bold (`**...**`) so the LLM consumer can see WHICH word in a
@@ -49,9 +53,19 @@ public class DocumentTextToolsTests {
         // copies from `line`, not from `keyword`, so a regression that
         // accidentally appended `keyword` instead would output `**revenue**`
         // three times and lose the visual distinction that the LLM can see).
-        var result = (string)HighlightKeywordMethod.Invoke(null,
-            ["Total Revenue increased; quarterly revenue beat estimates; REVENUE outlook stable.", "revenue"]);
+        var result = (string)
+            HighlightKeywordMethod.Invoke(
+                null,
+                [
+                    "Total Revenue increased; quarterly revenue beat estimates; REVENUE outlook stable.",
+                    "revenue",
+                ]
+            );
 
-        result.Should().Be("Total **Revenue** increased; quarterly **revenue** beat estimates; **REVENUE** outlook stable.");
+        result
+            .Should()
+            .Be(
+                "Total **Revenue** increased; quarterly **revenue** beat estimates; **REVENUE** outlook stable."
+            );
     }
 }

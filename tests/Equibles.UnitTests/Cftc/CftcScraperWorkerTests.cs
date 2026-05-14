@@ -9,9 +9,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Cftc;
 
-public class CftcScraperWorkerTests {
+public class CftcScraperWorkerTests
+{
     [Fact]
-    public void Constructor_AppliesSleepIntervalHoursFromOptionsAsTimeSpanHours() {
+    public void Constructor_AppliesSleepIntervalHoursFromOptionsAsTimeSpanHours()
+    {
         // CftcScraperWorker reads CftcScraperOptions.SleepIntervalHours
         // (inherited from ScraperOptions, default 24h) and stores it as a
         // TimeSpan via FromHours. The worker uses that interval to gate
@@ -27,14 +29,17 @@ public class CftcScraperWorkerTests {
             Substitute.For<IServiceScopeFactory>(),
             Substitute.For<ErrorReporter>(
                 Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()),
-            options);
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            options
+        );
 
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromHours(12));
     }
 
     [Fact]
-    public void ErrorSource_IsCftcScraper() {
+    public void ErrorSource_IsCftcScraper()
+    {
         // CftcScraperWorker pulls CFTC Commitment of Traders (COT) reports — a
         // different upstream and a different data product from every other scraper
         // in the system. When BaseScraperWorker's catch-all reports a failure, it
@@ -53,14 +58,17 @@ public class CftcScraperWorkerTests {
             Substitute.For<IServiceScopeFactory>(),
             Substitute.For<ErrorReporter>(
                 Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()),
-            options);
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            options
+        );
 
         sut.InvokeErrorSource().Should().Be(ErrorSource.CftcScraper);
     }
 
     [Fact]
-    public void WorkerName_IsCftcScraper() {
+    public void WorkerName_IsCftcScraper()
+    {
         // Tenth and final WorkerName pin in the natural-extension family (CBOE,
         // Holdings, SEC filing, FTD, Document processor, FRED, Yahoo price,
         // FINRA, Congressional trade, and now CFTC). Every BaseScraperWorker
@@ -82,18 +90,22 @@ public class CftcScraperWorkerTests {
             Substitute.For<IServiceScopeFactory>(),
             Substitute.For<ErrorReporter>(
                 Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()),
-            options);
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            options
+        );
 
         sut.InvokeWorkerName().Should().Be("CFTC scraper");
     }
 
-    private sealed class TestableCftcScraperWorker : CftcScraperWorker {
+    private sealed class TestableCftcScraperWorker : CftcScraperWorker
+    {
         public TestableCftcScraperWorker(
             ILogger<CftcScraperWorker> logger,
             IServiceScopeFactory scopeFactory,
             ErrorReporter errorReporter,
-            IOptions<CftcScraperOptions> options)
+            IOptions<CftcScraperOptions> options
+        )
             : base(logger, scopeFactory, errorReporter, options) { }
 
         public TimeSpan InvokeSleepInterval() => SleepInterval;

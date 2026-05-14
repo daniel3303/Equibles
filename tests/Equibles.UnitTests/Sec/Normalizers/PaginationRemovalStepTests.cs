@@ -3,20 +3,24 @@ using Equibles.Sec.BusinessLogic.Normalizers;
 
 namespace Equibles.UnitTests.Sec.Normalizers;
 
-public class PaginationRemovalStepTests {
+public class PaginationRemovalStepTests
+{
     private readonly PaginationRemovalStep _step = new();
     private readonly HtmlParser _parser = new();
 
     [Fact]
-    public void HrWithPageNumberBefore_RemovesBoth() {
-        var doc = _parser.ParseDocument("""
+    public void HrWithPageNumberBefore_RemovesBoth()
+    {
+        var doc = _parser.ParseDocument(
+            """
             <html><body>
               <p>Content before</p>
               <p>42</p>
               <hr>
               <p>Content after</p>
             </body></html>
-            """);
+            """
+        );
 
         _step.Execute(doc);
 
@@ -28,15 +32,18 @@ public class PaginationRemovalStepTests {
     }
 
     [Fact]
-    public void HrWithPartTextAfter_RemovesBoth() {
-        var doc = _parser.ParseDocument("""
+    public void HrWithPartTextAfter_RemovesBoth()
+    {
+        var doc = _parser.ParseDocument(
+            """
             <html><body>
               <p>Content before</p>
               <hr>
               <p>Part I</p>
               <p>Content after</p>
             </body></html>
-            """);
+            """
+        );
 
         _step.Execute(doc);
 
@@ -48,8 +55,10 @@ public class PaginationRemovalStepTests {
     }
 
     [Fact]
-    public void HrWithPageNumberBeforeAndPartAfter_RemovesAllThree() {
-        var doc = _parser.ParseDocument("""
+    public void HrWithPageNumberBeforeAndPartAfter_RemovesAllThree()
+    {
+        var doc = _parser.ParseDocument(
+            """
             <html><body>
               <p>Content before</p>
               <p>42</p>
@@ -57,7 +66,8 @@ public class PaginationRemovalStepTests {
               <p>Part II</p>
               <p>Content after</p>
             </body></html>
-            """);
+            """
+        );
 
         _step.Execute(doc);
 
@@ -70,14 +80,17 @@ public class PaginationRemovalStepTests {
     }
 
     [Fact]
-    public void HrWithoutPageNumberOrPartText_RemovesOnlyHr() {
-        var doc = _parser.ParseDocument("""
+    public void HrWithoutPageNumberOrPartText_RemovesOnlyHr()
+    {
+        var doc = _parser.ParseDocument(
+            """
             <html><body>
               <p>Content before</p>
               <hr>
               <p>Content after</p>
             </body></html>
-            """);
+            """
+        );
 
         _step.Execute(doc);
 
@@ -88,15 +101,18 @@ public class PaginationRemovalStepTests {
     }
 
     [Fact]
-    public void NoHrElements_NoChanges() {
-        var doc = _parser.ParseDocument("""
+    public void NoHrElements_NoChanges()
+    {
+        var doc = _parser.ParseDocument(
+            """
             <html><body>
               <p>Content before</p>
               <p>42</p>
               <p>Part I</p>
               <p>Content after</p>
             </body></html>
-            """);
+            """
+        );
 
         var htmlBefore = doc.Body!.InnerHtml;
 
@@ -106,8 +122,10 @@ public class PaginationRemovalStepTests {
     }
 
     [Fact]
-    public void HrNotDirectChildOfBody_NotAffected() {
-        var doc = _parser.ParseDocument("""
+    public void HrNotDirectChildOfBody_NotAffected()
+    {
+        var doc = _parser.ParseDocument(
+            """
             <html><body>
               <div>
                 <p>42</p>
@@ -115,7 +133,8 @@ public class PaginationRemovalStepTests {
                 <p>Part I</p>
               </div>
             </body></html>
-            """);
+            """
+        );
 
         var htmlBefore = doc.Body!.InnerHtml;
 
@@ -125,7 +144,8 @@ public class PaginationRemovalStepTests {
     }
 
     [Fact]
-    public void WhitespaceAndCommentsBetweenHrAndPartHeader_StillRemovesPartHeader() {
+    public void WhitespaceAndCommentsBetweenHrAndPartHeader_StillRemovesPartHeader()
+    {
         // Sibling pin to WhitespaceAndCommentsBetweenHrAndPageNumber_StillRemoved.
         // That test covers the BEFORE-HR skip-loop (comments/whitespace between an
         // <hr> and the candidate page-number sibling). This pin covers the AFTER-HR
@@ -146,7 +166,8 @@ public class PaginationRemovalStepTests {
         // Pin: an <hr> followed by a comment, then a `<p>Part III</p>`. Assert that
         // Part III is removed (proving the skip-loop walked past the comment to
         // find and recognize it) and that surrounding content survives.
-        var doc = _parser.ParseDocument("""
+        var doc = _parser.ParseDocument(
+            """
             <html><body>
               <p>Content before</p>
               <hr>
@@ -154,7 +175,8 @@ public class PaginationRemovalStepTests {
               <p>Part III</p>
               <p>Content after</p>
             </body></html>
-            """);
+            """
+        );
 
         _step.Execute(doc);
 
@@ -166,8 +188,10 @@ public class PaginationRemovalStepTests {
     }
 
     [Fact]
-    public void WhitespaceAndCommentsBetweenHrAndPageNumber_StillRemoved() {
-        var doc = _parser.ParseDocument("""
+    public void WhitespaceAndCommentsBetweenHrAndPageNumber_StillRemoved()
+    {
+        var doc = _parser.ParseDocument(
+            """
             <html><body>
               <p>Content before</p>
               <p>7</p>
@@ -175,7 +199,8 @@ public class PaginationRemovalStepTests {
               <hr>
               <p>Content after</p>
             </body></html>
-            """);
+            """
+        );
 
         _step.Execute(doc);
 

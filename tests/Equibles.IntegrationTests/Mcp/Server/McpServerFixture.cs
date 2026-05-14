@@ -17,16 +17,19 @@ namespace Equibles.IntegrationTests.Mcp.Server;
 /// so the fixture overrides <c>ConnectionStrings:DefaultConnection</c> at WebHost build time
 /// to point at the Testcontainers ParadeDB instance.
 /// </summary>
-public class McpServerFixture : WebApplicationFactory<Program>, IAsyncLifetime {
+public class McpServerFixture : WebApplicationFactory<Program>, IAsyncLifetime
+{
     private readonly ParadeDbFixture _paradeDb;
 
-    public McpServerFixture(ParadeDbFixture paradeDb) {
+    public McpServerFixture(ParadeDbFixture paradeDb)
+    {
         _paradeDb = paradeDb;
     }
 
     public string ConnectionString => _paradeDb.ConnectionString;
 
-    protected override void ConfigureWebHost(IWebHostBuilder builder) {
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
         builder.UseSetting("ConnectionStrings:DefaultConnection", _paradeDb.ConnectionString);
 
         // Match production: WebApplicationFactory enables ValidateOnBuild + ValidateScopes in
@@ -36,13 +39,15 @@ public class McpServerFixture : WebApplicationFactory<Program>, IAsyncLifetime {
         // MCP server doesn't register AddHttpClient at composition time; the validation
         // would reject the host before any test runs even though the production startup
         // tolerates this lazy resolution.
-        builder.UseDefaultServiceProvider(o => {
+        builder.UseDefaultServiceProvider(o =>
+        {
             o.ValidateOnBuild = false;
             o.ValidateScopes = false;
         });
     }
 
-    public async Task InitializeAsync() {
+    public async Task InitializeAsync()
+    {
         // Materialise the TestServer eagerly so any startup exception surfaces here rather
         // than in the first test. CreateClient() triggers host build, which runs
         // ConfigureServices/ConfigurePipeline against the real MCP server code path.
@@ -50,7 +55,8 @@ public class McpServerFixture : WebApplicationFactory<Program>, IAsyncLifetime {
         await Task.CompletedTask;
     }
 
-    async Task IAsyncLifetime.DisposeAsync() {
+    async Task IAsyncLifetime.DisposeAsync()
+    {
         await DisposeAsync();
     }
 }

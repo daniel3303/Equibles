@@ -2,7 +2,8 @@ using System.Text.Json.Serialization;
 
 namespace Equibles.Sec.BusinessLogic.Embeddings;
 
-internal class OllamaEmbedResponse {
+internal class OllamaEmbedResponse
+{
     [JsonPropertyName("model")]
     public string Model { get; set; }
 

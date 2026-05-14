@@ -7,9 +7,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Sec;
 
-public class DocumentProcessorWorkerTests {
+public class DocumentProcessorWorkerTests
+{
     [Fact]
-    public void SleepInterval_IsFifteenSeconds() {
+    public void SleepInterval_IsFifteenSeconds()
+    {
         // DocumentProcessorWorker is the worker that orchestrates Phase 1 (chunking)
         // and Phase 2 (embedding generation) over every pending SEC document. The
         // 15-second `SleepInterval` is the gap between full passes of both phases —
@@ -28,13 +30,18 @@ public class DocumentProcessorWorkerTests {
         var sut = new TestableDocumentProcessorWorker(
             Substitute.For<ILogger<DocumentProcessorWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()));
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            )
+        );
 
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromSeconds(15));
     }
 
     [Fact]
-    public void ErrorSource_IsDocumentProcessor() {
+    public void ErrorSource_IsDocumentProcessor()
+    {
         // DocumentProcessorWorker is the post-fetch pipeline (chunking + embedding) that
         // sits downstream of SecScraperWorker. When BaseScraperWorker's catch-all reports
         // a failure, it tags the error with this enum value as the routing key for the
@@ -52,13 +59,18 @@ public class DocumentProcessorWorkerTests {
         var sut = new TestableDocumentProcessorWorker(
             Substitute.For<ILogger<DocumentProcessorWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()));
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            )
+        );
 
         sut.InvokeErrorSource().Should().Be(ErrorSource.DocumentProcessor);
     }
 
     [Fact]
-    public void WorkerName_IsDocumentProcessor() {
+    public void WorkerName_IsDocumentProcessor()
+    {
         // Fifth WorkerName pin, completing the SleepInterval/ErrorSource/WorkerName
         // triple for DocumentProcessorWorker. WorkerName flows into BaseScraperWorker's
         // structured log scope and shows up in every Serilog line the worker emits —
@@ -75,16 +87,22 @@ public class DocumentProcessorWorkerTests {
         var sut = new TestableDocumentProcessorWorker(
             Substitute.For<ILogger<DocumentProcessorWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()));
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            )
+        );
 
         sut.InvokeWorkerName().Should().Be("Document processor");
     }
 
-    private sealed class TestableDocumentProcessorWorker : DocumentProcessorWorker {
+    private sealed class TestableDocumentProcessorWorker : DocumentProcessorWorker
+    {
         public TestableDocumentProcessorWorker(
             ILogger<DocumentProcessorWorker> logger,
             IServiceScopeFactory scopeFactory,
-            ErrorReporter errorReporter)
+            ErrorReporter errorReporter
+        )
             : base(logger, scopeFactory, errorReporter) { }
 
         public TimeSpan InvokeSleepInterval() => SleepInterval;

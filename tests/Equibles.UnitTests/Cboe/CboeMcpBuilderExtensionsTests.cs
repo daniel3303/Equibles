@@ -6,9 +6,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Cboe;
 
-public class CboeMcpBuilderExtensionsTests {
+public class CboeMcpBuilderExtensionsTests
+{
     [Fact]
-    public void AddCboe_RegistersAssemblyMcpModuleForCboeTools() {
+    public void AddCboe_RegistersAssemblyMcpModuleForCboeTools()
+    {
         // AddCboe wires the CBOE VIX + put/call-ratio MCP tools into the
         // EquiblesMcpBuilder via AssemblyMcpModule<CboeTools>. The marker
         // type drives the AutoWiring assembly scan; a regression that
@@ -21,7 +23,10 @@ public class CboeMcpBuilderExtensionsTests {
 
         builder.AddCboe();
 
-        builder.Modules.Should().ContainSingle()
-            .Which.Should().BeOfType<AssemblyMcpModule<CboeTools>>();
+        builder
+            .Modules.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeOfType<AssemblyMcpModule<CboeTools>>();
     }
 }

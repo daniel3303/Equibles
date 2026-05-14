@@ -21,7 +21,8 @@ using NSubstitute.ExceptionExtensions;
 
 namespace Equibles.IntegrationTests.Yahoo;
 
-public class YahooPriceImportServiceTests : IDisposable {
+public class YahooPriceImportServiceTests : IDisposable
+{
     private readonly EquiblesDbContext _dbContext;
     private readonly DailyStockPriceRepository _priceRepo;
     private readonly CommonStockRepository _stockRepo;
@@ -30,7 +31,8 @@ public class YahooPriceImportServiceTests : IDisposable {
     private readonly WorkerOptions _workerOptions;
     private readonly YahooPriceImportService _service;
 
-    public YahooPriceImportServiceTests() {
+    public YahooPriceImportServiceTests()
+    {
         _dbContext = TestDbContextFactory.Create(
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
@@ -65,12 +67,15 @@ public class YahooPriceImportServiceTests : IDisposable {
         );
     }
 
-    public void Dispose() {
+    public void Dispose()
+    {
         _dbContext.Dispose();
     }
 
-    private CommonStock CreateStock(string ticker, string name) {
-        return new CommonStock {
+    private CommonStock CreateStock(string ticker, string name)
+    {
+        return new CommonStock
+        {
             Id = Guid.NewGuid(),
             Ticker = ticker,
             Name = name,
@@ -78,18 +83,22 @@ public class YahooPriceImportServiceTests : IDisposable {
         };
     }
 
-    private async Task SeedStocks(params CommonStock[] stocks) {
+    private async Task SeedStocks(params CommonStock[] stocks)
+    {
         _stockRepo.AddRange(stocks);
         await _stockRepo.SaveChanges();
     }
 
-    private async Task SeedPrices(params DailyStockPrice[] prices) {
+    private async Task SeedPrices(params DailyStockPrice[] prices)
+    {
         _priceRepo.AddRange(prices);
         await _priceRepo.SaveChanges();
     }
 
-    private DailyStockPrice CreatePrice(CommonStock stock, DateOnly date, decimal close = 150m) {
-        return new DailyStockPrice {
+    private DailyStockPrice CreatePrice(CommonStock stock, DateOnly date, decimal close = 150m)
+    {
+        return new DailyStockPrice
+        {
             Id = Guid.NewGuid(),
             CommonStockId = stock.Id,
             Date = date,
@@ -102,34 +111,43 @@ public class YahooPriceImportServiceTests : IDisposable {
         };
     }
 
-    private static List<HistoricalPrice> CreateHistoricalPrices(params (DateOnly date, decimal close)[] entries) {
-        return entries.Select(e => new HistoricalPrice {
-            Date = e.date,
-            Open = e.close - 1m,
-            High = e.close + 1m,
-            Low = e.close - 2m,
-            Close = e.close,
-            AdjustedClose = e.close,
-            Volume = 500_000,
-        }).ToList();
+    private static List<HistoricalPrice> CreateHistoricalPrices(
+        params (DateOnly date, decimal close)[] entries
+    )
+    {
+        return entries
+            .Select(e => new HistoricalPrice
+            {
+                Date = e.date,
+                Open = e.close - 1m,
+                High = e.close + 1m,
+                Low = e.close - 2m,
+                Close = e.close,
+                AdjustedClose = e.close,
+                Volume = 500_000,
+            })
+            .ToList();
     }
 
     // ── Empty ticker map ──────────────────────────────────────────────
 
     [Fact]
-    public async Task Import_NoStocksExist_InsertsNothing() {
+    public async Task Import_NoStocksExist_InsertsNothing()
+    {
         await _service.Import(CancellationToken.None);
 
         var prices = _priceRepo.GetAll().ToList();
         prices.Should().BeEmpty();
-        await _yahooClient.DidNotReceive().GetHistoricalPrices(
-            Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
+        await _yahooClient
+            .DidNotReceive()
+            .GetHistoricalPrices(Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
     }
 
     // ── Creates new price records ─────────────────────────────────────
 
     [Fact]
-    public async Task Import_NewStock_FetchesAndInsertsPrices() {
+    public async Task Import_NewStock_FetchesAndInsertsPrices()
+    {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
@@ -139,7 +157,8 @@ public class YahooPriceImportServiceTests : IDisposable {
             (new DateOnly(2026, 3, 27), 185m)
         );
 
-        _yahooClient.GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+        _yahooClient
+            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(historicalPrices);
 
         await _service.Import(CancellationToken.None);
@@ -151,15 +170,18 @@ public class YahooPriceImportServiceTests : IDisposable {
     }
 
     [Fact]
-    public async Task Import_MultipleStocks_FetchesAndInsertsPricesForEach() {
+    public async Task Import_MultipleStocks_FetchesAndInsertsPricesForEach()
+    {
         var apple = CreateStock("AAPL", "Apple Inc.");
         var msft = CreateStock("MSFT", "Microsoft Corp.");
         await SeedStocks(apple, msft);
 
-        _yahooClient.GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+        _yahooClient
+            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(CreateHistoricalPrices((new DateOnly(2026, 3, 25), 180m)));
 
-        _yahooClient.GetHistoricalPrices("MSFT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+        _yahooClient
+            .GetHistoricalPrices("MSFT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(CreateHistoricalPrices((new DateOnly(2026, 3, 25), 400m)));
 
         await _service.Import(CancellationToken.None);
@@ -171,16 +193,26 @@ public class YahooPriceImportServiceTests : IDisposable {
     }
 
     [Fact]
-    public async Task Import_MapsAllPriceFieldsCorrectly() {
+    public async Task Import_MapsAllPriceFieldsCorrectly()
+    {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var date = new DateOnly(2026, 3, 25);
-        _yahooClient.GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns([new HistoricalPrice {
-                Date = date, Open = 178m, High = 186m, Low = 176m,
-                Close = 184m, AdjustedClose = 183m, Volume = 42_000_000,
-            }]);
+        _yahooClient
+            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns([
+                new HistoricalPrice
+                {
+                    Date = date,
+                    Open = 178m,
+                    High = 186m,
+                    Low = 176m,
+                    Close = 184m,
+                    AdjustedClose = 183m,
+                    Volume = 42_000_000,
+                },
+            ]);
 
         await _service.Import(CancellationToken.None);
 
@@ -198,7 +230,8 @@ public class YahooPriceImportServiceTests : IDisposable {
     // ── Skips stocks with existing recent data ────────────────────────
 
     [Fact]
-    public async Task Import_StockWithPricesUpToToday_SkipsWithoutCallingApi() {
+    public async Task Import_StockWithPricesUpToToday_SkipsWithoutCallingApi()
+    {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
@@ -208,12 +241,14 @@ public class YahooPriceImportServiceTests : IDisposable {
 
         await _service.Import(CancellationToken.None);
 
-        await _yahooClient.DidNotReceive().GetHistoricalPrices(
-            "AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
+        await _yahooClient
+            .DidNotReceive()
+            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
     }
 
     [Fact]
-    public async Task Import_StockWithRecentPrices_FetchesOnlyFromDayAfterLatest() {
+    public async Task Import_StockWithRecentPrices_FetchesOnlyFromDayAfterLatest()
+    {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
@@ -221,19 +256,22 @@ public class YahooPriceImportServiceTests : IDisposable {
         await SeedPrices(CreatePrice(apple, existingDate, 175m));
 
         var expectedStartDate = existingDate.AddDays(1); // 2026-03-21
-        _yahooClient.GetHistoricalPrices("AAPL", expectedStartDate, Arg.Any<DateOnly>())
+        _yahooClient
+            .GetHistoricalPrices("AAPL", expectedStartDate, Arg.Any<DateOnly>())
             .Returns(CreateHistoricalPrices((new DateOnly(2026, 3, 21), 178m)));
 
         await _service.Import(CancellationToken.None);
 
-        await _yahooClient.Received(1).GetHistoricalPrices(
-            "AAPL", expectedStartDate, Arg.Any<DateOnly>());
+        await _yahooClient
+            .Received(1)
+            .GetHistoricalPrices("AAPL", expectedStartDate, Arg.Any<DateOnly>());
     }
 
     // ── Deduplication of existing dates ───────────────────────────────
 
     [Fact]
-    public async Task Import_ApiReturnsDuplicateDates_OnlyInsertsNewDates() {
+    public async Task Import_ApiReturnsDuplicateDates_OnlyInsertsNewDates()
+    {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
@@ -241,11 +279,11 @@ public class YahooPriceImportServiceTests : IDisposable {
         await SeedPrices(CreatePrice(apple, existingDate, 175m));
 
         // API returns both the existing date and a new date
-        _yahooClient.GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns(CreateHistoricalPrices(
-                (existingDate, 175m),
-                (new DateOnly(2026, 3, 21), 178m)
-            ));
+        _yahooClient
+            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(
+                CreateHistoricalPrices((existingDate, 175m), (new DateOnly(2026, 3, 21), 178m))
+            );
 
         await _service.Import(CancellationToken.None);
 
@@ -255,18 +293,17 @@ public class YahooPriceImportServiceTests : IDisposable {
     }
 
     [Fact]
-    public async Task Import_AllReturnedDatesAlreadyExist_InsertsNothing() {
+    public async Task Import_AllReturnedDatesAlreadyExist_InsertsNothing()
+    {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var date1 = new DateOnly(2026, 3, 20);
         var date2 = new DateOnly(2026, 3, 21);
-        await SeedPrices(
-            CreatePrice(apple, date1, 175m),
-            CreatePrice(apple, date2, 178m)
-        );
+        await SeedPrices(CreatePrice(apple, date1, 175m), CreatePrice(apple, date2, 178m));
 
-        _yahooClient.GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+        _yahooClient
+            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(CreateHistoricalPrices((date1, 175m), (date2, 178m)));
 
         await _service.Import(CancellationToken.None);
@@ -278,11 +315,13 @@ public class YahooPriceImportServiceTests : IDisposable {
     // ── API returns empty ─────────────────────────────────────────────
 
     [Fact]
-    public async Task Import_ApiReturnsEmptyList_InsertsNothing() {
+    public async Task Import_ApiReturnsEmptyList_InsertsNothing()
+    {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
-        _yahooClient.GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+        _yahooClient
+            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(new List<HistoricalPrice>());
 
         await _service.Import(CancellationToken.None);
@@ -294,15 +333,18 @@ public class YahooPriceImportServiceTests : IDisposable {
     // ── Error handling ────────────────────────────────────────────────
 
     [Fact]
-    public async Task Import_HttpRequestException_SkipsTickerAndContinues() {
+    public async Task Import_HttpRequestException_SkipsTickerAndContinues()
+    {
         var apple = CreateStock("AAPL", "Apple Inc.");
         var msft = CreateStock("MSFT", "Microsoft Corp.");
         await SeedStocks(apple, msft);
 
-        _yahooClient.GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+        _yahooClient
+            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Throws(new HttpRequestException("Network error"));
 
-        _yahooClient.GetHistoricalPrices("MSFT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+        _yahooClient
+            .GetHistoricalPrices("MSFT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(CreateHistoricalPrices((new DateOnly(2026, 3, 25), 400m)));
 
         await _service.Import(CancellationToken.None);
@@ -313,30 +355,40 @@ public class YahooPriceImportServiceTests : IDisposable {
     }
 
     [Fact]
-    public async Task Import_HttpRequestException_DoesNotReportToErrorReporter() {
+    public async Task Import_HttpRequestException_DoesNotReportToErrorReporter()
+    {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
-        _yahooClient.GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+        _yahooClient
+            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Throws(new HttpRequestException("Timeout"));
 
         await _service.Import(CancellationToken.None);
 
-        await _errorReporter.DidNotReceive().Report(
-            Arg.Any<ErrorSource>(),
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>());
+        await _errorReporter
+            .DidNotReceive()
+            .Report(
+                Arg.Any<ErrorSource>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>()
+            );
     }
 
     [Fact]
-    public async Task Import_GenericException_ReportsToErrorReporterAndContinues() {
+    public async Task Import_GenericException_ReportsToErrorReporterAndContinues()
+    {
         var apple = CreateStock("AAPL", "Apple Inc.");
         var msft = CreateStock("MSFT", "Microsoft Corp.");
         await SeedStocks(apple, msft);
 
-        _yahooClient.GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+        _yahooClient
+            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Throws(new InvalidOperationException("Unexpected error"));
 
-        _yahooClient.GetHistoricalPrices("MSFT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+        _yahooClient
+            .GetHistoricalPrices("MSFT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(CreateHistoricalPrices((new DateOnly(2026, 3, 25), 400m)));
 
         await _service.Import(CancellationToken.None);
@@ -347,16 +399,21 @@ public class YahooPriceImportServiceTests : IDisposable {
         prices[0].CommonStockId.Should().Be(msft.Id);
 
         // Error reporter should have been called for the AAPL failure
-        await _errorReporter.Received(1).Report(
-            Arg.Any<ErrorSource>(),
-            Arg.Is<string>(s => s.Contains("AAPL")),
-            Arg.Any<string>(), Arg.Any<string>());
+        await _errorReporter
+            .Received(1)
+            .Report(
+                Arg.Any<ErrorSource>(),
+                Arg.Is<string>(s => s.Contains("AAPL")),
+                Arg.Any<string>(),
+                Arg.Any<string>()
+            );
     }
 
     // ── Cancellation ──────────────────────────────────────────────────
 
     [Fact]
-    public async Task Import_CancellationRequested_ThrowsOperationCancelled() {
+    public async Task Import_CancellationRequested_ThrowsOperationCancelled()
+    {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
@@ -371,57 +428,71 @@ public class YahooPriceImportServiceTests : IDisposable {
     // ── MinSyncDate configuration ─────────────────────────────────────
 
     [Fact]
-    public async Task Import_WithMinSyncDateConfigured_UsesItAsStartDate() {
+    public async Task Import_WithMinSyncDateConfigured_UsesItAsStartDate()
+    {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _workerOptions.MinSyncDate = new DateTime(2025, 6, 1);
 
         var expectedStart = new DateOnly(2025, 6, 1);
-        _yahooClient.GetHistoricalPrices("AAPL", expectedStart, Arg.Any<DateOnly>())
+        _yahooClient
+            .GetHistoricalPrices("AAPL", expectedStart, Arg.Any<DateOnly>())
             .Returns(CreateHistoricalPrices((new DateOnly(2025, 6, 2), 170m)));
 
         await _service.Import(CancellationToken.None);
 
-        await _yahooClient.Received(1).GetHistoricalPrices(
-            "AAPL", expectedStart, Arg.Any<DateOnly>());
+        await _yahooClient
+            .Received(1)
+            .GetHistoricalPrices("AAPL", expectedStart, Arg.Any<DateOnly>());
     }
 
     [Fact]
-    public async Task Import_WithoutMinSyncDate_DefaultsTo2020() {
+    public async Task Import_WithoutMinSyncDate_DefaultsTo2020()
+    {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _workerOptions.MinSyncDate = null;
 
         var expectedStart = new DateOnly(2020, 1, 1);
-        _yahooClient.GetHistoricalPrices("AAPL", expectedStart, Arg.Any<DateOnly>())
+        _yahooClient
+            .GetHistoricalPrices("AAPL", expectedStart, Arg.Any<DateOnly>())
             .Returns(CreateHistoricalPrices((new DateOnly(2020, 1, 2), 75m)));
 
         await _service.Import(CancellationToken.None);
 
-        await _yahooClient.Received(1).GetHistoricalPrices(
-            "AAPL", expectedStart, Arg.Any<DateOnly>());
+        await _yahooClient
+            .Received(1)
+            .GetHistoricalPrices("AAPL", expectedStart, Arg.Any<DateOnly>());
     }
 
     // ── Batch insertion ───────────────────────────────────────────────
 
     [Fact]
-    public async Task Import_LargePriceSet_InsertsAllRecords() {
+    public async Task Import_LargePriceSet_InsertsAllRecords()
+    {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         // Generate more than one batch worth (InsertBatchSize = 500)
         var startDate = new DateOnly(2024, 1, 1);
-        var historicalPrices = Enumerable.Range(0, 600)
-            .Select(i => new HistoricalPrice {
+        var historicalPrices = Enumerable
+            .Range(0, 600)
+            .Select(i => new HistoricalPrice
+            {
                 Date = startDate.AddDays(i),
-                Open = 100m + i, High = 102m + i, Low = 99m + i,
-                Close = 101m + i, AdjustedClose = 101m + i, Volume = 1_000_000,
+                Open = 100m + i,
+                High = 102m + i,
+                Low = 99m + i,
+                Close = 101m + i,
+                AdjustedClose = 101m + i,
+                Volume = 1_000_000,
             })
             .ToList();
 
-        _yahooClient.GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+        _yahooClient
+            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(historicalPrices);
 
         await _service.Import(CancellationToken.None);

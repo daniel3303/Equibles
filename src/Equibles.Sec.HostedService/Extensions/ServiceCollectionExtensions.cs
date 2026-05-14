@@ -5,8 +5,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Equibles.Sec.HostedService.Extensions;
 
-public static class ServiceCollectionExtensions {
-    public static IServiceCollection AddSecWorker(this IServiceCollection services) {
+public static class ServiceCollectionExtensions
+{
+    public static IServiceCollection AddSecWorker(this IServiceCollection services)
+    {
         services.AutoWireServicesFrom<DocumentManager>();
         services.AutoWireServicesFrom<Equibles.Integrations.Sec.SecEdgarClient>();
 

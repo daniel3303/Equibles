@@ -10,9 +10,11 @@ using NSubstitute.ExceptionExtensions;
 
 namespace Equibles.IntegrationTests.Errors;
 
-public class ErrorReporterTests {
+public class ErrorReporterTests
+{
     [Fact]
-    public async Task Report_DelegatesToErrorManager_ErrorPersisted() {
+    public async Task Report_DelegatesToErrorManager_ErrorPersisted()
+    {
         var context = TestDbContextFactory.Create(new ErrorsModuleConfiguration());
         var repository = new ErrorRepository(context);
         var errorManager = new ErrorManager(repository);
@@ -28,7 +30,8 @@ public class ErrorReporterTests {
     }
 
     [Fact]
-    public async Task Report_ErrorManagerCannotBeResolved_ExceptionSuppressed() {
+    public async Task Report_ErrorManagerCannotBeResolved_ExceptionSuppressed()
+    {
         var scopeFactory = ServiceScopeSubstitute.Create();
         var sut = new ErrorReporter(scopeFactory, Substitute.For<ILogger<ErrorReporter>>());
 
@@ -38,7 +41,8 @@ public class ErrorReporterTests {
     }
 
     [Fact]
-    public async Task Report_ScopeCreationFails_ExceptionSuppressed() {
+    public async Task Report_ScopeCreationFails_ExceptionSuppressed()
+    {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory.CreateScope().Throws(new ObjectDisposedException("disposed"));
         var sut = new ErrorReporter(scopeFactory, Substitute.For<ILogger<ErrorReporter>>());

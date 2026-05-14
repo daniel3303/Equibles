@@ -15,19 +15,22 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// indicators.
 /// </summary>
 [MemoryDiagnoser]
-public class TechnicalIndicatorServiceSmaBenchmarks {
+public class TechnicalIndicatorServiceSmaBenchmarks
+{
     private const int PriceCount = 1_008;
     private const int Period = 200;
     private List<decimal> _prices;
 
     [GlobalSetup]
-    public void Setup() {
+    public void Setup()
+    {
         // Identical shape to TechnicalIndicatorServiceBenchmarks/TechnicalIndicatorServiceEmaBenchmarks/
         // TechnicalIndicatorServiceRsiBenchmarks: ~4 trading years of slow drift plus a sinusoidal
         // component. Keeps the SMA arithmetic numerically meaningful (no flat input that would
         // make every window sum identical) without introducing run-to-run noise.
         _prices = new List<decimal>(PriceCount);
-        for (var i = 0; i < PriceCount; i++) {
+        for (var i = 0; i < PriceCount; i++)
+        {
             var drift = i * 0.05m;
             var wave = (decimal)Math.Sin(i / 12.0) * 3m;
             _prices.Add(100m + drift + wave);

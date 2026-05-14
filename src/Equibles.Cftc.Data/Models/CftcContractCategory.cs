@@ -2,7 +2,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Equibles.Cftc.Data.Models;
 
-public enum CftcContractCategory {
+public enum CftcContractCategory
+{
     [Display(Name = "Agriculture")]
     Agriculture,
 
@@ -22,5 +23,5 @@ public enum CftcContractCategory {
     Currencies,
 
     [Display(Name = "Other")]
-    Other
+    Other,
 }

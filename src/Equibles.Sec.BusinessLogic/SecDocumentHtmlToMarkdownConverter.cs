@@ -6,12 +6,14 @@ using ReverseMarkdown;
 namespace Equibles.Sec.BusinessLogic;
 
 [Service(ServiceLifetime.Scoped, typeof(ISecDocumentHtmlToMarkdownConverter))]
-public class SecDocumentHtmlToMarkdownConverter : ISecDocumentHtmlToMarkdownConverter {
-    public SecDocumentHtmlToMarkdownConverter() {
-    }
+public class SecDocumentHtmlToMarkdownConverter : ISecDocumentHtmlToMarkdownConverter
+{
+    public SecDocumentHtmlToMarkdownConverter() { }
 
-    public string Convert(string html) {
-        if (string.IsNullOrWhiteSpace(html)) {
+    public string Convert(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+        {
             return string.Empty;
         }
 
@@ -31,8 +33,10 @@ public class SecDocumentHtmlToMarkdownConverter : ISecDocumentHtmlToMarkdownConv
         return markdown;
     }
 
-    private Converter CreateMarkdownConverter() {
-        var config = new Config {
+    private Converter CreateMarkdownConverter()
+    {
+        var config = new Config
+        {
             GithubFlavored = true,
             RemoveComments = true,
             SmartHrefHandling = true,

@@ -9,12 +9,17 @@ namespace Equibles.UnitTests.Web;
 /// exercise the pure-logic private static helpers via reflection — same pattern
 /// as CftcClientTests, CboeClientTests, and SecEdgarClientTests.
 /// </summary>
-public class EconomicDataControllerTests {
-    private static readonly MethodInfo ExpandFrequencyMethod = typeof(EconomicDataController)
-        .GetMethod("ExpandFrequency", BindingFlags.NonPublic | BindingFlags.Static);
+public class EconomicDataControllerTests
+{
+    private static readonly MethodInfo ExpandFrequencyMethod =
+        typeof(EconomicDataController).GetMethod(
+            "ExpandFrequency",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
     [Fact]
-    public void ExpandFrequency_BiweeklyCodeBw_ReturnsBiweekly() {
+    public void ExpandFrequency_BiweeklyCodeBw_ReturnsBiweekly()
+    {
         // ExpandFrequency is the switch expression that converts FRED's
         // single/short-letter frequency codes ("D", "W", "BW", "M", "Q",
         // "SA", "A") into human-readable English labels for the
@@ -56,7 +61,8 @@ public class EconomicDataControllerTests {
     }
 
     [Fact]
-    public void ExpandFrequency_QuarterlyCodeQ_ReturnsQuarterly() {
+    public void ExpandFrequency_QuarterlyCodeQ_ReturnsQuarterly()
+    {
         // Sibling to the existing `BW → Biweekly` pin. This pin
         // exercises a SINGLE-letter arm ("Q") — structurally distinct
         // from the two-character "BW" arm. The pair covers both
@@ -98,7 +104,8 @@ public class EconomicDataControllerTests {
     }
 
     [Fact]
-    public void ExpandFrequency_LowercaseInputViaToUpperInvariantNormalization_MatchesMonthlyArm() {
+    public void ExpandFrequency_LowercaseInputViaToUpperInvariantNormalization_MatchesMonthlyArm()
+    {
         // Fourth pin in the ExpandFrequency family. Existing pins cover BW
         // (two-character mapped arm), Q (single-letter mapped arm), and XYZ
         // (default catch-all). All three feed input ALREADY in upper-case form
@@ -174,7 +181,8 @@ public class EconomicDataControllerTests {
     }
 
     [Fact]
-    public void ExpandFrequency_AnnualCodeA_ReturnsAnnualViaSingleLetterArm() {
+    public void ExpandFrequency_AnnualCodeA_ReturnsAnnualViaSingleLetterArm()
+    {
         // Fifth pin in the ExpandFrequency family. Existing pins cover:
         //   • BW (two-character arm)
         //   • Q (single-letter arm — Quarterly)
@@ -238,7 +246,8 @@ public class EconomicDataControllerTests {
     }
 
     [Fact]
-    public void ExpandFrequency_UnknownCode_ReturnsRawInputUnchangedNotNormalized() {
+    public void ExpandFrequency_UnknownCode_ReturnsRawInputUnchangedNotNormalized()
+    {
         // Third pin in the ExpandFrequency family. Existing pins cover BW
         // (two-character) and Q (single-letter). This pin covers the
         // CATCH-ALL `_ => frequency` arm — the default that fires when

@@ -5,12 +5,12 @@ using Pgvector;
 namespace Equibles.Sec.Data.Models.Chunks;
 
 [Index(nameof(ChunkId), nameof(Model), IsUnique = true)]
-public class Embedding {
+public class Embedding
+{
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public virtual Chunk Chunk { get; set; }
     public Guid ChunkId { get; set; }
-
 
     /// <summary>
     /// The model used to generate the embedding.
@@ -23,5 +23,4 @@ public class Embedding {
     public int VectorDimension { get; set; }
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
-
 }

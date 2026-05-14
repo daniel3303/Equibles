@@ -3,24 +3,26 @@ using Newtonsoft.Json;
 
 namespace Equibles.UnitTests.Yahoo;
 
-public class YahooQuoteSummaryResponseTests {
+public class YahooQuoteSummaryResponseTests
+{
     [Fact]
-    public void Deserialize_ValidRecommendationTrend_ParsesAllFields() {
+    public void Deserialize_ValidRecommendationTrend_ParsesAllFields()
+    {
         var json = """
-        {
-          "quoteSummary": {
-            "result": [{
-              "recommendationTrend": {
-                "trend": [
-                  { "period": "0m", "strongBuy": 3, "buy": 5, "hold": 8, "sell": 6, "strongSell": 0 },
-                  { "period": "-1m", "strongBuy": 2, "buy": 4, "hold": 7, "sell": 5, "strongSell": 1 }
-                ]
+            {
+              "quoteSummary": {
+                "result": [{
+                  "recommendationTrend": {
+                    "trend": [
+                      { "period": "0m", "strongBuy": 3, "buy": 5, "hold": 8, "sell": 6, "strongSell": 0 },
+                      { "period": "-1m", "strongBuy": 2, "buy": 4, "hold": 7, "sell": 5, "strongSell": 1 }
+                    ]
+                  }
+                }],
+                "error": null
               }
-            }],
-            "error": null
-          }
-        }
-        """;
+            }
+            """;
 
         var response = JsonConvert.DeserializeObject<YahooQuoteSummaryResponse>(json);
 
@@ -41,15 +43,16 @@ public class YahooQuoteSummaryResponseTests {
     }
 
     [Fact]
-    public void Deserialize_EmptyResult_ParsesWithEmptyList() {
+    public void Deserialize_EmptyResult_ParsesWithEmptyList()
+    {
         var json = """
-        {
-          "quoteSummary": {
-            "result": [],
-            "error": null
-          }
-        }
-        """;
+            {
+              "quoteSummary": {
+                "result": [],
+                "error": null
+              }
+            }
+            """;
 
         var response = JsonConvert.DeserializeObject<YahooQuoteSummaryResponse>(json);
 
@@ -57,19 +60,20 @@ public class YahooQuoteSummaryResponseTests {
     }
 
     [Fact]
-    public void Deserialize_EmptyTrendList_ParsesSuccessfully() {
+    public void Deserialize_EmptyTrendList_ParsesSuccessfully()
+    {
         var json = """
-        {
-          "quoteSummary": {
-            "result": [{
-              "recommendationTrend": {
-                "trend": []
+            {
+              "quoteSummary": {
+                "result": [{
+                  "recommendationTrend": {
+                    "trend": []
+                  }
+                }],
+                "error": null
               }
-            }],
-            "error": null
-          }
-        }
-        """;
+            }
+            """;
 
         var response = JsonConvert.DeserializeObject<YahooQuoteSummaryResponse>(json);
 
@@ -77,21 +81,22 @@ public class YahooQuoteSummaryResponseTests {
     }
 
     [Fact]
-    public void Deserialize_AllZeroCounts_ParsesSuccessfully() {
+    public void Deserialize_AllZeroCounts_ParsesSuccessfully()
+    {
         var json = """
-        {
-          "quoteSummary": {
-            "result": [{
-              "recommendationTrend": {
-                "trend": [
-                  { "period": "0w", "strongBuy": 0, "buy": 0, "hold": 0, "sell": 0, "strongSell": 0 }
-                ]
+            {
+              "quoteSummary": {
+                "result": [{
+                  "recommendationTrend": {
+                    "trend": [
+                      { "period": "0w", "strongBuy": 0, "buy": 0, "hold": 0, "sell": 0, "strongSell": 0 }
+                    ]
+                  }
+                }],
+                "error": null
               }
-            }],
-            "error": null
-          }
-        }
-        """;
+            }
+            """;
 
         var response = JsonConvert.DeserializeObject<YahooQuoteSummaryResponse>(json);
         var trend = response.QuoteSummary.Result[0].RecommendationTrend.Trend[0];

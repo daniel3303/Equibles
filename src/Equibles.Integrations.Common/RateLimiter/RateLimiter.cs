@@ -1,55 +1,67 @@
 namespace Equibles.Integrations.Common.RateLimiter;
 
-public class RateLimiter : IRateLimiter {
+public class RateLimiter : IRateLimiter
+{
     private readonly int _maxRequests;
     private readonly TimeSpan _timeWindow;
     private readonly Queue<DateTime> _requestTimes;
     private readonly Lock _lock = new();
     private DateTime _pauseUntil = DateTime.MinValue;
 
-    public RateLimiter(int maxRequests = 5, TimeSpan? timeWindow = null) {
+    public RateLimiter(int maxRequests = 5, TimeSpan? timeWindow = null)
+    {
         _maxRequests = maxRequests;
         _timeWindow = timeWindow ?? TimeSpan.FromMinutes(1);
         _requestTimes = new Queue<DateTime>();
     }
 
-    public async Task WaitAsync() {
+    public async Task WaitAsync()
+    {
         TimeSpan waitTime;
 
-        lock (_lock) {
+        lock (_lock)
+        {
             waitTime = CalculateWaitTime();
 
             // If a 429 triggered a pause, wait for the longer of the two
             var pauseRemaining = _pauseUntil - DateTime.UtcNow;
-            if (pauseRemaining > waitTime) {
+            if (pauseRemaining > waitTime)
+            {
                 waitTime = pauseRemaining;
             }
 
-            if (waitTime <= TimeSpan.Zero) {
+            if (waitTime <= TimeSpan.Zero)
+            {
                 _requestTimes.Enqueue(DateTime.UtcNow);
             }
         }
 
-        if (waitTime > TimeSpan.Zero) {
+        if (waitTime > TimeSpan.Zero)
+        {
             await Task.Delay(waitTime);
             await WaitAsync();
         }
     }
 
-    public void PauseFor(TimeSpan duration) {
-        lock (_lock) {
+    public void PauseFor(TimeSpan duration)
+    {
+        lock (_lock)
+        {
             var newPauseUntil = DateTime.UtcNow + duration;
-            if (newPauseUntil > _pauseUntil) {
+            if (newPauseUntil > _pauseUntil)
+            {
                 _pauseUntil = newPauseUntil;
             }
         }
     }
 
-    private TimeSpan CalculateWaitTime() {
+    private TimeSpan CalculateWaitTime()
+    {
         var now = DateTime.UtcNow;
         CleanupOldRequests(now);
 
-        if (_requestTimes.Count < _maxRequests) {
+        if (_requestTimes.Count < _maxRequests)
+        {
             return TimeSpan.Zero;
         }
 
@@ -57,8 +69,10 @@ public class RateLimiter : IRateLimiter {
         return (oldestRequest + _timeWindow) - now;
     }
 
-    private void CleanupOldRequests(DateTime now) {
-        while (_requestTimes.Count > 0 && _requestTimes.Peek() < now - _timeWindow) {
+    private void CleanupOldRequests(DateTime now)
+    {
+        while (_requestTimes.Count > 0 && _requestTimes.Peek() < now - _timeWindow)
+        {
             _requestTimes.Dequeue();
         }
     }

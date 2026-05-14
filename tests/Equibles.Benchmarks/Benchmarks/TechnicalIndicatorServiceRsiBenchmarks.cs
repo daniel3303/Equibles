@@ -12,18 +12,21 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// directly comparable across commits.
 /// </summary>
 [MemoryDiagnoser]
-public class TechnicalIndicatorServiceRsiBenchmarks {
+public class TechnicalIndicatorServiceRsiBenchmarks
+{
     private const int PriceCount = 1_008;
     private List<decimal> _prices;
 
     [GlobalSetup]
-    public void Setup() {
+    public void Setup()
+    {
         // Identical shape to TechnicalIndicatorServiceBenchmarks: ~4 trading years of slow
         // drift plus a sinusoidal component. Flat input would push every change to zero and
         // hit the avgLoss == 0 branch every step; pure random would make cross-commit deltas
         // dominated by noise.
         _prices = new List<decimal>(PriceCount);
-        for (var i = 0; i < PriceCount; i++) {
+        for (var i = 0; i < PriceCount; i++)
+        {
             var drift = i * 0.05m;
             var wave = (decimal)Math.Sin(i / 12.0) * 3m;
             _prices.Add(100m + drift + wave);

@@ -1,6 +1,7 @@
 namespace Equibles.Integrations.Sec.Models;
 
-public class FilingData {
+public class FilingData
+{
     /// <summary>
     /// CIK of the <em>filer</em> of this document, which may be a subsidiary that shares
     /// its parent's public ticker. Use this for retrieving the document content from

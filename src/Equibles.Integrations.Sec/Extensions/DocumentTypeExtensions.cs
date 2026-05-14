@@ -4,8 +4,10 @@ using Equibles.Integrations.Sec.Models;
 
 namespace Equibles.Integrations.Sec.Extensions;
 
-internal static class DocumentTypeExtensions {
-    public static string GetFormName(this DocumentTypeFilter documentType) {
+internal static class DocumentTypeExtensions
+{
+    public static string GetFormName(this DocumentTypeFilter documentType)
+    {
         var field = documentType.GetType().GetField(documentType.ToString());
         var attribute = field?.GetCustomAttribute<DisplayAttribute>();
         return attribute?.Name ?? documentType.ToString();

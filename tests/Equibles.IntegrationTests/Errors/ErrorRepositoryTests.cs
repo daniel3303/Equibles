@@ -7,16 +7,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.IntegrationTests.Errors;
 
-public class ErrorRepositoryTests : IDisposable {
+public class ErrorRepositoryTests : IDisposable
+{
     private readonly EquiblesDbContext _dbContext;
     private readonly ErrorRepository _repository;
 
-    public ErrorRepositoryTests() {
+    public ErrorRepositoryTests()
+    {
         _dbContext = TestDbContextFactory.Create(new ErrorsModuleConfiguration());
         _repository = new ErrorRepository(_dbContext);
     }
 
-    public void Dispose() {
+    public void Dispose()
+    {
         _dbContext.Dispose();
     }
 
@@ -29,8 +32,10 @@ public class ErrorRepositoryTests : IDisposable {
         bool seen = false,
         string stackTrace = null,
         string requestSummary = null
-    ) {
-        return new Error {
+    )
+    {
+        return new Error
+        {
             Id = Guid.NewGuid(),
             Source = source ?? ErrorSource.Other,
             Context = context,
@@ -44,7 +49,8 @@ public class ErrorRepositoryTests : IDisposable {
     // ── GetUnseen ───────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetUnseen_ReturnsOnlyUnseenErrors() {
+    public async Task GetUnseen_ReturnsOnlyUnseenErrors()
+    {
         _repository.Add(CreateError(seen: false, message: "Unseen 1"));
         _repository.Add(CreateError(seen: false, message: "Unseen 2"));
         _repository.Add(CreateError(seen: true, message: "Seen"));
@@ -57,7 +63,8 @@ public class ErrorRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetUnseen_AllSeen_ReturnsEmpty() {
+    public async Task GetUnseen_AllSeen_ReturnsEmpty()
+    {
         _repository.Add(CreateError(seen: true));
         _repository.Add(CreateError(seen: true));
         await _repository.SaveChanges();
@@ -68,7 +75,8 @@ public class ErrorRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetUnseen_EmptyTable_ReturnsEmpty() {
+    public async Task GetUnseen_EmptyTable_ReturnsEmpty()
+    {
         var result = await _repository.GetUnseen().ToListAsync();
 
         result.Should().BeEmpty();
@@ -77,35 +85,38 @@ public class ErrorRepositoryTests : IDisposable {
     // ── Search ──────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Search_MatchesContext() {
+    public async Task Search_MatchesContext()
+    {
         _repository.Add(CreateError(context: "HoldingsScraper", message: "Timeout"));
         _repository.Add(CreateError(context: "DocumentProcessor", message: "Parse error"));
         await _repository.SaveChanges();
 
-        var result = await _repository.GetAll()
+        var result = await _repository
+            .GetAll()
             .Where(e => e.Context.ToLower().Contains("holdings"))
             .ToListAsync();
 
-        result.Should().ContainSingle()
-            .Which.Context.Should().Be("HoldingsScraper");
+        result.Should().ContainSingle().Which.Context.Should().Be("HoldingsScraper");
     }
 
     [Fact]
-    public async Task Search_MatchesMessage() {
+    public async Task Search_MatchesMessage()
+    {
         _repository.Add(CreateError(context: "Ctx1", message: "Connection timeout occurred"));
         _repository.Add(CreateError(context: "Ctx2", message: "Parse error"));
         await _repository.SaveChanges();
 
-        var result = await _repository.GetAll()
+        var result = await _repository
+            .GetAll()
             .Where(e => e.Message.ToLower().Contains("timeout"))
             .ToListAsync();
 
-        result.Should().ContainSingle()
-            .Which.Message.Should().Contain("timeout");
+        result.Should().ContainSingle().Which.Message.Should().Contain("timeout");
     }
 
     [Fact]
-    public async Task Search_NullOrEmpty_ReturnsAll() {
+    public async Task Search_NullOrEmpty_ReturnsAll()
+    {
         _repository.Add(CreateError(message: "Error 1"));
         _repository.Add(CreateError(message: "Error 2"));
         await _repository.SaveChanges();
@@ -118,13 +129,18 @@ public class ErrorRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task Search_NoMatch_ReturnsEmpty() {
+    public async Task Search_NoMatch_ReturnsEmpty()
+    {
         _repository.Add(CreateError(context: "Ctx", message: "Parse error"));
         await _repository.SaveChanges();
 
         // Use direct query since EF.Functions.ILike is not available in InMemory provider
-        var result = await _repository.GetAll()
-            .Where(e => e.Context.ToLower().Contains("nonexistent") || e.Message.ToLower().Contains("nonexistent"))
+        var result = await _repository
+            .GetAll()
+            .Where(e =>
+                e.Context.ToLower().Contains("nonexistent")
+                || e.Message.ToLower().Contains("nonexistent")
+            )
             .ToListAsync();
 
         result.Should().BeEmpty();
@@ -133,9 +149,12 @@ public class ErrorRepositoryTests : IDisposable {
     // ── GetBySource ─────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetBySource_ReturnsOnlyMatchingSource() {
+    public async Task GetBySource_ReturnsOnlyMatchingSource()
+    {
         _repository.Add(CreateError(source: ErrorSource.DocumentScraper, message: "Doc error"));
-        _repository.Add(CreateError(source: ErrorSource.HoldingsScraper, message: "Holdings error"));
+        _repository.Add(
+            CreateError(source: ErrorSource.HoldingsScraper, message: "Holdings error")
+        );
         _repository.Add(CreateError(source: ErrorSource.DocumentScraper, message: "Doc error 2"));
         await _repository.SaveChanges();
 
@@ -146,7 +165,8 @@ public class ErrorRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetBySource_NoMatch_ReturnsEmpty() {
+    public async Task GetBySource_NoMatch_ReturnsEmpty()
+    {
         _repository.Add(CreateError(source: ErrorSource.DocumentScraper));
         await _repository.SaveChanges();
 
@@ -156,7 +176,8 @@ public class ErrorRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetBySource_EmptyTable_ReturnsEmpty() {
+    public async Task GetBySource_EmptyTable_ReturnsEmpty()
+    {
         var result = await _repository.GetBySource(ErrorSource.Other).ToListAsync();
 
         result.Should().BeEmpty();
@@ -165,7 +186,8 @@ public class ErrorRepositoryTests : IDisposable {
     // ── Base CRUD ───────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Add_PersistsErrorWithAllFields() {
+    public async Task Add_PersistsErrorWithAllFields()
+    {
         var error = CreateError(
             source: ErrorSource.CongressScraper,
             context: "CongressImport",
@@ -188,7 +210,8 @@ public class ErrorRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task Update_MarkAsSeen_PersistsChange() {
+    public async Task Update_MarkAsSeen_PersistsChange()
+    {
         var error = CreateError(seen: false);
         _repository.Add(error);
         await _repository.SaveChanges();
@@ -203,7 +226,8 @@ public class ErrorRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task Delete_RemovesError() {
+    public async Task Delete_RemovesError()
+    {
         var error = CreateError();
         _repository.Add(error);
         await _repository.SaveChanges();
@@ -216,7 +240,8 @@ public class ErrorRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetAll_ReturnsAllErrors() {
+    public async Task GetAll_ReturnsAllErrors()
+    {
         _repository.Add(CreateError(message: "Error 1"));
         _repository.Add(CreateError(message: "Error 2"));
         _repository.Add(CreateError(message: "Error 3"));

@@ -8,9 +8,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Sec;
 
-public class SecScraperWorkerTests {
+public class SecScraperWorkerTests
+{
     [Fact]
-    public void ValidateConfiguration_SecContactEmailMissing_ReturnsFalse() {
+    public void ValidateConfiguration_SecContactEmailMissing_ReturnsFalse()
+    {
         // SEC EDGAR rejects any request whose User-Agent header lacks a contact email —
         // and unlike the FTD endpoint (covered by FtdScraperWorker test, PR #137), the
         // submissions API does it with a silent 403 + IP-ban risk that affects every other
@@ -29,14 +31,19 @@ public class SecScraperWorkerTests {
         var sut = new TestableSecScraperWorker(
             Substitute.For<ILogger<SecScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
-            config);
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            config
+        );
 
         sut.InvokeValidateConfiguration().Should().BeFalse();
     }
 
     [Fact]
-    public void ValidateConfiguration_SecContactEmailConfigured_ReturnsTrue() {
+    public void ValidateConfiguration_SecContactEmailConfigured_ReturnsTrue()
+    {
         // Sibling to the false-case pin above. The risk this catches is asymmetric and
         // unreachable from the empty-email sibling alone: a regression that hard-codes
         // `ValidateConfiguration => false` (defensive default during a refactor, or
@@ -52,21 +59,26 @@ public class SecScraperWorkerTests {
         // distinguishes a working `IsNullOrEmpty` check from BOTH inversion (caught by
         // the false sibling) AND constant-return regressions (caught only here).
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> {
-                ["Sec:ContactEmail"] = "equibles-bot@example.com"
-            })
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["Sec:ContactEmail"] = "equibles-bot@example.com" }
+            )
             .Build();
         var sut = new TestableSecScraperWorker(
             Substitute.For<ILogger<SecScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
-            config);
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            config
+        );
 
         sut.InvokeValidateConfiguration().Should().BeTrue();
     }
 
     [Fact]
-    public void SleepInterval_IsFifteenSeconds() {
+    public void SleepInterval_IsFifteenSeconds()
+    {
         // SecScraperWorker is the only scraper in the pipeline that polls the SEC
         // submissions API at sub-minute cadence (the other workers — FTD, Holdings,
         // InsiderTrading, etc. — sleep for hours per cycle). The 15-second interval
@@ -82,14 +94,19 @@ public class SecScraperWorkerTests {
         var sut = new TestableSecScraperWorker(
             Substitute.For<ILogger<SecScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
-            new ConfigurationBuilder().Build());
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            new ConfigurationBuilder().Build()
+        );
 
         sut.InvokeSleepInterval().Should().Be(TimeSpan.FromSeconds(15));
     }
 
     [Fact]
-    public void ErrorSource_IsDocumentScraper() {
+    public void ErrorSource_IsDocumentScraper()
+    {
         // SecScraperWorker handles the full SEC document-pull pipeline (submissions,
         // filings, ownership XML, insider transactions). When the BaseScraperWorker's
         // catch-all reports a failure, it tags the error with this enum value as the
@@ -105,14 +122,19 @@ public class SecScraperWorkerTests {
         var sut = new TestableSecScraperWorker(
             Substitute.For<ILogger<SecScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
-            new ConfigurationBuilder().Build());
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            new ConfigurationBuilder().Build()
+        );
 
         sut.InvokeErrorSource().Should().Be(ErrorSource.DocumentScraper);
     }
 
     [Fact]
-    public void WorkerName_IsSecFilingScraper() {
+    public void WorkerName_IsSecFilingScraper()
+    {
         // Third WorkerName pin in the codebase (after CboeScraperWorker and
         // HoldingsScraperWorker). Completes the ErrorSource / SleepInterval /
         // WorkerName triple for this worker.
@@ -136,18 +158,24 @@ public class SecScraperWorkerTests {
         var sut = new TestableSecScraperWorker(
             Substitute.For<ILogger<SecScraperWorker>>(),
             Substitute.For<IServiceScopeFactory>(),
-            Substitute.For<ErrorReporter>(Substitute.For<IServiceScopeFactory>(), Substitute.For<ILogger<ErrorReporter>>()),
-            new ConfigurationBuilder().Build());
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            new ConfigurationBuilder().Build()
+        );
 
         sut.InvokeWorkerName().Should().Be("SEC filing scraper");
     }
 
-    private sealed class TestableSecScraperWorker : SecScraperWorker {
+    private sealed class TestableSecScraperWorker : SecScraperWorker
+    {
         public TestableSecScraperWorker(
             ILogger<SecScraperWorker> logger,
             IServiceScopeFactory scopeFactory,
             ErrorReporter errorReporter,
-            IConfiguration configuration)
+            IConfiguration configuration
+        )
             : base(logger, scopeFactory, errorReporter, configuration) { }
 
         public bool InvokeValidateConfiguration() => ValidateConfiguration();

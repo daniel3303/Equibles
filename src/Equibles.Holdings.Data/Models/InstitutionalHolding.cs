@@ -11,7 +11,8 @@ namespace Equibles.Holdings.Data.Models;
 // Unique index configured via Fluent API in EquiblesDbContext with NULLS NOT DISTINCT
 [Index(nameof(FilingDate))]
 [Index(nameof(ReportDate))]
-public class InstitutionalHolding {
+public class InstitutionalHolding
+{
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 

@@ -5,7 +5,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Congress.Data.Models;
 
 [Index(nameof(Name), IsUnique = true)]
-public class CongressMember {
+public class CongressMember
+{
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 

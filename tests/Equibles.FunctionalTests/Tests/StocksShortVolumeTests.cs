@@ -9,17 +9,20 @@ namespace Equibles.FunctionalTests.Tests;
 
 [Collection(FunctionalTestCollection.Name)]
 [Trait("Category", "Functional")]
-public class StocksShortVolumeTests {
+public class StocksShortVolumeTests
+{
     private readonly WebAppFixture _web;
     private readonly PlaywrightFixture _playwright;
 
-    public StocksShortVolumeTests(WebAppFixture web, PlaywrightFixture playwright) {
+    public StocksShortVolumeTests(WebAppFixture web, PlaywrightFixture playwright)
+    {
         _web = web;
         _playwright = playwright;
     }
 
     [Fact]
-    public async Task ShortVolume_GetForStockWithLotsOfSeededHistory_RendersMostRecent90DaysAndChart() {
+    public async Task ShortVolume_GetForStockWithLotsOfSeededHistory_RendersMostRecent90DaysAndChart()
+    {
         // Seeds 500 days of daily short-volume rows so the page has substantially more data
         // than StockTabService.LoadShortVolumeTab's Take(90) cap. The assertion pins three
         // behaviours that a smaller fixture cannot prove together: (a) the route resolves and
@@ -33,24 +36,32 @@ public class StocksShortVolumeTests {
         var stockId = Guid.NewGuid();
         var endDate = new DateOnly(2026, 1, 31);
 
-        await _web.ResetAndSeedAsync(async db => {
-            db.Add(new CommonStock {
-                Id = stockId,
-                Ticker = "AAPL",
-                Name = "Apple Inc.",
-                Cik = "0000320193",
-            });
+        await _web.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new CommonStock
+                {
+                    Id = stockId,
+                    Ticker = "AAPL",
+                    Name = "Apple Inc.",
+                    Cik = "0000320193",
+                }
+            );
 
             db.ChangeTracker.AutoDetectChangesEnabled = false;
-            for (var i = 0; i < totalSeededDays; i++) {
-                db.Add(new DailyShortVolume {
-                    CommonStockId = stockId,
-                    Date = endDate.AddDays(-i),
-                    ShortVolume = 1_000_000 + i,
-                    ShortExemptVolume = 10_000 + i,
-                    TotalVolume = 5_000_000 + i,
-                    Market = "FNRA",
-                });
+            for (var i = 0; i < totalSeededDays; i++)
+            {
+                db.Add(
+                    new DailyShortVolume
+                    {
+                        CommonStockId = stockId,
+                        Date = endDate.AddDays(-i),
+                        ShortVolume = 1_000_000 + i,
+                        ShortExemptVolume = 10_000 + i,
+                        TotalVolume = 5_000_000 + i,
+                        Market = "FNRA",
+                    }
+                );
             }
             await Task.CompletedTask;
         });
@@ -61,7 +72,8 @@ public class StocksShortVolumeTests {
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);
 
-        await Assertions.Expect(page.Locator("h3").Filter(new() { HasTextString = "No Short Volume Data" }))
+        await Assertions
+            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Short Volume Data" }))
             .ToHaveCountAsync(0);
         await Assertions.Expect(page.Locator("#short-volume-chart")).ToHaveCountAsync(1);
 
@@ -70,7 +82,8 @@ public class StocksShortVolumeTests {
 
         // The view renders rows OrderByDescending(Date), so the first row must be the
         // most-recent seeded date — proves Take(90) selected the newest rows, not the oldest.
-        await Assertions.Expect(rows.First.Locator("td").First)
+        await Assertions
+            .Expect(rows.First.Locator("td").First)
             .ToHaveTextAsync(endDate.ToString("yyyy-MM-dd"));
     }
 }

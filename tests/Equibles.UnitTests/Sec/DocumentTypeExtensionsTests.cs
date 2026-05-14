@@ -4,7 +4,8 @@ using Equibles.Sec.HostedService.Extensions;
 
 namespace Equibles.UnitTests.Sec;
 
-public class DocumentTypeExtensionsTests {
+public class DocumentTypeExtensionsTests
+{
     [Theory]
     [InlineData("TenK", DocumentTypeFilter.TenK)]
     [InlineData("TenQ", DocumentTypeFilter.TenQ)]
@@ -17,7 +18,11 @@ public class DocumentTypeExtensionsTests {
     [InlineData("FortyF", DocumentTypeFilter.FortyF)]
     [InlineData("FormFour", DocumentTypeFilter.FormFour)]
     [InlineData("FormThree", DocumentTypeFilter.FormThree)]
-    public void ToSecEdgarFilter_MappedType_ReturnsCorrectFilter(string documentTypeValue, DocumentTypeFilter expectedFilter) {
+    public void ToSecEdgarFilter_MappedType_ReturnsCorrectFilter(
+        string documentTypeValue,
+        DocumentTypeFilter expectedFilter
+    )
+    {
         var docType = DocumentType.FromValue(documentTypeValue);
 
         var result = docType.ToSecEdgarFilter();
@@ -26,14 +31,16 @@ public class DocumentTypeExtensionsTests {
     }
 
     [Fact]
-    public void ToSecEdgarFilter_UnmappedType_ReturnsNull() {
+    public void ToSecEdgarFilter_UnmappedType_ReturnsNull()
+    {
         var result = DocumentType.Other.ToSecEdgarFilter();
 
         result.Should().BeNull();
     }
 
     [Fact]
-    public void ToSecEdgarFilter_CustomUnregisteredType_ReturnsNull() {
+    public void ToSecEdgarFilter_CustomUnregisteredType_ReturnsNull()
+    {
         var custom = new DocumentType("CustomFiling", "CUSTOM-99");
 
         var result = custom.ToSecEdgarFilter();
@@ -42,16 +49,22 @@ public class DocumentTypeExtensionsTests {
     }
 
     [Fact]
-    public void ToSecEdgarFilter_AllFilterValues_AreCoveredByMapping() {
+    public void ToSecEdgarFilter_AllFilterValues_AreCoveredByMapping()
+    {
         var allFilters = Enum.GetValues<DocumentTypeFilter>();
-        var mappedFilters = DocumentType.GetAll()
+        var mappedFilters = DocumentType
+            .GetAll()
             .Select(dt => dt.ToSecEdgarFilter())
             .Where(f => f.HasValue)
             .Select(f => f!.Value)
             .ToHashSet();
 
-        mappedFilters.Should().BeEquivalentTo(allFilters,
-            "every DocumentTypeFilter value should be reachable from some DocumentType");
+        mappedFilters
+            .Should()
+            .BeEquivalentTo(
+                allFilters,
+                "every DocumentTypeFilter value should be reachable from some DocumentType"
+            );
     }
 
     [Theory]
@@ -61,7 +74,11 @@ public class DocumentTypeExtensionsTests {
     [InlineData("20-F", DocumentTypeFilter.TwentyF)]
     [InlineData("4", DocumentTypeFilter.FormFour)]
     [InlineData("3", DocumentTypeFilter.FormThree)]
-    public void FromFormName_ThenToSecEdgarFilter_RoundTrips(string formName, DocumentTypeFilter expectedFilter) {
+    public void FromFormName_ThenToSecEdgarFilter_RoundTrips(
+        string formName,
+        DocumentTypeFilter expectedFilter
+    )
+    {
         var docType = DocumentTypeExtensions.FromFormName(formName);
 
         var result = docType.ToSecEdgarFilter();

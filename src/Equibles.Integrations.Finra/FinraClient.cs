@@ -14,25 +14,39 @@ using Newtonsoft.Json;
 namespace Equibles.Integrations.Finra;
 
 [Service(ServiceLifetime.Scoped, typeof(IFinraClient))]
-public class FinraClient : IFinraClient {
-    private const string TokenEndpoint = "https://ews.fip.finra.org/fip/rest/ews/oauth2/access_token?grant_type=client_credentials";
+public class FinraClient : IFinraClient
+{
+    private const string TokenEndpoint =
+        "https://ews.fip.finra.org/fip/rest/ews/oauth2/access_token?grant_type=client_credentials";
     private const string ApiBaseUrl = "https://api.finra.org";
     private const int MaxPageSize = 5000;
     private const int MaxRetries = 3;
 
-    private static readonly string[] ShortInterestFields = [
-        "settlementDate", "symbolCode", "issueName",
-        "currentShortPositionQuantity", "previousShortPositionQuantity",
-        "changePreviousNumber", "averageDailyVolumeQuantity",
-        "daysToCoverQuantity", "changePercent", "marketClassCode"
+    private static readonly string[] ShortInterestFields =
+    [
+        "settlementDate",
+        "symbolCode",
+        "issueName",
+        "currentShortPositionQuantity",
+        "previousShortPositionQuantity",
+        "changePreviousNumber",
+        "averageDailyVolumeQuantity",
+        "daysToCoverQuantity",
+        "changePercent",
+        "marketClassCode",
     ];
 
     private static readonly IRateLimiter RateLimiter = new Common.RateLimiter.RateLimiter(
-        maxRequests: 20, timeWindow: TimeSpan.FromSeconds(1));
+        maxRequests: 20,
+        timeWindow: TimeSpan.FromSeconds(1)
+    );
 
     private static readonly SemaphoreSlim TokenSemaphore = new(1, 1);
     private static string _cachedToken;
-    private static DateTime _tokenExpiry = DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc);
+    private static DateTime _tokenExpiry = DateTime.SpecifyKind(
+        DateTime.MinValue,
+        DateTimeKind.Utc
+    );
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<FinraClient> _logger;
@@ -42,47 +56,57 @@ public class FinraClient : IFinraClient {
         HttpClient httpClient,
         ILogger<FinraClient> logger,
         IOptions<FinraOptions> options
-    ) {
+    )
+    {
         _httpClient = httpClient;
         _logger = logger;
         _options = options.Value;
     }
 
-    public bool IsConfigured => !string.IsNullOrEmpty(_options.ClientId) && !string.IsNullOrEmpty(_options.ClientSecret);
+    public bool IsConfigured =>
+        !string.IsNullOrEmpty(_options.ClientId) && !string.IsNullOrEmpty(_options.ClientSecret);
 
-    public async Task<List<ShortVolumeRecord>> GetDailyShortVolume(DateOnly date) {
+    public async Task<List<ShortVolumeRecord>> GetDailyShortVolume(DateOnly date)
+    {
         var dateStr = date.ToString("yyyy-MM-dd");
         _logger.LogDebug("Fetching daily short volume for {Date}", dateStr);
 
         var results = new List<ShortVolumeRecord>();
         var offset = 0;
 
-        while (true) {
-            var query = new {
-                fields = new[] {
+        while (true)
+        {
+            var query = new
+            {
+                fields = new[]
+                {
                     "tradeReportDate",
                     "securitiesInformationProcessorSymbolIdentifier",
                     "shortParQuantity",
                     "shortExemptParQuantity",
                     "totalParQuantity",
-                    "marketCode"
+                    "marketCode",
                 },
-                dateRangeFilters = new[] {
-                    new {
+                dateRangeFilters = new[]
+                {
+                    new
+                    {
                         fieldName = "tradeReportDate",
                         startDate = dateStr,
-                        endDate = dateStr
-                    }
+                        endDate = dateStr,
+                    },
                 },
                 limit = MaxPageSize,
-                offset
+                offset,
             };
 
             var page = await PostQuery<ShortVolumeRecord>("OTCMarket", "regShoDaily", query);
-            if (page.Count == 0) break;
+            if (page.Count == 0)
+                break;
 
             results.AddRange(page);
-            if (page.Count < MaxPageSize) break;
+            if (page.Count < MaxPageSize)
+                break;
 
             offset += page.Count;
         }
@@ -91,84 +115,135 @@ public class FinraClient : IFinraClient {
         return results;
     }
 
-    public Task<List<ShortInterestRecord>> GetShortInterest(DateOnly settlementDate) {
+    public Task<List<ShortInterestRecord>> GetShortInterest(DateOnly settlementDate)
+    {
         return GetShortInterestCore(settlementDate, null);
     }
 
-    public Task<List<ShortInterestRecord>> GetShortInterest(DateOnly settlementDate, IReadOnlyList<string> symbols) {
+    public Task<List<ShortInterestRecord>> GetShortInterest(
+        DateOnly settlementDate,
+        IReadOnlyList<string> symbols
+    )
+    {
         return GetShortInterestCore(settlementDate, symbols);
     }
 
-    private async Task<List<ShortInterestRecord>> GetShortInterestCore(DateOnly settlementDate, IReadOnlyList<string> symbols) {
+    private async Task<List<ShortInterestRecord>> GetShortInterestCore(
+        DateOnly settlementDate,
+        IReadOnlyList<string> symbols
+    )
+    {
         var dateStr = settlementDate.ToString("yyyy-MM-dd");
-        _logger.LogDebug("Fetching short interest for settlement date {Date}{Filter}",
-            dateStr, symbols != null ? $" (filtered to {symbols.Count} symbols)" : "");
+        _logger.LogDebug(
+            "Fetching short interest for settlement date {Date}{Filter}",
+            dateStr,
+            symbols != null ? $" (filtered to {symbols.Count} symbols)" : ""
+        );
 
         var results = new List<ShortInterestRecord>();
         var offset = 0;
 
-        while (true) {
+        while (true)
+        {
             object query;
-            if (symbols != null) {
-                query = new {
+            if (symbols != null)
+            {
+                query = new
+                {
                     fields = ShortInterestFields,
-                    dateRangeFilters = new[] {
-                        new { fieldName = "settlementDate", startDate = dateStr, endDate = dateStr }
+                    dateRangeFilters = new[]
+                    {
+                        new
+                        {
+                            fieldName = "settlementDate",
+                            startDate = dateStr,
+                            endDate = dateStr,
+                        },
                     },
-                    domainFilters = new[] {
-                        new { fieldName = "symbolCode", values = symbols }
-                    },
+                    domainFilters = new[] { new { fieldName = "symbolCode", values = symbols } },
                     limit = MaxPageSize,
-                    offset
+                    offset,
                 };
-            } else {
-                query = new {
+            }
+            else
+            {
+                query = new
+                {
                     fields = ShortInterestFields,
-                    dateRangeFilters = new[] {
-                        new { fieldName = "settlementDate", startDate = dateStr, endDate = dateStr }
+                    dateRangeFilters = new[]
+                    {
+                        new
+                        {
+                            fieldName = "settlementDate",
+                            startDate = dateStr,
+                            endDate = dateStr,
+                        },
                     },
                     limit = MaxPageSize,
-                    offset
+                    offset,
                 };
             }
 
-            var page = await PostQuery<ShortInterestRecord>("OTCMarket", "consolidatedShortInterest", query);
-            if (page.Count == 0) break;
+            var page = await PostQuery<ShortInterestRecord>(
+                "OTCMarket",
+                "consolidatedShortInterest",
+                query
+            );
+            if (page.Count == 0)
+                break;
 
             results.AddRange(page);
-            if (page.Count < MaxPageSize) break;
+            if (page.Count < MaxPageSize)
+                break;
 
             offset += page.Count;
         }
 
-        _logger.LogDebug("Fetched {Count} short interest records for {Date}", results.Count, dateStr);
+        _logger.LogDebug(
+            "Fetched {Count} short interest records for {Date}",
+            results.Count,
+            dateStr
+        );
         return results;
     }
 
-    public async Task<List<DateOnly>> GetShortInterestSettlementDates() {
+    public async Task<List<DateOnly>> GetShortInterestSettlementDates()
+    {
         // Query distinct settlement dates via the data endpoint (the /partitions GET returns 403).
         // Sort descending and extract unique dates across pages.
         var dates = new HashSet<DateOnly>();
         var offset = 0;
 
-        while (true) {
-            var query = new {
+        while (true)
+        {
+            var query = new
+            {
                 fields = new[] { "settlementDate" },
                 limit = MaxPageSize,
-                offset
+                offset,
             };
 
-            var records = await PostQuery<ShortInterestRecord>("OTCMarket", "consolidatedShortInterest", query);
-            if (records.Count == 0) break;
+            var records = await PostQuery<ShortInterestRecord>(
+                "OTCMarket",
+                "consolidatedShortInterest",
+                query
+            );
+            if (records.Count == 0)
+                break;
 
-            foreach (var record in records) {
-                if (!string.IsNullOrEmpty(record.SettlementDate)
-                    && DateOnly.TryParse(record.SettlementDate, out var date)) {
+            foreach (var record in records)
+            {
+                if (
+                    !string.IsNullOrEmpty(record.SettlementDate)
+                    && DateOnly.TryParse(record.SettlementDate, out var date)
+                )
+                {
                     dates.Add(date);
                 }
             }
 
-            if (records.Count < MaxPageSize) break;
+            if (records.Count < MaxPageSize)
+                break;
             offset += records.Count;
         }
 
@@ -176,7 +251,8 @@ public class FinraClient : IFinraClient {
         return dates.OrderBy(d => d).ToList();
     }
 
-    public async Task<List<DateOnly>> GetShortInterestSettlementDatesAfter(DateOnly afterDate) {
+    public async Task<List<DateOnly>> GetShortInterestSettlementDatesAfter(DateOnly afterDate)
+    {
         var startDateStr = afterDate.AddDays(1).ToString("yyyy-MM-dd");
         var endDateStr = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd");
 
@@ -185,39 +261,63 @@ public class FinraClient : IFinraClient {
         var dates = new HashSet<DateOnly>();
         var offset = 0;
 
-        while (true) {
-            var query = new {
+        while (true)
+        {
+            var query = new
+            {
                 fields = new[] { "settlementDate" },
-                dateRangeFilters = new[] {
-                    new { fieldName = "settlementDate", startDate = startDateStr, endDate = endDateStr }
+                dateRangeFilters = new[]
+                {
+                    new
+                    {
+                        fieldName = "settlementDate",
+                        startDate = startDateStr,
+                        endDate = endDateStr,
+                    },
                 },
                 limit = MaxPageSize,
-                offset
+                offset,
             };
 
-            var records = await PostQuery<ShortInterestRecord>("OTCMarket", "consolidatedShortInterest", query);
-            if (records.Count == 0) break;
+            var records = await PostQuery<ShortInterestRecord>(
+                "OTCMarket",
+                "consolidatedShortInterest",
+                query
+            );
+            if (records.Count == 0)
+                break;
 
-            foreach (var record in records) {
-                if (!string.IsNullOrEmpty(record.SettlementDate)
-                    && DateOnly.TryParse(record.SettlementDate, out var date)) {
+            foreach (var record in records)
+            {
+                if (
+                    !string.IsNullOrEmpty(record.SettlementDate)
+                    && DateOnly.TryParse(record.SettlementDate, out var date)
+                )
+                {
                     dates.Add(date);
                 }
             }
 
-            if (records.Count < MaxPageSize) break;
+            if (records.Count < MaxPageSize)
+                break;
             offset += records.Count;
         }
 
-        _logger.LogDebug("Discovered {Count} new settlement dates after {Date}", dates.Count, afterDate);
+        _logger.LogDebug(
+            "Discovered {Count} new settlement dates after {Date}",
+            dates.Count,
+            afterDate
+        );
         return dates.OrderBy(d => d).ToList();
     }
 
-    private async Task<List<T>> PostQuery<T>(string group, string name, object query) {
+    private async Task<List<T>> PostQuery<T>(string group, string name, object query)
+    {
         var url = $"{ApiBaseUrl}/data/group/{group}/name/{name}";
         var json = JsonConvert.SerializeObject(query);
 
-        var responseContent = await SendWithRetry(async token => {
+        var responseContent = await SendWithRetry(async token =>
+        {
             var request = new HttpRequestMessage(HttpMethod.Post, url);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -228,33 +328,47 @@ public class FinraClient : IFinraClient {
         return JsonConvert.DeserializeObject<List<T>>(responseContent) ?? [];
     }
 
-    private async Task<string> SendWithRetry(Func<string, Task<HttpResponseMessage>> sendRequest) {
+    private async Task<string> SendWithRetry(Func<string, Task<HttpResponseMessage>> sendRequest)
+    {
         var token = await GetAccessToken();
 
-        for (var attempt = 0; attempt <= MaxRetries; attempt++) {
+        for (var attempt = 0; attempt <= MaxRetries; attempt++)
+        {
             await RateLimiter.WaitAsync();
 
             using var response = await sendRequest(token);
 
-            if (response.StatusCode == HttpStatusCode.Unauthorized) {
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
                 _logger.LogDebug("Token expired, refreshing");
                 await InvalidateToken();
                 token = await GetAccessToken();
                 continue;
             }
 
-            if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < MaxRetries) {
+            if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < MaxRetries)
+            {
                 var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
-                _logger.LogWarning("Rate limited (429), retrying in {Delay}s (attempt {Attempt}/{Max})",
-                    delay.TotalSeconds, attempt + 1, MaxRetries);
+                _logger.LogWarning(
+                    "Rate limited (429), retrying in {Delay}s (attempt {Attempt}/{Max})",
+                    delay.TotalSeconds,
+                    attempt + 1,
+                    MaxRetries
+                );
                 await Task.Delay(delay);
                 continue;
             }
 
-            if ((int)response.StatusCode >= 500 && attempt < MaxRetries) {
+            if ((int)response.StatusCode >= 500 && attempt < MaxRetries)
+            {
                 var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
-                _logger.LogWarning("Server error ({StatusCode}), retrying in {Delay}s (attempt {Attempt}/{Max})",
-                    (int)response.StatusCode, delay.TotalSeconds, attempt + 1, MaxRetries);
+                _logger.LogWarning(
+                    "Server error ({StatusCode}), retrying in {Delay}s (attempt {Attempt}/{Max})",
+                    (int)response.StatusCode,
+                    delay.TotalSeconds,
+                    attempt + 1,
+                    MaxRetries
+                );
                 await Task.Delay(delay);
                 continue;
             }
@@ -266,17 +380,21 @@ public class FinraClient : IFinraClient {
         throw new HttpRequestException("Max retries exceeded for FINRA API request");
     }
 
-    private async Task<string> GetAccessToken() {
+    private async Task<string> GetAccessToken()
+    {
         await TokenSemaphore.WaitAsync();
-        try {
-            if (_cachedToken != null && DateTime.UtcNow < _tokenExpiry) {
+        try
+        {
+            if (_cachedToken != null && DateTime.UtcNow < _tokenExpiry)
+            {
                 return _cachedToken;
             }
 
             _logger.LogDebug("Requesting new FINRA access token");
 
             var credentials = Convert.ToBase64String(
-                Encoding.UTF8.GetBytes($"{_options.ClientId}:{_options.ClientSecret}"));
+                Encoding.UTF8.GetBytes($"{_options.ClientId}:{_options.ClientSecret}")
+            );
 
             var request = new HttpRequestMessage(HttpMethod.Post, TokenEndpoint);
             request.Headers.Authorization = new AuthenticationHeaderValue("Basic", credentials);
@@ -296,17 +414,23 @@ public class FinraClient : IFinraClient {
 
             _logger.LogDebug("FINRA access token acquired, expires in {ExpiresIn}s", expiresIn);
             return accessToken;
-        } finally {
+        }
+        finally
+        {
             TokenSemaphore.Release();
         }
     }
 
-    private static async Task InvalidateToken() {
+    private static async Task InvalidateToken()
+    {
         await TokenSemaphore.WaitAsync();
-        try {
+        try
+        {
             _cachedToken = null;
             _tokenExpiry = DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc);
-        } finally {
+        }
+        finally
+        {
             TokenSemaphore.Release();
         }
     }

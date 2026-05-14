@@ -3,8 +3,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Cftc.Data;
 
-public class CftcModuleConfiguration : Equibles.Data.IModuleConfiguration {
-    public void ConfigureEntities(ModelBuilder builder) {
+public class CftcModuleConfiguration : Equibles.Data.IModuleConfiguration
+{
+    public void ConfigureEntities(ModelBuilder builder)
+    {
         builder.Entity<CftcContract>();
         builder.Entity<CftcPositionReport>();
     }

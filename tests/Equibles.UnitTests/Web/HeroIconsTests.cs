@@ -2,9 +2,11 @@ using Equibles.Web.TagHelpers;
 
 namespace Equibles.UnitTests.Web;
 
-public class HeroIconsTests {
+public class HeroIconsTests
+{
     [Fact]
-    public void Get_SolidStyleMissingButOutlineExists_FallsBackToOutlinePath() {
+    public void Get_SolidStyleMissingButOutlineExists_FallsBackToOutlinePath()
+    {
         var solid = HeroIcons.Get("circle-stack", HeroIcons.IconStyle.Solid);
         var outline = HeroIcons.Get("circle-stack", HeroIcons.IconStyle.Outline);
 
@@ -13,7 +15,8 @@ public class HeroIconsTests {
     }
 
     [Fact]
-    public void Render_WithCustomCssClass_AppendsCssClassToBaseClassesWhilePreservingSize() {
+    public void Render_WithCustomCssClass_AppendsCssClassToBaseClassesWhilePreservingSize()
+    {
         // Render's `cssClass` parameter is the only optional ternary branch
         // in the method's classes-string composition:
         //   var classes = string.IsNullOrEmpty(cssClass)
@@ -53,7 +56,12 @@ public class HeroIconsTests {
         // proves the concat order (cssClass comes LAST, which is
         // load-bearing for Tailwind's last-class-wins resolution
         // — utility classes overriding base styles depend on this).
-        var svg = HeroIcons.Render("plus", HeroIcons.IconStyle.Outline, size: "6", cssClass: "text-red-600");
+        var svg = HeroIcons.Render(
+            "plus",
+            HeroIcons.IconStyle.Outline,
+            size: "6",
+            cssClass: "text-red-600"
+        );
 
         svg.Should().Contain("size-6");
         svg.Should().Contain("inline-block");
@@ -62,7 +70,8 @@ public class HeroIconsTests {
     }
 
     [Fact]
-    public void Render_SolidStyle_EmitsFilledCurrentColorWithoutStrokeAttributes() {
+    public void Render_SolidStyle_EmitsFilledCurrentColorWithoutStrokeAttributes()
+    {
         // Render's solid path differs from outline at three points: fill, stroke,
         // and the path's stroke-linecap/stroke-linejoin attrs. Outline icons use
         // a transparent fill with a colored stroke; solid icons use a colored
@@ -79,7 +88,8 @@ public class HeroIconsTests {
     }
 
     [Fact]
-    public void Render_WithNonDefaultSize_EmitsCorrespondingSizeClass() {
+    public void Render_WithNonDefaultSize_EmitsCorrespondingSizeClass()
+    {
         // Sibling to Render_WithCustomCssClass_AppendsCssClassToBaseClassesWhilePreservingSize.
         // The existing custom-cssClass pin asserts `svg.Should().Contain("size-6")`
         // but uses `size: "6"` — the DEFAULT. That pin proves the size class is

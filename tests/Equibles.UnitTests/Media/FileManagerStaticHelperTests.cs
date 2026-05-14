@@ -2,9 +2,11 @@ using Equibles.Media.BusinessLogic;
 
 namespace Equibles.UnitTests.Media;
 
-public class FileManagerStaticHelperTests {
+public class FileManagerStaticHelperTests
+{
     [Fact]
-    public void AcceptedExtensionsString_JoinsAllExtensionsWithLeadingDotAndCommaSeparator() {
+    public void AcceptedExtensionsString_JoinsAllExtensionsWithLeadingDotAndCommaSeparator()
+    {
         // Mirror of the IImageManager.AcceptedExtensionsString helper test but
         // for the FileManager (generic-file) accept list. The exact output is
         // wired straight into HTML <input type="file" accept="..."> attrs on

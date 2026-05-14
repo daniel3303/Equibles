@@ -27,51 +27,82 @@ namespace Equibles.IntegrationTests.Mcp;
 // extraction shows up here, not in production.
 
 [Collection(ParadeDbCollection.Name)]
-public class RagSearchToolsTests : ParadeDbMcpTestBase {
-    public RagSearchToolsTests(ParadeDbFixture fixture) : base(fixture) { }
+public class RagSearchToolsTests : ParadeDbMcpTestBase
+{
+    public RagSearchToolsTests(ParadeDbFixture fixture)
+        : base(fixture) { }
 
-    private RagSearchTools Sut() {
+    private RagSearchTools Sut()
+    {
         var ragManager = new RagManager(
             new ChunkRepository(DbContext),
             new CommonStockRepository(DbContext),
-            NullLogger<RagManager>());
+            NullLogger<RagManager>()
+        );
         var secDocumentService = new SecDocumentService(
             new DocumentRepository(DbContext),
-            NullLogger<SecDocumentService>());
-        return new RagSearchTools(ragManager, secDocumentService, ErrorManager, NullLogger<RagSearchTools>());
+            NullLogger<SecDocumentService>()
+        );
+        return new RagSearchTools(
+            ragManager,
+            secDocumentService,
+            ErrorManager,
+            NullLogger<RagSearchTools>()
+        );
     }
 
     // ── Seeding ─────────────────────────────────────────────────────────
 
-    private async Task<(CommonStock stock, Document document, List<Chunk> chunks)> SeedDocumentWithChunks(
+    private async Task<(
+        CommonStock stock,
+        Document document,
+        List<Chunk> chunks
+    )> SeedDocumentWithChunks(
         string[] chunkContents,
-        string ticker = "AAPL", string companyName = "Apple Inc",
-        DocumentType documentType = null, DateOnly? reportingDate = null
-    ) {
+        string ticker = "AAPL",
+        string companyName = "Apple Inc",
+        DocumentType documentType = null,
+        DateOnly? reportingDate = null
+    )
+    {
         documentType ??= DocumentType.TenK;
         var docReportingDate = reportingDate ?? new DateOnly(2026, 3, 15);
 
         // Ticker has a unique index; reuse an existing stock if a previous call in the same
         // test already seeded one with this ticker.
         var stockSet = DbContext.Set<CommonStock>();
-        var stock = stockSet.Local.FirstOrDefault(s => s.Ticker == ticker)
+        var stock =
+            stockSet.Local.FirstOrDefault(s => s.Ticker == ticker)
             ?? await stockSet.FirstOrDefaultAsync(s => s.Ticker == ticker);
-        if (stock == null) {
-            stock = new CommonStock { Ticker = ticker, Name = companyName, Cik = Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString() };
+        if (stock == null)
+        {
+            stock = new CommonStock
+            {
+                Ticker = ticker,
+                Name = companyName,
+                Cik = Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString(),
+            };
             stockSet.Add(stock);
         }
 
         var fileContent = new FileContent { Bytes = "placeholder"u8.ToArray() };
-        var file = new File {
-            Name = "filing", Extension = "txt", ContentType = "text/plain",
-            Size = fileContent.Bytes.Length, FileContent = fileContent,
+        var file = new File
+        {
+            Name = "filing",
+            Extension = "txt",
+            ContentType = "text/plain",
+            Size = fileContent.Bytes.Length,
+            FileContent = fileContent,
         };
         fileContent.FileId = file.Id;
         DbContext.Set<File>().Add(file);
 
-        var document = new Document {
-            CommonStock = stock, CommonStockId = stock.Id,
-            Content = file, ContentId = file.Id,
+        var document = new Document
+        {
+            CommonStock = stock,
+            CommonStockId = stock.Id,
+            Content = file,
+            ContentId = file.Id,
             DocumentType = documentType,
             ReportingDate = docReportingDate,
             ReportingForDate = docReportingDate.AddDays(-30),
@@ -80,16 +111,27 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase {
         DbContext.Set<Document>().Add(document);
 
         var chunks = new List<Chunk>();
-        for (var i = 0; i < chunkContents.Length; i++) {
+        for (var i = 0; i < chunkContents.Length; i++)
+        {
             var content = chunkContents[i];
-            chunks.Add(new Chunk {
-                Document = document, DocumentId = document.Id,
-                Index = i, StartPosition = i * 100, EndPosition = i * 100 + content.Length,
-                StartLineNumber = i + 1, Content = content,
-                DocumentType = documentType, Ticker = ticker,
-                ReportingDate = DateTime.SpecifyKind(
-                    docReportingDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc),
-            });
+            chunks.Add(
+                new Chunk
+                {
+                    Document = document,
+                    DocumentId = document.Id,
+                    Index = i,
+                    StartPosition = i * 100,
+                    EndPosition = i * 100 + content.Length,
+                    StartLineNumber = i + 1,
+                    Content = content,
+                    DocumentType = documentType,
+                    Ticker = ticker,
+                    ReportingDate = DateTime.SpecifyKind(
+                        docReportingDate.ToDateTime(TimeOnly.MinValue),
+                        DateTimeKind.Utc
+                    ),
+                }
+            );
         }
         DbContext.Set<Chunk>().AddRange(chunks);
         await DbContext.SaveChangesAsync();
@@ -100,9 +142,11 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase {
     // ── SearchDocuments ─────────────────────────────────────────────────
 
     [Fact]
-    public async Task SearchDocuments_NoMatches_ReturnsNoDocumentsMessage() {
+    public async Task SearchDocuments_NoMatches_ReturnsNoDocumentsMessage()
+    {
         await SeedDocumentWithChunks(
-            chunkContents: new[] { "We make consumer electronics.", "Smartphones drive revenue." });
+            chunkContents: new[] { "We make consumer electronics.", "Smartphones drive revenue." }
+        );
 
         var result = await Sut().SearchDocuments("blockchain cryptocurrency mining");
 
@@ -111,12 +155,15 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task SearchDocuments_MatchByKeyword_BuildsContextWithCompanyAndContent() {
+    public async Task SearchDocuments_MatchByKeyword_BuildsContextWithCompanyAndContent()
+    {
         await SeedDocumentWithChunks(
-            chunkContents: new[] {
+            chunkContents: new[]
+            {
                 "Apple's services segment grew 15% year-over-year, driven by App Store revenue.",
                 "We design and manufacture smartphones, computers, and tablets.",
-            });
+            }
+        );
 
         var result = await Sut().SearchDocuments("services segment revenue", maxResults: 5);
 
@@ -127,13 +174,19 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task SearchDocuments_FiltersByDocumentType_ExcludesOtherTypes() {
+    public async Task SearchDocuments_FiltersByDocumentType_ExcludesOtherTypes()
+    {
         await SeedDocumentWithChunks(
-            documentType: DocumentType.TenK, ticker: "AAPL",
-            chunkContents: new[] { "Annual report discussing quarterly results breakdown." });
+            documentType: DocumentType.TenK,
+            ticker: "AAPL",
+            chunkContents: new[] { "Annual report discussing quarterly results breakdown." }
+        );
         await SeedDocumentWithChunks(
-            documentType: DocumentType.TenQ, ticker: "MSFT", companyName: "Microsoft Corp",
-            chunkContents: new[] { "Quarterly results show steady growth." });
+            documentType: DocumentType.TenQ,
+            ticker: "MSFT",
+            companyName: "Microsoft Corp",
+            chunkContents: new[] { "Quarterly results show steady growth." }
+        );
 
         var result = await Sut().SearchDocuments("quarterly results", documentType: "TenQ");
 
@@ -142,16 +195,26 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task SearchDocuments_FiltersByDateRange_ExcludesOutsideWindow() {
+    public async Task SearchDocuments_FiltersByDateRange_ExcludesOutsideWindow()
+    {
         await SeedDocumentWithChunks(
-            ticker: "AAPL", reportingDate: new DateOnly(2024, 1, 15),
-            chunkContents: new[] { "Revenue increased substantially in fiscal year 2024." });
+            ticker: "AAPL",
+            reportingDate: new DateOnly(2024, 1, 15),
+            chunkContents: new[] { "Revenue increased substantially in fiscal year 2024." }
+        );
         await SeedDocumentWithChunks(
-            ticker: "MSFT", companyName: "Microsoft Corp", reportingDate: new DateOnly(2026, 3, 1),
-            chunkContents: new[] { "Revenue increased substantially in fiscal year 2026." });
+            ticker: "MSFT",
+            companyName: "Microsoft Corp",
+            reportingDate: new DateOnly(2026, 3, 1),
+            chunkContents: new[] { "Revenue increased substantially in fiscal year 2026." }
+        );
 
-        var result = await Sut().SearchDocuments("revenue increased fiscal year",
-            startDate: new DateTime(2026, 1, 1), endDate: new DateTime(2026, 12, 31));
+        var result = await Sut()
+            .SearchDocuments(
+                "revenue increased fiscal year",
+                startDate: new DateTime(2026, 1, 1),
+                endDate: new DateTime(2026, 12, 31)
+            );
 
         result.Should().Contain("MSFT");
         result.Should().NotContain("AAPL");
@@ -160,12 +223,17 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase {
     // ── SearchCompanyDocuments ──────────────────────────────────────────
 
     [Fact]
-    public async Task SearchCompanyDocuments_OnlyReturnsRequestedTicker() {
+    public async Task SearchCompanyDocuments_OnlyReturnsRequestedTicker()
+    {
         await SeedDocumentWithChunks(
-            ticker: "AAPL", chunkContents: new[] { "Cloud revenue increased." });
+            ticker: "AAPL",
+            chunkContents: new[] { "Cloud revenue increased." }
+        );
         await SeedDocumentWithChunks(
-            ticker: "MSFT", companyName: "Microsoft Corp",
-            chunkContents: new[] { "Cloud revenue increased substantially." });
+            ticker: "MSFT",
+            companyName: "Microsoft Corp",
+            chunkContents: new[] { "Cloud revenue increased substantially." }
+        );
 
         var result = await Sut().SearchCompanyDocuments("cloud revenue", "MSFT");
 
@@ -174,9 +242,12 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task SearchCompanyDocuments_UnknownTicker_StillReturnsEmptyMessage() {
+    public async Task SearchCompanyDocuments_UnknownTicker_StillReturnsEmptyMessage()
+    {
         await SeedDocumentWithChunks(
-            ticker: "AAPL", chunkContents: new[] { "Cloud revenue increased." });
+            ticker: "AAPL",
+            chunkContents: new[] { "Cloud revenue increased." }
+        );
 
         // ResolvePrimaryTicker falls back to the input ticker on miss; BM25 then finds zero rows
         // because no chunk has Ticker = "ZZZZ".
@@ -188,12 +259,17 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase {
     // ── SearchDocument ──────────────────────────────────────────────────
 
     [Fact]
-    public async Task SearchDocument_RestrictsSearchToProvidedDocumentId() {
+    public async Task SearchDocument_RestrictsSearchToProvidedDocumentId()
+    {
         var (_, docOne, _) = await SeedDocumentWithChunks(
-            ticker: "AAPL", chunkContents: new[] { "Risk factor: supply chain disruption." });
+            ticker: "AAPL",
+            chunkContents: new[] { "Risk factor: supply chain disruption." }
+        );
         var (_, docTwo, _) = await SeedDocumentWithChunks(
-            ticker: "MSFT", companyName: "Microsoft Corp",
-            chunkContents: new[] { "Risk factor: supply chain disruption." });
+            ticker: "MSFT",
+            companyName: "Microsoft Corp",
+            chunkContents: new[] { "Risk factor: supply chain disruption." }
+        );
 
         var result = await Sut().SearchDocument("supply chain", docTwo.Id);
 
@@ -202,7 +278,8 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task SearchDocument_UnknownDocumentId_ReturnsEmptyMessage() {
+    public async Task SearchDocument_UnknownDocumentId_ReturnsEmptyMessage()
+    {
         await SeedDocumentWithChunks(chunkContents: new[] { "Some content." });
 
         var result = await Sut().SearchDocument("anything", Guid.NewGuid());
@@ -213,20 +290,28 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase {
     // ── ListCompanyDocuments ────────────────────────────────────────────
 
     [Fact]
-    public async Task ListCompanyDocuments_UnknownTicker_ReturnsNotFoundMessage() {
+    public async Task ListCompanyDocuments_UnknownTicker_ReturnsNotFoundMessage()
+    {
         var result = await Sut().ListCompanyDocuments("ZZZZ");
 
         result.Should().Contain("No documents found for ticker ZZZZ");
     }
 
     [Fact]
-    public async Task ListCompanyDocuments_RendersDocumentsForCompany() {
+    public async Task ListCompanyDocuments_RendersDocumentsForCompany()
+    {
         await SeedDocumentWithChunks(
-            ticker: "AAPL", documentType: DocumentType.TenK,
-            reportingDate: new DateOnly(2026, 3, 15), chunkContents: new[] { "Annual report content." });
+            ticker: "AAPL",
+            documentType: DocumentType.TenK,
+            reportingDate: new DateOnly(2026, 3, 15),
+            chunkContents: new[] { "Annual report content." }
+        );
         await SeedDocumentWithChunks(
-            ticker: "AAPL", documentType: DocumentType.TenQ,
-            reportingDate: new DateOnly(2026, 4, 30), chunkContents: new[] { "Quarterly content." });
+            ticker: "AAPL",
+            documentType: DocumentType.TenQ,
+            reportingDate: new DateOnly(2026, 4, 30),
+            chunkContents: new[] { "Quarterly content." }
+        );
 
         var result = await Sut().ListCompanyDocuments("AAPL");
 
@@ -238,13 +323,19 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task ListCompanyDocuments_OrdersNewestFirst() {
+    public async Task ListCompanyDocuments_OrdersNewestFirst()
+    {
         await SeedDocumentWithChunks(
-            ticker: "AAPL", reportingDate: new DateOnly(2025, 6, 30),
-            chunkContents: new[] { "Older filing." });
+            ticker: "AAPL",
+            reportingDate: new DateOnly(2025, 6, 30),
+            chunkContents: new[] { "Older filing." }
+        );
         await SeedDocumentWithChunks(
-            ticker: "AAPL", documentType: DocumentType.TenQ,
-            reportingDate: new DateOnly(2026, 4, 30), chunkContents: new[] { "Newer filing." });
+            ticker: "AAPL",
+            documentType: DocumentType.TenQ,
+            reportingDate: new DateOnly(2026, 4, 30),
+            chunkContents: new[] { "Newer filing." }
+        );
 
         var result = await Sut().ListCompanyDocuments("AAPL");
 
@@ -252,13 +343,20 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task ListCompanyDocuments_FiltersByDocumentType() {
+    public async Task ListCompanyDocuments_FiltersByDocumentType()
+    {
         await SeedDocumentWithChunks(
-            ticker: "AAPL", documentType: DocumentType.TenK,
-            reportingDate: new DateOnly(2026, 3, 15), chunkContents: new[] { "Annual." });
+            ticker: "AAPL",
+            documentType: DocumentType.TenK,
+            reportingDate: new DateOnly(2026, 3, 15),
+            chunkContents: new[] { "Annual." }
+        );
         await SeedDocumentWithChunks(
-            ticker: "AAPL", documentType: DocumentType.EightK,
-            reportingDate: new DateOnly(2026, 4, 10), chunkContents: new[] { "Current report." });
+            ticker: "AAPL",
+            documentType: DocumentType.EightK,
+            reportingDate: new DateOnly(2026, 4, 10),
+            chunkContents: new[] { "Current report." }
+        );
 
         var result = await Sut().ListCompanyDocuments("AAPL", documentType: "EightK");
 
@@ -267,13 +365,16 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task ListCompanyDocuments_PaginatesAcrossPages() {
+    public async Task ListCompanyDocuments_PaginatesAcrossPages()
+    {
         // Seed 12 docs so pages 1 and 2 each have content; page 2 should return docs 11-12.
-        for (var i = 0; i < 12; i++) {
+        for (var i = 0; i < 12; i++)
+        {
             await SeedDocumentWithChunks(
                 ticker: "AAPL",
                 reportingDate: new DateOnly(2026, 1, 1).AddDays(i),
-                chunkContents: new[] { $"Doc {i + 1}" });
+                chunkContents: new[] { $"Doc {i + 1}" }
+            );
         }
 
         var page1 = await Sut().ListCompanyDocuments("AAPL", page: 1);

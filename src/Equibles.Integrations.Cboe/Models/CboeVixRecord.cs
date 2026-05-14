@@ -1,6 +1,7 @@
 namespace Equibles.Integrations.Cboe.Models;
 
-public class CboeVixRecord {
+public class CboeVixRecord
+{
     public DateOnly Date { get; set; }
     public decimal Open { get; set; }
     public decimal High { get; set; }

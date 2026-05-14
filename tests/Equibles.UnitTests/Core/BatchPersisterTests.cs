@@ -2,16 +2,23 @@ using Equibles.Worker;
 
 namespace Equibles.UnitTests.Core;
 
-public class BatchPersisterTests {
+public class BatchPersisterTests
+{
     [Fact]
-    public async Task Persist_ItemsNotDivisibleByBatchSize_FlushesEveryItemAndReturnsCorrectTotal() {
+    public async Task Persist_ItemsNotDivisibleByBatchSize_FlushesEveryItemAndReturnsCorrectTotal()
+    {
         var items = Enumerable.Range(1, 7).ToList();
         var flushed = new List<List<int>>();
 
-        var total = await BatchPersister.Persist(items, batchSize: 3, flushBatch: batch => {
-            flushed.Add([..batch]);
-            return Task.CompletedTask;
-        });
+        var total = await BatchPersister.Persist(
+            items,
+            batchSize: 3,
+            flushBatch: batch =>
+            {
+                flushed.Add([.. batch]);
+                return Task.CompletedTask;
+            }
+        );
 
         total.Should().Be(7);
         flushed.Should().HaveCount(3);
@@ -21,7 +28,8 @@ public class BatchPersisterTests {
     }
 
     [Fact]
-    public async Task Persist_EmptyItems_DoesNotCallFlushBatchAndReturnsZero() {
+    public async Task Persist_EmptyItems_DoesNotCallFlushBatchAndReturnsZero()
+    {
         // Sibling to the divisible/non-divisible pins. Both existing tests
         // use non-empty inputs. The third structural shape — an empty
         // enumerable — exercises a distinct path: the foreach body never
@@ -56,17 +64,23 @@ public class BatchPersisterTests {
         // final-flush guard fired correctly.
         var flushed = new List<List<int>>();
 
-        var total = await BatchPersister.Persist(Enumerable.Empty<int>(), batchSize: 3, flushBatch: batch => {
-            flushed.Add([..batch]);
-            return Task.CompletedTask;
-        });
+        var total = await BatchPersister.Persist(
+            Enumerable.Empty<int>(),
+            batchSize: 3,
+            flushBatch: batch =>
+            {
+                flushed.Add([.. batch]);
+                return Task.CompletedTask;
+            }
+        );
 
         total.Should().Be(0);
         flushed.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task Persist_ItemCountExactlyDivisibleByBatchSize_FlushesEachBatchOnceAndDoesNotDoubleFlush() {
+    public async Task Persist_ItemCountExactlyDivisibleByBatchSize_FlushesEachBatchOnceAndDoesNotDoubleFlush()
+    {
         // The non-divisible sibling pins the "leftover partial batch" path. This pin
         // covers the boundary case the sibling can NOT catch: when the last full
         // batch fills the list (count % batchSize == 0), `batch.Clear()` MUST run
@@ -90,10 +104,15 @@ public class BatchPersisterTests {
         var items = Enumerable.Range(1, 6).ToList();
         var flushed = new List<List<int>>();
 
-        var total = await BatchPersister.Persist(items, batchSize: 3, flushBatch: batch => {
-            flushed.Add([..batch]);
-            return Task.CompletedTask;
-        });
+        var total = await BatchPersister.Persist(
+            items,
+            batchSize: 3,
+            flushBatch: batch =>
+            {
+                flushed.Add([.. batch]);
+                return Task.CompletedTask;
+            }
+        );
 
         total.Should().Be(6);
         flushed.Should().HaveCount(2);

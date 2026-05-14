@@ -9,56 +9,80 @@ using Xunit;
 namespace Equibles.IntegrationTests.Mcp;
 
 [Collection(ParadeDbCollection.Name)]
-public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
-    public InstitutionalHoldingsToolsTests(ParadeDbFixture fixture) : base(fixture) { }
+public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
+{
+    public InstitutionalHoldingsToolsTests(ParadeDbFixture fixture)
+        : base(fixture) { }
 
-    private InstitutionalHoldingsTools Sut() => new(
-        new InstitutionalHoldingRepository(DbContext),
-        new InstitutionalHolderRepository(DbContext),
-        new CommonStockRepository(DbContext),
-        ErrorManager,
-        NullLogger<InstitutionalHoldingsTools>());
+    private InstitutionalHoldingsTools Sut() =>
+        new(
+            new InstitutionalHoldingRepository(DbContext),
+            new InstitutionalHolderRepository(DbContext),
+            new CommonStockRepository(DbContext),
+            ErrorManager,
+            NullLogger<InstitutionalHoldingsTools>()
+        );
 
     // ── Helpers ─────────────────────────────────────────────────────────
 
-    private static CommonStock CreateStock(string ticker = "AAPL", string name = "Apple Inc") {
-        return new CommonStock {
-            Ticker = ticker, Name = name,
+    private static CommonStock CreateStock(string ticker = "AAPL", string name = "Apple Inc")
+    {
+        return new CommonStock
+        {
+            Ticker = ticker,
+            Name = name,
             Cik = Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString(),
         };
     }
 
     private static InstitutionalHolder CreateHolder(
-        string cik = "0001067983", string name = "Berkshire Hathaway Inc",
-        string city = "Omaha", string stateOrCountry = "NE"
-    ) {
-        return new InstitutionalHolder {
-            Cik = cik, Name = name,
-            City = city, StateOrCountry = stateOrCountry,
+        string cik = "0001067983",
+        string name = "Berkshire Hathaway Inc",
+        string city = "Omaha",
+        string stateOrCountry = "NE"
+    )
+    {
+        return new InstitutionalHolder
+        {
+            Cik = cik,
+            Name = name,
+            City = city,
+            StateOrCountry = stateOrCountry,
         };
     }
 
     private static InstitutionalHolding CreateHolding(
-        CommonStock stock, InstitutionalHolder holder, DateOnly reportDate,
-        long shares = 1000, long value = 50_000, string accessionNumber = null
-    ) {
-        return new InstitutionalHolding {
-            CommonStockId = stock.Id, CommonStock = stock,
-            InstitutionalHolderId = holder.Id, InstitutionalHolder = holder,
+        CommonStock stock,
+        InstitutionalHolder holder,
+        DateOnly reportDate,
+        long shares = 1000,
+        long value = 50_000,
+        string accessionNumber = null
+    )
+    {
+        return new InstitutionalHolding
+        {
+            CommonStockId = stock.Id,
+            CommonStock = stock,
+            InstitutionalHolderId = holder.Id,
+            InstitutionalHolder = holder,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),
-            Shares = shares, Value = value,
+            Shares = shares,
+            Value = value,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
             AccessionNumber = accessionNumber ?? $"0000000000-24-{Guid.NewGuid().ToString()[..6]}",
-            TitleOfClass = "COM", Cusip = "037833100",
+            TitleOfClass = "COM",
+            Cusip = "037833100",
         };
     }
 
     // ── GetTopHolders ───────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetTopHolders_StockFoundWithHolders_ReturnsFormattedTable() {
+    public async Task GetTopHolders_StockFoundWithHolders_ReturnsFormattedTable()
+    {
         var stock = CreateStock("AAPL", "Apple Inc");
         var berkshire = CreateHolder("0001067983", "Berkshire Hathaway");
         var blackrock = CreateHolder("0001166559", "BlackRock Inc");
@@ -67,9 +91,12 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
         await DbContext.SaveChangesAsync();
 
         var reportDate = new DateOnly(2024, 3, 31);
-        DbContext.Set<InstitutionalHolding>().AddRange(
-            CreateHolding(stock, berkshire, reportDate, shares: 10_000, value: 1_500_000),
-            CreateHolding(stock, blackrock, reportDate, shares: 5_000, value: 750_000));
+        DbContext
+            .Set<InstitutionalHolding>()
+            .AddRange(
+                CreateHolding(stock, berkshire, reportDate, shares: 10_000, value: 1_500_000),
+                CreateHolding(stock, blackrock, reportDate, shares: 5_000, value: 750_000)
+            );
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetTopHolders("AAPL");
@@ -85,14 +112,16 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task GetTopHolders_StockNotFound_ReturnsNotFoundMessage() {
+    public async Task GetTopHolders_StockNotFound_ReturnsNotFoundMessage()
+    {
         var result = await Sut().GetTopHolders("ZZZZ");
 
         result.Should().Be("Stock 'ZZZZ' not found.");
     }
 
     [Fact]
-    public async Task GetTopHolders_StockFoundNoHoldings_ReturnsNoDataMessage() {
+    public async Task GetTopHolders_StockFoundNoHoldings_ReturnsNoDataMessage()
+    {
         DbContext.Set<CommonStock>().Add(CreateStock("AAPL", "Apple Inc"));
         await DbContext.SaveChangesAsync();
 
@@ -102,7 +131,8 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task GetTopHolders_WithSpecificReportDate_FiltersToThatDate() {
+    public async Task GetTopHolders_WithSpecificReportDate_FiltersToThatDate()
+    {
         var stock = CreateStock("AAPL", "Apple Inc");
         var holder = CreateHolder();
         DbContext.Set<CommonStock>().Add(stock);
@@ -111,9 +141,12 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
 
         var q1 = new DateOnly(2024, 3, 31);
         var q2 = new DateOnly(2024, 6, 30);
-        DbContext.Set<InstitutionalHolding>().AddRange(
-            CreateHolding(stock, holder, q1, shares: 1_000),
-            CreateHolding(stock, holder, q2, shares: 2_000));
+        DbContext
+            .Set<InstitutionalHolding>()
+            .AddRange(
+                CreateHolding(stock, holder, q1, shares: 1_000),
+                CreateHolding(stock, holder, q2, shares: 2_000)
+            );
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetTopHolders("AAPL", reportDate: "2024-03-31");
@@ -124,7 +157,8 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task GetTopHolders_DefaultsToLatestReportDate() {
+    public async Task GetTopHolders_DefaultsToLatestReportDate()
+    {
         var stock = CreateStock("AAPL", "Apple Inc");
         var holder = CreateHolder();
         DbContext.Set<CommonStock>().Add(stock);
@@ -133,9 +167,12 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
 
         var q1 = new DateOnly(2024, 3, 31);
         var q2 = new DateOnly(2024, 6, 30);
-        DbContext.Set<InstitutionalHolding>().AddRange(
-            CreateHolding(stock, holder, q1, shares: 1_000),
-            CreateHolding(stock, holder, q2, shares: 2_000));
+        DbContext
+            .Set<InstitutionalHolding>()
+            .AddRange(
+                CreateHolding(stock, holder, q1, shares: 1_000),
+                CreateHolding(stock, holder, q2, shares: 2_000)
+            );
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetTopHolders("AAPL");
@@ -145,17 +182,21 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task GetTopHolders_MaxResultsLimitsOutput() {
+    public async Task GetTopHolders_MaxResultsLimitsOutput()
+    {
         var stock = CreateStock("AAPL", "Apple Inc");
-        var holders = Enumerable.Range(1, 5).Select(i =>
-            CreateHolder($"000{i:D7}", $"Fund {i}")).ToList();
+        var holders = Enumerable
+            .Range(1, 5)
+            .Select(i => CreateHolder($"000{i:D7}", $"Fund {i}"))
+            .ToList();
         DbContext.Set<CommonStock>().Add(stock);
         DbContext.Set<InstitutionalHolder>().AddRange(holders);
         await DbContext.SaveChangesAsync();
 
         var reportDate = new DateOnly(2024, 3, 31);
-        var holdings = holders.Select((h, i) =>
-            CreateHolding(stock, h, reportDate, shares: (5 - i) * 1000)).ToList();
+        var holdings = holders
+            .Select((h, i) => CreateHolding(stock, h, reportDate, shares: (5 - i) * 1000))
+            .ToList();
         DbContext.Set<InstitutionalHolding>().AddRange(holdings);
         await DbContext.SaveChangesAsync();
 
@@ -168,7 +209,8 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task GetTopHolders_CalculatesPercentageOfTotal() {
+    public async Task GetTopHolders_CalculatesPercentageOfTotal()
+    {
         var stock = CreateStock("AAPL", "Apple Inc");
         var holder1 = CreateHolder("0001", "Fund A");
         var holder2 = CreateHolder("0002", "Fund B");
@@ -177,9 +219,12 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
         await DbContext.SaveChangesAsync();
 
         var reportDate = new DateOnly(2024, 3, 31);
-        DbContext.Set<InstitutionalHolding>().AddRange(
-            CreateHolding(stock, holder1, reportDate, shares: 75_000),
-            CreateHolding(stock, holder2, reportDate, shares: 25_000));
+        DbContext
+            .Set<InstitutionalHolding>()
+            .AddRange(
+                CreateHolding(stock, holder1, reportDate, shares: 75_000),
+                CreateHolding(stock, holder2, reportDate, shares: 25_000)
+            );
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetTopHolders("AAPL");
@@ -191,17 +236,39 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     // ── GetOwnershipHistory ─────────────────────────────────────────────
 
     [Fact]
-    public async Task GetOwnershipHistory_StockWithMultipleReportDates_ReturnsChronologicalTable() {
+    public async Task GetOwnershipHistory_StockWithMultipleReportDates_ReturnsChronologicalTable()
+    {
         var stock = CreateStock("AAPL", "Apple Inc");
         var holder = CreateHolder();
         DbContext.Set<CommonStock>().Add(stock);
         DbContext.Set<InstitutionalHolder>().Add(holder);
         await DbContext.SaveChangesAsync();
 
-        DbContext.Set<InstitutionalHolding>().AddRange(
-            CreateHolding(stock, holder, new DateOnly(2024, 3, 31), shares: 10_000, value: 1_000_000),
-            CreateHolding(stock, holder, new DateOnly(2024, 6, 30), shares: 12_000, value: 1_200_000),
-            CreateHolding(stock, holder, new DateOnly(2024, 9, 30), shares: 15_000, value: 1_500_000));
+        DbContext
+            .Set<InstitutionalHolding>()
+            .AddRange(
+                CreateHolding(
+                    stock,
+                    holder,
+                    new DateOnly(2024, 3, 31),
+                    shares: 10_000,
+                    value: 1_000_000
+                ),
+                CreateHolding(
+                    stock,
+                    holder,
+                    new DateOnly(2024, 6, 30),
+                    shares: 12_000,
+                    value: 1_200_000
+                ),
+                CreateHolding(
+                    stock,
+                    holder,
+                    new DateOnly(2024, 9, 30),
+                    shares: 15_000,
+                    value: 1_500_000
+                )
+            );
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetOwnershipHistory("AAPL");
@@ -213,14 +280,16 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task GetOwnershipHistory_StockNotFound_ReturnsNotFoundMessage() {
+    public async Task GetOwnershipHistory_StockNotFound_ReturnsNotFoundMessage()
+    {
         var result = await Sut().GetOwnershipHistory("ZZZZ");
 
         result.Should().Be("Stock 'ZZZZ' not found.");
     }
 
     [Fact]
-    public async Task GetOwnershipHistory_StockFoundNoHistory_ReturnsNoDataMessage() {
+    public async Task GetOwnershipHistory_StockFoundNoHistory_ReturnsNoDataMessage()
+    {
         DbContext.Set<CommonStock>().Add(CreateStock("AAPL", "Apple Inc"));
         await DbContext.SaveChangesAsync();
 
@@ -230,16 +299,20 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task GetOwnershipHistory_ShowsChangePercentageBetweenPeriods() {
+    public async Task GetOwnershipHistory_ShowsChangePercentageBetweenPeriods()
+    {
         var stock = CreateStock("AAPL", "Apple Inc");
         var holder = CreateHolder();
         DbContext.Set<CommonStock>().Add(stock);
         DbContext.Set<InstitutionalHolder>().Add(holder);
         await DbContext.SaveChangesAsync();
 
-        DbContext.Set<InstitutionalHolding>().AddRange(
-            CreateHolding(stock, holder, new DateOnly(2024, 3, 31), shares: 10_000),
-            CreateHolding(stock, holder, new DateOnly(2024, 6, 30), shares: 12_000));
+        DbContext
+            .Set<InstitutionalHolding>()
+            .AddRange(
+                CreateHolding(stock, holder, new DateOnly(2024, 3, 31), shares: 10_000),
+                CreateHolding(stock, holder, new DateOnly(2024, 6, 30), shares: 12_000)
+            );
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetOwnershipHistory("AAPL");
@@ -250,18 +323,21 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task GetOwnershipHistory_MaxPeriodsLimitsOutput() {
+    public async Task GetOwnershipHistory_MaxPeriodsLimitsOutput()
+    {
         var stock = CreateStock("AAPL", "Apple Inc");
         var holder = CreateHolder();
         DbContext.Set<CommonStock>().Add(stock);
         DbContext.Set<InstitutionalHolder>().Add(holder);
         await DbContext.SaveChangesAsync();
 
-        var dates = Enumerable.Range(0, 5)
+        var dates = Enumerable
+            .Range(0, 5)
             .Select(i => new DateOnly(2023, 3, 31).AddMonths(i * 3))
             .ToList();
-        var holdings = dates.Select((d, i) =>
-            CreateHolding(stock, holder, d, shares: 1000 * (i + 1))).ToList();
+        var holdings = dates
+            .Select((d, i) => CreateHolding(stock, holder, d, shares: 1000 * (i + 1)))
+            .ToList();
         DbContext.Set<InstitutionalHolding>().AddRange(holdings);
         await DbContext.SaveChangesAsync();
 
@@ -274,7 +350,8 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task GetOwnershipHistory_MultipleHoldersPerPeriod_AggregatesCorrectly() {
+    public async Task GetOwnershipHistory_MultipleHoldersPerPeriod_AggregatesCorrectly()
+    {
         var stock = CreateStock("AAPL", "Apple Inc");
         var holder1 = CreateHolder("0001", "Fund A");
         var holder2 = CreateHolder("0002", "Fund B");
@@ -283,9 +360,12 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
         await DbContext.SaveChangesAsync();
 
         var reportDate = new DateOnly(2024, 3, 31);
-        DbContext.Set<InstitutionalHolding>().AddRange(
-            CreateHolding(stock, holder1, reportDate, shares: 10_000, value: 1_000_000),
-            CreateHolding(stock, holder2, reportDate, shares: 5_000, value: 500_000));
+        DbContext
+            .Set<InstitutionalHolding>()
+            .AddRange(
+                CreateHolding(stock, holder1, reportDate, shares: 10_000, value: 1_000_000),
+                CreateHolding(stock, holder2, reportDate, shares: 5_000, value: 500_000)
+            );
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetOwnershipHistory("AAPL");
@@ -299,7 +379,8 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     // natively against the ParadeDB container — no test-only ILike shim required.
 
     [Fact]
-    public async Task GetInstitutionPortfolio_HolderFoundWithHoldings_ReturnsPortfolioTable() {
+    public async Task GetInstitutionPortfolio_HolderFoundWithHoldings_ReturnsPortfolioTable()
+    {
         var apple = CreateStock("AAPL", "Apple Inc");
         var msft = CreateStock("MSFT", "Microsoft Corp");
         var holder = CreateHolder("0001067983", "Berkshire Hathaway Inc", "Omaha", "NE");
@@ -308,9 +389,12 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
         await DbContext.SaveChangesAsync();
 
         var reportDate = new DateOnly(2024, 3, 31);
-        DbContext.Set<InstitutionalHolding>().AddRange(
-            CreateHolding(apple, holder, reportDate, shares: 10_000, value: 2_000_000),
-            CreateHolding(msft, holder, reportDate, shares: 5_000, value: 1_500_000));
+        DbContext
+            .Set<InstitutionalHolding>()
+            .AddRange(
+                CreateHolding(apple, holder, reportDate, shares: 10_000, value: 2_000_000),
+                CreateHolding(msft, holder, reportDate, shares: 5_000, value: 1_500_000)
+            );
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetInstitutionPortfolio("Berkshire");
@@ -325,15 +409,19 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task GetInstitutionPortfolio_HolderNotFound_ReturnsNotFoundMessage() {
+    public async Task GetInstitutionPortfolio_HolderNotFound_ReturnsNotFoundMessage()
+    {
         var result = await Sut().GetInstitutionPortfolio("NonExistent");
 
         result.Should().Be("No institution found matching 'NonExistent'.");
     }
 
     [Fact]
-    public async Task GetInstitutionPortfolio_HolderFoundNoHoldings_ReturnsNoDataMessage() {
-        DbContext.Set<InstitutionalHolder>().Add(CreateHolder("0001067983", "Berkshire Hathaway Inc"));
+    public async Task GetInstitutionPortfolio_HolderFoundNoHoldings_ReturnsNoDataMessage()
+    {
+        DbContext
+            .Set<InstitutionalHolder>()
+            .Add(CreateHolder("0001067983", "Berkshire Hathaway Inc"));
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetInstitutionPortfolio("Berkshire");
@@ -342,7 +430,8 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task GetInstitutionPortfolio_WithSpecificReportDate_FiltersToThatDate() {
+    public async Task GetInstitutionPortfolio_WithSpecificReportDate_FiltersToThatDate()
+    {
         var stock = CreateStock("AAPL", "Apple Inc");
         var holder = CreateHolder("0001067983", "Berkshire Hathaway Inc");
         DbContext.Set<CommonStock>().Add(stock);
@@ -351,9 +440,12 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
 
         var q1 = new DateOnly(2024, 3, 31);
         var q2 = new DateOnly(2024, 6, 30);
-        DbContext.Set<InstitutionalHolding>().AddRange(
-            CreateHolding(stock, holder, q1, shares: 1_000),
-            CreateHolding(stock, holder, q2, shares: 2_000));
+        DbContext
+            .Set<InstitutionalHolding>()
+            .AddRange(
+                CreateHolding(stock, holder, q1, shares: 1_000),
+                CreateHolding(stock, holder, q2, shares: 2_000)
+            );
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetInstitutionPortfolio("Berkshire", reportDate: "2024-03-31");
@@ -364,7 +456,8 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task GetInstitutionPortfolio_OrdersByValueDescending() {
+    public async Task GetInstitutionPortfolio_OrdersByValueDescending()
+    {
         var apple = CreateStock("AAPL", "Apple Inc");
         var msft = CreateStock("MSFT", "Microsoft Corp");
         var holder = CreateHolder("0001067983", "Berkshire Hathaway Inc");
@@ -373,25 +466,34 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
         await DbContext.SaveChangesAsync();
 
         var reportDate = new DateOnly(2024, 3, 31);
-        DbContext.Set<InstitutionalHolding>().AddRange(
-            CreateHolding(apple, holder, reportDate, shares: 1_000, value: 500_000),
-            CreateHolding(msft, holder, reportDate, shares: 2_000, value: 2_000_000));
+        DbContext
+            .Set<InstitutionalHolding>()
+            .AddRange(
+                CreateHolding(apple, holder, reportDate, shares: 1_000, value: 500_000),
+                CreateHolding(msft, holder, reportDate, shares: 2_000, value: 2_000_000)
+            );
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetInstitutionPortfolio("Berkshire");
 
         // MSFT (value 2M) outranks AAPL (value 500K).
-        result.IndexOf("MSFT", StringComparison.Ordinal)
-            .Should().BeLessThan(result.IndexOf("AAPL", StringComparison.Ordinal));
+        result
+            .IndexOf("MSFT", StringComparison.Ordinal)
+            .Should()
+            .BeLessThan(result.IndexOf("AAPL", StringComparison.Ordinal));
     }
 
     // ── SearchInstitutions ──────────────────────────────────────────────
 
     [Fact]
-    public async Task SearchInstitutions_MatchesFound_ReturnsFormattedTable() {
-        DbContext.Set<InstitutionalHolder>().AddRange(
-            CreateHolder("0001067983", "Berkshire Hathaway Inc", "Omaha", "NE"),
-            CreateHolder("0001166559", "BlackRock Inc", "New York", "NY"));
+    public async Task SearchInstitutions_MatchesFound_ReturnsFormattedTable()
+    {
+        DbContext
+            .Set<InstitutionalHolder>()
+            .AddRange(
+                CreateHolder("0001067983", "Berkshire Hathaway Inc", "Omaha", "NE"),
+                CreateHolder("0001166559", "BlackRock Inc", "New York", "NY")
+            );
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().SearchInstitutions("Inc");
@@ -405,8 +507,11 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task SearchInstitutions_NoMatches_ReturnsNotFoundMessage() {
-        DbContext.Set<InstitutionalHolder>().Add(CreateHolder("0001067983", "Berkshire Hathaway Inc"));
+    public async Task SearchInstitutions_NoMatches_ReturnsNotFoundMessage()
+    {
+        DbContext
+            .Set<InstitutionalHolder>()
+            .Add(CreateHolder("0001067983", "Berkshire Hathaway Inc"));
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().SearchInstitutions("NonExistentFund");
@@ -415,9 +520,12 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task SearchInstitutions_MaxResultsLimitsOutput() {
-        var holders = Enumerable.Range(1, 5).Select(i =>
-            CreateHolder($"000{i:D7}", $"Alpha Fund {i}")).ToArray();
+    public async Task SearchInstitutions_MaxResultsLimitsOutput()
+    {
+        var holders = Enumerable
+            .Range(1, 5)
+            .Select(i => CreateHolder($"000{i:D7}", $"Alpha Fund {i}"))
+            .ToArray();
         DbContext.Set<InstitutionalHolder>().AddRange(holders);
         await DbContext.SaveChangesAsync();
 
@@ -431,9 +539,11 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task SearchInstitutions_NullCityAndState_ShowsEmDash() {
-        DbContext.Set<InstitutionalHolder>().Add(
-            CreateHolder("0001234567", "Mystery Fund LLC", city: null, stateOrCountry: null));
+    public async Task SearchInstitutions_NullCityAndState_ShowsEmDash()
+    {
+        DbContext
+            .Set<InstitutionalHolder>()
+            .Add(CreateHolder("0001234567", "Mystery Fund LLC", city: null, stateOrCountry: null));
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().SearchInstitutions("Mystery");
@@ -443,9 +553,11 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase {
     }
 
     [Fact]
-    public async Task SearchInstitutions_IsCaseInsensitive() {
-        DbContext.Set<InstitutionalHolder>().Add(
-            CreateHolder("0001067983", "Berkshire Hathaway Inc"));
+    public async Task SearchInstitutions_IsCaseInsensitive()
+    {
+        DbContext
+            .Set<InstitutionalHolder>()
+            .Add(CreateHolder("0001067983", "Berkshire Hathaway Inc"));
         await DbContext.SaveChangesAsync();
 
         // Production code uses EF.Functions.ILike — this only succeeds against real Postgres.

@@ -7,9 +7,11 @@ using Microsoft.Extensions.Hosting;
 
 namespace Equibles.UnitTests.Cftc;
 
-public class CftcServiceCollectionExtensionsTests {
+public class CftcServiceCollectionExtensionsTests
+{
     [Fact]
-    public void AddCftcWorker_AutoWiresICftcClientFromIntegrationsAssembly() {
+    public void AddCftcWorker_AutoWiresICftcClientFromIntegrationsAssembly()
+    {
         // Sibling to `AddCftcWorker_AutoWiresCftcImportService`. The
         // existing pin covers the FIRST `AutoWireServicesFrom` call —
         // the hosted-service assembly scan that registers
@@ -56,7 +58,8 @@ public class CftcServiceCollectionExtensionsTests {
     }
 
     [Fact]
-    public void AddCftcWorker_AutoWiresCftcImportService() {
+    public void AddCftcWorker_AutoWiresCftcImportService()
+    {
         // AddCftcWorker is the host's seam into auto-wiring for the COT
         // (Commitment of Traders) import pipeline. It scans BOTH the
         // hosted-service assembly AND the Equibles.Integrations.Cftc
@@ -75,7 +78,8 @@ public class CftcServiceCollectionExtensionsTests {
     }
 
     [Fact]
-    public void AddCftcWorker_RegistersCftcScraperWorkerAsIHostedService() {
+    public void AddCftcWorker_RegistersCftcScraperWorkerAsIHostedService()
+    {
         // Third sibling in the AddCftcWorker registration family. The two
         // existing pins cover the AutoWireServicesFrom scans (CftcImportService
         // and ICftcClient). This pin covers the structurally distinct
@@ -127,8 +131,11 @@ public class CftcServiceCollectionExtensionsTests {
             .Where(d => d.ServiceType == typeof(IHostedService))
             .ToList();
 
-        hostedServiceDescriptors.Should().Contain(
-            d => d.ImplementationType == typeof(CftcScraperWorker),
-            "AddHostedService<CftcScraperWorker>() must register the worker as IHostedService so the weekly CFTC COT report download runs at startup");
+        hostedServiceDescriptors
+            .Should()
+            .Contain(
+                d => d.ImplementationType == typeof(CftcScraperWorker),
+                "AddHostedService<CftcScraperWorker>() must register the worker as IHostedService so the weekly CFTC COT report download runs at startup"
+            );
     }
 }

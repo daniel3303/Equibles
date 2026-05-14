@@ -12,13 +12,27 @@ namespace Equibles.Migrations.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "IX_InsiderTransaction_CommonStockId_InsiderOwnerId_Transaction~",
-                table: "InsiderTransaction");
+                table: "InsiderTransaction"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_InsiderTransaction_CommonStockId_InsiderOwnerId_Transaction~",
                 table: "InsiderTransaction",
-                columns: new[] { "CommonStockId", "InsiderOwnerId", "TransactionDate", "TransactionCode", "SecurityTitle", "AccessionNumber", "OwnershipNature", "Shares", "PricePerShare", "SharesOwnedAfter" },
-                unique: true);
+                columns: new[]
+                {
+                    "CommonStockId",
+                    "InsiderOwnerId",
+                    "TransactionDate",
+                    "TransactionCode",
+                    "SecurityTitle",
+                    "AccessionNumber",
+                    "OwnershipNature",
+                    "Shares",
+                    "PricePerShare",
+                    "SharesOwnedAfter",
+                },
+                unique: true
+            );
         }
 
         /// <inheritdoc />
@@ -26,13 +40,23 @@ namespace Equibles.Migrations.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "IX_InsiderTransaction_CommonStockId_InsiderOwnerId_Transaction~",
-                table: "InsiderTransaction");
+                table: "InsiderTransaction"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_InsiderTransaction_CommonStockId_InsiderOwnerId_Transaction~",
                 table: "InsiderTransaction",
-                columns: new[] { "CommonStockId", "InsiderOwnerId", "TransactionDate", "TransactionCode", "SecurityTitle", "AccessionNumber" },
-                unique: true);
+                columns: new[]
+                {
+                    "CommonStockId",
+                    "InsiderOwnerId",
+                    "TransactionDate",
+                    "TransactionCode",
+                    "SecurityTitle",
+                    "AccessionNumber",
+                },
+                unique: true
+            );
         }
     }
 }

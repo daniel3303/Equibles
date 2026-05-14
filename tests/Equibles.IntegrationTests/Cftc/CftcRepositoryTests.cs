@@ -7,24 +7,30 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.IntegrationTests.Cftc;
 
-public class CftcContractRepositoryTests : IDisposable {
+public class CftcContractRepositoryTests : IDisposable
+{
     private readonly EquiblesDbContext _dbContext;
     private readonly CftcContractRepository _repository;
 
-    public CftcContractRepositoryTests() {
+    public CftcContractRepositoryTests()
+    {
         _dbContext = TestDbContextFactory.Create(new CftcModuleConfiguration());
         _repository = new CftcContractRepository(_dbContext);
     }
 
-    public void Dispose() {
+    public void Dispose()
+    {
         _dbContext.Dispose();
     }
 
     private static CftcContract CreateContract(
         string marketCode = "WTI",
         string marketName = "Crude Oil, Light Sweet",
-        CftcContractCategory category = CftcContractCategory.Energy) {
-        return new CftcContract {
+        CftcContractCategory category = CftcContractCategory.Energy
+    )
+    {
+        return new CftcContract
+        {
             Id = Guid.NewGuid(),
             MarketCode = marketCode,
             MarketName = marketName,
@@ -35,7 +41,8 @@ public class CftcContractRepositoryTests : IDisposable {
     // -- GetByMarketCode --------------------------------------------------
 
     [Fact]
-    public async Task GetByMarketCode_ExistingCode_ReturnsContract() {
+    public async Task GetByMarketCode_ExistingCode_ReturnsContract()
+    {
         _dbContext.Set<CftcContract>().Add(CreateContract("WTI", "Crude Oil, Light Sweet"));
         await _dbContext.SaveChangesAsync();
 
@@ -47,35 +54,38 @@ public class CftcContractRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByMarketCode_NonExistentCode_ReturnsNull() {
+    public async Task GetByMarketCode_NonExistentCode_ReturnsNull()
+    {
         var result = await _repository.GetByMarketCode("NONEXISTENT").FirstOrDefaultAsync();
 
         result.Should().BeNull();
     }
 
     [Fact]
-    public async Task GetByMarketCode_DoesNotReturnOtherContracts() {
-        _dbContext.Set<CftcContract>().AddRange(
-            CreateContract("WTI", "Crude Oil"),
-            CreateContract("NG", "Natural Gas")
-        );
+    public async Task GetByMarketCode_DoesNotReturnOtherContracts()
+    {
+        _dbContext
+            .Set<CftcContract>()
+            .AddRange(CreateContract("WTI", "Crude Oil"), CreateContract("NG", "Natural Gas"));
         await _dbContext.SaveChangesAsync();
 
         var result = _repository.GetByMarketCode("WTI").ToList();
 
-        result.Should().ContainSingle()
-            .Which.MarketCode.Should().Be("WTI");
+        result.Should().ContainSingle().Which.MarketCode.Should().Be("WTI");
     }
 
     // -- GetByCategory ----------------------------------------------------
 
     [Fact]
-    public async Task GetByCategory_ReturnsContractsInCategory() {
-        _dbContext.Set<CftcContract>().AddRange(
-            CreateContract("WTI", "Crude Oil", CftcContractCategory.Energy),
-            CreateContract("NG", "Natural Gas", CftcContractCategory.Energy),
-            CreateContract("GC", "Gold", CftcContractCategory.Metals)
-        );
+    public async Task GetByCategory_ReturnsContractsInCategory()
+    {
+        _dbContext
+            .Set<CftcContract>()
+            .AddRange(
+                CreateContract("WTI", "Crude Oil", CftcContractCategory.Energy),
+                CreateContract("NG", "Natural Gas", CftcContractCategory.Energy),
+                CreateContract("GC", "Gold", CftcContractCategory.Metals)
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = _repository.GetByCategory(CftcContractCategory.Energy).ToList();
@@ -85,10 +95,11 @@ public class CftcContractRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByCategory_EmptyCategory_ReturnsEmpty() {
-        _dbContext.Set<CftcContract>().Add(
-            CreateContract("WTI", "Crude Oil", CftcContractCategory.Energy)
-        );
+    public async Task GetByCategory_EmptyCategory_ReturnsEmpty()
+    {
+        _dbContext
+            .Set<CftcContract>()
+            .Add(CreateContract("WTI", "Crude Oil", CftcContractCategory.Energy));
         await _dbContext.SaveChangesAsync();
 
         var result = _repository.GetByCategory(CftcContractCategory.Agriculture).ToList();
@@ -97,70 +108,82 @@ public class CftcContractRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByCategory_AllCategories_FiltersCorrectly() {
-        _dbContext.Set<CftcContract>().AddRange(
-            CreateContract("WTI", "Crude Oil", CftcContractCategory.Energy),
-            CreateContract("GC", "Gold", CftcContractCategory.Metals),
-            CreateContract("ZC", "Corn", CftcContractCategory.Agriculture),
-            CreateContract("ES", "E-mini S&P 500", CftcContractCategory.EquityIndices)
-        );
+    public async Task GetByCategory_AllCategories_FiltersCorrectly()
+    {
+        _dbContext
+            .Set<CftcContract>()
+            .AddRange(
+                CreateContract("WTI", "Crude Oil", CftcContractCategory.Energy),
+                CreateContract("GC", "Gold", CftcContractCategory.Metals),
+                CreateContract("ZC", "Corn", CftcContractCategory.Agriculture),
+                CreateContract("ES", "E-mini S&P 500", CftcContractCategory.EquityIndices)
+            );
         await _dbContext.SaveChangesAsync();
 
         _repository.GetByCategory(CftcContractCategory.Energy).ToList().Should().ContainSingle();
         _repository.GetByCategory(CftcContractCategory.Metals).ToList().Should().ContainSingle();
-        _repository.GetByCategory(CftcContractCategory.Agriculture).ToList().Should().ContainSingle();
-        _repository.GetByCategory(CftcContractCategory.EquityIndices).ToList().Should().ContainSingle();
+        _repository
+            .GetByCategory(CftcContractCategory.Agriculture)
+            .ToList()
+            .Should()
+            .ContainSingle();
+        _repository
+            .GetByCategory(CftcContractCategory.EquityIndices)
+            .ToList()
+            .Should()
+            .ContainSingle();
         _repository.GetByCategory(CftcContractCategory.Currencies).ToList().Should().BeEmpty();
     }
 
     // -- Search -----------------------------------------------------------
 
     [Fact]
-    public async Task Search_ByMarketCode_FindsMatch() {
-        _dbContext.Set<CftcContract>().AddRange(
-            CreateContract("WTI", "Crude Oil, Light Sweet"),
-            CreateContract("NG", "Natural Gas")
-        );
+    public async Task Search_ByMarketCode_FindsMatch()
+    {
+        _dbContext
+            .Set<CftcContract>()
+            .AddRange(
+                CreateContract("WTI", "Crude Oil, Light Sweet"),
+                CreateContract("NG", "Natural Gas")
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = _repository.Search("WTI").ToList();
 
-        result.Should().ContainSingle()
-            .Which.MarketCode.Should().Be("WTI");
+        result.Should().ContainSingle().Which.MarketCode.Should().Be("WTI");
     }
 
     [Fact]
-    public async Task Search_ByMarketName_FindsMatch() {
-        _dbContext.Set<CftcContract>().AddRange(
-            CreateContract("WTI", "Crude Oil, Light Sweet"),
-            CreateContract("NG", "Natural Gas")
-        );
+    public async Task Search_ByMarketName_FindsMatch()
+    {
+        _dbContext
+            .Set<CftcContract>()
+            .AddRange(
+                CreateContract("WTI", "Crude Oil, Light Sweet"),
+                CreateContract("NG", "Natural Gas")
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = _repository.Search("Natural Gas").ToList();
 
-        result.Should().ContainSingle()
-            .Which.MarketCode.Should().Be("NG");
+        result.Should().ContainSingle().Which.MarketCode.Should().Be("NG");
     }
 
     [Fact]
-    public async Task Search_CaseInsensitive_FindsMatch() {
-        _dbContext.Set<CftcContract>().Add(
-            CreateContract("WTI", "Crude Oil, Light Sweet")
-        );
+    public async Task Search_CaseInsensitive_FindsMatch()
+    {
+        _dbContext.Set<CftcContract>().Add(CreateContract("WTI", "Crude Oil, Light Sweet"));
         await _dbContext.SaveChangesAsync();
 
         var result = _repository.Search("crude oil").ToList();
 
-        result.Should().ContainSingle()
-            .Which.MarketCode.Should().Be("WTI");
+        result.Should().ContainSingle().Which.MarketCode.Should().Be("WTI");
     }
 
     [Fact]
-    public async Task Search_PartialMatch_FindsMatch() {
-        _dbContext.Set<CftcContract>().Add(
-            CreateContract("WTI", "Crude Oil, Light Sweet")
-        );
+    public async Task Search_PartialMatch_FindsMatch()
+    {
+        _dbContext.Set<CftcContract>().Add(CreateContract("WTI", "Crude Oil, Light Sweet"));
         await _dbContext.SaveChangesAsync();
 
         var result = _repository.Search("Crude").ToList();
@@ -169,10 +192,9 @@ public class CftcContractRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task Search_NoMatch_ReturnsEmpty() {
-        _dbContext.Set<CftcContract>().Add(
-            CreateContract("WTI", "Crude Oil, Light Sweet")
-        );
+    public async Task Search_NoMatch_ReturnsEmpty()
+    {
+        _dbContext.Set<CftcContract>().Add(CreateContract("WTI", "Crude Oil, Light Sweet"));
         await _dbContext.SaveChangesAsync();
 
         var result = _repository.Search("NONEXISTENT").ToList();
@@ -181,11 +203,14 @@ public class CftcContractRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task Search_MatchesMultipleContracts_ReturnsAll() {
-        _dbContext.Set<CftcContract>().AddRange(
-            CreateContract("WTI", "Crude Oil, Light Sweet"),
-            CreateContract("BRN", "Crude Oil, Brent")
-        );
+    public async Task Search_MatchesMultipleContracts_ReturnsAll()
+    {
+        _dbContext
+            .Set<CftcContract>()
+            .AddRange(
+                CreateContract("WTI", "Crude Oil, Light Sweet"),
+                CreateContract("BRN", "Crude Oil, Brent")
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = _repository.Search("Crude").ToList();
@@ -194,11 +219,14 @@ public class CftcContractRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task Search_MatchesBothCodeAndName_ReturnsAll() {
-        _dbContext.Set<CftcContract>().AddRange(
-            CreateContract("GOLD", "Gold Futures"),
-            CreateContract("GC", "GOLD 100 Troy Ounces")
-        );
+    public async Task Search_MatchesBothCodeAndName_ReturnsAll()
+    {
+        _dbContext
+            .Set<CftcContract>()
+            .AddRange(
+                CreateContract("GOLD", "Gold Futures"),
+                CreateContract("GC", "GOLD 100 Troy Ounces")
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = _repository.Search("GOLD").ToList();
@@ -207,24 +235,30 @@ public class CftcContractRepositoryTests : IDisposable {
     }
 }
 
-public class CftcPositionReportRepositoryTests : IDisposable {
+public class CftcPositionReportRepositoryTests : IDisposable
+{
     private readonly EquiblesDbContext _dbContext;
     private readonly CftcPositionReportRepository _repository;
 
-    public CftcPositionReportRepositoryTests() {
+    public CftcPositionReportRepositoryTests()
+    {
         _dbContext = TestDbContextFactory.Create(new CftcModuleConfiguration());
         _repository = new CftcPositionReportRepository(_dbContext);
     }
 
-    public void Dispose() {
+    public void Dispose()
+    {
         _dbContext.Dispose();
     }
 
     private CftcContract CreateContract(
         string marketCode = "WTI",
         string marketName = "Crude Oil, Light Sweet",
-        CftcContractCategory category = CftcContractCategory.Energy) {
-        var contract = new CftcContract {
+        CftcContractCategory category = CftcContractCategory.Energy
+    )
+    {
+        var contract = new CftcContract
+        {
             Id = Guid.NewGuid(),
             MarketCode = marketCode,
             MarketName = marketName,
@@ -239,8 +273,11 @@ public class CftcPositionReportRepositoryTests : IDisposable {
         DateOnly reportDate,
         long openInterest = 500_000,
         long nonCommLong = 200_000,
-        long nonCommShort = 150_000) {
-        return new CftcPositionReport {
+        long nonCommShort = 150_000
+    )
+    {
+        return new CftcPositionReport
+        {
             Id = Guid.NewGuid(),
             CftcContractId = contractId,
             ReportDate = reportDate,
@@ -260,13 +297,16 @@ public class CftcPositionReportRepositoryTests : IDisposable {
     // -- GetByContract (all reports) --------------------------------------
 
     [Fact]
-    public async Task GetByContract_ReturnsAllReportsForContract() {
+    public async Task GetByContract_ReturnsAllReportsForContract()
+    {
         var contract = CreateContract();
-        _dbContext.Set<CftcPositionReport>().AddRange(
-            CreateReport(contract.Id, new DateOnly(2025, 1, 7)),
-            CreateReport(contract.Id, new DateOnly(2025, 1, 14)),
-            CreateReport(contract.Id, new DateOnly(2025, 1, 21))
-        );
+        _dbContext
+            .Set<CftcPositionReport>()
+            .AddRange(
+                CreateReport(contract.Id, new DateOnly(2025, 1, 7)),
+                CreateReport(contract.Id, new DateOnly(2025, 1, 14)),
+                CreateReport(contract.Id, new DateOnly(2025, 1, 21))
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = await _repository.GetByContract(contract).ToListAsync();
@@ -276,12 +316,13 @@ public class CftcPositionReportRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByContract_ReturnsEmpty_WhenContractHasNoReports() {
+    public async Task GetByContract_ReturnsEmpty_WhenContractHasNoReports()
+    {
         var contractWithData = CreateContract("WTI", "Crude Oil");
         var contractWithout = CreateContract("NG", "Natural Gas");
-        _dbContext.Set<CftcPositionReport>().Add(
-            CreateReport(contractWithData.Id, new DateOnly(2025, 1, 7))
-        );
+        _dbContext
+            .Set<CftcPositionReport>()
+            .Add(CreateReport(contractWithData.Id, new DateOnly(2025, 1, 7)));
         await _dbContext.SaveChangesAsync();
 
         var result = await _repository.GetByContract(contractWithout).ToListAsync();
@@ -290,39 +331,42 @@ public class CftcPositionReportRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByContract_DoesNotReturnReportsFromOtherContracts() {
+    public async Task GetByContract_DoesNotReturnReportsFromOtherContracts()
+    {
         var wti = CreateContract("WTI", "Crude Oil");
         var ng = CreateContract("NG", "Natural Gas");
-        _dbContext.Set<CftcPositionReport>().AddRange(
-            CreateReport(wti.Id, new DateOnly(2025, 1, 7)),
-            CreateReport(ng.Id, new DateOnly(2025, 1, 7))
-        );
+        _dbContext
+            .Set<CftcPositionReport>()
+            .AddRange(
+                CreateReport(wti.Id, new DateOnly(2025, 1, 7)),
+                CreateReport(ng.Id, new DateOnly(2025, 1, 7))
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = await _repository.GetByContract(wti).ToListAsync();
 
-        result.Should().ContainSingle()
-            .Which.CftcContractId.Should().Be(wti.Id);
+        result.Should().ContainSingle().Which.CftcContractId.Should().Be(wti.Id);
     }
 
     // -- GetByContract (date range) ---------------------------------------
 
     [Fact]
-    public async Task GetByContract_WithDateRange_FiltersCorrectly() {
+    public async Task GetByContract_WithDateRange_FiltersCorrectly()
+    {
         var contract = CreateContract();
-        _dbContext.Set<CftcPositionReport>().AddRange(
-            CreateReport(contract.Id, new DateOnly(2025, 1, 7)),
-            CreateReport(contract.Id, new DateOnly(2025, 1, 14)),
-            CreateReport(contract.Id, new DateOnly(2025, 1, 21)),
-            CreateReport(contract.Id, new DateOnly(2025, 2, 4))
-        );
+        _dbContext
+            .Set<CftcPositionReport>()
+            .AddRange(
+                CreateReport(contract.Id, new DateOnly(2025, 1, 7)),
+                CreateReport(contract.Id, new DateOnly(2025, 1, 14)),
+                CreateReport(contract.Id, new DateOnly(2025, 1, 21)),
+                CreateReport(contract.Id, new DateOnly(2025, 2, 4))
+            );
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.GetByContract(
-            contract,
-            new DateOnly(2025, 1, 10),
-            new DateOnly(2025, 1, 25)
-        ).ToListAsync();
+        var result = await _repository
+            .GetByContract(contract, new DateOnly(2025, 1, 10), new DateOnly(2025, 1, 25))
+            .ToListAsync();
 
         result.Should().HaveCount(2);
         result.Should().Contain(r => r.ReportDate == new DateOnly(2025, 1, 14));
@@ -330,57 +374,57 @@ public class CftcPositionReportRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetByContract_DateRangeInclusive_IncludesBoundaryDates() {
+    public async Task GetByContract_DateRangeInclusive_IncludesBoundaryDates()
+    {
         var contract = CreateContract();
-        _dbContext.Set<CftcPositionReport>().AddRange(
-            CreateReport(contract.Id, new DateOnly(2025, 1, 7)),
-            CreateReport(contract.Id, new DateOnly(2025, 1, 14)),
-            CreateReport(contract.Id, new DateOnly(2025, 1, 21))
-        );
+        _dbContext
+            .Set<CftcPositionReport>()
+            .AddRange(
+                CreateReport(contract.Id, new DateOnly(2025, 1, 7)),
+                CreateReport(contract.Id, new DateOnly(2025, 1, 14)),
+                CreateReport(contract.Id, new DateOnly(2025, 1, 21))
+            );
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.GetByContract(
-            contract,
-            new DateOnly(2025, 1, 7),
-            new DateOnly(2025, 1, 21)
-        ).ToListAsync();
+        var result = await _repository
+            .GetByContract(contract, new DateOnly(2025, 1, 7), new DateOnly(2025, 1, 21))
+            .ToListAsync();
 
         result.Should().HaveCount(3);
     }
 
     [Fact]
-    public async Task GetByContract_DateRangeExcludesOtherContracts() {
+    public async Task GetByContract_DateRangeExcludesOtherContracts()
+    {
         var wti = CreateContract("WTI", "Crude Oil");
         var ng = CreateContract("NG", "Natural Gas");
-        _dbContext.Set<CftcPositionReport>().AddRange(
-            CreateReport(wti.Id, new DateOnly(2025, 1, 14)),
-            CreateReport(ng.Id, new DateOnly(2025, 1, 14))
-        );
+        _dbContext
+            .Set<CftcPositionReport>()
+            .AddRange(
+                CreateReport(wti.Id, new DateOnly(2025, 1, 14)),
+                CreateReport(ng.Id, new DateOnly(2025, 1, 14))
+            );
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.GetByContract(
-            wti,
-            new DateOnly(2025, 1, 1),
-            new DateOnly(2025, 1, 31)
-        ).ToListAsync();
+        var result = await _repository
+            .GetByContract(wti, new DateOnly(2025, 1, 1), new DateOnly(2025, 1, 31))
+            .ToListAsync();
 
-        result.Should().ContainSingle()
-            .Which.CftcContractId.Should().Be(wti.Id);
+        result.Should().ContainSingle().Which.CftcContractId.Should().Be(wti.Id);
     }
 
     [Fact]
-    public async Task GetByContract_DateRangeNoMatches_ReturnsEmpty() {
+    public async Task GetByContract_DateRangeNoMatches_ReturnsEmpty()
+    {
         var contract = CreateContract();
-        _dbContext.Set<CftcPositionReport>().Add(
-            CreateReport(contract.Id, new DateOnly(2025, 6, 1))
-        );
+        _dbContext
+            .Set<CftcPositionReport>()
+            .Add(CreateReport(contract.Id, new DateOnly(2025, 6, 1)));
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.GetByContract(
-            contract,
-            new DateOnly(2025, 1, 1),
-            new DateOnly(2025, 1, 31)
-        ).ToListAsync();
+        var result = await _repository
+            .GetByContract(contract, new DateOnly(2025, 1, 1), new DateOnly(2025, 1, 31))
+            .ToListAsync();
 
         result.Should().BeEmpty();
     }
@@ -388,13 +432,16 @@ public class CftcPositionReportRepositoryTests : IDisposable {
     // -- GetLatestDate ----------------------------------------------------
 
     [Fact]
-    public async Task GetLatestDate_ReturnsMostRecentDateForContract() {
+    public async Task GetLatestDate_ReturnsMostRecentDateForContract()
+    {
         var contract = CreateContract();
-        _dbContext.Set<CftcPositionReport>().AddRange(
-            CreateReport(contract.Id, new DateOnly(2025, 1, 7)),
-            CreateReport(contract.Id, new DateOnly(2025, 6, 17)),
-            CreateReport(contract.Id, new DateOnly(2025, 3, 11))
-        );
+        _dbContext
+            .Set<CftcPositionReport>()
+            .AddRange(
+                CreateReport(contract.Id, new DateOnly(2025, 1, 7)),
+                CreateReport(contract.Id, new DateOnly(2025, 6, 17)),
+                CreateReport(contract.Id, new DateOnly(2025, 3, 11))
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = await _repository.GetLatestDate(contract).FirstOrDefaultAsync();
@@ -403,7 +450,8 @@ public class CftcPositionReportRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetLatestDate_NoReports_ReturnsDefault() {
+    public async Task GetLatestDate_NoReports_ReturnsDefault()
+    {
         var contract = CreateContract();
         await _dbContext.SaveChangesAsync();
 
@@ -413,13 +461,16 @@ public class CftcPositionReportRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task GetLatestDate_DoesNotReturnOtherContractDates() {
+    public async Task GetLatestDate_DoesNotReturnOtherContractDates()
+    {
         var wti = CreateContract("WTI", "Crude Oil");
         var ng = CreateContract("NG", "Natural Gas");
-        _dbContext.Set<CftcPositionReport>().AddRange(
-            CreateReport(wti.Id, new DateOnly(2025, 1, 7)),
-            CreateReport(ng.Id, new DateOnly(2025, 12, 30))
-        );
+        _dbContext
+            .Set<CftcPositionReport>()
+            .AddRange(
+                CreateReport(wti.Id, new DateOnly(2025, 1, 7)),
+                CreateReport(ng.Id, new DateOnly(2025, 12, 30))
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = await _repository.GetLatestDate(wti).FirstOrDefaultAsync();
@@ -430,95 +481,110 @@ public class CftcPositionReportRepositoryTests : IDisposable {
     // -- GetLatestPerContract ---------------------------------------------
 
     [Fact]
-    public async Task GetLatestPerContract_ReturnsMostRecentPerContract() {
+    public async Task GetLatestPerContract_ReturnsMostRecentPerContract()
+    {
         var wti = CreateContract("WTI", "Crude Oil");
         var ng = CreateContract("NG", "Natural Gas");
-        _dbContext.Set<CftcPositionReport>().AddRange(
-            CreateReport(wti.Id, new DateOnly(2025, 1, 7)),
-            CreateReport(wti.Id, new DateOnly(2025, 6, 3)),
-            CreateReport(ng.Id, new DateOnly(2025, 3, 4)),
-            CreateReport(ng.Id, new DateOnly(2025, 9, 2))
-        );
+        _dbContext
+            .Set<CftcPositionReport>()
+            .AddRange(
+                CreateReport(wti.Id, new DateOnly(2025, 1, 7)),
+                CreateReport(wti.Id, new DateOnly(2025, 6, 3)),
+                CreateReport(ng.Id, new DateOnly(2025, 3, 4)),
+                CreateReport(ng.Id, new DateOnly(2025, 9, 2))
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = _repository.GetLatestPerContract().ToList();
 
         result.Should().HaveCount(2);
-        result.Should().Contain(r => r.CftcContractId == wti.Id && r.ReportDate == new DateOnly(2025, 6, 3));
-        result.Should().Contain(r => r.CftcContractId == ng.Id && r.ReportDate == new DateOnly(2025, 9, 2));
+        result
+            .Should()
+            .Contain(r => r.CftcContractId == wti.Id && r.ReportDate == new DateOnly(2025, 6, 3));
+        result
+            .Should()
+            .Contain(r => r.CftcContractId == ng.Id && r.ReportDate == new DateOnly(2025, 9, 2));
     }
 
     [Fact]
-    public async Task GetLatestPerContract_NoReports_ReturnsEmpty() {
+    public async Task GetLatestPerContract_NoReports_ReturnsEmpty()
+    {
         var result = _repository.GetLatestPerContract().ToList();
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task GetLatestPerContract_SingleContractSingleReport_ReturnsThatReport() {
+    public async Task GetLatestPerContract_SingleContractSingleReport_ReturnsThatReport()
+    {
         var contract = CreateContract();
-        _dbContext.Set<CftcPositionReport>().Add(
-            CreateReport(contract.Id, new DateOnly(2025, 3, 18), openInterest: 750_000)
-        );
+        _dbContext
+            .Set<CftcPositionReport>()
+            .Add(CreateReport(contract.Id, new DateOnly(2025, 3, 18), openInterest: 750_000));
         await _dbContext.SaveChangesAsync();
 
         var result = _repository.GetLatestPerContract().ToList();
 
-        result.Should().ContainSingle()
-            .Which.OpenInterest.Should().Be(750_000);
+        result.Should().ContainSingle().Which.OpenInterest.Should().Be(750_000);
     }
 
     // -- GetGlobalLatestDate ----------------------------------------------
 
     [Fact]
-    public async Task GetGlobalLatestDate_ReturnsMostRecentDateAcrossAllContracts() {
+    public async Task GetGlobalLatestDate_ReturnsMostRecentDateAcrossAllContracts()
+    {
         var wti = CreateContract("WTI", "Crude Oil");
         var ng = CreateContract("NG", "Natural Gas");
-        _dbContext.Set<CftcPositionReport>().AddRange(
-            CreateReport(wti.Id, new DateOnly(2025, 1, 7)),
-            CreateReport(ng.Id, new DateOnly(2025, 6, 17)),
-            CreateReport(wti.Id, new DateOnly(2025, 3, 11))
-        );
+        _dbContext
+            .Set<CftcPositionReport>()
+            .AddRange(
+                CreateReport(wti.Id, new DateOnly(2025, 1, 7)),
+                CreateReport(ng.Id, new DateOnly(2025, 6, 17)),
+                CreateReport(wti.Id, new DateOnly(2025, 3, 11))
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = await _repository.GetGlobalLatestDate().ToListAsync();
 
-        result.Should().ContainSingle()
-            .Which.Should().Be(new DateOnly(2025, 6, 17));
+        result.Should().ContainSingle().Which.Should().Be(new DateOnly(2025, 6, 17));
     }
 
     [Fact]
-    public async Task GetGlobalLatestDate_ReturnsEmpty_WhenNoReportsExist() {
+    public async Task GetGlobalLatestDate_ReturnsEmpty_WhenNoReportsExist()
+    {
         var result = await _repository.GetGlobalLatestDate().ToListAsync();
 
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task GetGlobalLatestDate_ReturnsSingleDate_WhenMultipleContractsShareLatestDate() {
+    public async Task GetGlobalLatestDate_ReturnsSingleDate_WhenMultipleContractsShareLatestDate()
+    {
         var wti = CreateContract("WTI", "Crude Oil");
         var ng = CreateContract("NG", "Natural Gas");
         var latestDate = new DateOnly(2025, 6, 17);
-        _dbContext.Set<CftcPositionReport>().AddRange(
-            CreateReport(wti.Id, latestDate),
-            CreateReport(ng.Id, latestDate),
-            CreateReport(wti.Id, new DateOnly(2025, 1, 7))
-        );
+        _dbContext
+            .Set<CftcPositionReport>()
+            .AddRange(
+                CreateReport(wti.Id, latestDate),
+                CreateReport(ng.Id, latestDate),
+                CreateReport(wti.Id, new DateOnly(2025, 1, 7))
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = await _repository.GetGlobalLatestDate().ToListAsync();
 
-        result.Should().ContainSingle()
-            .Which.Should().Be(latestDate);
+        result.Should().ContainSingle().Which.Should().Be(latestDate);
     }
 
     // -- Field persistence ------------------------------------------------
 
     [Fact]
-    public async Task PositionReport_PersistsAllFieldValues() {
+    public async Task PositionReport_PersistsAllFieldValues()
+    {
         var contract = CreateContract();
-        var report = new CftcPositionReport {
+        var report = new CftcPositionReport
+        {
             Id = Guid.NewGuid(),
             CftcContractId = contract.Id,
             ReportDate = new DateOnly(2025, 7, 15),
@@ -580,7 +646,8 @@ public class CftcPositionReportRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public async Task PositionReport_PersistsNullableFieldsCorrectly() {
+    public async Task PositionReport_PersistsNullableFieldsCorrectly()
+    {
         var contract = CreateContract();
         var report = CreateReport(contract.Id, new DateOnly(2025, 1, 7));
         // Nullable fields default to null in CreateReport helper

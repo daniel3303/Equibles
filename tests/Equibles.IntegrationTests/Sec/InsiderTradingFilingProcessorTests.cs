@@ -8,20 +8,22 @@ using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
+using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
-using Equibles.IntegrationTests.Helpers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
 namespace Equibles.IntegrationTests.Sec;
 
-public class InsiderTradingFilingProcessorTests {
+public class InsiderTradingFilingProcessorTests
+{
     // ── SanitizeXml ──
 
     [Fact]
-    public void SanitizeXml_WithSgmlEnvelope_ExtractsInnerXml() {
+    public void SanitizeXml_WithSgmlEnvelope_ExtractsInnerXml()
+    {
         var input = """
             <SEC-DOCUMENT>
             <XML>
@@ -38,7 +40,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void SanitizeXml_WithoutEnvelope_ReturnsXmlAsIs() {
+    public void SanitizeXml_WithoutEnvelope_ReturnsXmlAsIs()
+    {
         var input = "<ownershipDocument><root/></ownershipDocument>";
 
         var result = InsiderTradingFilingProcessor.SanitizeXml(input);
@@ -47,7 +50,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void SanitizeXml_UnescapedAmpersands_AreEscaped() {
+    public void SanitizeXml_UnescapedAmpersands_AreEscaped()
+    {
         var input = "<XML><doc>AT&T Corp & Others</doc></XML>";
 
         var result = InsiderTradingFilingProcessor.SanitizeXml(input);
@@ -56,7 +60,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public void SanitizeXml_AlreadyEscapedEntities_ArePreserved() {
+    public void SanitizeXml_AlreadyEscapedEntities_ArePreserved()
+    {
         var input = "<XML><doc>&amp; &lt; &gt; &quot; &apos; &#123; &#x1F;</doc></XML>";
 
         var result = InsiderTradingFilingProcessor.SanitizeXml(input);
@@ -85,14 +90,19 @@ public class InsiderTradingFilingProcessorTests {
     [InlineData("G", TransactionCode.Gift)]
     [InlineData("I", TransactionCode.Inheritance)]
     [InlineData("W", TransactionCode.Discretionary)]
-    public void ParseTransactionCode_ValidCode_ReturnsCorrectEnum(string code, TransactionCode expected) {
+    public void ParseTransactionCode_ValidCode_ReturnsCorrectEnum(
+        string code,
+        TransactionCode expected
+    )
+    {
         InsiderTradingFilingProcessor.ParseTransactionCode(code).Should().Be(expected);
     }
 
     [Theory]
     [InlineData("p", TransactionCode.Purchase)]
     [InlineData("s", TransactionCode.Sale)]
-    public void ParseTransactionCode_LowerCase_StillParses(string code, TransactionCode expected) {
+    public void ParseTransactionCode_LowerCase_StillParses(string code, TransactionCode expected)
+    {
         InsiderTradingFilingProcessor.ParseTransactionCode(code).Should().Be(expected);
     }
 
@@ -101,7 +111,8 @@ public class InsiderTradingFilingProcessorTests {
     [InlineData("")]
     [InlineData("Z")]
     [InlineData("PURCHASE")]
-    public void ParseTransactionCode_InvalidOrNull_ReturnsOther(string code) {
+    public void ParseTransactionCode_InvalidOrNull_ReturnsOther(string code)
+    {
         InsiderTradingFilingProcessor.ParseTransactionCode(code).Should().Be(TransactionCode.Other);
     }
 
@@ -118,7 +129,8 @@ public class InsiderTradingFilingProcessorTests {
     [InlineData(null, false)]
     [InlineData("", false)]
     [InlineData("yes", false)]
-    public void ParseBool_VariousInputs_ReturnsExpected(string input, bool expected) {
+    public void ParseBool_VariousInputs_ReturnsExpected(string input, bool expected)
+    {
         InsiderTradingFilingProcessor.ParseBool(input).Should().Be(expected);
     }
 
@@ -128,12 +140,14 @@ public class InsiderTradingFilingProcessorTests {
     [InlineData("1000", 1000L)]
     [InlineData("0", 0L)]
     [InlineData("-500", -500L)]
-    public void ParseLong_IntegerValues_ParsesCorrectly(string input, long expected) {
+    public void ParseLong_IntegerValues_ParsesCorrectly(string input, long expected)
+    {
         InsiderTradingFilingProcessor.ParseLong(input).Should().Be(expected);
     }
 
     [Fact]
-    public void ParseLong_DecimalValue_TruncatesToLong() {
+    public void ParseLong_DecimalValue_TruncatesToLong()
+    {
         // "1234.5678" can't be parsed as long, falls back to ParseDecimal then casts
         InsiderTradingFilingProcessor.ParseLong("1234.5678").Should().Be(1234L);
     }
@@ -142,7 +156,8 @@ public class InsiderTradingFilingProcessorTests {
     [InlineData(null)]
     [InlineData("")]
     [InlineData("abc")]
-    public void ParseLong_InvalidOrNull_ReturnsZero(string input) {
+    public void ParseLong_InvalidOrNull_ReturnsZero(string input)
+    {
         InsiderTradingFilingProcessor.ParseLong(input).Should().Be(0L);
     }
 
@@ -153,7 +168,8 @@ public class InsiderTradingFilingProcessorTests {
     [InlineData("0", 0)]
     [InlineData("-99.99", -99.99)]
     [InlineData("1,234.56", 1234.56)]
-    public void ParseDecimal_ValidInput_ReturnsValue(string input, double expected) {
+    public void ParseDecimal_ValidInput_ReturnsValue(string input, double expected)
+    {
         InsiderTradingFilingProcessor.ParseDecimal(input).Should().Be((decimal)expected);
     }
 
@@ -161,42 +177,49 @@ public class InsiderTradingFilingProcessorTests {
     [InlineData(null)]
     [InlineData("")]
     [InlineData("abc")]
-    public void ParseDecimal_InvalidOrNull_ReturnsZero(string input) {
+    public void ParseDecimal_InvalidOrNull_ReturnsZero(string input)
+    {
         InsiderTradingFilingProcessor.ParseDecimal(input).Should().Be(0m);
     }
 
     // ── CanProcess ──
 
     [Fact]
-    public void CanProcess_FormFour_ReturnsTrue() {
+    public void CanProcess_FormFour_ReturnsTrue()
+    {
         var processor = CreateProcessor();
         processor.CanProcess(DocumentType.FormFour).Should().BeTrue();
     }
 
     [Fact]
-    public void CanProcess_FormThree_ReturnsTrue() {
+    public void CanProcess_FormThree_ReturnsTrue()
+    {
         var processor = CreateProcessor();
         processor.CanProcess(DocumentType.FormThree).Should().BeTrue();
     }
 
     [Fact]
-    public void CanProcess_TenK_ReturnsFalse() {
+    public void CanProcess_TenK_ReturnsFalse()
+    {
         var processor = CreateProcessor();
         processor.CanProcess(DocumentType.TenK).Should().BeFalse();
     }
 
     [Fact]
-    public void CanProcess_EightK_ReturnsFalse() {
+    public void CanProcess_EightK_ReturnsFalse()
+    {
         var processor = CreateProcessor();
         processor.CanProcess(DocumentType.EightK).Should().BeFalse();
     }
 
     // ErrorReporter not needed — only testing CanProcess and static helpers
-    private static InsiderTradingFilingProcessor CreateProcessor() {
+    private static InsiderTradingFilingProcessor CreateProcessor()
+    {
         return new InsiderTradingFilingProcessor(
             NSubstitute.Substitute.For<IServiceScopeFactory>(),
             NSubstitute.Substitute.For<ILogger<InsiderTradingFilingProcessor>>(),
-            null);
+            null
+        );
     }
 
     // ── Process ─────────────────────────────────────────────────────────
@@ -267,12 +290,18 @@ public class InsiderTradingFilingProcessorTests {
         </ownershipDocument>
         """;
 
-    private (InsiderTradingFilingProcessor processor, InsiderOwnerRepository ownerRepo, InsiderTransactionRepository txRepo, ISecEdgarClient secClient)
-        CreateProcessorWithDeps() {
+    private (
+        InsiderTradingFilingProcessor processor,
+        InsiderOwnerRepository ownerRepo,
+        InsiderTransactionRepository txRepo,
+        ISecEdgarClient secClient
+    ) CreateProcessorWithDeps()
+    {
         var dbContext = TestDbContextFactory.Create(
             new InsiderTradingModuleConfiguration(),
             new CommonStocksModuleConfiguration(),
-            new ErrorsModuleConfiguration());
+            new ErrorsModuleConfiguration()
+        );
 
         var ownerRepo = new InsiderOwnerRepository(dbContext);
         var txRepo = new InsiderTransactionRepository(dbContext);
@@ -284,20 +313,27 @@ public class InsiderTradingFilingProcessorTests {
             (typeof(ISecEdgarClient), secClient),
             (typeof(InsiderOwnerRepository), ownerRepo),
             (typeof(InsiderTransactionRepository), txRepo),
-            (typeof(ErrorManager), errorManager));
+            (typeof(ErrorManager), errorManager)
+        );
 
-        var errorReporter = new ErrorReporter(scopeFactory, Substitute.For<ILogger<ErrorReporter>>());
+        var errorReporter = new ErrorReporter(
+            scopeFactory,
+            Substitute.For<ILogger<ErrorReporter>>()
+        );
         var processor = new InsiderTradingFilingProcessor(
             scopeFactory,
             Substitute.For<ILogger<InsiderTradingFilingProcessor>>(),
-            errorReporter);
+            errorReporter
+        );
 
         return (processor, ownerRepo, txRepo, secClient);
     }
 
-    private static FilingData MakeFiling(string accession = null, string form = "4") {
+    private static FilingData MakeFiling(string accession = null, string form = "4")
+    {
         accession ??= $"0001-24-{Guid.NewGuid().ToString("N")[..6]}";
-        return new FilingData {
+        return new FilingData
+        {
             AccessionNumber = accession,
             Form = form,
             FilingDate = new DateOnly(2024, 3, 16),
@@ -306,12 +342,19 @@ public class InsiderTradingFilingProcessorTests {
         };
     }
 
-    private static CommonStock MakeCompany() {
-        return new CommonStock { Ticker = "AAPL", Name = "Apple Inc", Cik = "0000320193" };
+    private static CommonStock MakeCompany()
+    {
+        return new CommonStock
+        {
+            Ticker = "AAPL",
+            Name = "Apple Inc",
+            Cik = "0000320193",
+        };
     }
 
     [Fact]
-    public async Task Process_ValidForm4_InsertsTransactionsAndOwner() {
+    public async Task Process_ValidForm4_InsertsTransactionsAndOwner()
+    {
         var (processor, ownerRepo, txRepo, secClient) = CreateProcessorWithDeps();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(ValidForm4Xml);
 
@@ -335,7 +378,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_Form3Holdings_InsertsHoldingsAsTransactions() {
+    public async Task Process_Form3Holdings_InsertsHoldingsAsTransactions()
+    {
         var (processor, ownerRepo, txRepo, secClient) = CreateProcessorWithDeps();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(Form3HoldingsXml);
         var filing = MakeFiling(form: "3");
@@ -351,7 +395,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_AlreadyImported_ReturnsFalse() {
+    public async Task Process_AlreadyImported_ReturnsFalse()
+    {
         var (processor, ownerRepo, txRepo, secClient) = CreateProcessorWithDeps();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(ValidForm4Xml);
         var filing = MakeFiling();
@@ -366,7 +411,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_EmptyContent_ReturnsFalse() {
+    public async Task Process_EmptyContent_ReturnsFalse()
+    {
         var (processor, _, _, secClient) = CreateProcessorWithDeps();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns("");
 
@@ -376,7 +422,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_MalformedXml_ReturnsFalse() {
+    public async Task Process_MalformedXml_ReturnsFalse()
+    {
         var (processor, _, _, secClient) = CreateProcessorWithDeps();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns("<not>valid<xml");
 
@@ -386,10 +433,12 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_MissingReportingOwner_ReturnsFalse() {
+    public async Task Process_MissingReportingOwner_ReturnsFalse()
+    {
         var (processor, _, _, secClient) = CreateProcessorWithDeps();
-        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(
-            "<ownershipDocument><nonDerivativeTable/></ownershipDocument>");
+        secClient
+            .GetDocumentContent(Arg.Any<FilingData>())
+            .Returns("<ownershipDocument><nonDerivativeTable/></ownershipDocument>");
 
         var result = await processor.Process(MakeFiling(), MakeCompany());
 
@@ -397,7 +446,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_MissingOwnerCik_ReturnsFalse() {
+    public async Task Process_MissingOwnerCik_ReturnsFalse()
+    {
         var xml = """
             <ownershipDocument>
                 <reportingOwner>
@@ -417,7 +467,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_ExistingOwnerReused_NoNewOwnerCreated() {
+    public async Task Process_ExistingOwnerReused_NoNewOwnerCreated()
+    {
         var (processor, ownerRepo, txRepo, secClient) = CreateProcessorWithDeps();
 
         // Pre-create the owner
@@ -433,7 +484,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_NoTransactions_SavesMarkerAndReturnsTrue() {
+    public async Task Process_NoTransactions_SavesMarkerAndReturnsTrue()
+    {
         var xml = """
             <ownershipDocument>
                 <reportingOwner>
@@ -456,7 +508,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_AmendmentFiling_InsertsAsNewRecord() {
+    public async Task Process_AmendmentFiling_InsertsAsNewRecord()
+    {
         var (processor, ownerRepo, txRepo, secClient) = CreateProcessorWithDeps();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(ValidForm4Xml);
         var company = MakeCompany();
@@ -482,7 +535,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_SgmlEnvelope_StrippedBeforeParsing() {
+    public async Task Process_SgmlEnvelope_StrippedBeforeParsing()
+    {
         var wrappedXml = $"<SEC-DOCUMENT>\n<XML>\n{ValidForm4Xml}\n</XML>\n</SEC-DOCUMENT>";
         var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(wrappedXml);
@@ -494,7 +548,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_Form4WithDerivativeTransaction_InsertsTransactionFromDerivativeTable() {
+    public async Task Process_Form4WithDerivativeTransaction_InsertsTransactionFromDerivativeTable()
+    {
         // Form 4 splits transactions across two parallel sections: <nonDerivativeTable> for
         // common stock (already covered by Process_ValidForm4_InsertsTransactionsAndOwner) and
         // <derivativeTable> for stock options, warrants, and similar instruments. The latter
@@ -556,7 +611,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_Form3WithDerivativeHolding_InsertsHoldingFromDerivativeTable() {
+    public async Task Process_Form3WithDerivativeHolding_InsertsHoldingFromDerivativeTable()
+    {
         // Companion to Process_Form4WithDerivativeTransaction. Inside `<derivativeTable>`
         // there are two element kinds — `<derivativeTransaction>` (covered) and
         // `<derivativeHolding>` (NOT covered). The holdings loop at line 146 of
@@ -616,7 +672,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_Form4WithDirectAndIndirectOwnershipOfSameSecurity_PersistsBothRecords() {
+    public async Task Process_Form4WithDirectAndIndirectOwnershipOfSameSecurity_PersistsBothRecords()
+    {
         // A single Form 4 can report the same (security, date, code) twice when an insider
         // holds the position both directly (own account) and indirectly (through a trust,
         // joint account, etc.). Under SEC rules these are distinct beneficial ownerships
@@ -688,7 +745,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_Form4WithMultiplePurchasesSameDay_PersistsAllTransactions() {
+    public async Task Process_Form4WithMultiplePurchasesSameDay_PersistsAllTransactions()
+    {
         // Real-world filing: Joel Marcus (ARE) 2026-05-05, accession 0001216955-26-000015
         // reports three open-market purchases on the same day, broken out by price tranche.
         // All three share (insider, security, date, code P, accession, ownership Direct);
@@ -785,13 +843,14 @@ public class InsiderTradingFilingProcessorTests {
         // key violation. Order by Shares above is incidental — assert on the ORDINAL contract.
         var byOrder = transactions.OrderBy(t => t.TransactionOrder).ToList();
         byOrder.Select(t => t.TransactionOrder).Should().Equal(0, 1, 2);
-        byOrder[0].Shares.Should().Be(2062);   // first tranche in the XML
+        byOrder[0].Shares.Should().Be(2062); // first tranche in the XML
         byOrder[1].Shares.Should().Be(3832);
         byOrder[2].Shares.Should().Be(1606);
     }
 
     [Fact]
-    public async Task Process_Form4WithMalformedTransactionDate_DropsThatRowAndPersistsTheRest() {
+    public async Task Process_Form4WithMalformedTransactionDate_DropsThatRowAndPersistsTheRest()
+    {
         // `InsiderTradingFilingProcessor.ParseTransaction` short-circuits with `null` when
         // `DateOnly.TryParse(transactionDateStr, out var transactionDate)` fails — the
         // surrounding loop filters null results out (`if (transaction != null) ...`). The
@@ -870,7 +929,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_Form4WithDisposedTransaction_PersistsAsDisposedNotAcquired() {
+    public async Task Process_Form4WithDisposedTransaction_PersistsAsDisposedNotAcquired()
+    {
         // ParseTransaction encodes the SEC acquired-or-disposed code as a one-line ternary:
         //   AcquiredDisposed = adCode == "A" ? Acquired : Disposed;
         // The Acquired side is covered by Process_ValidForm4_InsertsTransactionsAndOwner
@@ -932,7 +992,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_TransactionWithOnlyTransactionDate_PersistsRowWithDefaultsForEveryOptionalElement() {
+    public async Task Process_TransactionWithOnlyTransactionDate_PersistsRowWithDefaultsForEveryOptionalElement()
+    {
         // Pins the null arms of every `?.Element("…")?.Element("value")?.Value?.Trim()` chain
         // inside ParseTransaction (lines 197-204). The existing happy-path tests always carry
         // securityTitle / transactionCoding / transactionAmounts / postTransactionAmounts /
@@ -986,7 +1047,8 @@ public class InsiderTradingFilingProcessorTests {
     }
 
     [Fact]
-    public async Task Process_HoldingWithNoInnerElements_PersistsRowWithDefaultsForEveryOptionalElement() {
+    public async Task Process_HoldingWithNoInnerElements_PersistsRowWithDefaultsForEveryOptionalElement()
+    {
         // Pins the null arms of every `?.Element(...)` chain inside ParseHolding (lines 227-229).
         // The existing Form 3 happy-path pin always carries securityTitle / postTransactionAmounts
         // / ownershipNature, so only the non-null branches fire. A refactor that drops a `?.` for

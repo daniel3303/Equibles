@@ -7,9 +7,11 @@ using NSubstitute;
 
 namespace Equibles.IntegrationTests.Sec;
 
-public class SecEdgarClientTests {
+public class SecEdgarClientTests
+{
     [Fact]
-    public async Task GetActiveCompanies_MultipleTickerRowsForSameCik_CollapsesIntoOneCompanyWithPrimaryTickerFirst() {
+    public async Task GetActiveCompanies_MultipleTickerRowsForSameCik_CollapsesIntoOneCompanyWithPrimaryTickerFirst()
+    {
         // The SEC company_tickers_exchange.json emits one ROW per (cik, ticker), so a company
         // with multiple share classes (e.g. Alphabet GOOG + GOOGL) appears twice. The parser
         // must group by CIK and keep the FIRST ticker as the primary — a regression that
@@ -28,7 +30,9 @@ public class SecEdgarClientTests {
         var handler = new ScriptedHandler(json);
         var httpClient = new HttpClient(handler);
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" })
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" }
+            )
             .Build();
         var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
 
@@ -41,7 +45,8 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
-    public async Task GetCompanyFilings_DocumentTypeFilterFormFour_KeepsOnlyForm4FilingsFromRecentList() {
+    public async Task GetCompanyFilings_DocumentTypeFilterFormFour_KeepsOnlyForm4FilingsFromRecentList()
+    {
         // The SEC `submissions/CIK{n}.json` payload returns filings as parallel column-arrays
         // (`form`, `accessionNumber`, `filingDate`, …) mixing every form type the company has
         // ever filed. Insider-trading ingestion only wants Form 4 filings out of that bag.
@@ -75,11 +80,16 @@ public class SecEdgarClientTests {
         var handler = new ScriptedHandler(json);
         var httpClient = new HttpClient(handler);
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" })
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" }
+            )
             .Build();
         var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
 
-        var filings = await sut.GetCompanyFilings("1234567", documentType: DocumentTypeFilter.FormFour);
+        var filings = await sut.GetCompanyFilings(
+            "1234567",
+            documentType: DocumentTypeFilter.FormFour
+        );
 
         filings.Should().ContainSingle();
         filings[0].Form.Should().Be("4");
@@ -87,7 +97,8 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
-    public async Task GetCompanyFilings_FromDateAfterArchiveRange_SkipsArchiveFetchEntirely() {
+    public async Task GetCompanyFilings_FromDateAfterArchiveRange_SkipsArchiveFetchEntirely()
+    {
         // SEC paginates older filings into separate JSON files listed in `filings.files`, each
         // tagged with `filingFrom`/`filingTo`. `GetArchiveFilings` looks at the requested
         // date window and skips archives whose entire range falls outside it — saving an
@@ -131,7 +142,9 @@ public class SecEdgarClientTests {
         var handler = new ScriptedHandler(json);
         var httpClient = new HttpClient(handler);
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" })
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" }
+            )
             .Build();
         var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
 
@@ -141,7 +154,8 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
-    public async Task GetCompanyFilings_RecentEmptyButArchiveInRange_FetchesArchiveAndMergesItsFilings() {
+    public async Task GetCompanyFilings_RecentEmptyButArchiveInRange_FetchesArchiveAndMergesItsFilings()
+    {
         // Complement to GetCompanyFilings_FromDateAfterArchiveRange_SkipsArchiveFetchEntirely:
         // there the test pinned that an out-of-window archive is NOT fetched. Here we pin the
         // opposite leg — when the archive overlaps the request window, the second HTTP fetch
@@ -193,7 +207,9 @@ public class SecEdgarClientTests {
         var handler = new ScriptedHandler(mainJson, archiveJson);
         var httpClient = new HttpClient(handler);
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" })
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" }
+            )
             .Build();
         var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
 
@@ -205,7 +221,8 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
-    public async Task GetCompanyMetadata_OperatingCompanyOnNasdaq_LiftsEntityTypeAndExchangesFromJson() {
+    public async Task GetCompanyMetadata_OperatingCompanyOnNasdaq_LiftsEntityTypeAndExchangesFromJson()
+    {
         // GetCompanyMetadata is the entry point CompanySyncService leans on to decide if a
         // CIK represents a real operating company or a non-issuer (subsidiary that files
         // but isn't separately listed). The decision flows through CompanyMetadata's two
@@ -234,7 +251,9 @@ public class SecEdgarClientTests {
         var handler = new ScriptedHandler(json);
         var httpClient = new HttpClient(handler);
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" })
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" }
+            )
             .Build();
         var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
 
@@ -247,7 +266,8 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
-    public async Task GetCompanyFilings_ToDateInsideRecentRange_DropsFilingsStrictlyAfterIt() {
+    public async Task GetCompanyFilings_ToDateInsideRecentRange_DropsFilingsStrictlyAfterIt()
+    {
         // FilterFilings applies the upper-bound `toDate` clause `f.FilingDate <= toDate`
         // to every row that survives the earlier mapping. This is structurally different
         // from the archive-skip path (PR #108): the archive skip avoids the HTTP fetch
@@ -281,7 +301,9 @@ public class SecEdgarClientTests {
         var handler = new ScriptedHandler(json);
         var httpClient = new HttpClient(handler);
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" })
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" }
+            )
             .Build();
         var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
 
@@ -292,7 +314,8 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
-    public async Task GetCompanyFilings_SameAccessionInRecentAndArchive_DistinctByCollapsesToOneRow() {
+    public async Task GetCompanyFilings_SameAccessionInRecentAndArchive_DistinctByCollapsesToOneRow()
+    {
         // SEC paginates older filings into archive files but the boundaries occasionally
         // overlap — the same `accessionNumber` can appear in both `filings.recent` and a
         // listed archive. `GetCompanyFilings` runs `.DistinctBy(f => f.AccessionNumber)`
@@ -343,7 +366,9 @@ public class SecEdgarClientTests {
         var handler = new ScriptedHandler(mainJson, archiveJson);
         var httpClient = new HttpClient(handler);
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" })
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" }
+            )
             .Build();
         var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
 
@@ -354,7 +379,8 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
-    public async Task GetDocumentContent_FilingDataWithEmptyAccessionNumber_ThrowsArgumentException() {
+    public async Task GetDocumentContent_FilingDataWithEmptyAccessionNumber_ThrowsArgumentException()
+    {
         // GetDocumentContent(FilingData) is the entry point InsiderTradingFilingProcessor
         // (and any future form-handler) uses to fetch the SGML envelope for a filing. Two
         // guards run before any HTTP request: a null check (ArgumentNullException) and a
@@ -372,11 +398,14 @@ public class SecEdgarClientTests {
         var handler = new ScriptedHandler(); // empty queue — any HTTP attempt throws
         var httpClient = new HttpClient(handler);
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" })
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" }
+            )
             .Build();
         var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
 
-        var filing = new Equibles.Integrations.Sec.Models.FilingData {
+        var filing = new Equibles.Integrations.Sec.Models.FilingData
+        {
             AccessionNumber = "",
             Cik = "1234567",
             Form = "4",
@@ -388,7 +417,8 @@ public class SecEdgarClientTests {
     }
 
     [Fact]
-    public async Task GetDocumentFileBytes_RemoteReturns404_ReturnsEmptyArrayInsteadOfThrowing() {
+    public async Task GetDocumentFileBytes_RemoteReturns404_ReturnsEmptyArrayInsteadOfThrowing()
+    {
         // `GetDocumentFileBytes` fetches individual artifacts inside a SEC filing — the
         // 10-K HTML, exhibits, the uuencoded PDF from a 6-K paper filing, etc. SEC's filing
         // listings occasionally reference filenames that no longer resolve (renamed,
@@ -404,7 +434,9 @@ public class SecEdgarClientTests {
         var handler = new StatusCodeHandler(HttpStatusCode.NotFound);
         var httpClient = new HttpClient(handler);
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" })
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" }
+            )
             .Build();
         var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
 
@@ -413,32 +445,47 @@ public class SecEdgarClientTests {
         bytes.Should().BeEmpty();
     }
 
-    private sealed class StatusCodeHandler : HttpMessageHandler {
+    private sealed class StatusCodeHandler : HttpMessageHandler
+    {
         private readonly HttpStatusCode _statusCode;
 
         public StatusCodeHandler(HttpStatusCode statusCode) => _statusCode = statusCode;
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
-            return Task.FromResult(new HttpResponseMessage(_statusCode) {
-                Content = new StringContent(string.Empty),
-            });
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            return Task.FromResult(
+                new HttpResponseMessage(_statusCode) { Content = new StringContent(string.Empty) }
+            );
         }
     }
 
-    private sealed class ScriptedHandler : HttpMessageHandler {
+    private sealed class ScriptedHandler : HttpMessageHandler
+    {
         private readonly Queue<string> _responses;
 
-        public ScriptedHandler(params string[] responses) {
+        public ScriptedHandler(params string[] responses)
+        {
             _responses = new Queue<string>(responses);
         }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
-            if (_responses.Count == 0) {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            if (_responses.Count == 0)
+            {
                 throw new InvalidOperationException("ScriptedHandler exhausted");
             }
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) {
-                Content = new StringContent(_responses.Dequeue()),
-            });
+            return Task.FromResult(
+                new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(_responses.Dequeue()),
+                }
+            );
         }
     }
 }

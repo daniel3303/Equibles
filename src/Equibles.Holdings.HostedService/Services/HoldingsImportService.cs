@@ -1,14 +1,14 @@
 using System.IO.Compression;
-using Equibles.Errors.BusinessLogic;
-using Equibles.Data;
-using Equibles.Errors.Data.Models;
-using Equibles.Holdings.Data.Models;
 using Equibles.CommonStocks.Repositories;
-using Equibles.Holdings.Repositories;
-using Equibles.Holdings.HostedService.Models;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Core.Contracts;
+using Equibles.Data;
+using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.Data.Models;
+using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.HostedService.Models;
+using Equibles.Holdings.Repositories;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -17,7 +17,8 @@ using static Equibles.Holdings.HostedService.Services.HoldingsParsingHelper;
 namespace Equibles.Holdings.HostedService.Services;
 
 [Service]
-public class HoldingsImportService {
+public class HoldingsImportService
+{
     private const int InsertBatchSize = 1000;
     private const int MaxConsecutiveEmptyBatches = 5;
 
@@ -31,27 +32,38 @@ public class HoldingsImportService {
         ILogger<HoldingsImportService> logger,
         IOptions<WorkerOptions> workerOptions,
         IStockPriceProvider stockPriceProvider
-    ) {
+    )
+    {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _workerOptions = workerOptions.Value;
         _stockPriceProvider = stockPriceProvider;
     }
 
-    public async Task<ImportResult> ImportDataSet(ZipArchive archive, DateOnly minReportDate, CancellationToken cancellationToken) {
-        var context = new ImportContext {
+    public async Task<ImportResult> ImportDataSet(
+        ZipArchive archive,
+        DateOnly minReportDate,
+        CancellationToken cancellationToken
+    )
+    {
+        var context = new ImportContext
+        {
             TsvParser = new TsvParser(),
             Archive = archive,
             MinReportDate = minReportDate,
         };
 
         var parseResult = await ParseSubmissions(context, cancellationToken);
-        if (parseResult == null) return new ImportResult(0, IsComplete: false);
-        if (parseResult == false) return new ImportResult(0, IsComplete: true);
+        if (parseResult == null)
+            return new ImportResult(0, IsComplete: false);
+        if (parseResult == false)
+            return new ImportResult(0, IsComplete: true);
         DeduplicateSubmissions(context);
         var submissionCount = context.Submissions.Count;
-        if (!await ParseCoverPages(context, cancellationToken)) return new ImportResult(submissionCount, IsComplete: false);
-        if (!await BuildCusipMapping(context, cancellationToken)) return new ImportResult(submissionCount, IsComplete: true);
+        if (!await ParseCoverPages(context, cancellationToken))
+            return new ImportResult(submissionCount, IsComplete: false);
+        if (!await BuildCusipMapping(context, cancellationToken))
+            return new ImportResult(submissionCount, IsComplete: true);
         await BuildPriceMap(context, cancellationToken);
         await ParseOtherManagers(context, cancellationToken);
         await UpsertInstitutionalHolders(context, cancellationToken);
@@ -65,27 +77,40 @@ public class HoldingsImportService {
     /// Returns false if no 13F-HR submissions match filters (legitimate empty).
     /// Returns true if submissions were parsed successfully.
     /// </summary>
-    private async Task<bool?> ParseSubmissions(ImportContext context, CancellationToken cancellationToken) {
+    private async Task<bool?> ParseSubmissions(
+        ImportContext context,
+        CancellationToken cancellationToken
+    )
+    {
         var submissionEntry = FindEntry(context.Archive, "SUBMISSION.tsv");
-        if (submissionEntry == null) {
+        if (submissionEntry == null)
+        {
             _logger.LogWarning("SUBMISSION.tsv not found in archive");
             return null;
         }
 
         var submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase);
-        await foreach (var row in context.TsvParser.ParseEntry(submissionEntry)) {
+        await foreach (var row in context.TsvParser.ParseEntry(submissionEntry))
+        {
             var formType = GetValue(row, "SUBMISSIONTYPE");
-            if (formType is not ("13F-HR" or "13F-HR/A")) continue;
+            if (formType is not ("13F-HR" or "13F-HR/A"))
+                continue;
 
             var accession = GetValue(row, "ACCESSION_NUMBER");
-            if (string.IsNullOrEmpty(accession)) continue;
+            if (string.IsNullOrEmpty(accession))
+                continue;
 
             var periodOfReport = GetValue(row, "PERIODOFREPORT");
-            if (TryParseDateOnly(periodOfReport, out var reportDateCheck) && reportDateCheck < context.MinReportDate) {
+            if (
+                TryParseDateOnly(periodOfReport, out var reportDateCheck)
+                && reportDateCheck < context.MinReportDate
+            )
+            {
                 continue;
             }
 
-            submissions[accession] = new SubmissionRow {
+            submissions[accession] = new SubmissionRow
+            {
                 AccessionNumber = accession,
                 FilingDate = GetValue(row, "FILING_DATE"),
                 PeriodOfReport = periodOfReport,
@@ -94,7 +119,8 @@ public class HoldingsImportService {
             };
         }
 
-        if (submissions.Count == 0) {
+        if (submissions.Count == 0)
+        {
             _logger.LogInformation("No 13F-HR submissions found in data set");
             return false;
         }
@@ -104,41 +130,53 @@ public class HoldingsImportService {
         return true;
     }
 
-    internal static void DeduplicateSubmissions(ImportContext context) {
+    internal static void DeduplicateSubmissions(ImportContext context)
+    {
         var superseded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var byCikAndPeriod = context.Submissions.Values
-            .Where(s => !string.IsNullOrEmpty(s.Cik) && !string.IsNullOrEmpty(s.PeriodOfReport))
+        var byCikAndPeriod = context
+            .Submissions.Values.Where(s =>
+                !string.IsNullOrEmpty(s.Cik) && !string.IsNullOrEmpty(s.PeriodOfReport)
+            )
             .GroupBy(s => $"{s.Cik}|{s.PeriodOfReport}")
             .Where(g => g.Count() > 1);
 
-        foreach (var group in byCikAndPeriod) {
-            var latest = group
-                .OrderByDescending(s => s.FilingDate)
-                .First();
+        foreach (var group in byCikAndPeriod)
+        {
+            var latest = group.OrderByDescending(s => s.FilingDate).First();
 
-            foreach (var s in group.Where(s => s.AccessionNumber != latest.AccessionNumber)) {
+            foreach (var s in group.Where(s => s.AccessionNumber != latest.AccessionNumber))
+            {
                 superseded.Add(s.AccessionNumber);
             }
         }
 
-        foreach (var accession in superseded) {
+        foreach (var accession in superseded)
+        {
             context.Submissions.Remove(accession);
         }
     }
 
-    private async Task<bool> ParseCoverPages(ImportContext context, CancellationToken cancellationToken) {
+    private async Task<bool> ParseCoverPages(
+        ImportContext context,
+        CancellationToken cancellationToken
+    )
+    {
         var coverPageEntry = FindEntry(context.Archive, "COVERPAGE.tsv");
-        if (coverPageEntry == null) {
+        if (coverPageEntry == null)
+        {
             _logger.LogWarning("COVERPAGE.tsv not found in archive");
             return false;
         }
 
         var coverPages = new Dictionary<string, CoverPageRow>(StringComparer.OrdinalIgnoreCase);
-        await foreach (var row in context.TsvParser.ParseEntry(coverPageEntry)) {
+        await foreach (var row in context.TsvParser.ParseEntry(coverPageEntry))
+        {
             var accession = GetValue(row, "ACCESSION_NUMBER");
-            if (string.IsNullOrEmpty(accession) || !context.Submissions.ContainsKey(accession)) continue;
+            if (string.IsNullOrEmpty(accession) || !context.Submissions.ContainsKey(accession))
+                continue;
 
-            coverPages[accession] = new CoverPageRow {
+            coverPages[accession] = new CoverPageRow
+            {
                 AccessionNumber = accession,
                 IsAmendment = GetValue(row, "ISAMENDMENT"),
                 CompanyName = GetValue(row, "FILINGMANAGER_NAME"),
@@ -154,20 +192,28 @@ public class HoldingsImportService {
         return true;
     }
 
-    private async Task<bool> BuildCusipMapping(ImportContext context, CancellationToken cancellationToken) {
+    private async Task<bool> BuildCusipMapping(
+        ImportContext context,
+        CancellationToken cancellationToken
+    )
+    {
         var infoTableEntry = FindEntry(context.Archive, "INFOTABLE.tsv");
-        if (infoTableEntry == null) {
+        if (infoTableEntry == null)
+        {
             _logger.LogWarning("INFOTABLE.tsv not found in archive");
             return false;
         }
 
         var uniqueCusips = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        await foreach (var row in context.TsvParser.ParseEntry(infoTableEntry)) {
+        await foreach (var row in context.TsvParser.ParseEntry(infoTableEntry))
+        {
             var accession = GetValue(row, "ACCESSION_NUMBER");
-            if (!context.Submissions.ContainsKey(accession)) continue;
+            if (!context.Submissions.ContainsKey(accession))
+                continue;
 
             var cusip = GetValue(row, "CUSIP");
-            if (!string.IsNullOrEmpty(cusip)) {
+            if (!string.IsNullOrEmpty(cusip))
+            {
                 uniqueCusips.Add(cusip);
             }
         }
@@ -178,9 +224,10 @@ public class HoldingsImportService {
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var uniqueCusipsList = uniqueCusips.ToList();
 
-        var query = _workerOptions.TickersToSync?.Count > 0
-            ? stockRepo.GetByTickers(_workerOptions.TickersToSync)
-            : stockRepo.GetAll();
+        var query =
+            _workerOptions.TickersToSync?.Count > 0
+                ? stockRepo.GetByTickers(_workerOptions.TickersToSync)
+                : stockRepo.GetAll();
 
         var stocksWithCusip = await query
             .Where(cs => cs.Cusip != null && uniqueCusipsList.Contains(cs.Cusip))
@@ -188,14 +235,19 @@ public class HoldingsImportService {
             .ToListAsync(cancellationToken);
 
         var cusipMapping = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-        foreach (var stock in stocksWithCusip) {
+        foreach (var stock in stocksWithCusip)
+        {
             cusipMapping[stock.Cusip] = stock.Id;
         }
 
-        _logger.LogInformation("Mapped {Count} CUSIPs to tracked stocks (out of {Total} in data set)",
-            cusipMapping.Count, uniqueCusips.Count);
+        _logger.LogInformation(
+            "Mapped {Count} CUSIPs to tracked stocks (out of {Total} in data set)",
+            cusipMapping.Count,
+            uniqueCusips.Count
+        );
 
-        if (cusipMapping.Count == 0) {
+        if (cusipMapping.Count == 0)
+        {
             _logger.LogInformation("No tracked stocks found for this data set, skipping");
             return false;
         }
@@ -208,52 +260,70 @@ public class HoldingsImportService {
     /// Pre-fetches Yahoo closing prices for all (stock, reportDate) pairs in this dataset.
     /// Holdings without an available price will be marked as ValuePending during import.
     /// </summary>
-    private async Task BuildPriceMap(ImportContext context, CancellationToken cancellationToken) {
-        var reportDates = context.Submissions.Values
-            .Select(s => s.PeriodOfReport)
+    private async Task BuildPriceMap(ImportContext context, CancellationToken cancellationToken)
+    {
+        var reportDates = context
+            .Submissions.Values.Select(s => s.PeriodOfReport)
             .Where(p => TryParseDateOnly(p, out _))
-            .Select(p => { TryParseDateOnly(p, out var d); return d; })
+            .Select(p =>
+            {
+                TryParseDateOnly(p, out var d);
+                return d;
+            })
             .Distinct()
             .ToList();
 
         var stockIds = context.CusipMapping.Values.Distinct().ToList();
 
-        var requests = reportDates
-            .SelectMany(date => stockIds.Select(id => (id, date)))
-            .ToList();
+        var requests = reportDates.SelectMany(date => stockIds.Select(id => (id, date))).ToList();
 
-        context.StockPrices = await _stockPriceProvider.GetClosingPrices(requests, cancellationToken);
+        context.StockPrices = await _stockPriceProvider.GetClosingPrices(
+            requests,
+            cancellationToken
+        );
 
         _logger.LogInformation(
             "Fetched Yahoo prices for {Found}/{Requested} (stock, date) pairs",
-            context.StockPrices.Count, requests.Count);
+            context.StockPrices.Count,
+            requests.Count
+        );
     }
 
-    private async Task UpsertInstitutionalHolders(ImportContext context, CancellationToken cancellationToken) {
+    private async Task UpsertInstitutionalHolders(
+        ImportContext context,
+        CancellationToken cancellationToken
+    )
+    {
         var cikToHolderId = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
 
         using var scope = _scopeFactory.CreateScope();
         var holderRepo = scope.ServiceProvider.GetRequiredService<InstitutionalHolderRepository>();
 
-        var allCiks = context.Submissions.Values
-            .Where(s => !string.IsNullOrEmpty(s.Cik))
+        var allCiks = context
+            .Submissions.Values.Where(s => !string.IsNullOrEmpty(s.Cik))
             .Select(s => s.Cik)
             .Distinct()
             .ToList();
 
         var existingHolders = await holderRepo.GetByCiks(allCiks).ToListAsync(cancellationToken);
-        foreach (var holder in existingHolders) {
+        foreach (var holder in existingHolders)
+        {
             cikToHolderId[holder.Cik] = holder.Id;
         }
 
-        var existingCiks = existingHolders.Select(h => h.Cik).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingCiks = existingHolders
+            .Select(h => h.Cik)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var submission in context.Submissions.Values) {
-            if (string.IsNullOrEmpty(submission.Cik) || existingCiks.Contains(submission.Cik)) continue;
+        foreach (var submission in context.Submissions.Values)
+        {
+            if (string.IsNullOrEmpty(submission.Cik) || existingCiks.Contains(submission.Cik))
+                continue;
 
             context.CoverPages.TryGetValue(submission.AccessionNumber, out var coverPage);
 
-            var holder = new InstitutionalHolder {
+            var holder = new InstitutionalHolder
+            {
                 Cik = submission.Cik,
                 Name = coverPage?.CompanyName,
                 City = coverPage?.City,
@@ -273,28 +343,43 @@ public class HoldingsImportService {
         context.CikToHolderId = cikToHolderId;
     }
 
-    private async Task ParseOtherManagers(ImportContext context, CancellationToken cancellationToken) {
+    private async Task ParseOtherManagers(
+        ImportContext context,
+        CancellationToken cancellationToken
+    )
+    {
         var entry = FindEntry(context.Archive, "OTHERMANAGER2.tsv");
-        if (entry == null) {
+        if (entry == null)
+        {
             _logger.LogInformation("OTHERMANAGER2.tsv not found, skipping other-manager parsing");
             return;
         }
 
-        var managers = new Dictionary<string, Dictionary<int, string>>(StringComparer.OrdinalIgnoreCase);
-        await foreach (var row in context.TsvParser.ParseEntry(entry)) {
+        var managers = new Dictionary<string, Dictionary<int, string>>(
+            StringComparer.OrdinalIgnoreCase
+        );
+        await foreach (var row in context.TsvParser.ParseEntry(entry))
+        {
             var accession = GetValue(row, "ACCESSION_NUMBER");
-            if (string.IsNullOrEmpty(accession) || !context.Submissions.ContainsKey(accession)) continue;
+            if (string.IsNullOrEmpty(accession) || !context.Submissions.ContainsKey(accession))
+                continue;
 
             var seqStr = GetValue(row, "SEQUENCENUMBER");
-            if (!int.TryParse(seqStr, out var seq)) {
-                _logger.LogDebug("Failed to parse sequence number '{SeqStr}' in OTHERMANAGER2.tsv", seqStr);
+            if (!int.TryParse(seqStr, out var seq))
+            {
+                _logger.LogDebug(
+                    "Failed to parse sequence number '{SeqStr}' in OTHERMANAGER2.tsv",
+                    seqStr
+                );
                 continue;
             }
 
             var name = GetValue(row, "NAME");
-            if (string.IsNullOrEmpty(name)) continue;
+            if (string.IsNullOrEmpty(name))
+                continue;
 
-            if (!managers.TryGetValue(accession, out var seqMap)) {
+            if (!managers.TryGetValue(accession, out var seqMap))
+            {
                 seqMap = [];
                 managers[accession] = seqMap;
             }
@@ -306,32 +391,47 @@ public class HoldingsImportService {
         _logger.LogInformation("Parsed other-manager mappings for {Count} filings", managers.Count);
     }
 
-    private async Task HandleAmendments(ImportContext context, CancellationToken cancellationToken) {
+    private async Task HandleAmendments(ImportContext context, CancellationToken cancellationToken)
+    {
         using var scope = _scopeFactory.CreateScope();
-        var holdingRepo = scope.ServiceProvider.GetRequiredService<InstitutionalHoldingRepository>();
+        var holdingRepo =
+            scope.ServiceProvider.GetRequiredService<InstitutionalHoldingRepository>();
 
-        foreach (var (accession, submission) in context.Submissions) {
-            if (!context.CoverPages.TryGetValue(accession, out var coverPage)) continue;
-            if (!string.Equals(coverPage.IsAmendment, "Y", StringComparison.OrdinalIgnoreCase)) continue;
-            if (!context.CikToHolderId.TryGetValue(submission.Cik, out var holderId)) continue;
-            if (!TryParseDateOnly(submission.PeriodOfReport, out var reportDate)) continue;
+        foreach (var (accession, submission) in context.Submissions)
+        {
+            if (!context.CoverPages.TryGetValue(accession, out var coverPage))
+                continue;
+            if (!string.Equals(coverPage.IsAmendment, "Y", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!context.CikToHolderId.TryGetValue(submission.Cik, out var holderId))
+                continue;
+            if (!TryParseDateOnly(submission.PeriodOfReport, out var reportDate))
+                continue;
 
-            var existingHoldings = await holdingRepo.GetAll()
+            var existingHoldings = await holdingRepo
+                .GetAll()
                 .Where(h => h.InstitutionalHolderId == holderId && h.ReportDate == reportDate)
                 .ToListAsync(cancellationToken);
 
-            if (existingHoldings.Count > 0) {
+            if (existingHoldings.Count > 0)
+            {
                 holdingRepo.Delete(existingHoldings);
                 _logger.LogInformation(
                     "Deleted {Count} holdings for amendment {Accession}",
-                    existingHoldings.Count, accession);
+                    existingHoldings.Count,
+                    accession
+                );
             }
         }
 
         await holdingRepo.SaveChanges();
     }
 
-    private async Task StreamAndInsertHoldings(ImportContext context, CancellationToken cancellationToken) {
+    private async Task StreamAndInsertHoldings(
+        ImportContext context,
+        CancellationToken cancellationToken
+    )
+    {
         var infoTableEntry = FindEntry(context.Archive, "INFOTABLE.tsv");
         var holdingsMap = new Dictionary<string, InstitutionalHolding>();
         var totalInserted = 0;
@@ -340,41 +440,51 @@ public class HoldingsImportService {
         var totalPending = 0;
         var consecutiveEmptyBatches = 0;
 
-        await foreach (var row in context.TsvParser.ParseEntry(infoTableEntry)) {
+        await foreach (var row in context.TsvParser.ParseEntry(infoTableEntry))
+        {
             cancellationToken.ThrowIfCancellationRequested();
 
             var accession = GetValue(row, "ACCESSION_NUMBER");
-            if (!context.Submissions.TryGetValue(accession, out var submission)) continue;
+            if (!context.Submissions.TryGetValue(accession, out var submission))
+                continue;
 
             var cusip = GetValue(row, "CUSIP");
-            if (!context.CusipMapping.TryGetValue(cusip, out var commonStockId)) {
+            if (!context.CusipMapping.TryGetValue(cusip, out var commonStockId))
+            {
                 totalSkipped++;
                 continue;
             }
 
-            if (!context.CikToHolderId.TryGetValue(submission.Cik, out var holderId)) continue;
+            if (!context.CikToHolderId.TryGetValue(submission.Cik, out var holderId))
+                continue;
 
             TryParseDateOnly(submission.FilingDate, out var filingDate);
             TryParseDateOnly(submission.PeriodOfReport, out var reportDate);
 
             var shareType = ParseShareType(GetValue(row, "SSHPRNAMTTYPE"));
             var optionType = ParseOptionType(GetValue(row, "PUTCALL"));
-            var uniqueKey = $"{commonStockId}|{holderId}|{reportDate}|{(int)shareType}|{optionType?.ToString() ?? ""}";
+            var uniqueKey =
+                $"{commonStockId}|{holderId}|{reportDate}|{(int)shareType}|{optionType?.ToString() ?? ""}";
 
-            var isAmendment = context.CoverPages.TryGetValue(accession, out var cp)
+            var isAmendment =
+                context.CoverPages.TryGetValue(accession, out var cp)
                 && string.Equals(cp.IsAmendment, "Y", StringComparison.OrdinalIgnoreCase);
 
             var shares = ParseLong(GetValue(row, "SSHPRNAMT"));
 
             // Calculate value from Yahoo stock price
-            var hasPrice = context.StockPrices.TryGetValue((commonStockId, reportDate), out var closePrice);
+            var hasPrice = context.StockPrices.TryGetValue(
+                (commonStockId, reportDate),
+                out var closePrice
+            );
             var value = hasPrice ? (long)(shares * closePrice) : 0L;
             var valuePending = !hasPrice;
 
             var otherManagerNumber = ParseNullableInt(GetValue(row, "OTHERMANAGER"));
             var discretion = ParseInvestmentDiscretion(GetValue(row, "INVESTMENTDISCRETION"));
 
-            var managerEntry = new HoldingManagerEntry {
+            var managerEntry = new HoldingManagerEntry
+            {
                 ManagerNumber = otherManagerNumber,
                 ManagerName = ResolveManagerName(context, accession, otherManagerNumber),
                 Shares = shares,
@@ -382,7 +492,8 @@ public class HoldingsImportService {
                 InvestmentDiscretion = discretion,
             };
 
-            if (holdingsMap.TryGetValue(uniqueKey, out var existing)) {
+            if (holdingsMap.TryGetValue(uniqueKey, out var existing))
+            {
                 totalDuplicates++;
                 existing.Shares += shares;
                 existing.Value += value;
@@ -390,10 +501,14 @@ public class HoldingsImportService {
                 existing.VotingAuthShared += ParseLong(GetValue(row, "VOTING_AUTH_SHARED"));
                 existing.VotingAuthNone += ParseLong(GetValue(row, "VOTING_AUTH_NONE"));
                 existing.ManagerEntries.Add(managerEntry);
-            } else {
-                if (valuePending) totalPending++;
+            }
+            else
+            {
+                if (valuePending)
+                    totalPending++;
 
-                var holding = new InstitutionalHolding {
+                var holding = new InstitutionalHolding
+                {
                     InstitutionalHolderId = holderId,
                     CommonStockId = commonStockId,
                     FilingDate = filingDate,
@@ -416,26 +531,33 @@ public class HoldingsImportService {
                 holdingsMap[uniqueKey] = holding;
             }
 
-            if (holdingsMap.Count >= InsertBatchSize) {
+            if (holdingsMap.Count >= InsertBatchSize)
+            {
                 var inserted = await FlushBatch(holdingsMap.Values.ToList(), cancellationToken);
                 totalInserted += inserted;
                 holdingsMap.Clear();
 
-                if (inserted == 0) {
+                if (inserted == 0)
+                {
                     consecutiveEmptyBatches++;
-                    if (consecutiveEmptyBatches >= MaxConsecutiveEmptyBatches) {
+                    if (consecutiveEmptyBatches >= MaxConsecutiveEmptyBatches)
+                    {
                         _logger.LogInformation(
                             "Stopping early: {Count} consecutive batches had no new holdings — data set appears fully imported",
-                            consecutiveEmptyBatches);
+                            consecutiveEmptyBatches
+                        );
                         break;
                     }
-                } else {
+                }
+                else
+                {
                     consecutiveEmptyBatches = 0;
                 }
             }
         }
 
-        if (holdingsMap.Count > 0) {
+        if (holdingsMap.Count > 0)
+        {
             var inserted = await FlushBatch(holdingsMap.Values.ToList(), cancellationToken);
             totalInserted += inserted;
             holdingsMap.Clear();
@@ -443,24 +565,43 @@ public class HoldingsImportService {
 
         _logger.LogInformation(
             "Import complete. Inserted: {Inserted}, Skipped (untracked): {Skipped}, Duplicates: {Duplicates}, Pending price: {Pending}",
-            totalInserted, totalSkipped, totalDuplicates, totalPending);
+            totalInserted,
+            totalSkipped,
+            totalDuplicates,
+            totalPending
+        );
     }
 
-    private async Task<int> FlushBatch(List<InstitutionalHolding> holdings, CancellationToken cancellationToken) {
+    private async Task<int> FlushBatch(
+        List<InstitutionalHolding> holdings,
+        CancellationToken cancellationToken
+    )
+    {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
 
         var entriesByKey = new Dictionary<string, List<HoldingManagerEntry>>();
-        foreach (var h in holdings) {
-            var key = $"{h.CommonStockId}|{h.InstitutionalHolderId}|{h.ReportDate}|{(int)h.ShareType}|{h.OptionType?.ToString() ?? ""}";
+        foreach (var h in holdings)
+        {
+            var key =
+                $"{h.CommonStockId}|{h.InstitutionalHolderId}|{h.ReportDate}|{(int)h.ShareType}|{h.OptionType?.ToString() ?? ""}";
             entriesByKey[key] = h.ManagerEntries.ToList();
             h.ManagerEntries.Clear();
         }
 
-        await dbContext.Set<InstitutionalHolding>()
+        await dbContext
+            .Set<InstitutionalHolding>()
             .UpsertRange(holdings)
-            .On(h => new { h.CommonStockId, h.InstitutionalHolderId, h.ReportDate, h.ShareType, h.OptionType })
-            .WhenMatched(h => new InstitutionalHolding {
+            .On(h => new
+            {
+                h.CommonStockId,
+                h.InstitutionalHolderId,
+                h.ReportDate,
+                h.ShareType,
+                h.OptionType,
+            })
+            .WhenMatched(h => new InstitutionalHolding
+            {
                 Value = h.Value,
                 Shares = h.Shares,
                 FilingDate = h.FilingDate,
@@ -477,14 +618,18 @@ public class HoldingsImportService {
             .RunAsync(cancellationToken);
 
         var accessions = holdings.Select(h => h.AccessionNumber).Distinct().ToList();
-        var dbHoldings = await dbContext.Set<InstitutionalHolding>()
+        var dbHoldings = await dbContext
+            .Set<InstitutionalHolding>()
             .Include(h => h.ManagerEntries)
             .Where(h => accessions.Contains(h.AccessionNumber))
             .ToListAsync(cancellationToken);
 
-        foreach (var dbHolding in dbHoldings) {
-            var key = $"{dbHolding.CommonStockId}|{dbHolding.InstitutionalHolderId}|{dbHolding.ReportDate}|{(int)dbHolding.ShareType}|{dbHolding.OptionType?.ToString() ?? ""}";
-            if (entriesByKey.TryGetValue(key, out var entries)) {
+        foreach (var dbHolding in dbHoldings)
+        {
+            var key =
+                $"{dbHolding.CommonStockId}|{dbHolding.InstitutionalHolderId}|{dbHolding.ReportDate}|{(int)dbHolding.ShareType}|{dbHolding.OptionType?.ToString() ?? ""}";
+            if (entriesByKey.TryGetValue(key, out var entries))
+            {
                 dbHolding.ManagerEntries.Clear();
                 dbHolding.ManagerEntries.AddRange(entries);
             }
@@ -494,5 +639,4 @@ public class HoldingsImportService {
 
         return holdings.Count;
     }
-
 }

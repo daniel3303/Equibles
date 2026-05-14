@@ -9,17 +9,20 @@ namespace Equibles.FunctionalTests.Tests;
 
 [Collection(FunctionalTestCollection.Name)]
 [Trait("Category", "Functional")]
-public class StocksFtdSeededTests {
+public class StocksFtdSeededTests
+{
     private readonly WebAppFixture _web;
     private readonly PlaywrightFixture _playwright;
 
-    public StocksFtdSeededTests(WebAppFixture web, PlaywrightFixture playwright) {
+    public StocksFtdSeededTests(WebAppFixture web, PlaywrightFixture playwright)
+    {
         _web = web;
         _playwright = playwright;
     }
 
     [Fact]
-    public async Task Ftd_GetForStockWithLotsOfSeededHistory_RendersMostRecent90DaysAndChart() {
+    public async Task Ftd_GetForStockWithLotsOfSeededHistory_RendersMostRecent90DaysAndChart()
+    {
         // Seeds 200 daily FailToDeliver rows so the page has more than
         // StockTabService.LoadFtdTab's Take(90) cap. LoadFtdTab does a two-stage ordering:
         // OrderByDescending(SettlementDate).Take(90) to pick the slice, then OrderBy(Date)
@@ -38,22 +41,30 @@ public class StocksFtdSeededTests {
         var stockId = Guid.NewGuid();
         var endDate = new DateOnly(2026, 1, 31);
 
-        await _web.ResetAndSeedAsync(async db => {
-            db.Add(new CommonStock {
-                Id = stockId,
-                Ticker = "AAPL",
-                Name = "Apple Inc.",
-                Cik = "0000320193",
-            });
+        await _web.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new CommonStock
+                {
+                    Id = stockId,
+                    Ticker = "AAPL",
+                    Name = "Apple Inc.",
+                    Cik = "0000320193",
+                }
+            );
 
             db.ChangeTracker.AutoDetectChangesEnabled = false;
-            for (var i = 0; i < totalSeededDays; i++) {
-                db.Add(new FailToDeliver {
-                    CommonStockId = stockId,
-                    SettlementDate = endDate.AddDays(-i),
-                    Quantity = 10_000L + i,
-                    Price = 100m + i,
-                });
+            for (var i = 0; i < totalSeededDays; i++)
+            {
+                db.Add(
+                    new FailToDeliver
+                    {
+                        CommonStockId = stockId,
+                        SettlementDate = endDate.AddDays(-i),
+                        Quantity = 10_000L + i,
+                        Price = 100m + i,
+                    }
+                );
             }
             await Task.CompletedTask;
         });
@@ -64,9 +75,11 @@ public class StocksFtdSeededTests {
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);
 
-        await Assertions.Expect(page.Locator("h3").Filter(new() { HasTextString = "No Fails to Deliver Data" }))
+        await Assertions
+            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Fails to Deliver Data" }))
             .ToHaveCountAsync(0);
-        await Assertions.Expect(page.Locator("h3").Filter(new() { HasTextString = "Fails to Deliver History" }))
+        await Assertions
+            .Expect(page.Locator("h3").Filter(new() { HasTextString = "Fails to Deliver History" }))
             .ToHaveCountAsync(1);
 
         var rows = page.Locator("table tbody tr");
@@ -75,7 +88,8 @@ public class StocksFtdSeededTests {
         // The view renders OrderByDescending(SettlementDate), so the first row's date column
         // must be the most-recent seeded date — proves the Take(90) selected the newest rows,
         // not the oldest.
-        await Assertions.Expect(rows.First.Locator("td").First)
+        await Assertions
+            .Expect(rows.First.Locator("td").First)
             .ToHaveTextAsync(endDate.ToString("yyyy-MM-dd"));
     }
 }

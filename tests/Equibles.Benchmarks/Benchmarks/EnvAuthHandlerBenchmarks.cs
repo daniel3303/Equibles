@@ -12,13 +12,15 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// hot authenticated route. Captures both paths together as one realistic auth-check loop.
 /// </summary>
 [MemoryDiagnoser]
-public class EnvAuthHandlerBenchmarks {
+public class EnvAuthHandlerBenchmarks
+{
     private const string Username = "operator";
     private const string SessionSecret = "9f3a7c4d2e1b6f8a0c5d4e9b3a7f2c1d";
     private string _cookie;
 
     [GlobalSetup]
-    public void Setup() {
+    public void Setup()
+    {
         // Pre-compute the cookie a real authenticated session would carry. Without this the
         // ConstantTimeEquals path would always compare against a fresh token, masking the
         // realistic match case.
@@ -26,7 +28,8 @@ public class EnvAuthHandlerBenchmarks {
     }
 
     [Benchmark]
-    public bool ValidateAuthenticatedCookie() {
+    public bool ValidateAuthenticatedCookie()
+    {
         // Mirrors the production sequence: regenerate the expected token from settings, then
         // FixedTimeEquals against the request's cookie. One pass = one authenticated request.
         var expected = EnvAuthHandler.GenerateToken(Username, SessionSecret);

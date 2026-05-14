@@ -8,9 +8,11 @@ using NSubstitute;
 
 namespace Equibles.UnitTests.Web;
 
-public class HomeControllerTests {
+public class HomeControllerTests
+{
     [Fact]
-    public void Error_StatusCode429_ShowsTooManyRequestsTitleAndSets429Response() {
+    public void Error_StatusCode429_ShowsTooManyRequestsTitleAndSets429Response()
+    {
         // Pins the 429 case-specific branch — distinct from 404 and the default
         // arm pinned by sibling tests. 429 ("Too Many Requests") is the response
         // ASP.NET Core surfaces when the configured rate limiter rejects a
@@ -27,7 +29,11 @@ public class HomeControllerTests {
         // and the integration tests don't render the error pipeline against
         // throttled requests, so this regression escapes other tiers entirely.
         var httpContext = new DefaultHttpContext();
-        var controller = new HomeController(NullLogger<HomeController>.Instance, Substitute.For<IConfiguration>()) {
+        var controller = new HomeController(
+            NullLogger<HomeController>.Instance,
+            Substitute.For<IConfiguration>()
+        )
+        {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
             TempData = Substitute.For<ITempDataDictionary>(),
         };
@@ -40,7 +46,8 @@ public class HomeControllerTests {
     }
 
     [Fact]
-    public void Error_StatusCode404_ShowsPageNotFoundTitleAndSets404Response() {
+    public void Error_StatusCode404_ShowsPageNotFoundTitleAndSets404Response()
+    {
         // The sibling `Error_NullStatusCode_...` test pins the default switch arm
         // ("Something Went Wrong"). This pins the 404 case — the most common
         // user-facing error and the one with the strongest UX/SEO consequences:
@@ -62,7 +69,11 @@ public class HomeControllerTests {
         // collapsing them into a single Theory wouldn't isolate this case
         // distinctly enough to catch a swap.
         var httpContext = new DefaultHttpContext();
-        var controller = new HomeController(NullLogger<HomeController>.Instance, Substitute.For<IConfiguration>()) {
+        var controller = new HomeController(
+            NullLogger<HomeController>.Instance,
+            Substitute.For<IConfiguration>()
+        )
+        {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
             TempData = Substitute.For<ITempDataDictionary>(),
         };
@@ -75,7 +86,8 @@ public class HomeControllerTests {
     }
 
     [Fact]
-    public void Error_StatusCode404_SetsActionableDescriptionTextDistinctFromTitle() {
+    public void Error_StatusCode404_SetsActionableDescriptionTextDistinctFromTitle()
+    {
         // Sibling pin to the three existing Title pins (404, 429, default-500).
         // The Error() action populates TWO ViewData entries from the same statusCode:
         //   ViewData["Title"]       — short header (e.g. "Page Not Found")
@@ -115,19 +127,26 @@ public class HomeControllerTests {
         // string so a refactor that "simplifies" the wording must update this
         // test deliberately.
         var httpContext = new DefaultHttpContext();
-        var controller = new HomeController(NullLogger<HomeController>.Instance, Substitute.For<IConfiguration>()) {
+        var controller = new HomeController(
+            NullLogger<HomeController>.Instance,
+            Substitute.For<IConfiguration>()
+        )
+        {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
             TempData = Substitute.For<ITempDataDictionary>(),
         };
 
         controller.Error(statusCode: 404);
 
-        controller.ViewData["Description"].Should()
+        controller
+            .ViewData["Description"]
+            .Should()
             .Be("The page you're looking for doesn't exist or has been moved.");
     }
 
     [Fact]
-    public void Connect_McpPortNotConfigured_BuildsMcpUrlWithDefaultPort8081() {
+    public void Connect_McpPortNotConfigured_BuildsMcpUrlWithDefaultPort8081()
+    {
         // HomeController.Connect renders the "Connect AI Assistant" page that
         // walks users through wiring an MCP client (Claude Desktop, Continue,
         // etc.) to the local Equibles MCP server. The view-data the action
@@ -170,7 +189,8 @@ public class HomeControllerTests {
 
         var configuration = new ConfigurationBuilder().AddInMemoryCollection([]).Build();
 
-        var controller = new HomeController(NullLogger<HomeController>.Instance, configuration) {
+        var controller = new HomeController(NullLogger<HomeController>.Instance, configuration)
+        {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
             TempData = Substitute.For<ITempDataDictionary>(),
         };
@@ -182,7 +202,8 @@ public class HomeControllerTests {
     }
 
     [Fact]
-    public void Connect_McpApiKeyConfigured_SurfacesApiKeyViaViewData() {
+    public void Connect_McpApiKeyConfigured_SurfacesApiKeyViaViewData()
+    {
         // Sibling to `Connect_McpPortNotConfigured_BuildsMcpUrlWithDefaultPort8081`.
         // The McpPort sibling pins the URL composition path. This pin
         // exercises the OTHER ViewData entry the action populates:
@@ -219,12 +240,13 @@ public class HomeControllerTests {
         httpContext.Request.Host = new HostString("localhost");
 
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> {
-                ["McpApiKey"] = "eq_live_abc123secrettoken",
-            })
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["McpApiKey"] = "eq_live_abc123secrettoken" }
+            )
             .Build();
 
-        var controller = new HomeController(NullLogger<HomeController>.Instance, configuration) {
+        var controller = new HomeController(NullLogger<HomeController>.Instance, configuration)
+        {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
             TempData = Substitute.For<ITempDataDictionary>(),
         };
@@ -236,7 +258,8 @@ public class HomeControllerTests {
     }
 
     [Fact]
-    public void Error_NullStatusCode_SetsResponseStatusTo500AndShowsGenericTitle() {
+    public void Error_NullStatusCode_SetsResponseStatusTo500AndShowsGenericTitle()
+    {
         // ASP.NET Core's `UseStatusCodePagesWithReExecute("/Home/Error/{0}")` invokes
         // this action with the status code embedded in the URL — but the catch-all
         // exception handler invokes it WITHOUT a parameter (it doesn't know the
@@ -253,7 +276,11 @@ public class HomeControllerTests {
         // visibility into every uncaught exception. Pin both the response status
         // and the default-arm switch output on a single null-input call.
         var httpContext = new DefaultHttpContext();
-        var controller = new HomeController(NullLogger<HomeController>.Instance, Substitute.For<IConfiguration>()) {
+        var controller = new HomeController(
+            NullLogger<HomeController>.Instance,
+            Substitute.For<IConfiguration>()
+        )
+        {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
             TempData = Substitute.For<ITempDataDictionary>(),
         };
