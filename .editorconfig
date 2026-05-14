@@ -1,0 +1,27 @@
+# EditorConfig — cross-IDE defaults for contributors who don't run the
+# project's formatter (CSharpier handles all C# formatting itself).
+# Covers indent style, line endings, charset, and trailing-whitespace rules.
+#
+# Reference: https://editorconfig.org
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# JSON / YAML / MSBuild are conventionally 2-space.
+[*.{json,jsonc,yml,yaml,csproj,props,targets,fsproj,vbproj}]
+indent_size = 2
+
+# Markdown: two trailing spaces == hard line break, don't strip them.
+[*.md]
+trim_trailing_whitespace = false
+
+# Makefiles require tab indentation.
+[Makefile]
+indent_style = tab
