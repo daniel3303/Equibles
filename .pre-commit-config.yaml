@@ -1,0 +1,44 @@
+# Run these locally before pushing. Install once with `prek install -f`
+# (https://prek.j178.dev) or the Python `pre-commit` tool.
+#
+# Run on demand with `prek run --all-files`.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: no-commit-to-branch
+        args: ["--branch", "main"]
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: end-of-file-fixer
+        exclude: '\.(svg|min\.js|min\.css)$'
+      - id: trailing-whitespace
+        exclude: '\.(svg|min\.js|min\.css|md)$'
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+        exclude: '\.idea/.*'
+      - id: detect-private-key
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.45.0
+    hooks:
+      - id: markdownlint
+        args: ["--config", ".markdownlint.yaml"]
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        additional_dependencies: ["tomli"]
+
+  - repo: local
+    hooks:
+      - id: csharpier
+        name: csharpier check
+        entry: dotnet csharpier check
+        language: system
+        types: [c#]
+        pass_filenames: false
