@@ -62,17 +62,21 @@ Thanks for your interest in contributing! This guide covers how to get started, 
 ## Submitting Changes
 
 1. Create a feature branch from `main`:
+
    ```bash
    git checkout -b feat/your-feature
    ```
+
 2. Make your changes, following the [code style](#code-style) guidelines below.
 3. Ensure the solution builds cleanly: `dotnet build Equibles.sln`
 4. Commit with a descriptive message using [Conventional Commits](https://www.conventionalcommits.org/):
-   ```
+
+   ```text
    feat(holdings): add quarterly comparison endpoint
    fix(sec): handle missing CIK in EDGAR response
    docs: update MCP connection instructions
    ```
+
 5. Push your branch and open a pull request against `main`.
 6. Keep PRs focused — one logical change per PR.
 
@@ -99,7 +103,7 @@ Equibles is a modular monolith. Each financial domain (Holdings, Insider Trading
 
 Every domain module follows a layered pattern. Not all layers are required — create only what the module needs:
 
-```
+```text
 Equibles.{Module}.Data            → Entity models, EF configuration, IModuleConfiguration
 Equibles.{Module}.Repositories    → Data access via BaseRepository<T>
 Equibles.{Module}.BusinessLogic   → Managers with business logic (when needed)
@@ -124,7 +128,7 @@ Modules declare their dependencies automatically — calling `modules.AddSec()` 
 
 ### Data Flow
 
-```
+```text
 Data (models) → Repositories (data access) → Managers (business logic) → Controllers / MCP Tools / HostedServices
 ```
 

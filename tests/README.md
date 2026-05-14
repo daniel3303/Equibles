@@ -22,7 +22,7 @@ dotnet test tests/Equibles.Tests
 
 Tests are organized by feature area, mirroring the `src/` project structure:
 
-```
+```text
 tests/Equibles.Tests/
 ├── Helpers/                 # TestDbContextFactory, ServiceScopeSubstitute
 ├── CommonStocks/            # CommonStockManager validation
@@ -50,10 +50,12 @@ tests/Equibles.Tests/
 ## What Is Tested
 
 ### Core & Infrastructure
+
 - `EnumExtensionsTests` — `NameForHumans()` extension across multiple enum types
 - `EquiblesModuleBuilderTests` — Module registration, deduplication, fluent API
 
 ### Data Models & Enums
+
 - `CommonStockModelTests` — Entity defaults, property initialization
 - `HoldingsEnumTests` — `[Display]` attributes on ShareType, OptionType, InvestmentDiscretion
 - `InsiderTradingEnumTests` — `[Display]` on TransactionCode, AcquiredDisposed, OwnershipNature
@@ -63,17 +65,20 @@ tests/Equibles.Tests/
 - `DocumentTypeTests` — Case-insensitive parsing, display names, custom registration
 
 ### Business Logic
+
 - `CommonStockManagerTests` — Create/Update validation (required fields, uniqueness, secondary ticker conflicts)
 - `ErrorManagerTests` — Create with truncation boundaries, null defaults, MarkAsSeen, Delete
 - `ErrorReporterTests` — Delegation to ErrorManager, exception suppression on failure
 - `FileManagerTests` — SaveFile with MIME type detection, extension parsing, size validation
 
 ### Holdings Module
+
 - `ValueNormalizerTests` — Passthrough and Thousands normalizer behavior
 - `TsvParserTests` — Tab-delimited parsing from zip archives, edge cases
 - `HoldingsImportServiceTests` — Static parsing helpers (dates, enums, lookups, deduplication), SelectNormalizer decision tree (pre/post-2023, amendment consensus)
 
 ### SEC Module
+
 - `ChunkingStrategyTests` — Document segmentation into token-limited chunks
 - `TokenCounterTests` — Tokenization utility
 - `SecDocumentHtmlNormalizerTests` — SGML parsing, document type filtering
@@ -84,13 +89,16 @@ tests/Equibles.Tests/
 - **Normalizer pipeline** (6 test classes): XBRL stripping, table normalization, heading conversion, list conversion, pagination removal, currency consolidation
 
 ### Congress Module
+
 - `DisclosureParsingHelperTests` — ParseTransactionType, ParseAmountRange, ParseDate, ExtractTickerFromAssetName, GetCell, CleanSentinel, Truncate, IsValidDisclosureUrl, ParseTransactionsFromHtml (end-to-end)
 
 ### MCP Infrastructure
+
 - `ApiKeyMiddlewareTests` — Valid/invalid Bearer tokens, disabled validator, missing headers, case-insensitive prefix
 - `EquiblesMcpBuilderTests` — AddModule registration/deduplication, UseMiddleware DI registration, fluent API
 
 ### Integrations
+
 - `RateLimiterTests` — Async rate limiting, pause behavior, concurrency
 
 ## What Could Be Tested Next
@@ -105,12 +113,12 @@ tests/Equibles.Tests/
 
 ### Medium Value
 
-| Component | What to Test |
-|-----------|-------------|
+| Component | What to Test | Notes |
+|-----------|-------------|-------|
 | `FredImportService.ImportSeries` | Series creation, observation import, deduplication | Requires making method internal |
-| `ShortInterestImportService` | Date filtering, ticker mapping, duplicate detection |
-| `YahooPriceImportService` | Date range calculation, price record mapping |
-| Integration clients (`SecEdgarClient`, `FredClient`, `FinraClient`) | Response parsing with `HttpMessageHandler` mocking |
+| `ShortInterestImportService` | Date filtering, ticker mapping, duplicate detection | |
+| `YahooPriceImportService` | Date range calculation, price record mapping | |
+| Integration clients (`SecEdgarClient`, `FredClient`, `FinraClient`) | Response parsing with `HttpMessageHandler` mocking | |
 
 ### Lower Priority (simple pass-through or IO-bound)
 
