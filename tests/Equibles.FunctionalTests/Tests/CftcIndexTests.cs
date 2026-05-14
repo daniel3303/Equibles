@@ -95,8 +95,6 @@ public class CftcIndexTests
             .Expect(page.Locator("p").Filter(new() { HasTextString = "contracts from" }))
             .ToContainTextAsync("1 contracts from");
         // Seeded market code appears as a link, proving the per-contract projection ran.
-        await Assertions
-            .Expect(page.Locator("body"))
-            .ToContainTextAsync("TEST_ES_FUT");
+        await Assertions.Expect(page.Locator("body")).ToContainTextAsync("TEST_ES_FUT");
     }
 }
