@@ -66,4 +66,30 @@ public class MarketVixTests
         // thread culture which the fixture doesn't pin, so anchor on the row count instead).
         await Assertions.Expect(page.Locator("tbody tr")).ToHaveCountAsync(2);
     }
+
+    [Fact]
+    public async Task Vix_GetWithNoVixRows_RendersEmptyStateAndHidesChart()
+    {
+        // /market/vix with zero CboeVixDaily rows must (a) still return 200 and render the
+        // breadcrumb (MarketController must not 404), (b) take the `Records.Count == 0`
+        // branch of Views/Market/Vix.cshtml that emits "No data yet", and (c) skip the
+        // chronological-chart branch so the #vix-chart canvas is absent. The existing test
+        // only covers the populated path; this pins the empty path including the chart skip.
+        await _web.ResetAndSeedAsync(_ => Task.CompletedTask);
+
+        var page = await _playwright.NewPageAsync(_web.BaseUrl);
+        var response = await page.GotoAsync("/market/vix");
+
+        response.Should().NotBeNull();
+        response!.Status.Should().Be(200);
+
+        await Assertions
+            .Expect(page.Locator(".breadcrumbs li").Filter(new() { HasTextString = "VIX" }))
+            .ToHaveCountAsync(1);
+        await Assertions
+            .Expect(page.Locator("p").Filter(new() { HasTextString = "No data yet" }))
+            .ToHaveCountAsync(1);
+        await Assertions.Expect(page.Locator("#vix-chart")).ToHaveCountAsync(0);
+        await Assertions.Expect(page.Locator("tbody tr")).ToHaveCountAsync(0);
+    }
 }
