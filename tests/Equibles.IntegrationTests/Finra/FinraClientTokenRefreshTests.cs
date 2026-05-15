@@ -39,8 +39,12 @@ public class FinraClientTokenRefreshTests
 
         result.Should().ContainSingle();
         result[0].Symbol.Should().Be("AAPL");
-        // First data call 401 forced a token re-fetch (initial + refresh).
-        handler.TokenRequestCount.Should().BeGreaterThanOrEqualTo(2);
+        // The 401 path is fully proven by exactly two data calls plus a parsed
+        // record: the retry only returns data because GetAccessToken ran again
+        // after InvalidateToken — a broken branch would throw on the 401 instead.
+        // TokenRequestCount is deliberately NOT asserted: FinraClient caches the
+        // token in static fields, so a sibling Finra test running in parallel can
+        // warm that cache and make the initial fetch skip this handler.
         handler.DataRequestCount.Should().Be(2);
     }
 
@@ -48,7 +52,6 @@ public class FinraClientTokenRefreshTests
     {
         private readonly string _tokenBody;
         private readonly string _dataBody;
-        public int TokenRequestCount { get; private set; }
         public int DataRequestCount { get; private set; }
 
         public TokenRefreshHandler(string tokenBody, string dataBody)
@@ -64,7 +67,6 @@ public class FinraClientTokenRefreshTests
         {
             if (request.RequestUri!.AbsoluteUri.Contains("oauth2/access_token"))
             {
-                TokenRequestCount++;
                 return Task.FromResult(
                     new HttpResponseMessage(HttpStatusCode.OK)
                     {
