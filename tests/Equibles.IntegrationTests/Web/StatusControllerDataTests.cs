@@ -110,9 +110,8 @@ public class StatusControllerDataTests : IDisposable
         // The Json() body is an anonymous object — read DataCounts as a Dictionary<string,int>.
         // Any rename of these keys silently breaks the operator dashboard.
         var bodyType = json.Value!.GetType();
-        var dataCounts = (IDictionary<string, int>)bodyType
-            .GetProperty("DataCounts")!
-            .GetValue(json.Value)!;
+        var dataCounts =
+            (IDictionary<string, int>)bodyType.GetProperty("DataCounts")!.GetValue(json.Value)!;
         dataCounts.Should().ContainKey("StockCount");
         dataCounts.Should().ContainKey("DocumentCount");
         dataCounts.Should().ContainKey("CboeVixDailyCount");
