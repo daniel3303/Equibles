@@ -1,4 +1,7 @@
+using Equibles.Cboe.Repositories;
+using Equibles.Cftc.Repositories;
 using Equibles.CommonStocks.Repositories;
+using Equibles.Congress.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Errors.Repositories;
@@ -7,9 +10,6 @@ using Equibles.Fred.Repositories;
 using Equibles.Holdings.Repositories;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.IntegrationTests.Helpers;
-using Equibles.Cboe.Repositories;
-using Equibles.Cftc.Repositories;
-using Equibles.Congress.Repositories;
 using Equibles.Sec.Repositories;
 using Equibles.Web.Controllers;
 using Equibles.Web.FlashMessage.Contracts;
@@ -46,24 +46,36 @@ public class StatusControllerDeleteAllTests : ParadeDbMcpTestBase
     [Fact]
     public async Task DeleteAll_ThreeErrorsAcrossSources_WipesEveryRowAndRedirectsToIndex()
     {
-        DbContext.Set<Error>().Add(new Error
-        {
-            Source = ErrorSource.Other,
-            Context = "C1",
-            Message = "M1",
-        });
-        DbContext.Set<Error>().Add(new Error
-        {
-            Source = ErrorSource.DocumentScraper,
-            Context = "C2",
-            Message = "M2",
-        });
-        DbContext.Set<Error>().Add(new Error
-        {
-            Source = ErrorSource.CongressScraper,
-            Context = "C3",
-            Message = "M3",
-        });
+        DbContext
+            .Set<Error>()
+            .Add(
+                new Error
+                {
+                    Source = ErrorSource.Other,
+                    Context = "C1",
+                    Message = "M1",
+                }
+            );
+        DbContext
+            .Set<Error>()
+            .Add(
+                new Error
+                {
+                    Source = ErrorSource.DocumentScraper,
+                    Context = "C2",
+                    Message = "M2",
+                }
+            );
+        DbContext
+            .Set<Error>()
+            .Add(
+                new Error
+                {
+                    Source = ErrorSource.CongressScraper,
+                    Context = "C3",
+                    Message = "M3",
+                }
+            );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 

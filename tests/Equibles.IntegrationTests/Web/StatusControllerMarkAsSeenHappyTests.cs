@@ -124,7 +124,10 @@ public class StatusControllerMarkAsSeenHappyTests : IDisposable
         redirect.ActionName.Should().Be(nameof(StatusController.Show));
         redirect.RouteValues!["id"].Should().Be(error.Id);
         flashMessage.Received(1).Success("Error marked as seen.");
-        var refreshed = await _dbContext.Set<Error>().AsNoTracking().SingleAsync(e => e.Id == error.Id);
+        var refreshed = await _dbContext
+            .Set<Error>()
+            .AsNoTracking()
+            .SingleAsync(e => e.Id == error.Id);
         refreshed.Seen.Should().BeTrue();
     }
 }
