@@ -503,4 +503,98 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         holdings[0].AccessionNumber.Should().Be("ACC-AMEND");
         holdings[0].IsAmendment.Should().BeTrue();
     }
+
+    // ── Resilience / parser-branch coverage ─────────────────────────────
+
+    [Fact]
+    public async Task ImportDataSet_ArchiveMissingInfoTable_CompletesEmptyWithoutHoldings()
+    {
+        // BuildCusipMapping's "INFOTABLE.tsv not found" guard (zero-hit): an
+        // archive with submissions but no holdings table is treated as
+        // complete-but-empty (IsComplete=true so the worker marks it processed
+        // and never retries forever), persisting zero holdings — not a crash.
+        var submission =
+            "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
+            + "13F-HR\tACC-001\t2024-10-15\t2024-09-30\t0001067983\n";
+        var coverPage =
+            "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\tFILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\n"
+            + "ACC-001\tN\tBerkshire Hathaway\tOmaha\tNE\t028-12345\t12345\n";
+
+        using var archive = BuildArchive(
+            ("SUBMISSION.tsv", submission),
+            ("COVERPAGE.tsv", coverPage)
+        );
+        var sut = CreateImporter(PriceProviderReturning([]));
+
+        var result = await sut.ImportDataSet(
+            archive,
+            new DateOnly(2024, 1, 1),
+            CancellationToken.None
+        );
+
+        result.IsComplete.Should().BeTrue();
+        result.SubmissionCount.Should().Be(1);
+        using var verify = FreshContext();
+        (await verify.Set<InstitutionalHolding>().CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ImportDataSet_OtherManager2WithMalformedRows_SkipsThemAndStillCompletes()
+    {
+        // ParseOtherManagers' three skip guards (zero-hit): unknown accession,
+        // non-numeric SEQUENCENUMBER, and empty NAME must each be skipped while
+        // a valid co-manager row is still parsed and the import completes.
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc",
+            Cik = "0000320193",
+            Cusip = "037833100",
+        };
+        using (var seed = FreshContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            await seed.SaveChangesAsync();
+        }
+
+        var reportDate = new DateOnly(2024, 9, 30);
+        var submission =
+            "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
+            + "13F-HR\tACC-001\t2024-10-15\t2024-09-30\t0001067983\n";
+        var coverPage =
+            "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\tFILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\n"
+            + "ACC-001\tN\tBerkshire Hathaway\tOmaha\tNE\t028-12345\t12345\n";
+        var infoTable =
+            "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMT\tSSHPRNAMTTYPE\tPUTCALL\tINVESTMENTDISCRETION\tVOTING_AUTH_SOLE\tVOTING_AUTH_SHARED\tVOTING_AUTH_NONE\tTITLEOFCLASS\tOTHERMANAGER\n"
+            + "ACC-001\t037833100\t1000\tSH\t\tSOLE\t1000\t0\t0\tCOM\t\n";
+        var otherManager =
+            "ACCESSION_NUMBER\tSEQUENCENUMBER\tNAME\n"
+            + "UNKNOWN-ACC\t1\tGhost Manager\n" // unknown accession → skip
+            + "ACC-001\tnot-a-number\tBad Seq Manager\n" // bad SEQUENCENUMBER → skip
+            + "ACC-001\t3\t\n" // empty NAME → skip
+            + "ACC-001\t2\tValid Co-Manager\n"; // valid → parsed
+
+        using var archive = BuildArchive(
+            ("SUBMISSION.tsv", submission),
+            ("COVERPAGE.tsv", coverPage),
+            ("INFOTABLE.tsv", infoTable),
+            ("OTHERMANAGER2.tsv", otherManager)
+        );
+
+        var prices = new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 150m };
+        var sut = CreateImporter(PriceProviderReturning(prices));
+
+        var result = await sut.ImportDataSet(
+            archive,
+            new DateOnly(2024, 1, 1),
+            CancellationToken.None
+        );
+
+        // The malformed rows are skipped without aborting; the import completes.
+        result.SubmissionCount.Should().Be(1);
+        result.IsComplete.Should().BeTrue();
+        using var verify = FreshContext();
+        (await verify.Set<InstitutionalHolding>().CountAsync()).Should().Be(1);
+    }
 }
