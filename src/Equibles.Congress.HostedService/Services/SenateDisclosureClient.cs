@@ -1,9 +1,7 @@
-using System.Text.Json;
 using Equibles.Congress.Data.Models;
 using Equibles.Congress.HostedService.Models;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Common.RateLimiter;
-using Microsoft.Playwright;
 using Newtonsoft.Json;
 using static Equibles.Congress.HostedService.Services.DisclosureParsingHelper;
 
@@ -19,52 +17,18 @@ public class SenateDisclosureClient : IAsyncDisposable
     private const int MaxRetries = 3;
 
     private const string BaseUrl = "https://efdsearch.senate.gov";
-    private const string HomeUrl = BaseUrl + "/search/home/";
     private const string SearchDataUrl = BaseUrl + "/search/report/data/";
     private const string PtrReportTypeFilter = "[11]"; // Periodic Transaction Report
-    private const int BrowserFetchTimeoutMs = 30_000;
 
+    private readonly ISenateBrowserSession _session;
     private readonly ILogger<SenateDisclosureClient> _logger;
-    private readonly SemaphoreSlim _initLock = new(1, 1);
 
-    private IPlaywright _playwright;
-    private IBrowser _browser;
-    private IPage _page;
-    private bool _authenticated;
-
-    // JavaScript executed in the browser context to make HTTP requests.
-    // Reuses the browser's TLS fingerprint and session cookies to bypass Akamai bot detection.
-    // For POST requests, extracts the CSRF token from cookies and includes it in headers and form data.
-    private const string BrowserFetchScript = """
-        async ({url, formFields}) => {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000);
-            try {
-                const options = { signal: controller.signal };
-                if (formFields) {
-                    const csrfToken = document.cookie.split(';')
-                        .map(c => c.trim())
-                        .find(c => c.startsWith('csrftoken='))
-                        ?.split('=')[1] ?? '';
-                    formFields['csrftoken'] = csrfToken;
-                    options.method = 'POST';
-                    options.headers = {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-CSRFToken': csrfToken,
-                        'Referer': location.origin + '/search/',
-                    };
-                    options.body = new URLSearchParams(formFields).toString();
-                }
-                const resp = await fetch(url, options);
-                return { status: resp.status, body: await resp.text() };
-            } finally {
-                clearTimeout(timeoutId);
-            }
-        }
-        """;
-
-    public SenateDisclosureClient(ILogger<SenateDisclosureClient> logger)
+    public SenateDisclosureClient(
+        ISenateBrowserSession session,
+        ILogger<SenateDisclosureClient> logger
+    )
     {
+        _session = session;
         _logger = logger;
     }
 
@@ -74,7 +38,7 @@ public class SenateDisclosureClient : IAsyncDisposable
         CancellationToken ct
     )
     {
-        await EnsureAuthenticated(ct);
+        await _session.EnsureAuthenticated(ct);
 
         var reports = await SearchPtrReports(fromDate, toDate, ct);
         _logger.LogInformation(
@@ -115,56 +79,6 @@ public class SenateDisclosureClient : IAsyncDisposable
             reports.Count
         );
         return transactions;
-    }
-
-    private async Task EnsureAuthenticated(CancellationToken ct)
-    {
-        if (_authenticated)
-            return;
-
-        await _initLock.WaitAsync(ct);
-        try
-        {
-            if (_authenticated)
-                return;
-
-            _playwright = await Playwright.CreateAsync();
-            _browser = await _playwright.Firefox.LaunchAsync(
-                new BrowserTypeLaunchOptions { Headless = true }
-            );
-
-            var context = await _browser.NewContextAsync();
-            context.SetDefaultTimeout(BrowserFetchTimeoutMs);
-            _page = await context.NewPageAsync();
-
-            _logger.LogDebug("Navigating to Senate eFD via Playwright Firefox");
-
-            var response = await _page.GotoAsync(
-                HomeUrl,
-                new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 30_000 }
-            );
-
-            if (response?.Status != 200)
-                throw new HttpRequestException(
-                    $"Senate eFD home page returned HTTP {response?.Status}"
-                );
-
-            // Accept the prohibition agreement disclaimer
-            var checkbox = _page.Locator("#agree_statement");
-            if (await checkbox.IsVisibleAsync())
-            {
-                await checkbox.CheckAsync();
-                await _page.Locator("button[type='submit'], input[type='submit']").ClickAsync();
-                await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
-            }
-
-            _authenticated = true;
-            _logger.LogDebug("Senate eFD disclaimer accepted via Playwright Firefox");
-        }
-        finally
-        {
-            _initLock.Release();
-        }
     }
 
     private async Task<List<SenateReport>> SearchPtrReports(
@@ -273,9 +187,8 @@ public class SenateDisclosureClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// Makes an HTTP request via the Playwright browser's fetch() API with retry logic.
-    /// Bypasses Akamai bot detection by reusing the browser's TLS fingerprint and session cookies.
-    /// Pass formFields for POST, or null for GET.
+    /// Issues a request through the browser session with retry logic. Pass
+    /// formFields for POST, or null for GET.
     /// </summary>
     private async Task<string> FetchWithRetry(
         string url,
@@ -288,25 +201,18 @@ public class SenateDisclosureClient : IAsyncDisposable
             ct.ThrowIfCancellationRequested();
             await RateLimiter.WaitAsync();
 
-            JsonElement result;
+            SenateFetchResult result;
             try
             {
-                result = await _page.EvaluateAsync<JsonElement>(
-                    BrowserFetchScript,
-                    new { url, formFields }
-                );
+                result = await _session.Fetch(url, formFields, ct);
             }
-            catch (PlaywrightException) when (ct.IsCancellationRequested)
-            {
-                throw new OperationCanceledException(ct);
-            }
-            catch (PlaywrightException ex)
+            catch (SenateBrowserException ex)
             {
                 if (attempt >= MaxRetries)
                 {
                     _logger.LogError(
                         ex,
-                        "Playwright failed for {Url} after {Attempts} attempt(s)",
+                        "Browser fetch failed for {Url} after {Attempts} attempt(s)",
                         url,
                         attempt + 1
                     );
@@ -314,7 +220,7 @@ public class SenateDisclosureClient : IAsyncDisposable
                 }
                 var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
                 _logger.LogWarning(
-                    "Playwright timeout for {Url}, retrying in {Delay}s (attempt {Attempt}/{MaxRetries}): {Message}",
+                    "Browser fetch error for {Url}, retrying in {Delay}s (attempt {Attempt}/{MaxRetries}): {Message}",
                     url,
                     delay.TotalSeconds,
                     attempt + 1,
@@ -324,8 +230,9 @@ public class SenateDisclosureClient : IAsyncDisposable
                 await Task.Delay(delay, ct);
                 continue;
             }
-            var status = result.GetProperty("status").GetInt32();
-            var body = result.GetProperty("body").GetString();
+
+            var status = result.Status;
+            var body = result.Body;
 
             var isRetryable = status == 429 || status >= 500;
             if (isRetryable && attempt < MaxRetries)
@@ -371,36 +278,7 @@ public class SenateDisclosureClient : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
-
-        try
-        {
-            if (_page != null)
-            {
-                await _page.Context.CloseAsync();
-                _page = null;
-            }
-        }
-        catch (PlaywrightException)
-        {
-            _page = null;
-        }
-
-        try
-        {
-            if (_browser != null)
-            {
-                await _browser.CloseAsync();
-                _browser = null;
-            }
-        }
-        catch (PlaywrightException)
-        {
-            _browser = null;
-        }
-
-        _playwright?.Dispose();
-        _playwright = null;
-        _initLock.Dispose();
+        await _session.DisposeAsync();
     }
 
     private record SenateReport(string MemberName, string ReportUrl, DateOnly DateSubmitted);
