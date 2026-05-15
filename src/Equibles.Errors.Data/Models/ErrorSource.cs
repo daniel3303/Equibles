@@ -1,6 +1,6 @@
 namespace Equibles.Errors.Data.Models;
 
-public class ErrorSource
+public sealed class ErrorSource
 {
     public string Value { get; }
 

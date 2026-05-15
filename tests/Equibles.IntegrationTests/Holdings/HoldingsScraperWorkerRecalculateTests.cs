@@ -46,8 +46,7 @@ public class HoldingsScraperWorkerRecalculateTests
             BindingFlags.NonPublic | BindingFlags.Instance
         );
 
-        var act = async () =>
-            await (Task)method.Invoke(worker, [CancellationToken.None]);
+        var act = async () => await (Task)method.Invoke(worker, [CancellationToken.None]);
 
         // Reflection wraps user exceptions in TargetInvocationException, but the
         // catch in the production method should swallow this entirely — assert no

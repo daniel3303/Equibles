@@ -29,17 +29,31 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioTests : ParadeDbMc
     public async Task GetInstitutionPortfolio_BigValueLowSharesVsLowValueBigShares_RanksByValueDescending()
     {
         var holder = new InstitutionalHolder { Cik = "1", Name = "Berkshire Hathaway Inc." };
-        var bigDollar = new CommonStock { Ticker = "AAPL", Name = "Apple Inc.", Cik = "0000320193" };
-        var pennyStock = new CommonStock { Ticker = "PNY", Name = "Penny Stock Co.", Cik = "0001999999" };
+        var bigDollar = new CommonStock
+        {
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            Cik = "0000320193",
+        };
+        var pennyStock = new CommonStock
+        {
+            Ticker = "PNY",
+            Name = "Penny Stock Co.",
+            Cik = "0001999999",
+        };
         DbContext.Add(holder);
         DbContext.Add(bigDollar);
         DbContext.Add(pennyStock);
 
         var reportDate = new DateOnly(2024, 12, 31);
         // AAPL: fewer shares, but each share is worth more → larger Value.
-        DbContext.Add(MakeHolding(holder, bigDollar, reportDate, shares: 1_000, value: 100_000_000));
+        DbContext.Add(
+            MakeHolding(holder, bigDollar, reportDate, shares: 1_000, value: 100_000_000)
+        );
         // Penny: many more shares, but each is worth far less → smaller Value.
-        DbContext.Add(MakeHolding(holder, pennyStock, reportDate, shares: 1_000_000, value: 1_000_000));
+        DbContext.Add(
+            MakeHolding(holder, pennyStock, reportDate, shares: 1_000_000, value: 1_000_000)
+        );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
@@ -69,16 +83,17 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioTests : ParadeDbMc
         DateOnly reportDate,
         long shares,
         long value
-    ) => new()
-    {
-        CommonStockId = stock.Id,
-        InstitutionalHolderId = holder.Id,
-        FilingDate = reportDate.AddDays(45),
-        ReportDate = reportDate,
-        Shares = shares,
-        Value = value,
-        ShareType = ShareType.Shares,
-        InvestmentDiscretion = InvestmentDiscretion.Sole,
-        AccessionNumber = $"acc-{stock.Ticker}",
-    };
+    ) =>
+        new()
+        {
+            CommonStockId = stock.Id,
+            InstitutionalHolderId = holder.Id,
+            FilingDate = reportDate.AddDays(45),
+            ReportDate = reportDate,
+            Shares = shares,
+            Value = value,
+            ShareType = ShareType.Shares,
+            InvestmentDiscretion = InvestmentDiscretion.Sole,
+            AccessionNumber = $"acc-{stock.Ticker}",
+        };
 }

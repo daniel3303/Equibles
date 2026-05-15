@@ -35,10 +35,10 @@ public class CongressionalTradeRepositoryDateRangeTests : ParadeDbMcpTestBase
         DbContext.Add(member);
 
         DbContext.Add(MakeTrade(stock, member, new DateOnly(2024, 11, 30))); // BEFORE start — excluded
-        DbContext.Add(MakeTrade(stock, member, new DateOnly(2024, 12, 1)));  // ON start — INCLUDED
+        DbContext.Add(MakeTrade(stock, member, new DateOnly(2024, 12, 1))); // ON start — INCLUDED
         DbContext.Add(MakeTrade(stock, member, new DateOnly(2024, 12, 15))); // INSIDE — INCLUDED
         DbContext.Add(MakeTrade(stock, member, new DateOnly(2024, 12, 31))); // ON end — INCLUDED
-        DbContext.Add(MakeTrade(stock, member, new DateOnly(2025, 1, 1)));   // AFTER end — excluded
+        DbContext.Add(MakeTrade(stock, member, new DateOnly(2025, 1, 1))); // AFTER end — excluded
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
@@ -46,34 +46,43 @@ public class CongressionalTradeRepositoryDateRangeTests : ParadeDbMcpTestBase
         var trackedStock = verify.Set<CommonStock>().Single(s => s.Ticker == "AAPL");
         var sut = new CongressionalTradeRepository(verify);
 
-        var trades = await sut
-            .GetByStock(trackedStock, new DateOnly(2024, 12, 1), new DateOnly(2024, 12, 31))
+        var trades = await sut.GetByStock(
+                trackedStock,
+                new DateOnly(2024, 12, 1),
+                new DateOnly(2024, 12, 31)
+            )
             .AsNoTracking()
             .ToListAsync();
 
         trades.Should().HaveCount(3);
-        trades.Select(t => t.TransactionDate).Should().BeEquivalentTo(new[]
-        {
-            new DateOnly(2024, 12, 1),
-            new DateOnly(2024, 12, 15),
-            new DateOnly(2024, 12, 31),
-        });
+        trades
+            .Select(t => t.TransactionDate)
+            .Should()
+            .BeEquivalentTo(
+                new[]
+                {
+                    new DateOnly(2024, 12, 1),
+                    new DateOnly(2024, 12, 15),
+                    new DateOnly(2024, 12, 31),
+                }
+            );
     }
 
     private static CongressionalTrade MakeTrade(
         CommonStock stock,
         CongressMember member,
         DateOnly transactionDate
-    ) => new()
-    {
-        CommonStock = stock,
-        CongressMember = member,
-        TransactionDate = transactionDate,
-        FilingDate = transactionDate.AddDays(10),
-        TransactionType = CongressTransactionType.Purchase,
-        OwnerType = "Self",
-        AssetName = "Apple Inc.",
-        AmountFrom = 1000,
-        AmountTo = 15000,
-    };
+    ) =>
+        new()
+        {
+            CommonStock = stock,
+            CongressMember = member,
+            TransactionDate = transactionDate,
+            FilingDate = transactionDate.AddDays(10),
+            TransactionType = CongressTransactionType.Purchase,
+            OwnerType = "Self",
+            AssetName = "Apple Inc.",
+            AmountFrom = 1000,
+            AmountTo = 15000,
+        };
 }

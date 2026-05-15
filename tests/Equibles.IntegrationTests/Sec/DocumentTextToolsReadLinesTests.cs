@@ -29,7 +29,7 @@ public class DocumentTextToolsReadLinesTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ReadDocumentLines_EndLineExceedsDocumentLength_ClampsToTotalAndReturnsRemainingLines()
     {
-        var content = "Alpha\nBeta\nGamma";  // 3 lines total
+        var content = "Alpha\nBeta\nGamma"; // 3 lines total
         var stock = new CommonStock { Ticker = "MSFT", Name = "Microsoft Corp." };
         var file = new File
         {
@@ -66,6 +66,6 @@ public class DocumentTextToolsReadLinesTests : ParadeDbMcpTestBase
         output.Should().Contain("lines 2 to 3 of 3");
         output.Should().Contain("     2 │ Beta");
         output.Should().Contain("     3 │ Gamma");
-        output.Should().NotContain("Alpha");  // startLine=2 excludes line 1
+        output.Should().NotContain("Alpha"); // startLine=2 excludes line 1
     }
 }

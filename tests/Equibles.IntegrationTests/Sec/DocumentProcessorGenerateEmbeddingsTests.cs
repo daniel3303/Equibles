@@ -71,11 +71,13 @@ public class DocumentProcessorGenerateEmbeddingsTests
         addedEmbeddings[0].Chunk.Content.Should().Be("first");
         addedEmbeddings[1].Chunk.Content.Should().Be("second");
         addedEmbeddings[2].Chunk.Content.Should().Be("third");
-        addedEmbeddings.Should().AllSatisfy(e =>
-        {
-            e.Model.Should().Be("nomic-embed-text");
-            e.VectorDimension.Should().Be(2);
-        });
+        addedEmbeddings
+            .Should()
+            .AllSatisfy(e =>
+            {
+                e.Model.Should().Be("nomic-embed-text");
+                e.VectorDimension.Should().Be(2);
+            });
         await embeddingRepository.Received(1).SaveChanges();
     }
 }

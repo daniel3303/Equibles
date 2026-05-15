@@ -4,7 +4,7 @@ using System.ComponentModel;
 namespace Equibles.Sec.Data.Models;
 
 [TypeConverter(typeof(DocumentTypeConverter))]
-public class DocumentType
+public sealed class DocumentType
 {
     public string Value { get; }
     public string DisplayName { get; }

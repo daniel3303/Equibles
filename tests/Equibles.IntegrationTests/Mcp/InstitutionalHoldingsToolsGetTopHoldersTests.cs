@@ -29,7 +29,12 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetTopHolders_TwoHoldersWithLargeRatio_RanksByShareCountWithCorrectPercentages()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc.", Cik = "0000320193" };
+        var stock = new CommonStock
+        {
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            Cik = "0000320193",
+        };
         var bigHolder = new InstitutionalHolder { Cik = "1", Name = "Vanguard Group Inc." };
         var smallHolder = new InstitutionalHolder { Cik = "2", Name = "Tiny Capital LLC" };
         DbContext.Add(stock);
@@ -68,16 +73,17 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares
-    ) => new()
-    {
-        CommonStockId = stock.Id,
-        InstitutionalHolderId = holder.Id,
-        FilingDate = reportDate.AddDays(45),
-        ReportDate = reportDate,
-        Shares = shares,
-        Value = shares * 100,
-        ShareType = ShareType.Shares,
-        InvestmentDiscretion = InvestmentDiscretion.Sole,
-        AccessionNumber = $"acc-{holder.Cik}",
-    };
+    ) =>
+        new()
+        {
+            CommonStockId = stock.Id,
+            InstitutionalHolderId = holder.Id,
+            FilingDate = reportDate.AddDays(45),
+            ReportDate = reportDate,
+            Shares = shares,
+            Value = shares * 100,
+            ShareType = ShareType.Shares,
+            InvestmentDiscretion = InvestmentDiscretion.Sole,
+            AccessionNumber = $"acc-{holder.Cik}",
+        };
 }

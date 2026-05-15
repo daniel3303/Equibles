@@ -1,0 +1,10 @@
+name: "Equibles CodeQL config"
+
+# security-and-quality picks up maintainability findings alongside vulnerabilities.
+queries:
+  - uses: security-and-quality
+
+paths-ignore:
+  - "**/obj/**"
+  - "**/bin/**"
+  - "tests/**"

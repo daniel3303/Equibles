@@ -23,16 +23,8 @@ public class FredSeriesRepositorySearchTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Search_LowercaseQueryAgainstUppercaseSeriesId_MatchesViaSeriesIdBranchCaseInsensitive()
     {
-        DbContext.Add(new FredSeries
-        {
-            SeriesId = "GDP",
-            Title = "Gross Domestic Product",
-        });
-        DbContext.Add(new FredSeries
-        {
-            SeriesId = "UNRATE",
-            Title = "Unemployment Rate",
-        });
+        DbContext.Add(new FredSeries { SeriesId = "GDP", Title = "Gross Domestic Product" });
+        DbContext.Add(new FredSeries { SeriesId = "UNRATE", Title = "Unemployment Rate" });
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 

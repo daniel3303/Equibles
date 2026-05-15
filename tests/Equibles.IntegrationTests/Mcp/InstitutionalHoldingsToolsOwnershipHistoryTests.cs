@@ -28,7 +28,12 @@ public class InstitutionalHoldingsToolsOwnershipHistoryTests : ParadeDbMcpTestBa
     [Fact]
     public async Task GetOwnershipHistory_QuarterOverQuarterIncrease_RendersPlusSignedPercentChange()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc.", Cik = "0000320193" };
+        var stock = new CommonStock
+        {
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            Cik = "0000320193",
+        };
         var holder = new InstitutionalHolder
         {
             Cik = "0001067983",
@@ -67,16 +72,17 @@ public class InstitutionalHoldingsToolsOwnershipHistoryTests : ParadeDbMcpTestBa
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares
-    ) => new()
-    {
-        CommonStockId = stock.Id,
-        InstitutionalHolderId = holder.Id,
-        FilingDate = reportDate.AddDays(45),
-        ReportDate = reportDate,
-        Shares = shares,
-        Value = shares * 100,
-        ShareType = ShareType.Shares,
-        InvestmentDiscretion = InvestmentDiscretion.Sole,
-        AccessionNumber = $"acc-{reportDate:yyyyMMdd}",
-    };
+    ) =>
+        new()
+        {
+            CommonStockId = stock.Id,
+            InstitutionalHolderId = holder.Id,
+            FilingDate = reportDate.AddDays(45),
+            ReportDate = reportDate,
+            Shares = shares,
+            Value = shares * 100,
+            ShareType = ShareType.Shares,
+            InvestmentDiscretion = InvestmentDiscretion.Sole,
+            AccessionNumber = $"acc-{reportDate:yyyyMMdd}",
+        };
 }

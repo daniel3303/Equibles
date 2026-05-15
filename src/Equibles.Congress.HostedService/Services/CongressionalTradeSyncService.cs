@@ -140,8 +140,6 @@ public class CongressionalTradeSyncService
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
         var memberRepository = scope.ServiceProvider.GetRequiredService<CongressMemberRepository>();
-        var tradeRepository =
-            scope.ServiceProvider.GetRequiredService<CongressionalTradeRepository>();
         var commonStockRepository =
             scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
 

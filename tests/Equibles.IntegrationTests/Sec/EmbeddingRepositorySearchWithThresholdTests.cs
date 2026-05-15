@@ -80,24 +80,26 @@ public class EmbeddingRepositorySearchWithThresholdTests : ParadeDbMcpTestBase
         results[0].ChunkId.Should().Be(chunkX.Id);
     }
 
-    private static Chunk MakeChunk(Document document, string content, int index) => new()
-    {
-        DocumentId = document.Id,
-        Content = content,
-        Index = index,
-        StartPosition = index * 100,
-        EndPosition = (index + 1) * 100,
-        StartLineNumber = index + 1,
-        DocumentType = document.DocumentType,
-        Ticker = "AAPL",
-        ReportingDate = document.ReportingDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
-    };
+    private static Chunk MakeChunk(Document document, string content, int index) =>
+        new()
+        {
+            DocumentId = document.Id,
+            Content = content,
+            Index = index,
+            StartPosition = index * 100,
+            EndPosition = (index + 1) * 100,
+            StartLineNumber = index + 1,
+            DocumentType = document.DocumentType,
+            Ticker = "AAPL",
+            ReportingDate = document.ReportingDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+        };
 
-    private static Embedding MakeEmbedding(Guid chunkId, float[] vec) => new()
-    {
-        ChunkId = chunkId,
-        Model = Model,
-        Vector = new Vector(new ReadOnlyMemory<float>(vec)),
-        VectorDimension = vec.Length,
-    };
+    private static Embedding MakeEmbedding(Guid chunkId, float[] vec) =>
+        new()
+        {
+            ChunkId = chunkId,
+            Model = Model,
+            Vector = new Vector(new ReadOnlyMemory<float>(vec)),
+            VectorDimension = vec.Length,
+        };
 }

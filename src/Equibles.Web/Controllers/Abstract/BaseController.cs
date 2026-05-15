@@ -16,13 +16,13 @@ public abstract class BaseController : Controller
     protected string GetReturnUrl()
     {
         string returnUrl = null;
-        if (Request.HasFormContentType && Request.Form.ContainsKey("ReturnUrl"))
+        if (Request.HasFormContentType && Request.Form.TryGetValue("ReturnUrl", out var formValue))
         {
-            returnUrl = Request.Form["ReturnUrl"].ToString();
+            returnUrl = formValue.ToString();
         }
-        else if (Request.Query.ContainsKey("ReturnUrl"))
+        else if (Request.Query.TryGetValue("ReturnUrl", out var queryValue))
         {
-            returnUrl = Request.Query["ReturnUrl"].ToString();
+            returnUrl = queryValue.ToString();
         }
 
         if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
