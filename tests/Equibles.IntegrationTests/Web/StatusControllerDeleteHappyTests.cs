@@ -123,6 +123,8 @@ public class StatusControllerDeleteHappyTests : IDisposable
         flashMessage.Received(1).Success("Error deleted.");
         // The row must be gone — a regression that called Detach instead of
         // Remove would still pass the redirect assertion but leak the row.
-        (await _dbContext.Set<Error>().AnyAsync(e => e.Id == error.Id)).Should().BeFalse();
+        (await _dbContext.Set<Error>().AnyAsync(e => e.Id == error.Id))
+            .Should()
+            .BeFalse();
     }
 }
