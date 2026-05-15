@@ -340,6 +340,65 @@ public class DocumentScraperTests
         result.DocumentsAdded.Should().Be(0);
     }
 
+    [Fact]
+    public async Task ScrapeDocuments_GetCompanyFilingsThrowsHttp_RecordsPerCikErrorAndContinues()
+    {
+        // Covers ProcessDocumentTypeForCompany's per-CIK HttpRequestException
+        // catch (zero-hit): one CIK's filing fetch failing must be logged +
+        // counted, not abort the company — the loop continues to the next CIK.
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
+
+        harness
+            .SecEdgarClient.GetCompanyFilings("0000123456", DocumentTypeFilter.TenK, null)
+            .Returns<List<FilingData>>(_ => throw new HttpRequestException("SEC EDGAR 503"));
+
+        var options = new DocumentScraperOptions { DocumentTypesToSync = [DocumentType.TenK] };
+        var result = await harness.BuildScraper(dbContext, options: options).ScrapeDocuments();
+
+        result.CompaniesProcessed.Should().Be(1);
+        result.DocumentsFound.Should().Be(0);
+        result.Errors.Should().Be(1);
+        result.ErrorMessages.Should().ContainSingle().Which.Should().Contain("0000123456");
+    }
+
+    [Fact]
+    public async Task ScrapeDocuments_PersistenceExistsThrowsHttp_HitsHttpCatchAndRecordsError()
+    {
+        // Covers ProcessFiling's HttpRequestException catch (zero-hit), distinct
+        // from the generic catch: Exists throws BEFORE CreateDocument so the
+        // Polly pipeline is never entered — the HTTP-specific branch records the
+        // error without the deferred-retry path.
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
+
+        harness
+            .SecEdgarClient.GetCompanyFilings("0000123456", DocumentTypeFilter.TenK, null)
+            .Returns([BuildFiling("0000123456", "0000123456-25-000011", "10-K")]);
+        harness
+            .Persistence.Exists(
+                Arg.Any<CommonStock>(),
+                Arg.Any<DocumentType>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>()
+            )
+            .Returns<bool>(_ => throw new HttpRequestException("persistence HTTP fault"));
+
+        var options = new DocumentScraperOptions { DocumentTypesToSync = [DocumentType.TenK] };
+        var result = await harness.BuildScraper(dbContext, options: options).ScrapeDocuments();
+
+        result.DocumentsFound.Should().Be(1);
+        result.Errors.Should().Be(1);
+        result
+            .ErrorMessages.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("0000123456-25-000011");
+        result.DocumentsAdded.Should().Be(0);
+    }
+
     // ── helpers ──
 
     private static FilingData BuildFiling(string cik, string accession, string form) =>
