@@ -278,6 +278,68 @@ public class DocumentScraperTests
             );
     }
 
+    [Fact]
+    public async Task ScrapeDocuments_FilingHasUnknownFormType_SkipsWithoutPersisting()
+    {
+        // Covers ProcessFiling's unknown-form guard (zero-hit): a filing whose
+        // Form maps to no DocumentType must be counted skipped and never reach
+        // CreateDocument/persistence — a regression dropping the guard would NRE
+        // on the null DocumentType for every junk form SEC ever emits.
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
+
+        harness
+            .SecEdgarClient.GetCompanyFilings("0000123456", DocumentTypeFilter.TenK, null)
+            .Returns([BuildFiling("0000123456", "0000123456-25-000009", "NOT-A-FORM")]);
+
+        var options = new DocumentScraperOptions { DocumentTypesToSync = [DocumentType.TenK] };
+        var result = await harness.BuildScraper(dbContext, options: options).ScrapeDocuments();
+
+        result.DocumentsFound.Should().Be(1);
+        result.DocumentsSkipped.Should().Be(1);
+        result.DocumentsAdded.Should().Be(0);
+        result.Errors.Should().Be(0);
+        await harness
+            .Persistence.DidNotReceiveWithAnyArgs()
+            .Save(default, default, default, default, default, default, default, default);
+    }
+
+    [Fact]
+    public async Task ScrapeDocuments_PersistenceExistsThrows_RecordsErrorAndContinues()
+    {
+        // Covers ProcessFiling's generic catch (zero-hit): an unexpected fault
+        // from the persistence layer must increment Errors and be recorded, not
+        // abort the whole scrape — pins per-filing fault isolation.
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
+
+        harness
+            .SecEdgarClient.GetCompanyFilings("0000123456", DocumentTypeFilter.TenK, null)
+            .Returns([BuildFiling("0000123456", "0000123456-25-000010", "10-K")]);
+        harness
+            .Persistence.Exists(
+                Arg.Any<CommonStock>(),
+                Arg.Any<DocumentType>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>()
+            )
+            .Returns<bool>(_ => throw new Exception("persistence down"));
+
+        var options = new DocumentScraperOptions { DocumentTypesToSync = [DocumentType.TenK] };
+        var result = await harness.BuildScraper(dbContext, options: options).ScrapeDocuments();
+
+        result.DocumentsFound.Should().Be(1);
+        result.Errors.Should().Be(1);
+        result
+            .ErrorMessages.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("0000123456-25-000010");
+        result.DocumentsAdded.Should().Be(0);
+    }
+
     // ── helpers ──
 
     private static FilingData BuildFiling(string cik, string accession, string form) =>
