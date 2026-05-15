@@ -1,3 +1,7 @@
+# Disable Codecov's automatic PR comment. Coverage status checks still run;
+# only the bot comment is suppressed.
+comment: false
+
 coverage:
   status:
     project:
