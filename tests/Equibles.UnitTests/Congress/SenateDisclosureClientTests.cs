@@ -33,7 +33,10 @@ public class SenateDisclosureClientTests
         // Pin the rejection on an attacker-controlled absolute URL so a refactor that
         // collapses the if/else into "always prepend BaseUrl" (which would silently
         // mangle absolute URLs but ALSO accept them) is caught.
-        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var sut = new SenateDisclosureClient(
+            Substitute.For<ISenateBrowserSession>(),
+            Substitute.For<ILogger<SenateDisclosureClient>>()
+        );
         var row = new List<string>
         {
             "Jane",
@@ -75,7 +78,10 @@ public class SenateDisclosureClientTests
         // Together with the two rejection siblings, ParseReportRow's contract
         // is fully pinned: rejects cross-origin, rejects paper, accepts valid
         // electronic Senate filings.
-        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var sut = new SenateDisclosureClient(
+            Substitute.For<ISenateBrowserSession>(),
+            Substitute.For<ILogger<SenateDisclosureClient>>()
+        );
         var row = new List<string>
         {
             "Jane",
@@ -125,7 +131,10 @@ public class SenateDisclosureClientTests
         // URL) both have a valid <a href=...> tag. Neither exercises the .Success guard.
         // Pin the no-anchor case with a plain-text link cell so a refactor that drops
         // the guard surfaces here rather than as silent home-page fetches in production.
-        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var sut = new SenateDisclosureClient(
+            Substitute.For<ISenateBrowserSession>(),
+            Substitute.For<ILogger<SenateDisclosureClient>>()
+        );
         var row = new List<string>
         {
             "John",
@@ -166,7 +175,10 @@ public class SenateDisclosureClientTests
         // (the malformed bit is the URL or anchor). None exercises the date-parse
         // branch. Pin with a clearly-unparseable value ("not-a-date") so a regex/
         // culture-flexibility regression doesn't accidentally parse it.
-        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var sut = new SenateDisclosureClient(
+            Substitute.For<ISenateBrowserSession>(),
+            Substitute.For<ILogger<SenateDisclosureClient>>()
+        );
         var row = new List<string>
         {
             "Jane",
@@ -190,7 +202,10 @@ public class SenateDisclosureClientTests
         // (or used a wrong path segment), the importer would forward scanned PDFs into
         // FetchAndParseReport, fail mid-flight, and either flood the error log or crash
         // the scrape. Pin the skip so a refactor can't quietly let paper filings through.
-        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var sut = new SenateDisclosureClient(
+            Substitute.For<ISenateBrowserSession>(),
+            Substitute.For<ILogger<SenateDisclosureClient>>()
+        );
         var row = new List<string>
         {
             "John",
@@ -240,7 +255,10 @@ public class SenateDisclosureClientTests
         // TargetInvocationException wrapping IndexOutOfRangeException, which
         // .Should().BeNull() can't observe (it asserts on a return value the
         // exception prevents from existing).
-        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var sut = new SenateDisclosureClient(
+            Substitute.For<ISenateBrowserSession>(),
+            Substitute.For<ILogger<SenateDisclosureClient>>()
+        );
         var row = new List<string>
         {
             "Jane",
@@ -279,7 +297,10 @@ public class SenateDisclosureClientTests
         // to an empty member. Pin with both first AND last name as empty
         // strings (the JSON-likely shape; nulls are also possible but ?.Trim
         // on "" is the same as ?.Trim on null after the ?? "" coalesce).
-        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var sut = new SenateDisclosureClient(
+            Substitute.For<ISenateBrowserSession>(),
+            Substitute.For<ILogger<SenateDisclosureClient>>()
+        );
         var row = new List<string>
         {
             "",
@@ -309,7 +330,10 @@ public class SenateDisclosureClientTests
         // (via the memberName="" guard) AND, by completing the invocation
         // without exception, proves the two null-safe operators handled the
         // null inputs without dereferencing.
-        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var sut = new SenateDisclosureClient(
+            Substitute.For<ISenateBrowserSession>(),
+            Substitute.For<ILogger<SenateDisclosureClient>>()
+        );
         var row = new List<string>
         {
             null,
@@ -334,7 +358,10 @@ public class SenateDisclosureClientTests
         // value null, the coalesce yields an empty string, HrefRegex.Match("")
         // succeeds=false, and the method returns null at the !Success guard.
         // Without the `?? ""`, HrefRegex.Match(null) throws ArgumentNullException.
-        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var sut = new SenateDisclosureClient(
+            Substitute.For<ISenateBrowserSession>(),
+            Substitute.For<ILogger<SenateDisclosureClient>>()
+        );
         var row = new List<string> { "Jane", "Doe", "filed", null, "2024-01-15" };
 
         var act = () => ParseReportRowMethod.Invoke(sut, [row]);
@@ -353,7 +380,10 @@ public class SenateDisclosureClientTests
         // row[4] null, `?.Trim()` short-circuits to null, TryParse(null)
         // returns false, the method logs the debug message and returns null.
         // Without the `?.`, Trim() would NRE on the null reference.
-        var sut = new SenateDisclosureClient(Substitute.For<ILogger<SenateDisclosureClient>>());
+        var sut = new SenateDisclosureClient(
+            Substitute.For<ISenateBrowserSession>(),
+            Substitute.For<ILogger<SenateDisclosureClient>>()
+        );
         var row = new List<string>
         {
             "Jane",
