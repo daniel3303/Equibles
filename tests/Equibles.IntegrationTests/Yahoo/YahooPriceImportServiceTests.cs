@@ -500,4 +500,64 @@ public class YahooPriceImportServiceTests : IDisposable
         var prices = _priceRepo.GetAll().ToList();
         prices.Should().HaveCount(600);
     }
+
+    // ── Overflow guard + key-statistics update (zero-hit branches) ─────
+
+    [Fact]
+    public async Task Import_PriceExceedsNumericLimit_SkipsOverflowRowButInsertsValidOnes()
+    {
+        var stock = CreateStock("OVR", "Overflow Co.");
+        await SeedStocks(stock);
+
+        var valid = new HistoricalPrice
+        {
+            Date = new DateOnly(2024, 1, 2),
+            Open = 100m,
+            High = 102m,
+            Low = 99m,
+            Close = 101m,
+            AdjustedClose = 101m,
+            Volume = 1_000_000,
+        };
+        var overflow = new HistoricalPrice
+        {
+            Date = new DateOnly(2024, 1, 3),
+            // Above the numeric(18,4) ceiling → HasOverflowPrice true.
+            Open = 100_000_000_000_000m,
+            High = 100_000_000_000_000m,
+            Low = 100_000_000_000_000m,
+            Close = 100_000_000_000_000m,
+            AdjustedClose = 100_000_000_000_000m,
+            Volume = 1,
+        };
+        _yahooClient
+            .GetHistoricalPrices("OVR", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns([valid, overflow]);
+
+        await _service.Import(CancellationToken.None);
+
+        var prices = _priceRepo.GetAll().ToList();
+        prices.Should().ContainSingle("the overflow row must be skipped, the valid one kept");
+        prices[0].Date.Should().Be(new DateOnly(2024, 1, 2));
+    }
+
+    [Fact]
+    public async Task Import_KeyStatisticsSharesDiffer_UpdatesStockSharesOutstanding()
+    {
+        var stock = CreateStock("KST", "KeyStat Co.");
+        await SeedStocks(stock);
+
+        // No prices → ImportTicker returns early; SyncKeyStatistics still runs.
+        _yahooClient
+            .GetHistoricalPrices("KST", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns([]);
+        _yahooClient
+            .GetKeyStatistics("KST")
+            .Returns(new KeyStatistics { SharesOutstanding = 5_000_000 });
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "KST");
+        updated.SharesOutStanding.Should().Be(5_000_000);
+    }
 }
