@@ -685,4 +685,56 @@ public class CommonStockRepositoryTests : IDisposable
         result.Industry.Should().NotBeNull();
         result.Industry.Name.Should().Be("Technology");
     }
+
+    [Fact]
+    public async Task GetByAnyCik_PrimaryCikMatch_ReturnsStock()
+    {
+        _dbContext.Set<CommonStock>().Add(MakeStock(ticker: "AAA", cik: "0000000001"));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _repository.GetByAnyCik("0000000001");
+
+        result.Should().NotBeNull();
+        result.Ticker.Should().Be("AAA");
+    }
+
+    [Fact]
+    public async Task GetByAnyCik_SecondaryCikMatch_ReturnsStock()
+    {
+        var stock = MakeStock(ticker: "BBB", cik: "0000000002");
+        stock.SecondaryCiks = ["0000000099"];
+        _dbContext.Set<CommonStock>().Add(stock);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _repository.GetByAnyCik("0000000099");
+
+        result.Should().NotBeNull();
+        result.Ticker.Should().Be("BBB");
+    }
+
+    [Fact]
+    public async Task GetByAnyCik_PrimaryAndSecondaryBothMatch_PrefersPrimary()
+    {
+        var primary = MakeStock(ticker: "PRIM", cik: "0000000050");
+        var holder = MakeStock(ticker: "HOLD", cik: "0000000060");
+        holder.SecondaryCiks = ["0000000050"];
+        _dbContext.Set<CommonStock>().AddRange(primary, holder);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _repository.GetByAnyCik("0000000050");
+
+        result.Should().NotBeNull();
+        result.Cik.Should().Be("0000000050", "the primary-CIK match is ordered first");
+    }
+
+    [Fact]
+    public async Task GetByAnyCik_NoMatch_ReturnsNull()
+    {
+        _dbContext.Set<CommonStock>().Add(MakeStock(ticker: "CCC", cik: "0000000003"));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _repository.GetByAnyCik("9999999999");
+
+        result.Should().BeNull();
+    }
 }
