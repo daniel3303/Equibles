@@ -65,9 +65,7 @@ public static partial class MarkdownExtensions
         // URL whose scheme is not allowlisted before rendering (.DisableHtml()
         // only strips raw HTML tags, not markdown link schemes).
         var document = Markdown.Parse(markdown, pipeline);
-        foreach (
-            var link in document.Descendants<LinkInline>().Where(link => !IsSafeUrl(link.Url))
-        )
+        foreach (var link in document.Descendants<LinkInline>().Where(link => !IsSafeUrl(link.Url)))
         {
             link.Url = string.Empty;
         }
