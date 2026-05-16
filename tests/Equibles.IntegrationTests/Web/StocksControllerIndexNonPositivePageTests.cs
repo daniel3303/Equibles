@@ -21,7 +21,7 @@ public class StocksControllerIndexNonPositivePageTests
 
     public StocksControllerIndexNonPositivePageTests(WebHostFixture fixture) => _fixture = fixture;
 
-    [Fact(Skip = "GH-712 — Stocks/Index returns HTTP 500 for non-positive page (OFFSET -50)")]
+    [Fact]
     public async Task Index_PageQueryIsZero_ServesPageInsteadOfServerError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
