@@ -11,9 +11,7 @@ namespace Equibles.IntegrationTests.Web;
 
 public class EconomicDataControllerShowSingleObservationTests
 {
-    [Fact(
-        Skip = "GH-718 — EconomicData.Show OverflowExceptions on single-observation series (NaN StdDev cast)"
-    )]
+    [Fact]
     public async Task Show_SeriesWithExactlyOneObservation_RendersViewInsteadOfThrowing()
     {
         // Contract: a valid series detail page must render. Show casts
