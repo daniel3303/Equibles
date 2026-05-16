@@ -155,7 +155,10 @@ public class YahooFinanceClient : IYahooFinanceClient
 
     // ── Session management (mirrors FINRA's token caching pattern) ──
 
-    private async Task<(string Crumb, string CookieHeader)> EnsureSession()
+    // Acquires the Yahoo crumb/cookie over a self-managed HttpClient. Exposed as
+    // a protected virtual seam so tests can supply a session without the live
+    // bootstrap round-trip (production behaviour is unchanged).
+    protected virtual async Task<(string Crumb, string CookieHeader)> EnsureSession()
     {
         await SessionSemaphore.WaitAsync();
         try
