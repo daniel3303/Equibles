@@ -18,9 +18,7 @@ public class FailToDeliverUpsertWhenMatchedTests : ParadeDbMcpTestBase
     public FailToDeliverUpsertWhenMatchedTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    [Fact(
-        Skip = "GH-481 — UpsertRange WhenMatched silently no-ops on existing FailToDeliver rows against ParadeDB (FtdImportService cannot correct stale Quantity/Price on re-import)"
-    )]
+    [Fact]
     public async Task UpsertRange_OnCommonStockIdAndSettlementDate_WhenMatched_OverwritesExistingRowQuantityAndPrice()
     {
         var stock = new CommonStock
@@ -56,7 +54,10 @@ public class FailToDeliverUpsertWhenMatchedTests : ParadeDbMcpTestBase
                 },
             ])
             .On(f => new { f.CommonStockId, f.SettlementDate })
-            .WhenMatched(f => new FailToDeliver { Quantity = f.Quantity, Price = f.Price })
+            .WhenMatched(
+                (existing, incoming) =>
+                    new FailToDeliver { Quantity = incoming.Quantity, Price = incoming.Price }
+            )
             .RunAsync();
 
         DbContext.ChangeTracker.Clear();

@@ -223,7 +223,10 @@ public class FtdImportService
             .Set<FailToDeliver>()
             .UpsertRange(items)
             .On(f => new { f.CommonStockId, f.SettlementDate })
-            .WhenMatched(f => new FailToDeliver { Quantity = f.Quantity, Price = f.Price })
+            .WhenMatched(
+                (existing, incoming) =>
+                    new FailToDeliver { Quantity = incoming.Quantity, Price = incoming.Price }
+            )
             .RunAsync();
     }
 
