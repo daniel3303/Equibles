@@ -19,7 +19,7 @@ public class HomeControllerErrorOutOfRangeStatusTests
 
     public HomeControllerErrorOutOfRangeStatusTests(WebHostFixture fixture) => _fixture = fixture;
 
-    [Fact(Skip = "GH-714 — Home/Error/0 emits malformed status line 'HTTP/1.1 0 '")]
+    [Fact]
     public async Task Error_RouteStatusCodeIsZero_RespondsWithValidHttpStatus()
     {
         var response = await _fixture.Client.GetAsync("/Home/Error/0");
