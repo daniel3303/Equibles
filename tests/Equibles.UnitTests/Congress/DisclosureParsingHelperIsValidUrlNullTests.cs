@@ -4,7 +4,7 @@ namespace Equibles.UnitTests.Congress;
 
 public class DisclosureParsingHelperIsValidUrlNullTests
 {
-    [Fact(Skip = "GH-724 — IsValidDisclosureUrl NREs on null url instead of returning false")]
+    [Fact]
     public void IsValidDisclosureUrl_NullUrl_ReturnsFalseInsteadOfThrowing()
     {
         // Contract: this is a security allowlist predicate — it must be total and
