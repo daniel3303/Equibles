@@ -25,7 +25,6 @@ using Equibles.Sec.Data.Extensions;
 using Equibles.Sec.Mcp.Extensions;
 using Equibles.Yahoo.Data.Extensions;
 using Equibles.Yahoo.Mcp.Extensions;
-using Microsoft.EntityFrameworkCore;
 using ModelContextProtocol.AspNetCore;
 using Serilog;
 using Serilog.Events;
@@ -81,14 +80,6 @@ public partial class Program
         });
 
         builder.Services.AddSingleton<IApiKeyValidator, SimpleApiKeyValidator>();
-    }
-
-    public static async Task ApplyMigrationsAsync(WebApplication app)
-    {
-        using var scope = app.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
-        dbContext.Database.SetCommandTimeout(TimeSpan.FromHours(1));
-        await dbContext.Database.MigrateAsync();
     }
 
     public static void ConfigurePipeline(WebApplication app)
