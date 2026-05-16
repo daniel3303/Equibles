@@ -13,12 +13,12 @@ namespace Equibles.Holdings.HostedService;
 public class HoldingsScraperWorker : BaseScraperWorker
 {
     private const int MaxRetries = 3;
-    private static readonly TimeSpan[] RetryDelays =
-    [
-        TimeSpan.FromSeconds(30),
-        TimeSpan.FromMinutes(2),
-        TimeSpan.FromMinutes(10),
-    ];
+
+    // Per-attempt backoff before retrying a transient data-set failure.
+    // Exposed as a protected virtual seam so tests can collapse the waits
+    // without changing production behaviour (the defaults are unchanged).
+    protected virtual TimeSpan[] RetryDelays =>
+        [TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(10)];
 
     private readonly WorkerOptions _workerOptions;
     private readonly IConfiguration _configuration;
