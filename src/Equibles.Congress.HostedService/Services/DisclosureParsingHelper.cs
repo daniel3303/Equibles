@@ -208,16 +208,24 @@ public static partial class DisclosureParsingHelper
     {
         if (string.IsNullOrEmpty(type))
             return null;
+        // The House abbreviation may carry a qualifier suffix ("S (partial)"),
+        // so accept the bare letter or the letter followed by a space/'(' in
+        // addition to the Senate full words.
+        var trimmed = type.Trim();
         if (
-            type.Contains("Sale", StringComparison.OrdinalIgnoreCase)
-            || type.Contains("Sold", StringComparison.OrdinalIgnoreCase)
-            || type.Equals("S", StringComparison.OrdinalIgnoreCase)
+            trimmed.Contains("Sale", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Contains("Sold", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("S", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("S ", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("S(", StringComparison.OrdinalIgnoreCase)
         )
             return CongressTransactionType.Sale;
         if (
-            type.Contains("Purchase", StringComparison.OrdinalIgnoreCase)
-            || type.Contains("Buy", StringComparison.OrdinalIgnoreCase)
-            || type.Equals("P", StringComparison.OrdinalIgnoreCase)
+            trimmed.Contains("Purchase", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Contains("Buy", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("P", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("P ", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("P(", StringComparison.OrdinalIgnoreCase)
         )
             return CongressTransactionType.Purchase;
         return null;
