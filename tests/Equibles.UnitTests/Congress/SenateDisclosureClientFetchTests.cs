@@ -185,4 +185,31 @@ public class SenateDisclosureClientFetchTests
 
         session.Disposed.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task GetRecentTransactions_SearchThrowsBrowserExceptionEveryAttempt_ExhaustsRetriesAndRethrows()
+    {
+        // The "throws once then succeeds" pin covers the retry+continue arm;
+        // this covers the exhaustion arm: a SenateBrowserException on every
+        // attempt (0..MaxRetries) must, on the final attempt, log and rethrow
+        // rather than continue or swallow.
+        var session = new FakeSenateBrowserSession();
+        for (var attempt = 0; attempt <= 3; attempt++)
+        {
+            session.Script.Enqueue(() =>
+                throw new SenateBrowserException("down", new InvalidOperationException())
+            );
+        }
+
+        var act = async () =>
+            await Sut(session)
+                .GetRecentTransactions(
+                    new DateOnly(2024, 1, 1),
+                    new DateOnly(2024, 1, 31),
+                    CancellationToken.None
+                );
+
+        await act.Should().ThrowAsync<SenateBrowserException>();
+        session.FetchedUrls.Should().HaveCount(4, "every attempt (0..MaxRetries) was made");
+    }
 }
