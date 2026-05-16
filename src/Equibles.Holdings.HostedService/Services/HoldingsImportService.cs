@@ -600,21 +600,24 @@ public class HoldingsImportService
                 h.ShareType,
                 h.OptionType,
             })
-            .WhenMatched(h => new InstitutionalHolding
-            {
-                Value = h.Value,
-                Shares = h.Shares,
-                FilingDate = h.FilingDate,
-                AccessionNumber = h.AccessionNumber,
-                InvestmentDiscretion = h.InvestmentDiscretion,
-                VotingAuthSole = h.VotingAuthSole,
-                VotingAuthShared = h.VotingAuthShared,
-                VotingAuthNone = h.VotingAuthNone,
-                TitleOfClass = h.TitleOfClass,
-                Cusip = h.Cusip,
-                IsAmendment = h.IsAmendment,
-                ValuePending = h.ValuePending,
-            })
+            .WhenMatched(
+                (existing, incoming) =>
+                    new InstitutionalHolding
+                    {
+                        Value = incoming.Value,
+                        Shares = incoming.Shares,
+                        FilingDate = incoming.FilingDate,
+                        AccessionNumber = incoming.AccessionNumber,
+                        InvestmentDiscretion = incoming.InvestmentDiscretion,
+                        VotingAuthSole = incoming.VotingAuthSole,
+                        VotingAuthShared = incoming.VotingAuthShared,
+                        VotingAuthNone = incoming.VotingAuthNone,
+                        TitleOfClass = incoming.TitleOfClass,
+                        Cusip = incoming.Cusip,
+                        IsAmendment = incoming.IsAmendment,
+                        ValuePending = incoming.ValuePending,
+                    }
+            )
             .RunAsync(cancellationToken);
 
         var accessions = holdings.Select(h => h.AccessionNumber).Distinct().ToList();
