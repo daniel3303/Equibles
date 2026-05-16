@@ -72,17 +72,15 @@ public static class SecDocumentEnvelopeParser
         // not a bare name and the remote server decodes it back to a traversal.
         foreach (var ch in value)
         {
-            var isAllowed =
-                (ch >= 'A' && ch <= 'Z')
-                || (ch >= 'a' && ch <= 'z')
-                || (ch >= '0' && ch <= '9')
-                || ch == '.'
-                || ch == '_'
-                || ch == '-';
-            if (!isAllowed)
+            if (!IsBareNameChar(ch))
                 return false;
         }
         return true;
+    }
+
+    private static bool IsBareNameChar(char ch)
+    {
+        return char.IsAsciiLetterOrDigit(ch) || ch == '.' || ch == '_' || ch == '-';
     }
 
     private static bool TryExtractSgmlTagValue(string block, string tagName, out string value)
