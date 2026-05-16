@@ -11,9 +11,7 @@ public class StatisticsExtensionsSafeRoundOverflowTests
     // it through. (Ambiguity: the literal comment only names NaN/infinity; the
     // method name + stated purpose imply no OverflowException for any double.)
     // A caller relying on "Safe" must get null, not a crashed view render.
-    [Fact(
-        Skip = "GH-698 — SafeRound throws OverflowException for finite double exceeding decimal range"
-    )]
+    [Fact]
     public void SafeRound_FiniteValueExceedingDecimalRange_ReturnsNullInsteadOfThrowing()
     {
         var result = 1e29.SafeRound(2);
