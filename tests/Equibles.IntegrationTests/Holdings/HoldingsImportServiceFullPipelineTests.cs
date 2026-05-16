@@ -597,4 +597,64 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         using var verify = FreshContext();
         (await verify.Set<InstitutionalHolding>().CountAsync()).Should().Be(1);
     }
+
+    // ── Unmapped CUSIP row skipped ──────────────────────────────────────
+
+    [Fact]
+    public async Task ImportDataSet_InfoTableRowWithUnmappedCusip_SkipsThatRowAndPersistsTheRest()
+    {
+        // One INFOTABLE row references a CUSIP a tracked stock holds; a second
+        // references a CUSIP no tracked stock holds. The second must hit the
+        // CusipMapping miss → totalSkipped++/continue, while the first still
+        // persists — a single unknown holding can't drop the rest of a filing.
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc",
+            Cik = "0000320193",
+            Cusip = "037833100",
+        };
+        using (var seed = FreshContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            await seed.SaveChangesAsync();
+        }
+
+        var reportDate = new DateOnly(2024, 9, 30);
+        var submission =
+            "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
+            + "13F-HR\tACC-001\t2024-10-15\t2024-09-30\t0001067983\n";
+        var coverPage =
+            "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\tFILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\n"
+            + "ACC-001\tN\tBerkshire Hathaway\tOmaha\tNE\t028-12345\t12345\n";
+        var infoTable =
+            "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMT\tSSHPRNAMTTYPE\tPUTCALL\tINVESTMENTDISCRETION\tVOTING_AUTH_SOLE\tVOTING_AUTH_SHARED\tVOTING_AUTH_NONE\tTITLEOFCLASS\tOTHERMANAGER\n"
+            + "ACC-001\t037833100\t1000\tSH\t\tSOLE\t1000\t0\t0\tCOM\t\n"
+            // CUSIP no tracked stock holds → CusipMapping miss → row skipped.
+            + "ACC-001\t999999999\t500\tSH\t\tSOLE\t500\t0\t0\tCOM\t\n";
+
+        using var archive = BuildArchive(
+            ("SUBMISSION.tsv", submission),
+            ("COVERPAGE.tsv", coverPage),
+            ("INFOTABLE.tsv", infoTable)
+        );
+
+        var prices = new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 150m };
+        var sut = CreateImporter(PriceProviderReturning(prices));
+
+        var result = await sut.ImportDataSet(
+            archive,
+            new DateOnly(2024, 1, 1),
+            CancellationToken.None
+        );
+
+        result.IsComplete.Should().BeTrue();
+        using var verify = FreshContext();
+        var holdings = await verify.Set<InstitutionalHolding>().ToListAsync();
+        holdings
+            .Should()
+            .ContainSingle("the unmapped-CUSIP row is skipped, the mapped one persists");
+        holdings[0].Cusip.Should().Be("037833100");
+    }
 }
