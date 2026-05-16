@@ -17,7 +17,7 @@ public class MarkdownExtensionsJavascriptUriTests
     // active javascript: href. (Ambiguity: contract is implicit security intent,
     // not an XML-doc — but Raw() + DisableHtml + ingested input make it the
     // behaviour a caller must rely on.)
-    [Fact(Skip = "GH-703 — MarkdownToHtml emits active javascript: link href (stored XSS)")]
+    [Fact]
     public void MarkdownToHtml_JavascriptUriInLink_DoesNotEmitActiveJavascriptHref()
     {
         string captured = null;
