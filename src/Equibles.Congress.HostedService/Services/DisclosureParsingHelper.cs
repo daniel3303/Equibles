@@ -248,8 +248,12 @@ public static partial class DisclosureParsingHelper
         return (0, 0);
     }
 
-    public static bool IsValidDisclosureUrl(string url, string expectedBaseUrl) =>
-        url.StartsWith(expectedBaseUrl, StringComparison.OrdinalIgnoreCase);
+    public static bool IsValidDisclosureUrl(string url, string expectedBaseUrl)
+    {
+        if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(expectedBaseUrl))
+            return false;
+        return url.StartsWith(expectedBaseUrl, StringComparison.OrdinalIgnoreCase);
+    }
 
     // Matches tickers in parentheses/brackets: (AAPL), [MSFT], case-insensitive
     [GeneratedRegex(@"[\(\[]\s*([A-Za-z]{1,5})\s*[\)\]]")]
