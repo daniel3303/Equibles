@@ -300,4 +300,56 @@ public class TableNormalizationStepTests
 
         act.Should().NotThrow();
     }
+
+    [Fact]
+    public void Execute_TableWithNoRows_SkipsEmptyColumnRemoval()
+    {
+        // RemoveEmptyColumns early-returns when the table has no <tr> at all.
+        var doc = _parser.ParseDocument("<html><body><table></table></body></html>");
+
+        var act = () => _step.Execute(doc);
+
+        act.Should().NotThrow();
+        doc.QuerySelectorAll("tr").Length.Should().Be(0);
+    }
+
+    [Fact]
+    public void Execute_WhitespaceOnlySpanCellVsNonWhitespaceSpanCell_DistinguishesEmptiness()
+    {
+        // First cell holds only a whitespace/&nbsp; span (IsOnlyWhitespaceSpan
+        // → true: spans present, none with real text). Second cell has a span
+        // with real text (IsOnlyWhitespaceSpan → false on the first non-ws span).
+        var doc = _parser.ParseDocument(
+            "<html><body><table>"
+                + "<tr><td><span> </span><span>  </span></td><td><span>Real</span></td></tr>"
+                + "<tr><td>x</td><td>y</td></tr>"
+                + "</table></body></html>"
+        );
+
+        var act = () => _step.Execute(doc);
+
+        act.Should().NotThrow();
+        // The non-whitespace span's text must survive normalization.
+        doc.Body!.TextContent.Should().Contain("Real");
+    }
+
+    [Fact]
+    public void Execute_RowspanWithInterleavedNonTrElement_SkipsToNextRow()
+    {
+        // A <caption> sits between the rowspan source row and the next <tr>;
+        // the rowspan-expansion loop must skip non-tr siblings to find the row
+        // that receives the cloned cell.
+        var doc = _parser.ParseDocument(
+            "<html><body><table>"
+                + "<tr><td rowspan=\"2\">Span</td><td>A</td></tr>"
+                + "<caption>interleaved</caption>"
+                + "<tr><td>B</td></tr>"
+                + "</table></body></html>"
+        );
+
+        var act = () => _step.Execute(doc);
+
+        act.Should().NotThrow();
+        doc.QuerySelectorAll("tr").Length.Should().Be(2);
+    }
 }
