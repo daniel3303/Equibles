@@ -7,6 +7,11 @@
   <ItemGroup>
     <PackageReference Include="AngleSharp" />
     <PackageReference Include="Equibles.Core.AutoWiring" />
+    <!-- Direct reference pins the otherwise-transitive Microsoft.Bcl.Memory
+         (pulled via the ML.Tokenizers / PdfPig graph) off the vulnerable
+         9.0.4 (NU1903 / GHSA-73j8-2gch-69rq) to the centrally-managed
+         patched version. -->
+    <PackageReference Include="Microsoft.Bcl.Memory" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
