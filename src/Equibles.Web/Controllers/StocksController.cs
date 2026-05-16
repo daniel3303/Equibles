@@ -38,6 +38,12 @@ public class StocksController : BaseController
     {
         ViewData["Title"] = "Stocks";
 
+        // page is a client-supplied query value; a non-positive page would emit
+        // Skip((page-1)*pageSize) = a negative OFFSET, which PostgreSQL rejects
+        // (22023) and surfaces as HTTP 500. Clamp to the first page.
+        if (page < 1)
+            page = 1;
+
         const int pageSize = 50;
         var query = _commonStockRepository.Search(search);
         var totalCount = await query.CountAsync();
