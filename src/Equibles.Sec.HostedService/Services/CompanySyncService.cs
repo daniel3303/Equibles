@@ -210,9 +210,13 @@ public class CompanySyncService : ICompanySyncService
             && state.ExistingPrimaryTickers.Contains(primaryTicker)
         )
         {
-            var tickerHolder = state.ExistingStocks.FirstOrDefault(cs =>
-                cs.Ticker == primaryTicker
-            );
+            // Resolve the holder over every row, not just SEC-feed-scoped
+            // ExistingStocks: the holder we need to displace is precisely the
+            // one whose own CIK dropped out of the feed, so a feed-scoped lookup
+            // would never find it and the obsolete-removal arm below would be
+            // unreachable. PrimaryTickerToStock exists for exactly this (see its
+            // construction comment) and is what ReplaceObsoleteStock uses.
+            state.PrimaryTickerToStock.TryGetValue(primaryTicker, out var tickerHolder);
             if (tickerHolder != null && !state.SecCiks.Contains(tickerHolder.Cik))
             {
                 // Old holder is no longer in SEC data - remove it
