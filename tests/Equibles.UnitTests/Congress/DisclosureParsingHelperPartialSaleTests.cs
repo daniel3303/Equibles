@@ -11,9 +11,7 @@ public class DisclosureParsingHelperPartialSaleTests
     // explicitly listed House abbreviation, so per the contract it must resolve
     // to Sale. Existing tests pin "Sale (Partial)" and bare "S" but not this
     // exact documented token.
-    [Fact(
-        Skip = "GH-695 — ParseTransactionType returns null for documented House abbreviation \"S (partial)\""
-    )]
+    [Fact]
     public void ParseTransactionType_HouseAbbreviationSPartial_ReturnsSale()
     {
         var result = DisclosureParsingHelper.ParseTransactionType("S (partial)");
