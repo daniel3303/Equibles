@@ -185,6 +185,12 @@ public class DocumentTextTools
 
     private static string HighlightKeyword(string line, string keyword)
     {
+        // An empty keyword makes IndexOf return the start position every
+        // iteration, so index never advances and the loop runs unbounded
+        // (DoS — keyword reaches here unvalidated from the MCP tool).
+        if (string.IsNullOrEmpty(keyword))
+            return line;
+
         var result = new StringBuilder();
         var index = 0;
 
