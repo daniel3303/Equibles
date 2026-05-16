@@ -212,4 +212,46 @@ public class SenateDisclosureClientFetchTests
         await act.Should().ThrowAsync<SenateBrowserException>();
         session.FetchedUrls.Should().HaveCount(4, "every attempt (0..MaxRetries) was made");
     }
+
+    [Fact]
+    public async Task GetRecentTransactions_ReportFetchHardFails_LogsAndContinuesWithoutThrowing()
+    {
+        // Search yields one report, but fetching that report 404s (non-retryable
+        // → HttpRequestException). The per-report catch must log and move on so
+        // one bad report can't abort the whole run.
+        var session = new FakeSenateBrowserSession();
+        session.Script.Enqueue(() => Ok(SearchJson(recordsTotal: 1, rowCount: 1)));
+        session.Script.Enqueue(() => new SenateFetchResult { Status = 404, Body = "gone" });
+
+        var result = await Sut(session)
+            .GetRecentTransactions(
+                new DateOnly(2024, 1, 1),
+                new DateOnly(2024, 1, 31),
+                CancellationToken.None
+            );
+
+        result.Should().BeEmpty("the only report failed to fetch, but the run completed");
+        session.FetchedUrls.Should().Contain(ReportUrl);
+    }
+
+    [Fact]
+    public async Task GetRecentTransactions_ReportFetchCancelled_RethrowsOperationCanceled()
+    {
+        // Search succeeds; the report fetch raises OperationCanceledException.
+        // The per-report handler must rethrow it (cancellation is not a
+        // per-report failure to swallow).
+        var session = new FakeSenateBrowserSession();
+        session.Script.Enqueue(() => Ok(SearchJson(recordsTotal: 1, rowCount: 1)));
+        session.Script.Enqueue(() => throw new OperationCanceledException());
+
+        var act = async () =>
+            await Sut(session)
+                .GetRecentTransactions(
+                    new DateOnly(2024, 1, 1),
+                    new DateOnly(2024, 1, 31),
+                    CancellationToken.None
+                );
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
 }
