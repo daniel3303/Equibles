@@ -20,6 +20,11 @@ public class HoldingsScraperWorker : BaseScraperWorker
     protected virtual TimeSpan[] RetryDelays =>
         [TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(10)];
 
+    // Politeness cooldown after a data set fails within a cycle. Exposed as a
+    // protected virtual seam so tests can collapse it without changing
+    // production behaviour (the default is unchanged).
+    protected virtual TimeSpan FailedDataSetCooldown => TimeSpan.FromMinutes(5);
+
     private readonly WorkerOptions _workerOptions;
     private readonly IConfiguration _configuration;
 
@@ -81,7 +86,7 @@ public class HoldingsScraperWorker : BaseScraperWorker
             if (!await TryProcessDataSet(fileName, minReportDate, stoppingToken))
             {
                 failedDataSets.Add(fileName);
-                await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+                await Task.Delay(FailedDataSetCooldown, stoppingToken);
             }
         }
 
@@ -110,7 +115,7 @@ public class HoldingsScraperWorker : BaseScraperWorker
                         null,
                         $"file: {fileName}, permanently failed"
                     );
-                    await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+                    await Task.Delay(FailedDataSetCooldown, stoppingToken);
                 }
             }
         }
