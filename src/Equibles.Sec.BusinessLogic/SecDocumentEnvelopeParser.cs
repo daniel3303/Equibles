@@ -67,9 +67,19 @@ public static class SecDocumentEnvelopeParser
             return false;
         if (value[0] == '.')
             return false;
+        // Enforce the bare-name allowlist rather than blocklisting only literal
+        // separators: a name containing '%' (URL-encoded '../' = %2e%2e%2f) is
+        // not a bare name and the remote server decodes it back to a traversal.
         foreach (var ch in value)
         {
-            if (ch == '/' || ch == '\\')
+            var isAllowed =
+                (ch >= 'A' && ch <= 'Z')
+                || (ch >= 'a' && ch <= 'z')
+                || (ch >= '0' && ch <= '9')
+                || ch == '.'
+                || ch == '_'
+                || ch == '-';
+            if (!isAllowed)
                 return false;
         }
         return true;

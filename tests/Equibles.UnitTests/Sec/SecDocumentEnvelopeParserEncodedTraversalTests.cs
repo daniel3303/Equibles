@@ -13,7 +13,7 @@ public class SecDocumentEnvelopeParserEncodedTraversalTests
     // traversal. Literal `../` and `\` are already pinned — the encoded form
     // (the classic allowlist-bypass) is not. Per the stated contract this must
     // be rejected: TryExtractPaperPdfFilename returns false, filename empty.
-    [Fact(Skip = "GH-693 — IsSafeFilename accepts URL-encoded path traversal (%2e%2e%2f)")]
+    [Fact]
     public void TryExtractPaperPdfFilename_UrlEncodedPathTraversal_RejectsAndReturnsFalse()
     {
         var envelope = """
