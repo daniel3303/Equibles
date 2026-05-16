@@ -58,10 +58,7 @@ public class CftcShowViewRenderingTests
         // uses instead of hardcoding one separator.
         var expectedOpenInterest = HtmlEncoder.Default.Encode(250_000.ToString("N0"));
         html.Should()
-            .Contain(
-                expectedOpenInterest,
-                "the latest OpenInterest stat must render formatted N0"
-            );
+            .Contain(expectedOpenInterest, "the latest OpenInterest stat must render formatted N0");
         html.Should().Contain("2026-01-06", "the seeded report row date must render in the table");
         html.Should()
             .Contain(
