@@ -10,7 +10,7 @@ public class CftcClientSplitCsvLineEscapedQuoteTests
         BindingFlags.NonPublic | BindingFlags.Static
     );
 
-    [Fact(Skip = "GH-726 — SplitCsvLine does not unescape RFC-4180 doubled quotes")]
+    [Fact]
     public void SplitCsvLine_QuotedFieldWithEscapedQuote_UnescapesToSingleQuote()
     {
         // Contract: a quote-aware CSV splitter follows the universal convention —

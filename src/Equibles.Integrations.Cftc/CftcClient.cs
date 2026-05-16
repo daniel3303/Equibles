@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO.Compression;
 using System.Net;
+using System.Text;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Cftc.Contracts;
 using Equibles.Integrations.Cftc.Models;
@@ -198,25 +199,54 @@ public class CftcClient : ICftcClient
 
     private static string[] SplitCsvLine(string line)
     {
-        // CFTC files use comma-separated values with quoted fields
+        // CFTC files use comma-separated values with quoted fields. Follows
+        // RFC 4180: inside a quoted field a doubled "" is one literal ".
+        // Quoted content is taken verbatim; unquoted fields are whitespace-trimmed.
         var fields = new List<string>();
+        var field = new StringBuilder();
         var inQuotes = false;
-        var start = 0;
+        var wasQuoted = false;
 
         for (var i = 0; i < line.Length; i++)
         {
-            if (line[i] == '"')
+            var c = line[i];
+            if (inQuotes)
             {
-                inQuotes = !inQuotes;
+                if (c == '"')
+                {
+                    if (i + 1 < line.Length && line[i + 1] == '"')
+                    {
+                        field.Append('"');
+                        i++;
+                    }
+                    else
+                    {
+                        inQuotes = false;
+                    }
+                }
+                else
+                {
+                    field.Append(c);
+                }
             }
-            else if (line[i] == ',' && !inQuotes)
+            else if (c == '"')
             {
-                fields.Add(line[start..i].Trim().Trim('"'));
-                start = i + 1;
+                inQuotes = true;
+                wasQuoted = true;
+            }
+            else if (c == ',')
+            {
+                fields.Add(wasQuoted ? field.ToString() : field.ToString().Trim());
+                field.Clear();
+                wasQuoted = false;
+            }
+            else
+            {
+                field.Append(c);
             }
         }
 
-        fields.Add(line[start..].Trim().Trim('"'));
+        fields.Add(wasQuoted ? field.ToString() : field.ToString().Trim());
         return fields.ToArray();
     }
 
