@@ -5,7 +5,9 @@ namespace Equibles.UnitTests.Core;
 
 public class EnumExtensionsUndefinedValueTests
 {
-    [Fact(Skip = "GH-720 — NameForHumans throws on undefined enum value instead of ToString() fallback")]
+    [Fact(
+        Skip = "GH-720 — NameForHumans throws on undefined enum value instead of ToString() fallback"
+    )]
     public void NameForHumans_UndefinedEnumValue_FallsBackToToStringInsteadOfThrowing()
     {
         // Contract: NameForHumans is a total Enum helper — its own `?? enumValue.ToString()`
