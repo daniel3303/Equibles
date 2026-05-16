@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Encodings.Web;
 using Equibles.Cftc.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Xunit;
@@ -51,8 +52,16 @@ public class CftcShowViewRenderingTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var html = await response.Content.ReadAsStringAsync();
         html.Should().Contain("CRUDE OIL, LIGHT SWEET-WTI", "the market name must render");
+        // Razor formats with the host culture's N0 separator and HTML-encodes it.
+        // The separator char is ICU/culture-dependent (U+00A0 vs U+202F across
+        // runtimes), so compute the expected token with the same encoder Razor
+        // uses instead of hardcoding one separator.
+        var expectedOpenInterest = HtmlEncoder.Default.Encode(250_000.ToString("N0"));
         html.Should()
-            .Contain("250&#xA0;000", "the latest OpenInterest stat must render formatted N0");
+            .Contain(
+                expectedOpenInterest,
+                "the latest OpenInterest stat must render formatted N0"
+            );
         html.Should().Contain("2026-01-06", "the seeded report row date must render in the table");
         html.Should()
             .Contain(
