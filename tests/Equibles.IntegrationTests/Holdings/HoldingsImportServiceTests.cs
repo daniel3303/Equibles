@@ -298,17 +298,18 @@ public class HoldingsImportServiceTests
     }
 
     [Fact]
-    public async Task ImportDataSet_NoCusipsInInfoTableMatchTrackedStocks_ReturnsParsedCountComplete()
+    public async Task ImportDataSet_NoCusipsInInfoTableMatchTrackedStocks_ReturnsParsedCountNotComplete()
     {
-        // BuildCusipMapping returns false when none of the CUSIPs in
-        // INFOTABLE.tsv match a tracked CommonStock. ImportDataSet maps
-        // this to (count, IsComplete:true) — the file was structurally
-        // sound and we just don't track any of its issuers, so retrying
-        // would produce the same empty mapping. This is the inverse of
-        // the COVERPAGE.tsv-missing pin above (true vs false IsComplete
-        // for the same SubmissionCount), and a swap regression between
-        // them would corrupt ProcessedDataSet bookkeeping in opposite
-        // directions for opposite root causes.
+        // BuildCusipMapping returns NoTrackedStocks when none of the CUSIPs
+        // in INFOTABLE.tsv match a tracked CommonStock. Per GH-817 this is
+        // NOT terminal — typically a cold start where the FTD scraper has
+        // not seeded CUSIPs yet — so ImportDataSet maps it to
+        // (count, IsComplete:false) and leaves the data set unprocessed so
+        // a later cycle backfills it once CUSIPs exist. Marking it complete
+        // here (the old behavior) permanently locked the data set out of
+        // retry. The structural NoInfoTable case still returns true (it
+        // won't change on re-download); a swap regression between the two
+        // would corrupt ProcessedDataSet bookkeeping in opposite directions.
         var submissionTsv =
             "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
             + "13F-HR\tACC-001\t2024-10-15\t2024-09-30\t0001234567\n";
@@ -343,6 +344,6 @@ public class HoldingsImportServiceTests
         );
 
         result.SubmissionCount.Should().Be(1);
-        result.IsComplete.Should().BeTrue();
+        result.IsComplete.Should().BeFalse();
     }
 }
