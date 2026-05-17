@@ -260,7 +260,19 @@ public static partial class DisclosureParsingHelper
     {
         if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(expectedBaseUrl))
             return false;
-        return url.StartsWith(expectedBaseUrl, StringComparison.OrdinalIgnoreCase);
+
+        // A StartsWith check is an SSRF bypass: an attacker domain that merely
+        // prefixes the base ("house.gov.evil.example") would pass. Compare the
+        // actual origin — scheme, host and port must match exactly.
+        if (
+            !Uri.TryCreate(url, UriKind.Absolute, out var parsed)
+            || !Uri.TryCreate(expectedBaseUrl, UriKind.Absolute, out var baseUri)
+        )
+            return false;
+
+        return string.Equals(parsed.Scheme, baseUri.Scheme, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(parsed.Host, baseUri.Host, StringComparison.OrdinalIgnoreCase)
+            && parsed.Port == baseUri.Port;
     }
 
     // Matches tickers in parentheses/brackets: (AAPL), [MSFT], case-insensitive
