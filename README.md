@@ -110,6 +110,12 @@ Worker__MinSyncDate=2024-01-01
 | `Embedding__ModelName` | — | Model name (e.g., `bge-m3`) |
 | `Embedding__BatchSize` | `10` | Texts per embedding batch |
 
+**Update notifications (optional):**
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `CHECK_FOR_UPDATES` | `true` | When `true`, the web portal checks GitHub Releases and shows a banner when a newer version is available. Set to `false` to disable. |
+
 **Authentication (optional):**
 
 | Setting | Default | Description |
@@ -119,6 +125,26 @@ Worker__MinSyncDate=2024-01-01
 | `MCP_API_KEY` | — | MCP server API key (auth disabled if empty) |
 
 When set, the web portal requires login and the MCP server requires `Authorization: Bearer <key>` header. When unset, everything is open access (default).
+
+## Updating
+
+The web portal checks GitHub Releases on a schedule and shows a banner when a newer version is available (disable with `CHECK_FOR_UPDATES=false`). To update to the latest release:
+
+**Docker Compose:**
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+**From source:**
+
+```bash
+git pull
+dotnet build Equibles.sln
+```
+
+Database migrations are applied automatically on startup. Review the [changelog](CHANGELOG.md) for notable changes before upgrading.
 
 ## Web Portal
 

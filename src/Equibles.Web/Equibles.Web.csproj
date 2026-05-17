@@ -1,4 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <!-- Running version surfaced by the update-notification banner. Bump on each release to match the git tag. -->
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Repo-root CHANGELOG.md, copied so the in-app /changelog page can render it. -->
+    <Content Include="..\..\CHANGELOG.md" Link="CHANGELOG.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Equibles.Core.AutoWiring" />
     <PackageReference Include="Markdig" />

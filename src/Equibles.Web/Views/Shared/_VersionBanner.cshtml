@@ -1,0 +1,52 @@
+@using Equibles.Web.Models
+@{
+    if (ViewData["VersionUpdate"] is not VersionCheckResult update || !update.UpdateAvailable)
+    {
+        return;
+    }
+}
+
+<div id="version-banner" data-version="@update.LatestVersion" class="hidden bg-info/10 border-b border-info/30">
+    <div class="max-w-6xl mx-auto w-full px-6 py-2.5 flex items-center gap-3 text-sm">
+        <icon name="arrow-up-circle" size="5" class="text-info shrink-0" />
+        <span class="flex-1 text-base-content/80">
+            A new version <b class="text-base-content">@update.LatestVersion</b> is available — you are running
+            <b class="text-base-content">@update.CurrentVersion</b>.
+        </span>
+        <a href="https://github.com/daniel3303/Equibles#updating" target="_blank" rel="noopener"
+           class="btn btn-ghost btn-sm border border-base-300">
+            How to update
+        </a>
+        <a asp-controller="Changelog" asp-action="Index" class="btn btn-ghost btn-sm border border-base-300">
+            View changelog
+        </a>
+        <button type="button" id="version-banner-dismiss" class="btn btn-ghost btn-sm btn-square"
+                title="Dismiss">
+            <icon name="x-mark" size="4" />
+        </button>
+    </div>
+</div>
+
+<script>
+    // Update banner: shown once per browser session unless a newer version
+    // appears. The dismissed version is kept in sessionStorage so it reappears
+    // for a newer release but not on every page navigation.
+    (function () {
+        var banner = document.getElementById('version-banner');
+        if (!banner) return;
+
+        var key = 'equibles-version-dismissed';
+        var version = banner.getAttribute('data-version');
+
+        // Reveal the banner only if this version hasn't been dismissed this session.
+        if (sessionStorage.getItem(key) !== version) {
+            banner.classList.remove('hidden');
+        }
+
+        // Hide and remember the dismissed version for the rest of the session.
+        document.getElementById('version-banner-dismiss').addEventListener('click', function () {
+            banner.classList.add('hidden');
+            sessionStorage.setItem(key, version);
+        });
+    })();
+</script>

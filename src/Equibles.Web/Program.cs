@@ -82,11 +82,15 @@ public partial class Program
             options.LowercaseUrls = true;
         });
 
+        builder.Services.AddHttpClient();
+
         builder.Services.AddScoped<Equibles.Web.Filters.StatusBadgeFilter>();
+        builder.Services.AddScoped<Equibles.Web.Filters.VersionCheckFilter>();
         builder
             .Services.AddControllersWithViews(options =>
             {
                 options.Filters.AddService<Equibles.Web.Filters.StatusBadgeFilter>();
+                options.Filters.AddService<Equibles.Web.Filters.VersionCheckFilter>();
             })
             .AddRazorRuntimeCompilation();
 

@@ -7,6 +7,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Web portal now checks GitHub Releases and shows a banner when a newer version
+  is available, displaying the new and current versions with links to the
+  "Updating" guide and an in-app rendered changelog. The check is cached, runs
+  off the request path, fails silently, and can be disabled with the
+  `CHECK_FOR_UPDATES` environment variable (default `true`).
+
 ### Fixed
 
 - Embedding service healthcheck used `curl`, which is not present in the

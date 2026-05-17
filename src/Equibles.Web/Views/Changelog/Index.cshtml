@@ -1,0 +1,32 @@
+@model Equibles.Web.ViewModels.ChangelogViewModel
+@{
+    ViewData["Title"] = "Changelog";
+}
+
+@section Styles {
+    <style>
+        /* Plain CSS (not Tailwind utilities) so the Markdig-rendered CHANGELOG
+           reads well without depending on the typography plugin. */
+        .changelog-content h1 { font-size: 1.875rem; font-weight: 700; margin: 1.5rem 0 1rem; }
+        .changelog-content h2 { font-size: 1.375rem; font-weight: 700; margin: 2rem 0 .75rem; padding-bottom: .3rem; border-bottom: 1px solid var(--color-base-300); }
+        .changelog-content h3 { font-size: 1.05rem; font-weight: 600; margin: 1.25rem 0 .5rem; opacity: .85; }
+        .changelog-content p { margin: .5rem 0; }
+        .changelog-content ul { list-style: disc; padding-left: 1.5rem; margin: .5rem 0; }
+        .changelog-content li { margin: .3rem 0; }
+        .changelog-content a { color: var(--color-info); text-decoration: underline; }
+        .changelog-content code { background: var(--color-base-200); padding: .1rem .35rem; border-radius: .25rem; font-size: .85em; }
+    </style>
+}
+
+<div class="max-w-6xl mx-auto px-6 py-8">
+    <h1 class="text-3xl font-bold mb-2">Changelog</h1>
+    <p class="text-base-content/70 mb-8">
+        All notable changes to Equibles, newest first.
+    </p>
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-6 changelog-content">
+            @Html.Raw(Model.Html)
+        </div>
+    </div>
+</div>
