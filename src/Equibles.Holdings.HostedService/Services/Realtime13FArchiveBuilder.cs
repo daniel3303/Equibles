@@ -103,17 +103,25 @@ public class Realtime13FArchiveBuilder
             }
         }
 
-        var buffer = new MemoryStream();
-        using (var writer = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+        // Build into a throwaway buffer, then hand the read archive an
+        // independently-owned stream. Ownership is then unambiguous: disposing
+        // the returned archive disposes its stream, and a failure while writing
+        // disposes the build buffer here instead of leaking it.
+        byte[] zipBytes;
+        using (var buffer = new MemoryStream())
         {
-            WriteEntry(writer, "SUBMISSION.tsv", submission);
-            WriteEntry(writer, "COVERPAGE.tsv", coverPage);
-            WriteEntry(writer, "INFOTABLE.tsv", infoTable);
-            WriteEntry(writer, "OTHERMANAGER2.tsv", otherManager);
+            using (var writer = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                WriteEntry(writer, "SUBMISSION.tsv", submission);
+                WriteEntry(writer, "COVERPAGE.tsv", coverPage);
+                WriteEntry(writer, "INFOTABLE.tsv", infoTable);
+                WriteEntry(writer, "OTHERMANAGER2.tsv", otherManager);
+            }
+            zipBytes = buffer.ToArray();
         }
 
-        buffer.Position = 0;
-        return new ZipArchive(buffer, ZipArchiveMode.Read);
+        // Disposing the returned archive transitively disposes this stream.
+        return new ZipArchive(new MemoryStream(zipBytes), ZipArchiveMode.Read);
     }
 
     private static void WriteEntry(ZipArchive archive, string name, StringBuilder content)

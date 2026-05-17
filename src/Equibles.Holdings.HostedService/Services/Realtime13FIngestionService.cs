@@ -1,8 +1,10 @@
 using System.Text;
 using Equibles.Core.AutoWiring;
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Integrations.Sec.Contracts;
+using Equibles.Integrations.Sec.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.HostedService.Services;
@@ -61,22 +63,28 @@ public class Realtime13FIngestionService
             return 0;
         }
 
+        var alreadyProcessed = await LoadProcessedAccessions(
+            entries.Select(e => e.AccessionNumber),
+            cancellationToken
+        );
+
         var filings = new List<Parsed13FFiling>();
+        var handedOffAccessions = new List<string>();
         foreach (var entry in entries)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            if (alreadyProcessed.Contains(entry.AccessionNumber))
+            {
+                _logger.LogDebug(
+                    "Skipping already-processed filing {Accession}",
+                    entry.AccessionNumber
+                );
+                continue;
+            }
+
             try
             {
-                if (await AlreadyImported(entry.AccessionNumber, cancellationToken))
-                {
-                    _logger.LogDebug(
-                        "Skipping already-imported filing {Accession}",
-                        entry.AccessionNumber
-                    );
-                    continue;
-                }
-
                 var filing = await ParseFiling(entry, cancellationToken);
                 if (filing == null)
                     continue;
@@ -94,6 +102,7 @@ public class Realtime13FIngestionService
                     continue;
 
                 filings.Add(filing);
+                handedOffAccessions.Add(entry.AccessionNumber);
             }
             catch (OperationCanceledException)
             {
@@ -123,13 +132,19 @@ public class Realtime13FIngestionService
             filings.Count
         );
 
-        using var archive = _archiveBuilder.Build(filings);
-        await _importService.ImportDataSet(archive, minReportDate, cancellationToken);
+        using (var archive = _archiveBuilder.Build(filings))
+        {
+            await _importService.ImportDataSet(archive, minReportDate, cancellationToken);
+        }
+
+        // Record the ledger only after the import succeeded: a crash mid-import
+        // must not permanently skip these accessions on the next sweep.
+        await RecordProcessed(handedOffAccessions, cancellationToken);
 
         return filings.Count;
     }
 
-    private async Task<List<Equibles.Integrations.Sec.Models.EdgarDailyIndexEntry>> DiscoverEntries(
+    private async Task<List<EdgarDailyIndexEntry>> DiscoverEntries(
         DateOnly today,
         int lookbackDays,
         CancellationToken cancellationToken
@@ -138,7 +153,7 @@ public class Realtime13FIngestionService
         // Deduplicate by accession across the window: an amendment carries a
         // distinct accession number, so this only collapses the same filing
         // re-listed across overlapping sweeps, never an original vs amendment.
-        var byAccession = new Dictionary<string, Equibles.Integrations.Sec.Models.EdgarDailyIndexEntry>(
+        var byAccession = new Dictionary<string, EdgarDailyIndexEntry>(
             StringComparer.OrdinalIgnoreCase
         );
 
@@ -149,33 +164,62 @@ public class Realtime13FIngestionService
             var date = today.AddDays(-offset);
             var indexEntries = await _edgarClient.GetDailyIndex(date, cancellationToken);
 
+            // The client already filters to 13F-HR / 13F-HR/A; only guard
+            // against a malformed row with no accession number here.
             foreach (var entry in indexEntries)
             {
-                if (
-                    !string.IsNullOrEmpty(entry.AccessionNumber)
-                    && entry.FormType.StartsWith("13F-HR", StringComparison.OrdinalIgnoreCase)
-                )
-                {
+                if (!string.IsNullOrEmpty(entry.AccessionNumber))
                     byAccession[entry.AccessionNumber] = entry;
-                }
             }
         }
 
         return byAccession.Values.ToList();
     }
 
-    private async Task<bool> AlreadyImported(
-        string accessionNumber,
+    private async Task<HashSet<string>> LoadProcessedAccessions(
+        IEnumerable<string> accessionNumbers,
         CancellationToken cancellationToken
     )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var repo = scope.ServiceProvider.GetRequiredService<InstitutionalHoldingRepository>();
-        return await repo.GetByAccessionNumber(accessionNumber).AnyAsync(cancellationToken);
+        var repo = scope.ServiceProvider.GetRequiredService<ProcessedFilingRepository>();
+
+        var processed = await repo.GetByAccessionNumbers(accessionNumbers.ToList())
+            .Select(p => p.AccessionNumber)
+            .ToListAsync(cancellationToken);
+
+        return new HashSet<string>(processed, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private async Task RecordProcessed(
+        IReadOnlyCollection<string> accessionNumbers,
+        CancellationToken cancellationToken
+    )
+    {
+        if (accessionNumbers.Count == 0)
+            return;
+
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProcessedFilingRepository>();
+
+        // Re-check inside the write scope: a parallel sweep (or the quarterly
+        // worker) may have recorded some of these between discovery and now.
+        var existing = await repo.GetByAccessionNumbers(accessionNumbers.ToList())
+            .Select(p => p.AccessionNumber)
+            .ToListAsync(cancellationToken);
+        var existingSet = new HashSet<string>(existing, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var accession in accessionNumbers)
+        {
+            if (existingSet.Add(accession))
+                repo.Add(new ProcessedFiling { AccessionNumber = accession });
+        }
+
+        await repo.SaveChanges();
     }
 
     private async Task<Parsed13FFiling> ParseFiling(
-        Equibles.Integrations.Sec.Models.EdgarDailyIndexEntry entry,
+        EdgarDailyIndexEntry entry,
         CancellationToken cancellationToken
     )
     {
@@ -211,28 +255,53 @@ public class Realtime13FIngestionService
             entry.DateFiled
         );
 
-        var infoTableName = SelectInfoTable(artifacts);
-        if (infoTableName != null)
+        filing.Holdings = await ResolveHoldings(entry, artifacts, cancellationToken);
+
+        // A non-amendment with no parseable holdings means we picked the wrong
+        // artifact or the table failed to parse — never feed an empty original
+        // through (it would be a no-op at best, masking a real gap). Skip it and
+        // let the authoritative quarterly bulk import reconcile it later.
+        if (filing.Holdings.Count == 0 && !filing.IsAmendment)
         {
-            var infoTableXml = await DownloadText(
-                entry.Cik,
-                entry.AccessionNumber,
-                infoTableName,
-                cancellationToken
-            );
-            filing.Holdings = _parser.ParseInformationTable(infoTableXml);
-        }
-        else
-        {
-            // No information table is legitimate for an amendment that removes
-            // every position; the pipeline's amendment delete-by-period still runs.
-            _logger.LogInformation(
-                "Filing {Accession} has no information table (likely a holdings-removing amendment)",
+            _logger.LogWarning(
+                "Filing {Accession} yielded no holdings and is not an amendment — skipping",
                 entry.AccessionNumber
             );
+            return null;
         }
 
         return filing;
+    }
+
+    /// <summary>
+    /// Downloads candidate information-table XML artifacts and returns the
+    /// first that actually parses to one or more <c>&lt;infoTable&gt;</c> rows.
+    /// An empty result is only legitimate for a holdings-removing amendment —
+    /// the caller enforces that.
+    /// </summary>
+    private async Task<List<Parsed13FHolding>> ResolveHoldings(
+        EdgarDailyIndexEntry entry,
+        List<string> artifacts,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var name in OrderedInfoTableCandidates(artifacts))
+        {
+            var xml = await DownloadText(
+                entry.Cik,
+                entry.AccessionNumber,
+                name,
+                cancellationToken
+            );
+            if (string.IsNullOrWhiteSpace(xml))
+                continue;
+
+            var holdings = _parser.ParseInformationTable(xml);
+            if (holdings.Count > 0)
+                return holdings;
+        }
+
+        return [];
     }
 
     private async Task<string> DownloadText(
@@ -257,12 +326,14 @@ public class Realtime13FIngestionService
         );
 
     /// <summary>
-    /// The information table is the filing's other <c>.xml</c> artifact. SEC
-    /// names it inconsistently (<c>infotable.xml</c>, <c>form13fInfoTable.xml</c>,
-    /// <c>&lt;accession&gt;.xml</c>), so prefer a name that looks like an info
-    /// table and fall back to any non-cover, non-schema XML.
+    /// The information table is one of the filing's non-cover <c>.xml</c>
+    /// artifacts; SEC names it inconsistently (<c>infotable.xml</c>,
+    /// <c>form13fInfoTable.xml</c>, <c>&lt;accession&gt;.xml</c>) and filings
+    /// can also ship rendering/schema XML. Yield the table-looking names first,
+    /// then the rest, so the caller can validate by content rather than trust
+    /// a single name guess.
     /// </summary>
-    private static string SelectInfoTable(List<string> artifacts)
+    private static IEnumerable<string> OrderedInfoTableCandidates(List<string> artifacts)
     {
         var candidates = artifacts
             .Where(a =>
@@ -271,10 +342,12 @@ public class Realtime13FIngestionService
             )
             .ToList();
 
-        return candidates.FirstOrDefault(a =>
+        return candidates
+            .OrderByDescending(a =>
                 a.Contains("info", StringComparison.OrdinalIgnoreCase)
                 || a.Contains("table", StringComparison.OrdinalIgnoreCase)
                 || a.Contains("13f", StringComparison.OrdinalIgnoreCase)
-            ) ?? candidates.FirstOrDefault();
+            )
+            .ToList();
     }
 }
