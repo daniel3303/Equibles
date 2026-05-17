@@ -14,7 +14,7 @@ public class CftcClientSplitCsvLineLeadingSpaceTests
     // *inside* the quotes. A space between the delimiter and the opening quote
     // (`, "b"`, ubiquitous in CFTC CSVs) is not part of the quoted content, so
     // the parsed value must be "b", not " b".
-    [Fact(Skip = "GH-764 — SplitCsvLine leaks pre-quote whitespace into quoted value")]
+    [Fact]
     public void SplitCsvLine_SpaceBeforeOpeningQuote_DoesNotLeakSpaceIntoQuotedValue()
     {
         var line = "a, \"b\"";
