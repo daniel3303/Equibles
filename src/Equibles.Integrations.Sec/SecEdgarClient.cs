@@ -351,8 +351,12 @@ public class SecEdgarClient : ISecEdgarClient
 
         using var response = await SendWithRetryAsync(url, cancellationToken);
 
-        // Non-publishing days (weekends, federal holidays) have no index file.
-        if (response.StatusCode == HttpStatusCode.NotFound)
+        // No index file for that day → nothing to ingest, skip it rather than
+        // failing the whole real-time sweep. Weekends/holidays can 404, and SEC
+        // returns 403 (Forbidden) for not-yet-published / future-dated index
+        // files (e.g. "today" before the daily index is posted). Both mean the
+        // same thing here: there is no daily index for this date.
+        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden)
         {
             _logger.LogInformation("No daily index published for {Date:yyyy-MM-dd}", date);
             return [];

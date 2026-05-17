@@ -63,6 +63,33 @@ public class SecEdgarClientGetDailyIndexTests
         entries.Should().NotContain(e => e.Cik == "ABCDEFG");
     }
 
+    // SEC returns 403 (Forbidden), not 404, for not-yet-published / future-dated
+    // daily-index files (e.g. "today" before the index is posted, weekends).
+    // GetDailyIndex must treat that as "no index for this day" and return empty
+    // — a throw here kills the entire near-real-time 13F sweep every cycle.
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.NotFound)]
+    public async Task GetDailyIndex_NoIndexForDate_ReturnsEmptyInsteadOfThrowing(
+        HttpStatusCode status
+    )
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" }
+            )
+            .Build();
+        var sut = new SecEdgarClient(
+            new HttpClient(new StatusStubHandler(status)),
+            Substitute.For<ILogger<SecEdgarClient>>(),
+            config
+        );
+
+        var entries = await sut.GetDailyIndex(new DateOnly(2026, 5, 17));
+
+        entries.Should().BeEmpty();
+    }
+
     private sealed class StubHandler : HttpMessageHandler
     {
         private readonly string _body;
@@ -76,5 +103,17 @@ public class SecEdgarClientGetDailyIndexTests
             Task.FromResult(
                 new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(_body) }
             );
+    }
+
+    private sealed class StatusStubHandler : HttpMessageHandler
+    {
+        private readonly HttpStatusCode _status;
+
+        public StatusStubHandler(HttpStatusCode status) => _status = status;
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        ) => Task.FromResult(new HttpResponseMessage(_status));
     }
 }
