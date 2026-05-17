@@ -77,6 +77,13 @@ builder.Services.Configure<Equibles.Cboe.HostedService.Configuration.CboeScraper
     builder.Configuration.GetSection("CboeScraper")
 );
 
+// Without this bind, IOptions<EmbeddingConfig> is always default (Enabled=false),
+// so GenerateEmbeddingBatch short-circuits and no embeddings are ever produced —
+// the entire worker-embedding profile is inert.
+builder.Services.Configure<Equibles.Sec.BusinessLogic.Embeddings.EmbeddingConfig>(
+    builder.Configuration.GetSection("Embedding")
+);
+
 builder.Services.AddHttpClient();
 
 // AutoWire OSS business logic services
