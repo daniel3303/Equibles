@@ -72,11 +72,41 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             return false;
         }
 
+        var sanitized = SanitizeXml(xmlContent);
+
+        // Pre-XML-era ownership filings (Forms 3/4/5 before SEC mandated XML around
+        // mid-2003) are PEM/SGML text with no <ownershipDocument> root, so XML parsing
+        // always fails with "Data at the root level is invalid". They are unsupported
+        // by design — skip them quietly instead of reporting a guaranteed error per file.
+        if (!sanitized.Contains("<ownershipDocument", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogDebug(
+                "Skipping legacy non-XML ownership filing for {Ticker} - {AccessionNumber}",
+                companyTicker,
+                filing.AccessionNumber
+            );
+            return false;
+        }
+
         // Parse XML
         XDocument doc;
         try
         {
-            doc = XDocument.Parse(SanitizeXml(xmlContent));
+            doc = XDocument.Parse(sanitized);
+        }
+        catch (System.Xml.XmlException ex)
+        {
+            // Many legacy ownership filings are technically <ownershipDocument> XML
+            // but malformed (broken <footnote>, unescaped entities, mismatched tags).
+            // These are expected, non-actionable, and historically numerous — skip
+            // quietly instead of flooding the Errors table with one row per filing.
+            _logger.LogDebug(
+                ex,
+                "Skipping malformed ownership XML for {Ticker} - {AccessionNumber}",
+                companyTicker,
+                filing.AccessionNumber
+            );
+            return false;
         }
         catch (Exception ex)
         {
