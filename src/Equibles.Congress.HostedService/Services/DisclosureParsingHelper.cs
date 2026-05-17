@@ -275,8 +275,9 @@ public static partial class DisclosureParsingHelper
             && parsed.Port == baseUri.Port;
     }
 
-    // Matches tickers in parentheses/brackets: (AAPL), [MSFT], case-insensitive
-    [GeneratedRegex(@"[\(\[]\s*([A-Za-z]{1,5})\s*[\)\]]")]
+    // Matches tickers in parentheses/brackets: (AAPL), [MSFT], case-insensitive,
+    // including a dotted class-share suffix: (BRK.B), [BF.B]
+    [GeneratedRegex(@"[\(\[]\s*([A-Za-z]{1,5}(?:\.[A-Za-z]{1,2})?)\s*[\)\]]")]
     public static partial Regex TickerRegex();
 
     // Matches dollar amounts: $1,001 — requires $ prefix to avoid false positives

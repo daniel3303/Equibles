@@ -10,7 +10,7 @@ public class DisclosureParsingHelperExtractTickerClassShareTests
     // disclosures; they must be extracted, not dropped. (Ambiguity: the regex
     // is deliberately [A-Za-z]{1,5}; but a caller relies on dotted class
     // tickers mapping, since otherwise those trades silently lose their stock.)
-    [Fact(Skip = "GH-785 — ExtractTickerFromAssetName drops dotted class-share tickers")]
+    [Fact]
     public void ExtractTickerFromAssetName_DottedClassShareTicker_ExtractsFullTicker()
     {
         var result = DisclosureParsingHelper.ExtractTickerFromAssetName(
