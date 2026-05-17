@@ -9,7 +9,7 @@ public class DisclosureParsingHelperIsValidUrlBoundaryTests
     // host. An attacker-registered domain that merely *prefixes* the expected
     // base ("...house.gov.evil.example") is NOT on the house.gov origin and
     // must be rejected, or the guard is an SSRF bypass.
-    [Fact(Skip = "GH-750 — IsValidDisclosureUrl StartsWith allows prefix-domain bypass")]
+    [Fact]
     public void IsValidDisclosureUrl_AttackerDomainWithBaseAsPrefix_ReturnsFalse()
     {
         var result = DisclosureParsingHelper.IsValidDisclosureUrl(
