@@ -194,4 +194,26 @@ public class ListConversionStepTests
 
         result.Should().NotBeNull();
     }
+
+    // Contract: converting an item-list wrapper must preserve the item's
+    // content. The fallback branch's own comment says "use all content except
+    // bullet spans", so an item whose content is a hyperlink (no inline
+    // content div, no spans) must not produce an empty <li> — that silently
+    // discards an exhibit reference, exactly the kind of anchor-only list
+    // entry SEC exhibit indexes use.
+    [Fact(Skip = "GH-745 — ListConversionStep drops anchor-only item content")]
+    public void WrapperWithAnchorContentNoSpan_PreservesAnchorContentInLi()
+    {
+        var input = """
+            <div class="item-list-element-wrapper">
+              <span>•</span>
+              <a href="#ex101">Exhibit 10.1</a>
+            </div>
+            """;
+
+        var result = Execute(input);
+
+        result.Should().Contain("<li>");
+        result.Should().Contain("Exhibit 10.1");
+    }
 }
