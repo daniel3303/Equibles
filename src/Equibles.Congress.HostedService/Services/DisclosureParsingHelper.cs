@@ -252,9 +252,13 @@ public static partial class DisclosureParsingHelper
         if (matches.Count == 1)
         {
             long.TryParse(matches[0].Groups[1].Value.Replace(",", ""), out var val);
-            return amount.Contains("Over", StringComparison.OrdinalIgnoreCase)
-                ? (val, val)
-                : (0, val);
+            // A single amount is an open-ended lower bound when phrased as
+            // "Over $X" or the House top bracket "$X +" (>= $X) — both map to
+            // (val, val). Otherwise it is an upper bound, e.g. "Under $X".
+            var isOpenTopBracket =
+                amount.Contains("Over", StringComparison.OrdinalIgnoreCase)
+                || amount.TrimEnd().EndsWith('+');
+            return isOpenTopBracket ? (val, val) : (0, val);
         }
 
         return (0, 0);

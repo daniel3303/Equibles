@@ -9,7 +9,7 @@ public class DisclosureParsingHelperParseAmountRangeOpenTopTests
     // (>= $50M) — semantically identical to "Over $50,000,000", which the
     // existing pin maps to (val, val). So `from` must be 50,000,000, not 0;
     // returning (0, 50M) inverts the position (claims it is AT MOST $50M).
-    [Fact(Skip = "GH-780 — ParseAmountRange mishandles '$X +' open-top bracket")]
+    [Fact]
     public void ParseAmountRange_PlusSuffixOpenTopBracket_LowerBoundIsTheValue()
     {
         var (from, _) = DisclosureParsingHelper.ParseAmountRange("$50,000,000 +");
