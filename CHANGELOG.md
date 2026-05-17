@@ -7,6 +7,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+
+- Embedding service healthcheck used `curl`, which is not present in the
+  `ollama/ollama` image, leaving the container permanently `unhealthy` and
+  preventing `embedding-pull` / `worker-embedding` (and thus the entire vector
+  embedding profile) from starting. Switched the probe to `ollama list`.
+
 ## [1.0.0] — 2026-05-15
 
 First tagged release.
