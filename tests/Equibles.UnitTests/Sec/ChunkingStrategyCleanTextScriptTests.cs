@@ -11,7 +11,7 @@ public class ChunkingStrategyCleanTextScriptTests
     // document text that gets embedded into RAG / public search. A caller
     // relies on script source NOT leaking through — minified JS in a filing's
     // boilerplate must not become searchable "content".
-    [Fact(Skip = "GH-752 — CleanText leaks <script>/<style> source via TextContent")]
+    [Fact]
     public void CleanText_ScriptElement_DoesNotLeakScriptSourceIntoOutput()
     {
         var result = _strategy.CleanText(
