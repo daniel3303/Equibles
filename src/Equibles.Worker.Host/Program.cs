@@ -76,6 +76,7 @@ builder.Services.Configure<Equibles.Cftc.HostedService.Configuration.CftcScraper
 builder.Services.Configure<Equibles.Cboe.HostedService.Configuration.CboeScraperOptions>(
     builder.Configuration.GetSection("CboeScraper")
 );
+
 // Without this bind, IOptions<EmbeddingConfig> is always default (Enabled=false),
 // so GenerateEmbeddingBatch short-circuits and no embeddings are ever produced —
 // the entire worker-embedding profile is inert.
