@@ -6,5 +6,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
     <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.Messaging\Equibles.Messaging.csproj" />
   </ItemGroup>
 </Project>

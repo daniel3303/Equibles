@@ -87,5 +87,6 @@
     <ProjectReference Include="..\..\src\Equibles.Cboe.HostedService\Equibles.Cboe.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Migrations\Equibles.Migrations.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Mcp.Server\Equibles.Mcp.Server.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Messaging\Equibles.Messaging.csproj" />
   </ItemGroup>
 </Project>

@@ -4,6 +4,8 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Exceptions;
 using Equibles.IntegrationTests.Helpers;
+using MassTransit;
+using NSubstitute;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
@@ -14,7 +16,10 @@ public class CommonStockManagerCreateWhitespaceTickerTests
     public CommonStockManagerCreateWhitespaceTickerTests()
     {
         var context = TestDbContextFactory.Create(new CommonStocksModuleConfiguration());
-        _sut = new CommonStockManager(new CommonStockRepository(context));
+        _sut = new CommonStockManager(
+            new CommonStockRepository(context),
+            Substitute.For<IPublishEndpoint>()
+        );
     }
 
     // Contract: "Ticker is required". Ticker is also the globally-unique key
