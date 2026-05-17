@@ -201,7 +201,7 @@ public class ListConversionStepTests
     // content div, no spans) must not produce an empty <li> — that silently
     // discards an exhibit reference, exactly the kind of anchor-only list
     // entry SEC exhibit indexes use.
-    [Fact(Skip = "GH-745 — ListConversionStep drops anchor-only item content")]
+    [Fact]
     public void WrapperWithAnchorContentNoSpan_PreservesAnchorContentInLi()
     {
         var input = """

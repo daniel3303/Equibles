@@ -23,7 +23,7 @@ public class ErrorManagerCreateSurrogateTruncationTests
     // must yield a valid string. Index-slicing at 512 must not split a
     // surrogate pair (emoji/non-BMP chars are common in exception text) into a
     // dangling lone surrogate.
-    [Fact(Skip = "GH-774 — ErrorManager.Create truncation splits surrogate pairs")]
+    [Fact]
     public async Task Create_MessageTruncationAtSurrogatePair_DoesNotLeaveLoneSurrogate()
     {
         // 511 'a' + "😀" (U+1F600, 2 UTF-16 units) => length 513; a raw [..512]
