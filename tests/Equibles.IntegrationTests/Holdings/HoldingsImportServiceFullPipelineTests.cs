@@ -214,6 +214,51 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         holder.City.Should().Be("Omaha");
     }
 
+    // ── Cold-start CUSIP race (GH-817) ─────────────────────────────────
+
+    [Fact]
+    public async Task ImportDataSet_NoTrackedStockHasMatchingCusip_IsNotComplete_SoDataSetIsRetriedNotMarkedProcessed()
+    {
+        // GH-817: on a cold start the FTD scraper hasn't seeded CUSIPs yet, so
+        // no tracked CommonStock has a Cusip and BuildCusipMapping maps nothing.
+        // That must NOT be reported as a completed import — otherwise the
+        // worker marks the data set processed and never backfills it once
+        // CUSIPs are seeded. Contract: submissions still parse (SubmissionCount
+        // > 0) but IsComplete is false, and nothing is persisted.
+        // No CommonStock is seeded here (mirrors the cold-start DB state).
+        var submission =
+            "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
+            + "13F-HR\tACC-777\t2026-05-15\t2026-03-31\t0001067983\n";
+        var coverPage =
+            "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\tFILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\n"
+            + "ACC-777\tN\tBerkshire Hathaway\tOmaha\tNE\t028-12345\t12345\n";
+        var infoTable =
+            "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMT\tSSHPRNAMTTYPE\tPUTCALL\tINVESTMENTDISCRETION\tVOTING_AUTH_SOLE\tVOTING_AUTH_SHARED\tVOTING_AUTH_NONE\tTITLEOFCLASS\tOTHERMANAGER\n"
+            + "ACC-777\t037833100\t1000\tSH\t\tSOLE\t1000\t0\t0\tCOM\t\n";
+
+        using var archive = BuildArchive(
+            ("SUBMISSION.tsv", submission),
+            ("COVERPAGE.tsv", coverPage),
+            ("INFOTABLE.tsv", infoTable)
+        );
+
+        var sut = CreateImporter(
+            PriceProviderReturning(new Dictionary<(Guid, DateOnly), decimal>())
+        );
+
+        var result = await sut.ImportDataSet(
+            archive,
+            new DateOnly(2025, 1, 1),
+            CancellationToken.None
+        );
+
+        result.SubmissionCount.Should().Be(1);
+        result.IsComplete.Should().BeFalse();
+
+        using var verify = FreshContext();
+        (await verify.Set<InstitutionalHolding>().CountAsync()).Should().Be(0);
+    }
+
     // ── Price missing ──────────────────────────────────────────────────
 
     [Fact]
