@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y curl && \
     apt-get install -y nodejs
 
 COPY Directory.Build.props Directory.Packages.props ./
+COPY CHANGELOG.md ./
 COPY src/ src/
 
 WORKDIR /src/src/Equibles.Web

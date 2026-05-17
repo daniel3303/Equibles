@@ -44,6 +44,7 @@ services:
       Finra__ClientId: ${Finra__ClientId:-}
       Fred__ApiKey: ${Fred__ApiKey:-}
       MinimumLogLevel: ${MINIMUM_LOG_LEVEL:-Warning}
+      CheckForUpdates: ${CHECK_FOR_UPDATES:-true}
     volumes:
       - web-keys:/app/keys
     depends_on:
