@@ -12,7 +12,7 @@ public class SecEdgarClientMapToFilingDataCultureTests
     // culture-independent: ar-SA defaults to the Umm al-Qura (Hijri) calendar,
     // where culture-sensitive DateOnly.TryParse fails on an ISO string — a
     // Worker there would stamp every SEC filing with DateOnly.MinValue.
-    [Fact(Skip = "GH-776 — MapToFilingData ISO date parse fails under Hijri culture")]
+    [Fact]
     public void MapToFilingData_IsoDatesUnderHijriCulture_MapsToGregorianDates()
     {
         var original = CultureInfo.CurrentCulture;
