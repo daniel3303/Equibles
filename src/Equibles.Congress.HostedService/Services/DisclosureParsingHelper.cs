@@ -181,13 +181,17 @@ public static partial class DisclosureParsingHelper
     {
         if (string.IsNullOrWhiteSpace(text))
             return null;
-        if (DateOnly.TryParse(text, out var d))
+        // Congressional disclosure dates are US MM/dd/yyyy. Parsing with the
+        // host culture misreads "03/04/2025" as 3 April under en-GB/de-DE, so
+        // pin US culture (and an invariant exact-format fallback).
+        var us = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+        if (DateOnly.TryParse(text, us, System.Globalization.DateTimeStyles.None, out var d))
             return d;
         if (
             DateOnly.TryParseExact(
                 text,
                 "MM/dd/yyyy",
-                null,
+                System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None,
                 out d
             )

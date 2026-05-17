@@ -9,7 +9,7 @@ public class DisclosureParsingHelperParseDateCultureTests
     // the US MM/dd/yyyy convention. "03/04/2025" is March 4, 2025 regardless
     // of the host machine's culture — a Worker deployed under en-GB/de-DE must
     // not silently read it as April 3.
-    [Fact(Skip = "GH-747 — ParseDate uses CurrentCulture, misreads US dates")]
+    [Fact]
     public void ParseDate_UsFormatUnderNonUsCulture_InterpretsAsMonthDayYear()
     {
         var original = CultureInfo.CurrentCulture;
