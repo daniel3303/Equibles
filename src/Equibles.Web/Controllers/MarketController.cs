@@ -77,7 +77,13 @@ public class MarketController : BaseController
     [HttpGet("~/Market/PutCallRatio/{type}")]
     public async Task<IActionResult> PutCallRatio(string type)
     {
-        if (!Enum.TryParse<CboePutCallRatioType>(type, true, out var ratioType))
+        // Enum.TryParse accepts any numeric string in range (e.g. "999" -> an
+        // undefined enum), so pair it with Enum.IsDefined to reject values that
+        // map to no named member.
+        if (
+            !Enum.TryParse<CboePutCallRatioType>(type, true, out var ratioType)
+            || !Enum.IsDefined(ratioType)
+        )
             return NotFound();
 
         var records = await _putCallRepository

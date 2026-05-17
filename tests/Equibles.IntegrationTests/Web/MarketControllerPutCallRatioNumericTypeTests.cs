@@ -10,7 +10,7 @@ namespace Equibles.IntegrationTests.Web;
 
 public class MarketControllerPutCallRatioNumericTypeTests
 {
-    [Fact(Skip = "GH-716 — PutCallRatio numeric type string slips past Enum.TryParse and 500s")]
+    [Fact]
     public async Task PutCallRatio_NumericTypeStringNotADefinedEnum_ReturnsNotFound()
     {
         // Contract: an unknown ratio type must yield 404 (pinned for alphabetic input

@@ -187,7 +187,9 @@ public class CongressionalTradeSyncService
             .Set<CongressMember>()
             .UpsertRange(distinctMembers)
             .On(m => new { m.Name })
-            .WhenMatched(m => new CongressMember { Position = m.Position })
+            .WhenMatched(
+                (existing, incoming) => new CongressMember { Position = incoming.Position }
+            )
             .RunAsync(ct);
 
         var memberNames = distinctMembers.Select(m => m.Name).ToList();

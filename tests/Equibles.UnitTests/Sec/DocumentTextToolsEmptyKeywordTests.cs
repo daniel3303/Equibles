@@ -18,7 +18,7 @@ public class DocumentTextToolsEmptyKeywordTests
     // (Ambiguity: empty keyword could be argued a caller error — but it must
     // never produce an unbounded loop / DoS.) Timeout-bounded so the harness
     // can't hang; exceeding it is the failure signal.
-    [Fact(Timeout = 2000, Skip = "GH-700 — HighlightKeyword infinite-loops on empty keyword")]
+    [Fact(Timeout = 2000)]
     public async Task HighlightKeyword_EmptyKeyword_ReturnsLineUnchangedWithoutHanging()
     {
         var result = await Task.Run(() => (string)HighlightKeywordMethod.Invoke(null, ["abc", ""]));

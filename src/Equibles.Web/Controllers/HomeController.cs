@@ -17,6 +17,11 @@ public class HomeController : BaseController
     public IActionResult Error(int? statusCode = null)
     {
         var code = statusCode ?? 500;
+        // The route value is echoed onto Response.StatusCode; an out-of-range
+        // value (e.g. 0) makes Kestrel emit a malformed status line. HTTP status
+        // codes are constrained to 100-599 (RFC 9110) — fall back to 500.
+        if (code < 100 || code > 599)
+            code = 500;
         Response.StatusCode = code;
         ViewData["Title"] = code switch
         {

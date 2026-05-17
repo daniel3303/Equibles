@@ -2,6 +2,7 @@ using Equibles.Core.Extensions;
 using Equibles.Fred.Data.Models;
 using Equibles.Fred.Repositories;
 using Equibles.Web.Controllers.Abstract;
+using Equibles.Web.Extensions;
 using Equibles.Web.ViewModels.EconomicData;
 using MathNet.Numerics.Statistics;
 using Microsoft.AspNetCore.Mvc;
@@ -103,11 +104,11 @@ public class EconomicDataController : BaseController
         if (values.Length > 0)
         {
             var stats = new DescriptiveStatistics(values);
-            viewModel.Mean = (decimal)Math.Round(stats.Mean, 4);
-            viewModel.Min = (decimal)stats.Minimum;
-            viewModel.Max = (decimal)stats.Maximum;
-            viewModel.Median = (decimal)Math.Round(values.Median(), 4);
-            viewModel.StdDev = (decimal)Math.Round(stats.StandardDeviation, 4);
+            viewModel.Mean = stats.Mean.SafeRound(4);
+            viewModel.Min = stats.Minimum.SafeRound(4);
+            viewModel.Max = stats.Maximum.SafeRound(4);
+            viewModel.Median = values.Median().SafeRound(4);
+            viewModel.StdDev = stats.StandardDeviation.SafeRound(4);
             viewModel.LatestValue = observations[0].Value; // observations are desc by date
             if (observations.Count > 1)
                 viewModel.PreviousValue = observations[1].Value;

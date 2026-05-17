@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Encodings.Web;
 using Equibles.Cftc.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Xunit;
@@ -57,11 +58,15 @@ public class CftcIndexViewRenderingTests
                 "/futures/067651",
                 "asp-action=\"Show\" must resolve to the (lowercased) Show route, not an empty href"
             );
-        // N0 uses the host culture's group separator (a non-breaking space here),
-        // HTML-encoded by Razor as &#xA0; — pins the CommercialNet.HasValue branch.
+        // N0 uses the host culture's group separator, HTML-encoded by Razor.
+        // The separator char is ICU/culture-dependent (U+00A0 vs U+202F across
+        // runtimes), so compute the expected token with the same encoder Razor
+        // uses instead of hardcoding one separator — pins the
+        // CommercialNet.HasValue branch.
+        var expectedCommercialNet = HtmlEncoder.Default.Encode(200_000.ToString("N0"));
         html.Should()
             .Contain(
-                "200&#xA0;000",
+                expectedCommercialNet,
                 "CommercialNet (CommLong - CommShort = 200000) must render formatted N0"
             );
     }

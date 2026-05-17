@@ -67,12 +67,20 @@ public static class SecDocumentEnvelopeParser
             return false;
         if (value[0] == '.')
             return false;
+        // Enforce the bare-name allowlist rather than blocklisting only literal
+        // separators: a name containing '%' (URL-encoded '../' = %2e%2e%2f) is
+        // not a bare name and the remote server decodes it back to a traversal.
         foreach (var ch in value)
         {
-            if (ch == '/' || ch == '\\')
+            if (!IsBareNameChar(ch))
                 return false;
         }
         return true;
+    }
+
+    private static bool IsBareNameChar(char ch)
+    {
+        return char.IsAsciiLetterOrDigit(ch) || ch == '.' || ch == '_' || ch == '-';
     }
 
     private static bool TryExtractSgmlTagValue(string block, string tagName, out string value)
