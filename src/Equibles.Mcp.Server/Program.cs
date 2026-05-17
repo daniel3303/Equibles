@@ -67,6 +67,12 @@ public partial class Program
         builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();
         builder.Services.AutoWireServicesFrom<Equibles.Sec.BusinessLogic.Search.RagManager>();
 
+        // Required for RAG search to embed the query at request time; without this
+        // bind EmbeddingConfig is default (Enabled=false) and semantic search is inert.
+        builder.Services.Configure<Equibles.Sec.BusinessLogic.Embeddings.EmbeddingConfig>(
+            builder.Configuration.GetSection("Embedding")
+        );
+
         builder.Services.AddEquiblesMcp(mcp =>
         {
             mcp.AddHoldings();
