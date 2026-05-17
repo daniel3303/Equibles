@@ -30,36 +30,46 @@ public class Filing13FXmlParser
         if (root == null)
             throw new FormatException("primary_doc.xml has no root element");
 
+        // Scope every lookup to its structural parent. Several local names
+        // (cik, form13FFileNumber, name) legitimately recur elsewhere in the
+        // document — under headerData vs an otherManager block — so an
+        // unscoped first-match would silently grab the wrong element.
+        var headerData = Descendant(root, "headerData");
         var coverPage = Descendant(root, "coverPage");
         var filingManager = coverPage == null ? null : Descendant(coverPage, "filingManager");
         var address = filingManager == null ? null : Descendant(filingManager, "address");
 
-        var xmlCik = Value(Descendant(root, "cik"));
+        var xmlCik = headerData == null ? null : Value(Descendant(headerData, "cik"));
 
         var filing = new Parsed13FFiling
         {
             AccessionNumber = accessionNumber,
             Cik = string.IsNullOrEmpty(xmlCik) ? cik?.TrimStart('0') : xmlCik.TrimStart('0'),
             FilingDate = filingDate,
-            PeriodOfReport = ParseSecDate(Value(Descendant(root, "reportCalendarOrQuarter"))),
-            IsAmendment = IsAmendmentValue(Value(Descendant(root, "isAmendment"))),
-            FilingManagerName = Value(filingManager == null ? null : Child(filingManager, "name")),
-            City = Value(address == null ? null : Descendant(address, "city")),
-            StateOrCountry = Value(
-                address == null ? null : Descendant(address, "stateOrCountry")
+            PeriodOfReport = ParseSecDate(
+                Value(coverPage == null ? null : Descendant(coverPage, "reportCalendarOrQuarter"))
             ),
-            Form13FFileNumber = Value(Descendant(root, "form13FFileNumber")),
-            CrdNumber = Value(Descendant(root, "crdNumber")),
+            IsAmendment = IsAmendmentValue(
+                Value(coverPage == null ? null : Descendant(coverPage, "isAmendment"))
+            ),
+            FilingManagerName = Value(filingManager == null ? null : Child(filingManager, "name")),
+            City = Value(address == null ? null : Child(address, "city")),
+            StateOrCountry = Value(address == null ? null : Child(address, "stateOrCountry")),
+            Form13FFileNumber = Value(
+                coverPage == null ? null : Descendant(coverPage, "form13FFileNumber")
+            ),
+            CrdNumber = Value(coverPage == null ? null : Descendant(coverPage, "crdNumber")),
         };
 
-        foreach (var otherManager2 in Descendants(root, "otherManager2"))
+        var otherManagersScope = coverPage ?? root;
+        foreach (var otherManager2 in Descendants(otherManagersScope, "otherManager2"))
         {
-            var seqText = Value(Descendant(otherManager2, "sequenceNumber"));
+            var seqText = Value(Child(otherManager2, "sequenceNumber"));
             if (!int.TryParse(seqText, out var seq))
                 continue;
 
-            var inner = Descendant(otherManager2, "otherManager");
-            var name = Value(inner == null ? null : Descendant(inner, "name"));
+            var inner = Child(otherManager2, "otherManager");
+            var name = Value(inner == null ? null : Child(inner, "name"));
             if (!string.IsNullOrEmpty(name))
                 filing.OtherManagers[seq] = name;
         }
@@ -82,40 +92,51 @@ public class Filing13FXmlParser
         if (root == null)
             return holdings;
 
-        foreach (var info in Descendants(root, "infoTable"))
+        // infoTable rows are flat direct children of the table root. Use
+        // direct-child traversal so a field is never read from a sibling row
+        // (recursive Descendants would cross row boundaries if the schema ever
+        // nested). Fall back to a recursive scan only if the root is wrapped.
+        var rows = Children(root, "infoTable").ToList();
+        if (rows.Count == 0)
+            rows = Descendants(root, "infoTable").ToList();
+
+        foreach (var info in rows)
         {
-            var amount = Descendant(info, "shrsOrPrnAmt");
-            var voting = Descendant(info, "votingAuthority");
+            var amount = Child(info, "shrsOrPrnAmt");
+            var voting = Child(info, "votingAuthority");
 
             holdings.Add(
                 new Parsed13FHolding
                 {
-                    Cusip = Value(Descendant(info, "cusip")),
-                    TitleOfClass = Value(Descendant(info, "titleOfClass")),
-                    ShareType = Value(
-                        amount == null ? null : Descendant(amount, "sshPrnamtType")
-                    ),
-                    Shares = ParseLong(
-                        Value(amount == null ? null : Descendant(amount, "sshPrnamt"))
-                    ),
-                    PutCall = Value(Descendant(info, "putCall")),
-                    InvestmentDiscretion = Value(Descendant(info, "investmentDiscretion")),
+                    Cusip = Value(Child(info, "cusip")),
+                    TitleOfClass = Value(Child(info, "titleOfClass")),
+                    ShareType = Value(amount == null ? null : Child(amount, "sshPrnamtType")),
+                    Shares = ParseLong(Value(amount == null ? null : Child(amount, "sshPrnamt"))),
+                    PutCall = Value(Child(info, "putCall")),
+                    InvestmentDiscretion = Value(Child(info, "investmentDiscretion")),
                     VotingAuthSole = ParseLong(
-                        Value(voting == null ? null : Descendant(voting, "Sole"))
+                        Value(voting == null ? null : Child(voting, "Sole"))
                     ),
                     VotingAuthShared = ParseLong(
-                        Value(voting == null ? null : Descendant(voting, "Shared"))
+                        Value(voting == null ? null : Child(voting, "Shared"))
                     ),
                     VotingAuthNone = ParseLong(
-                        Value(voting == null ? null : Descendant(voting, "None"))
+                        Value(voting == null ? null : Child(voting, "None"))
                     ),
-                    OtherManagerNumber = ParseFirstInt(Value(Descendant(info, "otherManager"))),
+                    OtherManagerNumber = ParseFirstInt(Value(Child(info, "otherManager"))),
                 }
             );
         }
 
         return holdings;
     }
+
+    private static IEnumerable<XElement> Children(XElement parent, string localName) =>
+        parent
+            .Elements()
+            .Where(e =>
+                string.Equals(e.Name.LocalName, localName, StringComparison.OrdinalIgnoreCase)
+            );
 
     private static XElement Descendant(XElement parent, string localName) =>
         parent

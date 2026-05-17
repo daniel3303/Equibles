@@ -22,5 +22,6 @@ public class HoldingsModuleConfiguration : Equibles.Data.IModuleConfiguration
             .AreNullsDistinct(false);
 
         builder.Entity<ProcessedDataSet>();
+        builder.Entity<ProcessedFiling>();
     }
 }

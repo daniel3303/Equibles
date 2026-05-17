@@ -142,7 +142,16 @@ public class HoldingsImportService
 
         foreach (var group in byCikAndPeriod)
         {
-            var latest = group.OrderByDescending(s => s.FilingDate).First();
+            // FilingDate is day-granular (and, on the real-time path, derived
+            // from the daily-index date), so an original and its same-day
+            // amendment can tie. Break ties by accession number — SEC assigns
+            // these monotonically per filer agent, so the lexicographically
+            // greatest accession is the later submission. Without this the
+            // winner is nondeterministic and an amendment can be dropped.
+            var latest = group
+                .OrderByDescending(s => s.FilingDate, StringComparer.Ordinal)
+                .ThenByDescending(s => s.AccessionNumber, StringComparer.Ordinal)
+                .First();
 
             foreach (var s in group.Where(s => s.AccessionNumber != latest.AccessionNumber))
             {
