@@ -4,6 +4,8 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Exceptions;
 using Equibles.IntegrationTests.Helpers;
+using MassTransit;
+using NSubstitute;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
@@ -16,7 +18,7 @@ public class CommonStockManagerTests
     {
         var context = TestDbContextFactory.Create(new CommonStocksModuleConfiguration());
         _repository = new CommonStockRepository(context);
-        _sut = new CommonStockManager(_repository);
+        _sut = new CommonStockManager(_repository, Substitute.For<IPublishEndpoint>());
     }
 
     private static CommonStock MakeStock(

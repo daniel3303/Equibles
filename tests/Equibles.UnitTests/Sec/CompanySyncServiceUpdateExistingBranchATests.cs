@@ -15,6 +15,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Xunit;
+using MassTransit;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -73,7 +74,7 @@ public class CompanySyncServiceUpdateExistingBranchATests
         );
         Set("SecondaryCikToParent", new Dictionary<string, CommonStock>());
         Set("CommonStockRepository", new CommonStockRepository(db));
-        Set("CommonStockManager", new CommonStockManager(new CommonStockRepository(db)));
+        Set("CommonStockManager", new CommonStockManager(new CommonStockRepository(db), Substitute.For<IPublishEndpoint>()));
         Set("DbContext", db);
         return s;
     }
