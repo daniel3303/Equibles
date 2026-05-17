@@ -335,6 +335,122 @@ public class SecEdgarClient : ISecEdgarClient
         return await response.Content.ReadAsStreamAsync();
     }
 
+    public async Task<List<EdgarDailyIndexEntry>> GetDailyIndex(
+        DateOnly date,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var quarter = (date.Month - 1) / 3 + 1;
+
+        // Use the pipe-delimited master index, not the space-padded form.idx:
+        // company names contain spaces and CIK is right-aligned in the legacy
+        // fixed-width layout, so column-offset parsing is fragile. The master
+        // index is unambiguous: CIK|Company Name|Form Type|Date Filed|File Name.
+        var url =
+            $"{FilesBaseUrl}/Archives/edgar/daily-index/{date.Year}/QTR{quarter}/master.{date:yyyyMMdd}.idx";
+
+        using var response = await SendWithRetryAsync(url, cancellationToken);
+
+        // Non-publishing days (weekends, federal holidays) have no index file.
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            _logger.LogInformation("No daily index published for {Date:yyyy-MM-dd}", date);
+            return [];
+        }
+
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        return ParseMasterIndex(content, date);
+    }
+
+    /// <summary>
+    /// Parses the pipe-delimited <c>master.idx</c> body
+    /// (<c>CIK|Company Name|Form Type|Date Filed|File Name</c>), keeping only
+    /// 13F-HR / 13F-HR/A rows with an all-digit CIK.
+    /// </summary>
+    private static List<EdgarDailyIndexEntry> ParseMasterIndex(
+        string content,
+        DateOnly fallbackDate
+    )
+    {
+        var entries = new List<EdgarDailyIndexEntry>();
+
+        foreach (var rawLine in content.Split('\n'))
+        {
+            var line = rawLine.Trim();
+            if (line.Length == 0)
+                continue;
+
+            var fields = line.Split('|');
+            if (fields.Length < 5)
+                continue;
+
+            var cik = fields[0].Trim();
+            var company = fields[1].Trim();
+            var formType = fields[2].Trim();
+            var dateFiled = fields[3].Trim();
+            var fileName = fields[4].Trim();
+
+            if (!formType.StartsWith("13F-HR", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            // Header/preamble rows ("CIK", "Company Name", dashes) fail this.
+            if (cik.Length == 0 || !cik.All(char.IsDigit))
+                continue;
+
+            // edgar/data/{cik}/{accession-with-dashes}.txt → accession number
+            var accession = Path.GetFileNameWithoutExtension(fileName);
+            if (string.IsNullOrEmpty(accession))
+                continue;
+
+            entries.Add(
+                new EdgarDailyIndexEntry
+                {
+                    FormType = formType,
+                    CompanyName = company,
+                    Cik = cik,
+                    DateFiled = DateOnly.TryParse(dateFiled, out var d) ? d : fallbackDate,
+                    AccessionNumber = accession,
+                }
+            );
+        }
+
+        return entries;
+    }
+
+    public async Task<List<string>> GetFilingArtifactNames(
+        string cik,
+        string accessionNumber,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (string.IsNullOrEmpty(cik) || string.IsNullOrEmpty(accessionNumber))
+            throw new ArgumentException("cik and accessionNumber are required");
+
+        var unpaddedCik = cik.TrimStart('0');
+        var accessionNoDashes = accessionNumber.Replace("-", string.Empty);
+        var url =
+            $"{FilesBaseUrl}/Archives/edgar/data/{unpaddedCik}/{accessionNoDashes}/index.json";
+
+        using var response = await SendWithRetryAsync(url, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            _logger.LogWarning("Filing index not found at {Url}", url);
+            return [];
+        }
+
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        var index = JsonConvert.DeserializeObject<FilingIndexResponse>(content);
+
+        return index
+                ?.Directory?.Item?.Where(item => !string.IsNullOrEmpty(item.Name))
+                .Select(item => item.Name)
+                .ToList()
+            ?? [];
+    }
+
     private Task<HttpResponseMessage> SendWithRetryAsync(
         string url,
         CancellationToken cancellationToken = default

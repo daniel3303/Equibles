@@ -32,4 +32,26 @@ public interface ISecEdgarClient
     /// Use this for any SEC download (FTD files, 13F data sets, etc.).
     /// </summary>
     Task<Stream> DownloadStream(string url);
+
+    /// <summary>
+    /// Fetches SEC EDGAR's daily form index for a single calendar day — every
+    /// submission accepted that day, by any filer. Returns an empty list for
+    /// non-publishing days (weekends/holidays → 404), so callers can sweep a
+    /// date range without special-casing.
+    /// </summary>
+    Task<List<EdgarDailyIndexEntry>> GetDailyIndex(
+        DateOnly date,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Lists the artifact file names inside a single filing via its
+    /// <c>index.json</c>. Used to locate <c>primary_doc.xml</c> and the
+    /// information-table XML of a 13F-HR submission.
+    /// </summary>
+    Task<List<string>> GetFilingArtifactNames(
+        string cik,
+        string accessionNumber,
+        CancellationToken cancellationToken = default
+    );
 }
