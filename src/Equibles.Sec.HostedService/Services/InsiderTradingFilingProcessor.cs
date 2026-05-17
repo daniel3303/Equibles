@@ -327,7 +327,18 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             ?.Element("value")
             ?.Value?.Trim();
 
-        if (!DateOnly.TryParse(transactionDateStr, out var transactionDate))
+        // Form 4 transactionDate is ISO yyyy-MM-dd (ownership XSD). Parse it
+        // culture-independently — under a non-Gregorian host culture (e.g.
+        // ar-SA Umm al-Qura) culture-sensitive TryParse fails and every
+        // insider transaction would be silently dropped.
+        if (
+            !DateOnly.TryParse(
+                transactionDateStr,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out var transactionDate
+            )
+        )
             return null;
 
         return new InsiderTransaction

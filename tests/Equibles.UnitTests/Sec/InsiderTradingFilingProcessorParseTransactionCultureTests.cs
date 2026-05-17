@@ -15,7 +15,7 @@ public class InsiderTradingFilingProcessorParseTransactionCultureTests
     // DateOnly.TryParse fails on an ISO string, and ParseTransaction returns
     // null on a failed date parse, so a Worker there silently drops EVERY
     // insider transaction.
-    [Fact(Skip = "GH-778 — ParseTransaction drops Form 4 tx on ISO date parse under Hijri culture")]
+    [Fact]
     public void ParseTransaction_IsoTransactionDateUnderHijriCulture_ReturnsTransaction()
     {
         var original = CultureInfo.CurrentCulture;
