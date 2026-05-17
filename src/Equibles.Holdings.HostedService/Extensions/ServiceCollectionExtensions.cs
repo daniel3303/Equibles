@@ -11,6 +11,7 @@ public static class ServiceCollectionExtensions
         services.AutoWireServicesFrom<HoldingsImportService>();
 
         services.AddHostedService<HoldingsScraperWorker>();
+        services.AddHostedService<Holdings13FRealtimeWorker>();
 
         return services;
     }

@@ -335,6 +335,135 @@ public class SecEdgarClient : ISecEdgarClient
         return await response.Content.ReadAsStreamAsync();
     }
 
+    public async Task<List<EdgarDailyIndexEntry>> GetDailyIndex(
+        DateOnly date,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var quarter = (date.Month - 1) / 3 + 1;
+        var url =
+            $"{FilesBaseUrl}/Archives/edgar/daily-index/{date.Year}/QTR{quarter}/form.{date:yyyyMMdd}.idx";
+
+        using var response = await SendWithRetryAsync(url, cancellationToken);
+
+        // Non-publishing days (weekends, federal holidays) have no index file.
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            _logger.LogInformation("No daily index published for {Date:yyyy-MM-dd}", date);
+            return [];
+        }
+
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        return ParseDailyIndex(content, date);
+    }
+
+    /// <summary>
+    /// Parses the fixed-width <c>form.idx</c> body. Column widths drift between
+    /// EDGAR's historical and current layouts, so positions are derived from the
+    /// header row rather than hard-coded. Company names contain spaces, so a
+    /// naive whitespace split is not safe — column offsets are mandatory.
+    /// </summary>
+    private static List<EdgarDailyIndexEntry> ParseDailyIndex(string content, DateOnly fallbackDate)
+    {
+        var lines = content.Split('\n');
+        var entries = new List<EdgarDailyIndexEntry>();
+
+        var headerIndex = Array.FindIndex(
+            lines,
+            l => l.TrimStart().StartsWith("Form Type", StringComparison.OrdinalIgnoreCase)
+        );
+        if (headerIndex < 0)
+            return entries;
+
+        var header = lines[headerIndex];
+        var companyAt = header.IndexOf("Company Name", StringComparison.OrdinalIgnoreCase);
+        var cikAt = header.IndexOf("CIK", StringComparison.OrdinalIgnoreCase);
+        var dateAt = header.IndexOf("Date Filed", StringComparison.OrdinalIgnoreCase);
+        var fileAt = header.IndexOf("File Name", StringComparison.OrdinalIgnoreCase);
+        if (companyAt < 0 || cikAt < 0 || dateAt < 0 || fileAt < 0)
+            return entries;
+
+        // Data rows start after the dashed separator line that follows the header.
+        var dataStart = headerIndex + 1;
+        while (dataStart < lines.Length && lines[dataStart].TrimStart().StartsWith('-'))
+            dataStart++;
+
+        for (var i = dataStart; i < lines.Length; i++)
+        {
+            var line = lines[i].TrimEnd('\r');
+            if (line.Length <= fileAt)
+                continue;
+
+            var formType = Slice(line, 0, companyAt).Trim();
+            if (!formType.StartsWith("13F-HR", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var company = Slice(line, companyAt, cikAt).Trim();
+            var cik = Slice(line, cikAt, dateAt).Trim();
+            var dateFiled = Slice(line, dateAt, fileAt).Trim();
+            var fileName = line[fileAt..].Trim();
+
+            // edgar/data/{cik}/{accession-with-dashes}.txt → accession number
+            var accession = Path.GetFileNameWithoutExtension(fileName);
+            if (string.IsNullOrEmpty(accession) || string.IsNullOrEmpty(cik))
+                continue;
+
+            entries.Add(
+                new EdgarDailyIndexEntry
+                {
+                    FormType = formType,
+                    CompanyName = company,
+                    Cik = cik,
+                    DateFiled = DateOnly.TryParse(dateFiled, out var d) ? d : fallbackDate,
+                    AccessionNumber = accession,
+                }
+            );
+        }
+
+        return entries;
+    }
+
+    private static string Slice(string line, int start, int end)
+    {
+        if (start >= line.Length)
+            return string.Empty;
+        end = Math.Min(end, line.Length);
+        return line[start..end];
+    }
+
+    public async Task<List<string>> GetFilingArtifactNames(
+        string cik,
+        string accessionNumber,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (string.IsNullOrEmpty(cik) || string.IsNullOrEmpty(accessionNumber))
+            throw new ArgumentException("cik and accessionNumber are required");
+
+        var unpaddedCik = cik.TrimStart('0');
+        var accessionNoDashes = accessionNumber.Replace("-", string.Empty);
+        var url =
+            $"{FilesBaseUrl}/Archives/edgar/data/{unpaddedCik}/{accessionNoDashes}/index.json";
+
+        using var response = await SendWithRetryAsync(url, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            _logger.LogWarning("Filing index not found at {Url}", url);
+            return [];
+        }
+
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        var index = JsonConvert.DeserializeObject<FilingIndexResponse>(content);
+
+        return index
+                ?.Directory?.Item?.Where(item => !string.IsNullOrEmpty(item.Name))
+                .Select(item => item.Name)
+                .ToList() ?? [];
+    }
+
     private Task<HttpResponseMessage> SendWithRetryAsync(
         string url,
         CancellationToken cancellationToken = default
