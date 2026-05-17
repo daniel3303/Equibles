@@ -56,7 +56,13 @@ public class ImageManager : IImageManager
 
         using var contentStream = new MemoryStream(content);
         using var imageProcessor = await SixLabors.ImageSharp.Image.LoadAsync(contentStream);
-        if (maxWidth != null || maxHeight != null)
+        // maxWidth/maxHeight are a *maximum* — only resize when the source
+        // actually exceeds them. A source already within bounds must not be
+        // enlarged (wastes storage and blurs the image).
+        var exceedsMaxBounds =
+            (maxWidth != null && imageProcessor.Width > maxWidth)
+            || (maxHeight != null && imageProcessor.Height > maxHeight);
+        if (exceedsMaxBounds)
         {
             imageProcessor.Mutate(i =>
                 i.Resize(maxWidth ?? 0, maxHeight ?? 0, new BicubicResampler())
