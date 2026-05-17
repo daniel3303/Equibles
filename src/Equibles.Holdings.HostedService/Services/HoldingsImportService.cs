@@ -62,8 +62,16 @@ public class HoldingsImportService
         var submissionCount = context.Submissions.Count;
         if (!await ParseCoverPages(context, cancellationToken))
             return new ImportResult(submissionCount, IsComplete: false);
-        if (!await BuildCusipMapping(context, cancellationToken))
+        var cusipResult = await BuildCusipMapping(context, cancellationToken);
+        if (cusipResult == CusipMappingOutcome.NoInfoTable)
+            // Structural: a missing INFOTABLE.tsv won't appear on re-download —
+            // terminal, mark processed so we don't loop on a broken archive.
             return new ImportResult(submissionCount, IsComplete: true);
+        if (cusipResult == CusipMappingOutcome.NoTrackedStocks)
+            // No tracked stock mapped — typically a cold start where the FTD
+            // scraper hasn't seeded CUSIPs yet. NOT terminal: leave the data
+            // set unprocessed so a later cycle backfills it once CUSIPs exist.
+            return new ImportResult(submissionCount, IsComplete: false);
         await BuildPriceMap(context, cancellationToken);
         await ParseOtherManagers(context, cancellationToken);
         await UpsertInstitutionalHolders(context, cancellationToken);
@@ -201,7 +209,17 @@ public class HoldingsImportService
         return true;
     }
 
-    private async Task<bool> BuildCusipMapping(
+    // Distinguishes a terminal structural failure (missing INFOTABLE) from a
+    // recoverable "no tracked CUSIPs yet" so the caller can decide whether the
+    // data set is permanently done or should be retried on a later cycle.
+    private enum CusipMappingOutcome
+    {
+        Mapped,
+        NoInfoTable,
+        NoTrackedStocks,
+    }
+
+    private async Task<CusipMappingOutcome> BuildCusipMapping(
         ImportContext context,
         CancellationToken cancellationToken
     )
@@ -210,7 +228,7 @@ public class HoldingsImportService
         if (infoTableEntry == null)
         {
             _logger.LogWarning("INFOTABLE.tsv not found in archive");
-            return false;
+            return CusipMappingOutcome.NoInfoTable;
         }
 
         var uniqueCusips = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -257,12 +275,14 @@ public class HoldingsImportService
 
         if (cusipMapping.Count == 0)
         {
-            _logger.LogInformation("No tracked stocks found for this data set, skipping");
-            return false;
+            _logger.LogInformation(
+                "No tracked stocks mapped for this data set (CUSIPs may not be seeded yet) — will retry on a later cycle"
+            );
+            return CusipMappingOutcome.NoTrackedStocks;
         }
 
         context.CusipMapping = cusipMapping;
-        return true;
+        return CusipMappingOutcome.Mapped;
     }
 
     /// <summary>
