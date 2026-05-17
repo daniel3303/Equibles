@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using Equibles.Core.AutoWiring;
 using Equibles.Sec.BusinessLogic.Tokenization;
@@ -84,6 +85,20 @@ public class ChunkingStrategy
         // Strip any residual HTML tags using AngleSharp
         var parser = new HtmlParser();
         using var document = parser.ParseDocument($"<body>{text}</body>");
+
+        // TextContent concatenates the text of ALL descendants — including
+        // raw-text elements (<script>/<style>) and comments. SEC EDGAR HTML
+        // routinely carries boilerplate inline JS/CSS; left in, its source
+        // pollutes embeddings and document search. Remove those nodes first.
+        foreach (var node in document.QuerySelectorAll("script, style").ToList())
+        {
+            node.Remove();
+        }
+        foreach (var comment in document.Body.Descendants<IComment>().ToList())
+        {
+            comment.Remove();
+        }
+
         text = document.Body.TextContent;
 
         text = Regex.Replace(text, @"\s+", " ");
