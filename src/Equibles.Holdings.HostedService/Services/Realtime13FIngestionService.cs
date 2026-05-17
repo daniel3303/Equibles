@@ -287,12 +287,7 @@ public class Realtime13FIngestionService
     {
         foreach (var name in OrderedInfoTableCandidates(artifacts))
         {
-            var xml = await DownloadText(
-                entry.Cik,
-                entry.AccessionNumber,
-                name,
-                cancellationToken
-            );
+            var xml = await DownloadText(entry.Cik, entry.AccessionNumber, name, cancellationToken);
             if (string.IsNullOrWhiteSpace(xml))
                 continue;
 

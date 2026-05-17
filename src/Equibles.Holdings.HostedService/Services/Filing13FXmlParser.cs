@@ -146,7 +146,8 @@ public class Filing13FXmlParser
             );
 
     private static IEnumerable<XElement> Descendants(XElement parent, string localName) =>
-        parent.Descendants()
+        parent
+            .Descendants()
             .Where(e =>
                 string.Equals(e.Name.LocalName, localName, StringComparison.OrdinalIgnoreCase)
             );
@@ -215,7 +216,10 @@ public class Filing13FXmlParser
         if (string.IsNullOrWhiteSpace(raw))
             return null;
 
-        var first = raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        var first = raw.Split(
+                ',',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+            )
             .FirstOrDefault();
         return int.TryParse(first, out var value) ? value : null;
     }

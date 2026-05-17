@@ -16,26 +16,34 @@ namespace Equibles.Migrations.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    AccessionNumber = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    CreationTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    AccessionNumber = table.Column<string>(
+                        type: "character varying(32)",
+                        maxLength: 32,
+                        nullable: false
+                    ),
+                    CreationTime = table.Column<DateTime>(
+                        type: "timestamp with time zone",
+                        nullable: false
+                    ),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_ProcessedFiling", x => x.Id);
-                });
+                }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_ProcessedFiling_AccessionNumber",
                 table: "ProcessedFiling",
                 column: "AccessionNumber",
-                unique: true);
+                unique: true
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "ProcessedFiling");
+            migrationBuilder.DropTable(name: "ProcessedFiling");
         }
     }
 }

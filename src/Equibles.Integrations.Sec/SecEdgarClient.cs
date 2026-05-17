@@ -447,7 +447,8 @@ public class SecEdgarClient : ISecEdgarClient
         return index
                 ?.Directory?.Item?.Where(item => !string.IsNullOrEmpty(item.Name))
                 .Select(item => item.Name)
-                .ToList() ?? [];
+                .ToList()
+            ?? [];
     }
 
     private Task<HttpResponseMessage> SendWithRetryAsync(
