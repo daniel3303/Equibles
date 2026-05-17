@@ -37,18 +37,20 @@ public class CommonStockManager
             throw new ArgumentNullException(nameof(commonStock));
         }
 
-        // Checks for the required fields
-        if (string.IsNullOrEmpty(commonStock.Ticker))
+        // Required fields: a whitespace-only value is not a provided value.
+        // Ticker is the globally-unique key and the lookup key, so accepting
+        // whitespace would corrupt the uniqueness invariant and ticker lookups.
+        if (string.IsNullOrWhiteSpace(commonStock.Ticker))
         {
             throw new DomainValidationException("Ticker is required");
         }
 
-        if (string.IsNullOrEmpty(commonStock.Name))
+        if (string.IsNullOrWhiteSpace(commonStock.Name))
         {
             throw new DomainValidationException("Name is required");
         }
 
-        if (string.IsNullOrEmpty(commonStock.Cik))
+        if (string.IsNullOrWhiteSpace(commonStock.Cik))
         {
             throw new DomainValidationException("Cik is required");
         }

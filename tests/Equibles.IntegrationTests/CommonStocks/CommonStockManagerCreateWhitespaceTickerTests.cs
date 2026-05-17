@@ -21,7 +21,7 @@ public class CommonStockManagerCreateWhitespaceTickerTests
     // and the lookup key (GetByPrimaryTicker), so a whitespace-only value is
     // not a provided ticker and must be rejected — persisting one corrupts the
     // uniqueness invariant and ticker lookups.
-    [Fact(Skip = "GH-772 — required-field validation uses IsNullOrEmpty, allows whitespace ticker")]
+    [Fact]
     public async Task Create_WhitespaceOnlyTicker_IsRejected()
     {
         var stock = new CommonStock
