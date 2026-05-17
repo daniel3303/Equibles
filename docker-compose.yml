@@ -60,6 +60,8 @@ services:
         required: false
     environment:
       ConnectionStrings__DefaultConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
+      ConnectionStrings__TransportConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
+      MassTransit__RunMigration: "true"
       Sec__ContactEmail: ${SEC_CONTACT_EMAIL}
       Embedding__Enabled: "false"
       MinimumLogLevel: ${MINIMUM_LOG_LEVEL:-Warning}
