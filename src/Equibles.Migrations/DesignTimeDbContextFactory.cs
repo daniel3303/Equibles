@@ -9,6 +9,7 @@ using Equibles.Fred.Data;
 using Equibles.Holdings.Data;
 using Equibles.InsiderTrading.Data;
 using Equibles.Media.Data;
+using Equibles.Messaging;
 using Equibles.ParadeDB.EntityFrameworkCore;
 using Equibles.Sec.Data;
 using Equibles.Yahoo.Data;
@@ -59,6 +60,7 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<EquiblesDb
             new SecModuleConfiguration(),
             new MediaModuleConfiguration(),
             new ErrorsModuleConfiguration(),
+            new MessagingModuleConfiguration(),
         ];
 
         return new EquiblesDbContext(optionsBuilder.Options, modules);
