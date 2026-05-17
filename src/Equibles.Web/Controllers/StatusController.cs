@@ -233,7 +233,7 @@ public class StatusController : BaseController
                 Active = finraConfigured,
                 Reason = finraConfigured
                     ? "FINRA API credentials configured"
-                    : "Finra:ClientId not set — get a free key at developer.finra.org",
+                    : "Finra:ClientId not set — get a free key at gateway.finra.org/app/api-console",
             },
             new WorkerStatus
             {

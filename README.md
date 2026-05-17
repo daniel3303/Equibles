@@ -62,10 +62,12 @@ The FINRA scraper (short volume and short interest) requires a free API key. Wit
 
 To get a key:
 
-1. Create a free account at [developer.finra.org](https://developer.finra.org/)
-2. Go to **Teams & Apps** and create a new application
+1. Go to the [FINRA API Console](https://gateway.finra.org/app/api-console) and sign in (a Google account works)
+2. Open the **API Credentials** menu and create a new **API Key**
 3. Copy the **Client ID** and **Client Secret**
 4. Set `Finra__ClientId` and `Finra__ClientSecret` in your `.env` file or environment variables
+
+> The older `developer.finra.org` "Teams & Apps" flow has been retired — use the API Console above.
 
 **FRED Economic Data (free API key required):**
 
@@ -212,21 +214,16 @@ Without the embedding profile, BM25 full-text search via ParadeDB still works ou
 
 ## Screenshots
 
-### Stock Detail
-
-![Stock detail page showing price charts, moving averages, and technical indicators for AAPL](docs/screenshots/stock-detail.png)
-
-### Stocks
-
-![Stocks page with search and ticker listing](docs/screenshots/stocks-list.png)
-
-### Economic Data
-
-![Economic indicators grouped by category](docs/screenshots/economy.png)
-
-### Economic Indicator Detail
-
-![Federal Funds Rate chart and observations](docs/screenshots/economy-detail.png)
+<table>
+  <tr>
+    <td width="50%"><strong>Stock Detail</strong><br><img alt="Stock detail page showing price charts, moving averages, and technical indicators for AAPL" src="docs/screenshots/stock-detail.png"></td>
+    <td width="50%"><strong>Stocks</strong><br><img alt="Stocks page with search and ticker listing" src="docs/screenshots/stocks-list.png"></td>
+  </tr>
+  <tr>
+    <td width="50%"><strong>Economic Data</strong><br><img alt="Economic indicators grouped by category" src="docs/screenshots/economy.png"></td>
+    <td width="50%"><strong>Economic Indicator Detail</strong><br><img alt="Federal Funds Rate chart and observations" src="docs/screenshots/economy-detail.png"></td>
+  </tr>
+</table>
 
 ## Contributing
 
