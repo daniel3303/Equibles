@@ -62,10 +62,12 @@ The FINRA scraper (short volume and short interest) requires a free API key. Wit
 
 To get a key:
 
-1. Create a free account at [developer.finra.org](https://developer.finra.org/)
-2. Go to **Teams & Apps** and create a new application
+1. Go to the [FINRA API Console](https://gateway.finra.org/app/api-console) and sign in (a Google account works)
+2. Open the **API Credentials** menu and create a new **API Key**
 3. Copy the **Client ID** and **Client Secret**
 4. Set `Finra__ClientId` and `Finra__ClientSecret` in your `.env` file or environment variables
+
+> The older `developer.finra.org` "Teams & Apps" flow has been retired — use the API Console above.
 
 **FRED Economic Data (free API key required):**
 
