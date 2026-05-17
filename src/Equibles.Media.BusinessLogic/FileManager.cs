@@ -58,6 +58,16 @@ public class FileManager : IFileManager
             throw new ArgumentException("The file extension cannot be null or empty.");
         }
 
+        // Enforce the curated allowlist (whitelist, case-insensitive). Without
+        // this, an unenforced allowlist gives false assurance — an .exe/.svg/
+        // .html payload would be persisted and later served.
+        if (!AcceptedExtensions.Contains(fileExtension, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                $"The file extension '.{fileExtension}' is not allowed. Accepted extensions: {AcceptedExtensionsString()}."
+            );
+        }
+
         // Get the content type from the file extension
         var contentType = MimeTypeMap.GetMimeType(fileExtension);
         if (string.IsNullOrEmpty(contentType))

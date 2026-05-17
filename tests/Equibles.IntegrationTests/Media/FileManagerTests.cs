@@ -55,27 +55,21 @@ public class FileManagerTests
     }
 
     [Fact]
-    public async Task SaveFile_UnknownExtension_FallsBackToApplicationOctetStream()
+    public async Task SaveFile_AllowlistedExtensionWithNoSpecificMime_UsesOctetStream()
     {
         // SaveFile derives Content-Type from MimeTypeMap.GetMimeType(extension).
-        // Every existing test (.pdf, .jpg, .png, .txt) hits a mapped entry, so
-        // the fallback path — `if (string.IsNullOrEmpty(contentType))
-        // contentType = "application/octet-stream";` — is unexercised. That
-        // fallback is the only thing that prevents an unknown extension
-        // (e.g. SEC paper-filing artifacts with bespoke suffixes like
-        // `.xbrl.zip.gz`, partner uploads with obsolete suffixes, anything
-        // outside the curated AcceptedExtensions list) from persisting a
-        // null or empty `ContentType` column — which downstream blows up
-        // when the file is served back to the browser (the response either
-        // 500s on null header, or sniffs into something dangerous like
-        // text/html). A refactor that drops the fallback (e.g. assuming
-        // MimeTypeMap always returns non-empty, which it doesn't for
-        // unknown suffixes) would compile cleanly and pass every existing
-        // test, then silently corrupt the file metadata on the next bespoke
-        // upload. Pin the fallback so the regression surfaces here.
-        var file = await _sut.SaveFile([0x01, 0x02, 0x03], "weird.zzz");
+        // Most allowlisted types (.pdf, .jpg, .png, .txt, .doc…) map to a
+        // specific MIME, but `.psd` has no specific mapping and resolves to
+        // application/octet-stream. This pins the safe-content-type behaviour
+        // for an allowlisted-but-unmapped extension so the column is never
+        // null/empty (which would 500 or content-sniff when served back).
+        // Note: SaveFile now enforces the AcceptedExtensions allowlist
+        // (GH-766), so a genuinely unknown extension is rejected outright —
+        // this exercises the octet-stream path within that contract using a
+        // permitted extension.
+        var file = await _sut.SaveFile([0x38, 0x42, 0x50, 0x53], "layers.psd");
 
-        file.Extension.Should().Be("zzz");
+        file.Extension.Should().Be("psd");
         file.ContentType.Should().Be("application/octet-stream");
     }
 

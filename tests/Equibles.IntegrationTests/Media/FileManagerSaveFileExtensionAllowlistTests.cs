@@ -20,7 +20,7 @@ public class FileManagerSaveFileExtensionAllowlistTests
     // — otherwise an executable/HTML/SVG payload is persisted and later served,
     // and the allowlist is decorative. SaveFile already throws ArgumentException
     // for a missing extension; a disallowed one must be rejected the same way.
-    [Fact(Skip = "GH-766 — FileManager.SaveFile does not enforce AcceptedExtensions")]
+    [Fact]
     public async Task SaveFile_ExtensionNotInAcceptedAllowlist_IsRejected()
     {
         var act = async () => await _sut.SaveFile([0x4d, 0x5a], "malware.exe");
