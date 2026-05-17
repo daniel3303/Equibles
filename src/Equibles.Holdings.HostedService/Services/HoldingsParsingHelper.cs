@@ -28,7 +28,17 @@ internal static class HoldingsParsingHelper
         if (string.IsNullOrEmpty(value))
             return false;
 
-        if (DateOnly.TryParse(value, out result))
+        // ISO/SEC dates are culture-invariant. Parsing with the host culture
+        // breaks on non-Gregorian calendars (e.g. ar-SA Umm al-Qura), where a
+        // Worker would reinterpret "2024-03-15" as a Hijri date.
+        if (
+            DateOnly.TryParse(
+                value,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out result
+            )
+        )
             return true;
 
         if (

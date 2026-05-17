@@ -11,7 +11,7 @@ public class HoldingsParsingHelperTryParseDateOnlyCultureTests
     // Umm al-Qura (Hijri) calendar — the first branch uses culture-sensitive
     // DateOnly.TryParse, so a Worker there must still read "2024-03-15" as
     // 15 March 2024, not a Hijri reinterpretation.
-    [Fact(Skip = "GH-770 — TryParseDateOnly fails ISO dates under Hijri-calendar culture")]
+    [Fact]
     public void TryParseDateOnly_IsoDateUnderHijriCalendarCulture_ReturnsGregorianDate()
     {
         var original = CultureInfo.CurrentCulture;
