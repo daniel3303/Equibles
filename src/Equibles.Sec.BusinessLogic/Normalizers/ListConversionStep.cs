@@ -105,15 +105,11 @@ internal class ListConversionStep : IHtmlNormalizationStep
         }
         else
         {
-            // Fallback: use all content except bullet spans
-            var allSpans = itemElement
-                .QuerySelectorAll("span")
-                .Where(s => s.TextContent.Trim() is not ("•" or "·" or "-"))
-                .ToList();
-            foreach (var span in allSpans)
-            {
-                liElement.AppendChild(span.Clone(true));
-            }
+            // Fallback: use the entire remaining content (the bullet span is
+            // already removed). Cloning only <span> children silently dropped
+            // anchor-only items (e.g. SEC exhibit-index entries), producing an
+            // empty <li> and discarding the reference.
+            liElement.InnerHtml = itemElement.InnerHtml;
         }
 
         return liElement;

@@ -233,6 +233,10 @@ public class CftcClient : ICftcClient
             {
                 inQuotes = true;
                 wasQuoted = true;
+                // CFTC pads delimiters as `, "value"`. The space(s) before the
+                // opening quote are not part of the quoted content — discard
+                // them so the value is taken verbatim from inside the quotes.
+                field.Clear();
             }
             else if (c == ',')
             {
@@ -240,10 +244,12 @@ public class CftcClient : ICftcClient
                 field.Clear();
                 wasQuoted = false;
             }
-            else
+            else if (!wasQuoted)
             {
                 field.Append(c);
             }
+            // Characters after a closing quote (CFTC's trailing padding before
+            // the next delimiter) are likewise not part of the verbatim value.
         }
 
         fields.Add(wasQuoted ? field.ToString() : field.ToString().Trim());

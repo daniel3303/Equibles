@@ -29,7 +29,7 @@ public class ImageManagerSaveImageMaxBoundsTests
     // A source already within those bounds must not be enlarged — a 10x10
     // image saved with a 4000x4000 cap should stay 10x10, not be upscaled
     // (which wastes storage and blurs the image).
-    [Fact(Skip = "GH-768 — SaveImage upscales beyond documented max bounds")]
+    [Fact]
     public async Task SaveImage_SourceSmallerThanMax_IsNotUpscaled()
     {
         var content = CreateMinimalPng(10, 10);
