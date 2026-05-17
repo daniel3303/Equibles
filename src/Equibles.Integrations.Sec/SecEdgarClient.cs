@@ -493,10 +493,24 @@ public class SecEdgarClient : ISecEdgarClient
                 {
                     Cik = cik,
                     AccessionNumber = accessionNumber,
-                    FilingDate = DateOnly.TryParse(recent.FilingDate[i], out var fd)
+                    // SEC submissions feed dates are ISO yyyy-MM-dd. Parse them
+                    // culture-independently — under a non-Gregorian host culture
+                    // (e.g. ar-SA Umm al-Qura) culture-sensitive TryParse fails
+                    // and every filing would be stamped DateOnly.MinValue.
+                    FilingDate = DateOnly.TryParse(
+                        recent.FilingDate[i],
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None,
+                        out var fd
+                    )
                         ? fd
                         : DateOnly.MinValue,
-                    ReportDate = DateOnly.TryParse(recent.ReportDate[i], out var rd)
+                    ReportDate = DateOnly.TryParse(
+                        recent.ReportDate[i],
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None,
+                        out var rd
+                    )
                         ? rd
                         : DateOnly.MinValue,
                     Form = recent.Form[i],
