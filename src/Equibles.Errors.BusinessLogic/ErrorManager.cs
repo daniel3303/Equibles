@@ -29,14 +29,27 @@ public class ErrorManager
         var error = new Error
         {
             Source = source,
-            Context = context.Length > 128 ? context[..128] : context,
-            Message = message.Length > 512 ? message[..512] : message,
+            Context = Truncate(context, 128),
+            Message = Truncate(message, 512),
             StackTrace = stackTrace,
-            RequestSummary = requestSummary?.Length > 512 ? requestSummary[..512] : requestSummary,
+            RequestSummary = Truncate(requestSummary, 512),
         };
 
         _errorRepository.Add(error);
         await _errorRepository.SaveChanges();
+    }
+
+    // Caps a value to maxLength UTF-16 units without splitting a surrogate
+    // pair. Exception text routinely contains non-BMP chars (emoji); a raw
+    // [..maxLength] slice could leave a dangling lone surrogate, which then
+    // corrupts the text column and any JSON serialization for the dashboard.
+    private static string Truncate(string value, int maxLength)
+    {
+        if (value == null || value.Length <= maxLength)
+            return value;
+
+        var end = char.IsHighSurrogate(value[maxLength - 1]) ? maxLength - 1 : maxLength;
+        return value[..end];
     }
 
     public async Task MarkAsSeen(Error error)
