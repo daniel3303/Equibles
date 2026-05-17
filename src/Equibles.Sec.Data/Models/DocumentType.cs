@@ -68,11 +68,25 @@ public sealed class DocumentType
 
     public static DocumentType FromValue(string value)
     {
+        // The OrdinalIgnoreCase comparer's GetHashCode throws on null, so a
+        // null lookup key must short-circuit. FromValue is a lookup that
+        // returns null on no match — the EF value converter relies on this
+        // for NULL columns (DocumentType.FromValue(v) ?? new DocumentType(v)).
+        if (value == null)
+        {
+            return null;
+        }
+
         return AllByValue.GetValueOrDefault(value);
     }
 
     public static DocumentType FromDisplayName(string displayName)
     {
+        if (displayName == null)
+        {
+            return null;
+        }
+
         return AllByDisplayName.GetValueOrDefault(displayName);
     }
 

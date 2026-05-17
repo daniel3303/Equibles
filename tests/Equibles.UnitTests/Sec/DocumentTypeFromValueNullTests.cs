@@ -8,7 +8,7 @@ public class DocumentTypeFromValueNullTests
     // (cf. FromValue_UnknownValue_ReturnsNull). Its sole caller is the EF value
     // converter `DocumentType.FromValue(v) ?? new DocumentType(v)`, which gets
     // v == null for a NULL column — so null input must return null, not throw.
-    [Fact(Skip = "GH-782 — DocumentType.FromValue throws on null instead of returning null")]
+    [Fact]
     public void FromValue_NullValue_ReturnsNullInsteadOfThrowing()
     {
         DocumentType.FromValue(null).Should().BeNull();
