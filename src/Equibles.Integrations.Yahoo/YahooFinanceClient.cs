@@ -78,23 +78,27 @@ public class YahooFinanceClient : IYahooFinanceClient
 
         for (var i = 0; i < result.Timestamp.Count; i++)
         {
-            // Skip entries with missing OHLC data (market holidays, etc.)
-            if (quote.Close[i] == null)
+            // Yahoo occasionally returns a ragged payload — a timestamp array
+            // longer than the OHLC/volume columns. Bound every column access
+            // (as adjclose already is) so a missing tail is treated like a
+            // holiday gap instead of throwing and aborting the whole import.
+            var close = i < quote.Close.Count ? quote.Close[i] : null;
+            if (close == null)
                 continue;
 
             prices.Add(
                 new HistoricalPrice
                 {
                     Date = FromUnixTimestamp(result.Timestamp[i]),
-                    Open = Math.Round(quote.Open[i] ?? 0, 4),
-                    High = Math.Round(quote.High[i] ?? 0, 4),
-                    Low = Math.Round(quote.Low[i] ?? 0, 4),
-                    Close = Math.Round(quote.Close[i].Value, 4),
+                    Open = Math.Round((i < quote.Open.Count ? quote.Open[i] : null) ?? 0, 4),
+                    High = Math.Round((i < quote.High.Count ? quote.High[i] : null) ?? 0, 4),
+                    Low = Math.Round((i < quote.Low.Count ? quote.Low[i] : null) ?? 0, 4),
+                    Close = Math.Round(close.Value, 4),
                     AdjustedClose =
                         adjCloseList != null && i < adjCloseList.Count
                             ? Math.Round(adjCloseList[i] ?? 0, 4)
-                            : Math.Round(quote.Close[i].Value, 4),
-                    Volume = quote.Volume[i] ?? 0,
+                            : Math.Round(close.Value, 4),
+                    Volume = (i < quote.Volume.Count ? quote.Volume[i] : null) ?? 0,
                 }
             );
         }

@@ -14,7 +14,7 @@ public class YahooFinanceClientHistoricalRaggedArrayTests
     // payload — timestamp array longer than the OHLC arrays, a real Yahoo
     // quirk — must likewise be tolerated, not crash the whole ticker import.
     // (adjclose IS bounds-checked `i < adjCloseList.Count`; OHLC is not.)
-    [Fact(Skip = "GH-787 — GetHistoricalPrices throws on ragged Yahoo payload")]
+    [Fact]
     public async Task GetHistoricalPrices_TimestampArrayLongerThanQuoteArrays_DoesNotThrow()
     {
         var unixDec23 = new DateTimeOffset(
