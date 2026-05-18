@@ -49,6 +49,54 @@ public static class FiscalCalendar
     }
 
     /// <summary>
+    /// Inverse of <see cref="GetPeriod(DateOnly,int)"/>: the last calendar day
+    /// of <paramref name="fiscalQuarter"/> (1-4) of fiscal year
+    /// <paramref name="fiscalYear"/>, for a company whose fiscal year ends in
+    /// <paramref name="fiscalYearEndMonth"/> (1-12, 12 = calendar-year filer).
+    /// </summary>
+    /// <remarks>
+    /// Month-granular by design — the day is the last of the quarter's end
+    /// month, matching how <see cref="GetPeriod(DateOnly,int)"/> buckets dates
+    /// and how SEC 10-Q/10-K reporting periods line up. 52/53-week filers whose
+    /// period end drifts a few days are intentionally normalised to month-end
+    /// (see the type remarks). Round-trips with <see cref="GetPeriod(DateOnly,int)"/>:
+    /// <c>GetPeriod(GetQuarterEndDate(y, q, m), m) == new FiscalPeriod(y, q)</c>.
+    /// </remarks>
+    public static DateOnly GetQuarterEndDate(
+        int fiscalYear,
+        int fiscalQuarter,
+        int fiscalYearEndMonth
+    )
+    {
+        if (fiscalYearEndMonth is < 1 or > 12)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(fiscalYearEndMonth),
+                fiscalYearEndMonth,
+                "Fiscal year-end month must be between 1 and 12."
+            );
+        }
+
+        if (fiscalQuarter is < 1 or > 4)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(fiscalQuarter),
+                fiscalQuarter,
+                "Fiscal quarter must be between 1 and 4."
+            );
+        }
+
+        // Q4 ends in the fiscal-year-end month of the fiscal year's labelling
+        // calendar year; each earlier quarter ends three months before. When
+        // that walk crosses January it lands in the previous calendar year.
+        var endMonthRaw = fiscalYearEndMonth - 3 * (4 - fiscalQuarter);
+        var endMonth = endMonthRaw <= 0 ? endMonthRaw + 12 : endMonthRaw;
+        var endYear = endMonthRaw <= 0 ? fiscalYear - 1 : fiscalYear;
+
+        return new DateOnly(endYear, endMonth, DateTime.DaysInMonth(endYear, endMonth));
+    }
+
+    /// <summary>
     /// Returns the fiscal period for <paramref name="date"/> using the stock's
     /// detected <see cref="CommonStock.FiscalYearEndMonth"/>, or null when the
     /// fiscal year-end has not been detected yet.
@@ -61,5 +109,27 @@ public static class FiscalCalendar
         }
 
         return commonStock.FiscalYearEndMonth is { } month ? GetPeriod(date, month) : null;
+    }
+
+    /// <summary>
+    /// The quarter-end date for <paramref name="fiscalQuarter"/>/
+    /// <paramref name="fiscalYear"/> using the stock's detected
+    /// <see cref="CommonStock.FiscalYearEndMonth"/>, or null when the fiscal
+    /// year-end has not been detected yet.
+    /// </summary>
+    public static DateOnly? GetQuarterEndDate(
+        int fiscalYear,
+        int fiscalQuarter,
+        CommonStock commonStock
+    )
+    {
+        if (commonStock == null)
+        {
+            throw new ArgumentNullException(nameof(commonStock));
+        }
+
+        return commonStock.FiscalYearEndMonth is { } month
+            ? GetQuarterEndDate(fiscalYear, fiscalQuarter, month)
+            : null;
     }
 }
