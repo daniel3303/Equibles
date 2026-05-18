@@ -61,11 +61,12 @@ jobs:
 
       - name: Test
         # Functional tests need Playwright + a ParadeDB container and live in functional.yml.
+        # Live (contract/smoke) tests hit real upstream APIs and run nightly in smoke.yml.
         # Do not pin LogFileName: with multiple test projects in the sln, a fixed
         # filename makes each project overwrite the previous TRX so only the last
         # project's results survive. Letting dotnet test auto-name produces one
         # TRX per project for dorny/test-reporter's coverage/**/*.trx glob.
-        run: dotnet test Equibles.sln --no-build -c Release --filter "Category!=Functional" --logger trx --collect:"XPlat Code Coverage" --settings coverage.runsettings --results-directory ./coverage
+        run: dotnet test Equibles.sln --no-build -c Release --filter "Category!=Functional&Category!=Live" --logger trx --collect:"XPlat Code Coverage" --settings coverage.runsettings --results-directory ./coverage
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v6
