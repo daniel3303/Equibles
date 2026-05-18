@@ -79,20 +79,26 @@ public class YahooFinanceClient : IYahooFinanceClient
         for (var i = 0; i < result.Timestamp.Count; i++)
         {
             // Yahoo occasionally returns a ragged payload — a timestamp array
-            // longer than the OHLC/volume columns. Bound every column access
-            // (as adjclose already is) so a missing tail is treated like a
-            // holiday gap instead of throwing and aborting the whole import.
+            // longer than the OHLC/volume columns, or a column with a null
+            // hole on a holiday / early-close row. Bound every column access
+            // and require the full OHLC quartet: an incomplete row is treated
+            // like a holiday gap (skipped) rather than emitted as an
+            // OHLC-impossible bar (e.g. High=0 while Close>0) or aborting the
+            // whole import.
+            var open = i < quote.Open.Count ? quote.Open[i] : null;
+            var high = i < quote.High.Count ? quote.High[i] : null;
+            var low = i < quote.Low.Count ? quote.Low[i] : null;
             var close = i < quote.Close.Count ? quote.Close[i] : null;
-            if (close == null)
+            if (open == null || high == null || low == null || close == null)
                 continue;
 
             prices.Add(
                 new HistoricalPrice
                 {
                     Date = FromUnixTimestamp(result.Timestamp[i]),
-                    Open = Math.Round((i < quote.Open.Count ? quote.Open[i] : null) ?? 0, 4),
-                    High = Math.Round((i < quote.High.Count ? quote.High[i] : null) ?? 0, 4),
-                    Low = Math.Round((i < quote.Low.Count ? quote.Low[i] : null) ?? 0, 4),
+                    Open = Math.Round(open.Value, 4),
+                    High = Math.Round(high.Value, 4),
+                    Low = Math.Round(low.Value, 4),
                     Close = Math.Round(close.Value, 4),
                     AdjustedClose =
                         adjCloseList != null && i < adjCloseList.Count
