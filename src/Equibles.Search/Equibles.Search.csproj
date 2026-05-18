@@ -6,5 +6,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Equibles.Search.Abstractions\Equibles.Search.Abstractions.csproj" />
+    <ProjectReference Include="..\Equibles.Plugins\Equibles.Plugins.csproj" />
   </ItemGroup>
 </Project>
