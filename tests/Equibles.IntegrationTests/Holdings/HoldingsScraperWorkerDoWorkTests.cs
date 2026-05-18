@@ -55,7 +55,7 @@ public class HoldingsScraperWorkerDoWorkTests : ParadeDbMcpTestBase
             scopeFactory,
             BuildErrorReporter(),
             Options.Create(new WorkerOptions { MinSyncDate = new DateTime(2099, 1, 1) }),
-            ConfigWithContactEmail()
+            ConfigWithContactEmail(), new HoldingsRescanSignal()
         );
 
         var doWork = typeof(HoldingsScraperWorker).GetMethod(
@@ -87,7 +87,7 @@ public class HoldingsScraperWorkerDoWorkTests : ParadeDbMcpTestBase
             scopeFactory,
             BuildErrorReporter(),
             Options.Create(new WorkerOptions()),
-            ConfigWithContactEmail()
+            ConfigWithContactEmail(), new HoldingsRescanSignal()
         );
 
         var tryProcess = typeof(HoldingsScraperWorker).GetMethod(

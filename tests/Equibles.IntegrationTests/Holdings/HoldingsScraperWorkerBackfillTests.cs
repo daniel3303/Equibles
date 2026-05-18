@@ -59,7 +59,7 @@ public class HoldingsScraperWorkerBackfillTests : ParadeDbMcpTestBase
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
             Options.Create(new WorkerOptions()),
-            configuration
+            configuration, new HoldingsRescanSignal()
         );
 
         var method = typeof(HoldingsScraperWorker).GetMethod(
