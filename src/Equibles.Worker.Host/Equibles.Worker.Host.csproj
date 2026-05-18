@@ -24,5 +24,6 @@
     <ProjectReference Include="..\Equibles.Integrations.Cboe\Equibles.Integrations.Cboe.csproj" />
     <ProjectReference Include="..\Equibles.Plugins\Equibles.Plugins.csproj" />
     <ProjectReference Include="..\Equibles.Messaging\Equibles.Messaging.csproj" />
+    <ProjectReference Include="..\Equibles.Sec.FinancialFacts.HostedService\Equibles.Sec.FinancialFacts.HostedService.csproj" />
   </ItemGroup>
 </Project>

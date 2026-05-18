@@ -12,6 +12,7 @@ using Equibles.Media.Data;
 using Equibles.Messaging;
 using Equibles.ParadeDB.EntityFrameworkCore;
 using Equibles.Sec.Data;
+using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Yahoo.Data;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -115,6 +116,7 @@ public class ParadeDbFixture : IAsyncLifetime
             new CftcModuleConfiguration(),
             new CboeModuleConfiguration(),
             new SecModuleConfiguration(),
+            new FinancialFactsModuleConfiguration(),
             new MediaModuleConfiguration(),
             new ErrorsModuleConfiguration(),
             new MessagingModuleConfiguration(),

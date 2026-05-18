@@ -11,6 +11,7 @@ public sealed class ErrorSource
     public static readonly ErrorSource HoldingsScraper = new("HoldingsScraper");
     public static readonly ErrorSource FinraScraper = new("FinraScraper");
     public static readonly ErrorSource FtdScraper = new("FtdScraper");
+    public static readonly ErrorSource FinancialFactsScraper = new("FinancialFactsScraper");
     public static readonly ErrorSource DocumentProcessor = new("DocumentProcessor");
     public static readonly ErrorSource CongressScraper = new("CongressScraper");
     public static readonly ErrorSource FredScraper = new("FredScraper");
@@ -27,6 +28,7 @@ public sealed class ErrorSource
             HoldingsScraper,
             FinraScraper,
             FtdScraper,
+            FinancialFactsScraper,
             DocumentProcessor,
             CongressScraper,
             FredScraper,

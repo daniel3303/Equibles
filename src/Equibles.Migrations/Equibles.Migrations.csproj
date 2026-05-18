@@ -20,5 +20,6 @@
     <ProjectReference Include="..\Equibles.Cftc.Data\Equibles.Cftc.Data.csproj" />
     <ProjectReference Include="..\Equibles.Cboe.Data\Equibles.Cboe.Data.csproj" />
     <ProjectReference Include="..\Equibles.Messaging\Equibles.Messaging.csproj" />
+    <ProjectReference Include="..\Equibles.Sec.FinancialFacts.Data\Equibles.Sec.FinancialFacts.Data.csproj" />
   </ItemGroup>
 </Project>

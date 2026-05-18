@@ -12,6 +12,7 @@ using Equibles.Media.Data;
 using Equibles.Messaging;
 using Equibles.ParadeDB.EntityFrameworkCore;
 using Equibles.Sec.Data;
+using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Yahoo.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -58,6 +59,7 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<EquiblesDb
             new CftcModuleConfiguration(),
             new CboeModuleConfiguration(),
             new SecModuleConfiguration(),
+            new FinancialFactsModuleConfiguration(),
             new MediaModuleConfiguration(),
             new ErrorsModuleConfiguration(),
             new MessagingModuleConfiguration(),
