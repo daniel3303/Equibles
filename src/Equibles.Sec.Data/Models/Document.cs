@@ -10,6 +10,7 @@ namespace Equibles.Sec.Data.Models;
 [Index(nameof(DocumentType), IsUnique = false)]
 [Index(nameof(ReportingDate), IsUnique = false)]
 [Index(nameof(ReportingForDate), IsUnique = false)]
+[Index(nameof(AccessionNumber), IsUnique = false)]
 public class Document
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -37,6 +38,14 @@ public class Document
 
     [MaxLength(500)]
     public string SourceUrl { get; set; }
+
+    /// <summary>
+    /// SEC accession number of the source filing (globally unique, e.g.
+    /// 0000320193-24-000123). Null for legacy rows and paper-only filings.
+    /// Used to link structured financial facts back to their filing.
+    /// </summary>
+    [MaxLength(32)]
+    public string AccessionNumber { get; set; }
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }

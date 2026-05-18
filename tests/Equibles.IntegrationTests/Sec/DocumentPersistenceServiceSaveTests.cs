@@ -91,7 +91,8 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase
             documentType: DocumentType.TenK,
             reportingDate: new DateOnly(2024, 3, 15),
             reportingForDate: new DateOnly(2023, 12, 31),
-            sourceUrl: "https://example.test/filing"
+            sourceUrl: "https://example.test/filing",
+            accessionNumber: "0000320193-24-000123"
         );
 
         await using var verify = Fixture.CreateDbContext();
@@ -108,5 +109,6 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase
         saved.ReportingDate.Should().Be(new DateOnly(2024, 3, 15));
         saved.LineCount.Should().Be(3, "the LF-split line count for 3 \\n-separated segments is 3");
         saved.SourceUrl.Should().Be("https://example.test/filing");
+        saved.AccessionNumber.Should().Be("0000320193-24-000123");
     }
 }

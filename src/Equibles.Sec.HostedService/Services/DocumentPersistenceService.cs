@@ -39,6 +39,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         DateOnly reportingDate,
         DateOnly reportingForDate,
         string sourceUrl,
+        string accessionNumber,
         CancellationToken cancellationToken = default
     )
     {
@@ -58,6 +59,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             ReportingDate = reportingDate,
             ReportingForDate = reportingForDate,
             SourceUrl = sourceUrl,
+            AccessionNumber = accessionNumber,
             LineCount = lineCount,
         };
 
