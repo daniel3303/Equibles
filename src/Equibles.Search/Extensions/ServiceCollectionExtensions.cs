@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using Equibles.Plugins;
 using Equibles.Search.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -15,6 +16,10 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddEquiblesSearch(this IServiceCollection services)
     {
+        // Self-load every Equibles.* plugin assembly so discovery never depends on another
+        // registrar (e.g. AddAllRepositories) having run first. LoadAll is cached/idempotent.
+        PluginLoader.LoadAll();
+
         var providerTypes = AppDomain
             .CurrentDomain.GetAssemblies()
             .Where(assembly =>
