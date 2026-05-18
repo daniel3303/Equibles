@@ -31,6 +31,6 @@ public class CongressMemberSearchProvider : QueryableSearchProvider<CongressMemb
         {
             Title = member.Name,
             Kind = "CongressMember",
-            RouteValues = { ["name"] = member.Name },
+            RouteValues = { ["id"] = member.Id.ToString() },
         };
 }

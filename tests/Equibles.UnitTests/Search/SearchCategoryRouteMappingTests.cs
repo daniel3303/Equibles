@@ -8,16 +8,16 @@ namespace Equibles.UnitTests.Search;
 
 public class SearchCategoryRouteMappingTests
 {
-    // Pins the linkable/non-linkable allowlist: a new provider Kind must be a conscious decision
-    // here, not a silently inert search result.
+    // Pins the linkable allowlist: every shipped Kind must resolve to a URL. A new provider Kind
+    // is a conscious decision here, never a silently inert search result.
     [Theory]
     [InlineData("Stock", true)]
     [InlineData("Filing", true)]
     [InlineData("EconomicSeries", true)]
     [InlineData("FuturesMarket", true)]
-    [InlineData("Institution", false)]
-    [InlineData("Insider", false)]
-    [InlineData("CongressMember", false)]
+    [InlineData("Institution", true)]
+    [InlineData("Insider", true)]
+    [InlineData("CongressMember", true)]
     public void HitUrl_ResolvesLinkableKinds_AndReturnsNullForKnownNonLinkable(
         string kind,
         bool expectLink

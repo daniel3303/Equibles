@@ -38,10 +38,23 @@ public static class SearchCategoryRouteExtensions
                 "Cftc",
                 new { marketCode = hit.RouteValues.GetValueOrDefault("marketCode") }
             ),
-            // Intentionally non-linkable: "Institution", "Insider", "CongressMember" have no
-            // standalone Web detail page, so they render as inert text. Any NEW kind that falls
-            // here is a gap — SearchCategoryRouteMappingTests pins this allowlist so a new
-            // provider can't silently ship dead entries.
+            "Institution" => url.Action(
+                "Institution",
+                "Profiles",
+                new { cik = hit.RouteValues.GetValueOrDefault("cik") }
+            ),
+            "Insider" => url.Action(
+                "Insider",
+                "Profiles",
+                new { ownerCik = hit.RouteValues.GetValueOrDefault("ownerCik") }
+            ),
+            "CongressMember" => url.Action(
+                "Member",
+                "Profiles",
+                new { id = hit.RouteValues.GetValueOrDefault("id") }
+            ),
+            // Every shipped Kind resolves above. A new provider Kind falling here is a gap —
+            // SearchCategoryRouteMappingTests pins the allowlist so it can't ship dead entries.
             _ => null,
         };
     }
