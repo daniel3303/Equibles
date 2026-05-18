@@ -54,7 +54,7 @@ public class YahooFinanceClientHistoricalAdjCloseNullHoleTests
         }
     }
 
-    [Fact(Skip = "GH-898 — adjclose null hole yields AdjustedClose=0 instead of Close fallback")]
+    [Fact]
     public async Task GetHistoricalPrices_AdjCloseArrayPresentWithNullHole_FallsBackToClose()
     {
         await WithSeededSession(async () =>
