@@ -1,0 +1,46 @@
+name: Smoke Tests (Live)
+
+on:
+  schedule:
+    # Nightly at 06:00 UTC. These hit real upstream APIs (Yahoo, etc.) and detect
+    # contract drift before a release — they are NOT a per-PR gate.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      - uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7  # v5
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Restore
+        run: dotnet restore Equibles.sln
+
+      - name: Build smoke test project
+        run: dotnet build tests/Equibles.SmokeTests/Equibles.SmokeTests.csproj --no-restore -c Release
+
+      - name: Run smoke tests
+        # Category=Live is excluded from ci.yml; this is the only place it runs.
+        run: dotnet test tests/Equibles.SmokeTests/Equibles.SmokeTests.csproj --no-build -c Release --filter "Category=Live" --logger "trx;LogFileName=results.trx" --results-directory ./smoke-results
+
+      - name: Test Report
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2  # v3
+        if: success() || failure()
+        with:
+          name: Smoke Test Results
+          path: smoke-results/**/*.trx
+          reporter: dotnet-trx
