@@ -18,7 +18,7 @@ public class YahooFinanceClientHistoricalPartialRaggedOhlcTests
     // row is skipped (as the null-Close path does); it must not be emitted as an
     // OHLC-impossible bar (High=0 while Close>0), which would silently import
     // garbage and break the smoke test's own invariants.
-    [Fact(Skip = "GH-889 — partial-ragged OHLC emits High=0 bar with Close>0")]
+    [Fact]
     public async Task GetHistoricalPrices_CloseLongerThanHighColumn_DoesNotEmitOhlcImpossibleBar()
     {
         var unixDec23 = new DateTimeOffset(
