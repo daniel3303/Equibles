@@ -18,13 +18,13 @@
 
     <!-- Search -->
     <form method="get" class="mb-6">
-        <div class="flex gap-3">
+        <div class="join w-full max-w-xl">
             <input type="search" name="q" value="@Model.Query"
-                   class="input input-bordered flex-1 max-w-xl"
+                   class="input input-bordered join-item grow"
                    aria-label="Search everything"
                    placeholder="Search for a ticker, company, filing, indicator..." autofocus />
-            <button type="submit" class="btn btn-primary">
-                <icon name="magnifying-glass" size="5" /> Search
+            <button type="submit" class="btn btn-primary join-item" aria-label="Search" title="Search">
+                <icon name="magnifying-glass" size="5" />
             </button>
         </div>
     </form>
