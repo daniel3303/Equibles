@@ -11,7 +11,7 @@ namespace Equibles.UnitTests.Holdings;
 
 public class Holdings13FRealtimeWorkerTests
 {
-    [Fact(Skip = "GH-810 — whitespace-only Sec:ContactEmail wrongly passes ValidateConfiguration")]
+    [Fact]
     public void ValidateConfiguration_SecContactEmailWhitespaceOnly_ReturnsFalse()
     {
         // Contract (from the worker's own warning + the SEC EDGAR User-Agent rule it

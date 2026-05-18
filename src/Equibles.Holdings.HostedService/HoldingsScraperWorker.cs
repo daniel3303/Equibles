@@ -82,7 +82,7 @@ public class HoldingsScraperWorker : BaseScraperWorker
 
     protected override bool ValidateConfiguration()
     {
-        if (string.IsNullOrEmpty(_configuration["Sec:ContactEmail"]))
+        if (string.IsNullOrWhiteSpace(_configuration["Sec:ContactEmail"]))
         {
             Logger.LogWarning(
                 "Holdings Scraper stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file."
