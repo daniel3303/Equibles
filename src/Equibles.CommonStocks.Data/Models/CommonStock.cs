@@ -45,6 +45,22 @@ public class CommonStock
     [MaxLength(9)]
     public string Cusip { get; set; }
 
+    /// <summary>
+    /// Calendar month (1-12) the company's fiscal year ends in, sourced from
+    /// SEC EDGAR's submissions <c>fiscalYearEnd</c> field. Null until detected.
+    /// Off-calendar filers (e.g. Apple ≈ September, Microsoft = June) need this
+    /// so quarter math reflects their real reporting periods rather than
+    /// calendar quarters.
+    /// </summary>
+    public int? FiscalYearEndMonth { get; set; }
+
+    /// <summary>
+    /// Day of month (1-31) the company's fiscal year ends on, sourced from the
+    /// same SEC field. Informational — quarter math keys off the month, since
+    /// many filers use a moving "last Saturday" day that varies year to year.
+    /// </summary>
+    public int? FiscalYearEndDay { get; set; }
+
     public Guid? IndustryId { get; set; }
     public virtual Industry Industry { get; set; }
 }

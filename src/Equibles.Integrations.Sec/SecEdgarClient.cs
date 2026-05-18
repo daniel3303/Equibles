@@ -107,11 +107,19 @@ public class SecEdgarClient : ISecEdgarClient
             if (apiResponse == null)
                 return null;
 
+            // Cache the submissions payload keyed by URL so an immediately
+            // following GetCompanyFilings(cik) — which hits the same
+            // /submissions/CIK*.json URL — reuses it instead of re-fetching.
+            // This keeps fiscal-year detection in the scraper net-zero extra
+            // SEC requests on the common path.
+            _cachedContent = new CachedResponse(url, content);
+
             return new CompanyMetadata
             {
                 Cik = cik,
                 EntityType = apiResponse.EntityType,
                 Exchanges = apiResponse.Exchanges ?? [],
+                FiscalYearEnd = apiResponse.FiscalYearEnd,
             };
         }
         catch (HttpRequestException ex)

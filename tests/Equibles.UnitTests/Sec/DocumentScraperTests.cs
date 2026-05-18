@@ -1,4 +1,5 @@
 using System.Text;
+using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -13,6 +14,7 @@ using Equibles.Sec.HostedService;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Services;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -399,6 +401,42 @@ public class DocumentScraperTests
         result.DocumentsAdded.Should().Be(0);
     }
 
+    [Fact]
+    public async Task ScrapeDocuments_SecReportsFiscalYearEnd_PersistsItOnTheStock()
+    {
+        // Covers the fiscal-year-end wiring: GetCompanyMetadata returns an
+        // off-calendar "MMDD", and ProcessCompanyDocumentsWithScope persists
+        // it via CommonStockManager before the (empty) document-type loop.
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        var company = SeedCompany(dbContext, ticker: "AAPL", cik: "0000320193");
+        harness
+            .SecEdgarClient.GetCompanyMetadata("0000320193")
+            .Returns(new CompanyMetadata { FiscalYearEnd = "0928" });
+
+        await harness.BuildScraper(dbContext).ScrapeDocuments();
+
+        var persisted = await dbContext.Set<CommonStock>().SingleAsync(c => c.Id == company.Id);
+        persisted.FiscalYearEndMonth.Should().Be(9);
+        persisted.FiscalYearEndDay.Should().Be(28);
+    }
+
+    [Fact]
+    public async Task ScrapeDocuments_SecReportsNoFiscalYearEnd_LeavesStockUnchanged()
+    {
+        // The substitute returns null metadata by default; the stock's
+        // fiscal-year columns must stay null rather than throw or be zeroed.
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        var company = SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
+
+        await harness.BuildScraper(dbContext).ScrapeDocuments();
+
+        var persisted = await dbContext.Set<CommonStock>().SingleAsync(c => c.Id == company.Id);
+        persisted.FiscalYearEndMonth.Should().BeNull();
+        persisted.FiscalYearEndDay.Should().BeNull();
+    }
+
     // ── helpers ──
 
     private static FilingData BuildFiling(string cik, string accession, string form) =>
@@ -469,6 +507,12 @@ public class DocumentScraperTests
             // registration would invalidate the context after the first scope.
             services.AddSingleton(dbContext);
             services.AddScoped<CommonStockRepository>();
+            // DocumentScraper now resolves CommonStockManager per scope to
+            // persist the SEC-sourced fiscal year-end. IPublishEndpoint is an
+            // unrelated CommonStockManager ctor dep (SetCusip outbox event);
+            // substituted because fiscal-year detection never publishes.
+            services.AddSingleton(Substitute.For<IPublishEndpoint>());
+            services.AddScoped<CommonStockManager>();
             services.AddSingleton(SecEdgarClient);
             services.AddSingleton(Normalizer);
             services.AddSingleton(Converter);
