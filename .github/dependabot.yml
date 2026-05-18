@@ -27,6 +27,12 @@ updates:
       # .SqlTransport.PostgreSQL.
       - dependency-name: "MassTransit*"
         update-types: ["version-update:semver-major"]
+      # Microsoft.Bcl.Memory is a deliberate direct pin at 9.0.16 that
+      # overrides the transitive high-severity advisory NU1903
+      # (GHSA-73j8-2gch-69rq). Block major bumps so the 10.x PR can't reopen;
+      # 9.0.x patches are still allowed.
+      - dependency-name: "Microsoft.Bcl.Memory"
+        update-types: ["version-update:semver-major"]
     groups:
       microsoft-extensions:
         patterns:
