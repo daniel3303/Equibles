@@ -46,7 +46,7 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
 
     protected override bool ValidateConfiguration()
     {
-        if (string.IsNullOrEmpty(_configuration["Sec:ContactEmail"]))
+        if (string.IsNullOrWhiteSpace(_configuration["Sec:ContactEmail"]))
         {
             Logger.LogWarning(
                 "13F real-time ingestion stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file."
