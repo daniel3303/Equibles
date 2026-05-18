@@ -46,7 +46,8 @@ public class HoldingsScraperWorkerMarkAsProcessedTests : ParadeDbMcpTestBase
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
             Options.Create(new WorkerOptions()),
-            configuration, new HoldingsRescanSignal()
+            configuration,
+            new HoldingsRescanSignal()
         );
 
         var method = typeof(HoldingsScraperWorker).GetMethod(

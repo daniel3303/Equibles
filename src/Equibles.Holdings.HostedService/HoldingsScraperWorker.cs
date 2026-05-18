@@ -63,9 +63,7 @@ public class HoldingsScraperWorker : BaseScraperWorker
         var completed = await Task.WhenAny(wake, delay);
         if (completed == wake && !stoppingToken.IsCancellationRequested)
         {
-            Logger.LogInformation(
-                "Holdings scraper woken early by a CUSIP-change rescan request"
-            );
+            Logger.LogInformation("Holdings scraper woken early by a CUSIP-change rescan request");
         }
         else
         {

@@ -13,9 +13,7 @@ public class HoldingsRescanSignalTests
         signal.RequestRescan();
 
         var wait = signal.WaitAsync(CancellationToken.None);
-        (await Task.WhenAny(wait, Task.Delay(TimeSpan.FromSeconds(1))))
-            .Should()
-            .Be(wait);
+        (await Task.WhenAny(wait, Task.Delay(TimeSpan.FromSeconds(1)))).Should().Be(wait);
     }
 
     // Requests coalesce: many CUSIP-change events in one FTD burst must trigger

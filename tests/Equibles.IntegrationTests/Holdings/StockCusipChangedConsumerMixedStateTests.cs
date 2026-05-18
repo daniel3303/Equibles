@@ -1,4 +1,5 @@
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.HostedService;
 using Equibles.Holdings.HostedService.Consumers;
 using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
@@ -8,7 +9,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Xunit;
-using Equibles.Holdings.HostedService;
 
 namespace Equibles.IntegrationTests.Holdings;
 
@@ -65,7 +65,11 @@ public class StockCusipChangedConsumerMixedStateTests : IAsyncLifetime
 
         await using (var ctx = _fixture.CreateDbContext())
         {
-            var sut = new StockCusipChangedConsumer(new ProcessedDataSetRepository(ctx), new HoldingsRescanSignal(), Substitute.For<ILogger<StockCusipChangedConsumer>>());
+            var sut = new StockCusipChangedConsumer(
+                new ProcessedDataSetRepository(ctx),
+                new HoldingsRescanSignal(),
+                Substitute.For<ILogger<StockCusipChangedConsumer>>()
+            );
             // Must not throw a unique-constraint violation from a duplicate guard.
             await sut.Consume(
                 Context(new StockCusipChanged(Guid.NewGuid(), "MSFT", "OLD", "594918104"))

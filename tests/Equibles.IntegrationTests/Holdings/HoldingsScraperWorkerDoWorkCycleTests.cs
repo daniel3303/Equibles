@@ -41,7 +41,14 @@ public class HoldingsScraperWorkerDoWorkCycleTests : ParadeDbMcpTestBase
             IOptions<WorkerOptions> workerOptions,
             IConfiguration configuration
         )
-            : base(logger, scopeFactory, errorReporter, workerOptions, configuration, new HoldingsRescanSignal()) { }
+            : base(
+                logger,
+                scopeFactory,
+                errorReporter,
+                workerOptions,
+                configuration,
+                new HoldingsRescanSignal()
+            ) { }
 
         protected override TimeSpan[] RetryDelays =>
             [

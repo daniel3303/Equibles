@@ -197,7 +197,14 @@ public class HoldingsScraperWorkerTests
             IOptions<WorkerOptions> workerOptions,
             IConfiguration configuration
         )
-            : base(logger, scopeFactory, errorReporter, workerOptions, configuration, new HoldingsRescanSignal()) { }
+            : base(
+                logger,
+                scopeFactory,
+                errorReporter,
+                workerOptions,
+                configuration,
+                new HoldingsRescanSignal()
+            ) { }
 
         public bool InvokeValidateConfiguration() => ValidateConfiguration();
 
