@@ -39,6 +39,7 @@
     <ProjectReference Include="..\..\src\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Errors.Repositories\Equibles.Errors.Repositories.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Sec.HostedService\Equibles.Sec.HostedService.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Sec.FinancialFacts.HostedService\Equibles.Sec.FinancialFacts.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Media.Data\Equibles.Media.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Media.BusinessLogic\Equibles.Media.BusinessLogic.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Congress.HostedService\Equibles.Congress.HostedService.csproj" />
