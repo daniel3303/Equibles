@@ -136,6 +136,39 @@ public class SecEdgarClient : ISecEdgarClient
         }
     }
 
+    public async Task<CompanyFactsResponse> GetCompanyFacts(string cik)
+    {
+        try
+        {
+            var formattedCik = FormatCik(cik);
+            var url = BuildUrl($"/api/xbrl/companyfacts/CIK{formattedCik}.json");
+
+            using var response = await SendWithRetryAsync(url);
+
+            // Companies with no XBRL facts return 404 — a normal "nothing to
+            // ingest" outcome, not an error.
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return null;
+
+            response.EnsureSuccessStatusCode();
+
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonConvert.DeserializeObject<CompanyFactsResponse>(content);
+        }
+        catch (HttpRequestException ex)
+        {
+            // HTTP errors (including exhausted 429 retries) propagate to caller
+            _logger.LogError(ex, "HTTP error retrieving company facts for CIK: {Cik}", cik);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Non-HTTP errors (deserialization, etc.) — return null as "not found"
+            _logger.LogError(ex, "Error retrieving company facts for CIK: {Cik}", cik);
+            return null;
+        }
+    }
+
     public async Task<List<FilingData>> GetCompanyFilings(
         string cik,
         DocumentTypeFilter? documentType = null,
