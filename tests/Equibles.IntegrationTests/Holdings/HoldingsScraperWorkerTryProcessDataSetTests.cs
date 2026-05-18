@@ -125,7 +125,7 @@ public class HoldingsScraperWorkerTryProcessDataSetTests : ParadeDbMcpTestBase
             scopeFactory,
             BuildErrorReporter(),
             Options.Create(new WorkerOptions()),
-            ConfigWithContactEmail()
+            ConfigWithContactEmail(), new HoldingsRescanSignal()
         );
     }
 

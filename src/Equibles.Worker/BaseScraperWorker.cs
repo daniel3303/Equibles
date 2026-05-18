@@ -82,9 +82,17 @@ public abstract class BaseScraperWorker : BackgroundService
                 WorkerName,
                 interval
             );
-            await Task.Delay(interval, stoppingToken);
+            await WaitForNextCycle(interval, stoppingToken);
         }
     }
+
+    /// <summary>
+    /// Waits between cycles. Default is a plain delay; a worker can override to
+    /// also wake early on an external signal (e.g. <c>HoldingsScraperWorker</c>
+    /// waking on a CUSIP-change rescan request).
+    /// </summary>
+    protected virtual Task WaitForNextCycle(TimeSpan interval, CancellationToken stoppingToken) =>
+        Task.Delay(interval, stoppingToken);
 
     protected virtual bool ValidateConfiguration() => true;
 

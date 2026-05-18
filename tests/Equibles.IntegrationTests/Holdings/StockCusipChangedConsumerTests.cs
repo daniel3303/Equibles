@@ -1,4 +1,5 @@
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.HostedService;
 using Equibles.Holdings.HostedService.Consumers;
 using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
@@ -15,6 +16,8 @@ namespace Equibles.IntegrationTests.Holdings;
 public class StockCusipChangedConsumerTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
+
+    private readonly HoldingsRescanSignal _signal = new();
 
     public StockCusipChangedConsumerTests(ParadeDbFixture fixture) => _fixture = fixture;
 
@@ -59,6 +62,7 @@ public class StockCusipChangedConsumerTests : IAsyncLifetime
         {
             var sut = new StockCusipChangedConsumer(
                 new ProcessedDataSetRepository(ctx),
+                _signal,
                 Substitute.For<ILogger<StockCusipChangedConsumer>>()
             );
             await sut.Consume(
@@ -69,6 +73,12 @@ public class StockCusipChangedConsumerTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var rows = await verify.Set<ProcessedDataSet>().Select(r => r.FileName).ToListAsync();
         rows.Should().ContainSingle().Which.Should().Be(ProcessedDataSet.BackfillGuardFileName);
+
+        // GH-852: invalidation must wake the Holdings worker now.
+        var wait = _signal.WaitAsync(CancellationToken.None);
+        (await Task.WhenAny(wait, Task.Delay(TimeSpan.FromSeconds(1))))
+            .Should()
+            .Be(wait, "the consumer must signal a rescan after invalidating ProcessedDataSet");
     }
 
     // Idempotent: once only the guard remains, a further event is a no-op
@@ -87,12 +97,19 @@ public class StockCusipChangedConsumerTests : IAsyncLifetime
         {
             var sut = new StockCusipChangedConsumer(
                 new ProcessedDataSetRepository(ctx),
+                _signal,
                 Substitute.For<ILogger<StockCusipChangedConsumer>>()
             );
             await sut.Consume(
                 Context(new StockCusipChanged(Guid.NewGuid(), "MSFT", "abc", "594918104"))
             );
         }
+
+        // No invalidation happened (already cleared) → no rescan signalled.
+        var wait = _signal.WaitAsync(CancellationToken.None);
+        (await Task.WhenAny(wait, Task.Delay(TimeSpan.FromMilliseconds(300))))
+            .Should()
+            .NotBe(wait, "an already-invalidated no-op must not trigger a rescan");
 
         await using var verify = _fixture.CreateDbContext();
         var rows = await verify.Set<ProcessedDataSet>().Select(r => r.FileName).ToListAsync();

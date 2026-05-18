@@ -22,14 +22,17 @@ namespace Equibles.Holdings.HostedService.Consumers;
 public class StockCusipChangedConsumer : IConsumer<StockCusipChanged>
 {
     private readonly ProcessedDataSetRepository _processedDataSetRepository;
+    private readonly HoldingsRescanSignal _rescanSignal;
     private readonly ILogger<StockCusipChangedConsumer> _logger;
 
     public StockCusipChangedConsumer(
         ProcessedDataSetRepository processedDataSetRepository,
+        HoldingsRescanSignal rescanSignal,
         ILogger<StockCusipChangedConsumer> logger
     )
     {
         _processedDataSetRepository = processedDataSetRepository;
+        _rescanSignal = rescanSignal;
         _logger = logger;
     }
 
@@ -63,8 +66,12 @@ public class StockCusipChangedConsumer : IConsumer<StockCusipChanged>
 
         await _processedDataSetRepository.SaveChanges();
 
+        // Wake the Holdings worker now (GH-852) instead of waiting up to its
+        // 24h cycle / risking a same-cycle skip.
+        _rescanSignal.RequestRescan();
+
         _logger.LogInformation(
-            "CUSIP change for {Ticker} ({Cusip}) invalidated {Count} processed 13F data set(s); the quarterly holdings worker will re-import and backfill on its next cycle",
+            "CUSIP change for {Ticker} ({Cusip}) invalidated {Count} processed 13F data set(s); signalled the holdings worker to re-import and backfill now",
             context.Message.Ticker,
             context.Message.Cusip,
             realRows.Count

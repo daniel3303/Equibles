@@ -27,6 +27,7 @@ public class HoldingsScraperWorker : BaseScraperWorker
 
     private readonly WorkerOptions _workerOptions;
     private readonly IConfiguration _configuration;
+    private readonly HoldingsRescanSignal _rescanSignal;
 
     protected override string WorkerName => "Holdings scraper";
     protected override TimeSpan SleepInterval => TimeSpan.FromHours(24);
@@ -37,12 +38,48 @@ public class HoldingsScraperWorker : BaseScraperWorker
         IServiceScopeFactory scopeFactory,
         ErrorReporter errorReporter,
         IOptions<WorkerOptions> workerOptions,
-        IConfiguration configuration
+        IConfiguration configuration,
+        HoldingsRescanSignal rescanSignal
     )
         : base(logger, scopeFactory, errorReporter)
     {
         _workerOptions = workerOptions.Value;
         _configuration = configuration;
+        _rescanSignal = rescanSignal;
+    }
+
+    // GH-852: wake immediately when StockCusipChangedConsumer requests a
+    // rescan, instead of waiting up to the 24h SleepInterval. If the plain
+    // delay wins, cancel the pending wait so it doesn't swallow a later signal.
+    protected override async Task WaitForNextCycle(
+        TimeSpan interval,
+        CancellationToken stoppingToken
+    )
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        var wake = _rescanSignal.WaitAsync(cts.Token);
+        var delay = Task.Delay(interval, stoppingToken);
+
+        var completed = await Task.WhenAny(wake, delay);
+        if (completed == wake && !stoppingToken.IsCancellationRequested)
+        {
+            Logger.LogInformation(
+                "Holdings scraper woken early by a CUSIP-change rescan request"
+            );
+        }
+        else
+        {
+            cts.Cancel();
+        }
+
+        try
+        {
+            await wake;
+        }
+        catch (OperationCanceledException)
+        {
+            // Either the delay won (we cancelled the pending wait) or shutdown.
+        }
     }
 
     protected override bool ValidateConfiguration()
