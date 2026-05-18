@@ -1,10 +1,11 @@
+using Equibles.Cftc.Data.Models;
 using Equibles.Search.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Cftc.Repositories.Search;
 
 /// <summary>Futures group of the global search. Wraps the existing market code/name search.</summary>
-public class CftcContractSearchProvider : ISearchProvider
+public class CftcContractSearchProvider : QueryableSearchProvider<CftcContract>
 {
     private readonly CftcContractRepository _cftcContractRepository;
 
@@ -13,35 +14,24 @@ public class CftcContractSearchProvider : ISearchProvider
         _cftcContractRepository = cftcContractRepository;
     }
 
-    public string Category => "Futures";
+    public override string Category => "Futures";
 
-    public int Order => 60;
+    public override int Order => 60;
 
-    public async Task<SearchResultGroup> Search(
-        SearchRequest request,
+    protected override IQueryable<CftcContract> Filter(SearchRequest request) =>
+        _cftcContractRepository.Search(request.Query).OrderBy(contract => contract.MarketName);
+
+    protected override Task<List<CftcContract>> Materialize(
+        IQueryable<CftcContract> query,
         CancellationToken cancellationToken
-    )
-    {
-        var contracts = await _cftcContractRepository
-            .Search(request.Query)
-            .OrderBy(contract => contract.MarketName)
-            .Take(request.MaxPerProvider)
-            .Select(contract => new { contract.MarketCode, contract.MarketName })
-            .ToListAsync(cancellationToken);
+    ) => query.ToListAsync(cancellationToken);
 
-        return new SearchResultGroup
+    protected override SearchHit Project(CftcContract contract) =>
+        new()
         {
-            Category = Category,
-            Order = Order,
-            Hits = contracts
-                .Select(contract => new SearchHit
-                {
-                    Title = contract.MarketName,
-                    Subtitle = contract.MarketCode,
-                    Kind = "FuturesMarket",
-                    RouteValues = { ["marketCode"] = contract.MarketCode },
-                })
-                .ToList(),
+            Title = contract.MarketName,
+            Subtitle = contract.MarketCode,
+            Kind = "FuturesMarket",
+            RouteValues = { ["marketCode"] = contract.MarketCode },
         };
-    }
 }
