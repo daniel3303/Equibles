@@ -584,6 +584,7 @@ public class DocumentScraper : IDocumentScraper
                     filing.FilingDate,
                     filing.ReportDate,
                     filing.DocumentUrl,
+                    filing.AccessionNumber,
                     cancellationToken
                 );
 

@@ -1,4 +1,5 @@
 using Equibles.Integrations.Sec.Models;
+using Equibles.Integrations.Sec.Models.Responses;
 
 namespace Equibles.Integrations.Sec.Contracts;
 
@@ -15,6 +16,13 @@ public interface ISecEdgarClient
     );
     Task<string> GetDocumentContent(string accessionNumber, string cik);
     Task<string> GetDocumentContent(FilingData filing);
+
+    /// <summary>
+    /// Fetches SEC's pre-parsed, standardized XBRL facts for a company
+    /// (Company Facts API). Returns null when the company has no XBRL facts
+    /// (404) or the payload cannot be parsed.
+    /// </summary>
+    Task<CompanyFactsResponse> GetCompanyFacts(string cik);
 
     /// <summary>
     /// Fetches a single artifact (e.g. an attached PDF) inside a filing by filename,

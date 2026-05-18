@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <InternalsVisibleTo Include="Equibles.UnitTests" />
+    <InternalsVisibleTo Include="Equibles.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Equibles.Core.AutoWiring" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="FlexLabs.EntityFrameworkCore.Upsert" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
+    <ProjectReference Include="..\Equibles.Worker\Equibles.Worker.csproj" />
+    <ProjectReference Include="..\Equibles.Integrations.Sec\Equibles.Integrations.Sec.csproj" />
+    <ProjectReference Include="..\Equibles.Sec.FinancialFacts.Repositories\Equibles.Sec.FinancialFacts.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.Sec.Repositories\Equibles.Sec.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
+  </ItemGroup>
+</Project>

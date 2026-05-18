@@ -67,7 +67,7 @@ public class DocumentScraperTests
             .GetCompanyFilings(default, default, default, default);
         await harness
             .Persistence.DidNotReceiveWithAnyArgs()
-            .Save(default, default, default, default, default, default, default, default);
+            .Save(default, default, default, default, default, default, default, default, default);
     }
 
     [Fact]
@@ -136,6 +136,7 @@ public class DocumentScraperTests
                 FilingDateAlpha,
                 ReportDateAlpha,
                 "https://sec.gov/acme-10k.htm",
+                "0000123456-25-000001",
                 Arg.Any<CancellationToken>()
             );
         harness.PdfTextExtractor.DidNotReceiveWithAnyArgs().Extract(default);
@@ -188,7 +189,7 @@ public class DocumentScraperTests
             .Exists(default, default, default, default);
         await harness
             .Persistence.DidNotReceiveWithAnyArgs()
-            .Save(default, default, default, default, default, default, default, default);
+            .Save(default, default, default, default, default, default, default, default, default);
         harness.Converter.DidNotReceiveWithAnyArgs().Convert(default);
     }
 
@@ -252,6 +253,7 @@ public class DocumentScraperTests
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<string>(),
+                Arg.Any<string>(),
                 Arg.Any<CancellationToken>()
             );
         await harness
@@ -264,6 +266,7 @@ public class DocumentScraperTests
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<string>(),
+                Arg.Any<string>(),
                 Arg.Any<CancellationToken>()
             );
         await harness
@@ -275,6 +278,7 @@ public class DocumentScraperTests
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
+                Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>()
             );
@@ -304,7 +308,7 @@ public class DocumentScraperTests
         result.Errors.Should().Be(0);
         await harness
             .Persistence.DidNotReceiveWithAnyArgs()
-            .Save(default, default, default, default, default, default, default, default);
+            .Save(default, default, default, default, default, default, default, default, default);
     }
 
     [Fact]

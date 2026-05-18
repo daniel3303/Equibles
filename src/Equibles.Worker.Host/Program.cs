@@ -19,6 +19,8 @@ using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.Media.Data.Extensions;
 using Equibles.Messaging.Extensions;
 using Equibles.Sec.Data.Extensions;
+using Equibles.Sec.FinancialFacts.HostedService.Configuration;
+using Equibles.Sec.FinancialFacts.HostedService.Extensions;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Extensions;
 using Equibles.Worker.Extensions;
@@ -67,6 +69,9 @@ builder.Services.Configure<Equibles.Finra.HostedService.Configuration.FinraScrap
 builder.Services.Configure<Equibles.Sec.HostedService.Configuration.FtdScraperOptions>(
     builder.Configuration.GetSection("FtdScraper")
 );
+builder.Services.Configure<FinancialFactsScraperOptions>(
+    builder.Configuration.GetSection("FinancialFactsScraper")
+);
 builder.Services.Configure<Equibles.Fred.HostedService.Configuration.FredScraperOptions>(
     builder.Configuration.GetSection("FredScraper")
 );
@@ -101,6 +106,7 @@ builder.Services.AutoWireServicesFrom<Equibles.Sec.BusinessLogic.SecDocumentHtml
 // Register worker services and all scrapers
 builder.Services.AddWorkerServices();
 builder.Services.AddSecWorker();
+builder.Services.AddSecFinancialFactsWorker();
 builder.Services.AddFinraWorker();
 builder.Services.AddFredWorker();
 builder.Services.AddYahooWorker();

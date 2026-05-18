@@ -108,7 +108,8 @@ public class DocumentPersistenceServiceTests : IDisposable
             documentType: DocumentType.TenK,
             reportingDate: new DateOnly(2025, 3, 15),
             reportingForDate: new DateOnly(2024, 12, 31),
-            sourceUrl: "https://sec.gov/example"
+            sourceUrl: "https://sec.gov/example",
+            accessionNumber: "0001193125-25-000042"
         );
 
         var persisted = await _dbContext.Set<Document>().SingleAsync();
@@ -118,5 +119,6 @@ public class DocumentPersistenceServiceTests : IDisposable
         persisted.ReportingDate.Should().Be(new DateOnly(2025, 3, 15));
         persisted.ReportingForDate.Should().Be(new DateOnly(2024, 12, 31));
         persisted.SourceUrl.Should().Be("https://sec.gov/example");
+        persisted.AccessionNumber.Should().Be("0001193125-25-000042");
     }
 }
