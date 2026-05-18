@@ -33,21 +33,16 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
-      - uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7  # v5
-        with:
-          dotnet-version: '10.0.x'
-          dotnet-quality: 'preview'
-
       - name: Initialize CodeQL
         uses: github/codeql-action/init@9e0d7b8d25671d64c341c19c0152d693099fb5ba  # v4
         with:
           languages: ${{ matrix.language }}
+          # build-mode: none makes CodeQL walk the source tree for .cs files and
+          # honor the paths-ignore globs in codeql-config.yml. Under the default
+          # build mode, paths-ignore is silently ignored for C#, so obj/, bin/
+          # and tests/ leaked into the scan despite being listed there.
+          build-mode: none
           config-file: ./.github/codeql-config.yml
-
-      - name: Build
-        run: |
-          dotnet restore Equibles.sln
-          dotnet build Equibles.sln --no-restore -c Release
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@9e0d7b8d25671d64c341c19c0152d693099fb5ba  # v4
