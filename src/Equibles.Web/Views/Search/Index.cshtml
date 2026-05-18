@@ -19,7 +19,7 @@
     <!-- Search -->
     <form method="get" class="mb-6">
         <div class="flex gap-3">
-            <input type="text" name="q" value="@Model.Query"
+            <input type="search" name="q" value="@Model.Query"
                    class="input input-bordered flex-1 max-w-xl"
                    aria-label="Search everything"
                    placeholder="Search for a ticker, company, filing, indicator..." autofocus />
@@ -30,30 +30,44 @@
     </form>
 
     @if (string.IsNullOrWhiteSpace(Model.Query)) {
-        <div class="text-base-content/60 py-12 text-center">
-            Type anything above to search across every dataset.
+        <div class="flex flex-col items-center text-center py-16 gap-4">
+            <icon name="magnifying-glass" size="10" class="text-base-content/30" />
+            <p class="text-base-content/70 max-w-md">
+                Search stocks, SEC filings, institutions, insiders, congress members,
+                economic indicators and futures markets — all at once.
+            </p>
+            <div class="flex flex-wrap justify-center gap-2">
+                <span class="text-sm text-base-content/50">Try:</span>
+                <a asp-action="Index" asp-route-q="AAPL" class="badge badge-ghost badge-lg transition-colors hover:badge-primary">AAPL</a>
+                <a asp-action="Index" asp-route-q="Apple" class="badge badge-ghost badge-lg transition-colors hover:badge-primary">Apple</a>
+                <a asp-action="Index" asp-route-q="10-K" class="badge badge-ghost badge-lg transition-colors hover:badge-primary">10-K</a>
+            </div>
         </div>
     } else if (!Model.HasResults) {
-        <div class="text-base-content/60 py-12 text-center">
-            No results for <span class="font-semibold">@Model.Query</span>.
+        <div class="flex flex-col items-center text-center py-16 gap-3">
+            <icon name="magnifying-glass" size="10" class="text-base-content/30" />
+            <p class="text-base-content/70">
+                No results for <span class="font-semibold text-base-content">@Model.Query</span>.
+            </p>
+            <p class="text-sm text-base-content/50">Try a ticker symbol, company name, or filing type.</p>
         </div>
     } else {
         <!-- Category filter chips -->
         <div class="flex flex-wrap gap-2 mb-6">
             <a asp-action="Index" asp-route-q="@Model.Query"
-               class="badge badge-lg @(string.IsNullOrWhiteSpace(Model.ActiveCategory) ? "badge-primary" : "badge-ghost")">
+               class="badge badge-lg transition-colors hover:badge-primary @(string.IsNullOrWhiteSpace(Model.ActiveCategory) ? "badge-primary" : "badge-ghost")">
                 All
             </a>
             @foreach (var group in Model.Groups) {
                 <a asp-action="Index" asp-route-q="@Model.Query" asp-route-category="@group.Category"
-                   class="badge badge-lg @(string.Equals(group.Category, Model.ActiveCategory, StringComparison.OrdinalIgnoreCase) ? "badge-primary" : "badge-ghost")">
+                   class="badge badge-lg transition-colors hover:badge-primary @(string.Equals(group.Category, Model.ActiveCategory, StringComparison.OrdinalIgnoreCase) ? "badge-primary" : "badge-ghost")">
                     @group.Category (@group.Hits.Count)
                 </a>
             }
         </div>
 
         <!-- Result groups -->
-        <div class="grid gap-6 md:grid-cols-2">
+        <div class="grid gap-6 md:grid-cols-2 items-start">
             @foreach (var group in visibleGroups) {
                 var seeAll = Url.CategoryUrl(group.Category, Model.Query);
                 <div class="card bg-base-100 shadow-sm">

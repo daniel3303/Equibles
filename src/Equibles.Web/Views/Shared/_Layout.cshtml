@@ -17,7 +17,7 @@
                 <a asp-action="Index" asp-controller="Home" class="flex items-center gap-2">
                     <img src="/favicon/favicon/android-chrome-512x512.png" alt="Equibles" class="h-7 w-auto" />
                 </a>
-                <nav class="hidden md:flex items-center gap-6" aria-label="Main navigation">
+                <nav class="hidden lg:flex items-center gap-6 whitespace-nowrap" aria-label="Main navigation">
                     <a asp-action="Index" asp-controller="Home" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Home</a>
                     <a asp-action="Index" asp-controller="Stocks" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Stocks</a>
                     <a asp-action="Index" asp-controller="EconomicData" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Economic Data</a>
@@ -34,8 +34,8 @@
             </div>
             <div class="flex items-center gap-2">
                 <!-- Global search: posts the query to SearchController.Index as ?q= -->
-                <form asp-controller="Search" asp-action="Index" method="get" class="hidden md:block">
-                    <label class="input input-sm input-bordered flex items-center gap-2 w-56">
+                <form asp-controller="Search" asp-action="Index" method="get" class="hidden lg:block">
+                    <label class="input input-sm input-bordered flex items-center gap-2 w-48 xl:w-64">
                         <icon name="magnifying-glass" size="4" />
                         <input type="text" name="q" class="grow" placeholder="Search everything..." aria-label="Search everything" />
                     </label>
@@ -52,7 +52,7 @@
                     </form>
                 }
                 <!-- Mobile nav menu -->
-                <div class="dropdown dropdown-end md:hidden">
+                <div class="dropdown dropdown-end lg:hidden">
                     <div tabindex="0" role="button" class="btn btn-ghost btn-sm">
                         <icon name="bars-3" size="5" />
                     </div>
