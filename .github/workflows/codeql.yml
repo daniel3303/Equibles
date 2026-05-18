@@ -39,7 +39,7 @@ jobs:
           dotnet-quality: 'preview'
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@68bde559dea0fdcac2102bfdf6230c5f70eb485e  # v4
+        uses: github/codeql-action/init@9e0d7b8d25671d64c341c19c0152d693099fb5ba  # v4
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql-config.yml
@@ -50,6 +50,6 @@ jobs:
           dotnet build Equibles.sln --no-restore -c Release
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@68bde559dea0fdcac2102bfdf6230c5f70eb485e  # v4
+        uses: github/codeql-action/analyze@9e0d7b8d25671d64c341c19c0152d693099fb5ba  # v4
         with:
           category: "/language:${{ matrix.language }}"
