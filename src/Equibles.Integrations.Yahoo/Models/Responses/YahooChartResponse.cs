@@ -20,11 +20,26 @@ public class ChartContainer
 
 public class ChartResult
 {
+    [JsonProperty("meta")]
+    public ChartMeta Meta { get; set; }
+
     [JsonProperty("timestamp")]
     public List<long> Timestamp { get; set; } = [];
 
     [JsonProperty("indicators")]
     public ChartIndicators Indicators { get; set; }
+}
+
+public class ChartMeta
+{
+    // Exchange UTC offset in seconds. Yahoo stamps daily-bar timestamps in the
+    // exchange's local time; this is how a UTC epoch maps back to the trading
+    // day. Defaults to 0 when absent (UTC).
+    [JsonProperty("gmtoffset")]
+    public long GmtOffset { get; set; }
+
+    [JsonProperty("exchangeTimezoneName")]
+    public string ExchangeTimezoneName { get; set; }
 }
 
 public class ChartIndicators

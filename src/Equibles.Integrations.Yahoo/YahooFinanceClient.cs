@@ -55,8 +55,14 @@ public class YahooFinanceClient : IYahooFinanceClient
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
-        var period1 = ToUnixTimestamp(startDate);
-        var period2 = ToUnixTimestamp(endDate.AddDays(1)); // inclusive end
+        // Yahoo stamps daily bars in the exchange's local time, but the
+        // period1/period2 query bounds are UTC epoch seconds. An exchange east
+        // of UTC has its startDate bar stamped before startDate-UTC-midnight,
+        // so a naive window silently drops boundary days. Over-fetch by a full
+        // day on each side (max real offset is ±14h) and trim to the exact
+        // exchange-local [startDate, endDate] window after parsing.
+        var period1 = ToUnixTimestamp(startDate.AddDays(-1));
+        var period2 = ToUnixTimestamp(endDate.AddDays(2));
 
         var url =
             $"{ChartBaseUrl}/{Uri.EscapeDataString(ticker)}"
@@ -74,10 +80,26 @@ public class YahooFinanceClient : IYahooFinanceClient
             return [];
 
         var adjCloseList = result.Indicators?.AdjClose?.FirstOrDefault()?.AdjustedClose;
+        // Exchange-local offset (seconds). Adding it to a UTC epoch shifts the
+        // instant into exchange-local time, so the existing UTC-based
+        // FromUnixTimestamp then yields the correct trading-day calendar date.
+        var offsetSeconds = result.Meta?.GmtOffset ?? 0;
         var prices = new List<HistoricalPrice>();
+        var skipped = 0;
+        var outsideWindow = 0;
 
         for (var i = 0; i < result.Timestamp.Count; i++)
         {
+            // Trim the over-fetched window down to the requested range, on the
+            // exchange-local calendar (not UTC) — otherwise boundary days land
+            // on the wrong date or get dropped for non-UTC exchanges.
+            var date = FromUnixTimestamp(result.Timestamp[i] + offsetSeconds);
+            if (date < startDate || date > endDate)
+            {
+                outsideWindow++;
+                continue;
+            }
+
             // Yahoo occasionally returns a ragged payload — a timestamp array
             // longer than the OHLC/volume columns, or a column with a null
             // hole on a holiday / early-close row. Bound every column access
@@ -90,12 +112,15 @@ public class YahooFinanceClient : IYahooFinanceClient
             var low = i < quote.Low.Count ? quote.Low[i] : null;
             var close = i < quote.Close.Count ? quote.Close[i] : null;
             if (open == null || high == null || low == null || close == null)
+            {
+                skipped++;
                 continue;
+            }
 
             prices.Add(
                 new HistoricalPrice
                 {
-                    Date = FromUnixTimestamp(result.Timestamp[i]),
+                    Date = date,
                     Open = Math.Round(open.Value, 4),
                     High = Math.Round(high.Value, 4),
                     Low = Math.Round(low.Value, 4),
@@ -113,7 +138,13 @@ public class YahooFinanceClient : IYahooFinanceClient
             );
         }
 
-        _logger.LogDebug("Fetched {Count} historical prices for {Ticker}", prices.Count, ticker);
+        _logger.LogDebug(
+            "Fetched {Count} historical prices for {Ticker} ({Skipped} incomplete, {OutsideWindow} outside window)",
+            prices.Count,
+            ticker,
+            skipped,
+            outsideWindow
+        );
         return prices;
     }
 
