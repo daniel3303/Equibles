@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
@@ -11,6 +12,7 @@ using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
 using Equibles.Worker;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -80,6 +82,13 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
                 sp.GetService(typeof(EquiblesDbContext)).Returns(ctx);
                 sp.GetService(typeof(CommonStockRepository))
                     .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(CommonStockManager))
+                    .Returns(
+                        new CommonStockManager(
+                            new CommonStockRepository(ctx),
+                            Substitute.For<IPublishEndpoint>()
+                        )
+                    );
                 sp.GetService(typeof(FailToDeliverRepository))
                     .Returns(new FailToDeliverRepository(ctx));
                 sp.GetService(typeof(TickerMapService)).Returns(new TickerMapService(scopeFactory));

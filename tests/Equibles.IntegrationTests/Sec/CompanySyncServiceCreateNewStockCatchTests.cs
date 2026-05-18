@@ -8,6 +8,7 @@ using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.HostedService.Services;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -54,7 +55,10 @@ public class CompanySyncServiceCreateNewStockCatchTests : ParadeDbMcpTestBase
             (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
             (
                 typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext))
+                new CommonStockManager(
+                    new CommonStockRepository(DbContext),
+                    Substitute.For<IPublishEndpoint>()
+                )
             ),
             (typeof(EquiblesDbContext), DbContext)
         );

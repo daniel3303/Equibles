@@ -2,6 +2,8 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Exceptions;
+using Equibles.Messaging.Contracts.CommonStocks;
+using MassTransit;
 
 namespace Equibles.CommonStocks.BusinessLogic;
 
@@ -9,10 +11,44 @@ namespace Equibles.CommonStocks.BusinessLogic;
 public class CommonStockManager
 {
     private readonly CommonStockRepository _commonStockRepository;
+    private readonly IPublishEndpoint _publishEndpoint;
 
-    public CommonStockManager(CommonStockRepository commonStockRepository)
+    public CommonStockManager(
+        CommonStockRepository commonStockRepository,
+        IPublishEndpoint publishEndpoint
+    )
     {
         _commonStockRepository = commonStockRepository;
+        _publishEndpoint = publishEndpoint;
+    }
+
+    /// <summary>
+    /// Sets a stock's CUSIP. When the value actually changes, publishes
+    /// <see cref="StockCusipChanged"/> (before SaveChanges, so the EF outbox
+    /// captures it in the same transaction) so the Holdings module can
+    /// backfill quarterly 13F data sets that were processed while this stock
+    /// was still unresolvable. A no-op change publishes nothing.
+    /// </summary>
+    public async Task SetCusip(CommonStock commonStock, string cusip)
+    {
+        if (commonStock == null)
+        {
+            throw new ArgumentNullException(nameof(commonStock));
+        }
+
+        if (string.Equals(commonStock.Cusip, cusip, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var previousCusip = commonStock.Cusip;
+        commonStock.Cusip = cusip;
+
+        // Publish before SaveChanges (outbox pattern).
+        await _publishEndpoint.Publish(
+            new StockCusipChanged(commonStock.Id, commonStock.Ticker, previousCusip, cusip)
+        );
+        await _commonStockRepository.SaveChanges();
     }
 
     public async Task<CommonStock> Create(CommonStock commonStock)

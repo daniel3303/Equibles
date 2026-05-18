@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO.Compression;
+using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
@@ -156,6 +157,7 @@ public class FtdImportService
 
         using var scope = _scopeFactory.CreateScope();
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var stockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
 
         // Load stocks that don't have CUSIPs yet
         var tickers = tickerToCusip.Keys.ToList();
@@ -169,14 +171,12 @@ public class FtdImportService
         {
             if (tickerToCusip.TryGetValue(stock.Ticker, out var cusip))
             {
-                stock.Cusip = cusip;
+                // Route through the manager so a StockCusipChanged event is
+                // published (outbox) — lets Holdings backfill any 13F data
+                // sets processed before this stock had a CUSIP.
+                await stockManager.SetCusip(stock, cusip);
                 seeded++;
             }
-        }
-
-        if (seeded > 0)
-        {
-            await stockRepo.SaveChanges();
         }
 
         return seeded;

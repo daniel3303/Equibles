@@ -17,6 +17,7 @@ using Equibles.Holdings.Data.Extensions;
 using Equibles.Holdings.HostedService.Extensions;
 using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.Media.Data.Extensions;
+using Equibles.Messaging.Extensions;
 using Equibles.Sec.Data.Extensions;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Extensions;
@@ -46,6 +47,11 @@ Equibles.Plugins.PluginLoader.LoadAll();
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddEquiblesDbContext(connectionString, modules => modules.AddAllModules());
 builder.Services.AddAllRepositories();
+
+// MassTransit (Postgres SQL transport + EF outbox in EquiblesDbContext).
+// AddAllModules() auto-discovers MessagingModuleConfiguration via reflection
+// since this host references Equibles.Messaging.
+builder.Services.AddMessaging(builder.Configuration);
 
 // Worker-specific configuration
 builder.Services.Configure<WorkerOptions>(builder.Configuration.GetSection("Worker"));
