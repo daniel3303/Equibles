@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="..\Equibles.Congress.Data\Equibles.Congress.Data.csproj" />
+    <ProjectReference Include="..\Equibles.Search.Abstractions\Equibles.Search.Abstractions.csproj" />
   </ItemGroup>
 </Project>

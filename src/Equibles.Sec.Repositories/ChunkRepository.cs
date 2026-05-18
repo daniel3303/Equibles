@@ -18,7 +18,8 @@ public class ChunkRepository : BaseRepository<Chunk>
         Guid? documentId = null,
         DocumentType documentType = null,
         DateOnly? startDate = null,
-        DateOnly? endDate = null
+        DateOnly? endDate = null,
+        CancellationToken cancellationToken = default
     )
     {
         var query = DbContext
@@ -55,6 +56,6 @@ public class ChunkRepository : BaseRepository<Chunk>
         return await query
             .OrderByDescending(c => EF.Functions.Score(c.Id))
             .Take(maxResults)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
     }
 }

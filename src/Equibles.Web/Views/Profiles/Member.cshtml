@@ -1,0 +1,47 @@
+@model Equibles.Web.ViewModels.Profiles.CongressProfileViewModel
+
+@{
+    ViewData["Title"] = Model.Name;
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">@Model.Name</h1>
+        <p class="text-base-content/60">Member of Congress</p>
+    </div>
+
+    <h2 class="text-xl font-semibold mb-3">Recent trades</h2>
+    @if (Model.Trades.Count == 0) {
+        <div class="text-base-content/60 py-8">No reported trades.</div>
+    } else {
+        <div class="card bg-base-100 shadow-sm">
+            <div class="overflow-x-auto">
+                <table class="table table-zebra table-sm">
+                    <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th class="hidden lg:table-cell">Date</th>
+                            <th class="hidden lg:table-cell">Asset</th>
+                            <th class="hidden lg:table-cell">Owner</th>
+                            <th class="text-right">Amount (USD)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var trade in Model.Trades) {
+                            <tr>
+                                <td>
+                                    <a asp-action="Show" asp-controller="Stocks" asp-route-ticker="@trade.Ticker"
+                                       class="font-semibold link link-primary">@trade.Ticker</a>
+                                </td>
+                                <td class="hidden lg:table-cell">@trade.TransactionDate.ToString("yyyy-MM-dd")</td>
+                                <td class="hidden lg:table-cell max-w-xs truncate">@trade.AssetName</td>
+                                <td class="hidden lg:table-cell">@trade.OwnerType</td>
+                                <td class="text-right">@trade.AmountFrom.ToString("N0") – @trade.AmountTo.ToString("N0")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
