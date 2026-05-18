@@ -2,6 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Equibles.Search;
 using Equibles.Search.Abstractions;
+using Equibles.CommonStocks.Repositories.Search;
 using Equibles.Search.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -26,6 +27,24 @@ public class SearchServiceCollectionExtensionsTests
                 && descriptor.ImplementationType == typeof(DiscoverableTestProvider)
             );
         services.Should().Contain(descriptor => descriptor.ServiceType == typeof(SearchAggregator));
+    }
+
+    [Fact]
+    public void AddEquiblesSearch_WithoutAddAllRepositories_StillDiscoversRealModuleProvider()
+    {
+        // Ordering-independence (issue #887): AddEquiblesSearch self-loads plugin assemblies via
+        // PluginLoader, so a real module provider is discovered even though AddAllRepositories
+        // (the registrar it used to implicitly depend on) was never called.
+        var services = new ServiceCollection();
+
+        services.AddEquiblesSearch();
+
+        services
+            .Should()
+            .Contain(descriptor =>
+                descriptor.ServiceType == typeof(ISearchProvider)
+                && descriptor.ImplementationType == typeof(CommonStockSearchProvider)
+            );
     }
 
     [Fact]
