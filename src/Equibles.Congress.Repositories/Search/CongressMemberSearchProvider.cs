@@ -1,10 +1,11 @@
+using Equibles.Congress.Data.Models;
 using Equibles.Search.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Congress.Repositories.Search;
 
 /// <summary>Congress group of the global search. Wraps the existing member name search.</summary>
-public class CongressMemberSearchProvider : ISearchProvider
+public class CongressMemberSearchProvider : QueryableSearchProvider<CongressMember>
 {
     private readonly CongressMemberRepository _congressMemberRepository;
 
@@ -13,34 +14,23 @@ public class CongressMemberSearchProvider : ISearchProvider
         _congressMemberRepository = congressMemberRepository;
     }
 
-    public string Category => "Congress";
+    public override string Category => "Congress";
 
-    public int Order => 50;
+    public override int Order => 50;
 
-    public async Task<SearchResultGroup> Search(
-        SearchRequest request,
+    protected override IQueryable<CongressMember> Filter(SearchRequest request) =>
+        _congressMemberRepository.Search(request.Query).OrderBy(member => member.Name);
+
+    protected override Task<List<CongressMember>> Materialize(
+        IQueryable<CongressMember> query,
         CancellationToken cancellationToken
-    )
-    {
-        var members = await _congressMemberRepository
-            .Search(request.Query)
-            .OrderBy(member => member.Name)
-            .Take(request.MaxPerProvider)
-            .Select(member => new { member.Name })
-            .ToListAsync(cancellationToken);
+    ) => query.ToListAsync(cancellationToken);
 
-        return new SearchResultGroup
+    protected override SearchHit Project(CongressMember member) =>
+        new()
         {
-            Category = Category,
-            Order = Order,
-            Hits = members
-                .Select(member => new SearchHit
-                {
-                    Title = member.Name,
-                    Kind = "CongressMember",
-                    RouteValues = { ["name"] = member.Name },
-                })
-                .ToList(),
+            Title = member.Name,
+            Kind = "CongressMember",
+            RouteValues = { ["id"] = member.Id.ToString() },
         };
-    }
 }

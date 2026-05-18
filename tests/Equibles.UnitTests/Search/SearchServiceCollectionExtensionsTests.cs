@@ -1,8 +1,8 @@
 using System.Threading;
 using System.Threading.Tasks;
+using Equibles.CommonStocks.Repositories.Search;
 using Equibles.Search;
 using Equibles.Search.Abstractions;
-using Equibles.CommonStocks.Repositories.Search;
 using Equibles.Search.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 

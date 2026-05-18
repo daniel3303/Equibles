@@ -1,0 +1,49 @@
+@model Equibles.Web.ViewModels.Profiles.InstitutionProfileViewModel
+
+@{
+    ViewData["Title"] = Model.Name;
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">@Model.Name</h1>
+        <p class="text-base-content/60">
+            Institutional holder@(string.IsNullOrWhiteSpace(Model.Location) ? "" : " · " + Model.Location) · CIK @Model.Cik
+        </p>
+    </div>
+
+    <h2 class="text-xl font-semibold mb-3">Recent holdings</h2>
+    @if (Model.Holdings.Count == 0) {
+        <div class="text-base-content/60 py-8">No reported holdings.</div>
+    } else {
+        <div class="card bg-base-100 shadow-sm">
+            <div class="overflow-x-auto">
+                <table class="table table-zebra table-sm">
+                    <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Company</th>
+                            <th class="hidden lg:table-cell">Report date</th>
+                            <th class="text-right">Shares</th>
+                            <th class="text-right">Value (USD)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var holding in Model.Holdings) {
+                            <tr>
+                                <td>
+                                    <a asp-action="Show" asp-controller="Stocks" asp-route-ticker="@holding.Ticker"
+                                       class="font-semibold link link-primary">@holding.Ticker</a>
+                                </td>
+                                <td class="max-w-xs truncate">@holding.Company</td>
+                                <td class="hidden lg:table-cell">@holding.ReportDate.ToString("yyyy-MM-dd")</td>
+                                <td class="text-right">@holding.Shares.ToString("N0")</td>
+                                <td class="text-right">@holding.Value.ToString("N0")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>

@@ -1,10 +1,11 @@
+using Equibles.InsiderTrading.Data.Models;
 using Equibles.Search.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.InsiderTrading.Repositories.Search;
 
 /// <summary>Insiders group of the global search. Wraps the existing owner name search.</summary>
-public class InsiderOwnerSearchProvider : ISearchProvider
+public class InsiderOwnerSearchProvider : QueryableSearchProvider<InsiderOwner>
 {
     private readonly InsiderOwnerRepository _insiderOwnerRepository;
 
@@ -13,48 +14,26 @@ public class InsiderOwnerSearchProvider : ISearchProvider
         _insiderOwnerRepository = insiderOwnerRepository;
     }
 
-    public string Category => "Insiders";
+    public override string Category => "Insiders";
 
-    public int Order => 40;
+    public override int Order => 40;
 
-    public async Task<SearchResultGroup> Search(
-        SearchRequest request,
+    protected override IQueryable<InsiderOwner> Filter(SearchRequest request) =>
+        _insiderOwnerRepository.Search(request.Query).OrderBy(owner => owner.Name);
+
+    protected override Task<List<InsiderOwner>> Materialize(
+        IQueryable<InsiderOwner> query,
         CancellationToken cancellationToken
-    )
-    {
-        var owners = await _insiderOwnerRepository
-            .Search(request.Query)
-            .OrderBy(owner => owner.Name)
-            .Take(request.MaxPerProvider)
-            .Select(owner => new
-            {
-                owner.Name,
-                owner.OwnerCik,
-                owner.OfficerTitle,
-                owner.IsDirector,
-                owner.IsTenPercentOwner,
-            })
-            .ToListAsync(cancellationToken);
+    ) => query.ToListAsync(cancellationToken);
 
-        return new SearchResultGroup
+    protected override SearchHit Project(InsiderOwner owner) =>
+        new()
         {
-            Category = Category,
-            Order = Order,
-            Hits = owners
-                .Select(owner => new SearchHit
-                {
-                    Title = owner.Name,
-                    Subtitle = DescribeRole(
-                        owner.OfficerTitle,
-                        owner.IsDirector,
-                        owner.IsTenPercentOwner
-                    ),
-                    Kind = "Insider",
-                    RouteValues = { ["ownerCik"] = owner.OwnerCik },
-                })
-                .ToList(),
+            Title = owner.Name,
+            Subtitle = DescribeRole(owner.OfficerTitle, owner.IsDirector, owner.IsTenPercentOwner),
+            Kind = "Insider",
+            RouteValues = { ["ownerCik"] = owner.OwnerCik },
         };
-    }
 
     private static string DescribeRole(string officerTitle, bool isDirector, bool isTenPercentOwner)
     {
