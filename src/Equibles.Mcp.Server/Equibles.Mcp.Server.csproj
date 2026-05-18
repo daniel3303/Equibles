@@ -23,5 +23,6 @@
     <ProjectReference Include="..\Equibles.Finra.Mcp\Equibles.Finra.Mcp.csproj" />
     <ProjectReference Include="..\Equibles.Yahoo.Mcp\Equibles.Yahoo.Mcp.csproj" />
     <ProjectReference Include="..\Equibles.Plugins\Equibles.Plugins.csproj" />
+    <ProjectReference Include="..\Equibles.Messaging\Equibles.Messaging.csproj" />
   </ItemGroup>
 </Project>

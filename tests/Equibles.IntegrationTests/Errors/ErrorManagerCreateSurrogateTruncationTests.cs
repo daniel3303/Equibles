@@ -3,6 +3,7 @@ using Equibles.Errors.Data;
 using Equibles.Errors.Data.Models;
 using Equibles.Errors.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Messaging;
 
 namespace Equibles.IntegrationTests.Errors;
 
@@ -13,7 +14,10 @@ public class ErrorManagerCreateSurrogateTruncationTests
 
     public ErrorManagerCreateSurrogateTruncationTests()
     {
-        var context = TestDbContextFactory.Create(new ErrorsModuleConfiguration());
+        var context = TestDbContextFactory.Create(
+            new ErrorsModuleConfiguration(),
+            new MessagingModuleConfiguration()
+        );
         _repository = new ErrorRepository(context);
         _sut = new ErrorManager(_repository);
     }

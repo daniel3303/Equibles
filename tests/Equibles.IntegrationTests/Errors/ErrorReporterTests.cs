@@ -3,6 +3,7 @@ using Equibles.Errors.Data;
 using Equibles.Errors.Data.Models;
 using Equibles.Errors.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Messaging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -15,7 +16,10 @@ public class ErrorReporterTests
     [Fact]
     public async Task Report_DelegatesToErrorManager_ErrorPersisted()
     {
-        var context = TestDbContextFactory.Create(new ErrorsModuleConfiguration());
+        var context = TestDbContextFactory.Create(
+            new ErrorsModuleConfiguration(),
+            new MessagingModuleConfiguration()
+        );
         var repository = new ErrorRepository(context);
         var errorManager = new ErrorManager(repository);
         var scopeFactory = ServiceScopeSubstitute.Create((typeof(ErrorManager), errorManager));

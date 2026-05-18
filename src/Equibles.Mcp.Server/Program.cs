@@ -21,6 +21,7 @@ using Equibles.Mcp.Contracts;
 using Equibles.Mcp.Extensions;
 using Equibles.Mcp.Middleware;
 using Equibles.Media.Data.Extensions;
+using Equibles.Messaging.Extensions;
 using Equibles.Sec.Data.Extensions;
 using Equibles.Sec.Mcp.Extensions;
 using Equibles.Yahoo.Data.Extensions;
@@ -60,7 +61,13 @@ public partial class Program
         Equibles.Plugins.PluginLoader.LoadAll();
 
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-        builder.Services.AddEquiblesDbContext(connectionString, modules => modules.AddAllModules());
+        // .AddMessaging() explicitly so the MassTransit outbox entities (in the
+        // shared migration snapshot) are always in this host's model too —
+        // AddAllModules' reflection only sees already-loaded assemblies.
+        builder.Services.AddEquiblesDbContext(
+            connectionString,
+            modules => modules.AddAllModules().AddMessaging()
+        );
         builder.Services.AddAllRepositories();
 
         builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();

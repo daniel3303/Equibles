@@ -6,11 +6,7 @@
 
   <ItemGroup>
     <!-- Repo-root CHANGELOG.md, copied so the in-app /changelog page can render it. -->
-    <Content
-      Include="..\..\CHANGELOG.md"
-      Link="CHANGELOG.md"
-      CopyToOutputDirectory="PreserveNewest"
-    />
+    <Content Include="..\..\CHANGELOG.md" Link="CHANGELOG.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -43,5 +39,6 @@
     <ProjectReference Include="..\Equibles.Yahoo.Repositories\Equibles.Yahoo.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Cftc.Repositories\Equibles.Cftc.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Cboe.Repositories\Equibles.Cboe.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.Messaging\Equibles.Messaging.csproj" />
   </ItemGroup>
 </Project>

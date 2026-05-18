@@ -31,6 +31,7 @@ using Equibles.InsiderTrading.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.Data;
 using Equibles.Media.Data.Extensions;
+using Equibles.Messaging;
 using Equibles.Sec.Data.Extensions;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Data.Extensions;
@@ -572,6 +573,7 @@ public class ModuleConfigurationTests : IDisposable
                 new SecTestModuleConfiguration(),
                 new MediaModuleConfiguration(),
                 new ErrorsModuleConfiguration(),
+                new MessagingModuleConfiguration(),
                 new FredModuleConfiguration(),
                 new FinraModuleConfiguration(),
                 new YahooModuleConfiguration(),
