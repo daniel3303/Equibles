@@ -1,4 +1,7 @@
+using System.IO;
 using System.Net;
+using System.Net.Sockets;
+using System.Security.Authentication;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Common.RateLimiter;
 using Equibles.Integrations.Sec.Contracts;
@@ -512,7 +515,29 @@ public class SecEdgarClient : ISecEdgarClient
             await RateLimiter.WaitAsync();
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            var response = await _httpClient.GetAsync(url, completionOption, cancellationToken);
+            HttpResponseMessage response;
+            try
+            {
+                response = await _httpClient.GetAsync(url, completionOption, cancellationToken);
+            }
+            catch (HttpRequestException ex)
+                when (IsTransientNetworkError(ex) && attempt < MaxRetries)
+            {
+                // DNS / socket / TLS failures (e.g. transient connectivity to www.sec.gov) are
+                // retryable just like a 5xx — retry with backoff instead of surfacing them as
+                // dashboard errors. Only a sustained outage exhausts retries and throws once.
+                var delay = TransientBackoff(attempt);
+                _logger.LogWarning(
+                    ex,
+                    "Transient network error reaching SEC EDGAR for {Url}, retrying in {Delay}s (attempt {Attempt}/{Max})",
+                    url,
+                    delay.TotalSeconds,
+                    attempt + 1,
+                    MaxRetries
+                );
+                await Task.Delay(delay, cancellationToken);
+                continue;
+            }
             sw.Stop();
 
             _logger.LogDebug(
@@ -586,10 +611,20 @@ public class SecEdgarClient : ISecEdgarClient
             }
         }
 
-        // Exponential backoff: 2s, 4s, 8s, 16s, 32s — capped at 1 min
+        return TransientBackoff(attempt);
+    }
+
+    // Exponential backoff: 2s, 4s, 8s, 16s, 32s — capped at MaxRetryDelay.
+    private static TimeSpan TransientBackoff(int attempt)
+    {
         var backoff = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
         return backoff > MaxRetryDelay ? MaxRetryDelay : backoff;
     }
+
+    // DNS resolution, socket and TLS handshake failures are transient connectivity problems,
+    // not defects — they are retried, never recorded as dashboard errors.
+    private static bool IsTransientNetworkError(HttpRequestException exception) =>
+        exception.InnerException is SocketException or IOException or AuthenticationException;
 
     private static List<CompanyInfo> ParseCompaniesFromResponse(CompanyTickersResponse response)
     {
