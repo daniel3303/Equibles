@@ -11,11 +11,7 @@ public static class ProfileFormatting
         );
     }
 
-    public static string DescribeRole(
-        string officerTitle,
-        bool isDirector,
-        bool isTenPercentOwner
-    )
+    public static string DescribeRole(string officerTitle, bool isDirector, bool isTenPercentOwner)
     {
         if (!string.IsNullOrWhiteSpace(officerTitle))
             return officerTitle;
