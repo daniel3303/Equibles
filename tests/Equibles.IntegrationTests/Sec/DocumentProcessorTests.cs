@@ -106,9 +106,42 @@ public class DocumentProcessorTests
             .ContainSingle();
     }
 
-    [Fact]
-    public async Task GenerateEmbeddings_EmbeddingCountMismatch_Throws()
+    private static (DocumentProcessor Sut, EmbeddingRepository Repo) CreateSutWithRepo(
+        IEmbeddingClient embeddingClient
+    )
     {
+        var embeddingRepository = Substitute.For<EmbeddingRepository>(
+            (Equibles.Data.EquiblesDbContext)null
+        );
+        var sut = new DocumentProcessor(
+            Substitute.For<ChunkRepository>((Equibles.Data.EquiblesDbContext)null),
+            embeddingRepository,
+            embeddingClient,
+            new ChunkingStrategy(new TokenCounter()),
+            Options.Create(new EmbeddingConfig { ModelName = "test-model" }),
+            Substitute.For<ILogger<DocumentProcessor>>()
+        );
+        return (sut, embeddingRepository);
+    }
+
+    private static List<Embedding> AddedEmbeddings(EmbeddingRepository repo) =>
+        repo.ReceivedCalls()
+            .Where(c => c.GetMethodInfo().Name == nameof(EmbeddingRepository.Add))
+            .Select(c => (Embedding)c.GetArguments()[0])
+            .ToList();
+
+    [Fact]
+    public async Task GenerateEmbeddings_FewerEmbeddingsThanChunks_PersistsAlignedSubsetWithoutThrowing()
+    {
+        // PR #866 superseded the old `if (embeddings.Count != chunks.Count) throw`
+        // guard. The contract is now tolerant: GenerateEmbeddingsForChunks aligns
+        // on `Math.Min(chunks.Count, embeddings.Count)`, persists the aligned
+        // prefix, and leaves the rest unembedded for a later pass — a count
+        // mismatch is no longer fatal because one short response must not abort
+        // a document or hot-loop the worker.
+        //
+        // Too-low case: 3 chunks, 2 embeddings → the first 2 chunks are
+        // persisted, the 3rd is silently skipped, and nothing throws.
         var documentId = Guid.NewGuid();
         var chunks = new List<Chunk>
         {
@@ -122,41 +155,33 @@ public class DocumentProcessorTests
             .GenerateEmbeddings(Arg.Any<List<string>>())
             .Returns(new List<float[]> { new float[] { 0.1f }, new float[] { 0.2f } });
 
-        var sut = CreateSut(embeddingClient);
+        var (sut, repo) = CreateSutWithRepo(embeddingClient);
 
         var act = () => sut.GenerateEmbeddings(chunks, CancellationToken.None);
 
-        await act.Should()
-            .ThrowAsync<InvalidOperationException>()
-            .WithMessage("Embedding count mismatch: expected 3, got 2");
+        await act.Should().NotThrowAsync();
+        var added = AddedEmbeddings(repo);
+        added.Select(e => e.Chunk.Content).Should().Equal("first", "second");
     }
 
     [Fact]
-    public async Task GenerateEmbeddings_EmbeddingCountExceedsChunkCount_Throws()
+    public async Task GenerateEmbeddings_MoreEmbeddingsThanChunks_PersistsAlignedSubsetWithoutThrowing()
     {
-        // Sibling to the count-too-low pin above. The risk this catches is asymmetric
-        // and unreachable from the existing sibling alone: the guard is
-        // `if (embeddings.Count != chunks.Count) throw;` — a regression that swaps `!=`
-        // for `<` (or for `embeddings.Count < chunks.Count`, a "defensive" check someone
-        // might write to "tolerate extra embeddings") would still throw on the too-low
-        // case (3 chunks, 2 embeddings) and pass the existing test, but would silently
-        // let the too-high case through. The for-loop below the guard then runs only
-        // `chunks.Count` iterations, so the extra embedding gets dropped on the floor
-        // and no exception, no log, no CI signal surfaces.
+        // Asymmetric sibling to the too-low pin above. Under the new
+        // `Math.Min`-aligned contract a regression in EITHER direction is
+        // observable, but the two cases catch different collapses:
         //
-        // That partial-drop is a real data-integrity hazard: the embedding service
-        // could return more vectors than chunks under several plausible failure modes
-        // — a hosted batching bug where one chunk's payload tokenises into two,
-        // a transient duplicate-response retry, or a misconfigured model that emits
-        // multiple vectors per input. In every case, the surviving chunks would still
-        // be persisted with their intended embeddings, but the dropped vector
-        // represents a chunk that DID exist on the wire and now silently doesn't —
-        // future search hits against the dropped vector are simply impossible, and
-        // no recovery path exists because the loss is unobservable.
+        //  - Too-low (above): a change to `Math.Max` or to indexing by
+        //    `embeddings.Count` would over-read and throw / persist garbage.
+        //  - Too-high (here): a change that iterates `embeddings.Count` instead
+        //    of the min would index past the chunk list; one that iterates
+        //    `chunks.Count` is correct and drops the surplus vector by design
+        //    (the embedding service can legitimately emit more vectors than
+        //    chunks — a hosted batching bug, a duplicate-response retry, or a
+        //    misconfigured multi-vector model).
         //
-        // The pair (2-vs-3 → throws, 3-vs-2 → throws) distinguishes a working `!=`
-        // guard from BOTH `<` AND `>` collapses; only one direction is caught by the
-        // existing test.
+        // Contract: 2 chunks, 3 embeddings → exactly the 2 chunks are
+        // persisted, the surplus vector is dropped, and nothing throws.
         var documentId = Guid.NewGuid();
         var chunks = new List<Chunk>
         {
@@ -176,12 +201,12 @@ public class DocumentProcessorTests
                 }
             );
 
-        var sut = CreateSut(embeddingClient);
+        var (sut, repo) = CreateSutWithRepo(embeddingClient);
 
         var act = () => sut.GenerateEmbeddings(chunks, CancellationToken.None);
 
-        await act.Should()
-            .ThrowAsync<InvalidOperationException>()
-            .WithMessage("Embedding count mismatch: expected 2, got 3");
+        await act.Should().NotThrowAsync();
+        var added = AddedEmbeddings(repo);
+        added.Select(e => e.Chunk.Content).Should().Equal("first", "second");
     }
 }
