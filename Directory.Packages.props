@@ -43,7 +43,7 @@
     <!-- Pinned to remediate the transitive 9.0.4 high-severity advisory
          GHSA-73j8-2gch-69rq (NU1903); referenced directly in
          Equibles.Sec.BusinessLogic to override the vulnerable transitive. -->
-    <PackageVersion Include="Microsoft.Bcl.Memory" Version="9.0.16" />
+    <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.8" />
     <!-- Microsoft.Extensions -->
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.8" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.8" />
