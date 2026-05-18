@@ -78,6 +78,8 @@
     <ProjectReference Include="..\..\src\Equibles.Integrations.Cftc\Equibles.Integrations.Cftc.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Cftc.HostedService\Equibles.Cftc.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Plugins\Equibles.Plugins.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Search\Equibles.Search.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Search.Abstractions\Equibles.Search.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Cboe.HostedService\Equibles.Cboe.HostedService.csproj" />
   </ItemGroup>
 </Project>

@@ -2,6 +2,7 @@ using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Data.Extensions;
 using Equibles.Messaging.Extensions;
+using Equibles.Search.Extensions;
 using Equibles.Web.Authentication;
 using Equibles.Web.FlashMessage;
 using Microsoft.AspNetCore.Authentication;
@@ -54,6 +55,9 @@ public partial class Program
             migrationsAssembly: typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly
         );
         builder.Services.AddAllRepositories();
+        // Discovers every ISearchProvider in loaded Equibles.* assemblies (mirrors
+        // AddAllRepositories) so new modules join global search with no host change.
+        builder.Services.AddEquiblesSearch();
 
         builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();
         builder.Services.AutoWireServicesFrom<Equibles.Web.Services.StockTabService>();
