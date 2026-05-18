@@ -1,10 +1,11 @@
+using Equibles.Fred.Data.Models;
 using Equibles.Search.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Fred.Repositories.Search;
 
 /// <summary>Economic-indicator group. Wraps the existing FRED series id/title search.</summary>
-public class FredSeriesSearchProvider : ISearchProvider
+public class FredSeriesSearchProvider : QueryableSearchProvider<FredSeries>
 {
     private readonly FredSeriesRepository _fredSeriesRepository;
 
@@ -13,42 +14,26 @@ public class FredSeriesSearchProvider : ISearchProvider
         _fredSeriesRepository = fredSeriesRepository;
     }
 
-    public string Category => "Economic Indicators";
+    public override string Category => "Economic Indicators";
 
-    public int Order => 20;
+    public override int Order => 20;
 
-    public async Task<SearchResultGroup> Search(
-        SearchRequest request,
+    protected override IQueryable<FredSeries> Filter(SearchRequest request) =>
+        _fredSeriesRepository.Search(request.Query).OrderBy(series => series.Title);
+
+    protected override Task<List<FredSeries>> Materialize(
+        IQueryable<FredSeries> query,
         CancellationToken cancellationToken
-    )
-    {
-        var series = await _fredSeriesRepository
-            .Search(request.Query)
-            .OrderBy(s => s.Title)
-            .Take(request.MaxPerProvider)
-            .Select(s => new
-            {
-                s.SeriesId,
-                s.Title,
-                s.Units,
-            })
-            .ToListAsync(cancellationToken);
+    ) => query.ToListAsync(cancellationToken);
 
-        return new SearchResultGroup
+    protected override SearchHit Project(FredSeries series) =>
+        new()
         {
-            Category = Category,
-            Order = Order,
-            Hits = series
-                .Select(s => new SearchHit
-                {
-                    Title = s.Title,
-                    Subtitle = string.IsNullOrWhiteSpace(s.Units)
-                        ? s.SeriesId
-                        : $"{s.SeriesId} · {s.Units}",
-                    Kind = "EconomicSeries",
-                    RouteValues = { ["seriesId"] = s.SeriesId },
-                })
-                .ToList(),
+            Title = series.Title,
+            Subtitle = string.IsNullOrWhiteSpace(series.Units)
+                ? series.SeriesId
+                : $"{series.SeriesId} · {series.Units}",
+            Kind = "EconomicSeries",
+            RouteValues = { ["seriesId"] = series.SeriesId },
         };
-    }
 }

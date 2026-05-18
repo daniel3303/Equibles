@@ -1,10 +1,11 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Search.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.Repositories.Search;
 
 /// <summary>Stocks group of the global search. Wraps the existing ticker/name search.</summary>
-public class CommonStockSearchProvider : ISearchProvider
+public class CommonStockSearchProvider : QueryableSearchProvider<CommonStock>
 {
     private readonly CommonStockRepository _commonStockRepository;
 
@@ -13,34 +14,24 @@ public class CommonStockSearchProvider : ISearchProvider
         _commonStockRepository = commonStockRepository;
     }
 
-    public string Category => "Stocks";
+    public override string Category => "Stocks";
 
-    public int Order => 0;
+    public override int Order => 0;
 
-    public async Task<SearchResultGroup> Search(
-        SearchRequest request,
+    protected override IQueryable<CommonStock> Filter(SearchRequest request) =>
+        _commonStockRepository.Search(request.Query);
+
+    protected override Task<List<CommonStock>> Materialize(
+        IQueryable<CommonStock> query,
         CancellationToken cancellationToken
-    )
-    {
-        var stocks = await _commonStockRepository
-            .Search(request.Query)
-            .Take(request.MaxPerProvider)
-            .Select(stock => new { stock.Ticker, stock.Name })
-            .ToListAsync(cancellationToken);
+    ) => query.ToListAsync(cancellationToken);
 
-        return new SearchResultGroup
+    protected override SearchHit Project(CommonStock stock) =>
+        new()
         {
-            Category = Category,
-            Order = Order,
-            Hits = stocks
-                .Select(stock => new SearchHit
-                {
-                    Title = stock.Ticker,
-                    Subtitle = stock.Name,
-                    Kind = "Stock",
-                    RouteValues = { ["ticker"] = stock.Ticker },
-                })
-                .ToList(),
+            Title = stock.Ticker,
+            Subtitle = stock.Name,
+            Kind = "Stock",
+            RouteValues = { ["ticker"] = stock.Ticker },
         };
-    }
 }
