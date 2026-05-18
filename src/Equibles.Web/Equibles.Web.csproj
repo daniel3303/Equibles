@@ -6,7 +6,11 @@
 
   <ItemGroup>
     <!-- Repo-root CHANGELOG.md, copied so the in-app /changelog page can render it. -->
-    <Content Include="..\..\CHANGELOG.md" Link="CHANGELOG.md" CopyToOutputDirectory="PreserveNewest" />
+    <Content
+      Include="..\..\CHANGELOG.md"
+      Link="CHANGELOG.md"
+      CopyToOutputDirectory="PreserveNewest"
+    />
   </ItemGroup>
 
   <ItemGroup>
