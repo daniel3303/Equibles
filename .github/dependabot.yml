@@ -22,6 +22,11 @@ updates:
       # Stay on the 3.x line, which remains under the Six Labors Split License.
       - dependency-name: "SixLabors.ImageSharp"
         update-types: ["version-update:semver-major"]
+      # MassTransit 9.x requires a paid commercial license. Stay on the 8.x
+      # line (Apache-2.0) — covers MassTransit, .EntityFrameworkCore and
+      # .SqlTransport.PostgreSQL.
+      - dependency-name: "MassTransit*"
+        update-types: ["version-update:semver-major"]
     groups:
       microsoft-extensions:
         patterns:
