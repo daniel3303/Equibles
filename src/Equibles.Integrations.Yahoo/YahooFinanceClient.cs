@@ -100,10 +100,14 @@ public class YahooFinanceClient : IYahooFinanceClient
                     High = Math.Round(high.Value, 4),
                     Low = Math.Round(low.Value, 4),
                     Close = Math.Round(close.Value, 4),
-                    AdjustedClose =
-                        adjCloseList != null && i < adjCloseList.Count
-                            ? Math.Round(adjCloseList[i] ?? 0, 4)
-                            : Math.Round(close.Value, 4),
+                    // adjclose may be absent (no array / short) OR a null hole
+                    // on a holiday-edge row. Both mean "unavailable" → fall
+                    // back to the day's Close, never 0.
+                    AdjustedClose = Math.Round(
+                        (adjCloseList != null && i < adjCloseList.Count ? adjCloseList[i] : null)
+                            ?? close.Value,
+                        4
+                    ),
                     Volume = (i < quote.Volume.Count ? quote.Volume[i] : null) ?? 0,
                 }
             );
