@@ -67,6 +67,9 @@ public class DocumentProcessor : IDocumentProcessor
         // Group by document for logging
         var chunksByDocument = chunks.GroupBy(c => c.DocumentId);
 
+        var totalChunks = 0;
+        var totalEmbedded = 0;
+
         foreach (var group in chunksByDocument)
         {
             if (cancellationToken.IsCancellationRequested)
@@ -76,20 +79,23 @@ public class DocumentProcessor : IDocumentProcessor
             }
 
             var documentChunks = group.ToList();
+            totalChunks += documentChunks.Count;
             try
             {
-                await GenerateEmbeddingsForChunks(documentChunks);
+                var embedded = await GenerateEmbeddingsForChunks(documentChunks);
+                totalEmbedded += embedded;
                 _logger.LogInformation(
-                    "Generated embeddings for {Count} chunks of document {DocumentId}",
+                    "Generated embeddings for {Embedded}/{Count} chunks of document {DocumentId}",
+                    embedded,
                     documentChunks.Count,
                     group.Key
                 );
             }
             catch (Exception ex)
             {
-                // Do not rethrow: an unexpected failure on one document must not
-                // tear down the whole document-processor worker. Log and move on;
-                // the chunk stays unembedded and is retried on a later pass.
+                // Do not rethrow here: an unexpected failure on one document must
+                // not abort embedding for the remaining documents. Log and move
+                // on; the chunks stay unembedded and are retried on a later pass.
                 _logger.LogWarning(
                     ex,
                     "Skipping embeddings for document {DocumentId} after an unexpected "
@@ -97,6 +103,19 @@ public class DocumentProcessor : IDocumentProcessor
                     group.Key
                 );
             }
+        }
+
+        // Distinguish a few poison chunks (isolated above, so the backlog keeps
+        // draining) from a systemic outage. If we attempted chunks but embedded
+        // none, the embedding server is down: throw so the worker's base loop
+        // logs it loudly, reports it, and backs off for a cycle — instead of
+        // hot-looping on the same batch with zero progress and no error.
+        if (totalChunks > 0 && totalEmbedded == 0)
+        {
+            throw new InvalidOperationException(
+                $"No embeddings were produced for any of {totalChunks} chunks — "
+                    + "the embedding server is likely down. Backing off this cycle."
+            );
         }
     }
 
@@ -179,7 +198,13 @@ public class DocumentProcessor : IDocumentProcessor
         return allChunks;
     }
 
-    private async Task GenerateEmbeddingsForChunks(List<Chunk> chunks)
+    /// <summary>
+    /// Embeds the given chunks and persists the successful ones. Returns the
+    /// number of embeddings actually written — entries the embedding client
+    /// could not produce (null, positionally aligned to the input) are skipped,
+    /// so a return of 0 means nothing in this document could be embedded.
+    /// </summary>
+    private async Task<int> GenerateEmbeddingsForChunks(List<Chunk> chunks)
     {
         var chunkContents = chunks.Select(c => c.Content).ToList();
 
@@ -215,5 +240,7 @@ public class DocumentProcessor : IDocumentProcessor
         {
             await _embeddingRepository.SaveChanges();
         }
+
+        return added;
     }
 }

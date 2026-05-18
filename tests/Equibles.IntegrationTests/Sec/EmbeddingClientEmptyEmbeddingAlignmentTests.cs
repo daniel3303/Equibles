@@ -19,10 +19,7 @@ namespace Equibles.IntegrationTests.Sec;
 /// </summary>
 public class EmbeddingClientEmptyEmbeddingAlignmentTests
 {
-    [Fact(
-        Skip = "GH-820 — EmbeddingClient.GenerateEmbeddings silently drops empty embeddings, "
-            + "breaking positional alignment with chunks"
-    )]
+    [Fact]
     public async Task GenerateEmbeddings_OneTextReturnsEmptyEmbedding_StaysPositionallyAlignedToInputs()
     {
         // Ollama answers 200 but with no vector for the 2nd input (degenerate
