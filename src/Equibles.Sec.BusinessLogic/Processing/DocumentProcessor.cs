@@ -67,6 +67,9 @@ public class DocumentProcessor : IDocumentProcessor
         // Group by document for logging
         var chunksByDocument = chunks.GroupBy(c => c.DocumentId);
 
+        var totalChunks = 0;
+        var totalEmbedded = 0;
+
         foreach (var group in chunksByDocument)
         {
             if (cancellationToken.IsCancellationRequested)
@@ -76,25 +79,43 @@ public class DocumentProcessor : IDocumentProcessor
             }
 
             var documentChunks = group.ToList();
+            totalChunks += documentChunks.Count;
             try
             {
-                await GenerateEmbeddingsForChunks(documentChunks);
+                var embedded = await GenerateEmbeddingsForChunks(documentChunks);
+                totalEmbedded += embedded;
                 _logger.LogInformation(
-                    "Generated embeddings for {Count} chunks of document {DocumentId}",
+                    "Generated embeddings for {Embedded}/{Count} chunks of document {DocumentId}",
+                    embedded,
                     documentChunks.Count,
                     group.Key
                 );
             }
             catch (Exception ex)
             {
-                _logger.LogError(
+                // Do not rethrow here: an unexpected failure on one document must
+                // not abort embedding for the remaining documents. Log and move
+                // on; the chunks stay unembedded and are retried on a later pass.
+                _logger.LogWarning(
                     ex,
-                    "Error generating embeddings for document {DocumentId}. "
-                        + "Stopping batch — embedding server is likely down",
+                    "Skipping embeddings for document {DocumentId} after an unexpected "
+                        + "error; continuing with the rest",
                     group.Key
                 );
-                throw;
             }
+        }
+
+        // Distinguish a few poison chunks (isolated above, so the backlog keeps
+        // draining) from a systemic outage. If we attempted chunks but embedded
+        // none, the embedding server is down: throw so the worker's base loop
+        // logs it loudly, reports it, and backs off for a cycle — instead of
+        // hot-looping on the same batch with zero progress and no error.
+        if (totalChunks > 0 && totalEmbedded == 0)
+        {
+            throw new InvalidOperationException(
+                $"No embeddings were produced for any of {totalChunks} chunks — "
+                    + "the embedding server is likely down. Backing off this cycle."
+            );
         }
     }
 
@@ -177,33 +198,49 @@ public class DocumentProcessor : IDocumentProcessor
         return allChunks;
     }
 
-    private async Task GenerateEmbeddingsForChunks(List<Chunk> chunks)
+    /// <summary>
+    /// Embeds the given chunks and persists the successful ones. Returns the
+    /// number of embeddings actually written — entries the embedding client
+    /// could not produce (null, positionally aligned to the input) are skipped,
+    /// so a return of 0 means nothing in this document could be embedded.
+    /// </summary>
+    private async Task<int> GenerateEmbeddingsForChunks(List<Chunk> chunks)
     {
         var chunkContents = chunks.Select(c => c.Content).ToList();
 
         var embeddings = await _embeddingClient.GenerateEmbeddings(chunkContents);
 
-        if (embeddings.Count != chunks.Count)
+        // embeddings is positionally aligned to chunks; an entry is null when
+        // that chunk could not be embedded (e.g. the model returned a NaN
+        // vector and Ollama 500'd). Skip those chunks instead of failing the
+        // whole batch — they simply stay unembedded and can be retried later.
+        var count = Math.Min(chunks.Count, embeddings.Count);
+        var added = 0;
+        for (int i = 0; i < count; i++)
         {
-            throw new InvalidOperationException(
-                $"Embedding count mismatch: expected {chunks.Count}, got {embeddings.Count}"
-            );
-        }
-
-        for (int i = 0; i < chunks.Count; i++)
-        {
-            var embedding = new Embedding
+            if (embeddings[i] == null)
             {
-                Chunk = chunks[i],
-                Model = _embeddingConfig.ModelName,
-                Vector = new Vector(embeddings[i]),
-                VectorDimension = embeddings[i].Length,
-                CreationTime = DateTime.UtcNow,
-            };
+                continue;
+            }
 
-            _embeddingRepository.Add(embedding);
+            _embeddingRepository.Add(
+                new Embedding
+                {
+                    Chunk = chunks[i],
+                    Model = _embeddingConfig.ModelName,
+                    Vector = new Vector(embeddings[i]),
+                    VectorDimension = embeddings[i].Length,
+                    CreationTime = DateTime.UtcNow,
+                }
+            );
+            added++;
         }
 
-        await _embeddingRepository.SaveChanges();
+        if (added > 0)
+        {
+            await _embeddingRepository.SaveChanges();
+        }
+
+        return added;
     }
 }

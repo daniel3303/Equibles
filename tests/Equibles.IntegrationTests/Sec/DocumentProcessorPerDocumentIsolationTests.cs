@@ -18,10 +18,7 @@ namespace Equibles.IntegrationTests.Sec;
 /// </summary>
 public class DocumentProcessorPerDocumentIsolationTests
 {
-    [Fact(
-        Skip = "GH-828 — DocumentProcessor.GenerateEmbeddings rethrows on one document's "
-            + "failure, aborting embeddings for all remaining documents"
-    )]
+    [Fact]
     public async Task GenerateEmbeddings_FirstDocumentFails_StillEmbedsTheSecondDocument()
     {
         var docA = Guid.NewGuid();

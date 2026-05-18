@@ -17,10 +17,7 @@ namespace Equibles.IntegrationTests.Sec;
 /// </summary>
 public class EmbeddingClientSingleTextNullEmbeddingsTests
 {
-    [Fact(
-        Skip = "GH-825 — EmbeddingClient.GenerateEmbeddings single-text branch throws "
-            + "ArgumentNullException when Ollama 200 has no embeddings field"
-    )]
+    [Fact]
     public async Task GenerateEmbeddings_SingleTextOllamaReturnsNoEmbeddingsField_DoesNotThrowAndStaysAligned()
     {
         // Ollama answers 200 but omits the "embeddings" field for this input

@@ -50,24 +50,16 @@ public class EmbeddingClient : IEmbeddingClient
             return [];
         }
 
-        try
-        {
-            var batches = texts.Chunk(_config.BatchSize).ToList();
-            var allEmbeddings = new List<float[]>();
+        var batches = texts.Chunk(_config.BatchSize).ToList();
+        var allEmbeddings = new List<float[]>(texts.Count);
 
-            foreach (var batch in batches)
-            {
-                var batchEmbeddings = await ProcessBatch(batch.ToList());
-                allEmbeddings.AddRange(batchEmbeddings);
-            }
-
-            return allEmbeddings;
-        }
-        catch (Exception ex)
+        foreach (var batch in batches)
         {
-            _logger.LogError(ex, "Error generating embeddings for {Count} texts", texts.Count);
-            throw;
+            allEmbeddings.AddRange(await ProcessBatch(batch.ToList()));
         }
+
+        // Positionally aligned to `texts`; entries are null where embedding failed.
+        return allEmbeddings;
     }
 
     public async Task<int> GetEmbeddingDimension()
@@ -86,51 +78,45 @@ public class EmbeddingClient : IEmbeddingClient
 
     private async Task<List<float[]>> ProcessBatch(List<string> batch)
     {
-        // For single text, we can call the new /api/embed endpoint
-        if (batch.Count == 1)
-        {
-            var singlePayload = new { model = _config.ModelName, input = batch[0] };
-
-            var singleJson = JsonSerializer.Serialize(singlePayload);
-            using var singleContent = new StringContent(
-                singleJson,
-                System.Text.Encoding.UTF8,
-                "application/json"
-            );
-
-            // Use the new /api/embed endpoint
-            var response = await _httpClient.PostAsync("/api/embed", singleContent);
-            response.EnsureSuccessStatusCode();
-
-            var responseJson = await response.Content.ReadAsStringAsync();
-            var result = JsonSerializer.Deserialize<OllamaEmbedResponse>(responseJson);
-
-            return result.Embeddings;
-        }
-
-        // For multiple texts, we need to call the endpoint multiple times
-        // as Ollama's /api/embed doesn't support batch processing like OpenAI
-        var embeddings = new List<float[]>();
+        // Ollama's /api/embed handles one input per call. Embed each text
+        // independently and return a list positionally aligned to `batch`,
+        // using null for any text that fails (e.g. Ollama returns 500 because
+        // the model emitted a NaN vector for that specific input). One bad
+        // chunk must never abort the batch or crash the document processor —
+        // the caller skips null entries so the backlog keeps draining.
+        var embeddings = new List<float[]>(batch.Count);
         foreach (var text in batch)
         {
-            var payload = new { model = _config.ModelName, input = text };
-
-            var json = JsonSerializer.Serialize(payload);
-            using var content = new StringContent(
-                json,
-                System.Text.Encoding.UTF8,
-                "application/json"
-            );
-
-            var response = await _httpClient.PostAsync("/api/embed", content);
-            response.EnsureSuccessStatusCode();
-
-            var responseJson = await response.Content.ReadAsStringAsync();
-            var result = JsonSerializer.Deserialize<OllamaEmbedResponse>(responseJson);
-
-            if (result.Embeddings != null && result.Embeddings.Count > 0)
+            try
             {
-                embeddings.Add(result.Embeddings[0]);
+                var payload = new { model = _config.ModelName, input = text };
+
+                var json = JsonSerializer.Serialize(payload);
+                using var content = new StringContent(
+                    json,
+                    System.Text.Encoding.UTF8,
+                    "application/json"
+                );
+
+                var response = await _httpClient.PostAsync("/api/embed", content);
+                response.EnsureSuccessStatusCode();
+
+                var responseJson = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<OllamaEmbedResponse>(responseJson);
+
+                embeddings.Add(
+                    result?.Embeddings != null && result.Embeddings.Count > 0
+                        ? result.Embeddings[0]
+                        : null
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Skipping a chunk that failed to embed (continuing with the rest)"
+                );
+                embeddings.Add(null);
             }
         }
 
