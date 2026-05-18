@@ -21,9 +21,9 @@
     <!-- Email -->
     <PackageVersion Include="MailKit" Version="4.15.0" />
     <!-- Messaging -->
-    <PackageVersion Include="MassTransit" Version="8.5.7" />
-    <PackageVersion Include="MassTransit.EntityFrameworkCore" Version="8.5.7" />
-    <PackageVersion Include="MassTransit.SqlTransport.PostgreSQL" Version="8.5.7" />
+    <PackageVersion Include="MassTransit" Version="9.1.1" />
+    <PackageVersion Include="MassTransit.EntityFrameworkCore" Version="9.1.1" />
+    <PackageVersion Include="MassTransit.SqlTransport.PostgreSQL" Version="9.1.1" />
     <!-- AI / ML -->
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.3.0" />
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.3.0" />
