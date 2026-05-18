@@ -109,7 +109,13 @@ public class YahooPriceScraperWorkerTests
             ErrorReporter errorReporter,
             IOptions<YahooPriceScraperOptions> options
         )
-            : base(logger, scopeFactory, errorReporter, options) { }
+            : base(
+                logger,
+                scopeFactory,
+                errorReporter,
+                options,
+                Options.Create(new Equibles.Core.Configuration.WorkerOptions())
+            ) { }
 
         public TimeSpan InvokeSleepInterval() => SleepInterval;
 

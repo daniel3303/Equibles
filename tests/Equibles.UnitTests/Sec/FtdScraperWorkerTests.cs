@@ -189,7 +189,14 @@ public class FtdScraperWorkerTests
             IOptions<FtdScraperOptions> options,
             IConfiguration configuration
         )
-            : base(logger, scopeFactory, errorReporter, options, configuration) { }
+            : base(
+                logger,
+                scopeFactory,
+                errorReporter,
+                options,
+                Options.Create(new Equibles.Core.Configuration.WorkerOptions()),
+                configuration
+            ) { }
 
         public bool InvokeValidateConfiguration() => ValidateConfiguration();
 
