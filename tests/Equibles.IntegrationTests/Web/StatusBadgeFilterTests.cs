@@ -2,6 +2,7 @@ using Equibles.Errors.Data;
 using Equibles.Errors.Data.Models;
 using Equibles.Errors.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Messaging;
 using Equibles.Web.Filters;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -20,7 +21,10 @@ public class StatusBadgeFilterTests
 
     public StatusBadgeFilterTests()
     {
-        var context = TestDbContextFactory.Create(new ErrorsModuleConfiguration());
+        var context = TestDbContextFactory.Create(
+            new ErrorsModuleConfiguration(),
+            new MessagingModuleConfiguration()
+        );
         _errorRepository = new ErrorRepository(context);
         _configBuilder = new ConfigurationBuilder();
     }

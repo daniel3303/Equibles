@@ -20,6 +20,7 @@ using Equibles.InsiderTrading.Data;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.Data;
+using Equibles.Messaging;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
 using Equibles.Web.Controllers;
@@ -63,6 +64,7 @@ public class StatusControllerMarkAsSeenHappyTests : IDisposable
             new FredModuleConfiguration(),
             new YahooModuleConfiguration(),
             new ErrorsModuleConfiguration(),
+            new MessagingModuleConfiguration(),
             new CftcModuleConfiguration(),
             new CboeModuleConfiguration()
         );

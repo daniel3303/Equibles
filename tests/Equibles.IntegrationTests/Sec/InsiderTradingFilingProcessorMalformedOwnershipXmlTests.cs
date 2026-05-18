@@ -8,6 +8,7 @@ using Equibles.InsiderTrading.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Messaging;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
 using Microsoft.Extensions.Logging;
@@ -34,7 +35,8 @@ public class InsiderTradingFilingProcessorMalformedOwnershipXmlTests
         var dbContext = TestDbContextFactory.Create(
             new InsiderTradingModuleConfiguration(),
             new CommonStocksModuleConfiguration(),
-            new ErrorsModuleConfiguration()
+            new ErrorsModuleConfiguration(),
+            new MessagingModuleConfiguration()
         );
 
         var errorRepo = new ErrorRepository(dbContext);

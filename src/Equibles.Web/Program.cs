@@ -1,6 +1,7 @@
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Data.Extensions;
+using Equibles.Messaging.Extensions;
 using Equibles.Web.Authentication;
 using Equibles.Web.FlashMessage;
 using Microsoft.AspNetCore.Authentication;
@@ -44,7 +45,12 @@ public partial class Program
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
         builder.Services.AddEquiblesDbContext(
             connectionString,
-            modules => modules.AddAllModules(),
+            // .AddMessaging() explicitly: the MassTransit outbox entities are in
+            // the shared migration snapshot, so every host that runs/validates
+            // migrations must include them or EF throws PendingModelChanges.
+            // AddAllModules' reflection only sees already-loaded assemblies, so
+            // the explicit call guarantees it deterministically.
+            modules => modules.AddAllModules().AddMessaging(),
             migrationsAssembly: typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly
         );
         builder.Services.AddAllRepositories();

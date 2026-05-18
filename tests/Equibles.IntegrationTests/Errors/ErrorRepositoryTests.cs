@@ -3,6 +3,7 @@ using Equibles.Errors.Data;
 using Equibles.Errors.Data.Models;
 using Equibles.Errors.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Messaging;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.IntegrationTests.Errors;
@@ -14,7 +15,10 @@ public class ErrorRepositoryTests : IDisposable
 
     public ErrorRepositoryTests()
     {
-        _dbContext = TestDbContextFactory.Create(new ErrorsModuleConfiguration());
+        _dbContext = TestDbContextFactory.Create(
+            new ErrorsModuleConfiguration(),
+            new MessagingModuleConfiguration()
+        );
         _repository = new ErrorRepository(_dbContext);
     }
 
