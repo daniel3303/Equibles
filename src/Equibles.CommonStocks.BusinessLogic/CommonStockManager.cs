@@ -51,6 +51,44 @@ public class CommonStockManager
         await _commonStockRepository.SaveChanges();
     }
 
+    /// <summary>
+    /// Sets the company's fiscal year-end (month 1-12, optional day 1-31),
+    /// sourced from SEC EDGAR's submissions <c>fiscalYearEnd</c> field. A
+    /// no-op change persists nothing. Saves directly via the repository — like
+    /// <see cref="SetCusip"/>, this mutates a single non-key field and must not
+    /// re-run the full ticker/CIK uniqueness validation.
+    /// </summary>
+    public async Task SetFiscalYearEnd(CommonStock commonStock, int month, int? day)
+    {
+        if (commonStock == null)
+        {
+            throw new ArgumentNullException(nameof(commonStock));
+        }
+
+        if (month is < 1 or > 12)
+        {
+            throw new DomainValidationException(
+                $"Fiscal year-end month must be between 1 and 12, got {month}"
+            );
+        }
+
+        if (day is < 1 or > 31)
+        {
+            throw new DomainValidationException(
+                $"Fiscal year-end day must be between 1 and 31, got {day}"
+            );
+        }
+
+        if (commonStock.FiscalYearEndMonth == month && commonStock.FiscalYearEndDay == day)
+        {
+            return;
+        }
+
+        commonStock.FiscalYearEndMonth = month;
+        commonStock.FiscalYearEndDay = day;
+        await _commonStockRepository.SaveChanges();
+    }
+
     public async Task<CommonStock> Create(CommonStock commonStock)
     {
         await ValidateCommonStock(commonStock, true);

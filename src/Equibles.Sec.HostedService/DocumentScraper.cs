@@ -1,4 +1,5 @@
 using System.Text;
+using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
@@ -178,6 +179,8 @@ public class DocumentScraper : IDocumentScraper
         var persistenceService =
             scope.ServiceProvider.GetRequiredService<IDocumentPersistenceService>();
 
+        var commonStockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
+
         var company = await companyRepository.Get(companyUntracked.Id);
 
         try
@@ -187,6 +190,11 @@ public class DocumentScraper : IDocumentScraper
                 company.Ticker,
                 company.Name
             );
+
+            // Detect the fiscal year-end before fetching filings: the metadata
+            // call primes the SEC client's submissions cache so the first
+            // GetCompanyFilings hits the same URL and adds no extra request.
+            await UpdateFiscalYearEnd(company, secEdgarClient, commonStockManager);
 
             foreach (var documentType in _options.DocumentTypesToSync)
             {
@@ -232,6 +240,50 @@ public class DocumentScraper : IDocumentScraper
                 ex.Message,
                 ex.StackTrace,
                 $"ticker: {company.Ticker}"
+            );
+        }
+    }
+
+    /// <summary>
+    /// Reads SEC EDGAR's submissions <c>fiscalYearEnd</c> for the company and
+    /// persists it when it changed. Best-effort: a metadata failure is logged
+    /// and reported but never blocks document scraping, since fiscal-year
+    /// metadata is a nice-to-have enrichment, not a prerequisite for filings.
+    /// Errors are still reported (consistent with the other per-company steps)
+    /// so a systemic SEC-schema change that breaks parsing surfaces on the
+    /// dashboard instead of silently disabling fiscal detection platform-wide.
+    /// </summary>
+    private async Task UpdateFiscalYearEnd(
+        CommonStock company,
+        ISecEdgarClient secEdgarClient,
+        CommonStockManager commonStockManager
+    )
+    {
+        try
+        {
+            var metadata = await secEdgarClient.GetCompanyMetadata(company.Cik);
+            if (metadata?.FiscalYearEndMonth is not { } month)
+            {
+                return;
+            }
+
+            await commonStockManager.SetFiscalYearEnd(company, month, metadata.FiscalYearEndDay);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not update fiscal year-end for {Ticker} (CIK: {Cik}): {Message}",
+                company.Ticker,
+                company.Cik,
+                ex.Message
+            );
+            await _errorReporter.Report(
+                ErrorSource.DocumentScraper,
+                "DocumentScraper.UpdateFiscalYearEnd",
+                ex.Message,
+                ex.StackTrace,
+                $"ticker: {company.Ticker}, cik: {company.Cik}"
             );
         }
     }

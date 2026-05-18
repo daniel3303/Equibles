@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -12,6 +13,7 @@ using Equibles.Sec.HostedService;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Services;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -91,6 +93,11 @@ public class DocumentScraperDeferredRetryTests
         var services = new ServiceCollection();
         services.AddSingleton(ctx);
         services.AddScoped<CommonStockRepository>();
+        // DocumentScraper resolves CommonStockManager per scope to persist the
+        // SEC-sourced fiscal year-end; IPublishEndpoint is an unrelated ctor
+        // dep (SetCusip outbox event) the fiscal-year path never uses.
+        services.AddSingleton(Substitute.For<IPublishEndpoint>());
+        services.AddScoped<CommonStockManager>();
         services.AddSingleton(secEdgar);
         services.AddSingleton(persistence);
         services.AddSingleton(Substitute.For<ISecDocumentHtmlNormalizer>());

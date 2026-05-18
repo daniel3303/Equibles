@@ -9,6 +9,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Fiscal year-end detection for companies. The SEC document scraper now reads
+  EDGAR's submissions `fiscalYearEnd` field and persists `FiscalYearEndMonth` /
+  `FiscalYearEndDay` on `CommonStock` (sourced entirely from public SEC data,
+  no extra request on the common path — the metadata fetch primes the
+  submissions cache reused by the filings fetch). A new `FiscalCalendar` helper
+  maps any date to a company's fiscal quarter/year, so off-calendar filers
+  (e.g. Apple ≈ September, Microsoft = June) are no longer misrepresented by
+  calendar-quarter math.
 - Web portal now checks GitHub Releases and shows a banner when a newer version
   is available, displaying the new and current versions with links to the
   "Updating" guide and an in-app rendered changelog. The check is cached, runs
