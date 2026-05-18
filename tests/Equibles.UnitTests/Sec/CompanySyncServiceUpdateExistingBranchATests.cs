@@ -9,13 +9,13 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.HostedService.Services;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Xunit;
-using MassTransit;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -74,7 +74,13 @@ public class CompanySyncServiceUpdateExistingBranchATests
         );
         Set("SecondaryCikToParent", new Dictionary<string, CommonStock>());
         Set("CommonStockRepository", new CommonStockRepository(db));
-        Set("CommonStockManager", new CommonStockManager(new CommonStockRepository(db), Substitute.For<IPublishEndpoint>()));
+        Set(
+            "CommonStockManager",
+            new CommonStockManager(
+                new CommonStockRepository(db),
+                Substitute.For<IPublishEndpoint>()
+            )
+        );
         Set("DbContext", db);
         return s;
     }
