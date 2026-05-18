@@ -16,6 +16,7 @@
         <div class="flex gap-3">
             <input type="text" name="search" value="@Model.Search"
                    class="input input-bordered flex-1 max-w-md"
+                   aria-label="Search stocks by ticker or name"
                    placeholder="Search by ticker or name..." />
             <button type="submit" class="btn btn-primary">Search</button>
             @if (!string.IsNullOrEmpty(Model.Search)) {
