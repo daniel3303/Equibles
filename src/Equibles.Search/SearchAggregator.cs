@@ -106,11 +106,16 @@ public class SearchAggregator
                 exception,
                 "Search provider {Provider} failed for query {Query}; group omitted",
                 providerType.Name,
-                request.Query
+                SanitizeForLog(request.Query)
             );
             return Empty;
         }
     }
+
+    // Strips control characters (notably CR/LF) from the user-supplied query so a crafted
+    // search term cannot inject forged lines into the rendered Serilog console/file output.
+    private static string SanitizeForLog(string value) =>
+        new string(value.Where(character => !char.IsControl(character)).ToArray());
 
     // Empty (no-hit) sentinel — RunProvider never returns null, so the ordering step downstream
     // cannot NRE and the filter in Search drops degraded providers uniformly.

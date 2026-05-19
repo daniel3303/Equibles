@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Equibles.Search;
 using Equibles.Search.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Equibles.UnitTests.Search;
@@ -12,6 +14,14 @@ namespace Equibles.UnitTests.Search;
 public class SearchAggregatorTests
 {
     private static SearchAggregator Build(params ISearchProvider[] providers)
+    {
+        return Build(NullLogger<SearchAggregator>.Instance, providers);
+    }
+
+    private static SearchAggregator Build(
+        ILogger<SearchAggregator> logger,
+        params ISearchProvider[] providers
+    )
     {
         // Register under ISearchProvider so the aggregator's per-scope, by-concrete-type
         // resolution is exercised as in production. Each stub is a distinct sealed type
@@ -25,7 +35,7 @@ public class SearchAggregatorTests
 
         return new SearchAggregator(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<SearchAggregator>.Instance
+            logger
         );
     }
 
@@ -98,6 +108,55 @@ public class SearchAggregatorTests
 
         result.Should().BeEmpty();
         stub.CallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Search_ProviderThrows_LogsQueryWithControlCharactersStripped()
+    {
+        // A query carrying CR/LF/TAB must not reach the rendered log verbatim — otherwise a
+        // crafted search term could forge log lines (CodeQL cs/log-forging, alert #351).
+        var logger = new CapturingLogger<SearchAggregator>();
+        var aggregator = Build(
+            logger,
+            new StubA("Broken", 0, _ => throw new InvalidOperationException("boom"))
+        );
+
+        await aggregator.Search("ab\r\ncd\tef", 5, CancellationToken.None);
+
+        logger.Messages.Should().ContainSingle();
+        var message = logger.Messages[0];
+        message.Should().Contain("abcdef");
+        message.Should().NotContainAny("\r", "\n", "\t");
+    }
+
+    // Minimal ILogger that records the fully-formatted message; the project only references
+    // Logging.Abstractions, so we avoid pulling in a fake-logger package for one assertion.
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = new();
+
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception exception,
+            Func<TState, Exception, string> formatter
+        )
+        {
+            Messages.Add(formatter(state, exception));
+        }
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+
+            public void Dispose() { }
+        }
     }
 
     private abstract class StubProvider : ISearchProvider
