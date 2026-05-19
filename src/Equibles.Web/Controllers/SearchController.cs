@@ -36,4 +36,22 @@ public class SearchController : BaseController
             }
         );
     }
+
+    // Results-only fragment for instant (as-you-type) search. instant-search.js fetches this
+    // and swaps it into the page; the markup is identical to Index's results region.
+    [HttpGet]
+    public async Task<IActionResult> Results(string q, string category)
+    {
+        var groups = await _searchAggregator.Search(q, MaxPerProvider, HttpContext.RequestAborted);
+
+        return PartialView(
+            "_Results",
+            new GlobalSearchViewModel
+            {
+                Query = q,
+                Groups = groups,
+                ActiveCategory = category,
+            }
+        );
+    }
 }

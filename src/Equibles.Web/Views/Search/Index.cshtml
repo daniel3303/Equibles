@@ -1,14 +1,9 @@
-@using Equibles.Web.Extensions
 @using Equibles.Web.Search
 @model Equibles.Web.ViewModels.Search.GlobalSearchViewModel
 
 @{
     ViewData["Title"] = "Search";
     ViewData["Description"] = "Search stocks, SEC filings, institutions, insiders, congress members, economic indicators and futures markets.";
-
-    var visibleGroups = string.IsNullOrWhiteSpace(Model.ActiveCategory)
-        ? Model.Groups
-        : Model.Groups.Where(g => string.Equals(g.Category, Model.ActiveCategory, StringComparison.OrdinalIgnoreCase)).ToList();
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
@@ -17,9 +12,10 @@
         <p class="text-base-content/60">Stocks, filings, institutions, insiders, congress, economic indicators and futures</p>
     </div>
 
-    <!-- Search: scope selector + query. The scope sets the `category` param the controller and
-         result view already understand, so a user can narrow the search before submitting. -->
-    <form method="get" class="mb-6">
+    <!-- Search: scope selector + query. instant-search.js progressively enhances this into
+         debounced as-you-type results; without JS the form still submits a normal GET. -->
+    <form id="global-search-form" method="get" asp-controller="Search" asp-action="Index"
+          data-results-url="@Url.Action("Results")" class="mb-6">
         <div class="join w-full max-w-2xl">
             <select name="category" class="select select-bordered join-item w-auto"
                     aria-label="Limit search to a category">
@@ -41,89 +37,7 @@
         </div>
     </form>
 
-    @if (string.IsNullOrWhiteSpace(Model.Query)) {
-        <div class="flex flex-col items-center text-center py-16 gap-5">
-            <icon name="magnifying-glass" size="10" class="text-base-content/30" />
-            <p class="text-base-content/70 max-w-md">
-                Search stocks, SEC filings, institutions, insiders, congress members,
-                economic indicators and futures markets — all at once.
-            </p>
-            <div class="flex flex-col items-center gap-2">
-                <span class="text-sm text-base-content/50">Browse a category</span>
-                <div class="flex flex-wrap justify-center gap-2 max-w-xl">
-                    @foreach (var category in SearchCategories.All) {
-                        <a asp-action="Index" asp-route-category="@category"
-                           class="badge badge-ghost badge-lg transition-colors hover:badge-primary">@category</a>
-                    }
-                </div>
-            </div>
-            <div class="flex flex-wrap justify-center items-center gap-2">
-                <span class="text-sm text-base-content/50">Try:</span>
-                <a asp-action="Index" asp-route-q="AAPL" class="badge badge-ghost badge-lg transition-colors hover:badge-primary">AAPL</a>
-                <a asp-action="Index" asp-route-q="Apple" class="badge badge-ghost badge-lg transition-colors hover:badge-primary">Apple</a>
-                <a asp-action="Index" asp-route-q="10-K" class="badge badge-ghost badge-lg transition-colors hover:badge-primary">10-K</a>
-            </div>
-        </div>
-    } else if (!Model.HasResults) {
-        <div class="flex flex-col items-center text-center py-16 gap-3">
-            <icon name="magnifying-glass" size="10" class="text-base-content/30" />
-            <p class="text-base-content/70">
-                No results for <span class="font-semibold text-base-content">@Model.Query</span>.
-            </p>
-            <p class="text-sm text-base-content/50">Try a ticker symbol, company name, or filing type.</p>
-        </div>
-    } else {
-        <!-- Category filter chips -->
-        <div class="flex flex-wrap gap-2 mb-6">
-            <a asp-action="Index" asp-route-q="@Model.Query"
-               class="badge badge-lg transition-colors hover:badge-primary @(string.IsNullOrWhiteSpace(Model.ActiveCategory) ? "badge-primary" : "badge-ghost")">
-                All
-            </a>
-            @foreach (var group in Model.Groups) {
-                <a asp-action="Index" asp-route-q="@Model.Query" asp-route-category="@group.Category"
-                   class="badge badge-lg transition-colors hover:badge-primary @(string.Equals(group.Category, Model.ActiveCategory, StringComparison.OrdinalIgnoreCase) ? "badge-primary" : "badge-ghost")">
-                    @group.Category (@group.Hits.Count)
-                </a>
-            }
-        </div>
-
-        <!-- Result groups -->
-        <div class="grid gap-6 md:grid-cols-2 items-start">
-            @foreach (var group in visibleGroups) {
-                var seeAll = Url.CategoryUrl(group.Category, Model.Query);
-                <div class="card bg-base-100 shadow-sm">
-                    <div class="card-body p-4 lg:p-6">
-                        <div class="flex items-center justify-between mb-2">
-                            <h2 class="card-title text-lg">@group.Category</h2>
-                            @if (seeAll != null) {
-                                <a href="@seeAll" class="link link-primary text-sm">See all</a>
-                            }
-                        </div>
-                        <ul class="divide-y divide-base-200">
-                            @foreach (var hit in group.Hits) {
-                                var hitUrl = Url.HitUrl(hit);
-                                <li class="py-2">
-                                    @if (hitUrl != null) {
-                                        <a href="@hitUrl" class="block hover:bg-base-200 rounded px-2 -mx-2 py-1">
-                                            <div class="font-medium">@hit.Title</div>
-                                            @if (!string.IsNullOrWhiteSpace(hit.Subtitle)) {
-                                                <div class="text-sm text-base-content/60">@hit.Subtitle</div>
-                                            }
-                                        </a>
-                                    } else {
-                                        <div class="px-2 -mx-2 py-1">
-                                            <div class="font-medium">@hit.Title</div>
-                                            @if (!string.IsNullOrWhiteSpace(hit.Subtitle)) {
-                                                <div class="text-sm text-base-content/60">@hit.Subtitle</div>
-                                            }
-                                        </div>
-                                    }
-                                </li>
-                            }
-                        </ul>
-                    </div>
-                </div>
-            }
-        </div>
-    }
+    <div id="search-results" aria-live="polite" aria-busy="false">
+        <partial name="_Results" model="Model" />
+    </div>
 </div>

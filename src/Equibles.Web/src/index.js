@@ -23,3 +23,4 @@ import './js/messages';
 import './js/modals';
 import './js/homepage-demos';
 import './js/docs-nav';
+import './js/instant-search';
