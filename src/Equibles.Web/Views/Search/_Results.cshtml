@@ -39,6 +39,17 @@
         <p class="text-sm text-base-content/50">Try a ticker symbol, company name, or filing type.</p>
     </div>
 } else {
+    <!-- Result count: visibility of system status — tells the user how broad the
+         match is before they scan the groups. -->
+    <p class="text-sm text-base-content/60 mb-3">
+        <span class="font-semibold text-base-content">@visibleGroups.Sum(g => g.Hits.Count)</span>
+        @(visibleGroups.Sum(g => g.Hits.Count) == 1 ? "result" : "results") for
+        <span class="font-semibold text-base-content">@Model.Query</span>
+        in @(string.IsNullOrWhiteSpace(Model.ActiveCategory)
+            ? (visibleGroups.Count == 1 ? "1 category" : $"{visibleGroups.Count} categories")
+            : Model.ActiveCategory)
+    </p>
+
     <!-- Category filter chips -->
     <div class="flex flex-wrap gap-2 mb-6">
         <a asp-action="Index" asp-route-q="@Model.Query"
