@@ -24,3 +24,4 @@ import './js/modals';
 import './js/homepage-demos';
 import './js/docs-nav';
 import './js/instant-search';
+import './js/search-keyboard';
