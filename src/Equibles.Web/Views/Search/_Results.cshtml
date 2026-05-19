@@ -79,6 +79,22 @@
         }
     </div>
 
+    @if (!visibleGroups.Any()) {
+        <!-- The active category matched nothing, but other categories did — make the
+             dead-end recoverable in one click instead of showing a blank panel. -->
+        <div class="flex flex-col items-center text-center py-16 gap-4">
+            <icon name="magnifying-glass" size="10" class="text-base-content/30" />
+            <p class="text-base-content/70">
+                No <span class="font-semibold text-base-content">@Model.ActiveCategory</span>
+                results for <span class="font-semibold text-base-content">@Model.Query</span>,
+                but @Model.Groups.Sum(g => g.Hits.Count) match in other categories.
+            </p>
+            <a asp-action="Index" asp-route-q="@Model.Query" class="btn btn-primary">
+                Show all results
+            </a>
+        </div>
+    }
+
     <!-- Result groups -->
     <div class="grid gap-6 md:grid-cols-2 items-start">
         @foreach (var group in visibleGroups) {
