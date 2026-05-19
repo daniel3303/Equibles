@@ -11,7 +11,7 @@ namespace Equibles.UnitTests.Sec;
 
 public class FinancialFactsScraperWorkerWhitespaceEmailTests
 {
-    [Fact(Skip = "GH-916 — whitespace-only Sec:ContactEmail passes the SEC-ban gate")]
+    [Fact]
     public void ValidateConfiguration_SecContactEmailWhitespaceOnly_ReturnsFalse()
     {
         // Contract: the gate exists so the scraper never hits SEC without a usable
