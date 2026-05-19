@@ -14,9 +14,7 @@ namespace Equibles.UnitTests.Sec.Normalizers;
 /// </summary>
 public class HeadingConversionStepIsPartHeadingNbspTests
 {
-    [Fact(
-        Skip = "GH-981 — IsPartHeading rejects NBSP-separated 'Part N' headings (StartsWith requires U+0020)"
-    )]
+    [Fact]
     public void IsPartHeading_NonBreakingSpaceSeparator_ReturnsTrue()
     {
         var method = typeof(HeadingConversionStep).GetMethod(
