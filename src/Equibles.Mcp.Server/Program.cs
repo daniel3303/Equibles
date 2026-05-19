@@ -23,6 +23,7 @@ using Equibles.Mcp.Middleware;
 using Equibles.Media.Data.Extensions;
 using Equibles.Messaging.Extensions;
 using Equibles.Sec.Data.Extensions;
+using Equibles.Sec.FinancialFacts.Mcp.Extensions;
 using Equibles.Sec.Mcp.Extensions;
 using Equibles.Yahoo.Data.Extensions;
 using Equibles.Yahoo.Mcp.Extensions;
@@ -85,6 +86,7 @@ public partial class Program
             mcp.AddInsiderTrading();
             mcp.AddFred();
             mcp.AddSec();
+            mcp.AddFinancialFacts();
             mcp.AddCftc();
             mcp.AddCboe();
             mcp.AddCongress();

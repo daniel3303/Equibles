@@ -12,6 +12,7 @@
     <ProjectReference Include="..\Equibles.Holdings.Mcp\Equibles.Holdings.Mcp.csproj" />
     <ProjectReference Include="..\Equibles.InsiderTrading.Mcp\Equibles.InsiderTrading.Mcp.csproj" />
     <ProjectReference Include="..\Equibles.Sec.Mcp\Equibles.Sec.Mcp.csproj" />
+    <ProjectReference Include="..\Equibles.Sec.FinancialFacts.Mcp\Equibles.Sec.FinancialFacts.Mcp.csproj" />
     <ProjectReference Include="..\Equibles.Fred.Mcp\Equibles.Fred.Mcp.csproj" />
     <ProjectReference Include="..\Equibles.Congress.Repositories\Equibles.Congress.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Finra.Repositories\Equibles.Finra.Repositories.csproj" />
