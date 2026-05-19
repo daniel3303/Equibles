@@ -7,4 +7,7 @@ public class SearchRequest
 
     /// <summary>Upper bound on hits a single provider returns for the grouped view.</summary>
     public int MaxPerProvider { get; set; } = 5;
+
+    /// <summary>How hits are ordered within each group; applied by the aggregator, not providers.</summary>
+    public SearchSort SortBy { get; set; } = SearchSort.Relevance;
 }

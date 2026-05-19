@@ -8,6 +8,7 @@
 
     const input = form.querySelector('input[name="q"]');
     const scope = form.querySelector('select[name="category"]');
+    const sort = form.querySelector('select[name="sort"]');
     if (!input) return;
 
     const resultsUrl = form.dataset.resultsUrl || '/Search/Results';
@@ -22,8 +23,10 @@
         const params = new URLSearchParams();
         const q = input.value.trim();
         const category = scope ? scope.value : '';
+        const sortBy = sort ? sort.value : '';
         if (q) params.set('q', q);
         if (category) params.set('category', category);
+        if (sortBy && sortBy !== '0') params.set('sort', sortBy);
 
         if (controller) controller.abort();
         controller = new AbortController();
@@ -53,6 +56,7 @@
         timer = setTimeout(() => run(false), 250);
     });
     scope?.addEventListener('change', () => run(false));
+    sort?.addEventListener('change', () => run(false));
     form.addEventListener('submit', (event) => {
         event.preventDefault();
         clearTimeout(timer);
@@ -64,6 +68,7 @@
         const params = new URLSearchParams(window.location.search);
         input.value = params.get('q') || '';
         if (scope) scope.value = params.get('category') || '';
+        if (sort) sort.value = params.get('sort') || '0';
         run(false);
     });
 })();
