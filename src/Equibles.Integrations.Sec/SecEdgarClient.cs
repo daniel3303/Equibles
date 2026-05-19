@@ -42,7 +42,7 @@ public class SecEdgarClient : ISecEdgarClient
         _logger = logger;
 
         var contactEmail = configuration["Sec:ContactEmail"];
-        if (!string.IsNullOrEmpty(contactEmail))
+        if (!string.IsNullOrWhiteSpace(contactEmail))
         {
             _httpClient.DefaultRequestHeaders.Add(
                 "User-Agent",

@@ -38,7 +38,7 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
 
     protected override bool ValidateConfiguration()
     {
-        if (string.IsNullOrEmpty(_configuration["Sec:ContactEmail"]))
+        if (string.IsNullOrWhiteSpace(_configuration["Sec:ContactEmail"]))
         {
             Logger.LogWarning(
                 "Financial facts scraper stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file."
