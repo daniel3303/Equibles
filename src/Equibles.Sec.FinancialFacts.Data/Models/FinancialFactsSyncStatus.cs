@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using Equibles.CommonStocks.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,6 +11,10 @@ namespace Equibles.Sec.FinancialFacts.Data.Models;
 [Index(nameof(CommonStockId), IsUnique = true)]
 public class FinancialFactsSyncStatus
 {
+    // Client-generated Guid key. Without DatabaseGeneratedOption.None EF marks
+    // it store-generated, so FlexLabs UpsertRange omits it from the INSERT and
+    // Postgres (no column default) rejects the row with a NOT NULL violation.
+    [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid CommonStockId { get; set; }

@@ -74,7 +74,7 @@ public class FinancialFactsImportServiceIdempotencyTests : IAsyncLifetime
         return scopeFactory;
     }
 
-    [Fact(Skip = "GH-911 — single non-duplicate Company Facts value persists zero rows")]
+    [Fact]
     public async Task Import_RunTwiceWithIdenticalFacts_SecondRunIsNoOpNoDuplicateRows()
     {
         var apple = new CommonStock

@@ -74,7 +74,7 @@ public class FinancialFactsImportServiceDedupTests : IAsyncLifetime
         return scopeFactory;
     }
 
-    [Fact(Skip = "GH-883 — duplicate-tuple Company Facts import persists zero rows")]
+    [Fact]
     public async Task Import_DuplicateConceptPeriodAccessionTuples_CollapsesToLatestFiledOneRow()
     {
         var apple = new CommonStock
