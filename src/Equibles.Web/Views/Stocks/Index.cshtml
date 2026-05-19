@@ -1,8 +1,22 @@
+@using Equibles.Web.ViewModels.Stocks
 @model Equibles.Web.ViewModels.Stocks.StockBrowserViewModel
 
 @{
     ViewData["Title"] = "Stocks";
     ViewData["Description"] = "Browse and search US common stocks with institutional holdings, short volume, short interest, and fails-to-deliver data.";
+
+    // Active filters carried across pagination links so paging never drops them.
+    var filterRoute = new Dictionary<string, string>();
+    if (!string.IsNullOrEmpty(Model.Search)) {
+        filterRoute["search"] = Model.Search;
+    }
+    if (Model.Sort != StockSort.Ticker) {
+        filterRoute["sort"] = Model.Sort.ToString();
+    }
+    if (Model.MinMarketCap.HasValue) {
+        filterRoute["minMarketCap"] = Model.MinMarketCap.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+    var hasFilters = filterRoute.Count > 0;
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
@@ -11,15 +25,36 @@
         <p class="text-base-content/60">Browse @Model.TotalCount.ToString("N0") US common stocks</p>
     </div>
 
-    <!-- Search -->
+    <!-- Search + filters (plain query-param names, bound to StocksController.Index) -->
     <form method="get" class="mb-6">
-        <div class="flex gap-3">
-            <input type="text" name="search" value="@Model.Search"
-                   class="input input-bordered flex-1 max-w-md"
-                   aria-label="Search stocks by ticker or name"
-                   placeholder="Search by ticker or name..." />
-            <button type="submit" class="btn btn-primary">Search</button>
-            @if (!string.IsNullOrEmpty(Model.Search)) {
+        <div class="flex flex-wrap gap-3 items-end">
+            <label class="form-control">
+                <span class="label-text text-sm mb-1">Search</span>
+                <input type="text" name="search" value="@Model.Search"
+                       class="input input-bordered w-64"
+                       aria-label="Search stocks by ticker or name"
+                       placeholder="Ticker or name..." />
+            </label>
+            <label class="form-control">
+                <span class="label-text text-sm mb-1">Sort by</span>
+                <select name="sort" class="select select-bordered" aria-label="Sort stocks">
+                    @foreach (var option in Html.GetEnumSelectList<StockSort>()) {
+                        <option value="@option.Value"
+                                selected="@(option.Value == ((int)Model.Sort).ToString())">
+                            @option.Text
+                        </option>
+                    }
+                </select>
+            </label>
+            <label class="form-control">
+                <span class="label-text text-sm mb-1">Min market cap ($)</span>
+                <input type="number" name="minMarketCap" value="@Model.MinMarketCap"
+                       min="0" step="any" class="input input-bordered w-48"
+                       aria-label="Minimum market capitalization"
+                       placeholder="e.g. 1000000000" />
+            </label>
+            <button type="submit" class="btn btn-primary">Apply</button>
+            @if (hasFilters) {
                 <a asp-action="Index" class="btn btn-ghost">Clear</a>
             }
         </div>
@@ -52,6 +87,13 @@
                             </td>
                         </tr>
                     }
+                    @if (Model.Stocks.Count == 0) {
+                        <tr>
+                            <td colspan="4" class="text-center py-10 text-base-content/60">
+                                No stocks match these filters.
+                            </td>
+                        </tr>
+                    }
                 </tbody>
             </table>
         </div>
@@ -62,7 +104,7 @@
         <div class="flex justify-center mt-6">
             <div class="join">
                 @if (Model.Page > 1) {
-                    <a asp-action="Index" asp-route-search="@Model.Search" asp-route-page="@(Model.Page - 1)" class="join-item btn btn-sm">Previous</a>
+                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="@(Model.Page - 1)" class="join-item btn btn-sm">Previous</a>
                 }
 
                 @{
@@ -71,14 +113,14 @@
                 }
 
                 @if (startPage > 1) {
-                    <a asp-action="Index" asp-route-search="@Model.Search" asp-route-page="1" class="join-item btn btn-sm">1</a>
+                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="1" class="join-item btn btn-sm">1</a>
                     @if (startPage > 2) {
                         <span class="join-item btn btn-sm btn-disabled">...</span>
                     }
                 }
 
                 @for (var i = startPage; i <= endPage; i++) {
-                    <a asp-action="Index" asp-route-search="@Model.Search" asp-route-page="@i"
+                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="@i"
                        class="join-item btn btn-sm @(i == Model.Page ? "btn-active" : "")">@i</a>
                 }
 
@@ -86,11 +128,11 @@
                     @if (endPage < Model.TotalPages - 1) {
                         <span class="join-item btn btn-sm btn-disabled">...</span>
                     }
-                    <a asp-action="Index" asp-route-search="@Model.Search" asp-route-page="@Model.TotalPages" class="join-item btn btn-sm">@Model.TotalPages</a>
+                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="@Model.TotalPages" class="join-item btn btn-sm">@Model.TotalPages</a>
                 }
 
                 @if (Model.Page < Model.TotalPages) {
-                    <a asp-action="Index" asp-route-search="@Model.Search" asp-route-page="@(Model.Page + 1)" class="join-item btn btn-sm">Next</a>
+                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="@(Model.Page + 1)" class="join-item btn btn-sm">Next</a>
                 }
             </div>
         </div>
