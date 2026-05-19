@@ -15,9 +15,7 @@ namespace Equibles.UnitTests.Congress;
 /// </summary>
 public class HouseDisclosureClientExtractTransactionTypeLowercaseTests
 {
-    [Fact(
-        Skip = "GH-993 — PurchaseTypeRegex omits RegexOptions.IgnoreCase, asymmetric to SaleTypeRegex"
-    )]
+    [Fact]
     public void ExtractTransactionType_LowercasePurchaseP_StillReturnsPurchaseViaIgnoreCase()
     {
         var method = typeof(HouseDisclosureClient).GetMethod(
