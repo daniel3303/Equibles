@@ -34,7 +34,12 @@ public class StocksController : BaseController
     }
 
     [HttpGet]
-    public async Task<IActionResult> Index(string search, int page = 1)
+    public async Task<IActionResult> Index(
+        string search,
+        StockSort sort = StockSort.Ticker,
+        double? minMarketCap = null,
+        int page = 1
+    )
     {
         ViewData["Title"] = "Stocks";
 
@@ -46,6 +51,24 @@ public class StocksController : BaseController
 
         const int pageSize = 50;
         var query = _commonStockRepository.Search(search);
+
+        if (minMarketCap.HasValue)
+            query = query.Where(s => s.MarketCapitalization >= minMarketCap.Value);
+
+        // The later OrderBy replaces the repository's default Ticker ordering;
+        // Ticker is the tie-breaker so paging stays stable on equal market caps.
+        query = sort switch
+        {
+            StockSort.Name => query.OrderBy(s => s.Name).ThenBy(s => s.Ticker),
+            StockSort.MarketCapDescending => query
+                .OrderByDescending(s => s.MarketCapitalization)
+                .ThenBy(s => s.Ticker),
+            StockSort.MarketCapAscending => query
+                .OrderBy(s => s.MarketCapitalization)
+                .ThenBy(s => s.Ticker),
+            _ => query.OrderBy(s => s.Ticker),
+        };
+
         var totalCount = await query.CountAsync();
 
         var stocks = await query
@@ -66,6 +89,8 @@ public class StocksController : BaseController
         {
             Stocks = stocks,
             Search = search,
+            Sort = sort,
+            MinMarketCap = minMarketCap,
             Page = page,
             PageSize = pageSize,
             TotalCount = totalCount,
