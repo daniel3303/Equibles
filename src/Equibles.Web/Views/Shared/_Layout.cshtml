@@ -54,8 +54,10 @@
                         </select>
                         <label class="input input-sm input-bordered join-item flex items-center gap-2 w-44 xl:w-56">
                             <icon name="magnifying-glass" size="4" />
-                            <input type="search" name="q" value="@activeSearchQuery" class="grow"
-                                   placeholder="Search everything..." aria-label="Search everything" />
+                            <input id="navbar-search-input" type="search" name="q" value="@activeSearchQuery" class="grow"
+                                   placeholder="Search everything..." aria-label="Search everything"
+                                   aria-keyshortcuts="/" />
+                            <kbd class="kbd kbd-sm text-base-content/50" aria-hidden="true">/</kbd>
                         </label>
                     </div>
                 </form>
