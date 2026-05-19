@@ -359,8 +359,10 @@ public partial class HouseDisclosureClient
     [GeneratedRegex(@"\bS\s*(\((?:partial|full)\))?\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex SaleTypeRegex();
 
-    // House purchase type at end of text (before date)
-    [GeneratedRegex(@"\bP\s*$")]
+    // House purchase type at end of text (before date). IgnoreCase mirrors
+    // SaleTypeRegex; without it, a lowercase 'p' marker falls through both
+    // ExtractTransactionType and RemoveTrailingTransactionType.
+    [GeneratedRegex(@"\bP\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex PurchaseTypeRegex();
 
     private record HouseFiling(
