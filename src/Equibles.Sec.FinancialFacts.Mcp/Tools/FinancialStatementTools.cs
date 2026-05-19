@@ -83,7 +83,7 @@ public class FinancialStatementTools
                 SecFiscalPeriod? requestedPeriod = null;
                 if (period != null)
                 {
-                    if (!TryParsePeriod(period, out var parsedPeriod))
+                    if (!FactArgs.TryParsePeriod(period, out var parsedPeriod))
                         return $"Unknown period '{period}'. Use 'FY' or 'Q1'..'Q4'.";
                     requestedPeriod = parsedPeriod;
                 }
@@ -225,33 +225,6 @@ public class FinancialStatementTools
                 return true;
             default:
                 type = default;
-                return false;
-        }
-    }
-
-    private static bool TryParsePeriod(string value, out SecFiscalPeriod period)
-    {
-        switch (value?.Trim().ToUpperInvariant())
-        {
-            case "FY":
-            case "FULLYEAR":
-            case "ANNUAL":
-                period = SecFiscalPeriod.FullYear;
-                return true;
-            case "Q1":
-                period = SecFiscalPeriod.Q1;
-                return true;
-            case "Q2":
-                period = SecFiscalPeriod.Q2;
-                return true;
-            case "Q3":
-                period = SecFiscalPeriod.Q3;
-                return true;
-            case "Q4":
-                period = SecFiscalPeriod.Q4;
-                return true;
-            default:
-                period = default;
                 return false;
         }
     }
