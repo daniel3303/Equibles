@@ -75,6 +75,7 @@
         <a role="tab" class="btn btn-sm @(activeTab == "short-volume" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="ShortVolume" asp-route-ticker="@stock.Ticker">Short Volume</a>
         <a role="tab" class="btn btn-sm @(activeTab == "short-interest" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="ShortInterest" asp-route-ticker="@stock.Ticker">Short Interest</a>
         <a role="tab" class="btn btn-sm @(activeTab == "ftd" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Ftd" asp-route-ticker="@stock.Ticker">Fails to Deliver</a>
+        <a role="tab" class="btn btn-sm @(activeTab == "financials" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Financials" asp-route-ticker="@stock.Ticker">Financials</a>
         <a role="tab" class="btn btn-sm @(activeTab == "documents" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Documents" asp-route-ticker="@stock.Ticker">SEC Filings</a>
         <a role="tab" class="btn btn-sm @(activeTab == "insider-trading" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="InsiderTrading" asp-route-ticker="@stock.Ticker">Insider Trades</a>
         <a role="tab" class="btn btn-sm @(activeTab == "congressional-trades" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="CongressionalTrades" asp-route-ticker="@stock.Ticker">Congressional Trades</a>
@@ -97,6 +98,9 @@
                 break;
             case "ftd":
                 @await Html.PartialAsync("_FtdTab", (FtdTabViewModel)ViewData["TabViewModel"])
+                break;
+            case "financials":
+                @await Html.PartialAsync("_FinancialsTab", (FinancialsTabViewModel)ViewData["TabViewModel"])
                 break;
             case "documents":
                 @await Html.PartialAsync("_DocumentsTab", (DocumentsTabViewModel)ViewData["TabViewModel"])

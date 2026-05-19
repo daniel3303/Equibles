@@ -35,6 +35,7 @@
     <ProjectReference Include="..\Equibles.Fred.Repositories\Equibles.Fred.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Sec.Repositories\Equibles.Sec.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Sec.BusinessLogic\Equibles.Sec.BusinessLogic.csproj" />
+    <ProjectReference Include="..\Equibles.Sec.FinancialFacts.Repositories\Equibles.Sec.FinancialFacts.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
     <ProjectReference Include="..\Equibles.Errors.Repositories\Equibles.Errors.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Media.Repositories\Equibles.Media.Repositories.csproj" />

@@ -1,6 +1,7 @@
 using System.Text;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Repositories;
+using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.Repositories;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.Extensions;
@@ -163,6 +164,28 @@ public class StocksController : BaseController
 
         var viewModel = BuildStockViewModel(stock, "ftd");
         ViewData["TabViewModel"] = await _stockTabService.LoadFtdTab(stock);
+        return View("Show", viewModel);
+    }
+
+    [HttpGet("~/Stocks/{ticker}/Financials")]
+    public async Task<IActionResult> Financials(
+        string ticker,
+        FinancialStatementType statement = FinancialStatementType.IncomeStatement,
+        int? year = null,
+        SecFiscalPeriod? period = null
+    )
+    {
+        var stock = await LoadStock(ticker);
+        if (stock == null)
+            return NotFound();
+
+        var viewModel = BuildStockViewModel(stock, "financials");
+        ViewData["TabViewModel"] = await _stockTabService.LoadFinancialsTab(
+            stock,
+            statement,
+            year,
+            period
+        );
         return View("Show", viewModel);
     }
 

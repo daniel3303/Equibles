@@ -12,6 +12,7 @@ using Equibles.InsiderTrading.Data;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.Data;
+using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.Repositories;
 using Equibles.Web.Services;
 using Equibles.Web.ViewModels.Stocks;
@@ -54,7 +55,9 @@ public class StockTabServiceLoadHolderDetailTests : IDisposable
             new DocumentRepository(_dbContext),
             new InsiderTransactionRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext)
+            new DailyStockPriceRepository(_dbContext),
+            new FinancialFactRepository(_dbContext),
+            new FinancialConceptRepository(_dbContext)
         );
     }
 
