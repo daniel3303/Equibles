@@ -1,3 +1,4 @@
+using System.Globalization;
 using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -195,9 +196,10 @@ public class CompanySyncService : ICompanySyncService
     )
     {
         var existingStock = state.ExistingStocks.First(cs => cs.Cik == secCompany.Cik);
+        var normalizedName = NormalizeCompanyName(secCompany.Name);
         var needsUpdate =
             existingStock.Ticker != primaryTicker
-            || existingStock.Name != secCompany.Name
+            || existingStock.Name != normalizedName
             || !(existingStock.SecondaryTickers ?? []).SequenceEqual(secondaryTickers);
 
         if (!needsUpdate)
@@ -275,7 +277,7 @@ public class CompanySyncService : ICompanySyncService
         try
         {
             existingStock.Ticker = primaryTicker;
-            existingStock.Name = secCompany.Name;
+            existingStock.Name = normalizedName;
             existingStock.SecondaryTickers = secondaryTickers;
             await state.CommonStockManager.Update(existingStock);
 
@@ -371,7 +373,7 @@ public class CompanySyncService : ICompanySyncService
                 new CommonStock
                 {
                     Ticker = primaryTicker,
-                    Name = secCompany.Name,
+                    Name = NormalizeCompanyName(secCompany.Name),
                     Cik = secCompany.Cik,
                     SecondaryTickers = secondaryTickers,
                     Description = $"Company with tickers: {string.Join(", ", secCompany.Tickers)}",
@@ -422,7 +424,7 @@ public class CompanySyncService : ICompanySyncService
                 new CommonStock
                 {
                     Ticker = primaryTicker,
-                    Name = secCompany.Name,
+                    Name = NormalizeCompanyName(secCompany.Name),
                     Cik = secCompany.Cik,
                     SecondaryTickers = secondaryTickers,
                     Description = $"Company with tickers: {string.Join(", ", secCompany.Tickers)}",
@@ -594,6 +596,22 @@ public class CompanySyncService : ICompanySyncService
     private static long ParseCik(string cik)
     {
         return long.TryParse(cik, out var n) ? n : long.MaxValue;
+    }
+
+    // SEC EDGAR returns some names in ALL CAPS (e.g. "AMAZON COM INC",
+    // "MICROSOFT CORP") and others in branded mixed case (e.g. "Apple Inc.",
+    // "Meta Platforms, Inc."). When a name is uniformly upper-cased we treat it
+    // as legacy formatting and convert it to Title Case; mixed-case names are
+    // trusted as-is.
+    private static string NormalizeCompanyName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return name;
+
+        if (name.Any(char.IsLower))
+            return name;
+
+        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(name.ToLowerInvariant());
     }
 
     private class StockSyncState
