@@ -18,6 +18,7 @@ using Equibles.Media.Data;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
+using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Web.Services;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Data.Models;
@@ -53,7 +54,9 @@ public class StockTabServiceTests : IDisposable
             new DocumentRepository(_dbContext),
             new InsiderTransactionRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext)
+            new DailyStockPriceRepository(_dbContext),
+            new FinancialFactRepository(_dbContext),
+            new FinancialConceptRepository(_dbContext)
         );
     }
 

@@ -13,6 +13,7 @@ using Equibles.InsiderTrading.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.Data;
 using Equibles.Sec.Repositories;
+using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Web.Controllers;
 using Equibles.Web.Services;
 using Equibles.Web.ViewModels.Stocks;
@@ -69,7 +70,9 @@ public class StocksControllerShortVolumeTabTests : IDisposable
             new DocumentRepository(_dbContext),
             new InsiderTransactionRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext)
+            new DailyStockPriceRepository(_dbContext),
+            new FinancialFactRepository(_dbContext),
+            new FinancialConceptRepository(_dbContext)
         );
         var controller = new StocksController(
             new CommonStockRepository(_dbContext),
