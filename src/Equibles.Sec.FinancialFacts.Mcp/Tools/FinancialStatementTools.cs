@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Globalization;
 using System.Text;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Extensions;
@@ -8,6 +7,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Statements;
+using Equibles.Sec.FinancialFacts.Mcp.Helpers;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -153,7 +153,8 @@ public class FinancialStatementTools
 
                 var result = new StringBuilder();
                 result.AppendLine(
-                    $"{statementType.NameForHumans()} for {stock.Ticker} ({Md(stock.Name)}) — "
+                    $"{statementType.NameForHumans()} for {stock.Ticker} "
+                        + $"({FactMarkdown.Cell(stock.Name)}) — "
                         + $"FY{selected.FiscalYear} {selected.FiscalPeriod.NameForHumans()}:"
                 );
                 result.AppendLine();
@@ -168,30 +169,16 @@ public class FinancialStatementTools
                         || !latestByConcept.TryGetValue(conceptId, out var fact)
                     )
                     {
-                        result.AppendLine($"| {Md(line.Label)} | — | | | | |");
+                        result.AppendLine($"| {FactMarkdown.Cell(line.Label)} | — | | | | |");
                         continue;
                     }
 
-                    var isPerShare =
-                        fact.Unit != null
-                        && fact.Unit.EndsWith("/shares", StringComparison.OrdinalIgnoreCase);
-                    // Format culture-invariantly so the LLM-facing output is
-                    // identical regardless of the server's locale.
-                    var number = fact.Value.ToString(
-                        isPerShare ? "N2" : "N0",
-                        CultureInfo.InvariantCulture
-                    );
-                    // Only USD gets a "$"; other currencies (EUR/GBP for 20-F /
-                    // 40-F filers) are conveyed by the Unit column rather than
-                    // mislabelled with a dollar sign.
-                    var isUsd =
-                        fact.Unit != null
-                        && fact.Unit.StartsWith("USD", StringComparison.OrdinalIgnoreCase);
-                    var value = isUsd ? "$" + number : number;
-
                     result.AppendLine(
-                        $"| {Md(line.Label)} | {value} | {Md(fact.Unit)} | "
-                            + $"{fact.PeriodEnd:yyyy-MM-dd} | {Md(fact.Form?.DisplayName)} | "
+                        $"| {FactMarkdown.Cell(line.Label)} | "
+                            + $"{FactMarkdown.Value(fact.Value, fact.Unit)} | "
+                            + $"{FactMarkdown.Cell(fact.Unit)} | "
+                            + $"{fact.PeriodEnd:yyyy-MM-dd} | "
+                            + $"{FactMarkdown.Cell(fact.Form?.DisplayName)} | "
                             + $"{fact.FiledDate:yyyy-MM-dd} |"
                     );
                     rendered++;
@@ -206,21 +193,11 @@ public class FinancialStatementTools
             },
             _logger,
             "GetFinancialStatement",
-            $"ticker: {Clean(ticker)}, statement: {Clean(statement)}, "
-                + $"year: {year}, period: {Clean(period)}",
+            $"ticker: {FactMarkdown.Clean(ticker)}, statement: {FactMarkdown.Clean(statement)}, "
+                + $"year: {year}, period: {FactMarkdown.Clean(period)}",
             ReportError
         );
     }
-
-    // Escapes the Markdown table delimiters so a value containing '|' or a
-    // newline (e.g. some ADR/fund names) can't break the table the LLM consumes.
-    private static string Md(string value) =>
-        value == null ? "" : value.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
-
-    // Strips control chars from untrusted args before they reach logs / the
-    // error store, matching the repo's existing log-hygiene precedent (e91e72a).
-    private static string Clean(string value) =>
-        value == null ? "" : new string(value.Where(c => !char.IsControl(c)).ToArray());
 
     private static bool TryParseStatement(string value, out FinancialStatementType type)
     {
