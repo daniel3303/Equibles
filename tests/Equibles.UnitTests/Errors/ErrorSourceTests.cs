@@ -10,6 +10,7 @@ public class ErrorSourceTests
     [InlineData(nameof(ErrorSource.HoldingsScraper), "HoldingsScraper")]
     [InlineData(nameof(ErrorSource.FinraScraper), "FinraScraper")]
     [InlineData(nameof(ErrorSource.FtdScraper), "FtdScraper")]
+    [InlineData(nameof(ErrorSource.FinancialFactsScraper), "FinancialFactsScraper")]
     [InlineData(nameof(ErrorSource.DocumentProcessor), "DocumentProcessor")]
     [InlineData(nameof(ErrorSource.CongressScraper), "CongressScraper")]
     [InlineData(nameof(ErrorSource.FredScraper), "FredScraper")]
@@ -25,29 +26,20 @@ public class ErrorSourceTests
     }
 
     [Fact]
-    public void GetAll_ReturnsAllItems()
+    public void GetAll_ReturnsExactlyTheDeclaredStaticInstances()
     {
-        ErrorSource.GetAll().Should().HaveCount(13);
-    }
+        // Reflection-driven so adding a new ErrorSource member can never leave
+        // GetAll() silently incomplete (or this test stale on a hard-coded
+        // count) — the previous brittle HaveCount(13) broke when
+        // FinancialFactsScraper was added.
+        var declared = typeof(ErrorSource)
+            .GetFields(
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static
+            )
+            .Where(f => f.FieldType == typeof(ErrorSource))
+            .Select(f => (ErrorSource)f.GetValue(null));
 
-    [Fact]
-    public void GetAll_ContainsAllStaticInstances()
-    {
-        var all = ErrorSource.GetAll();
-
-        all.Should().Contain(ErrorSource.McpTool);
-        all.Should().Contain(ErrorSource.DocumentScraper);
-        all.Should().Contain(ErrorSource.HoldingsScraper);
-        all.Should().Contain(ErrorSource.FinraScraper);
-        all.Should().Contain(ErrorSource.FtdScraper);
-        all.Should().Contain(ErrorSource.DocumentProcessor);
-        all.Should().Contain(ErrorSource.CongressScraper);
-        all.Should().Contain(ErrorSource.FredScraper);
-        all.Should().Contain(ErrorSource.YahooPriceScraper);
-        all.Should().Contain(ErrorSource.CftcScraper);
-        all.Should().Contain(ErrorSource.CboeScraper);
-        all.Should().Contain(ErrorSource.TranscriptScraper);
-        all.Should().Contain(ErrorSource.Other);
+        ErrorSource.GetAll().Should().BeEquivalentTo(declared);
     }
 
     [Theory]
