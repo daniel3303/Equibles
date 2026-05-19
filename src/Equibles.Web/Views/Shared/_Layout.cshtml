@@ -34,19 +34,28 @@
             </div>
             <div class="flex items-center gap-2">
                 <!-- Global search: scope + query posted to SearchController.Index as ?category=&q=.
-                     Scope mirrors the /Search page so the filter is reachable from every page. -->
+                     Echoes the active category and query so the navbar reflects the current
+                     search and the chosen scope survives refining from any page. -->
+                @{
+                    var activeSearchCategory = Context.Request.Query["category"].ToString();
+                    var activeSearchQuery = Context.Request.Query["q"].ToString();
+                }
                 <form asp-controller="Search" asp-action="Index" method="get" class="hidden lg:block">
                     <div class="join">
                         <select name="category" class="select select-sm select-bordered join-item"
                                 aria-label="Limit search to a category">
                             <option value="">All</option>
                             @foreach (var category in Equibles.Web.Search.SearchCategories.All) {
-                                <option value="@category">@category</option>
+                                <option value="@category"
+                                        selected="@(string.Equals(category, activeSearchCategory, StringComparison.OrdinalIgnoreCase))">
+                                    @category
+                                </option>
                             }
                         </select>
                         <label class="input input-sm input-bordered join-item flex items-center gap-2 w-44 xl:w-56">
                             <icon name="magnifying-glass" size="4" />
-                            <input type="search" name="q" class="grow" placeholder="Search everything..." aria-label="Search everything" />
+                            <input type="search" name="q" value="@activeSearchQuery" class="grow"
+                                   placeholder="Search everything..." aria-label="Search everything" />
                         </label>
                     </div>
                 </form>
