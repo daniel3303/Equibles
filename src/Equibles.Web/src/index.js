@@ -25,3 +25,4 @@ import './js/homepage-demos';
 import './js/docs-nav';
 import './js/instant-search';
 import './js/search-keyboard';
+import './js/global-search-shortcut';
