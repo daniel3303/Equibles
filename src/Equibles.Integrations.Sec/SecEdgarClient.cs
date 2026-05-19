@@ -683,6 +683,18 @@ public class SecEdgarClient : ISecEdgarClient
 
         for (var i = 0; i < recent.AccessionNumber.Count; i++)
         {
+            // SEC can emit a ragged payload where a secondary array is shorter
+            // than AccessionNumber. Skip rows that cannot be fully mapped rather
+            // than throw, mirroring ParseCompaniesFromResponse's short-row guard.
+            if (
+                recent.FilingDate.Count <= i
+                || recent.ReportDate.Count <= i
+                || recent.Form.Count <= i
+                || recent.PrimaryDocument.Count <= i
+                || recent.PrimaryDocDescription.Count <= i
+            )
+                continue;
+
             var accessionNumber = recent.AccessionNumber[i];
             filings.Add(
                 new FilingData
