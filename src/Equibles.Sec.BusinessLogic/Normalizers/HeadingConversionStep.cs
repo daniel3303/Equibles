@@ -109,7 +109,8 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         if (string.IsNullOrWhiteSpace(node.TextContent))
             return false;
 
-        return node.TextContent.Trim().Where(char.IsLetter).All(char.IsUpper);
+        var letters = node.TextContent.Trim().Where(char.IsLetter).ToList();
+        return letters.Count > 0 && letters.All(char.IsUpper);
     }
 
     private bool IsPartHeading(string text)
