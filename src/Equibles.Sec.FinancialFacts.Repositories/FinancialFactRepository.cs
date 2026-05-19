@@ -13,4 +13,9 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
     {
         return GetAll().Where(f => f.CommonStockId == stock.Id);
     }
+
+    public IQueryable<FinancialFact> GetByStocks(IReadOnlyCollection<Guid> stockIds)
+    {
+        return GetAll().Where(f => stockIds.Contains(f.CommonStockId));
+    }
 }
