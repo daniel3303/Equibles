@@ -26,3 +26,4 @@ import './js/docs-nav';
 import './js/instant-search';
 import './js/search-keyboard';
 import './js/global-search-shortcut';
+import './js/search-clear';
