@@ -32,6 +32,11 @@
                    class="input input-bordered join-item grow"
                    aria-label="Search everything"
                    placeholder="Search for a ticker, company, filing, indicator..." autofocus />
+            <button type="button" id="search-clear"
+                    class="btn btn-ghost border border-base-300 join-item @(string.IsNullOrEmpty(Model.Query) ? "hidden" : "")"
+                    aria-label="Clear search" title="Clear search">
+                <icon name="x-mark" size="5" />
+            </button>
             <button type="submit" class="btn btn-primary join-item" aria-label="Search" title="Search">
                 <icon name="magnifying-glass" size="5" />
             </button>
