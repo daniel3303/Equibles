@@ -59,7 +59,11 @@ public static class SearchCategoryRouteExtensions
         };
     }
 
-    /// <summary>"See all" destination for a group, or null when no browse page exists.</summary>
+    /// <summary>
+    /// "See all" destination for a group. Prefers a dedicated browse page when one exists;
+    /// otherwise falls back to the search page filtered to just that category so users still
+    /// get an expanded result list instead of a dead-end.
+    /// </summary>
     public static string CategoryUrl(this IUrlHelper url, string category, string query)
     {
         return category switch
@@ -67,7 +71,7 @@ public static class SearchCategoryRouteExtensions
             "Stocks" => url.Action("Index", "Stocks", new { search = query }),
             "Economic Indicators" => url.Action("Index", "EconomicData"),
             "Futures" => url.Action("Index", "Cftc"),
-            _ => null,
+            _ => url.Action("Index", "Search", new { q = query, category }),
         };
     }
 }

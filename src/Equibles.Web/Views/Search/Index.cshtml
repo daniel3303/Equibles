@@ -5,72 +5,186 @@
 @{
     ViewData["Title"] = "Search";
     ViewData["Description"] = "Search stocks, SEC filings, institutions, insiders, congress members, economic indicators and futures markets.";
+
+    // Maps each search category to its module's Heroicon so sidebar items and result groups
+    // share a single visual language. Unknown categories fall back to the generic glyph.
+    string CategoryIcon(string category) => category switch {
+        "Stocks" => "chart-bar",
+        "SEC Filings" => "document-text",
+        "Economic Indicators" => "presentation-chart-line",
+        "Institutions" => "building-library",
+        "Insiders" => "user-group",
+        "Congress" => "building-office",
+        "Futures" => "cube",
+        _ => "magnifying-glass",
+    };
+
+    // Counts non-default filters in play so the mobile "Filters" button can show a badge.
+    var activeFilterCount =
+        (string.IsNullOrWhiteSpace(Model.ActiveCategory) ? 0 : 1)
+        + (Model.SortBy == SearchSort.Relevance ? 0 : 1)
+        + (Model.DateFrom.HasValue ? 1 : 0)
+        + (Model.DateTo.HasValue ? 1 : 0);
 }
 
-<div class="max-w-6xl mx-auto px-6 py-12">
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold mb-2">Search</h1>
+<div class="max-w-7xl mx-auto px-4 lg:px-6 py-8 lg:py-12">
+    <!-- Page heading + primary search box. The big query input stays on the main canvas
+         (not in the sidebar) so it remains the obvious focal point on every viewport. -->
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold mb-1">Search</h1>
         <p class="text-base-content/60">Stocks, filings, institutions, insiders, congress, economic indicators and futures</p>
     </div>
 
-    <!-- Search: scope selector + query. instant-search.js progressively enhances this into
-         debounced as-you-type results; without JS the form still submits a normal GET. -->
     <form id="global-search-form" method="get" asp-controller="Search" asp-action="Index"
-          data-results-url="@Url.Action("Results")" class="mb-6">
-        <div class="join w-full max-w-2xl">
-            <select name="category" class="select select-bordered join-item w-auto"
-                    aria-label="Limit search to a category">
-                <option value="">All categories</option>
-                @foreach (var category in SearchCategories.All) {
-                    <option value="@category"
-                            selected="@(string.Equals(category, Model.ActiveCategory, StringComparison.OrdinalIgnoreCase))">
-                        @category
-                    </option>
-                }
-            </select>
-            <label class="input input-bordered join-item grow flex items-center gap-2">
-                <input type="search" name="q" value="@Model.Query" class="grow"
-                       aria-label="Search everything"
-                       placeholder="Search for a ticker, company, filing, indicator..." autofocus />
-                <button type="button" id="search-clear"
-                        class="btn btn-ghost btn-xs btn-circle @(string.IsNullOrEmpty(Model.Query) ? "hidden" : "")"
-                        aria-label="Clear search" title="Clear search">
-                    <icon name="x-mark" size="4" />
+          data-results-url="@Url.Action("Results")">
+        <!-- Sticky search bar: stays visible while the user scrolls through long result lists.
+             instant-search.js progressively enhances this; without JS it submits a normal GET. -->
+        <div class="mb-6 sticky top-14 z-30 bg-base-200/80 backdrop-blur-md -mx-4 lg:-mx-6 px-4 lg:px-6 py-3 border-b border-base-200">
+            <div class="flex items-center gap-2 max-w-3xl">
+                <label class="input input-bordered flex-1 flex items-center gap-3 h-12">
+                    <icon name="magnifying-glass" size="5" class="text-base-content/40" />
+                    <input type="search" name="q" value="@Model.Query" class="grow text-base"
+                           aria-label="Search everything"
+                           placeholder="Search for a ticker, company, filing, indicator..." autofocus />
+                    <button type="button" id="search-clear"
+                            class="btn btn-ghost btn-xs btn-circle @(string.IsNullOrEmpty(Model.Query) ? "hidden" : "")"
+                            aria-label="Clear search" title="Clear search">
+                        <icon name="x-mark" size="4" />
+                    </button>
+                </label>
+                <button type="submit" class="btn btn-primary h-12 px-5" aria-label="Search" title="Search">
+                    <icon name="magnifying-glass" size="5" />
                 </button>
-            </label>
-            <button type="submit" class="btn btn-primary join-item" aria-label="Search" title="Search">
-                <icon name="magnifying-glass" size="5" />
-            </button>
-        </div>
-        <!-- Sort + date range. instant-search.js submits these alongside q + category
-             and re-renders. The date range only narrows date-aware results (SEC filings). -->
-        <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-base-content/60">
-            <div class="flex items-center gap-2">
-                <label for="search-sort">Sort by</label>
-                <select id="search-sort" name="sort" class="select select-bordered select-sm w-auto"
-                        aria-label="Sort results">
-                    @foreach (var option in Html.GetEnumSelectList<SearchSort>()) {
-                        <option value="@option.Value"
-                                selected="@(option.Value == ((int)Model.SortBy).ToString())">
-                            @option.Text
-                        </option>
+                <!-- Mobile-only: opens the filter drawer (the lg+ sidebar is always visible). -->
+                <button type="button" id="search-filters-toggle"
+                        class="btn btn-ghost border border-base-300 h-12 px-3 lg:hidden"
+                        aria-label="Show filters" title="Filters">
+                    <icon name="adjustments-horizontal" size="5" />
+                    @if (activeFilterCount > 0) {
+                        <span class="badge badge-primary badge-sm">@activeFilterCount</span>
                     }
-                </select>
+                </button>
             </div>
-            <div class="flex items-center gap-2">
-                <label for="search-date-from">Filed between</label>
-                <input id="search-date-from" type="date" name="dateFrom"
-                       value="@(Model.DateFrom?.ToString("yyyy-MM-dd"))"
-                       class="input input-bordered input-sm w-auto" aria-label="Filed on or after" />
-                <span aria-hidden="true">–</span>
-                <input id="search-date-to" type="date" name="dateTo"
-                       value="@(Model.DateTo?.ToString("yyyy-MM-dd"))"
-                       class="input input-bordered input-sm w-auto" aria-label="Filed on or before" />
+        </div>
+
+        <!-- Two-column shell: filters on the left, results on the right.
+             On mobile the sidebar is hidden behind an off-canvas drawer (toggled above). -->
+        <div class="lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] lg:gap-6">
+            <!-- Filter sidebar — visible from lg, off-canvas drawer below.
+                 instant-search.js sets role="dialog" + aria-modal when it acts as a mobile drawer. -->
+            <aside id="search-filters" class="hidden lg:block" aria-label="Search filters">
+                <div class="lg:sticky lg:top-32 space-y-5">
+                    <div class="bg-base-100 rounded-xl shadow-sm border border-base-200/60 p-5 space-y-5">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/60">Filters</h2>
+                            <a id="search-clear-filters"
+                               asp-action="Index" asp-route-q="@Model.Query"
+                               class="text-xs link link-hover text-base-content/60 hover:text-primary @(activeFilterCount == 0 ? "invisible" : "")">
+                                Clear all
+                            </a>
+                        </div>
+
+                        <!-- Category picker: radio-style list (only one category narrows the view at a time).
+                             Each option shows its module icon for fast visual scanning. -->
+                        <fieldset class="space-y-1">
+                            <legend class="text-xs font-semibold text-base-content/50 mb-2">Category</legend>
+                            <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-base-200 transition-colors focus-within:ring-2 focus-within:ring-primary/40 @(string.IsNullOrWhiteSpace(Model.ActiveCategory) ? "bg-primary/10 text-primary font-medium" : "")">
+                                <input type="radio" name="category" value=""
+                                       class="radio radio-xs radio-primary"
+                                       checked="@string.IsNullOrWhiteSpace(Model.ActiveCategory)" />
+                                <icon name="squares-2x2" size="4" />
+                                <span class="text-sm">All categories</span>
+                            </label>
+                            @foreach (var category in SearchCategories.All) {
+                                var isActive = string.Equals(category, Model.ActiveCategory, StringComparison.OrdinalIgnoreCase);
+                                <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-base-200 transition-colors focus-within:ring-2 focus-within:ring-primary/40 @(isActive ? "bg-primary/10 text-primary font-medium" : "")">
+                                    <input type="radio" name="category" value="@category"
+                                           class="radio radio-xs radio-primary"
+                                           checked="@isActive" />
+                                    <icon name="@CategoryIcon(category)" size="4" />
+                                    <span class="text-sm">@category</span>
+                                </label>
+                            }
+                        </fieldset>
+
+                        <!-- Sort order: applied centrally by the aggregator across all groups. -->
+                        <fieldset>
+                            <legend class="text-xs font-semibold text-base-content/50 mb-2">Sort by</legend>
+                            <select name="sort" id="search-sort" class="select select-bordered select-sm w-full"
+                                    aria-label="Sort results">
+                                @foreach (var option in Html.GetEnumSelectList<SearchSort>()) {
+                                    <option value="@option.Value"
+                                            selected="@(option.Value == ((int)Model.SortBy).ToString())">
+                                        @option.Text
+                                    </option>
+                                }
+                            </select>
+                        </fieldset>
+
+                        <!-- Date range: only narrows date-aware groups (currently SEC Filings).
+                             Other providers ignore these values, so they stay opt-in here. -->
+                        <fieldset>
+                            <legend class="text-xs font-semibold text-base-content/50 mb-2">Filed between</legend>
+                            <div class="space-y-2">
+                                <div>
+                                    <label class="text-[11px] uppercase tracking-wide text-base-content/40" for="search-date-from">From</label>
+                                    <input id="search-date-from" type="date" name="dateFrom"
+                                           value="@(Model.DateFrom?.ToString("yyyy-MM-dd"))"
+                                           class="input input-bordered input-sm w-full"
+                                           aria-label="Filed on or after" />
+                                </div>
+                                <div>
+                                    <label class="text-[11px] uppercase tracking-wide text-base-content/40" for="search-date-to">To</label>
+                                    <input id="search-date-to" type="date" name="dateTo"
+                                           value="@(Model.DateTo?.ToString("yyyy-MM-dd"))"
+                                           class="input input-bordered input-sm w-full"
+                                           aria-label="Filed on or before" />
+                                </div>
+                            </div>
+                        </fieldset>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Results column. -->
+            <div id="search-results" aria-live="polite" aria-busy="false" class="min-w-0">
+                <partial name="_Results" model="Model" />
             </div>
         </div>
     </form>
-
-    <div id="search-results" aria-live="polite" aria-busy="false">
-        <partial name="_Results" model="Model" />
-    </div>
 </div>
+
+<!-- Mobile filter drawer backdrop. instant-search.js toggles the .open class. -->
+<div id="search-filters-backdrop"
+     class="fixed inset-0 bg-black/40 z-40 hidden lg:!hidden"
+     aria-hidden="true"></div>
+
+@section Styles {
+    <style>
+        /* Mobile drawer: the same #search-filters element doubles as the slide-in panel.
+           lg breakpoint resets it to the static sidebar via the inline classes above. */
+        @@media (max-width: 1023.98px) {
+            #search-filters {
+                position: fixed;
+                top: 0;
+                right: 0;
+                bottom: 0;
+                width: min(20rem, 90vw);
+                background: var(--color-base-100);
+                z-index: 50;
+                padding: 1rem;
+                overflow-y: auto;
+                transform: translateX(100%);
+                transition: transform 0.2s ease-out;
+                box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
+            }
+            #search-filters.open {
+                display: block !important;
+                transform: translateX(0);
+            }
+            #search-filters-backdrop.open {
+                display: block;
+            }
+        }
+    </style>
+}

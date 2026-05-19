@@ -9,8 +9,7 @@
     // Maps each search category to its module's Heroicon so result groups are
     // scannable at a glance instead of being seven near-identical text cards.
     // Unknown categories fall back to the generic search glyph.
-    string CategoryIcon(string category) => category switch
-    {
+    string CategoryIcon(string category) => category switch {
         "Stocks" => "chart-bar",
         "SEC Filings" => "document-text",
         "Economic Indicators" => "presentation-chart-line",
@@ -20,10 +19,14 @@
         "Futures" => "cube",
         _ => "magnifying-glass",
     };
+
+    // Pin one group per row only when the user has narrowed to a single category — the
+    // focused view shows long lists, so a two-up grid would just make each row half-empty.
+    var isFocused = !string.IsNullOrWhiteSpace(Model.ActiveCategory);
 }
 
 @if (string.IsNullOrWhiteSpace(Model.Query)) {
-    <div class="flex flex-col items-center text-center py-16 gap-5">
+    <div class="flex flex-col items-center text-center py-16 lg:py-24 gap-5">
         <icon name="magnifying-glass" size="10" class="text-base-content/30" />
         <p class="text-base-content/70 max-w-md">
             Search stocks, SEC filings, institutions, insiders, congress members,
@@ -34,7 +37,10 @@
             <div class="flex flex-wrap justify-center gap-2 max-w-xl">
                 @foreach (var category in Equibles.Web.Search.SearchCategories.All) {
                     <a asp-action="Index" asp-route-category="@category"
-                       class="badge badge-ghost badge-lg transition-colors hover:badge-primary">@category</a>
+                       class="badge badge-ghost badge-lg gap-1 transition-colors hover:badge-primary">
+                        <icon name="@CategoryIcon(category)" size="3" />
+                        @category
+                    </a>
                 }
             </div>
         </div>
@@ -46,7 +52,7 @@
         </div>
     </div>
 } else if (!Model.HasResults) {
-    <div class="flex flex-col items-center text-center py-16 gap-3">
+    <div class="flex flex-col items-center text-center py-16 lg:py-24 gap-3">
         <icon name="magnifying-glass" size="10" class="text-base-content/30" />
         <p class="text-base-content/70">
             No results for <span class="font-semibold text-base-content">@Model.Query</span>.
@@ -54,18 +60,27 @@
         <p class="text-sm text-base-content/50">Try a ticker symbol, company name, or filing type.</p>
     </div>
 } else {
-    <!-- Result count: visibility of system status — tells the user how broad the
-         match is before they scan the groups. -->
-    <p class="text-sm text-base-content/60 mb-3">
-        <span class="font-semibold text-base-content">@visibleGroups.Sum(g => g.Hits.Count)</span>
-        @(visibleGroups.Sum(g => g.Hits.Count) == 1 ? "result" : "results") for
-        <span class="font-semibold text-base-content">@Model.Query</span>
-        in @(string.IsNullOrWhiteSpace(Model.ActiveCategory)
-            ? (visibleGroups.Count == 1 ? "1 category" : $"{visibleGroups.Count} categories")
-            : Model.ActiveCategory)
-    </p>
+    var totalHits = visibleGroups.Sum(g => g.Hits.Count);
 
-    <!-- Category filter chips -->
+    <!-- Result count + chips give the user a quick read on breadth before scanning groups. -->
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <p class="text-sm text-base-content/60">
+            <span class="font-semibold text-base-content">@totalHits</span>
+            @(totalHits == 1 ? "result" : "results") for
+            <span class="font-semibold text-base-content">@Model.Query</span>
+            in @(string.IsNullOrWhiteSpace(Model.ActiveCategory)
+                ? (visibleGroups.Count == 1 ? "1 category" : $"{visibleGroups.Count} categories")
+                : Model.ActiveCategory)
+        </p>
+    </div>
+
+    <!-- Category chips: a faster way to swap categories than scrolling to the sidebar.
+         The "All" chip clears the category filter; the others mirror the radios in the sidebar.
+         Includes the active category even when it has zero hits so the user can see it's still
+         selected and pivot away with one click instead of hunting in the sidebar. -->
+    var hasActiveGroup = string.IsNullOrWhiteSpace(Model.ActiveCategory)
+        || Model.Groups.Any(g => string.Equals(g.Category, Model.ActiveCategory, StringComparison.OrdinalIgnoreCase));
+
     <div class="flex flex-wrap gap-2 mb-6">
         <a asp-action="Index" asp-route-q="@Model.Query"
            class="badge badge-lg transition-colors hover:badge-primary @(string.IsNullOrWhiteSpace(Model.ActiveCategory) ? "badge-primary" : "badge-ghost")">
@@ -75,6 +90,12 @@
             <a asp-action="Index" asp-route-q="@Model.Query" asp-route-category="@group.Category"
                class="badge badge-lg transition-colors hover:badge-primary @(string.Equals(group.Category, Model.ActiveCategory, StringComparison.OrdinalIgnoreCase) ? "badge-primary" : "badge-ghost")">
                 @group.Category (@group.Hits.Count)
+            </a>
+        }
+        @if (!hasActiveGroup) {
+            <a asp-action="Index" asp-route-q="@Model.Query" asp-route-category="@Model.ActiveCategory"
+               class="badge badge-lg badge-primary">
+                @Model.ActiveCategory (0)
             </a>
         }
     </div>
@@ -93,54 +114,58 @@
                 Show all results
             </a>
         </div>
-    }
-
-    <!-- Result groups -->
-    <div class="grid gap-6 md:grid-cols-2 items-start">
-        @foreach (var group in visibleGroups) {
-            var seeAll = Url.CategoryUrl(group.Category, Model.Query);
-            <div class="card bg-base-100 shadow-sm transition-shadow hover:shadow-md">
-                <div class="card-body p-4 lg:p-6">
-                    <div class="flex items-center justify-between mb-3">
-                        <div class="flex items-center gap-3 min-w-0">
-                            <span class="flex items-center justify-center size-9 rounded-lg bg-primary/10 text-primary shrink-0">
-                                <icon name="@CategoryIcon(group.Category)" size="5" />
-                            </span>
-                            <h2 class="card-title text-lg truncate">@group.Category</h2>
-                            <span class="badge badge-ghost badge-sm shrink-0">@group.Hits.Count</span>
+    } else {
+        <div class="grid gap-5 @(isFocused ? "grid-cols-1" : "md:grid-cols-2") items-start">
+            @foreach (var group in visibleGroups) {
+                var seeAll = Url.CategoryUrl(group.Category, Model.Query);
+                <div class="card bg-base-100 shadow-sm border border-base-200/60 transition-shadow hover:shadow-md">
+                    <div class="card-body p-4 lg:p-5">
+                        <div class="flex items-center justify-between mb-3 gap-3">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <span class="flex items-center justify-center size-9 rounded-lg bg-primary/10 text-primary shrink-0">
+                                    <icon name="@CategoryIcon(group.Category)" size="5" />
+                                </span>
+                                <h2 class="card-title text-lg truncate">@group.Category</h2>
+                                <span class="badge badge-ghost badge-sm shrink-0">@group.Hits.Count</span>
+                            </div>
+                            @if (seeAll != null && !isFocused) {
+                                <!-- "See all" lives on the overview only; in the focused view the card already
+                                     shows the expanded list, so the link would be a no-op. -->
+                                <a href="@seeAll" class="link link-primary text-sm shrink-0 flex items-center gap-1">
+                                    See all
+                                    <icon name="arrow-right" size="3" />
+                                </a>
+                            }
                         </div>
-                        @if (seeAll != null) {
-                            <a href="@seeAll" class="link link-primary text-sm shrink-0">See all</a>
-                        }
-                    </div>
-                    <ul class="divide-y divide-base-200">
-                        @foreach (var hit in group.Hits) {
-                            var hitUrl = Url.HitUrl(hit);
-                            <li>
-                                @if (hitUrl != null) {
-                                    <a href="@hitUrl" class="group flex items-center gap-3 hover:bg-base-200 rounded-lg px-3 -mx-3 py-2.5 transition-colors">
-                                        <span class="min-w-0 grow">
+                        <ul class="divide-y divide-base-200">
+                            @foreach (var hit in group.Hits) {
+                                var hitUrl = Url.HitUrl(hit);
+                                <li>
+                                    @if (hitUrl != null) {
+                                        <a href="@hitUrl" class="group flex items-center gap-3 hover:bg-base-200 rounded-lg px-3 -mx-3 py-2.5 transition-colors">
+                                            <span class="min-w-0 grow">
+                                                <span class="block font-medium truncate">@hit.Title</span>
+                                                @if (!string.IsNullOrWhiteSpace(hit.Subtitle)) {
+                                                    <span class="block text-sm text-base-content/60 truncate">@hit.Subtitle</span>
+                                                }
+                                            </span>
+                                            <icon name="chevron-right" size="4"
+                                                  class="text-base-content/30 shrink-0 opacity-0 -translate-x-1 transition-all group-hover:opacity-100 group-hover:translate-x-0" />
+                                        </a>
+                                    } else {
+                                        <div class="px-3 -mx-3 py-2.5">
                                             <span class="block font-medium truncate">@hit.Title</span>
                                             @if (!string.IsNullOrWhiteSpace(hit.Subtitle)) {
                                                 <span class="block text-sm text-base-content/60 truncate">@hit.Subtitle</span>
                                             }
-                                        </span>
-                                        <icon name="chevron-right" size="4"
-                                              class="text-base-content/30 shrink-0 opacity-0 -translate-x-1 transition-all group-hover:opacity-100 group-hover:translate-x-0" />
-                                    </a>
-                                } else {
-                                    <div class="px-3 -mx-3 py-2.5">
-                                        <span class="block font-medium truncate">@hit.Title</span>
-                                        @if (!string.IsNullOrWhiteSpace(hit.Subtitle)) {
-                                            <span class="block text-sm text-base-content/60 truncate">@hit.Subtitle</span>
-                                        }
-                                    </div>
-                                }
-                            </li>
-                        }
-                    </ul>
+                                        </div>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </div>
                 </div>
-            </div>
-        }
-    </div>
+            }
+        </div>
+    }
 }
