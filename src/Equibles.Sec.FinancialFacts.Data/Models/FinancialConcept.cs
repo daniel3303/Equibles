@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,6 +13,10 @@ namespace Equibles.Sec.FinancialFacts.Data.Models;
 [Index(nameof(Taxonomy), nameof(Tag), IsUnique = true)]
 public class FinancialConcept
 {
+    // Client-generated Guid key. Without DatabaseGeneratedOption.None EF marks
+    // it store-generated, so FlexLabs UpsertRange omits it from the INSERT and
+    // Postgres (no column default) rejects the row with a NOT NULL violation.
+    [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public FactTaxonomy Taxonomy { get; set; }
