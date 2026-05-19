@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Text;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
@@ -8,6 +9,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
+using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
 using Equibles.Sec.FinancialFacts.Mcp.Helpers;
 using Equibles.Sec.FinancialFacts.Repositories;
@@ -21,6 +23,7 @@ namespace Equibles.Sec.FinancialFacts.Mcp.Tools;
 public class FinancialFactsTools
 {
     private const int MaxResultsCap = 200;
+    private const int MaxTickers = 25;
 
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
@@ -136,9 +139,13 @@ public class FinancialFactsTools
                     .Select(g =>
                     {
                         var byPriority = g.OrderBy(f => conceptPriority[f.FinancialConceptId]);
+                        // AccessionNumber is the stable final tiebreak for
+                        // same-day amendments (Postgres has no implicit order).
                         var ordered = asOriginallyReported
-                            ? byPriority.ThenBy(f => f.FiledDate)
-                            : byPriority.ThenByDescending(f => f.FiledDate);
+                            ? byPriority.ThenBy(f => f.FiledDate).ThenBy(f => f.AccessionNumber)
+                            : byPriority
+                                .ThenByDescending(f => f.FiledDate)
+                                .ThenByDescending(f => f.AccessionNumber);
                         return ordered.First();
                     })
                     .OrderByDescending(f => f.PeriodEnd)
@@ -179,6 +186,153 @@ public class FinancialFactsTools
             "GetFinancialFact",
             $"ticker: {FactMarkdown.Clean(ticker)}, concept: {FactMarkdown.Clean(concept)}, "
                 + $"form: {FactMarkdown.Clean(form)}",
+            ReportError
+        );
+    }
+
+    [McpServerTool(Name = "CompareFinancialFact")]
+    [Description(
+        "Compare one financial concept across several companies for the same fiscal "
+            + "period — peer comparison. Returns one row per ticker with the "
+            + "latest-restated value; tickers with no data for the period are listed "
+            + "separately."
+    )]
+    public Task<string> CompareFinancialFact(
+        [Description("Comma-separated tickers, e.g. 'AAPL,MSFT,GOOGL' (max 25)")] string tickers,
+        [Description(
+            "Concept alias, e.g. 'revenue', 'net-income', 'eps-diluted'. Call with an "
+                + "unknown value to list supported aliases."
+        )]
+            string concept,
+        [Description("Fiscal year, e.g. 2023")] int fiscalYear,
+        [Description("Fiscal period: 'FY' (default) or 'Q1'..'Q4'")] string fiscalPeriod = "FY"
+    )
+    {
+        return McpToolExecutor.Execute(
+            async () =>
+            {
+                if (string.IsNullOrWhiteSpace(concept))
+                    return "A concept is required. Supported: "
+                        + $"{string.Join(", ", FinancialConceptAliases.SupportedAliases)} "
+                        + "(common synonyms like 'sales', 'r&d', 'ocf' also work).";
+
+                if (!FinancialConceptAliases.TryResolve(concept, out var conceptRefs))
+                    return $"Unknown concept '{concept}'. Supported: "
+                        + $"{string.Join(", ", FinancialConceptAliases.SupportedAliases)} "
+                        + "(common synonyms like 'sales', 'r&d', 'ocf' also work).";
+
+                if (!FactArgs.TryParsePeriod(fiscalPeriod, out var period))
+                    return $"Unknown period '{fiscalPeriod}'. Use 'FY' or 'Q1'..'Q4'.";
+
+                if (string.IsNullOrWhiteSpace(tickers))
+                    return "At least one ticker is required.";
+
+                var requested = tickers
+                    .Split(
+                        ',',
+                        StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+                    )
+                    .Select(t => t.ToUpperInvariant())
+                    .Distinct()
+                    .ToList();
+
+                if (requested.Count == 0)
+                    return "At least one ticker is required.";
+                if (requested.Count > MaxTickers)
+                    return $"Too many tickers ({requested.Count}). The maximum is {MaxTickers}.";
+
+                var conceptPriority = await ResolveConceptPriority(conceptRefs);
+                if (conceptPriority.Count == 0)
+                    return $"No '{concept}' data has been ingested.";
+
+                // Two queries instead of 2N: batch-load the requested stocks,
+                // then all matching facts in one go keyed by company.
+                var stocks = await _commonStockRepository.GetByTickers(requested).ToListAsync();
+                var stockByTicker = new Dictionary<string, CommonStock>();
+                foreach (var s in stocks)
+                {
+                    if (requested.Contains(s.Ticker))
+                        stockByTicker.TryAdd(s.Ticker, s);
+                    foreach (var secondary in s.SecondaryTickers ?? [])
+                        if (requested.Contains(secondary))
+                            stockByTicker.TryAdd(secondary, s);
+                }
+
+                var stockIds = stocks.Select(s => s.Id).ToList();
+                var facts = await _financialFactRepository
+                    .GetByStocks(stockIds)
+                    .Where(f =>
+                        f.FiscalYear == fiscalYear
+                        && f.FiscalPeriod == period
+                        && conceptPriority.Keys.Contains(f.FinancialConceptId)
+                    )
+                    .ToListAsync();
+
+                // Same deterministic pick as GetFinancialFact: the alias's
+                // primary tag wins, then the latest filing, then accession as a
+                // stable tiebreak for same-day amendments (Postgres has no
+                // implicit row order).
+                var bestByStock = facts
+                    .GroupBy(f => f.CommonStockId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g =>
+                            g.OrderBy(f => conceptPriority[f.FinancialConceptId])
+                                .ThenByDescending(f => f.FiledDate)
+                                .ThenByDescending(f => f.AccessionNumber)
+                                .First()
+                    );
+
+                var rows = new List<(string Ticker, string Name, FinancialFact Fact)>();
+                var skipped = new List<string>();
+                foreach (var ticker in requested)
+                {
+                    if (!stockByTicker.TryGetValue(ticker, out var stock))
+                    {
+                        skipped.Add($"{FactMarkdown.Cell(ticker)} (not found)");
+                        continue;
+                    }
+                    if (!bestByStock.TryGetValue(stock.Id, out var best))
+                    {
+                        skipped.Add($"{FactMarkdown.Cell(ticker)} (no data)");
+                        continue;
+                    }
+                    rows.Add((stock.Ticker, stock.Name, best));
+                }
+
+                var result = new StringBuilder();
+                result.AppendLine(
+                    $"{concept} — {fiscalYear} {period.NameForHumans()} peer comparison:"
+                );
+                result.AppendLine();
+                result.AppendLine("| Ticker | Company | Value | Unit | Form | Filed |");
+                result.AppendLine("|--------|---------|------:|------|------|-------|");
+                foreach (var (ticker, name, fact) in rows)
+                {
+                    result.AppendLine(
+                        $"| {FactMarkdown.Cell(ticker)} | {FactMarkdown.Cell(name)} | "
+                            + $"{FactMarkdown.Value(fact.Value, fact.Unit)} | "
+                            + $"{FactMarkdown.Cell(fact.Unit)} | "
+                            + $"{FactMarkdown.Cell(fact.Form?.DisplayName)} | "
+                            + $"{fact.FiledDate:yyyy-MM-dd} |"
+                    );
+                }
+
+                if (rows.Count == 0)
+                    result.AppendLine(
+                        $"\n_No company reported '{concept}' for {fiscalYear} "
+                            + $"{period.NameForHumans()}._"
+                    );
+
+                if (skipped.Count > 0)
+                    result.AppendLine($"\n_Skipped: {string.Join(", ", skipped)}._");
+
+                return result.ToString();
+            },
+            _logger,
+            "CompareFinancialFact",
+            $"tickers: {FactMarkdown.Clean(tickers)}, concept: {FactMarkdown.Clean(concept)}, "
+                + $"year: {fiscalYear}, period: {FactMarkdown.Clean(fiscalPeriod)}",
             ReportError
         );
     }
