@@ -1,4 +1,5 @@
 @using Equibles.Web.Extensions
+@using Equibles.Web.Search
 @model Equibles.Web.ViewModels.Search.GlobalSearchViewModel
 
 @{
@@ -16,9 +17,20 @@
         <p class="text-base-content/60">Stocks, filings, institutions, insiders, congress, economic indicators and futures</p>
     </div>
 
-    <!-- Search -->
+    <!-- Search: scope selector + query. The scope sets the `category` param the controller and
+         result view already understand, so a user can narrow the search before submitting. -->
     <form method="get" class="mb-6">
-        <div class="join w-full max-w-xl">
+        <div class="join w-full max-w-2xl">
+            <select name="category" class="select select-bordered join-item w-auto"
+                    aria-label="Limit search to a category">
+                <option value="">All categories</option>
+                @foreach (var category in SearchCategories.All) {
+                    <option value="@category"
+                            selected="@(string.Equals(category, Model.ActiveCategory, StringComparison.OrdinalIgnoreCase))">
+                        @category
+                    </option>
+                }
+            </select>
             <input type="search" name="q" value="@Model.Query"
                    class="input input-bordered join-item grow"
                    aria-label="Search everything"
@@ -30,13 +42,22 @@
     </form>
 
     @if (string.IsNullOrWhiteSpace(Model.Query)) {
-        <div class="flex flex-col items-center text-center py-16 gap-4">
+        <div class="flex flex-col items-center text-center py-16 gap-5">
             <icon name="magnifying-glass" size="10" class="text-base-content/30" />
             <p class="text-base-content/70 max-w-md">
                 Search stocks, SEC filings, institutions, insiders, congress members,
                 economic indicators and futures markets — all at once.
             </p>
-            <div class="flex flex-wrap justify-center gap-2">
+            <div class="flex flex-col items-center gap-2">
+                <span class="text-sm text-base-content/50">Browse a category</span>
+                <div class="flex flex-wrap justify-center gap-2 max-w-xl">
+                    @foreach (var category in SearchCategories.All) {
+                        <a asp-action="Index" asp-route-category="@category"
+                           class="badge badge-ghost badge-lg transition-colors hover:badge-primary">@category</a>
+                    }
+                </div>
+            </div>
+            <div class="flex flex-wrap justify-center items-center gap-2">
                 <span class="text-sm text-base-content/50">Try:</span>
                 <a asp-action="Index" asp-route-q="AAPL" class="badge badge-ghost badge-lg transition-colors hover:badge-primary">AAPL</a>
                 <a asp-action="Index" asp-route-q="Apple" class="badge badge-ghost badge-lg transition-colors hover:badge-primary">Apple</a>
