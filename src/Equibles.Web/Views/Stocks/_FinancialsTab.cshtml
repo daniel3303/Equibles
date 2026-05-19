@@ -1,0 +1,122 @@
+@using Equibles.Core.Extensions
+@using Equibles.Sec.FinancialFacts.Data.Enums
+@model Equibles.Web.ViewModels.Stocks.FinancialsTabViewModel
+
+@if (!Model.HasData) {
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body items-center text-center py-12">
+            <div class="text-base-content/30 mb-3">
+                <icon name="document-text" size="12" />
+            </div>
+            <h3 class="text-base-content/60 mb-2">No Financial Data</h3>
+            <p class="text-base-content/40 text-sm">No structured financial facts have been ingested for this stock yet.</p>
+        </div>
+    </div>
+} else {
+    @* Reuse the single Token definition from FinancialsPeriodOption rather than
+       rebuilding the "year-period" string here, so the format lives in one place. *@
+    var selectedToken = Model.AvailablePeriods
+        .FirstOrDefault(p => p.FiscalYear == Model.SelectedYear && p.FiscalPeriod == Model.SelectedPeriod)?.Token;
+
+    <!-- Statement type + fiscal period selectors -->
+    <div class="mb-4 text-sm">
+        <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <div class="flex items-center gap-2 shrink-0">
+                <span class="text-base-content/60 whitespace-nowrap">Statement:</span>
+                <select id="financials-statement" class="select select-bordered select-sm">
+                    @foreach (var type in Enum.GetValues<FinancialStatementType>()) {
+                        if (type == Model.StatementType) {
+                            <option value="@type" selected>@type.NameForHumans()</option>
+                        } else {
+                            <option value="@type">@type.NameForHumans()</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <span class="text-base-content/60 whitespace-nowrap">Period:</span>
+                <select id="financials-period" class="select select-bordered select-sm">
+                    @foreach (var p in Model.AvailablePeriods) {
+                        if (p.Token == selectedToken) {
+                            <option value="@p.Token" selected>@p.Label</option>
+                        } else {
+                            <option value="@p.Token">@p.Label</option>
+                        }
+                    }
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table table-zebra table-sm">
+                <thead>
+                    <tr>
+                        <th>Line Item</th>
+                        <th class="text-right">Value</th>
+                        <th class="hidden md:table-cell">Unit</th>
+                        <th class="hidden md:table-cell">Period End</th>
+                        <th class="hidden lg:table-cell">Form</th>
+                        <th class="hidden lg:table-cell">Filed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var line in Model.Lines) {
+                        <tr>
+                            <td>@line.Label</td>
+                            @if (line.HasValue) {
+                                var isPerShare = line.Unit != null && line.Unit.EndsWith("/shares", StringComparison.OrdinalIgnoreCase);
+                                var isMoney = line.Unit != null && line.Unit.StartsWith("USD", StringComparison.OrdinalIgnoreCase);
+                                // Per-share figures need cents precision; totals are whole numbers.
+                                var formatted = isPerShare
+                                    ? "$" + line.Value.ToString("N2")
+                                    : isMoney
+                                        ? "$" + line.Value.ToString("N0")
+                                        : line.Value.ToString("N0");
+                                <td class="text-right font-mono">@formatted</td>
+                                <td class="hidden md:table-cell text-base-content/60">@line.Unit</td>
+                                <td class="hidden md:table-cell text-base-content/60">@line.PeriodEnd.ToString("yyyy-MM-dd")</td>
+                                <td class="hidden lg:table-cell text-base-content/60">@line.Form</td>
+                                <td class="hidden lg:table-cell text-base-content/60">@line.FiledDate.ToString("yyyy-MM-dd")</td>
+                            } else {
+                                <td class="text-right text-base-content/30">—</td>
+                                <td class="hidden md:table-cell"></td>
+                                <td class="hidden md:table-cell"></td>
+                                <td class="hidden lg:table-cell"></td>
+                                <td class="hidden lg:table-cell"></td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+    // Financials tab filters: changing the statement type or fiscal period
+    // reloads the tab with the new selection. The period <option> value packs
+    // "year-period" (e.g. 2023-FullYear); split it back into the two query
+    // params the Financials action expects.
+    document.addEventListener('DOMContentLoaded', function () {
+        const statementEl = document.getElementById('financials-statement');
+        const periodEl = document.getElementById('financials-period');
+        if (!statementEl || !periodEl) return;
+
+        // Rebuild the tab URL from the current selector state.
+        function navigate() {
+            const statement = statementEl.value;
+            const token = periodEl.value;
+            const sep = token.indexOf('-');
+            const year = token.substring(0, sep);
+            const period = token.substring(sep + 1);
+            window.location.href = 'Financials?statement=' + encodeURIComponent(statement) +
+                '&year=' + encodeURIComponent(year) +
+                '&period=' + encodeURIComponent(period);
+        }
+
+        statementEl.addEventListener('change', navigate);
+        periodEl.addEventListener('change', navigate);
+    });
+    </script>
+}

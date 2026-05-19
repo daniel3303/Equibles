@@ -1,10 +1,14 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Congress.Repositories;
 using Equibles.Core.AutoWiring;
+using Equibles.Core.Extensions;
 using Equibles.Finra.Repositories;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.InsiderTrading.Repositories;
+using Equibles.Sec.FinancialFacts.Data.Enums;
+using Equibles.Sec.FinancialFacts.Data.Statements;
+using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.Repositories;
 using Equibles.Web.ViewModels.Stocks;
 using Equibles.Yahoo.Repositories;
@@ -24,6 +28,8 @@ public class StockTabService
     private readonly InsiderTransactionRepository _insiderTransactionRepository;
     private readonly CongressionalTradeRepository _congressionalTradeRepository;
     private readonly DailyStockPriceRepository _dailyStockPriceRepository;
+    private readonly FinancialFactRepository _financialFactRepository;
+    private readonly FinancialConceptRepository _financialConceptRepository;
 
     public StockTabService(
         InstitutionalHoldingRepository institutionalHoldingRepository,
@@ -34,7 +40,9 @@ public class StockTabService
         DocumentRepository documentRepository,
         InsiderTransactionRepository insiderTransactionRepository,
         CongressionalTradeRepository congressionalTradeRepository,
-        DailyStockPriceRepository dailyStockPriceRepository
+        DailyStockPriceRepository dailyStockPriceRepository,
+        FinancialFactRepository financialFactRepository,
+        FinancialConceptRepository financialConceptRepository
     )
     {
         _institutionalHoldingRepository = institutionalHoldingRepository;
@@ -46,6 +54,8 @@ public class StockTabService
         _insiderTransactionRepository = insiderTransactionRepository;
         _congressionalTradeRepository = congressionalTradeRepository;
         _dailyStockPriceRepository = dailyStockPriceRepository;
+        _financialFactRepository = financialFactRepository;
+        _financialConceptRepository = financialConceptRepository;
     }
 
     public async Task<HoldingsTabViewModel> LoadHoldingsTab(CommonStock stock, DateOnly? date)
@@ -214,6 +224,122 @@ public class StockTabService
             MacdHistogram = macdHistogram,
         };
     }
+
+    public async Task<FinancialsTabViewModel> LoadFinancialsTab(
+        CommonStock stock,
+        FinancialStatementType statementType,
+        int? year,
+        SecFiscalPeriod? period
+    )
+    {
+        // Distinct (year, period) pairs the company actually reported. This is a
+        // separate round trip from the per-period fact query below — both are
+        // covered by the [CommonStockId, FiscalYear, FiscalPeriod] index, and
+        // keeping them separate avoids loading every fact just to list periods.
+        var periodKeys = await _financialFactRepository
+            .GetByStock(stock)
+            .Select(f => new { f.FiscalYear, f.FiscalPeriod })
+            .Distinct()
+            .ToListAsync();
+
+        // SecFiscalPeriod's enum ordinal (FullYear=0, Q1=1…Q4=4) is not
+        // chronological — ordering by it would float the annual figure to the
+        // wrong end. The 10-K (FullYear) is filed after Q4 and is the canonical
+        // annual number, so rank it last within its year; default selection
+        // (first option) is then the latest year's annual statement.
+        var availablePeriods = periodKeys
+            .OrderByDescending(p => p.FiscalYear)
+            .ThenByDescending(p => ChronologicalRank(p.FiscalPeriod))
+            .Select(p => new FinancialsPeriodOption(
+                p.FiscalYear,
+                p.FiscalPeriod,
+                $"FY{p.FiscalYear} {p.FiscalPeriod.NameForHumans()}"
+            ))
+            .ToList();
+
+        var viewModel = new FinancialsTabViewModel
+        {
+            Ticker = stock.Ticker,
+            StatementType = statementType,
+            AvailablePeriods = availablePeriods,
+        };
+
+        if (availablePeriods.Count == 0)
+            return viewModel;
+
+        // Default to the most recent period; fall back to it when the requested
+        // (year, period) is not one the company actually reported.
+        var selected =
+            availablePeriods.FirstOrDefault(p => p.FiscalYear == year && p.FiscalPeriod == period)
+            ?? availablePeriods[0];
+        viewModel.SelectedYear = selected.FiscalYear;
+        viewModel.SelectedPeriod = selected.FiscalPeriod;
+
+        var statementLines = FinancialStatementConcepts.For(statementType);
+        var taxonomies = statementLines.Select(l => l.Taxonomy).Distinct().ToList();
+        var tags = statementLines.Select(l => l.Tag).Distinct().ToList();
+
+        var concepts = await _financialConceptRepository
+            .GetMatching(taxonomies, tags)
+            .Select(c => new
+            {
+                c.Id,
+                c.Taxonomy,
+                c.Tag,
+            })
+            .ToListAsync();
+        var conceptIdByKey = concepts.ToDictionary(c => (c.Taxonomy, c.Tag), c => c.Id);
+        var conceptIds = concepts.Select(c => c.Id).ToHashSet();
+
+        var facts = await _financialFactRepository
+            .GetByStock(stock)
+            .Where(f =>
+                f.FiscalYear == selected.FiscalYear
+                && f.FiscalPeriod == selected.FiscalPeriod
+                && conceptIds.Contains(f.FinancialConceptId)
+            )
+            .ToListAsync();
+
+        // SEC re-emits a concept across filings (restatements); the latest-filed
+        // value is the currently-reported one.
+        var latestByConcept = facts
+            .GroupBy(f => f.FinancialConceptId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.FiledDate).First());
+
+        viewModel.Lines = statementLines
+            .Select(line =>
+            {
+                var row = new FinancialsLineViewModel { Label = line.Label };
+                if (
+                    conceptIdByKey.TryGetValue((line.Taxonomy, line.Tag), out var conceptId)
+                    && latestByConcept.TryGetValue(conceptId, out var fact)
+                )
+                {
+                    row.HasValue = true;
+                    row.Value = fact.Value;
+                    row.Unit = fact.Unit;
+                    row.PeriodEnd = fact.PeriodEnd;
+                    row.Form = fact.Form?.DisplayName;
+                    row.FiledDate = fact.FiledDate;
+                }
+                return row;
+            })
+            .ToList();
+
+        return viewModel;
+    }
+
+    // Chronological order within a fiscal year: Q1 < Q2 < Q3 < Q4 < FullYear.
+    private static int ChronologicalRank(SecFiscalPeriod period) =>
+        period switch
+        {
+            SecFiscalPeriod.Q1 => 1,
+            SecFiscalPeriod.Q2 => 2,
+            SecFiscalPeriod.Q3 => 3,
+            SecFiscalPeriod.Q4 => 4,
+            SecFiscalPeriod.FullYear => 5,
+            _ => 0,
+        };
 
     public async Task<HolderDetailViewModel> LoadHolderDetail(
         CommonStock stock,

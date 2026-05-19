@@ -25,6 +25,7 @@ using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.Data;
 using Equibles.Messaging;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.Repositories;
 using Equibles.Web.Controllers;
 using Equibles.Web.FlashMessage.Contracts;
@@ -303,7 +304,9 @@ public class StocksControllerTests : IDisposable
             _documentRepository,
             new InsiderTransactionRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext)
+            new DailyStockPriceRepository(_dbContext),
+            new FinancialFactRepository(_dbContext),
+            new FinancialConceptRepository(_dbContext)
         );
     }
 
