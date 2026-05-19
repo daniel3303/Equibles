@@ -15,5 +15,10 @@ public class GlobalSearchViewModel
     /// <summary>Selected hit ordering.</summary>
     public SearchSort SortBy { get; set; } = SearchSort.Relevance;
 
+    /// <summary>Inclusive date-range filter (honored by date-aware providers, e.g. SEC Filings).</summary>
+    public DateOnly? DateFrom { get; set; }
+
+    public DateOnly? DateTo { get; set; }
+
     public bool HasResults => Groups.Count > 0;
 }

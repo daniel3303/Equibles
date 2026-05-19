@@ -31,6 +31,8 @@ public class SecDocumentSearchProvider : ISearchProvider
         var chunks = await _chunkRepository.HybridSearch(
             request.Query,
             request.MaxPerProvider * ChunkOverFetchFactor,
+            startDate: request.DateFrom,
+            endDate: request.DateTo,
             cancellationToken: cancellationToken
         );
 
