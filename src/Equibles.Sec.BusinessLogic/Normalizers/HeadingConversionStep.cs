@@ -120,7 +120,11 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
 
         var upperText = text.ToUpperInvariant().Trim();
 
-        if (upperText.StartsWith("PART "))
+        // SEC EDGAR renders "Part N" with a non-breaking space (U+00A0)
+        // between word and numeral, so accept any Unicode whitespace after
+        // "PART" — not just the literal U+0020 that StartsWith("PART ") demands.
+        // Mirrors the GH-975 fix applied to IsItemHeading.
+        if (upperText.StartsWith("PART") && upperText.Length > 4 && char.IsWhiteSpace(upperText[4]))
         {
             var afterPart = upperText.Substring(5).Trim();
             if (!string.IsNullOrEmpty(afterPart))
