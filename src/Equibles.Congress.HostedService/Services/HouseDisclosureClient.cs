@@ -360,7 +360,7 @@ public partial class HouseDisclosureClient
     private static partial Regex SaleTypeRegex();
 
     // House purchase type at end of text (before date)
-    [GeneratedRegex(@"\bP\s*$")]
+    [GeneratedRegex(@"\bP\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex PurchaseTypeRegex();
 
     private record HouseFiling(
