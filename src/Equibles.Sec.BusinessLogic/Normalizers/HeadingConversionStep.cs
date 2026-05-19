@@ -143,7 +143,12 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
 
         var upperText = text.ToUpperInvariant().Trim();
 
-        return upperText.StartsWith("ITEM ") && upperText.Length > 5;
+        // SEC EDGAR renders "Item N" with a non-breaking space (U+00A0)
+        // between word and number, so accept any Unicode whitespace after
+        // "ITEM" — not just the literal U+0020 that StartsWith("ITEM ") demands.
+        return upperText.StartsWith("ITEM")
+            && upperText.Length > 5
+            && char.IsWhiteSpace(upperText[4]);
     }
 
     private bool IsItalicSpan(IElement span)

@@ -13,9 +13,7 @@ namespace Equibles.UnitTests.Sec.Normalizers;
 /// </summary>
 public class HeadingConversionStepIsItemHeadingTests
 {
-    [Fact(
-        Skip = "GH-975 — IsItemHeading rejects NBSP-separated 'Item N' headings (StartsWith requires U+0020)"
-    )]
+    [Fact]
     public void IsItemHeading_NonBreakingSpaceSeparator_ReturnsTrue()
     {
         var method = typeof(HeadingConversionStep).GetMethod(
