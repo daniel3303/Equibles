@@ -10,14 +10,12 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class CompanySyncServiceNormalizeCompanyNameTests
 {
-    private static readonly MethodInfo NormalizeMethod =
-        typeof(CompanySyncService).GetMethod(
-            "NormalizeCompanyName",
-            BindingFlags.NonPublic | BindingFlags.Static
-        );
+    private static readonly MethodInfo NormalizeMethod = typeof(CompanySyncService).GetMethod(
+        "NormalizeCompanyName",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
-    private static string Normalize(string name) =>
-        (string)NormalizeMethod.Invoke(null, [name]);
+    private static string Normalize(string name) => (string)NormalizeMethod.Invoke(null, [name]);
 
     [Theory]
     [InlineData("AMAZON COM INC", "Amazon Com Inc")]
