@@ -28,7 +28,9 @@ public class SearchAggregator
         string query,
         int maxPerProvider,
         CancellationToken cancellationToken,
-        SearchSort sortBy = SearchSort.Relevance
+        SearchSort sortBy = SearchSort.Relevance,
+        DateOnly? dateFrom = null,
+        DateOnly? dateTo = null
     )
     {
         if (string.IsNullOrWhiteSpace(query))
@@ -54,6 +56,8 @@ public class SearchAggregator
             Query = query.Trim(),
             MaxPerProvider = maxPerProvider,
             SortBy = sortBy,
+            DateFrom = dateFrom,
+            DateTo = dateTo,
         };
 
         var groups = await Task.WhenAll(

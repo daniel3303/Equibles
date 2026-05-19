@@ -9,6 +9,8 @@
     const input = form.querySelector('input[name="q"]');
     const scope = form.querySelector('select[name="category"]');
     const sort = form.querySelector('select[name="sort"]');
+    const dateFrom = form.querySelector('input[name="dateFrom"]');
+    const dateTo = form.querySelector('input[name="dateTo"]');
     if (!input) return;
 
     const resultsUrl = form.dataset.resultsUrl || '/Search/Results';
@@ -27,6 +29,8 @@
         if (q) params.set('q', q);
         if (category) params.set('category', category);
         if (sortBy && sortBy !== '0') params.set('sort', sortBy);
+        if (dateFrom?.value) params.set('dateFrom', dateFrom.value);
+        if (dateTo?.value) params.set('dateTo', dateTo.value);
 
         if (controller) controller.abort();
         controller = new AbortController();
@@ -57,6 +61,8 @@
     });
     scope?.addEventListener('change', () => run(false));
     sort?.addEventListener('change', () => run(false));
+    dateFrom?.addEventListener('change', () => run(false));
+    dateTo?.addEventListener('change', () => run(false));
     form.addEventListener('submit', (event) => {
         event.preventDefault();
         clearTimeout(timer);
@@ -69,6 +75,8 @@
         input.value = params.get('q') || '';
         if (scope) scope.value = params.get('category') || '';
         if (sort) sort.value = params.get('sort') || '0';
+        if (dateFrom) dateFrom.value = params.get('dateFrom') || '';
+        if (dateTo) dateTo.value = params.get('dateTo') || '';
         run(false);
     });
 })();

@@ -124,6 +124,53 @@ public class SearchAggregatorTests
     }
 
     [Fact]
+    public async Task Search_DateRange_IsThreadedIntoTheProviderRequest()
+    {
+        SearchRequest captured = null;
+        var from = new DateOnly(2024, 1, 1);
+        var to = new DateOnly(2024, 6, 30);
+        var aggregator = Build(
+            new StubA(
+                "Stocks",
+                0,
+                request =>
+                {
+                    captured = request;
+                    return GroupWithTitles("Stocks", "AAPL");
+                }
+            )
+        );
+
+        await aggregator.Search("are", 5, CancellationToken.None, SearchSort.Relevance, from, to);
+
+        captured.Should().NotBeNull();
+        captured.DateFrom.Should().Be(from);
+        captured.DateTo.Should().Be(to);
+    }
+
+    [Fact]
+    public async Task Search_NoDateRange_LeavesProviderRequestBoundsNull()
+    {
+        SearchRequest captured = null;
+        var aggregator = Build(
+            new StubA(
+                "Stocks",
+                0,
+                request =>
+                {
+                    captured = request;
+                    return GroupWithTitles("Stocks", "AAPL");
+                }
+            )
+        );
+
+        await aggregator.Search("are", 5, CancellationToken.None);
+
+        captured.DateFrom.Should().BeNull();
+        captured.DateTo.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Search_OneProviderThrows_OtherGroupsStillReturned()
     {
         var aggregator = Build(

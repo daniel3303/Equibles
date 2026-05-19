@@ -20,7 +20,13 @@ public class SearchController : BaseController
     }
 
     [HttpGet]
-    public async Task<IActionResult> Index(string q, string category, SearchSort sort)
+    public async Task<IActionResult> Index(
+        string q,
+        string category,
+        SearchSort sort,
+        DateOnly? dateFrom,
+        DateOnly? dateTo
+    )
     {
         ViewData["Title"] = "Search";
 
@@ -30,7 +36,9 @@ public class SearchController : BaseController
             q,
             MaxPerProvider,
             HttpContext.RequestAborted,
-            sort
+            sort,
+            dateFrom,
+            dateTo
         );
 
         return View(
@@ -40,6 +48,8 @@ public class SearchController : BaseController
                 Groups = groups,
                 ActiveCategory = category,
                 SortBy = sort,
+                DateFrom = dateFrom,
+                DateTo = dateTo,
             }
         );
     }
@@ -47,13 +57,21 @@ public class SearchController : BaseController
     // Results-only fragment for instant (as-you-type) search. instant-search.js fetches this
     // and swaps it into the page; the markup is identical to Index's results region.
     [HttpGet]
-    public async Task<IActionResult> Results(string q, string category, SearchSort sort)
+    public async Task<IActionResult> Results(
+        string q,
+        string category,
+        SearchSort sort,
+        DateOnly? dateFrom,
+        DateOnly? dateTo
+    )
     {
         var groups = await _searchAggregator.Search(
             q,
             MaxPerProvider,
             HttpContext.RequestAborted,
-            sort
+            sort,
+            dateFrom,
+            dateTo
         );
 
         return PartialView(
@@ -64,6 +82,8 @@ public class SearchController : BaseController
                 Groups = groups,
                 ActiveCategory = category,
                 SortBy = sort,
+                DateFrom = dateFrom,
+                DateTo = dateTo,
             }
         );
     }
