@@ -14,9 +14,7 @@ namespace Equibles.UnitTests.Sec.Normalizers;
 /// </summary>
 public class HeadingConversionStepIsAllUppercaseTests
 {
-    [Fact(
-        Skip = "GH-969 — IsAllUppercase returns true for letter-less spans (vacuous All on empty)"
-    )]
+    [Fact]
     public void IsAllUppercase_LetterlessText_ReturnsFalse()
     {
         var span = new HtmlParser()
