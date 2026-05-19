@@ -9,7 +9,7 @@ public class TechnicalIndicatorServiceComputeRsiZeroLossTests
     // avgLoss = 0 so RS is infinite and RSI is 100 by definition (the overbought
     // extreme). A strictly increasing series has zero losses, so its first
     // computable RSI must be exactly 100. Asserting the contract, not the code.
-    [Fact(Skip = "GH-955 — ComputeRsi returns 99.01 not 100 for a zero-loss series")]
+    [Fact]
     public void ComputeRsi_StrictlyIncreasingSeries_FirstValueIs100()
     {
         var prices = new List<decimal> { 1m, 2m, 3m, 4m, 5m };

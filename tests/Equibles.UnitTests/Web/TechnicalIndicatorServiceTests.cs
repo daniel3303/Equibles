@@ -365,10 +365,8 @@ public class TechnicalIndicatorServiceTests
     [Fact]
     public void ComputeRsi_AllGains_ReturnsRsi100()
     {
-        // Prices that only go up => avgLoss=0 => rs=100 => RSI = 100 - 100/101 = 99.01
-        // Wait, let's re-read: rs = avgLoss == 0 ? 100m : avgGain / avgLoss
-        // RSI = 100 - 100/(1+100) = 100 - 100/101 = 100 - 0.990099.. = 99.0099.. => rounded to 99.01
-        // Hmm, that's not exactly 100. Let's verify with period=3 for simplicity.
+        // Prices that only go up => avgLoss=0 => RS infinite => RSI = 100
+        // (a window with no losses is the overbought extreme, by definition).
         var prices = new List<decimal> { 10m, 11m, 12m, 13m, 14m };
         var result = TechnicalIndicatorService.ComputeRsi(prices, 3);
 
@@ -376,14 +374,11 @@ public class TechnicalIndicatorServiceTests
         // changes: [_, +1, +1, +1, +1]
         // gains:   [0, 1, 1, 1, 1]
         // losses:  [0, 0, 0, 0, 0]
-        // avgGain = (1+1+1)/3 = 1; avgLoss = 0/3 = 0
-        // rs = 100 (avgLoss==0 branch)
-        // RSI[3] = 100 - 100/(1+100) = 100 - 0.990099... = 99.0099... => 99.01
-        result[3].Should().Be(99.01m);
+        // avgGain = (1+1+1)/3 = 1; avgLoss = 0/3 = 0 => RSI = 100
+        result[3].Should().Be(100m);
 
-        // Index 4: avgGain = (1*2 + 1)/3 = 1; avgLoss = (0*2 + 0)/3 = 0
-        // rs = 100 => RSI = 99.01
-        result[4].Should().Be(99.01m);
+        // Index 4: avgGain = (1*2 + 1)/3 = 1; avgLoss = (0*2 + 0)/3 = 0 => RSI = 100
+        result[4].Should().Be(100m);
     }
 
     [Fact]
@@ -460,13 +455,12 @@ public class TechnicalIndicatorServiceTests
     [Fact]
     public void ComputeRsi_ConstantPrices_AllZeroChanges()
     {
-        // All changes are 0 => avgGain=0, avgLoss=0
-        // rs = 100 (avgLoss==0 branch) => RSI = 99.01
+        // All changes are 0 => avgGain=0, avgLoss=0. avgLoss==0 ⇒ RS infinite
+        // ⇒ RSI = 100 by the same no-losses rule (Wilder); not 99.01.
         var prices = new List<decimal> { 50m, 50m, 50m, 50m, 50m };
         var result = TechnicalIndicatorService.ComputeRsi(prices, 3);
 
-        // avgGain=0, avgLoss=0 => avgLoss==0 => rs=100 => RSI = 99.01
-        result[3].Should().Be(99.01m);
+        result[3].Should().Be(100m);
     }
 
     [Fact]
@@ -484,8 +478,8 @@ public class TechnicalIndicatorServiceTests
             result[i].Should().BeNull($"index {i} should be null during lookback");
         }
 
-        // Index 14 should be the first RSI value (all gains => 99.01)
-        result[14].Should().Be(99.01m);
+        // Index 14 should be the first RSI value (all gains, zero losses => 100)
+        result[14].Should().Be(100m);
     }
 
     [Fact]
