@@ -14,7 +14,7 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class SecEdgarClientMapToFilingDataRaggedArraysTests
 {
-    [Fact(Skip = "GH-918 — ragged SEC submissions arrays throw, aborting the filing ingest")]
+    [Fact]
     public void MapToFilingData_SecondaryArrayShorterThanAccessionNumbers_DoesNotThrowAndKeepsMappableRow()
     {
         var asm = typeof(SecEdgarClient).Assembly;
