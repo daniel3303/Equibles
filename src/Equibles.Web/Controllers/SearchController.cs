@@ -1,4 +1,5 @@
 using Equibles.Search;
+using Equibles.Search.Abstractions;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.ViewModels.Search;
 using Microsoft.AspNetCore.Mvc;
@@ -19,13 +20,18 @@ public class SearchController : BaseController
     }
 
     [HttpGet]
-    public async Task<IActionResult> Index(string q, string category)
+    public async Task<IActionResult> Index(string q, string category, SearchSort sort)
     {
         ViewData["Title"] = "Search";
 
         // Aggregator returns every non-empty group; the view filters for display so the category
         // chips can still list all matched categories even when one is selected.
-        var groups = await _searchAggregator.Search(q, MaxPerProvider, HttpContext.RequestAborted);
+        var groups = await _searchAggregator.Search(
+            q,
+            MaxPerProvider,
+            HttpContext.RequestAborted,
+            sort
+        );
 
         return View(
             new GlobalSearchViewModel
@@ -33,6 +39,7 @@ public class SearchController : BaseController
                 Query = q,
                 Groups = groups,
                 ActiveCategory = category,
+                SortBy = sort,
             }
         );
     }
@@ -40,9 +47,14 @@ public class SearchController : BaseController
     // Results-only fragment for instant (as-you-type) search. instant-search.js fetches this
     // and swaps it into the page; the markup is identical to Index's results region.
     [HttpGet]
-    public async Task<IActionResult> Results(string q, string category)
+    public async Task<IActionResult> Results(string q, string category, SearchSort sort)
     {
-        var groups = await _searchAggregator.Search(q, MaxPerProvider, HttpContext.RequestAborted);
+        var groups = await _searchAggregator.Search(
+            q,
+            MaxPerProvider,
+            HttpContext.RequestAborted,
+            sort
+        );
 
         return PartialView(
             "_Results",
@@ -51,6 +63,7 @@ public class SearchController : BaseController
                 Query = q,
                 Groups = groups,
                 ActiveCategory = category,
+                SortBy = sort,
             }
         );
     }

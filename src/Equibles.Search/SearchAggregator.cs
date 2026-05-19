@@ -27,7 +27,8 @@ public class SearchAggregator
     public async Task<List<SearchResultGroup>> Search(
         string query,
         int maxPerProvider,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        SearchSort sortBy = SearchSort.Relevance
     )
     {
         if (string.IsNullOrWhiteSpace(query))
@@ -48,7 +49,12 @@ public class SearchAggregator
                 .ToList();
         }
 
-        var request = new SearchRequest { Query = query.Trim(), MaxPerProvider = maxPerProvider };
+        var request = new SearchRequest
+        {
+            Query = query.Trim(),
+            MaxPerProvider = maxPerProvider,
+            SortBy = sortBy,
+        };
 
         var groups = await Task.WhenAll(
             providerTypes.Select(providerType =>
@@ -58,9 +64,24 @@ public class SearchAggregator
 
         return groups
             .Where(group => group.Hits.Count > 0)
+            .Select(group => SortHits(group, sortBy))
             .OrderBy(group => group.Order)
             .ThenBy(group => group.Category ?? string.Empty, StringComparer.Ordinal)
             .ToList();
+    }
+
+    // Reorders a group's hits per the requested sort. Relevance keeps the provider's own ranking
+    // (providers return hits already scored); Name is a stable, case-insensitive title sort.
+    private static SearchResultGroup SortHits(SearchResultGroup group, SearchSort sortBy)
+    {
+        if (sortBy == SearchSort.Name)
+        {
+            group.Hits = group
+                .Hits.OrderBy(hit => hit.Title ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        return group;
     }
 
     private async Task<SearchResultGroup> RunProvider(

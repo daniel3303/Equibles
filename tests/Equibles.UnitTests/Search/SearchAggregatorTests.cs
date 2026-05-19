@@ -66,6 +66,63 @@ public class SearchAggregatorTests
         result.Select(g => g.Category).Should().Equal("Alpha", "Beta");
     }
 
+    private static SearchResultGroup GroupWithTitles(string category, params string[] titles)
+    {
+        return new SearchResultGroup
+        {
+            Category = category,
+            Order = 0,
+            Hits = titles.Select(t => new SearchHit { Title = t }).ToList(),
+        };
+    }
+
+    [Fact]
+    public async Task Search_SortByName_OrdersHitsByTitleCaseInsensitive()
+    {
+        var aggregator = Build(
+            new StubA(
+                "Stocks",
+                0,
+                _ => GroupWithTitles("Stocks", "delta", "Alpha", "charlie", "Bravo")
+            )
+        );
+
+        var result = await aggregator.Search("are", 5, CancellationToken.None, SearchSort.Name);
+
+        result.Should().ContainSingle();
+        result[0].Hits.Select(h => h.Title).Should().Equal("Alpha", "Bravo", "charlie", "delta");
+    }
+
+    [Fact]
+    public async Task Search_SortByRelevance_PreservesProviderHitOrder()
+    {
+        var aggregator = Build(
+            new StubA("Stocks", 0, _ => GroupWithTitles("Stocks", "zeta", "alpha", "mid"))
+        );
+
+        var result = await aggregator.Search(
+            "are",
+            5,
+            CancellationToken.None,
+            SearchSort.Relevance
+        );
+
+        result.Should().ContainSingle();
+        result[0].Hits.Select(h => h.Title).Should().Equal("zeta", "alpha", "mid");
+    }
+
+    [Fact]
+    public async Task Search_DefaultSort_PreservesProviderHitOrder()
+    {
+        var aggregator = Build(
+            new StubA("Stocks", 0, _ => GroupWithTitles("Stocks", "zeta", "alpha", "mid"))
+        );
+
+        var result = await aggregator.Search("are", 5, CancellationToken.None);
+
+        result[0].Hits.Select(h => h.Title).Should().Equal("zeta", "alpha", "mid");
+    }
+
     [Fact]
     public async Task Search_OneProviderThrows_OtherGroupsStillReturned()
     {

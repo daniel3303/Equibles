@@ -1,3 +1,4 @@
+@using Equibles.Search.Abstractions
 @using Equibles.Web.Search
 @model Equibles.Web.ViewModels.Search.GlobalSearchViewModel
 
@@ -34,6 +35,19 @@
             <button type="submit" class="btn btn-primary join-item" aria-label="Search" title="Search">
                 <icon name="magnifying-glass" size="5" />
             </button>
+        </div>
+        <!-- Sort order. instant-search.js submits it alongside q + category and re-renders. -->
+        <div class="mt-3 flex items-center gap-2 text-sm text-base-content/60">
+            <label for="search-sort">Sort by</label>
+            <select id="search-sort" name="sort" class="select select-bordered select-sm w-auto"
+                    aria-label="Sort results">
+                @foreach (var option in Html.GetEnumSelectList<SearchSort>()) {
+                    <option value="@option.Value"
+                            selected="@(option.Value == ((int)Model.SortBy).ToString())">
+                        @option.Text
+                    </option>
+                }
+            </select>
         </div>
     </form>
 

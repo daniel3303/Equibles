@@ -12,5 +12,8 @@ public class GlobalSearchViewModel
     /// <summary>Selected category filter; null means "all".</summary>
     public string ActiveCategory { get; set; }
 
+    /// <summary>Selected hit ordering.</summary>
+    public SearchSort SortBy { get; set; } = SearchSort.Relevance;
+
     public bool HasResults => Groups.Count > 0;
 }
