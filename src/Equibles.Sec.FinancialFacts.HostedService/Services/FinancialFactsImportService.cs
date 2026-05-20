@@ -245,23 +245,7 @@ public class FinancialFactsImportService
         CancellationToken cancellationToken
     )
     {
-        var pairs = parsed.Select(p => (p.Taxonomy, p.Tag)).ToHashSet();
-
-        // Pre-index labels in one pass so the per-pair lookup is O(1); the
-        // prior per-pair scan was O(pairs * parsed) on multi-thousand-fact filings.
-        var firstLabelByPair = parsed
-            .Where(p => !string.IsNullOrEmpty(p.Label))
-            .GroupBy(p => (p.Taxonomy, p.Tag))
-            .ToDictionary(g => g.Key, g => g.First().Label);
-
-        var concepts = pairs
-            .Select(pair => new FinancialConcept
-            {
-                Taxonomy = pair.Taxonomy,
-                Tag = pair.Tag,
-                Label = firstLabelByPair.GetValueOrDefault(pair),
-            })
-            .ToList();
+        var (pairs, concepts) = BuildConceptsForUpsert(parsed);
 
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
@@ -296,6 +280,32 @@ public class FinancialFactsImportService
 
         return rows.Where(r => pairs.Contains((r.Taxonomy, r.Tag)))
             .ToDictionary(r => (r.Taxonomy, r.Tag), r => r.Id);
+    }
+
+    private static (
+        HashSet<(FactTaxonomy Taxonomy, string Tag)> Pairs,
+        List<FinancialConcept> Concepts
+    ) BuildConceptsForUpsert(List<ParsedFact> parsed)
+    {
+        var pairs = parsed.Select(p => (p.Taxonomy, p.Tag)).ToHashSet();
+
+        // Pre-index labels in one pass so the per-pair lookup is O(1); the
+        // prior per-pair scan was O(pairs * parsed) on multi-thousand-fact filings.
+        var firstLabelByPair = parsed
+            .Where(p => !string.IsNullOrEmpty(p.Label))
+            .GroupBy(p => (p.Taxonomy, p.Tag))
+            .ToDictionary(g => g.Key, g => g.First().Label);
+
+        var concepts = pairs
+            .Select(pair => new FinancialConcept
+            {
+                Taxonomy = pair.Taxonomy,
+                Tag = pair.Tag,
+                Label = firstLabelByPair.GetValueOrDefault(pair),
+            })
+            .ToList();
+
+        return (pairs, concepts);
     }
 
     private async Task<Dictionary<string, Guid>> LoadDocumentIdsByAccession(
