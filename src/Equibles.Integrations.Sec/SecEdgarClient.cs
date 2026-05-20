@@ -421,45 +421,56 @@ public class SecEdgarClient : ISecEdgarClient
 
         foreach (var rawLine in content.Split('\n'))
         {
-            var line = rawLine.Trim();
-            if (line.Length == 0)
-                continue;
-
-            var fields = line.Split('|');
-            if (fields.Length < 5)
-                continue;
-
-            var cik = fields[0].Trim();
-            var company = fields[1].Trim();
-            var formType = fields[2].Trim();
-            var dateFiled = fields[3].Trim();
-            var fileName = fields[4].Trim();
-
-            if (!formType.StartsWith("13F-HR", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            // Header/preamble rows ("CIK", "Company Name", dashes) fail this.
-            if (cik.Length == 0 || !cik.All(char.IsDigit))
-                continue;
-
-            // edgar/data/{cik}/{accession-with-dashes}.txt → accession number
-            var accession = Path.GetFileNameWithoutExtension(fileName);
-            if (string.IsNullOrEmpty(accession))
-                continue;
-
-            entries.Add(
-                new EdgarDailyIndexEntry
-                {
-                    FormType = formType,
-                    CompanyName = company,
-                    Cik = cik,
-                    DateFiled = DateOnly.TryParse(dateFiled, out var d) ? d : fallbackDate,
-                    AccessionNumber = accession,
-                }
-            );
+            if (TryParseMasterIndexLine(rawLine, fallbackDate, out var entry))
+                entries.Add(entry);
         }
 
         return entries;
+    }
+
+    private static bool TryParseMasterIndexLine(
+        string rawLine,
+        DateOnly fallbackDate,
+        out EdgarDailyIndexEntry entry
+    )
+    {
+        entry = null;
+
+        var line = rawLine.Trim();
+        if (line.Length == 0)
+            return false;
+
+        var fields = line.Split('|');
+        if (fields.Length < 5)
+            return false;
+
+        var cik = fields[0].Trim();
+        var company = fields[1].Trim();
+        var formType = fields[2].Trim();
+        var dateFiled = fields[3].Trim();
+        var fileName = fields[4].Trim();
+
+        if (!formType.StartsWith("13F-HR", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Header/preamble rows ("CIK", "Company Name", dashes) fail this.
+        if (cik.Length == 0 || !cik.All(char.IsDigit))
+            return false;
+
+        // edgar/data/{cik}/{accession-with-dashes}.txt → accession number
+        var accession = Path.GetFileNameWithoutExtension(fileName);
+        if (string.IsNullOrEmpty(accession))
+            return false;
+
+        entry = new EdgarDailyIndexEntry
+        {
+            FormType = formType,
+            CompanyName = company,
+            Cik = cik,
+            DateFiled = DateOnly.TryParse(dateFiled, out var d) ? d : fallbackDate,
+            AccessionNumber = accession,
+        };
+        return true;
     }
 
     public async Task<List<string>> GetFilingArtifactNames(
