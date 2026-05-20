@@ -69,9 +69,7 @@ public class YahooPriceImportServiceCompanyProfilePreservesSectorTests : IDispos
 
     public void Dispose() => _dbContext.Dispose();
 
-    [Fact(
-        Skip = "GH-1235 — SyncCompanyProfile overwrites Industry.SectorId whenever Yahoo's sector differs, contradicting the in-source 'backfill if missing' comment."
-    )]
+    [Fact]
     public async Task Import_ExistingIndustryAlreadyLinkedToSector_DoesNotOverwriteWithDifferentYahooSector()
     {
         // Contract (per the SyncCompanyProfile code comment):
