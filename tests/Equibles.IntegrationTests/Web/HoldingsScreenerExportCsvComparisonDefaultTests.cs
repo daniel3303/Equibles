@@ -12,9 +12,7 @@ public class HoldingsScreenerExportCsvComparisonDefaultTests
     public HoldingsScreenerExportCsvComparisonDefaultTests(WebHostFixture fixture) =>
         _fixture = fixture;
 
-    [Fact(
-        Skip = "GH-1252 — ResolveScreenerDates defaults comparison to reportDates[1] regardless of selected; collapses to selected==comparison when selected is second-latest."
-    )]
+    [Fact]
     public async Task ExportCsv_SelectedDateIsSecondLatest_DefaultComparisonIsNextOlderNotItself()
     {
         // Contract: the screener compares two quarters. When the user picks a
