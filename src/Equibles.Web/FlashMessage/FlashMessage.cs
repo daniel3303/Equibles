@@ -62,55 +62,26 @@ public class FlashMessage : IFlashMessage
         TempData.Clear();
     }
 
-    public void Success(string message, string title = null, bool isHtml = false)
-    {
-        Queue(
-            new FlashMessageModel
-            {
-                Message = message,
-                Title = title,
-                IsHtml = isHtml,
-                Type = FlashMessageType.Success,
-            }
-        );
-    }
+    public void Success(string message, string title = null, bool isHtml = false) =>
+        QueueOfType(FlashMessageType.Success, message, title, isHtml);
 
-    public void Error(string message, string title = null, bool isHtml = false)
-    {
-        Queue(
-            new FlashMessageModel
-            {
-                Message = message,
-                Title = title,
-                IsHtml = isHtml,
-                Type = FlashMessageType.Error,
-            }
-        );
-    }
+    public void Error(string message, string title = null, bool isHtml = false) =>
+        QueueOfType(FlashMessageType.Error, message, title, isHtml);
 
-    public void Info(string message, string title = null, bool isHtml = false)
-    {
-        Queue(
-            new FlashMessageModel
-            {
-                Message = message,
-                Title = title,
-                IsHtml = isHtml,
-                Type = FlashMessageType.Info,
-            }
-        );
-    }
+    public void Info(string message, string title = null, bool isHtml = false) =>
+        QueueOfType(FlashMessageType.Info, message, title, isHtml);
 
-    public void Warning(string message, string title = null, bool isHtml = false)
-    {
+    public void Warning(string message, string title = null, bool isHtml = false) =>
+        QueueOfType(FlashMessageType.Warning, message, title, isHtml);
+
+    private void QueueOfType(FlashMessageType type, string message, string title, bool isHtml) =>
         Queue(
             new FlashMessageModel
             {
                 Message = message,
                 Title = title,
                 IsHtml = isHtml,
-                Type = FlashMessageType.Warning,
+                Type = type,
             }
         );
-    }
 }
