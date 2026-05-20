@@ -62,7 +62,8 @@ Every client follows the same shape: one interface + one implementation register
 
 Two retry shapes appear across the clients; pick by upstream behaviour:
 
-- **Bounded exponential backoff** (FRED, Yahoo, CBOE) — `for attempt in 0..MaxRetries`, sleep `2^attempt` seconds on `429` / `5xx` / network failure, give up after the last attempt with `HttpRequestException("Max retries exceeded …")`.
+- **Bounded exponential backoff** (FRED, Yahoo, CBOE) — `for attempt in 0..MaxRetries`, sleep `2^attempt` seconds on `429` / `5xx` / network failure.
+- After the last attempt, give up with `HttpRequestException("Max retries exceeded …")`.
 - **Auth-refresh + retry** (FINRA, Yahoo session cookies) — on `401` / `403`, invalidate the cached token / cookie, refresh, retry once.
 - Distinct from the rate-limit retry because the failure mode is "session expired" rather than "too fast".
 
