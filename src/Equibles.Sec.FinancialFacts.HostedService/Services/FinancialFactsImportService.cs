@@ -94,41 +94,7 @@ public class FinancialFactsImportService
 
         try
         {
-            var conceptIds = await ResolveConcepts(parsed, cancellationToken);
-            var documentIds = await LoadDocumentIdsByAccession(stock, cancellationToken);
-
-            var built = parsed
-                .Select(p => BuildFact(stock, p, conceptIds, documentIds))
-                .Where(f => f != null)
-                .ToList();
-
-            var droppedConcepts = parsed.Count - built.Count;
-            if (droppedConcepts > 0)
-            {
-                // A non-zero drop means concept resolution missed a tag it
-                // should have inserted — surface it rather than hide it.
-                _logger.LogWarning(
-                    "Dropped {Count} facts with unresolved concepts for {Ticker} (CIK {Cik})",
-                    droppedConcepts,
-                    stock.Ticker,
-                    stock.Cik
-                );
-            }
-
-            var facts = CollapseToNaturalKey(built);
-
-            // SyncStatus is advanced only here, after a successful persist, so a
-            // failure leaves the checkpoint un-advanced and the company is
-            // retried in full next cycle.
-            await BatchPersister.Persist(facts, InsertBatchSize, FlushFacts);
-            await UpsertSyncStatus(stock, maxFiled, cancellationToken);
-
-            _logger.LogInformation(
-                "Imported {Count} financial facts for {Ticker} (CIK {Cik})",
-                facts.Count,
-                stock.Ticker,
-                stock.Cik
-            );
+            await PersistFacts(stock, parsed, maxFiled, cancellationToken);
         }
         // Per-company fault isolation (mirrors FtdImportService): one company's
         // failure is reported and skipped so the worker cycle continues for the
@@ -149,6 +115,50 @@ public class FinancialFactsImportService
                 $"ticker: {stock.Ticker}, cik: {stock.Cik}"
             );
         }
+    }
+
+    private async Task PersistFacts(
+        CommonStock stock,
+        List<ParsedFact> parsed,
+        DateOnly maxFiled,
+        CancellationToken cancellationToken
+    )
+    {
+        var conceptIds = await ResolveConcepts(parsed, cancellationToken);
+        var documentIds = await LoadDocumentIdsByAccession(stock, cancellationToken);
+
+        var built = parsed
+            .Select(p => BuildFact(stock, p, conceptIds, documentIds))
+            .Where(f => f != null)
+            .ToList();
+
+        var droppedConcepts = parsed.Count - built.Count;
+        if (droppedConcepts > 0)
+        {
+            // A non-zero drop means concept resolution missed a tag it
+            // should have inserted — surface it rather than hide it.
+            _logger.LogWarning(
+                "Dropped {Count} facts with unresolved concepts for {Ticker} (CIK {Cik})",
+                droppedConcepts,
+                stock.Ticker,
+                stock.Cik
+            );
+        }
+
+        var facts = CollapseToNaturalKey(built);
+
+        // SyncStatus is advanced only here, after a successful persist, so a
+        // failure leaves the checkpoint un-advanced and the company is
+        // retried in full next cycle.
+        await BatchPersister.Persist(facts, InsertBatchSize, FlushFacts);
+        await UpsertSyncStatus(stock, maxFiled, cancellationToken);
+
+        _logger.LogInformation(
+            "Imported {Count} financial facts for {Ticker} (CIK {Cik})",
+            facts.Count,
+            stock.Ticker,
+            stock.Cik
+        );
     }
 
     private IEnumerable<ParsedFact> ParseFacts(CompanyFactsResponse response, CommonStock stock)
