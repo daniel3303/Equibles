@@ -135,8 +135,7 @@ public class DocumentScraper : IDocumentScraper
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during document scraping process");
-            result.Errors++;
-            result.ErrorMessages.Add($"General error: {ex.Message}");
+            RecordError(result, "General error", ex);
             await ReportError("ScrapeDocuments", ex);
         }
 
@@ -224,8 +223,7 @@ public class DocumentScraper : IDocumentScraper
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing documents for company {Ticker}", company.Ticker);
-            result.Errors++;
-            result.ErrorMessages.Add($"Company {company.Ticker}: {ex.Message}");
+            RecordError(result, $"Company {company.Ticker}", ex);
             await ReportError("ProcessCompany", ex, $"ticker: {company.Ticker}");
         }
     }
@@ -320,10 +318,7 @@ public class DocumentScraper : IDocumentScraper
                         cik,
                         company.Ticker
                     );
-                    result.Errors++;
-                    result.ErrorMessages.Add(
-                        $"Company {company.Ticker} CIK {cik} - {documentType}: {ex.Message}"
-                    );
+                    RecordError(result, $"Company {company.Ticker} CIK {cik} - {documentType}", ex);
                     continue;
                 }
 
@@ -357,8 +352,7 @@ public class DocumentScraper : IDocumentScraper
                 documentType,
                 company.Ticker
             );
-            result.Errors++;
-            result.ErrorMessages.Add($"Company {company.Ticker} - {documentType}: {ex.Message}");
+            RecordError(result, $"Company {company.Ticker} - {documentType}", ex);
             await ReportError(
                 "ProcessDocType",
                 ex,
@@ -446,10 +440,7 @@ public class DocumentScraper : IDocumentScraper
                 company.Ticker,
                 filing.AccessionNumber
             );
-            result.Errors++;
-            result.ErrorMessages.Add(
-                $"Filing {company.Ticker}/{filing.AccessionNumber}: {ex.Message}"
-            );
+            RecordError(result, $"Filing {company.Ticker}/{filing.AccessionNumber}", ex);
         }
         catch (Exception ex)
         {
@@ -459,10 +450,7 @@ public class DocumentScraper : IDocumentScraper
                 company.Ticker,
                 filing.AccessionNumber
             );
-            result.Errors++;
-            result.ErrorMessages.Add(
-                $"Filing {company.Ticker}/{filing.AccessionNumber}: {ex.Message}"
-            );
+            RecordError(result, $"Filing {company.Ticker}/{filing.AccessionNumber}", ex);
             await ReportError(
                 "ProcessFiling",
                 ex,
@@ -573,6 +561,12 @@ public class DocumentScraper : IDocumentScraper
                 );
             }
         );
+    }
+
+    private static void RecordError(ScrapingResult result, string label, Exception ex)
+    {
+        result.Errors++;
+        result.ErrorMessages.Add($"{label}: {ex.Message}");
     }
 
     private Task ReportError(string operation, Exception ex, string requestSummary = null) =>
