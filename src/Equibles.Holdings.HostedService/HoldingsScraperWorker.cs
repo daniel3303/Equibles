@@ -126,34 +126,7 @@ public class HoldingsScraperWorker : BaseScraperWorker
         }
 
         if (failedDataSets.Count > 0)
-        {
-            Logger.LogWarning(
-                "Retrying {Count} failed data sets at end of cycle: {FileNames}",
-                failedDataSets.Count,
-                string.Join(", ", failedDataSets)
-            );
-
-            foreach (var fileName in failedDataSets)
-            {
-                stoppingToken.ThrowIfCancellationRequested();
-
-                if (!await TryProcessDataSet(fileName, minReportDate, stoppingToken))
-                {
-                    Logger.LogError(
-                        "Data set {FileName} permanently failed after all retry attempts in this cycle",
-                        fileName
-                    );
-                    await ErrorReporter.Report(
-                        ErrorSource,
-                        "Holdings.ProcessDataSet",
-                        "Permanently failed after all retry attempts",
-                        null,
-                        $"file: {fileName}, permanently failed"
-                    );
-                    await Task.Delay(FailedDataSetCooldown, stoppingToken);
-                }
-            }
-        }
+            await RetryFailedDataSets(failedDataSets, minReportDate, stoppingToken);
 
         // Recalculate holdings that were imported without a Yahoo price available
         await RecalculatePendingValues(stoppingToken);
@@ -163,6 +136,40 @@ public class HoldingsScraperWorker : BaseScraperWorker
     /// On first run (empty ProcessedDataSet table), seeds all file names except the latest
     /// so only the most recent period gets downloaded and checked.
     /// </summary>
+    private async Task RetryFailedDataSets(
+        List<string> failedDataSets,
+        DateOnly minReportDate,
+        CancellationToken stoppingToken
+    )
+    {
+        Logger.LogWarning(
+            "Retrying {Count} failed data sets at end of cycle: {FileNames}",
+            failedDataSets.Count,
+            string.Join(", ", failedDataSets)
+        );
+
+        foreach (var fileName in failedDataSets)
+        {
+            stoppingToken.ThrowIfCancellationRequested();
+
+            if (!await TryProcessDataSet(fileName, minReportDate, stoppingToken))
+            {
+                Logger.LogError(
+                    "Data set {FileName} permanently failed after all retry attempts in this cycle",
+                    fileName
+                );
+                await ErrorReporter.Report(
+                    ErrorSource,
+                    "Holdings.ProcessDataSet",
+                    "Permanently failed after all retry attempts",
+                    null,
+                    $"file: {fileName}, permanently failed"
+                );
+                await Task.Delay(FailedDataSetCooldown, stoppingToken);
+            }
+        }
+    }
+
     private async Task BackfillProcessedDataSets(
         List<string> fileNames,
         CancellationToken cancellationToken
