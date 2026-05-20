@@ -83,28 +83,7 @@ public class CompanySyncService : ICompanySyncService
             // primary ticker our incoming company wants.
             var primaryTickerToStock = allExistingStocks.ToDictionary(s => s.Ticker, s => s);
 
-            // Subsidiaries we already decided about: each entry maps a subsidiary CIK to
-            // its parent stock. Incoming SEC entries whose CIK appears here are silently
-            // skipped — without this filter every sync would re-evaluate the collision
-            // and re-log the warning. We build defensively to survive a data anomaly
-            // (the same subsidiary CIK attached to two parents) rather than throwing.
-            var secondaryCikToParent = new Dictionary<string, CommonStock>();
-            foreach (var stock in allExistingStocks)
-            {
-                foreach (var subCik in stock.SecondaryCiks)
-                {
-                    if (!secondaryCikToParent.TryAdd(subCik, stock))
-                    {
-                        _logger.LogWarning(
-                            "Subsidiary CIK {Cik} is attached to multiple parents ({ExistingParent} and {DuplicateParent}); "
-                                + "keeping {ExistingParent}. Manual cleanup required.",
-                            subCik,
-                            secondaryCikToParent[subCik].Ticker,
-                            stock.Ticker
-                        );
-                    }
-                }
-            }
+            var secondaryCikToParent = BuildSecondaryCikToParent(allExistingStocks);
 
             // Primary tickers are globally unique — collisions on primary mean the incoming
             // company must replace or skip. Secondary tickers may legitimately overlap across
@@ -612,6 +591,35 @@ public class CompanySyncService : ICompanySyncService
             return name;
 
         return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(name.ToLowerInvariant());
+    }
+
+    // Subsidiaries we already decided about: each entry maps a subsidiary CIK to
+    // its parent stock. Incoming SEC entries whose CIK appears here are silently
+    // skipped — without this filter every sync would re-evaluate the collision
+    // and re-log the warning. Built defensively to survive a data anomaly
+    // (the same subsidiary CIK attached to two parents) rather than throwing.
+    private Dictionary<string, CommonStock> BuildSecondaryCikToParent(
+        List<CommonStock> allExistingStocks
+    )
+    {
+        var secondaryCikToParent = new Dictionary<string, CommonStock>();
+        foreach (var stock in allExistingStocks)
+        {
+            foreach (var subCik in stock.SecondaryCiks)
+            {
+                if (!secondaryCikToParent.TryAdd(subCik, stock))
+                {
+                    _logger.LogWarning(
+                        "Subsidiary CIK {Cik} is attached to multiple parents ({ExistingParent} and {DuplicateParent}); "
+                            + "keeping {ExistingParent}. Manual cleanup required.",
+                        subCik,
+                        secondaryCikToParent[subCik].Ticker,
+                        stock.Ticker
+                    );
+                }
+            }
+        }
+        return secondaryCikToParent;
     }
 
     private class StockSyncState
