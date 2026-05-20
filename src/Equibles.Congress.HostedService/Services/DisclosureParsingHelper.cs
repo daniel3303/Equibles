@@ -64,26 +64,30 @@ public static partial class DisclosureParsingHelper
 
     private static ColumnIndices MapColumnIndices(List<string> headers)
     {
-        var dateCol = headers.FindIndex(h => h.Contains("transaction") && h.Contains("date"));
-        if (dateCol == -1)
-            dateCol = headers.FindIndex(h => h.Contains("notification") && h.Contains("date"));
-        if (dateCol == -1)
-            dateCol = headers.FindIndex(h => h.Contains("date"));
+        var dateCol = FindFirstIndex(
+            headers,
+            h => h.Contains("transaction") && h.Contains("date"),
+            h => h.Contains("notification") && h.Contains("date"),
+            h => h.Contains("date")
+        );
 
         var ownerCol = headers.FindIndex(h => h.Contains("owner") || h.Contains("filer"));
         var tickerCol = headers.FindIndex(h => h.Contains("ticker") || h.Contains("symbol"));
 
-        var assetCol = headers.FindIndex(h => h.Contains("asset") && h.Contains("name"));
-        if (assetCol == -1)
-            assetCol = headers.FindIndex(h => h.Contains("asset") && !h.Contains("type"));
-        if (assetCol == -1)
-            assetCol = headers.FindIndex(h => h.Contains("description"));
+        var assetCol = FindFirstIndex(
+            headers,
+            h => h.Contains("asset") && h.Contains("name"),
+            h => h.Contains("asset") && !h.Contains("type"),
+            h => h.Contains("description")
+        );
 
         var assetTypeCol = headers.FindIndex(h => h.Contains("asset") && h.Contains("type"));
 
-        var typeCol = headers.FindIndex(h => h.Contains("transaction") && h.Contains("type"));
-        if (typeCol == -1)
-            typeCol = headers.FindIndex(h => h == "type");
+        var typeCol = FindFirstIndex(
+            headers,
+            h => h.Contains("transaction") && h.Contains("type"),
+            h => h == "type"
+        );
 
         var amountCol = headers.FindIndex(h => h.Contains("amount"));
 
@@ -96,6 +100,17 @@ public static partial class DisclosureParsingHelper
             typeCol,
             amountCol
         );
+    }
+
+    private static int FindFirstIndex(List<string> headers, params Predicate<string>[] predicates)
+    {
+        foreach (var predicate in predicates)
+        {
+            var idx = headers.FindIndex(predicate);
+            if (idx != -1)
+                return idx;
+        }
+        return -1;
     }
 
     private static DisclosureTransaction ParseTransactionRow(
