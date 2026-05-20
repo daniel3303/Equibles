@@ -280,6 +280,23 @@ public class StockTabService
         viewModel.SelectedYear = selected.FiscalYear;
         viewModel.SelectedPeriod = selected.FiscalPeriod;
 
+        viewModel.Lines = await BuildStatementLines(
+            stock,
+            statementType,
+            selected.FiscalYear,
+            selected.FiscalPeriod
+        );
+
+        return viewModel;
+    }
+
+    private async Task<List<FinancialsLineViewModel>> BuildStatementLines(
+        CommonStock stock,
+        FinancialStatementType statementType,
+        int fiscalYear,
+        SecFiscalPeriod fiscalPeriod
+    )
+    {
         var statementLines = FinancialStatementConcepts.For(statementType);
         var taxonomies = statementLines.Select(l => l.Taxonomy).Distinct().ToList();
         var tags = statementLines.Select(l => l.Tag).Distinct().ToList();
@@ -299,8 +316,8 @@ public class StockTabService
         var facts = await _financialFactRepository
             .GetByStock(stock)
             .Where(f =>
-                f.FiscalYear == selected.FiscalYear
-                && f.FiscalPeriod == selected.FiscalPeriod
+                f.FiscalYear == fiscalYear
+                && f.FiscalPeriod == fiscalPeriod
                 && conceptIds.Contains(f.FinancialConceptId)
             )
             .ToListAsync();
@@ -311,7 +328,7 @@ public class StockTabService
             .GroupBy(f => f.FinancialConceptId)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.FiledDate).First());
 
-        viewModel.Lines = statementLines
+        return statementLines
             .Select(line =>
             {
                 var row = new FinancialsLineViewModel { Label = line.Label };
@@ -330,8 +347,6 @@ public class StockTabService
                 return row;
             })
             .ToList();
-
-        return viewModel;
     }
 
     // Chronological order within a fiscal year: Q1 < Q2 < Q3 < Q4 < FullYear.
