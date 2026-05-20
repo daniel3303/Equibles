@@ -13,6 +13,8 @@ An open-source, self-hosted mini Bloomberg Terminal for AI agents. Scrapes, stor
 
 Powers [equibles.com](https://equibles.com).
 
+See [`docs/`](docs/README.md) for contributor documentation.
+
 ## What's Included
 
 | Domain | Data Source | Description |
