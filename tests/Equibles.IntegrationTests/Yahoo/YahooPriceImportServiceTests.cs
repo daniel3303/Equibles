@@ -611,6 +611,33 @@ public class YahooPriceImportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Import_KeyStatisticsSharesZero_LeavesExistingSharesUntouched()
+    {
+        // Mirror of Import_KeyStatisticsMarketCapZero — the "never overwrite a known value
+        // with 0" contract has to hold on both fields. A regression that dropped the
+        // `stats.SharesOutstanding != 0` guard would let Yahoo's "unknown" sentinel blank
+        // an existing SharesOutStanding; the MarketCap pin alone wouldn't catch it.
+        var stock = CreateStock("SHS0", "Shares Zero Co.");
+        stock.SharesOutStanding = 12_345_678;
+        await SeedStocks(stock);
+
+        _yahooClient
+            .GetHistoricalPrices("SHS0", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns([]);
+        _yahooClient
+            .GetKeyStatistics("SHS0")
+            .Returns(
+                new KeyStatistics { SharesOutstanding = 0, MarketCapitalization = 2_222_222d }
+            );
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "SHS0");
+        updated.SharesOutStanding.Should().Be(12_345_678);
+        updated.MarketCapitalization.Should().Be(2_222_222d);
+    }
+
+    [Fact]
     public async Task Import_KeyStatisticsBothZero_LeavesStockUntouched()
     {
         var stock = CreateStock("ZERO", "All Zero Co.");
