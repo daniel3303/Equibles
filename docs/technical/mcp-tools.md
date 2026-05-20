@@ -83,7 +83,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetLatestEconomicData` — latest snapshot across the curated macro indicators.
 - `SearchEconomicIndicators` — keyword search across series titles / categories.
 
-### `mcp.AddStockPrices()` — Yahoo OHLCV
+### `mcp.AddStockPrices()` — Yahoo OHLCV + technical indicators
 
 `StockPriceTools`:
 
