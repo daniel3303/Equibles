@@ -25,6 +25,23 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- `FinancialFactsImportService` was reading SEC's filing-level `fy` / `fp`
+  fields as each fact's period identity, but SEC stamps every comparable-year
+  value inside one filing with the **filing's** fiscal year (a FY2024 10-K
+  carrying three years of revenue tags all three rows `fy=2024, fp=FY`). The
+  resulting collision at the natural unique index made downstream consumers
+  filter ambiguously by `(FiscalYear, FiscalPeriod)`, surfacing wrong figures
+  on the web Financials tab, MCP `GetFinancialStatement` /
+  `CompareFinancialFact`, and the MCP `GetFinancialFact` time series.
+  `FiscalYear` / `FiscalPeriod` are now derived from `PeriodStart` /
+  `PeriodEnd` against `CommonStock.FiscalYearEndMonth` /
+  `FiscalYearEndDay` via a new `FiscalPeriodResolver` (handles 52/53-week
+  filer drift, leap-year FYE clamps, half-year and nine-month cumulatives,
+  and falls back to the pre-fix behaviour when the company's FYE is unknown).
+  **Existing `FinancialFact` rows in any deployed database still carry the
+  pre-fix identity** — to refresh, stop the worker, drop the
+  `FinancialFact` and `FinancialFactsSyncStatus` tables, and restart; the
+  scraper will re-ingest from the SEC HTTP cache without re-downloading.
 - Embedding service healthcheck used `curl`, which is not present in the
   `ollama/ollama` image, leaving the container permanently `unhealthy` and
   preventing `embedding-pull` / `worker-embedding` (and thus the entire vector
