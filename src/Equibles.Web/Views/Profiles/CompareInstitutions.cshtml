@@ -1,0 +1,106 @@
+@model Equibles.Web.ViewModels.Profiles.InstitutionCompareViewModel
+
+@{
+    ViewData["Title"] = "Compare institutions";
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">Compare institutions</h1>
+        <p class="text-base-content/60">
+            Side-by-side 13F portfolio overlap. Pass 2–4 CIKs via <code>?ciks=…&amp;ciks=…</code>.
+        </p>
+    </div>
+
+    @if (Model.RequestedCiks.Count < Equibles.Web.ViewModels.Profiles.InstitutionCompareViewModel.MinCiks) {
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body items-center text-center py-12">
+                <div class="text-base-content/30 mb-3">
+                    <icon name="user-group" size="12" />
+                </div>
+                <h3 class="text-base-content/60 mb-2">Pass at least two CIKs to compare</h3>
+                <p class="text-base-content/40 text-sm">Example: <code>/Institutions/Compare?ciks=0001067983&amp;ciks=0001603466</code></p>
+            </div>
+        </div>
+    } else if (Model.MissingCiks.Count > 0 && Model.Overlap == null) {
+        <div class="alert alert-warning" data-testid="compare-missing-ciks">
+            <icon name="exclamation-triangle" size="5" />
+            <span>Could not resolve CIKs: @string.Join(", ", Model.MissingCiks).</span>
+        </div>
+    } else if (Model.Overlap == null) {
+        <div class="alert alert-info" data-testid="compare-no-common-quarter">
+            <icon name="information-circle" size="5" />
+            <span>The selected institutions have no common report date.</span>
+        </div>
+    } else {
+        var overlap = Model.Overlap;
+        <!-- Overlap summary header. -->
+        <div class="card bg-base-100 shadow-sm mb-6" data-testid="compare-overlap-summary">
+            <div class="card-body p-4">
+                <div class="flex flex-wrap items-center gap-3 mb-3 text-xs text-base-content/60">
+                    <span class="badge badge-ghost">Report date: @overlap.ReportDate.ToString("MMM dd, yyyy")</span>
+                    @if (Model.CommonReportDates.Count > 1) {
+                        <span class="badge badge-ghost">@Model.CommonReportDates.Count common quarters</span>
+                    }
+                </div>
+                <div class="stats stats-vertical lg:stats-horizontal shadow-sm bg-base-200 w-full">
+                    <div class="stat">
+                        <div class="stat-title">Union positions</div>
+                        <div class="stat-value text-2xl font-mono">@overlap.UnionPositionCount.ToString("N0")</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-title">Shared positions</div>
+                        <div class="stat-value text-2xl font-mono">@overlap.IntersectionPositionCount.ToString("N0")</div>
+                    </div>
+                    <div class="stat" title="|A ∩ B| / |A ∪ B|">
+                        <div class="stat-title">Jaccard similarity</div>
+                        <div class="stat-value text-2xl font-mono">@overlap.JaccardSimilarityPercent.ToString("F1")%</div>
+                    </div>
+                    <div class="stat" title="Σ min(value)/Σ max(value) across shared stocks">
+                        <div class="stat-title">$-weighted overlap</div>
+                        <div class="stat-value text-2xl font-mono">@overlap.DollarWeightedOverlapPercent.ToString("F1")%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Side-by-side stocks table — one row per stock in the union, one column-group per fund. -->
+        <div class="card bg-base-100 shadow-sm" data-testid="compare-overlap-table">
+            <div class="overflow-x-auto">
+                <table class="table table-zebra table-sm">
+                    <thead>
+                        <tr>
+                            <th rowspan="2">Ticker</th>
+                            <th rowspan="2">Company</th>
+                            @foreach (var fund in overlap.Funds) {
+                                <th colspan="2" class="text-center border-x border-base-300">
+                                    @fund.HolderName <span class="text-xs text-base-content/50">CIK @fund.HolderCik</span>
+                                </th>
+                            }
+                            <th rowspan="2" class="text-right">Combined value</th>
+                        </tr>
+                        <tr>
+                            @foreach (var fund in overlap.Funds) {
+                                <th class="text-right text-xs">Shares</th>
+                                <th class="text-right text-xs">% Port.</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in overlap.Rows) {
+                            <tr>
+                                <td class="font-mono">@row.Ticker</td>
+                                <td class="max-w-xs truncate">@row.Name</td>
+                                @foreach (var slice in row.Slices) {
+                                    <td class="text-right font-mono">@(slice.Shares > 0 ? slice.Shares.ToString("N0") : "—")</td>
+                                    <td class="text-right font-mono text-base-content/60">@(slice.Value > 0 ? slice.PercentOfPortfolio.ToString("F1") + "%" : "—")</td>
+                                }
+                                <td class="text-right font-mono">$@row.CombinedValue.ToString("N0")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
