@@ -52,7 +52,8 @@ Why the indirection through `ViewData` rather than a single `StockDetailViewMode
 
 ## Tag helpers
 
-- [`HeroIconTagHelper`](../../src/Equibles.Web/TagHelpers/HeroIconTagHelper.cs) — `<icon name="..." size="6" />` renders inline SVG from the Heroicons set baked into [`HeroIcons.cs`](../../src/Equibles.Web/TagHelpers/HeroIcons.cs). No icon-font dependency.
+- [`HeroIconTagHelper`](../../src/Equibles.Web/TagHelpers/HeroIconTagHelper.cs) — `<icon name="..." size="6" />` renders inline SVG from the Heroicons set baked into [`HeroIcons.cs`](../../src/Equibles.Web/TagHelpers/HeroIcons.cs).
+- No icon-font dependency.
 
 ## Frontend build
 
