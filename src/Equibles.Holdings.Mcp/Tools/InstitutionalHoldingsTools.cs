@@ -1017,12 +1017,7 @@ public class InstitutionalHoldingsTools
                 if (common.Count == 0)
                     return "The selected institutions share no common report dates.";
 
-                var selected =
-                    !string.IsNullOrEmpty(reportDate)
-                    && DateOnly.TryParse(reportDate, out var parsed)
-                    && common.Contains(parsed)
-                        ? parsed
-                        : common[0];
+                var selected = ResolveReportDate(reportDate, common);
 
                 var perFund =
                     new List<(
