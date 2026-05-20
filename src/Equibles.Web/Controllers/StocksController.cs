@@ -108,120 +108,82 @@ public class StocksController : BaseController
     }
 
     [HttpGet("~/Stocks/{ticker}/Price")]
-    public async Task<IActionResult> Price(string ticker)
-    {
-        var stock = await LoadStock(ticker);
-        if (stock == null)
-            return NotFound();
-
-        var viewModel = BuildStockViewModel(stock, "price");
-        ViewData["TabViewModel"] = await _stockTabService.LoadPriceTab(stock);
-        return View("Show", viewModel);
-    }
+    public Task<IActionResult> Price(string ticker) =>
+        ShowStockTab(ticker, "price", async s => await _stockTabService.LoadPriceTab(s));
 
     [HttpGet("~/Stocks/{ticker}/Holdings")]
-    public async Task<IActionResult> Holdings(string ticker, DateOnly? date)
-    {
-        var stock = await LoadStock(ticker);
-        if (stock == null)
-            return NotFound();
-
-        var viewModel = BuildStockViewModel(stock, "holdings");
-        ViewData["TabViewModel"] = await _stockTabService.LoadHoldingsTab(stock, date);
-        return View("Show", viewModel);
-    }
+    public Task<IActionResult> Holdings(string ticker, DateOnly? date) =>
+        ShowStockTab(
+            ticker,
+            "holdings",
+            async s => await _stockTabService.LoadHoldingsTab(s, date)
+        );
 
     [HttpGet("~/Stocks/{ticker}/ShortVolume")]
-    public async Task<IActionResult> ShortVolume(string ticker)
-    {
-        var stock = await LoadStock(ticker);
-        if (stock == null)
-            return NotFound();
-
-        var viewModel = BuildStockViewModel(stock, "short-volume");
-        ViewData["TabViewModel"] = await _stockTabService.LoadShortVolumeTab(stock);
-        return View("Show", viewModel);
-    }
+    public Task<IActionResult> ShortVolume(string ticker) =>
+        ShowStockTab(
+            ticker,
+            "short-volume",
+            async s => await _stockTabService.LoadShortVolumeTab(s)
+        );
 
     [HttpGet("~/Stocks/{ticker}/ShortInterest")]
-    public async Task<IActionResult> ShortInterest(string ticker)
-    {
-        var stock = await LoadStock(ticker);
-        if (stock == null)
-            return NotFound();
-
-        var viewModel = BuildStockViewModel(stock, "short-interest");
-        ViewData["TabViewModel"] = await _stockTabService.LoadShortInterestTab(stock);
-        return View("Show", viewModel);
-    }
+    public Task<IActionResult> ShortInterest(string ticker) =>
+        ShowStockTab(
+            ticker,
+            "short-interest",
+            async s => await _stockTabService.LoadShortInterestTab(s)
+        );
 
     [HttpGet("~/Stocks/{ticker}/Ftd")]
-    public async Task<IActionResult> Ftd(string ticker)
-    {
-        var stock = await LoadStock(ticker);
-        if (stock == null)
-            return NotFound();
-
-        var viewModel = BuildStockViewModel(stock, "ftd");
-        ViewData["TabViewModel"] = await _stockTabService.LoadFtdTab(stock);
-        return View("Show", viewModel);
-    }
+    public Task<IActionResult> Ftd(string ticker) =>
+        ShowStockTab(ticker, "ftd", async s => await _stockTabService.LoadFtdTab(s));
 
     [HttpGet("~/Stocks/{ticker}/Financials")]
-    public async Task<IActionResult> Financials(
+    public Task<IActionResult> Financials(
         string ticker,
         FinancialStatementType statement = FinancialStatementType.IncomeStatement,
         int? year = null,
         SecFiscalPeriod? period = null
+    ) =>
+        ShowStockTab(
+            ticker,
+            "financials",
+            async s => await _stockTabService.LoadFinancialsTab(s, statement, year, period)
+        );
+
+    [HttpGet("~/Stocks/{ticker}/Documents")]
+    public Task<IActionResult> Documents(string ticker) =>
+        ShowStockTab(ticker, "documents", async s => await _stockTabService.LoadDocumentsTab(s));
+
+    [HttpGet("~/Stocks/{ticker}/InsiderTrading")]
+    public Task<IActionResult> InsiderTrading(string ticker) =>
+        ShowStockTab(
+            ticker,
+            "insider-trading",
+            async s => await _stockTabService.LoadInsiderTradingTab(s)
+        );
+
+    [HttpGet("~/Stocks/{ticker}/CongressionalTrades")]
+    public Task<IActionResult> CongressionalTrades(string ticker) =>
+        ShowStockTab(
+            ticker,
+            "congressional-trades",
+            async s => await _stockTabService.LoadCongressionalTradesTab(s)
+        );
+
+    private async Task<IActionResult> ShowStockTab(
+        string ticker,
+        string activeTab,
+        Func<Equibles.CommonStocks.Data.Models.CommonStock, Task<object>> loadTab
     )
     {
         var stock = await LoadStock(ticker);
         if (stock == null)
             return NotFound();
 
-        var viewModel = BuildStockViewModel(stock, "financials");
-        ViewData["TabViewModel"] = await _stockTabService.LoadFinancialsTab(
-            stock,
-            statement,
-            year,
-            period
-        );
-        return View("Show", viewModel);
-    }
-
-    [HttpGet("~/Stocks/{ticker}/Documents")]
-    public async Task<IActionResult> Documents(string ticker)
-    {
-        var stock = await LoadStock(ticker);
-        if (stock == null)
-            return NotFound();
-
-        var viewModel = BuildStockViewModel(stock, "documents");
-        ViewData["TabViewModel"] = await _stockTabService.LoadDocumentsTab(stock);
-        return View("Show", viewModel);
-    }
-
-    [HttpGet("~/Stocks/{ticker}/InsiderTrading")]
-    public async Task<IActionResult> InsiderTrading(string ticker)
-    {
-        var stock = await LoadStock(ticker);
-        if (stock == null)
-            return NotFound();
-
-        var viewModel = BuildStockViewModel(stock, "insider-trading");
-        ViewData["TabViewModel"] = await _stockTabService.LoadInsiderTradingTab(stock);
-        return View("Show", viewModel);
-    }
-
-    [HttpGet("~/Stocks/{ticker}/CongressionalTrades")]
-    public async Task<IActionResult> CongressionalTrades(string ticker)
-    {
-        var stock = await LoadStock(ticker);
-        if (stock == null)
-            return NotFound();
-
-        var viewModel = BuildStockViewModel(stock, "congressional-trades");
-        ViewData["TabViewModel"] = await _stockTabService.LoadCongressionalTradesTab(stock);
+        var viewModel = BuildStockViewModel(stock, activeTab);
+        ViewData["TabViewModel"] = await loadTab(stock);
         return View("Show", viewModel);
     }
 
