@@ -114,6 +114,35 @@ public static class TechnicalIndicatorService
     }
 
     /// <summary>
+    /// On-Balance Volume. Running cumulative sum seeded at 0: add the bar's volume when
+    /// close > prev_close, subtract when close < prev_close, leave unchanged on equality.
+    /// Bar 0 emits the seed (0) since there is no prior close to compare against.
+    /// Returns a list aligned to input length.
+    /// </summary>
+    public static List<long> ComputeObv(List<decimal> closes, List<long> volumes)
+    {
+        if (closes.Count != volumes.Count)
+            throw new ArgumentException("closes and volumes must have the same length");
+
+        var count = closes.Count;
+        var result = new List<long>(count);
+        if (count == 0)
+            return result;
+
+        long obv = 0;
+        result.Add(obv);
+        for (var i = 1; i < count; i++)
+        {
+            if (closes[i] > closes[i - 1])
+                obv += volumes[i];
+            else if (closes[i] < closes[i - 1])
+                obv -= volumes[i];
+            result.Add(obv);
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Average True Range (Wilder, J. Welles). TR = max(high − low, |high − prev_close|,
     /// |low − prev_close|); ATR is seeded with the simple average of the first
     /// <paramref name="period"/> TRs and then smoothed via Wilder's recursive average:
