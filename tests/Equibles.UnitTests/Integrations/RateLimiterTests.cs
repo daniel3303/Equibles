@@ -290,4 +290,36 @@ public class RateLimiterTests
                 );
         }
     }
+
+    [Fact]
+    public async Task WaitAsync_PauseShorterThanQueueWait_UsesQueueWait()
+    {
+        // WaitAsync's wait is `max(queue saturation wait, pause remaining)` — implemented
+        // by the `if (pauseRemaining > waitTime) waitTime = pauseRemaining;` guard. Two
+        // halves of that contract are already pinned: PauseFor_DelaysSubsequentWaitAsyncCalls
+        // (queue=0, pause>0 → use pause) and WaitAsync_FillsCapacity_NextRequestWaitsForOldestToAgeOut
+        // (queue>0, pause<0 → use queue). The remaining cell — both positive, pause < queue
+        // — is unpinned, and is exactly the case a "simplification" PR could regress by
+        // dropping the if-guard and writing `waitTime = pauseRemaining;` unconditionally.
+        // That refactor would replace the ~400ms queue wait below with a ~50ms pause wait,
+        // releasing the scraper before the upstream window allows it and triggering bans.
+        //
+        // Construction: maxRequests=1 saturates after the first call so the second WaitAsync
+        // sees a positive queue-driven wait of ~400ms. A short PauseFor of 50ms sits BELOW
+        // that — the longer (queue) wait must dominate, so total time is ~400ms, never ~50ms.
+        var limiter = new RateLimiter(maxRequests: 1, timeWindow: TimeSpan.FromMilliseconds(400));
+        await limiter.WaitAsync();
+
+        limiter.PauseFor(TimeSpan.FromMilliseconds(50));
+
+        var sw = Stopwatch.StartNew();
+        await limiter.WaitAsync();
+        sw.Stop();
+
+        sw.ElapsedMilliseconds.Should()
+            .BeGreaterThanOrEqualTo(
+                350,
+                "queue saturation wait (~400ms) must dominate the shorter pause (50ms) — if the if-guard were dropped the wait would collapse to ~50ms"
+            );
+    }
 }
