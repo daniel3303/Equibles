@@ -1,0 +1,119 @@
+using Equibles.CommonStocks.Repositories;
+using Equibles.Holdings.Repositories;
+using Equibles.Web.Controllers.Abstract;
+using Equibles.Web.ViewModels.Holdings;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace Equibles.Web.Controllers;
+
+public class HoldingsActivityController : BaseController
+{
+    private readonly InstitutionalHoldingRepository _holdingRepository;
+    private readonly CommonStockRepository _commonStockRepository;
+
+    public HoldingsActivityController(
+        InstitutionalHoldingRepository holdingRepository,
+        CommonStockRepository commonStockRepository,
+        ILogger<HoldingsActivityController> logger
+    )
+        : base(logger)
+    {
+        _holdingRepository = holdingRepository;
+        _commonStockRepository = commonStockRepository;
+    }
+
+    [HttpGet("~/Holdings/Activity")]
+    public async Task<IActionResult> Activity(DateOnly? date)
+    {
+        var reportDates = await _holdingRepository
+            .GetAvailableReportDates()
+            .OrderByDescending(d => d)
+            .ToListAsync();
+
+        var viewModel = new HoldingsActivityViewModel { AvailableDates = reportDates };
+        if (reportDates.Count == 0)
+            return View(viewModel);
+
+        var selectedDate = date ?? reportDates[0];
+        var selectedIndex = reportDates.IndexOf(selectedDate);
+        if (selectedIndex < 0)
+        {
+            selectedDate = reportDates[0];
+            selectedIndex = 0;
+        }
+        viewModel.SelectedDate = selectedDate;
+
+        var previousDate =
+            selectedIndex < reportDates.Count - 1
+                ? reportDates[selectedIndex + 1]
+                : (DateOnly?)null;
+        viewModel.PreviousDate = previousDate;
+        if (!previousDate.HasValue)
+            return View(viewModel);
+
+        // Pull the top N stocks by absolute Δ value in each direction. The cap is
+        // applied server-side so the controller never materializes the full per-stock
+        // aggregation for the whole universe.
+        var movers = _holdingRepository
+            .GetQuarterlyActivity(selectedDate, previousDate.Value)
+            .Where(a => a.CurrentShares != a.PreviousShares);
+
+        var topBuysAgg = await movers
+            .Where(a => a.CurrentShares > a.PreviousShares)
+            .OrderByDescending(a => a.CurrentValue - a.PreviousValue)
+            .Take(HoldingsActivityViewModel.RowCap)
+            .ToListAsync();
+        var topSellsAgg = await movers
+            .Where(a => a.CurrentShares < a.PreviousShares)
+            .OrderBy(a => a.CurrentValue - a.PreviousValue)
+            .Take(HoldingsActivityViewModel.RowCap)
+            .ToListAsync();
+
+        var stockIds = topBuysAgg
+            .Concat(topSellsAgg)
+            .Select(a => a.CommonStockId)
+            .Distinct()
+            .ToList();
+        var stocks = await _commonStockRepository
+            .GetAll()
+            .Where(s => stockIds.Contains(s.Id))
+            .Select(s => new StockLabel
+            {
+                Id = s.Id,
+                Ticker = s.Ticker,
+                Name = s.Name,
+            })
+            .ToDictionaryAsync(s => s.Id);
+
+        viewModel.TopBuys = topBuysAgg.Select(a => MapRow(a, stocks)).ToList();
+        viewModel.TopSells = topSellsAgg.Select(a => MapRow(a, stocks)).ToList();
+
+        return View(viewModel);
+    }
+
+    private static HoldingsActivityRow MapRow(
+        Equibles.Holdings.Repositories.Models.MarketWideStockActivity activity,
+        IDictionary<Guid, StockLabel> stocks
+    )
+    {
+        stocks.TryGetValue(activity.CommonStockId, out var stock);
+        return new HoldingsActivityRow
+        {
+            CommonStockId = activity.CommonStockId,
+            Ticker = stock?.Ticker ?? "—",
+            Name = stock?.Name ?? "Unknown",
+            DeltaShares = activity.DeltaShares,
+            DeltaValue = activity.DeltaValue,
+            CurrentFilerCount = activity.CurrentFilerCount,
+            PreviousFilerCount = activity.PreviousFilerCount,
+        };
+    }
+
+    private class StockLabel
+    {
+        public Guid Id { get; set; }
+        public string Ticker { get; set; }
+        public string Name { get; set; }
+    }
+}
