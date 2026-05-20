@@ -22,6 +22,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetOwnershipHistory` — historical ownership trend (shares, value, holder count) per quarter.
 - `GetInstitutionPortfolio` — full portfolio of one institution for a `ReportDate`.
 - `SearchInstitutions` — name-search returning matching `InstitutionalHolder` rows.
+- `GetTopBuyersSellers` — biggest absolute share additions and reductions for a ticker vs. the prior `ReportDate`; flags new and sold-out positions.
 
 ### `mcp.AddInsiderTrading()` — Form 3 / 4
 
