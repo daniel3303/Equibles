@@ -114,6 +114,70 @@ public static class TechnicalIndicatorService
     }
 
     /// <summary>
+    /// Average True Range (Wilder, J. Welles). TR = max(high − low, |high − prev_close|,
+    /// |low − prev_close|); ATR is seeded with the simple average of the first
+    /// <paramref name="period"/> TRs and then smoothed via Wilder's recursive average:
+    /// <c>atr_i = (atr_{i-1} × (period − 1) + tr_i) / period</c>. Returns a list aligned
+    /// to input length, null-padded while the window fills.
+    /// </summary>
+    public static List<decimal?> ComputeAtr(
+        List<decimal> highs,
+        List<decimal> lows,
+        List<decimal> closes,
+        int period = 14
+    )
+    {
+        if (highs.Count != lows.Count || lows.Count != closes.Count)
+            throw new ArgumentException("highs, lows, and closes must all have the same length");
+
+        var count = closes.Count;
+        var result = new List<decimal?>(count);
+        if (count == 0)
+            return result;
+
+        // True Range per bar. Bar 0 has no previous close — TR_0 collapses to high − low,
+        // which is the standard convention.
+        var trueRanges = new decimal[count];
+        trueRanges[0] = highs[0] - lows[0];
+        for (var i = 1; i < count; i++)
+        {
+            var prevClose = closes[i - 1];
+            var range = highs[i] - lows[i];
+            var upGap = Math.Abs(highs[i] - prevClose);
+            var downGap = Math.Abs(lows[i] - prevClose);
+            trueRanges[i] = Math.Max(range, Math.Max(upGap, downGap));
+        }
+
+        // Need at least `period` TR values before emitting an ATR — short series stays null.
+        if (count < period)
+        {
+            for (var i = 0; i < count; i++)
+                result.Add(null);
+            return result;
+        }
+
+        // First (period - 1) bars are warm-up; the seed lands at index (period - 1).
+        for (var i = 0; i < period - 1; i++)
+            result.Add(null);
+
+        decimal seed = 0m;
+        for (var i = 0; i < period; i++)
+            seed += trueRanges[i];
+        seed /= period;
+        result.Add(Math.Round(seed, 4));
+
+        // Wilder smoothing: combine the running ATR with the next TR.
+        var atr = seed;
+        for (var i = period; i < count; i++)
+        {
+            atr = (atr * (period - 1) + trueRanges[i]) / period;
+            result.Add(Math.Round(atr, 4));
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Stochastic Oscillator. %K = 100 × (close - lowestLow) / (highestHigh - lowestLow)
     /// over a <paramref name="kPeriod"/> lookback; %D is the simple moving average of %K
     /// over <paramref name="dPeriod"/> bars. Returns lists matching the input length,
