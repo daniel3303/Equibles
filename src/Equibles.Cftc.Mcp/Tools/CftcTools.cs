@@ -60,16 +60,11 @@ public class CftcTools
                 if (contract == null)
                     return $"Contract '{marketCode}' not found. Use SearchCftcMarkets to find available contracts.";
 
-                var start =
-                    !string.IsNullOrEmpty(startDate)
-                    && DateOnly.TryParse(startDate, out var parsedStart)
-                        ? parsedStart
-                        : DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1));
-
-                var end =
-                    !string.IsNullOrEmpty(endDate) && DateOnly.TryParse(endDate, out var parsedEnd)
-                        ? parsedEnd
-                        : DateOnly.FromDateTime(DateTime.UtcNow);
+                var start = ParseDateOr(
+                    startDate,
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
+                );
+                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
 
                 var reports = await _reportRepository
                     .GetByContract(contract, start, end)
@@ -240,4 +235,7 @@ public class CftcTools
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
+
+    private static DateOnly ParseDateOr(string text, DateOnly fallback) =>
+        !string.IsNullOrEmpty(text) && DateOnly.TryParse(text, out var parsed) ? parsed : fallback;
 }
