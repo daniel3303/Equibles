@@ -117,19 +117,6 @@ internal static class FiscalPeriodResolver
         return new DateOnly(year, month, Math.Min(day, maxDay));
     }
 
-    private static DateOnly ClosestTo(DateOnly[] candidates, DateOnly target)
-    {
-        var best = candidates[0];
-        var bestDistance = Math.Abs(best.DayNumber - target.DayNumber);
-        for (var i = 1; i < candidates.Length; i++)
-        {
-            var distance = Math.Abs(candidates[i].DayNumber - target.DayNumber);
-            if (distance < bestDistance)
-            {
-                best = candidates[i];
-                bestDistance = distance;
-            }
-        }
-        return best;
-    }
+    private static DateOnly ClosestTo(DateOnly[] candidates, DateOnly target) =>
+        candidates.MinBy(c => Math.Abs(c.DayNumber - target.DayNumber));
 }
