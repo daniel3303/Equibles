@@ -26,6 +26,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetMarketWide13FActivity` — market-wide leaderboard for a quarter, selected by `bucket`: `top-buys`, `top-sells`, `new-positions`, `sold-out-positions`.
 - `GetInstitutionSummary` — portfolio header for one filer at a `ReportDate`: AUM, position count, top-10 / top-25 concentration, QoQ turnover, latest / prior dates.
 - `GetInstitutionSectorAllocation` — one filer's portfolio grouped by industry / sector for its latest 13F report; stocks lacking a classification collapse into an "Unclassified" row.
+- `GetInstitutionQuarterlyActivity` — one filer's position changes vs. the prior quarter, bucketed into Initiated / Increased / Reduced / Exited; optional `bucket` filter to a single bucket.
 
 ### `mcp.AddInsiderTrading()` — Form 3 / 4
 
