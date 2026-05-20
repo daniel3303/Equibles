@@ -38,16 +38,7 @@ public static class HoldingsTopMoversSelector
     private static int CountIn(
         Dictionary<PositionChangeType, List<HolderPositionChange>> groupedHolders,
         params PositionChangeType[] types
-    )
-    {
-        var total = 0;
-        foreach (var type in types)
-        {
-            if (groupedHolders.TryGetValue(type, out var list))
-                total += list.Count;
-        }
-        return total;
-    }
+    ) => types.Sum(type => groupedHolders.TryGetValue(type, out var list) ? list.Count : 0);
 
     private static IEnumerable<HolderPositionChange> EnumerateOrEmpty(
         Dictionary<PositionChangeType, List<HolderPositionChange>> groupedHolders,
