@@ -56,19 +56,12 @@ public class InstitutionalHoldingsTools
                 if (stock == null)
                     return $"Stock '{ticker}' not found.";
 
-                DateOnly targetDate;
-                if (TryParseReportDate(reportDate, out var parsed))
-                {
-                    targetDate = parsed;
-                }
-                else
-                {
-                    var latestDate = await GetReportDatesByStock(stock).FirstOrDefaultAsync();
-
-                    if (latestDate == default)
-                        return $"No institutional holdings data available for {ticker}.";
-                    targetDate = latestDate;
-                }
+                var (targetDate, found) = await TryResolveLatestReportDate(
+                    reportDate,
+                    GetReportDatesByStock(stock)
+                );
+                if (!found)
+                    return $"No institutional holdings data available for {ticker}.";
 
                 var allHoldings = _holdingRepository.GetByStock(stock, targetDate);
                 var totalInstitutions = await allHoldings
@@ -200,19 +193,12 @@ public class InstitutionalHoldingsTools
 
                 var holder = holders.First();
 
-                DateOnly targetDate;
-                if (TryParseReportDate(reportDate, out var parsed))
-                {
-                    targetDate = parsed;
-                }
-                else
-                {
-                    var latestDate = await GetReportDatesByHolder(holder).FirstOrDefaultAsync();
-
-                    if (latestDate == default)
-                        return $"No holdings data for {holder.Name}.";
-                    targetDate = latestDate;
-                }
+                var (targetDate, found) = await TryResolveLatestReportDate(
+                    reportDate,
+                    GetReportDatesByHolder(holder)
+                );
+                if (!found)
+                    return $"No holdings data for {holder.Name}.";
 
                 var holdings = await _holdingRepository
                     .GetByHolder(holder, targetDate)
@@ -1107,6 +1093,18 @@ public class InstitutionalHoldingsTools
         TryParseReportDate(input, out var parsed) && validDates.Contains(parsed)
             ? parsed
             : validDates[0];
+
+    private static async Task<(DateOnly Date, bool Found)> TryResolveLatestReportDate(
+        string input,
+        IQueryable<DateOnly> dateSource
+    )
+    {
+        if (TryParseReportDate(input, out var parsed))
+            return (parsed, true);
+
+        var latest = await dateSource.FirstOrDefaultAsync();
+        return (latest, latest != default);
+    }
 
     private class HolderAggregate
     {
