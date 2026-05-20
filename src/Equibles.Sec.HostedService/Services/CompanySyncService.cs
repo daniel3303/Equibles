@@ -200,14 +200,7 @@ public class CompanySyncService : ICompanySyncService
             {
                 try
                 {
-                    state.CommonStockRepository.Delete(tickerHolder);
-                    await state.CommonStockRepository.SaveChanges();
-
-                    state.ExistingCiks.Remove(tickerHolder.Cik);
-                    state.ExistingPrimaryTickers.Remove(tickerHolder.Ticker);
-                    foreach (var t in tickerHolder.SecondaryTickers)
-                        state.ExistingSecondaryTickers.Remove(t);
-                    state.ExistingStocks.Remove(tickerHolder);
+                    await DeleteAndUntrack(tickerHolder, state);
 
                     _logger.LogInformation(
                         "Removed obsolete company {Name} (CIK: {Cik}) holding ticker {Ticker}",
@@ -326,14 +319,7 @@ public class CompanySyncService : ICompanySyncService
 
         try
         {
-            state.CommonStockRepository.Delete(obsoleteStock);
-            await state.CommonStockRepository.SaveChanges();
-
-            state.ExistingCiks.Remove(obsoleteStock.Cik);
-            state.ExistingPrimaryTickers.Remove(obsoleteStock.Ticker);
-            foreach (var t in obsoleteStock.SecondaryTickers)
-                state.ExistingSecondaryTickers.Remove(t);
-            state.ExistingStocks.Remove(obsoleteStock);
+            await DeleteAndUntrack(obsoleteStock, state);
 
             var newStock = await state.CommonStockManager.Create(
                 new CommonStock
@@ -601,6 +587,18 @@ public class CompanySyncService : ICompanySyncService
             }
         }
         return secondaryCikToParent;
+    }
+
+    private static async Task DeleteAndUntrack(CommonStock stock, StockSyncState state)
+    {
+        state.CommonStockRepository.Delete(stock);
+        await state.CommonStockRepository.SaveChanges();
+
+        state.ExistingCiks.Remove(stock.Cik);
+        state.ExistingPrimaryTickers.Remove(stock.Ticker);
+        foreach (var t in stock.SecondaryTickers)
+            state.ExistingSecondaryTickers.Remove(t);
+        state.ExistingStocks.Remove(stock);
     }
 
     private Task ReportError(string operation, Exception ex, string context) =>
