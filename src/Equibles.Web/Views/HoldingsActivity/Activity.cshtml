@@ -44,16 +44,16 @@
     @if (!Model.PreviousDate.HasValue) {
         <!-- Single-quarter case: nothing to rank by Δ. The empty state above is the report. -->
     } else {
-        <!-- Two stacked cards: Top Buys, Top Sells. New / Sold-out leaderboards land in a follow-up slice. -->
+        <!-- Four cards: Top Buys / Top Sells (Δ value), New Positions / Sold-out Positions (filer count). -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             @{
-                var boards = new[]
+                var deltaBoards = new[]
                 {
                     new { Label = "Top Buys", Rows = Model.TopBuys, BadgeCss = "badge-success", TestId = "activity-top-buys" },
                     new { Label = "Top Sells", Rows = Model.TopSells, BadgeCss = "badge-error", TestId = "activity-top-sells" },
                 };
             }
-            @foreach (var board in boards) {
+            @foreach (var board in deltaBoards) {
                 <div class="card bg-base-100 shadow-sm" data-testid="@board.TestId">
                     <div class="card-body p-4">
                         <div class="flex items-center gap-2 mb-2">
@@ -87,6 +87,55 @@
                                                 <td class="text-right font-mono @deltaSharesCss">@deltaSharesSign@row.DeltaShares.ToString("N0")</td>
                                                 <td class="text-right font-mono hidden md:table-cell @deltaValueCss">@deltaValueSign$@row.DeltaValue.ToString("N0")</td>
                                                 <td class="text-right font-mono hidden lg:table-cell text-base-content/60">@row.PreviousFilerCount.ToString("N0") → @row.CurrentFilerCount.ToString("N0")</td>
+                                                <td class="text-right">
+                                                    <a asp-controller="Stocks" asp-action="Holdings"
+                                                       asp-route-ticker="@row.Ticker"
+                                                       asp-route-date="@Model.SelectedDate.ToString("yyyy-MM-dd")"
+                                                       class="btn btn-ghost btn-sm">View</a>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            @{
+                var churnBoards = new[]
+                {
+                    new { Label = "New Positions", Rows = Model.NewPositions, BadgeCss = "badge-info", FilerLabel = "# Filers Initiated", FilerSelector = (Func<HoldingsActivityRow, int>)(r => r.NewFilerCount), TestId = "activity-new-positions" },
+                    new { Label = "Sold-Out Positions", Rows = Model.SoldOutPositions, BadgeCss = "badge-warning", FilerLabel = "# Filers Exited", FilerSelector = (Func<HoldingsActivityRow, int>)(r => r.SoldOutFilerCount), TestId = "activity-sold-out-positions" },
+                };
+            }
+            @foreach (var board in churnBoards) {
+                <div class="card bg-base-100 shadow-sm" data-testid="@board.TestId">
+                    <div class="card-body p-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <h3 class="text-base font-medium m-0">@board.Label</h3>
+                            <span class="badge @board.BadgeCss badge-sm">@board.Rows.Count.ToString("N0")</span>
+                        </div>
+                        @if (board.Rows.Count == 0) {
+                            <div class="text-xs text-base-content/50">No stocks in this bucket for the selected quarter.</div>
+                        } else {
+                            <div class="overflow-x-auto">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Ticker</th>
+                                            <th>Company</th>
+                                            <th class="text-right">@board.FilerLabel</th>
+                                            <th class="text-right">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var row in board.Rows) {
+                                            <tr>
+                                                <td class="font-mono">@row.Ticker</td>
+                                                <td class="max-w-xs truncate">@row.Name</td>
+                                                <td class="text-right font-mono">@board.FilerSelector(row).ToString("N0")</td>
                                                 <td class="text-right">
                                                     <a asp-controller="Stocks" asp-action="Holdings"
                                                        asp-route-ticker="@row.Ticker"

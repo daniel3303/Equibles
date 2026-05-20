@@ -46,8 +46,9 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
 
     // Per-stock aggregation of 13F activity across two quarters: totals, filer counts,
     // and the derived deltas drive the Top Buys / Top Sells leaderboards. New /
-    // Sold-out filer-count metrics need a set-difference between holders per stock per
-    // quarter and live in a separate query — see GetQuarterlyNewSoldOut (TODO #1009).
+    // Sold-out filer-count metrics live in GetQuarterlyNewSoldOutPositions — they need
+    // a set-difference between (stock, holder) pairs across the two quarters and don't
+    // fit cleanly inside this single GROUP BY.
     // Both quarters are filtered in a single round trip; the conditional Sum / nested
     // Distinct().Count() forms translate server-side in EF Core.
     public IQueryable<MarketWideStockActivity> GetQuarterlyActivity(
@@ -70,6 +71,50 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     .Distinct()
                     .Count(),
                 PreviousFilerCount = g.Where(h => h.ReportDate == previous)
+                    .Select(h => h.InstitutionalHolderId)
+                    .Distinct()
+                    .Count(),
+            });
+    }
+
+    // Per-stock churn between two 13F quarters: how many filers initiated a position
+    // (in current, not in prior) and how many exited (in prior, not in current).
+    // Implemented as two NOT-EXISTS subqueries against the same table — EF Core
+    // translates the `!DbContext.Set<>().Any(...)` form to a SQL `NOT EXISTS` clause.
+    public IQueryable<MarketWideStockChurn> GetQuarterlyNewSoldOutPositions(
+        DateOnly current,
+        DateOnly previous
+    )
+    {
+        return GetAll()
+            .Where(h => h.ReportDate == current || h.ReportDate == previous)
+            .GroupBy(h => h.CommonStockId)
+            .Select(g => new MarketWideStockChurn
+            {
+                CommonStockId = g.Key,
+                NewFilerCount = g.Where(h =>
+                        h.ReportDate == current
+                        && !DbContext
+                            .Set<InstitutionalHolding>()
+                            .Any(p =>
+                                p.ReportDate == previous
+                                && p.CommonStockId == h.CommonStockId
+                                && p.InstitutionalHolderId == h.InstitutionalHolderId
+                            )
+                    )
+                    .Select(h => h.InstitutionalHolderId)
+                    .Distinct()
+                    .Count(),
+                SoldOutFilerCount = g.Where(h =>
+                        h.ReportDate == previous
+                        && !DbContext
+                            .Set<InstitutionalHolding>()
+                            .Any(c =>
+                                c.ReportDate == current
+                                && c.CommonStockId == h.CommonStockId
+                                && c.InstitutionalHolderId == h.InstitutionalHolderId
+                            )
+                    )
                     .Select(h => h.InstitutionalHolderId)
                     .Distinct()
                     .Count(),
