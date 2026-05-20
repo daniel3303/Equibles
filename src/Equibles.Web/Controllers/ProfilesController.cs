@@ -44,7 +44,7 @@ public class ProfilesController : BaseController
     }
 
     [HttpGet("~/Institutions/{cik}")]
-    public async Task<IActionResult> Institution(string cik)
+    public async Task<IActionResult> Institution(string cik, DateOnly? activityDate = null)
     {
         var holder = await _institutionalHolderRepository.GetByCik(cik);
         if (holder == null)
@@ -73,6 +73,11 @@ public class ProfilesController : BaseController
             .OrderByDescending(d => d)
             .ToListAsync();
         var (summary, industryAllocation) = await BuildSummaryAndAllocation(holder, distinctDates);
+        var (quarterlyActivity, activityResolved, activityPrior) = await BuildQuarterlyActivity(
+            holder,
+            distinctDates,
+            activityDate
+        );
 
         ViewData["Title"] = holder.Name;
         return View(
@@ -84,8 +89,82 @@ public class ProfilesController : BaseController
                 Holdings = holdings,
                 Summary = summary,
                 IndustryAllocation = industryAllocation,
+                AvailableReportDates = distinctDates,
+                ActivityDate = activityResolved,
+                ActivityPriorDate = activityPrior,
+                QuarterlyActivity = quarterlyActivity,
             }
         );
+    }
+
+    private async Task<(
+        Dictionary<StockPositionChangeType, List<StockPositionChange>> Buckets,
+        DateOnly? Selected,
+        DateOnly? Prior
+    )> BuildQuarterlyActivity(
+        InstitutionalHolder holder,
+        IReadOnlyList<DateOnly> distinctReportDates,
+        DateOnly? requestedDate
+    )
+    {
+        if (distinctReportDates.Count < 2)
+            return (
+                new Dictionary<StockPositionChangeType, List<StockPositionChange>>(),
+                distinctReportDates.Count == 1 ? distinctReportDates[0] : (DateOnly?)null,
+                null
+            );
+
+        DateOnly selected;
+        var selectedIndex = -1;
+        if (requestedDate.HasValue)
+        {
+            for (var i = 0; i < distinctReportDates.Count; i++)
+            {
+                if (distinctReportDates[i] != requestedDate.Value)
+                    continue;
+                selectedIndex = i;
+                break;
+            }
+        }
+        if (selectedIndex < 0)
+        {
+            selected = distinctReportDates[0];
+            selectedIndex = 0;
+        }
+        else
+        {
+            selected = distinctReportDates[selectedIndex];
+        }
+        if (selectedIndex >= distinctReportDates.Count - 1)
+            return (
+                new Dictionary<StockPositionChangeType, List<StockPositionChange>>(),
+                selected,
+                null
+            );
+
+        var prior = distinctReportDates[selectedIndex + 1];
+        var currentHoldings = await _institutionalHoldingRepository
+            .GetByHolder(holder, selected)
+            .Include(h => h.CommonStock)
+            .ToListAsync();
+        var previousHoldings = await _institutionalHoldingRepository
+            .GetByHolder(holder, prior)
+            .Include(h => h.CommonStock)
+            .ToListAsync();
+
+        var grouped = HolderQuarterlyActivityCalculator.Group(currentHoldings, previousHoldings);
+
+        // Cap each bucket and pre-sort by |Δ value| desc so the view renders the
+        // largest movers first per section.
+        var capped = grouped.ToDictionary(
+            kv => kv.Key,
+            kv =>
+                kv.Value.OrderByDescending(r => Math.Abs(r.DeltaValue))
+                    .Take(InstitutionProfileViewModel.ActivityRowCap)
+                    .ToList()
+        );
+
+        return (capped, selected, prior);
     }
 
     private async Task<(
