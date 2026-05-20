@@ -13,7 +13,3 @@ Reference for developers working inside the Equibles codebase. Pairs with [`../g
 - [Migrations and database](migrations.md) — `Equibles.Migrations` design-time factory, ParadeDB extensions (`pgvector`, `pg_search`), `MigrateAsync` on host startup.
 - [Development](development.md) — Docker-first workflow, `dotnet csharpier` formatting, pre-commit hooks, single-test commands, CI gates (`ci.yml` / `functional.yml` / `smoke.yml`).
 - [Operations](operations.md) — environment-variable catalog, `--profile embedding` opt-in, `CHECK_FOR_UPDATES`, auth modes, upgrading.
-
-## Status
-
-All nine pages above are **planned at this path**. Their content lives at `docs/<page>.md` today (the pre-split layout) and will be migrated to `docs/technical/<page>.md` one file per PR via `/update-docs`'s populate lane. The top-level `docs/README.md` index will be refit to point at this section's README once the migration completes.
