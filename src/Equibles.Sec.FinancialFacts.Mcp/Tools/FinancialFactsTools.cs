@@ -140,32 +140,7 @@ public class FinancialFactsTools
                 if (perPeriod.Count == 0)
                     return $"No '{concept}' data found for {stock.Ticker} with the given filters.";
 
-                var basis = asOriginallyReported ? "as originally reported" : "latest restated";
-                var result = new StringBuilder();
-                result.AppendLine(
-                    $"{concept} for {stock.Ticker} ({FactMarkdown.Cell(stock.Name)}) — {basis}:"
-                );
-                result.AppendLine();
-                result.AppendLine(
-                    "| Period End | FY | Period | Value | Unit | Form | Filed | Accession |"
-                );
-                result.AppendLine(
-                    "|-----------|---:|--------|------:|------|------|-------|-----------|"
-                );
-                foreach (var f in perPeriod)
-                {
-                    result.AppendLine(
-                        $"| {f.PeriodEnd:yyyy-MM-dd} | {f.FiscalYear} | "
-                            + $"{f.FiscalPeriod.NameForHumans()} | "
-                            + $"{FactMarkdown.Value(f.Value, f.Unit)} | "
-                            + $"{FactMarkdown.Cell(f.Unit)} | "
-                            + $"{FactMarkdown.Cell(f.Form?.DisplayName)} | "
-                            + $"{f.FiledDate:yyyy-MM-dd} | "
-                            + $"{FactMarkdown.Cell(f.AccessionNumber)} |"
-                    );
-                }
-
-                return result.ToString();
+                return RenderFactHistoryTable(concept, stock, asOriginallyReported, perPeriod);
             },
             "GetFinancialFact",
             $"ticker: {FactMarkdown.Clean(ticker)}, concept: {FactMarkdown.Clean(concept)}, "
@@ -278,6 +253,37 @@ public class FinancialFactsTools
             $"tickers: {FactMarkdown.Clean(tickers)}, concept: {FactMarkdown.Clean(concept)}, "
                 + $"year: {fiscalYear}, period: {FactMarkdown.Clean(fiscalPeriod)}"
         );
+    }
+
+    private static string RenderFactHistoryTable(
+        string concept,
+        CommonStock stock,
+        bool asOriginallyReported,
+        List<FinancialFact> perPeriod
+    )
+    {
+        var basis = asOriginallyReported ? "as originally reported" : "latest restated";
+        var result = new StringBuilder();
+        result.AppendLine(
+            $"{concept} for {stock.Ticker} ({FactMarkdown.Cell(stock.Name)}) — {basis}:"
+        );
+        result.AppendLine();
+        result.AppendLine("| Period End | FY | Period | Value | Unit | Form | Filed | Accession |");
+        result.AppendLine("|-----------|---:|--------|------:|------|------|-------|-----------|");
+        foreach (var f in perPeriod)
+        {
+            result.AppendLine(
+                $"| {f.PeriodEnd:yyyy-MM-dd} | {f.FiscalYear} | "
+                    + $"{f.FiscalPeriod.NameForHumans()} | "
+                    + $"{FactMarkdown.Value(f.Value, f.Unit)} | "
+                    + $"{FactMarkdown.Cell(f.Unit)} | "
+                    + $"{FactMarkdown.Cell(f.Form?.DisplayName)} | "
+                    + $"{f.FiledDate:yyyy-MM-dd} | "
+                    + $"{FactMarkdown.Cell(f.AccessionNumber)} |"
+            );
+        }
+
+        return result.ToString();
     }
 
     private static string RenderComparisonTable(
