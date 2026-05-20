@@ -294,8 +294,9 @@ public class YahooPriceImportService
         if (existing != null)
         {
             // Backfill the sector link if it was missing — newly-imported industries that
-            // pre-dated the Sector taxonomy would otherwise stay unlinked.
-            if (sectorId.HasValue && existing.SectorId != sectorId)
+            // pre-dated the Sector taxonomy would otherwise stay unlinked. An already-linked
+            // industry keeps its existing sector even when Yahoo classifies it differently.
+            if (sectorId.HasValue && !existing.SectorId.HasValue)
             {
                 existing.SectorId = sectorId;
                 await industryRepo.SaveChanges();
