@@ -336,18 +336,11 @@ public class InstitutionalHoldingsTools
                     .OrderByDescending(d => d)
                     .ToListAsync();
 
-                DateOnly targetDate;
-                if (
+                var targetDate =
                     !string.IsNullOrEmpty(reportDate)
                     && DateOnly.TryParse(reportDate, out var parsed)
-                )
-                {
-                    targetDate = parsed;
-                }
-                else
-                {
-                    targetDate = reportDates.FirstOrDefault();
-                }
+                        ? parsed
+                        : reportDates.FirstOrDefault();
                 if (targetDate == default)
                     return $"No institutional holdings data available for {ticker}.";
 
@@ -484,6 +477,162 @@ public class InstitutionalHoldingsTools
             _logger,
             "GetTopBuyersSellers",
             $"ticker: {ticker}",
+            ReportError
+        );
+    }
+
+    [McpServerTool(Name = "GetMarketWide13FActivity")]
+    [Description(
+        "Get the market-wide 13F leaderboards for a given quarter — which stocks were most bought, most sold, most initiated, or most exited across all 13F filers vs the prior quarter. The `bucket` argument selects one of: top-buys (Δ shares > 0 ranked by Δ value desc), top-sells (Δ shares < 0 ranked by Δ value asc), new-positions (stocks ranked by count of filers initiating a position), sold-out-positions (stocks ranked by count of filers exiting). Use this to answer 'what's the consensus 13F move this quarter?'"
+    )]
+    public Task<string> GetMarketWide13FActivity(
+        [Description("Bucket: top-buys, top-sells, new-positions, or sold-out-positions")]
+            string bucket,
+        [Description("Report date in YYYY-MM-DD format (defaults to latest available)")]
+            string reportDate = null,
+        [Description("Maximum number of stocks to return (default: 20)")] int maxResults = 20
+    )
+    {
+        return McpToolExecutor.Execute(
+            async () =>
+            {
+                var normalizedBucket = (bucket ?? string.Empty).Trim().ToLowerInvariant();
+                if (
+                    normalizedBucket != "top-buys"
+                    && normalizedBucket != "top-sells"
+                    && normalizedBucket != "new-positions"
+                    && normalizedBucket != "sold-out-positions"
+                )
+                    return "Unknown bucket. Use one of: top-buys, top-sells, new-positions, sold-out-positions.";
+
+                var reportDates = await _holdingRepository
+                    .GetAvailableReportDates()
+                    .Distinct()
+                    .OrderByDescending(d => d)
+                    .ToListAsync();
+                if (reportDates.Count == 0)
+                    return "No 13F holdings data available.";
+
+                DateOnly targetDate;
+                if (
+                    !string.IsNullOrEmpty(reportDate)
+                    && DateOnly.TryParse(reportDate, out var parsed)
+                )
+                    targetDate = parsed;
+                else
+                    targetDate = reportDates[0];
+                var targetIndex = reportDates.IndexOf(targetDate);
+                if (targetIndex < 0)
+                    return $"Report date {targetDate:yyyy-MM-dd} not found. Available dates: {string.Join(", ", reportDates.Take(5).Select(d => d.ToString("yyyy-MM-dd")))}{(reportDates.Count > 5 ? "…" : "")}.";
+
+                var previousDate =
+                    targetIndex < reportDates.Count - 1
+                        ? reportDates[targetIndex + 1]
+                        : (DateOnly?)null;
+                if (!previousDate.HasValue)
+                    return $"No prior quarter to compare against for {targetDate:yyyy-MM-dd}.";
+
+                // Headline + comparison subtitle.
+                var result = new StringBuilder();
+                result.AppendLine(
+                    $"Market-wide 13F **{normalizedBucket}** for {targetDate:yyyy-MM-dd}"
+                );
+                result.AppendLine($"vs prior quarter {previousDate.Value:yyyy-MM-dd}");
+                result.AppendLine();
+
+                if (normalizedBucket is "top-buys" or "top-sells")
+                {
+                    var activity = _holdingRepository.GetQuarterlyActivity(
+                        targetDate,
+                        previousDate.Value
+                    );
+                    var movers = activity.Where(a => a.CurrentShares != a.PreviousShares);
+                    var rows =
+                        normalizedBucket == "top-buys"
+                            ? await movers
+                                .Where(a => a.CurrentShares > a.PreviousShares)
+                                .OrderByDescending(a => a.CurrentValue - a.PreviousValue)
+                                .Take(maxResults)
+                                .ToListAsync()
+                            : await movers
+                                .Where(a => a.CurrentShares < a.PreviousShares)
+                                .OrderBy(a => a.CurrentValue - a.PreviousValue)
+                                .Take(maxResults)
+                                .ToListAsync();
+                    if (rows.Count == 0)
+                        return result.ToString()
+                            + "_No stocks moved in this direction this quarter._";
+
+                    var stockIds = rows.Select(r => r.CommonStockId).ToList();
+                    var stocks = await _commonStockRepository
+                        .GetAll()
+                        .Where(s => stockIds.Contains(s.Id))
+                        .ToDictionaryAsync(s => s.Id);
+
+                    result.AppendLine("| # | Ticker | Company | Δ Shares | Δ Value ($M) |");
+                    result.AppendLine("|---|--------|---------|---------|-------------|");
+                    for (var i = 0; i < rows.Count; i++)
+                    {
+                        var r = rows[i];
+                        stocks.TryGetValue(r.CommonStockId, out var s);
+                        var sign = r.DeltaShares > 0 ? "+" : "";
+                        result.AppendLine(
+                            $"| {i + 1} | {s?.Ticker ?? "—"} | {s?.Name ?? "Unknown"} | {sign}{r.DeltaShares:N0} | {r.DeltaValue / 1_000_000m:+#,##0.0;-#,##0.0;0.0} |"
+                        );
+                    }
+                    return result.ToString();
+                }
+                else
+                {
+                    var churn = _holdingRepository.GetQuarterlyNewSoldOutPositions(
+                        targetDate,
+                        previousDate.Value
+                    );
+                    var rows =
+                        normalizedBucket == "new-positions"
+                            ? await churn
+                                .Where(c => c.NewFilerCount > 0)
+                                .OrderByDescending(c => c.NewFilerCount)
+                                .Take(maxResults)
+                                .ToListAsync()
+                            : await churn
+                                .Where(c => c.SoldOutFilerCount > 0)
+                                .OrderByDescending(c => c.SoldOutFilerCount)
+                                .Take(maxResults)
+                                .ToListAsync();
+                    if (rows.Count == 0)
+                        return result.ToString() + "_No stocks in this bucket this quarter._";
+
+                    var stockIds = rows.Select(r => r.CommonStockId).ToList();
+                    var stocks = await _commonStockRepository
+                        .GetAll()
+                        .Where(s => stockIds.Contains(s.Id))
+                        .ToDictionaryAsync(s => s.Id);
+
+                    var label =
+                        normalizedBucket == "new-positions"
+                            ? "# Filers Initiated"
+                            : "# Filers Exited";
+                    result.AppendLine($"| # | Ticker | Company | {label} |");
+                    result.AppendLine("|---|--------|---------|-------------|");
+                    for (var i = 0; i < rows.Count; i++)
+                    {
+                        var r = rows[i];
+                        stocks.TryGetValue(r.CommonStockId, out var s);
+                        var count =
+                            normalizedBucket == "new-positions"
+                                ? r.NewFilerCount
+                                : r.SoldOutFilerCount;
+                        result.AppendLine(
+                            $"| {i + 1} | {s?.Ticker ?? "—"} | {s?.Name ?? "Unknown"} | {count:N0} |"
+                        );
+                    }
+                    return result.ToString();
+                }
+            },
+            _logger,
+            "GetMarketWide13FActivity",
+            $"bucket: {bucket}",
             ReportError
         );
     }

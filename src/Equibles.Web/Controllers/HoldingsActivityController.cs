@@ -70,9 +70,29 @@ public class HoldingsActivityController : BaseController
             .Take(HoldingsActivityViewModel.RowCap)
             .ToListAsync();
 
+        // New / Sold-out per-stock churn — runs as a separate aggregation because the
+        // set-difference of (stock, holder) pairs across quarters can't live inside the
+        // same GROUP BY as the share/value totals.
+        var churn = _holdingRepository.GetQuarterlyNewSoldOutPositions(
+            selectedDate,
+            previousDate.Value
+        );
+        var newPositionsAgg = await churn
+            .Where(c => c.NewFilerCount > 0)
+            .OrderByDescending(c => c.NewFilerCount)
+            .Take(HoldingsActivityViewModel.RowCap)
+            .ToListAsync();
+        var soldOutPositionsAgg = await churn
+            .Where(c => c.SoldOutFilerCount > 0)
+            .OrderByDescending(c => c.SoldOutFilerCount)
+            .Take(HoldingsActivityViewModel.RowCap)
+            .ToListAsync();
+
         var stockIds = topBuysAgg
             .Concat(topSellsAgg)
             .Select(a => a.CommonStockId)
+            .Concat(newPositionsAgg.Select(c => c.CommonStockId))
+            .Concat(soldOutPositionsAgg.Select(c => c.CommonStockId))
             .Distinct()
             .ToList();
         var stocks = await _commonStockRepository
@@ -88,8 +108,28 @@ public class HoldingsActivityController : BaseController
 
         viewModel.TopBuys = topBuysAgg.Select(a => MapRow(a, stocks)).ToList();
         viewModel.TopSells = topSellsAgg.Select(a => MapRow(a, stocks)).ToList();
+        viewModel.NewPositions = newPositionsAgg.Select(c => MapChurnRow(c, stocks)).ToList();
+        viewModel.SoldOutPositions = soldOutPositionsAgg
+            .Select(c => MapChurnRow(c, stocks))
+            .ToList();
 
         return View(viewModel);
+    }
+
+    private static HoldingsActivityRow MapChurnRow(
+        Equibles.Holdings.Repositories.Models.MarketWideStockChurn churn,
+        IDictionary<Guid, StockLabel> stocks
+    )
+    {
+        stocks.TryGetValue(churn.CommonStockId, out var stock);
+        return new HoldingsActivityRow
+        {
+            CommonStockId = churn.CommonStockId,
+            Ticker = stock?.Ticker ?? "—",
+            Name = stock?.Name ?? "Unknown",
+            NewFilerCount = churn.NewFilerCount,
+            SoldOutFilerCount = churn.SoldOutFilerCount,
+        };
     }
 
     private static HoldingsActivityRow MapRow(
