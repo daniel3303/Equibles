@@ -96,19 +96,18 @@ public class EconomicDataController : BaseController
             Observations = observations,
         };
 
-        // Compute statistics using MathNet.Numerics
         var values = observations
             .Where(o => o.Value.HasValue)
             .Select(o => (double)o.Value.Value)
             .ToArray();
         if (values.Length > 0)
         {
-            var stats = new DescriptiveStatistics(values);
-            viewModel.Mean = stats.Mean.SafeRound(4);
-            viewModel.Min = stats.Minimum.SafeRound(4);
-            viewModel.Max = stats.Maximum.SafeRound(4);
-            viewModel.Median = values.Median().SafeRound(4);
-            viewModel.StdDev = stats.StandardDeviation.SafeRound(4);
+            var s = ComputeStats(values, decimals: 4);
+            viewModel.Mean = s.Mean;
+            viewModel.Min = s.Min;
+            viewModel.Max = s.Max;
+            viewModel.Median = s.Median;
+            viewModel.StdDev = s.StdDev;
             viewModel.LatestValue = observations[0].Value; // observations are desc by date
             if (observations.Count > 1)
                 viewModel.PreviousValue = observations[1].Value;
@@ -136,6 +135,26 @@ public class EconomicDataController : BaseController
         return sma.Select((v, i) => i < period - 1 ? (decimal?)null : (decimal?)Math.Round(v, 4))
             .ToList();
     }
+
+    private static StatsSummary ComputeStats(double[] values, int decimals)
+    {
+        var stats = new DescriptiveStatistics(values);
+        return new StatsSummary(
+            Mean: stats.Mean.SafeRound(decimals),
+            Median: values.Median().SafeRound(decimals),
+            Min: stats.Minimum.SafeRound(decimals),
+            Max: stats.Maximum.SafeRound(decimals),
+            StdDev: stats.StandardDeviation.SafeRound(decimals)
+        );
+    }
+
+    private readonly record struct StatsSummary(
+        decimal? Mean,
+        decimal? Median,
+        decimal? Min,
+        decimal? Max,
+        decimal? StdDev
+    );
 
     private static string ExpandFrequency(string frequency) =>
         frequency?.Trim().ToUpperInvariant() switch
