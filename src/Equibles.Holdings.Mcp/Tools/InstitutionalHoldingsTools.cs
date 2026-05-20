@@ -56,10 +56,7 @@ public class InstitutionalHoldingsTools
                     return $"Stock '{ticker}' not found.";
 
                 DateOnly targetDate;
-                if (
-                    !string.IsNullOrEmpty(reportDate)
-                    && DateOnly.TryParse(reportDate, out var parsed)
-                )
+                if (TryParseReportDate(reportDate, out var parsed))
                 {
                     targetDate = parsed;
                 }
@@ -214,10 +211,7 @@ public class InstitutionalHoldingsTools
                 var holder = holders.First();
 
                 DateOnly targetDate;
-                if (
-                    !string.IsNullOrEmpty(reportDate)
-                    && DateOnly.TryParse(reportDate, out var parsed)
-                )
+                if (TryParseReportDate(reportDate, out var parsed))
                 {
                     targetDate = parsed;
                 }
@@ -338,11 +332,9 @@ public class InstitutionalHoldingsTools
                     .OrderByDescending(d => d)
                     .ToListAsync();
 
-                var targetDate =
-                    !string.IsNullOrEmpty(reportDate)
-                    && DateOnly.TryParse(reportDate, out var parsed)
-                        ? parsed
-                        : reportDates.FirstOrDefault();
+                var targetDate = TryParseReportDate(reportDate, out var parsed)
+                    ? parsed
+                    : reportDates.FirstOrDefault();
                 if (targetDate == default)
                     return $"No institutional holdings data available for {ticker}.";
 
@@ -508,10 +500,7 @@ public class InstitutionalHoldingsTools
                     return "No 13F holdings data available.";
 
                 DateOnly targetDate;
-                if (
-                    !string.IsNullOrEmpty(reportDate)
-                    && DateOnly.TryParse(reportDate, out var parsed)
-                )
+                if (TryParseReportDate(reportDate, out var parsed))
                     targetDate = parsed;
                 else
                     targetDate = reportDates[0];
@@ -662,11 +651,7 @@ public class InstitutionalHoldingsTools
                     return $"No 13F holdings reported by {holder.Name}.";
 
                 DateOnly targetDate;
-                if (
-                    !string.IsNullOrEmpty(reportDate)
-                    && DateOnly.TryParse(reportDate, out var parsed)
-                    && reportDates.Contains(parsed)
-                )
+                if (TryParseReportDate(reportDate, out var parsed) && reportDates.Contains(parsed))
                     targetDate = parsed;
                 else
                     targetDate = reportDates[0];
@@ -754,11 +739,7 @@ public class InstitutionalHoldingsTools
                     return $"No 13F holdings reported by {holder.Name}.";
 
                 DateOnly targetDate;
-                if (
-                    !string.IsNullOrEmpty(reportDate)
-                    && DateOnly.TryParse(reportDate, out var parsed)
-                    && reportDates.Contains(parsed)
-                )
+                if (TryParseReportDate(reportDate, out var parsed) && reportDates.Contains(parsed))
                     targetDate = parsed;
                 else
                     targetDate = reportDates[0];
@@ -846,11 +827,7 @@ public class InstitutionalHoldingsTools
                     return $"{holder.Name} has fewer than two reported quarters — no diff available.";
 
                 DateOnly targetDate;
-                if (
-                    !string.IsNullOrEmpty(reportDate)
-                    && DateOnly.TryParse(reportDate, out var parsed)
-                    && reportDates.Contains(parsed)
-                )
+                if (TryParseReportDate(reportDate, out var parsed) && reportDates.Contains(parsed))
                     targetDate = parsed;
                 else
                     targetDate = reportDates[0];
@@ -980,11 +957,7 @@ public class InstitutionalHoldingsTools
                     return $"{holder1.Name} and {holder2.Name} share no common report dates.";
 
                 DateOnly selected;
-                if (
-                    !string.IsNullOrEmpty(reportDate)
-                    && DateOnly.TryParse(reportDate, out var parsed)
-                    && common.Contains(parsed)
-                )
+                if (TryParseReportDate(reportDate, out var parsed) && common.Contains(parsed))
                     selected = parsed;
                 else
                     selected = common[0];
@@ -1191,6 +1164,12 @@ public class InstitutionalHoldingsTools
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
+    }
+
+    private static bool TryParseReportDate(string input, out DateOnly result)
+    {
+        result = default;
+        return !string.IsNullOrEmpty(input) && DateOnly.TryParse(input, out result);
     }
 
     private class HolderAggregate
