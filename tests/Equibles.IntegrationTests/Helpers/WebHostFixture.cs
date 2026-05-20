@@ -67,6 +67,10 @@ public class WebHostFixture : IAsyncLifetime
         // container as the app DB to mirror docker-compose, where web and worker
         // share Postgres.
         builder.Configuration["ConnectionStrings:TransportConnection"] = _db.GetConnectionString();
+        // No worker in integration tests, so the web host creates the transport
+        // schema itself. Without this the bus fails its health check on first
+        // start and any test that exercises /healthz returns 503.
+        builder.Configuration["MassTransit:RunMigration"] = "true";
         builder.Configuration["DataProtection:KeysDirectory"] = _keysDirectory;
 
         Program.ConfigureServices(builder);
