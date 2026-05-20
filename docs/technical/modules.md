@@ -32,7 +32,8 @@ These do not own a financial-domain dataset; they support every other module.
 
 ## Module nuances
 
-- **Insider Trading has no `.HostedService` project.** Form 3 / Form 4 filings are SEC documents and arrive through the SEC pipeline. `InsiderTradingFilingProcessor` ([`src/Equibles.Sec.HostedService/Services/InsiderTradingFilingProcessor.cs`](../../src/Equibles.Sec.HostedService/Services/InsiderTradingFilingProcessor.cs)) runs inside `DocumentProcessorWorker`, parses the form, and writes through the Insider Trading repositories.
+- **Insider Trading has no `.HostedService` project.** Form 3 / Form 4 filings are SEC documents and arrive through the SEC pipeline.
+- [`InsiderTradingFilingProcessor`](../../src/Equibles.Sec.HostedService/Services/InsiderTradingFilingProcessor.cs) runs inside `DocumentProcessorWorker`, parses the form, and writes through the Insider Trading repositories.
 - **Holdings has two scrapers.** `HoldingsScraperWorker` does the periodic bulk pull; `Holdings13FRealtimeWorker` watches EDGAR for new 13F-HR submissions and ingests them as they post. Both share the same `ProcessedDataSet` / `ProcessedFiling` deduplication bookkeeping.
 - **SEC ships three scrapers.** `SecScraperWorker` pulls filings; `DocumentProcessorWorker` normalises them and routes them to per-document-type processors; `FtdScraperWorker` pulls fails-to-deliver data.
 - `Equibles.Sec.FinancialFacts.HostedService` is a separate worker that pulls the XBRL fact stream from the same EDGAR root.
