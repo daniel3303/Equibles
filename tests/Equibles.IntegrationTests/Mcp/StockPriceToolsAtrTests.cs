@@ -135,6 +135,50 @@ public class StockPriceToolsAtrTests : ParadeDbMcpTestBase
         dataLines.Should().Be(5);
     }
 
+    [Fact]
+    public async Task GetAverageTrueRange_WarmUpBars_RenderAtrCellAsEmDash()
+    {
+        // ATR returns null for bars inside the warm-up window (count < period). The tool
+        // must render those cells as "—" (em dash), not as "0", empty, or "0.0000". None
+        // of the other tests pin this — they only inspect numeric cells or row counts.
+        // Two bars with period=3: both indices land in warm-up, so every ATR cell is null.
+        var stock = MakeStock();
+        DbContext.Set<CommonStock>().Add(stock);
+        await DbContext.SaveChangesAsync();
+        var start = new DateOnly(2025, 1, 6);
+        for (var i = 0; i < 2; i++)
+        {
+            DbContext
+                .Set<DailyStockPrice>()
+                .Add(
+                    new DailyStockPrice
+                    {
+                        CommonStockId = stock.Id,
+                        Date = start.AddDays(i),
+                        Open = 100m,
+                        High = 101m,
+                        Low = 99m,
+                        Close = 100m,
+                        AdjustedClose = 100m,
+                        Volume = 1,
+                    }
+                );
+        }
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetAverageTrueRange(
+                "AAPL",
+                startDate: start.ToString("yyyy-MM-dd"),
+                endDate: start.AddDays(2).ToString("yyyy-MM-dd"),
+                period: 3
+            );
+
+        var dataRows = result.Split('\n').Where(line => line.StartsWith("| 2025-")).ToList();
+        dataRows.Should().HaveCount(2);
+        dataRows.Should().OnlyContain(row => row.EndsWith("| — |"));
+    }
+
     private static CommonStock MakeStock() =>
         new()
         {
