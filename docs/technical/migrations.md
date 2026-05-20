@@ -52,7 +52,8 @@ Hosts call `await dbContext.Database.MigrateAsync()` on startup.
 The initial migration declares two extensions, both required:
 
 - `vector` — pgvector. Stores SEC chunk embeddings on `Chunk.Embedding` (`vector` column). Disabled embedding (`EmbeddingConfig.Enabled=false`) just leaves the column null; the extension is still required because the column type references it.
-- `pg_search` — ParadeDB BM25. Powers full-text search over SEC chunk content via a BM25 index. Declared via the EF annotation `Npgsql:PostgresExtension:pg_search` plus the index method override (`NpgsqlIndexBuilderExtensions.HasMethod(..., "bm25")`).
+- `pg_search` — ParadeDB BM25; powers full-text search over SEC chunk content via a BM25 index.
+- Declared via the EF annotation `Npgsql:PostgresExtension:pg_search` plus the index method override (`NpgsqlIndexBuilderExtensions.HasMethod(..., "bm25")`).
 
 Both extensions ship out-of-the-box in the `paradedb/paradedb:latest` Docker image used by `db` in `docker-compose.yml`. On a non-ParadeDB Postgres install, `MigrateAsync` will fail at `CREATE EXTENSION pg_search` with a clear error.
 
