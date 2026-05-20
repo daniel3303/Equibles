@@ -48,7 +48,7 @@ public class RagSearchTools
         [Description("Optional end date filter in YYYY-MM-DD format")] DateTime? endDate = null
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var parsedType = ParseDocumentType(documentType);
@@ -61,10 +61,8 @@ public class RagSearchTools
                 );
                 return await _ragManager.BuildContext(chunks);
             },
-            _logger,
             "SearchDocuments",
-            $"query: {query}",
-            ReportError
+            $"query: {query}"
         );
     }
 
@@ -81,7 +79,7 @@ public class RagSearchTools
         [Description("Optional end date filter in YYYY-MM-DD format")] DateTime? endDate = null
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var parsedType = ParseDocumentType(documentType);
@@ -95,10 +93,8 @@ public class RagSearchTools
                 );
                 return await _ragManager.BuildContext(chunks);
             },
-            _logger,
             "SearchCompanyDocuments",
-            $"ticker: {ticker}, query: {query}",
-            ReportError
+            $"ticker: {ticker}, query: {query}"
         );
     }
 
@@ -112,7 +108,7 @@ public class RagSearchTools
         [Description("Maximum number of results to return (default: 5)")] int maxResults = 5
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var chunks = await _ragManager.SearchRelevantChunksByDocument(
@@ -122,10 +118,8 @@ public class RagSearchTools
                 );
                 return await _ragManager.BuildContext(chunks);
             },
-            _logger,
             "SearchDocument",
-            $"documentId: {documentId}, query: {query}",
-            ReportError
+            $"documentId: {documentId}, query: {query}"
         );
     }
 
@@ -142,7 +136,7 @@ public class RagSearchTools
         [Description(DocumentTypeDescription)] string documentType = null
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var parsedType = ParseDocumentType(documentType);
@@ -186,12 +180,13 @@ public class RagSearchTools
 
                 return result.ToString();
             },
-            _logger,
             "ListCompanyDocuments",
-            $"ticker: {ticker}",
-            ReportError
+            $"ticker: {ticker}"
         );
     }
+
+    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
+        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
 
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
