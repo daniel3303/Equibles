@@ -21,16 +21,11 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
 
         foreach (var table in tables)
         {
-            FixColspanAndRowspan(table, doc);
-            CleanupTableRows(table);
+            FixColspan(table, doc);
+            FixRowspan(table, doc);
+            RemoveEmptyRows(table);
             RemoveEmptyColumns(table);
         }
-    }
-
-    private void FixColspanAndRowspan(IElement table, IHtmlDocument doc)
-    {
-        FixColspan(table, doc);
-        FixRowspan(table, doc);
     }
 
     private void FixColspan(IElement table, IHtmlDocument doc)
@@ -122,11 +117,6 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
         {
             row.AppendChild(newCell);
         }
-    }
-
-    private void CleanupTableRows(IElement table)
-    {
-        RemoveEmptyRows(table);
     }
 
     private void RemoveEmptyRows(IElement table)
