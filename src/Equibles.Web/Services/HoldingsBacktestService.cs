@@ -3,6 +3,7 @@ using Equibles.Core.AutoWiring;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
 using Equibles.Web.ViewModels.Profiles;
+using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
 
@@ -156,26 +157,20 @@ public class HoldingsBacktestService
             .Distinct()
             .ToList();
 
-        // OrderBy() needs to precede the projection — EF can't translate an OrderBy keyed
-        // off the projected record's property because the constructor isn't translatable.
         var priceRows =
             stockIds.Count == 0
                 ? []
-                : await _priceRepository
-                    .GetByStocks(stockIds, priceWindowFrom, resolvedTo)
-                    .OrderBy(p => p.Date)
-                    .Select(p => new BacktestPriceRow(p.CommonStockId, p.Date, p.AdjustedClose))
-                    .ToListAsync();
+                : await LoadPriceRows(
+                    _priceRepository.GetByStocks(stockIds, priceWindowFrom, resolvedTo)
+                );
 
         var pricesByStock = priceRows
             .GroupBy(p => p.StockId)
             .ToDictionary(g => g.Key, g => g.ToArray());
 
-        var benchmarkPrices = await _priceRepository
-            .GetByStock(benchmarkStock, priceWindowFrom, resolvedTo)
-            .OrderBy(p => p.Date)
-            .Select(p => new BacktestPriceRow(p.CommonStockId, p.Date, p.AdjustedClose))
-            .ToListAsync();
+        var benchmarkPrices = await LoadPriceRows(
+            _priceRepository.GetByStock(benchmarkStock, priceWindowFrom, resolvedTo)
+        );
 
         if (benchmarkPrices.Count == 0)
         {
@@ -208,6 +203,14 @@ public class HoldingsBacktestService
         }
         return options;
     }
+
+    // OrderBy() must precede the projection — EF can't translate an OrderBy keyed off the
+    // projected record's property because the constructor isn't translatable.
+    private static Task<List<BacktestPriceRow>> LoadPriceRows(IQueryable<DailyStockPrice> query) =>
+        query
+            .OrderBy(p => p.Date)
+            .Select(p => new BacktestPriceRow(p.CommonStockId, p.Date, p.AdjustedClose))
+            .ToListAsync();
 
     private static decimal? ForwardFill(
         Dictionary<Guid, BacktestPriceRow[]> pricesByStock,
