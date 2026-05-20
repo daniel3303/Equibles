@@ -114,25 +114,7 @@ public class YahooPriceImportService
             cancellationToken
         );
 
-        var outOfRange = prices.Where(HasOverflowPrice).ToList();
-        if (outOfRange.Count > 0)
-        {
-            var sample = outOfRange[0];
-            _logger.LogWarning(
-                "Skipping {Count} prices for {Ticker} exceeding numeric(18,4) limit. "
-                    + "Sample: {Date} O={Open} H={High} L={Low} C={Close} AC={AdjClose}",
-                outOfRange.Count,
-                ticker,
-                sample.Date,
-                sample.Open,
-                sample.High,
-                sample.Low,
-                sample.Close,
-                sample.AdjustedClose
-            );
-        }
-
-        var overflowDates = outOfRange.Select(p => p.Date).ToHashSet();
+        var overflowDates = WarnAndCollectOverflowDates(prices, ticker);
 
         var newPrices = prices
             .Where(p => !existingDates.Contains(p.Date) && !overflowDates.Contains(p.Date))
@@ -329,6 +311,32 @@ public class YahooPriceImportService
             .FirstOrDefaultAsync(cancellationToken);
 
         return SyncDateResolver.Resolve(latestDate, _workerOptions);
+    }
+
+    private HashSet<DateOnly> WarnAndCollectOverflowDates(
+        List<HistoricalPrice> prices,
+        string ticker
+    )
+    {
+        var outOfRange = prices.Where(HasOverflowPrice).ToList();
+        if (outOfRange.Count > 0)
+        {
+            var sample = outOfRange[0];
+            _logger.LogWarning(
+                "Skipping {Count} prices for {Ticker} exceeding numeric(18,4) limit. "
+                    + "Sample: {Date} O={Open} H={High} L={Low} C={Close} AC={AdjClose}",
+                outOfRange.Count,
+                ticker,
+                sample.Date,
+                sample.Open,
+                sample.High,
+                sample.Low,
+                sample.Close,
+                sample.AdjustedClose
+            );
+        }
+
+        return outOfRange.Select(p => p.Date).ToHashSet();
     }
 
     private static bool HasOverflowPrice(HistoricalPrice p) =>
