@@ -5,6 +5,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Fred.Data.Models;
 using Equibles.Fred.Repositories;
 using Equibles.Integrations.Fred.Contracts;
+using Equibles.Integrations.Fred.Models;
 using Equibles.Worker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -119,15 +120,7 @@ public class FredImportService
             return;
         }
 
-        // Parse each record's date once and reuse the (record, date) pairs for
-        // both the range computation and the dedup/insert loop below.
-        var parsedRecords = records
-            .Select(r =>
-                (Record: r, ParsedDate: DateOnly.TryParse(r.Date, out var d) ? d : (DateOnly?)null)
-            )
-            .Where(p => p.ParsedDate.HasValue)
-            .Select(p => (p.Record, Date: p.ParsedDate.Value))
-            .ToList();
+        var parsedRecords = ParseObservationDates(records);
 
         if (parsedRecords.Count == 0)
         {
@@ -278,6 +271,22 @@ public class FredImportService
     private static DateOnly? ParseDate(string value)
     {
         return DateOnly.TryParse(value, out var date) ? date : null;
+    }
+
+    // Parse each FRED record's date once so callers can reuse the (record, date)
+    // pairs for both the range computation and the dedup/insert loop without
+    // re-parsing per use. Records with unparseable Date strings are dropped.
+    private static List<(FredObservationRecord Record, DateOnly Date)> ParseObservationDates(
+        List<FredObservationRecord> records
+    )
+    {
+        var result = new List<(FredObservationRecord, DateOnly)>(records.Count);
+        foreach (var r in records)
+        {
+            if (DateOnly.TryParse(r.Date, out var date))
+                result.Add((r, date));
+        }
+        return result;
     }
 
     // FRED uses the literal "." as its missing-observation sentinel.
