@@ -247,9 +247,7 @@ public class ProfilesController : BaseController
         if (commonDates.Count == 0)
             return View(viewModel);
 
-        var selected = date ?? commonDates[0];
-        if (!commonDates.Contains(selected))
-            selected = commonDates[0];
+        var selected = ResolveSelectedDate(date, commonDates);
         viewModel.SelectedDate = selected;
 
         var perFund = await LoadPerFundHoldings(holders, selected);
@@ -284,9 +282,7 @@ public class ProfilesController : BaseController
         if (commonDates.Count == 0)
             return View(viewModel);
 
-        var selected = date ?? commonDates[0];
-        if (!commonDates.Contains(selected))
-            selected = commonDates[0];
+        var selected = ResolveSelectedDate(date, commonDates);
         viewModel.SelectedDate = selected;
 
         var perFund = await LoadPerFundHoldings(holders, selected);
@@ -431,6 +427,9 @@ public class ProfilesController : BaseController
         }
         return perFund;
     }
+
+    private static DateOnly ResolveSelectedDate(DateOnly? requested, List<DateOnly> available) =>
+        requested.HasValue && available.Contains(requested.Value) ? requested.Value : available[0];
 
     private static List<string> NormalizeCiks(string[] ciks) =>
         (ciks ?? [])
