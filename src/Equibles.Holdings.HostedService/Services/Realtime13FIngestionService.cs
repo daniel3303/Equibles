@@ -83,42 +83,12 @@ public class Realtime13FIngestionService
                 continue;
             }
 
-            try
-            {
-                var filing = await ParseFiling(entry, cancellationToken);
-                if (filing == null)
-                    continue;
+            var filing = await TryParseAndValidateEntry(entry, minReportDate, cancellationToken);
+            if (filing == null)
+                continue;
 
-                if (filing.PeriodOfReport == DateOnly.MinValue)
-                {
-                    _logger.LogWarning(
-                        "Skipping filing {Accession}: unparseable report period",
-                        entry.AccessionNumber
-                    );
-                    continue;
-                }
-
-                if (filing.PeriodOfReport < minReportDate)
-                    continue;
-
-                filings.Add(filing);
-                handedOffAccessions.Add(entry.AccessionNumber);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // One malformed filing must not abort the whole sweep — the
-                // quarterly bulk import will still reconcile it later.
-                _logger.LogError(
-                    ex,
-                    "Failed to ingest 13F filing {Accession} (CIK {Cik}), continuing",
-                    entry.AccessionNumber,
-                    entry.Cik
-                );
-            }
+            filings.Add(filing);
+            handedOffAccessions.Add(entry.AccessionNumber);
         }
 
         if (filings.Count == 0)
@@ -142,6 +112,50 @@ public class Realtime13FIngestionService
         await RecordProcessed(handedOffAccessions, cancellationToken);
 
         return filings.Count;
+    }
+
+    private async Task<Parsed13FFiling> TryParseAndValidateEntry(
+        EdgarDailyIndexEntry entry,
+        DateOnly minReportDate,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var filing = await ParseFiling(entry, cancellationToken);
+            if (filing == null)
+                return null;
+
+            if (filing.PeriodOfReport == DateOnly.MinValue)
+            {
+                _logger.LogWarning(
+                    "Skipping filing {Accession}: unparseable report period",
+                    entry.AccessionNumber
+                );
+                return null;
+            }
+
+            if (filing.PeriodOfReport < minReportDate)
+                return null;
+
+            return filing;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // One malformed filing must not abort the whole sweep — the
+            // quarterly bulk import will still reconcile it later.
+            _logger.LogError(
+                ex,
+                "Failed to ingest 13F filing {Accession} (CIK {Cik}), continuing",
+                entry.AccessionNumber,
+                entry.Cik
+            );
+            return null;
+        }
     }
 
     private async Task<List<EdgarDailyIndexEntry>> DiscoverEntries(
