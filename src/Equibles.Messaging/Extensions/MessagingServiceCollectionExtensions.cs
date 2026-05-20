@@ -9,7 +9,21 @@ namespace Equibles.Messaging.Extensions;
 
 public static class MessagingServiceCollectionExtensions
 {
-    public static void AddMessaging(this IServiceCollection services, IConfiguration configuration)
+    /// <summary>
+    /// Wires MassTransit (Postgres SQL transport + EF outbox) and auto-registers
+    /// every [Consumer] in matching loaded assemblies. When
+    /// <paramref name="consumerAssemblies"/> is null, every non-system assembly
+    /// in the current AppDomain is scanned — the default used by the worker host
+    /// so a new HostedService's consumer is picked up automatically. Pass a
+    /// specific set when the calling host should only own a subset of consumers
+    /// (the web host scans just its own assembly so it doesn't try to
+    /// instantiate worker-only consumers whose dependencies it never wires).
+    /// </summary>
+    public static void AddMessaging(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IEnumerable<Assembly> consumerAssemblies = null
+    )
     {
         // Only the host that owns the DB should create the transport schema /
         // infrastructure (idempotent, but gated to avoid every host racing it).
@@ -41,10 +55,15 @@ public static class MessagingServiceCollectionExtensions
                 ?? throw new InvalidOperationException("Could not determine main assembly name.");
             x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter(mainAssemblyName, true));
 
-            // Auto-register every [Consumer] IConsumer<T> across loaded assemblies.
-            var consumerTypes = AppDomain
-                .CurrentDomain.GetAssemblies()
-                .Where(a => !IsSystemAssembly(a))
+            // Auto-register every [Consumer] IConsumer<T> across the chosen
+            // assemblies. Default scope: every non-system assembly currently
+            // loaded (worker behavior); explicit scope: only the assemblies the
+            // caller actually owns (web behavior).
+            var scannedAssemblies =
+                consumerAssemblies
+                ?? AppDomain.CurrentDomain.GetAssemblies().Where(a => !IsSystemAssembly(a));
+
+            var consumerTypes = scannedAssemblies
                 .SelectMany(a =>
                 {
                     try
