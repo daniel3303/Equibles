@@ -76,13 +76,13 @@ public class InsiderTradingTools
                 foreach (var t in transactions)
                 {
                     var role = GetRole(t.InsiderOwner);
-                    var type = t.AcquiredDisposed == AcquiredDisposed.Acquired ? "Buy" : "Sell";
-                    if (t.TransactionCode == TransactionCode.Award)
-                        type = "Award";
-                    if (t.TransactionCode == TransactionCode.Gift)
-                        type = "Gift";
-                    if (t.TransactionCode == TransactionCode.Exercise)
-                        type = "Exercise";
+                    var type = t.TransactionCode switch
+                    {
+                        TransactionCode.Award => "Award",
+                        TransactionCode.Gift => "Gift",
+                        TransactionCode.Exercise => "Exercise",
+                        _ => t.AcquiredDisposed == AcquiredDisposed.Acquired ? "Buy" : "Sell",
+                    };
 
                     var value = t.Shares * t.PricePerShare;
                     result.AppendLine(
