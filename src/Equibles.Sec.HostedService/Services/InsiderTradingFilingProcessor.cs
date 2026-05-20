@@ -385,14 +385,17 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         return element?.Element("value")?.Value;
     }
 
+    private const string XmlEnvelopeStart = "<XML>";
+    private const string XmlEnvelopeEnd = "</XML>";
+
     internal static string SanitizeXml(string xml)
     {
         // SEC filings wrap the actual XML inside an SGML envelope.
-        var xmlStart = xml.IndexOf("<XML>", StringComparison.OrdinalIgnoreCase);
-        var xmlEnd = xml.IndexOf("</XML>", StringComparison.OrdinalIgnoreCase);
+        var xmlStart = xml.IndexOf(XmlEnvelopeStart, StringComparison.OrdinalIgnoreCase);
+        var xmlEnd = xml.IndexOf(XmlEnvelopeEnd, StringComparison.OrdinalIgnoreCase);
         if (xmlStart >= 0 && xmlEnd > xmlStart)
         {
-            xml = xml[(xmlStart + 5)..xmlEnd].Trim();
+            xml = xml[(xmlStart + XmlEnvelopeStart.Length)..xmlEnd].Trim();
         }
 
         // Fix unescaped ampersands in entity names
