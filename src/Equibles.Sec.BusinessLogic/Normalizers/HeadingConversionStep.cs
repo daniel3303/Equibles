@@ -148,14 +148,7 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
             && char.IsWhiteSpace(upperText[4]);
     }
 
-    private bool IsItalicSpan(IElement span)
-    {
-        var style = span.GetAttribute("style") ?? "";
-        var innerHtml = span.InnerHtml;
-
-        return ContainsCssDeclaration(style, "font-style", "italic")
-            || ContainsCssDeclaration(innerHtml, "font-style", "italic");
-    }
+    private bool IsItalicSpan(IElement span) => HasInlineCss(span, "font-style", "italic");
 
     private void ReplaceNodeWithHeading(IElement node, string headingTag, IHtmlDocument doc)
     {
@@ -164,13 +157,16 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         node.ParentElement?.ReplaceChild(heading, node);
     }
 
-    private bool IsBoldSpan(IElement span)
+    private bool IsBoldSpan(IElement span) => HasInlineCss(span, "font-weight", "bold");
+
+    // SEC EDGAR sometimes leaves the styling on the span itself (via the
+    // `style` attribute) and sometimes on a child element (rendered into
+    // `innerHtml`), so both surfaces have to be inspected.
+    private static bool HasInlineCss(IElement span, string property, string value)
     {
         var style = span.GetAttribute("style") ?? "";
-        var innerHtml = span.InnerHtml;
-
-        return ContainsCssDeclaration(style, "font-weight", "bold")
-            || ContainsCssDeclaration(innerHtml, "font-weight", "bold");
+        return ContainsCssDeclaration(style, property, value)
+            || ContainsCssDeclaration(span.InnerHtml, property, value);
     }
 
     // SEC EDGAR emits inline CSS with and without a space after the colon
