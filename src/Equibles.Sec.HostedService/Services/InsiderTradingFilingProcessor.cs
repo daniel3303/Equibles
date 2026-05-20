@@ -159,7 +159,6 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             return false;
         }
 
-        // Upsert insider owner
         var owner = await ownerRepository.GetByOwnerCik(ownerCik);
         if (owner == null)
         {
