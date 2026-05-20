@@ -35,6 +35,13 @@
             </div>
             @if (Model.PreviousDate.HasValue) {
                 <div class="text-xs text-base-content/50">vs prior quarter @Model.PreviousDate.Value.ToString("MMM dd, yyyy")</div>
+                <!-- CSV download covers all four boards for the selected ReportDate. -->
+                <a class="btn btn-outline btn-sm ml-auto"
+                   asp-controller="HoldingsExport" asp-action="Activity"
+                   asp-route-date="@Model.SelectedDate.ToString("yyyy-MM-dd")"
+                   data-testid="activity-export-csv">
+                    Download CSV
+                </a>
             } else {
                 <div class="text-xs text-base-content/50">No prior quarter available — buy/sell ranking needs two quarters.</div>
             }

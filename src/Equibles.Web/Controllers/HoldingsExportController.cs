@@ -175,6 +175,144 @@ public class HoldingsExportController : BaseController
         return File(Encoding.UTF8.GetBytes(csv), "text/csv", filename);
     }
 
+    [HttpGet("~/Holdings/Export/Activity")]
+    public async Task<IActionResult> Activity(DateOnly? date)
+    {
+        var reportDates = await _holdingRepository
+            .GetAvailableReportDates()
+            .OrderByDescending(d => d)
+            .ToListAsync();
+        if (reportDates.Count < 2)
+            return NotFound();
+
+        var selectedDate =
+            date.HasValue && reportDates.Contains(date.Value) ? date.Value : reportDates[0];
+        var selectedIndex = reportDates.IndexOf(selectedDate);
+        var previousDate =
+            selectedIndex < reportDates.Count - 1 ? reportDates[selectedIndex + 1] : reportDates[1];
+
+        // Per-stock buy/sell movers (CSV has no row cap — analysts expect the full set).
+        var activity = await _holdingRepository
+            .GetQuarterlyActivity(selectedDate, previousDate)
+            .Where(a => a.CurrentShares != a.PreviousShares)
+            .ToListAsync();
+        var topBuys = activity
+            .Where(a => a.CurrentShares > a.PreviousShares)
+            .OrderByDescending(a => a.CurrentValue - a.PreviousValue)
+            .ToList();
+        var topSells = activity
+            .Where(a => a.CurrentShares < a.PreviousShares)
+            .OrderBy(a => a.CurrentValue - a.PreviousValue)
+            .ToList();
+
+        var churn = await _holdingRepository
+            .GetQuarterlyNewSoldOutPositions(selectedDate, previousDate)
+            .Where(c => c.NewFilerCount > 0 || c.SoldOutFilerCount > 0)
+            .ToListAsync();
+        var newPositions = churn
+            .Where(c => c.NewFilerCount > 0)
+            .OrderByDescending(c => c.NewFilerCount)
+            .ToList();
+        var soldOut = churn
+            .Where(c => c.SoldOutFilerCount > 0)
+            .OrderByDescending(c => c.SoldOutFilerCount)
+            .ToList();
+
+        var stockIds = topBuys
+            .Concat(topSells)
+            .Select(a => a.CommonStockId)
+            .Concat(newPositions.Concat(soldOut).Select(c => c.CommonStockId))
+            .Distinct()
+            .ToList();
+        var stocks = await _stockRepository
+            .GetAll()
+            .Where(s => stockIds.Contains(s.Id))
+            .Select(s => new StockLabel(s.Id, s.Ticker, s.Name))
+            .ToDictionaryAsync(s => s.Id);
+
+        string[] headers =
+        [
+            "Board",
+            "ReportDate",
+            "ComparisonDate",
+            "Ticker",
+            "CompanyName",
+            "CurrentFilerCount",
+            "PreviousFilerCount",
+            "DeltaShares",
+            "DeltaValue",
+            "NewFilerCount",
+            "SoldOutFilerCount",
+        ];
+
+        var rows = new List<string[]>();
+        foreach (var row in topBuys)
+            rows.Add(ActivityRow("TopBuys", row, selectedDate, previousDate, stocks));
+        foreach (var row in topSells)
+            rows.Add(ActivityRow("TopSells", row, selectedDate, previousDate, stocks));
+        foreach (var row in newPositions)
+            rows.Add(ChurnRow("NewPositions", row, selectedDate, previousDate, stocks));
+        foreach (var row in soldOut)
+            rows.Add(ChurnRow("SoldOutPositions", row, selectedDate, previousDate, stocks));
+
+        var csv = CsvExportService.BuildCsv(headers, rows);
+        var filename = $"13F-activity-{selectedDate:yyyy-MM-dd}.csv";
+        Response.Headers.CacheControl = "no-store";
+        return File(Encoding.UTF8.GetBytes(csv), "text/csv", filename);
+    }
+
+    private static string[] ActivityRow(
+        string board,
+        Equibles.Holdings.Repositories.Models.MarketWideStockActivity row,
+        DateOnly current,
+        DateOnly previous,
+        IDictionary<Guid, StockLabel> stocks
+    )
+    {
+        stocks.TryGetValue(row.CommonStockId, out var stock);
+        return
+        [
+            board,
+            CsvExportService.Format(current),
+            CsvExportService.Format(previous),
+            stock?.Ticker ?? string.Empty,
+            stock?.Name ?? string.Empty,
+            CsvExportService.Format((long)row.CurrentFilerCount),
+            CsvExportService.Format((long)row.PreviousFilerCount),
+            CsvExportService.Format(row.CurrentShares - row.PreviousShares),
+            CsvExportService.Format(row.CurrentValue - row.PreviousValue),
+            string.Empty,
+            string.Empty,
+        ];
+    }
+
+    private static string[] ChurnRow(
+        string board,
+        Equibles.Holdings.Repositories.Models.MarketWideStockChurn row,
+        DateOnly current,
+        DateOnly previous,
+        IDictionary<Guid, StockLabel> stocks
+    )
+    {
+        stocks.TryGetValue(row.CommonStockId, out var stock);
+        return
+        [
+            board,
+            CsvExportService.Format(current),
+            CsvExportService.Format(previous),
+            stock?.Ticker ?? string.Empty,
+            stock?.Name ?? string.Empty,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            CsvExportService.Format((long)row.NewFilerCount),
+            CsvExportService.Format((long)row.SoldOutFilerCount),
+        ];
+    }
+
+    private record StockLabel(Guid Id, string Ticker, string Name);
+
     // CIKs are numeric strings in production, but the URL could carry a hand-typed value.
     // Strip anything that's unsafe in a filename (slashes / quotes / control chars) so the
     // Content-Disposition header stays well-formed.
