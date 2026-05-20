@@ -27,6 +27,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetInstitutionSummary` — portfolio header for one filer at a `ReportDate`: AUM, position count, top-10 / top-25 concentration, QoQ turnover, latest / prior dates.
 - `GetInstitutionSectorAllocation` — one filer's portfolio grouped by industry / sector for its latest 13F report; stocks lacking a classification collapse into an "Unclassified" row.
 - `GetInstitutionQuarterlyActivity` — one filer's position changes vs. the prior quarter, bucketed into Initiated / Increased / Reduced / Exited; optional `bucket` filter to a single bucket.
+- `GetFundOverlap` — 13F portfolio overlap between two filers at their latest common `ReportDate`: Jaccard similarity, dollar-weighted overlap, and a side-by-side stock table with per-fund shares + percent of portfolio.
 
 ### `mcp.AddInsiderTrading()` — Form 3 / 4
 
