@@ -84,7 +84,8 @@ The snapshot is the source of truth for the entire EF model. New migrations shou
 
 ## Common errors
 
-- **`PendingModelChanges` at host startup** — a module's `IModuleConfiguration` is in the runtime model but not in the migration snapshot. Most common cause: forgetting `AddMessaging()` in a host that calls `AddAllModules()`. See [Architecture → Host composition](architecture.md#host-composition) for the explicit-call requirement.
+- **`PendingModelChanges` at host startup** — a module's `IModuleConfiguration` is in the runtime model but not in the migration snapshot.
+- Most common cause: forgetting `AddMessaging()` in a host that calls `AddAllModules()`; see [Architecture → Host composition](architecture.md#host-composition) for the explicit-call requirement.
 - **"relation does not exist" after adding a new module** — the new module's `Equibles.<Module>.Data` was not added to `Equibles.Migrations.csproj` and `DesignTimeDbContextFactory`. Both edits, then `dotnet ef migrations add`.
 - **`CREATE EXTENSION "pg_search" does not exist`** — running against vanilla Postgres instead of ParadeDB. Use the `paradedb/paradedb` Docker image (see `docker-compose.yml`).
 - **Migration timeout on first run** — bumping `Database.SetCommandTimeout` higher is the lever. The default 1 hour covers the first-run BM25 index build; if you've split a heavy index migration across multiple files, the host applies them sequentially under the same command timeout.
