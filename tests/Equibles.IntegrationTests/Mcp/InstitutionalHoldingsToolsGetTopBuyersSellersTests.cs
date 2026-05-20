@@ -166,6 +166,71 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
     }
 
     [Fact]
+    public async Task GetTopBuyersSellers_StockExistsButHasNoHoldings_ReportsNoData()
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "TSLA",
+            Name = "Tesla Inc.",
+            Cik = "0001318605",
+        };
+        DbContext.Add(stock);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new InstitutionalHoldingsTools(
+            new InstitutionalHoldingRepository(verify),
+            new InstitutionalHolderRepository(verify),
+            new CommonStockRepository(verify),
+            ErrorManager,
+            Substitute.For<ILogger<InstitutionalHoldingsTools>>()
+        );
+
+        var output = await sut.GetTopBuyersSellers("TSLA");
+
+        output.Should().Contain("No institutional holdings data");
+    }
+
+    [Fact]
+    public async Task GetTopBuyersSellers_OnlyUnchangedHolders_ReportsNoMovement()
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "NVDA",
+            Name = "NVIDIA Corp.",
+            Cik = "0001045810",
+        };
+        var holder = new InstitutionalHolder { Cik = "30", Name = "Steady State Capital" };
+        DbContext.Add(stock);
+        DbContext.Add(holder);
+
+        var prior = new DateOnly(2024, 9, 30);
+        var latest = new DateOnly(2024, 12, 31);
+        // Same shares in both quarters → only the Unchanged bucket → no movers.
+        DbContext.Add(MakeHolding(stock, holder, prior, shares: 1_000));
+        DbContext.Add(MakeHolding(stock, holder, latest, shares: 1_000));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new InstitutionalHoldingsTools(
+            new InstitutionalHoldingRepository(verify),
+            new InstitutionalHolderRepository(verify),
+            new CommonStockRepository(verify),
+            ErrorManager,
+            Substitute.For<ILogger<InstitutionalHoldingsTools>>()
+        );
+
+        var output = await sut.GetTopBuyersSellers("NVDA");
+
+        // No buyers and no sellers — early-return message, not the per-section tables.
+        output.Should().Contain("No quarter-over-quarter movement found");
+        output.Should().NotContain("## Top Buyers");
+        output.Should().NotContain("## Top Sellers");
+    }
+
+    [Fact]
     public async Task GetTopBuyersSellers_ExplicitReportDate_HonorsArgument()
     {
         var stock = new CommonStock
