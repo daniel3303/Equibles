@@ -192,17 +192,7 @@ public class FredImportService
             }
         );
 
-        using (var scope = _scopeFactory.CreateScope())
-        {
-            var seriesRepo = scope.ServiceProvider.GetRequiredService<FredSeriesRepository>();
-            var dbSeries = await seriesRepo.Get(series.Id);
-            dbSeries.LastUpdated = DateTime.UtcNow;
-            if (latestObservationDate != DateOnly.MinValue)
-            {
-                dbSeries.ObservationEnd = latestObservationDate;
-            }
-            await seriesRepo.SaveChanges();
-        }
+        await UpdateSeriesMetadata(series.Id, latestObservationDate);
 
         if (skipped > 0)
         {
@@ -218,6 +208,19 @@ public class FredImportService
             totalInserted,
             curated.SeriesId
         );
+    }
+
+    private async Task UpdateSeriesMetadata(Guid seriesId, DateOnly latestObservationDate)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var seriesRepo = scope.ServiceProvider.GetRequiredService<FredSeriesRepository>();
+        var dbSeries = await seriesRepo.Get(seriesId);
+        dbSeries.LastUpdated = DateTime.UtcNow;
+        if (latestObservationDate != DateOnly.MinValue)
+        {
+            dbSeries.ObservationEnd = latestObservationDate;
+        }
+        await seriesRepo.SaveChanges();
     }
 
     private async Task<FredSeries> EnsureSeriesExists(
