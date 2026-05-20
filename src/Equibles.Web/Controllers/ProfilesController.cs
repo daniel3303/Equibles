@@ -134,27 +134,19 @@ public class ProfilesController : BaseController
                 null
             );
 
-        DateOnly selected;
-        var selectedIndex = -1;
+        var selectedIndex = 0;
         if (requestedDate.HasValue)
         {
             for (var i = 0; i < distinctReportDates.Count; i++)
             {
-                if (distinctReportDates[i] != requestedDate.Value)
-                    continue;
-                selectedIndex = i;
-                break;
+                if (distinctReportDates[i] == requestedDate.Value)
+                {
+                    selectedIndex = i;
+                    break;
+                }
             }
         }
-        if (selectedIndex < 0)
-        {
-            selected = distinctReportDates[0];
-            selectedIndex = 0;
-        }
-        else
-        {
-            selected = distinctReportDates[selectedIndex];
-        }
+        var selected = distinctReportDates[selectedIndex];
         if (selectedIndex >= distinctReportDates.Count - 1)
             return (
                 new Dictionary<StockPositionChangeType, List<StockPositionChange>>(),
