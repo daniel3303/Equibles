@@ -43,7 +43,9 @@ Why the indirection through `ViewData` rather than a single `StockDetailViewMode
 
 - `_ViewStart.cshtml` pins every view to `_Layout.cshtml`. There is no per-area layout split — one shell for everything.
 - `_ViewImports.cshtml` declares the project-wide `@using`s + tag-helper imports + the `Equibles.Web` namespace.
-- [`FlashMessage`](../../src/Equibles.Web/FlashMessage) — one-shot session messages used across controllers. `services.AddFlashMessage()` registers the writer; the layout reads via injected `IFlashMessage`. Use for redirects after a write (Auth login success, etc.).
+- [`FlashMessage`](../../src/Equibles.Web/FlashMessage) — one-shot session messages used across controllers.
+- `services.AddFlashMessage()` registers the writer; the layout reads via injected `IFlashMessage`.
+- Use for redirects after a write (Auth login success, etc.).
 - [`StatusBadgeFilter`](../../src/Equibles.Web/Filters/StatusBadgeFilter.cs) counts recent errors and exposes a badge for the Status link in the layout.
 - [`VersionCheckFilter`](../../src/Equibles.Web/Filters/VersionCheckFilter.cs) compares `AssemblyInformationalVersion` against the latest GitHub release and surfaces an update banner.
 - Both filters register globally via `AddControllersWithViews(options => options.Filters.AddService<...>())`.
