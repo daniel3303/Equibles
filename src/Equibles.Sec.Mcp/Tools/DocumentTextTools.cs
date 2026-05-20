@@ -57,12 +57,12 @@ public class DocumentTextTools
 
                 if (matches.Count == 0)
                 {
-                    return $"No matches found for \"{keyword}\" in {document.CommonStock.Name} ({document.CommonStock.Ticker}) {document.DocumentType} filed {document.ReportingDate:yyyy-MM-dd}.";
+                    return $"No matches found for \"{keyword}\" in {FormatDocumentHeader(document)}.";
                 }
 
                 var result = new StringBuilder();
                 result.AppendLine(
-                    $"Keyword search for \"{keyword}\" in {document.CommonStock.Name} ({document.CommonStock.Ticker}) {document.DocumentType} filed {document.ReportingDate:yyyy-MM-dd} — {matches.Count} matches found:"
+                    $"Keyword search for \"{keyword}\" in {FormatDocumentHeader(document)} — {matches.Count} matches found:"
                 );
                 result.AppendLine();
 
@@ -124,7 +124,7 @@ public class DocumentTextTools
 
                 var result = new StringBuilder();
                 result.AppendLine(
-                    $"{document.CommonStock.Name} ({document.CommonStock.Ticker}) {document.DocumentType} filed {document.ReportingDate:yyyy-MM-dd} — lines {startLine:N0} to {endLine:N0} of {totalLines:N0}:"
+                    $"{FormatDocumentHeader(document)} — lines {startLine:N0} to {endLine:N0} of {totalLines:N0}:"
                 );
                 result.AppendLine();
 
@@ -195,6 +195,9 @@ public class DocumentTextTools
     {
         return $"{lineNumber, 6} │ {content}";
     }
+
+    private static string FormatDocumentHeader(Document document) =>
+        $"{document.CommonStock.Name} ({document.CommonStock.Ticker}) {document.DocumentType} filed {document.ReportingDate:yyyy-MM-dd}";
 
     private static string HighlightKeyword(string line, string keyword)
     {
