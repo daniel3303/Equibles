@@ -47,10 +47,7 @@ public class FileManager : IFileManager
      */
     public Task<File> SaveFile(byte[] content, string fileName, bool protect = false)
     {
-        // Gets the file extension from the file name
         var fileExtension = Path.GetExtension(fileName)?.TrimStart('.');
-
-        // Gets the file name without extension
         var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(fileName);
 
         if (string.IsNullOrEmpty(fileExtension))
@@ -68,7 +65,6 @@ public class FileManager : IFileManager
             );
         }
 
-        // Get the content type from the file extension
         var contentType = MimeTypeMap.GetMimeType(fileExtension);
         if (string.IsNullOrEmpty(contentType))
         {
