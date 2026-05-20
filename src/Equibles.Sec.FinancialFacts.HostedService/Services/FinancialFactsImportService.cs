@@ -174,48 +174,66 @@ public class FinancialFactsImportService
                 {
                     foreach (var value in values)
                     {
-                        if (!TryMapFiscalPeriod(value.Fp, out var fiscalPeriod))
-                            continue;
-                        if (string.IsNullOrEmpty(value.Accn))
-                            continue;
-
-                        var isInstant = value.Start == null;
-                        var periodStart = value.Start ?? value.End;
-                        // Derive (FiscalYear, FiscalPeriod) from the period the
-                        // fact actually measures — the filing's fy/fp identifies
-                        // the filing, not each comparable-year value inside it
-                        // (#982). Resolver returns null when FYE info is missing
-                        // or the duration shape is unrecognised; the original
-                        // SEC-supplied identity is the fallback.
-                        var resolved = FiscalPeriodResolver.Resolve(
-                            periodStart,
-                            value.End,
-                            stock.FiscalYearEndMonth,
-                            stock.FiscalYearEndDay
+                        var fact = TryBuildParsedFact(
+                            taxonomy,
+                            tag,
+                            concept.Label,
+                            unit,
+                            value,
+                            stock
                         );
-                        yield return new ParsedFact
-                        {
-                            Taxonomy = taxonomy,
-                            Tag = tag,
-                            Label = concept.Label,
-                            Unit = unit,
-                            PeriodType = isInstant
-                                ? FactPeriodType.Instant
-                                : FactPeriodType.Duration,
-                            PeriodStart = periodStart,
-                            PeriodEnd = value.End,
-                            Value = value.Val,
-                            FiscalYear = resolved?.Year ?? value.Fy ?? value.End.Year,
-                            FiscalPeriod = resolved?.Period ?? fiscalPeriod,
-                            Form = value.Form,
-                            Filed = value.Filed,
-                            Accession = value.Accn,
-                            Frame = value.Frame,
-                        };
+                        if (fact != null)
+                            yield return fact;
                     }
                 }
             }
         }
+    }
+
+    private static ParsedFact TryBuildParsedFact(
+        FactTaxonomy taxonomy,
+        string tag,
+        string label,
+        string unit,
+        CompanyFactValue value,
+        CommonStock stock
+    )
+    {
+        if (!TryMapFiscalPeriod(value.Fp, out var fiscalPeriod))
+            return null;
+        if (string.IsNullOrEmpty(value.Accn))
+            return null;
+
+        var isInstant = value.Start == null;
+        var periodStart = value.Start ?? value.End;
+        // Derive (FiscalYear, FiscalPeriod) from the period the fact actually
+        // measures — the filing's fy/fp identifies the filing, not each
+        // comparable-year value inside it (#982). Resolver returns null when
+        // FYE info is missing or the duration shape is unrecognised; the
+        // original SEC-supplied identity is the fallback.
+        var resolved = FiscalPeriodResolver.Resolve(
+            periodStart,
+            value.End,
+            stock.FiscalYearEndMonth,
+            stock.FiscalYearEndDay
+        );
+        return new ParsedFact
+        {
+            Taxonomy = taxonomy,
+            Tag = tag,
+            Label = label,
+            Unit = unit,
+            PeriodType = isInstant ? FactPeriodType.Instant : FactPeriodType.Duration,
+            PeriodStart = periodStart,
+            PeriodEnd = value.End,
+            Value = value.Val,
+            FiscalYear = resolved?.Year ?? value.Fy ?? value.End.Year,
+            FiscalPeriod = resolved?.Period ?? fiscalPeriod,
+            Form = value.Form,
+            Filed = value.Filed,
+            Accession = value.Accn,
+            Frame = value.Frame,
+        };
     }
 
     /// <summary>

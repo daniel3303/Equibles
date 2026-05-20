@@ -179,44 +179,7 @@ public class ShortInterestImportService
                 var inserted = await BatchPersister.Persist(
                     items,
                     InsertBatchSize,
-                    async batch =>
-                    {
-                        using var scope = _scopeFactory.CreateScope();
-                        var stockRepo =
-                            scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-                        var repo =
-                            scope.ServiceProvider.GetRequiredService<ShortInterestRepository>();
-
-                        // tickerMap was built at the start of Import and goes stale if CompanySyncService
-                        // hard-deletes a stock in parallel (PR #5's ReplaceObsoleteStock path). Re-validate
-                        // each batch against the current set of CommonStockIds so dangling-FK inserts can't
-                        // poison the whole batch.
-                        var batchStockIds = batch.Select(b => b.CommonStockId).Distinct().ToList();
-                        var liveStockIds = await stockRepo
-                            .GetAll()
-                            .Where(s => batchStockIds.Contains(s.Id))
-                            .Select(s => s.Id)
-                            .ToHashSetAsync(cancellationToken);
-
-                        var validBatch = batch
-                            .Where(b => liveStockIds.Contains(b.CommonStockId))
-                            .ToList();
-                        var dropped = batch.Count - validBatch.Count;
-                        if (dropped > 0)
-                        {
-                            _logger.LogWarning(
-                                "Dropped {Dropped} short interest rows for {Date} referencing CommonStockIds no longer in the database",
-                                dropped,
-                                date
-                            );
-                        }
-
-                        if (validBatch.Count == 0)
-                            return;
-
-                        repo.AddRange(validBatch);
-                        await repo.SaveChanges();
-                    }
+                    batch => ValidateAndPersistBatch(batch, date, cancellationToken)
                 );
 
                 totalImported += inserted;
@@ -249,5 +212,44 @@ public class ShortInterestImportService
             totalImported,
             datesSkipped
         );
+    }
+
+    // tickerMap was built at the start of Import and goes stale if CompanySyncService
+    // hard-deletes a stock in parallel (PR #5's ReplaceObsoleteStock path). Re-validate
+    // each batch against the current set of CommonStockIds so dangling-FK inserts can't
+    // poison the whole batch.
+    private async Task ValidateAndPersistBatch(
+        List<ShortInterest> batch,
+        DateOnly date,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var repo = scope.ServiceProvider.GetRequiredService<ShortInterestRepository>();
+
+        var batchStockIds = batch.Select(b => b.CommonStockId).Distinct().ToList();
+        var liveStockIds = await stockRepo
+            .GetAll()
+            .Where(s => batchStockIds.Contains(s.Id))
+            .Select(s => s.Id)
+            .ToHashSetAsync(cancellationToken);
+
+        var validBatch = batch.Where(b => liveStockIds.Contains(b.CommonStockId)).ToList();
+        var dropped = batch.Count - validBatch.Count;
+        if (dropped > 0)
+        {
+            _logger.LogWarning(
+                "Dropped {Dropped} short interest rows for {Date} referencing CommonStockIds no longer in the database",
+                dropped,
+                date
+            );
+        }
+
+        if (validBatch.Count == 0)
+            return;
+
+        repo.AddRange(validBatch);
+        await repo.SaveChanges();
     }
 }
