@@ -115,8 +115,7 @@ public class InlineXbrlParser
         out DateOnly end
     )
     {
-        var instant = FindFirstChildByLocalName(period, InstantLocalName);
-        if (instant != null && DateOnly.TryParse(instant.TextContent.Trim(), out var instantDate))
+        if (TryParseChildDate(period, InstantLocalName, out var instantDate))
         {
             isInstant = true;
             start = instantDate;
@@ -124,13 +123,9 @@ public class InlineXbrlParser
             return true;
         }
 
-        var startElement = FindFirstChildByLocalName(period, StartDateLocalName);
-        var endElement = FindFirstChildByLocalName(period, EndDateLocalName);
         if (
-            startElement != null
-            && endElement != null
-            && DateOnly.TryParse(startElement.TextContent.Trim(), out var startDate)
-            && DateOnly.TryParse(endElement.TextContent.Trim(), out var endDate)
+            TryParseChildDate(period, StartDateLocalName, out var startDate)
+            && TryParseChildDate(period, EndDateLocalName, out var endDate)
         )
         {
             isInstant = false;
@@ -143,6 +138,13 @@ public class InlineXbrlParser
         start = default;
         end = default;
         return false;
+    }
+
+    private static bool TryParseChildDate(IElement parent, string localName, out DateOnly date)
+    {
+        date = default;
+        var child = FindFirstChildByLocalName(parent, localName);
+        return child != null && DateOnly.TryParse(child.TextContent.Trim(), out date);
     }
 
     private static List<ParsedXbrlDimension> ExtractDimensions(IElement contextElement)
