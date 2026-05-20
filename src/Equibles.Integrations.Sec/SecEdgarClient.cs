@@ -745,7 +745,7 @@ public class SecEdgarClient : ISecEdgarClient
         var formattedCik = FormatCik(cik);
 
         // Official SEC pattern for raw text files
-        return $"https://www.sec.gov/Archives/edgar/data/{formattedCik}/{accessionNumber}.txt";
+        return $"{FilesBaseUrl}/Archives/edgar/data/{formattedCik}/{accessionNumber}.txt";
     }
 
     private static string FormatCik(string cik)
