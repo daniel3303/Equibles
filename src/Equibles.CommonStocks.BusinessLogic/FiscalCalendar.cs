@@ -103,10 +103,7 @@ public static class FiscalCalendar
     /// </summary>
     public static FiscalPeriod? GetPeriod(DateOnly date, CommonStock commonStock)
     {
-        if (commonStock == null)
-        {
-            throw new ArgumentNullException(nameof(commonStock));
-        }
+        ArgumentNullException.ThrowIfNull(commonStock);
 
         return commonStock.FiscalYearEndMonth is { } month ? GetPeriod(date, month) : null;
     }
@@ -123,10 +120,7 @@ public static class FiscalCalendar
         CommonStock commonStock
     )
     {
-        if (commonStock == null)
-        {
-            throw new ArgumentNullException(nameof(commonStock));
-        }
+        ArgumentNullException.ThrowIfNull(commonStock);
 
         return commonStock.FiscalYearEndMonth is { } month
             ? GetQuarterEndDate(fiscalYear, fiscalQuarter, month)
