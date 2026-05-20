@@ -613,14 +613,7 @@ public class HoldingsImportService
         var entriesByKey = new Dictionary<string, List<HoldingManagerEntry>>();
         foreach (var h in holdings)
         {
-            var key = BuildHoldingKey(
-                h.CommonStockId,
-                h.InstitutionalHolderId,
-                h.ReportDate,
-                h.ShareType,
-                h.OptionType
-            );
-            entriesByKey[key] = h.ManagerEntries.ToList();
+            entriesByKey[BuildHoldingKey(h)] = h.ManagerEntries.ToList();
             h.ManagerEntries.Clear();
         }
 
@@ -664,14 +657,7 @@ public class HoldingsImportService
 
         foreach (var dbHolding in dbHoldings)
         {
-            var key = BuildHoldingKey(
-                dbHolding.CommonStockId,
-                dbHolding.InstitutionalHolderId,
-                dbHolding.ReportDate,
-                dbHolding.ShareType,
-                dbHolding.OptionType
-            );
-            if (entriesByKey.TryGetValue(key, out var entries))
+            if (entriesByKey.TryGetValue(BuildHoldingKey(dbHolding), out var entries))
             {
                 dbHolding.ManagerEntries.Clear();
                 dbHolding.ManagerEntries.AddRange(entries);
@@ -691,4 +677,13 @@ public class HoldingsImportService
         OptionType? optionType
     ) =>
         $"{commonStockId}|{institutionalHolderId}|{reportDate}|{(int)shareType}|{optionType?.ToString() ?? ""}";
+
+    private static string BuildHoldingKey(InstitutionalHolding h) =>
+        BuildHoldingKey(
+            h.CommonStockId,
+            h.InstitutionalHolderId,
+            h.ReportDate,
+            h.ShareType,
+            h.OptionType
+        );
 }
