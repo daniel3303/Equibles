@@ -55,8 +55,24 @@ public class CongressionalTradeSyncService
 
         var allTransactions = new List<DisclosureTransaction>();
 
-        await FetchSenateTransactions(allTransactions, fromDate, toDate, ct);
-        await FetchHouseTransactions(allTransactions, fromDate, toDate, ct);
+        await FetchDisclosureTransactions(
+            allTransactions,
+            "Senate",
+            "CongressTrades.SyncSenate",
+            sp =>
+                sp.GetRequiredService<SenateDisclosureClient>()
+                    .GetRecentTransactions(fromDate, toDate, ct),
+            ct
+        );
+        await FetchDisclosureTransactions(
+            allTransactions,
+            "House",
+            "CongressTrades.SyncHouse",
+            sp =>
+                sp.GetRequiredService<HouseDisclosureClient>()
+                    .GetRecentTransactions(fromDate, toDate, ct),
+            ct
+        );
 
         if (allTransactions.Count == 0)
         {
@@ -72,18 +88,18 @@ public class CongressionalTradeSyncService
         await ProcessTransactions(allTransactions, ct);
     }
 
-    private async Task FetchSenateTransactions(
+    private async Task FetchDisclosureTransactions(
         List<DisclosureTransaction> target,
-        DateOnly from,
-        DateOnly to,
+        string sourceLabel,
+        string errorContext,
+        Func<IServiceProvider, Task<List<DisclosureTransaction>>> fetch,
         CancellationToken ct
     )
     {
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
-            var client = scope.ServiceProvider.GetRequiredService<SenateDisclosureClient>();
-            var txns = await client.GetRecentTransactions(from, to, ct);
+            var txns = await fetch(scope.ServiceProvider);
             target.AddRange(txns);
         }
         catch (OperationCanceledException)
@@ -92,40 +108,10 @@ public class CongressionalTradeSyncService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to fetch Senate disclosure data");
+            _logger.LogWarning(ex, "Failed to fetch {Source} disclosure data", sourceLabel);
             await _errorReporter.Report(
                 ErrorSource.CongressScraper,
-                "CongressTrades.SyncSenate",
-                ex.Message,
-                ex.StackTrace
-            );
-        }
-    }
-
-    private async Task FetchHouseTransactions(
-        List<DisclosureTransaction> target,
-        DateOnly from,
-        DateOnly to,
-        CancellationToken ct
-    )
-    {
-        try
-        {
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var client = scope.ServiceProvider.GetRequiredService<HouseDisclosureClient>();
-            var txns = await client.GetRecentTransactions(from, to, ct);
-            target.AddRange(txns);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to fetch House disclosure data");
-            await _errorReporter.Report(
-                ErrorSource.CongressScraper,
-                "CongressTrades.SyncHouse",
+                errorContext,
                 ex.Message,
                 ex.StackTrace
             );
