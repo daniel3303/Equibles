@@ -73,7 +73,6 @@ public class FredImportService
 
     private async Task ImportSeries(CuratedSeries curated, CancellationToken cancellationToken)
     {
-        // Ensure series metadata exists in DB
         FredSeries series;
         using (var scope = _scopeFactory.CreateScope())
         {
@@ -117,7 +116,6 @@ public class FredImportService
             }
         }
 
-        // Determine start date for observations
         DateOnly startDate;
         using (var scope = _scopeFactory.CreateScope())
         {
@@ -146,7 +144,6 @@ public class FredImportService
             return;
         }
 
-        // Fetch new observations from FRED API
         var records = await _fredClient.GetObservations(curated.SeriesId, startDate);
         _logger.LogDebug(
             "FRED API returned {Count} observations for {SeriesId} from {StartDate}",
@@ -180,7 +177,6 @@ public class FredImportService
         var minApiDate = apiDates.Min();
         var maxApiDate = apiDates.Max();
 
-        // Load existing dates that overlap with the API response range
         HashSet<DateOnly> existingDates;
         using (var scope = _scopeFactory.CreateScope())
         {
@@ -202,7 +198,6 @@ public class FredImportService
             existingDates.Count
         );
 
-        // Build new observations, skipping any that already exist
         var observations = new List<FredObservation>();
         var skipped = 0;
         var latestObservationDate = DateOnly.MinValue;
@@ -256,7 +251,6 @@ public class FredImportService
             }
         );
 
-        // Update series metadata
         using (var scope = _scopeFactory.CreateScope())
         {
             var seriesRepo = scope.ServiceProvider.GetRequiredService<FredSeriesRepository>();
