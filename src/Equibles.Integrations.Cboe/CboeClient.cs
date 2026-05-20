@@ -105,20 +105,8 @@ public class CboeClient : ICboeClient
     private static List<CboePutCallRecord> ParsePutCallCsv(string content)
     {
         var records = new List<CboePutCallRecord>();
-        using var reader = new StringReader(content);
-
-        // Skip header line
-        reader.ReadLine();
-
-        while (reader.ReadLine() is { } line)
+        foreach (var fields in EnumerateCsvRows(content, minFields: 5))
         {
-            if (string.IsNullOrWhiteSpace(line))
-                continue;
-
-            var fields = line.Split(',');
-            if (fields.Length < 5)
-                continue;
-
             if (
                 !DateOnly.TryParseExact(
                     fields[0].Trim(),
@@ -141,27 +129,14 @@ public class CboeClient : ICboeClient
                 }
             );
         }
-
         return records;
     }
 
     private static List<CboeVixRecord> ParseVixCsv(string content)
     {
         var records = new List<CboeVixRecord>();
-        using var reader = new StringReader(content);
-
-        // Skip header line
-        reader.ReadLine();
-
-        while (reader.ReadLine() is { } line)
+        foreach (var fields in EnumerateCsvRows(content, minFields: 5))
         {
-            if (string.IsNullOrWhiteSpace(line))
-                continue;
-
-            var fields = line.Split(',');
-            if (fields.Length < 5)
-                continue;
-
             if (
                 !DateOnly.TryParseExact(
                     fields[0].Trim(),
@@ -193,8 +168,26 @@ public class CboeClient : ICboeClient
                 }
             );
         }
-
         return records;
+    }
+
+    // First line is the header; subsequent blank or short rows are skipped.
+    private static IEnumerable<string[]> EnumerateCsvRows(string content, int minFields)
+    {
+        using var reader = new StringReader(content);
+        reader.ReadLine();
+
+        while (reader.ReadLine() is { } line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            var fields = line.Split(',');
+            if (fields.Length < minFields)
+                continue;
+
+            yield return fields;
+        }
     }
 
     private static long? ParseLong(string value)

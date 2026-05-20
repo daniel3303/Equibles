@@ -47,7 +47,6 @@ public class CompanySyncService : ICompanySyncService
                 secCompanies.Count
             );
 
-            // Filter by configured tickers if specified
             if (_workerOptions.TickersToSync?.Count > 0)
             {
                 secCompanies = secCompanies
@@ -67,7 +66,6 @@ public class CompanySyncService : ICompanySyncService
             var commonStockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
             var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
 
-            // Get all CIKs from SEC companies
             var secCiks = secCompanies.Select(c => c.Cik).ToHashSet();
 
             // Load every existing stock so we can detect subsidiaries already attached
@@ -200,7 +198,6 @@ public class CompanySyncService : ICompanySyncService
             state.PrimaryTickerToStock.TryGetValue(primaryTicker, out var tickerHolder);
             if (tickerHolder != null && !state.SecCiks.Contains(tickerHolder.Cik))
             {
-                // Old holder is no longer in SEC data - remove it
                 try
                 {
                     state.CommonStockRepository.Delete(tickerHolder);
@@ -260,7 +257,6 @@ public class CompanySyncService : ICompanySyncService
             existingStock.SecondaryTickers = secondaryTickers;
             await state.CommonStockManager.Update(existingStock);
 
-            // Update tracking sets on success
             if (oldTicker != primaryTicker)
             {
                 state.ExistingPrimaryTickers.Remove(oldTicker);
@@ -336,7 +332,6 @@ public class CompanySyncService : ICompanySyncService
             return;
         }
 
-        // Old company no longer in SEC data - replace it
         try
         {
             state.CommonStockRepository.Delete(obsoleteStock);
