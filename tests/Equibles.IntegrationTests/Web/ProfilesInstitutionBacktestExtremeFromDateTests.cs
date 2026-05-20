@@ -14,9 +14,7 @@ public class ProfilesInstitutionBacktestExtremeFromDateTests
     public ProfilesInstitutionBacktestExtremeFromDateTests(WebHostFixture fixture) =>
         _fixture = fixture;
 
-    [Fact(
-        Skip = "GH-1271 — HoldingsBacktestService.Execute computes resolvedFrom.AddDays(-14) which throws on DateOnly underflow; ?from=0001-01-01 surfaces a 500 instead of an inline alert."
-    )]
+    [Fact]
     public async Task GetBacktest_FromAtDateOnlyMinValue_DoesNotReturn500()
     {
         // Contract (per the slice commit): "benchmark-not-found and no-rebalance-in-window
