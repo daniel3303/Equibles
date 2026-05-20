@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
@@ -62,12 +63,7 @@ public class InstitutionalHoldingsTools
                 }
                 else
                 {
-                    var latestDate = await _holdingRepository
-                        .GetHistoryByStock(stock)
-                        .Select(h => h.ReportDate)
-                        .Distinct()
-                        .OrderByDescending(d => d)
-                        .FirstOrDefaultAsync();
+                    var latestDate = await GetReportDatesByStock(stock).FirstOrDefaultAsync();
 
                     if (latestDate == default)
                         return $"No institutional holdings data available for {ticker}.";
@@ -136,13 +132,7 @@ public class InstitutionalHoldingsTools
                 if (stock == null)
                     return $"Stock '{ticker}' not found.";
 
-                var reportDates = await _holdingRepository
-                    .GetHistoryByStock(stock)
-                    .Select(h => h.ReportDate)
-                    .Distinct()
-                    .OrderByDescending(d => d)
-                    .Take(maxPeriods)
-                    .ToListAsync();
+                var reportDates = await GetReportDatesByStock(stock).Take(maxPeriods).ToListAsync();
 
                 if (reportDates.Count == 0)
                     return $"No institutional holdings history available for {ticker}.";
@@ -320,12 +310,7 @@ public class InstitutionalHoldingsTools
                 if (stock == null)
                     return $"Stock '{ticker}' not found.";
 
-                var reportDates = await _holdingRepository
-                    .GetHistoryByStock(stock)
-                    .Select(h => h.ReportDate)
-                    .Distinct()
-                    .OrderByDescending(d => d)
-                    .ToListAsync();
+                var reportDates = await GetReportDatesByStock(stock).ToListAsync();
 
                 var targetDate = TryParseReportDate(reportDate, out var parsed)
                     ? parsed
@@ -1118,6 +1103,13 @@ public class InstitutionalHoldingsTools
     private IQueryable<DateOnly> GetReportDatesByHolder(InstitutionalHolder holder) =>
         _holdingRepository
             .GetHistoryByHolder(holder)
+            .Select(h => h.ReportDate)
+            .Distinct()
+            .OrderByDescending(d => d);
+
+    private IQueryable<DateOnly> GetReportDatesByStock(CommonStock stock) =>
+        _holdingRepository
+            .GetHistoryByStock(stock)
             .Select(h => h.ReportDate)
             .Distinct()
             .OrderByDescending(d => d);
