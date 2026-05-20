@@ -46,8 +46,7 @@ public class HoldingsExportController : BaseController
         if (reportDates.Count == 0)
             return NotFound();
 
-        var selectedDate =
-            date.HasValue && reportDates.Contains(date.Value) ? date.Value : reportDates[0];
+        var selectedDate = ResolveSelectedDate(date, reportDates);
 
         var holdings = await _holdingRepository
             .GetByStock(stock, selectedDate)
@@ -118,8 +117,7 @@ public class HoldingsExportController : BaseController
         if (reportDates.Count == 0)
             return NotFound();
 
-        var selectedDate =
-            date.HasValue && reportDates.Contains(date.Value) ? date.Value : reportDates[0];
+        var selectedDate = ResolveSelectedDate(date, reportDates);
 
         var rowsRaw = await _holdingRepository
             .GetByHolder(holder, selectedDate)
@@ -181,8 +179,7 @@ public class HoldingsExportController : BaseController
         if (reportDates.Count < 2)
             return NotFound();
 
-        var selectedDate =
-            date.HasValue && reportDates.Contains(date.Value) ? date.Value : reportDates[0];
+        var selectedDate = ResolveSelectedDate(date, reportDates);
         var selectedIndex = reportDates.IndexOf(selectedDate);
         var previousDate =
             selectedIndex < reportDates.Count - 1 ? reportDates[selectedIndex + 1] : reportDates[1];
@@ -260,6 +257,9 @@ public class HoldingsExportController : BaseController
         Response.Headers.CacheControl = "no-store";
         return File(Encoding.UTF8.GetBytes(csv), "text/csv", filename);
     }
+
+    private static DateOnly ResolveSelectedDate(DateOnly? requested, List<DateOnly> available) =>
+        requested.HasValue && available.Contains(requested.Value) ? requested.Value : available[0];
 
     private static string[] ActivityRow(
         string board,
