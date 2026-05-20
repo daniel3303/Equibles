@@ -39,7 +39,8 @@ These do not own a financial-domain dataset; they support every other module.
 - **SEC Financial Facts ships two XBRL extractors in `Equibles.Sec.FinancialFacts.BusinessLogic/Parsers/`.** `StandaloneXbrlParser` consumes older filings' dedicated `.xml` instance documents; `InlineXbrlParser` consumes the embedded iXBRL of modern `.htm` filings. Both emit the same `ParsedXbrlFact` shape (concept + period + unit + `xbrldi:explicitMember` dimensions) that maps onto `FinancialFact` + `FinancialFactDimension`. **The parsers are not wired into the worker pipeline** — running them at scale requires persisting the raw XBRL artifacts at ingest time (today they live only in transient envelopes; `XbrlStripStep` deletes the inline header before downstream consumers see it). That prerequisite is tracked in [#1118](https://github.com/daniel3303/Equibles/issues/1118); once it lands the import service can call these parsers and start populating dimensional rows.
 - **The `*.Mcp` project is optional.** A module without AI-assistant-facing tools (currently: `Errors`, `Media`, `CommonStocks` — internal infrastructure) ships only `.Data` + `.Repositories` (+ `.BusinessLogic` when needed).
 - The MCP host calls `mcp.AddXxx()` only for modules that expose tools.
-- **Module dependencies are declared in the `.Data` extension method.** For example, `Equibles.Sec.Data.Extensions.ModuleBuilderExtensions.AddSec()` calls `AddCommonStocks()` and `AddMedia()` before adding itself, so any host that registers SEC gets the prerequisites without listing them.
+- **Module dependencies are declared in the `.Data` extension method.** For example, `Equibles.Sec.Data.Extensions.ModuleBuilderExtensions.AddSec()` calls `AddCommonStocks()` and `AddMedia()` before adding itself.
+- Any host that registers SEC gets the prerequisites without listing them.
 
 ## Reading a module quickly
 
