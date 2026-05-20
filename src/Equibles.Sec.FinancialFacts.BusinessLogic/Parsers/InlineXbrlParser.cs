@@ -79,15 +79,9 @@ public class InlineXbrlParser
         root.QuerySelectorAll("*")
             .Where(e => string.Equals(e.LocalName, localName, StringComparison.OrdinalIgnoreCase));
 
-    private static Dictionary<
-        string,
-        (bool IsInstant, DateOnly Start, DateOnly End, List<ParsedXbrlDimension> Dimensions)
-    > BuildContextMap(IDocument document)
+    private static Dictionary<string, ParsedContext> BuildContextMap(IDocument document)
     {
-        var contexts = new Dictionary<
-            string,
-            (bool, DateOnly, DateOnly, List<ParsedXbrlDimension>)
-        >(StringComparer.Ordinal);
+        var contexts = new Dictionary<string, ParsedContext>(StringComparer.Ordinal);
 
         foreach (var contextElement in FindByLocalName(document, ContextLocalName))
         {
@@ -103,7 +97,7 @@ public class InlineXbrlParser
                 continue;
 
             var dimensions = ExtractDimensions(contextElement);
-            contexts[id] = (isInstant, start, end, dimensions);
+            contexts[id] = new ParsedContext(isInstant, start, end, dimensions);
         }
 
         return contexts;
@@ -214,10 +208,7 @@ public class InlineXbrlParser
 
     private static bool TryParseFact(
         IElement element,
-        Dictionary<
-            string,
-            (bool IsInstant, DateOnly Start, DateOnly End, List<ParsedXbrlDimension> Dimensions)
-        > contexts,
+        Dictionary<string, ParsedContext> contexts,
         Dictionary<string, string> units,
         out ParsedXbrlFact fact
     )
@@ -396,4 +387,11 @@ public class InlineXbrlParser
             return int.MaxValue;
         return int.TryParse(decimalsAttribute, out var value) ? value : null;
     }
+
+    private record struct ParsedContext(
+        bool IsInstant,
+        DateOnly Start,
+        DateOnly End,
+        List<ParsedXbrlDimension> Dimensions
+    );
 }
