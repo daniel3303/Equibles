@@ -113,6 +113,70 @@ public static class TechnicalIndicatorService
         return result;
     }
 
+    /// <summary>
+    /// Stochastic Oscillator. %K = 100 × (close - lowestLow) / (highestHigh - lowestLow)
+    /// over a <paramref name="kPeriod"/> lookback; %D is the simple moving average of %K
+    /// over <paramref name="dPeriod"/> bars. Returns lists matching the input length,
+    /// null-padded at the start while the lookback window fills.
+    /// </summary>
+    public static (List<decimal?> K, List<decimal?> D) ComputeStochastic(
+        List<decimal> highs,
+        List<decimal> lows,
+        List<decimal> closes,
+        int kPeriod = 14,
+        int dPeriod = 3
+    )
+    {
+        if (highs.Count != lows.Count || lows.Count != closes.Count)
+            throw new ArgumentException("highs, lows, and closes must all have the same length");
+
+        var count = closes.Count;
+        var k = new List<decimal?>(count);
+        for (var i = 0; i < count; i++)
+        {
+            if (i < kPeriod - 1)
+            {
+                k.Add(null);
+                continue;
+            }
+
+            var highestHigh = decimal.MinValue;
+            var lowestLow = decimal.MaxValue;
+            for (var j = i - kPeriod + 1; j <= i; j++)
+            {
+                if (highs[j] > highestHigh)
+                    highestHigh = highs[j];
+                if (lows[j] < lowestLow)
+                    lowestLow = lows[j];
+            }
+
+            var range = highestHigh - lowestLow;
+            // Flat range = no momentum signal. Conventional convention is %K = 50 (the
+            // neutral midpoint) rather than 0 / divide-by-zero / NaN.
+            var kValue = range == 0 ? 50m : Math.Round(100m * (closes[i] - lowestLow) / range, 4);
+            k.Add(kValue);
+        }
+
+        // %D = SMA of %K over dPeriod bars. Computed inline so the SMA can window over
+        // a list-of-nullables without leaking the warm-up nulls into the average.
+        var d = new List<decimal?>(count);
+        for (var i = 0; i < count; i++)
+        {
+            if (i < kPeriod - 1 + dPeriod - 1)
+            {
+                d.Add(null);
+                continue;
+            }
+
+            var sum = 0m;
+            for (var j = i - dPeriod + 1; j <= i; j++)
+                sum += k[j].Value;
+            d.Add(Math.Round(sum / dPeriod, 4));
+        }
+
+        return (k, d);
+    }
+
     public static (
         List<decimal?> Line,
         List<decimal?> Signal,
