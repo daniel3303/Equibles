@@ -291,16 +291,12 @@ public class HoldingsImportService
     /// </summary>
     private async Task BuildPriceMap(ImportContext context, CancellationToken cancellationToken)
     {
-        var reportDates = context
-            .Submissions.Values.Select(s => s.PeriodOfReport)
-            .Where(p => TryParseDateOnly(p, out _))
-            .Select(p =>
-            {
-                TryParseDateOnly(p, out var d);
-                return d;
-            })
-            .Distinct()
-            .ToList();
+        var reportDates = new HashSet<DateOnly>();
+        foreach (var submission in context.Submissions.Values)
+        {
+            if (TryParseDateOnly(submission.PeriodOfReport, out var date))
+                reportDates.Add(date);
+        }
 
         var stockIds = context.CusipMapping.Values.Distinct().ToList();
 
