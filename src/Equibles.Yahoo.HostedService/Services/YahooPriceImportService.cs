@@ -134,20 +134,18 @@ public class YahooPriceImportService
         if (newPrices.Count == 0)
             return 0;
 
-        var inserted = await BatchPersister.Persist(
-            newPrices,
-            InsertBatchSize,
-            async batch =>
-            {
-                using var scope = _scopeFactory.CreateScope();
-                var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
-                repo.AddRange(batch);
-                await repo.SaveChanges();
-            }
-        );
+        var inserted = await BatchPersister.Persist(newPrices, InsertBatchSize, FlushPriceBatch);
 
         _logger.LogDebug("Inserted {Count} prices for {Ticker}", inserted, ticker);
         return inserted;
+    }
+
+    private async Task FlushPriceBatch(List<DailyStockPrice> batch)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+        repo.AddRange(batch);
+        await repo.SaveChanges();
     }
 
     private async Task SyncKeyStatistics(
