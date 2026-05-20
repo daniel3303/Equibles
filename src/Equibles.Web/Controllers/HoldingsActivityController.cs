@@ -35,13 +35,9 @@ public class HoldingsActivityController : BaseController
         if (reportDates.Count == 0)
             return View(viewModel);
 
-        var selectedDate = date ?? reportDates[0];
-        var selectedIndex = reportDates.IndexOf(selectedDate);
-        if (selectedIndex < 0)
-        {
-            selectedDate = reportDates[0];
-            selectedIndex = 0;
-        }
+        var requestedIndex = date.HasValue ? reportDates.IndexOf(date.Value) : -1;
+        var selectedIndex = requestedIndex < 0 ? 0 : requestedIndex;
+        var selectedDate = reportDates[selectedIndex];
         viewModel.SelectedDate = selectedDate;
 
         var previousDate =
