@@ -605,10 +605,12 @@ public class HoldingsImportService
             context.CoverPages.TryGetValue(accession, out var cp)
             && string.Equals(cp.IsAmendment, "Y", StringComparison.OrdinalIgnoreCase);
 
-        var shares = ParseLong(GetValue(row, "SSHPRNAMT"));
-        var votingAuthSole = ParseLong(GetValue(row, "VOTING_AUTH_SOLE"));
-        var votingAuthShared = ParseLong(GetValue(row, "VOTING_AUTH_SHARED"));
-        var votingAuthNone = ParseLong(GetValue(row, "VOTING_AUTH_NONE"));
+        long ParseLongField(string field) => ParseLong(GetValue(row, field));
+
+        var shares = ParseLongField("SSHPRNAMT");
+        var votingAuthSole = ParseLongField("VOTING_AUTH_SOLE");
+        var votingAuthShared = ParseLongField("VOTING_AUTH_SHARED");
+        var votingAuthNone = ParseLongField("VOTING_AUTH_NONE");
 
         var hasPrice = context.StockPrices.TryGetValue(
             (commonStockId, reportDate),
