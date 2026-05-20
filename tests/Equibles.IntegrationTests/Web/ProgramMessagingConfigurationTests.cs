@@ -1,3 +1,4 @@
+using Equibles.Holdings.HostedService.Consumers;
 using Equibles.IntegrationTests.Helpers;
 using MassTransit;
 using Microsoft.AspNetCore.Builder;
@@ -34,6 +35,32 @@ public class ProgramMessagingConfigurationTests
         app.Services.GetRequiredService<IOptions<SqlTransportOptions>>()
             .Value.ConnectionString.Should()
             .Be(transport, "AddMessaging binds the transport connection string");
+    }
+
+    [Fact]
+    public void ConfigureServices_DoesNotRegisterWorkerOnlyConsumer_EvenWhenWorkerAssemblyLoaded()
+    {
+        // AddMessaging's `consumerAssemblies` parameter exists so the web host
+        // scans only its own assembly — worker-only consumers like
+        // StockCusipChangedConsumer depend on services the web never wires
+        // (HoldingsRescanSignal, ProcessedDataSetRepository) and would crash
+        // service-provider validation. A regression that ignored the parameter
+        // and fell back to the default AppDomain scan would pick this consumer
+        // up once the holdings assembly is loaded — exactly the scenario this
+        // touch on `typeof(StockCusipChangedConsumer)` forces.
+        _ = typeof(StockCusipChangedConsumer);
+
+        using var app = BuildHost(
+            "Host=localhost;Database=equibles;Username=postgres;Password=postgres"
+        );
+
+        using var scope = app.Services.CreateScope();
+        var consumer = scope.ServiceProvider.GetService<StockCusipChangedConsumer>();
+        consumer
+            .Should()
+            .BeNull(
+                "the web host must only scan its own assembly for consumers, not every loaded assembly"
+            );
     }
 
     private WebApplication BuildHost(string transportConnection)
