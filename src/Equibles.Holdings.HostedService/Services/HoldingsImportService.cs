@@ -424,13 +424,15 @@ public class HoldingsImportService
 
         foreach (var (accession, submission) in context.Submissions)
         {
-            if (!context.CoverPages.TryGetValue(accession, out var coverPage))
-                continue;
-            if (!string.Equals(coverPage.IsAmendment, "Y", StringComparison.OrdinalIgnoreCase))
-                continue;
-            if (!context.CikToHolderId.TryGetValue(submission.Cik, out var holderId))
-                continue;
-            if (!TryParseDateOnly(submission.PeriodOfReport, out var reportDate))
+            if (
+                !TryResolveAmendmentTarget(
+                    accession,
+                    submission,
+                    context,
+                    out var holderId,
+                    out var reportDate
+                )
+            )
                 continue;
 
             var existingHoldings = await holdingRepo
@@ -450,6 +452,29 @@ public class HoldingsImportService
         }
 
         await holdingRepo.SaveChanges();
+    }
+
+    private static bool TryResolveAmendmentTarget(
+        string accession,
+        SubmissionRow submission,
+        ImportContext context,
+        out Guid holderId,
+        out DateOnly reportDate
+    )
+    {
+        holderId = default;
+        reportDate = default;
+
+        if (!context.CoverPages.TryGetValue(accession, out var coverPage))
+            return false;
+        if (!string.Equals(coverPage.IsAmendment, "Y", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (!context.CikToHolderId.TryGetValue(submission.Cik, out holderId))
+            return false;
+        if (!TryParseDateOnly(submission.PeriodOfReport, out reportDate))
+            return false;
+
+        return true;
     }
 
     private async Task StreamAndInsertHoldings(
