@@ -340,6 +340,79 @@ public class StockPriceTools
         );
     }
 
+    [McpServerTool(Name = "GetOnBalanceVolume")]
+    [Description(
+        "On-Balance Volume (OBV) for a stock. Running cumulative volume that adds the "
+            + "bar's volume on up-closes, subtracts on down-closes, and stays flat on "
+            + "equal closes. Useful for confirming or diverging from price trends with "
+            + "volume flow."
+    )]
+    public Task<string> GetOnBalanceVolume(
+        [Description("Stock ticker symbol (e.g., AAPL, MSFT)")] string ticker,
+        [Description("Start date in YYYY-MM-DD format (defaults to 6 months ago)")]
+            string startDate = null,
+        [Description("End date in YYYY-MM-DD format (defaults to latest available)")]
+            string endDate = null,
+        [Description("Maximum number of records to return (default: 60, newest first)")]
+            int maxResults = 60
+    )
+    {
+        return McpToolExecutor.Execute(
+            async () =>
+            {
+                var stock = await _commonStockRepository.GetByTicker(
+                    ticker.Trim().ToUpperInvariant()
+                );
+                if (stock == null)
+                    return $"Stock '{ticker}' not found.";
+
+                var start =
+                    !string.IsNullOrEmpty(startDate)
+                    && DateOnly.TryParse(startDate, out var parsedStart)
+                        ? parsedStart
+                        : DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-6));
+
+                var end =
+                    !string.IsNullOrEmpty(endDate) && DateOnly.TryParse(endDate, out var parsedEnd)
+                        ? parsedEnd
+                        : DateOnly.FromDateTime(DateTime.UtcNow);
+
+                var records = await _priceRepository
+                    .GetByStock(stock, start, end)
+                    .OrderBy(p => p.Date)
+                    .ToListAsync();
+
+                if (records.Count == 0)
+                    return $"No price data found for {stock.Ticker} in the specified date range.";
+
+                var closes = records.Select(p => p.Close).ToList();
+                var volumes = records.Select(p => p.Volume).ToList();
+                var obv = TechnicalIndicatorService.ComputeObv(closes, volumes);
+
+                var result = new StringBuilder();
+                result.AppendLine($"On-Balance Volume for {stock.Ticker} ({stock.Name}):");
+                result.AppendLine();
+                result.AppendLine("| Date | Close | Volume | OBV |");
+                result.AppendLine("|------|-------|--------|-----|");
+
+                var emitted = 0;
+                for (var i = records.Count - 1; i >= 0 && emitted < maxResults; i--)
+                {
+                    result.AppendLine(
+                        $"| {records[i].Date:yyyy-MM-dd} | {records[i].Close:F2} | {records[i].Volume:N0} | {obv[i]:N0} |"
+                    );
+                    emitted++;
+                }
+
+                return result.ToString();
+            },
+            _logger,
+            "GetOnBalanceVolume",
+            $"ticker: {ticker}",
+            ReportError
+        );
+    }
+
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
