@@ -73,48 +73,9 @@ public class FredImportService
 
     private async Task ImportSeries(CuratedSeries curated, CancellationToken cancellationToken)
     {
-        FredSeries series;
-        using (var scope = _scopeFactory.CreateScope())
-        {
-            var seriesRepo = scope.ServiceProvider.GetRequiredService<FredSeriesRepository>();
-            series = await seriesRepo
-                .GetBySeriesId(curated.SeriesId)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (series == null)
-            {
-                var metadata = await _fredClient.GetSeriesMetadata(curated.SeriesId);
-                if (metadata == null)
-                {
-                    _logger.LogWarning(
-                        "FRED series {SeriesId} not found in API, skipping",
-                        curated.SeriesId
-                    );
-                    return;
-                }
-
-                series = new FredSeries
-                {
-                    SeriesId = metadata.Id,
-                    Title = metadata.Title,
-                    Category = curated.Category,
-                    Frequency = metadata.FrequencyShort,
-                    Units = metadata.Units,
-                    SeasonalAdjustment = metadata.SeasonalAdjustmentShort,
-                    ObservationStart = ParseDate(metadata.ObservationStart),
-                    ObservationEnd = ParseDate(metadata.ObservationEnd),
-                };
-
-                seriesRepo.Add(series);
-                await seriesRepo.SaveChanges();
-
-                _logger.LogInformation(
-                    "Created FRED series {SeriesId} ({Title})",
-                    series.SeriesId,
-                    series.Title
-                );
-            }
-        }
+        var series = await EnsureSeriesExists(curated, cancellationToken);
+        if (series == null)
+            return;
 
         DateOnly startDate;
         using (var scope = _scopeFactory.CreateScope())
@@ -278,6 +239,54 @@ public class FredImportService
             totalInserted,
             curated.SeriesId
         );
+    }
+
+    private async Task<FredSeries> EnsureSeriesExists(
+        CuratedSeries curated,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var seriesRepo = scope.ServiceProvider.GetRequiredService<FredSeriesRepository>();
+        var series = await seriesRepo
+            .GetBySeriesId(curated.SeriesId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (series != null)
+            return series;
+
+        var metadata = await _fredClient.GetSeriesMetadata(curated.SeriesId);
+        if (metadata == null)
+        {
+            _logger.LogWarning(
+                "FRED series {SeriesId} not found in API, skipping",
+                curated.SeriesId
+            );
+            return null;
+        }
+
+        series = new FredSeries
+        {
+            SeriesId = metadata.Id,
+            Title = metadata.Title,
+            Category = curated.Category,
+            Frequency = metadata.FrequencyShort,
+            Units = metadata.Units,
+            SeasonalAdjustment = metadata.SeasonalAdjustmentShort,
+            ObservationStart = ParseDate(metadata.ObservationStart),
+            ObservationEnd = ParseDate(metadata.ObservationEnd),
+        };
+
+        seriesRepo.Add(series);
+        await seriesRepo.SaveChanges();
+
+        _logger.LogInformation(
+            "Created FRED series {SeriesId} ({Title})",
+            series.SeriesId,
+            series.Title
+        );
+
+        return series;
     }
 
     private static DateOnly? ParseDate(string value)
