@@ -61,53 +61,7 @@ public class CompanySyncService : ICompanySyncService
             }
 
             using var scope = _serviceScopeFactory.CreateScope();
-            var commonStockRepository =
-                scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-            var commonStockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
-            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
-
-            var secCiks = secCompanies.Select(c => c.Cik).ToHashSet();
-
-            // Load every existing stock so we can detect subsidiaries already attached
-            // as SecondaryCiks on prior syncs. We can't filter by SEC CIKs alone because
-            // the subsidiary's CIK won't match any incoming primary CIK — it lives only
-            // inside another stock's SecondaryCiks list.
-            var allExistingStocks = await commonStockRepository.GetAll().ToListAsync();
-            var existingStocks = allExistingStocks.Where(cs => secCiks.Contains(cs.Cik)).ToList();
-            var existingCiks = existingStocks.Select(cs => cs.Cik).ToHashSet();
-
-            // Build the ticker → stock lookup over every row so ReplaceObsoleteStock can find
-            // a ticker holder whose own CIK dropped out of SEC's feed but who still owns the
-            // primary ticker our incoming company wants.
-            var primaryTickerToStock = allExistingStocks.ToDictionary(s => s.Ticker, s => s);
-
-            var secondaryCikToParent = BuildSecondaryCikToParent(allExistingStocks);
-
-            // Primary tickers are globally unique — collisions on primary mean the incoming
-            // company must replace or skip. Secondary tickers may legitimately overlap across
-            // related SEC filers (e.g. parent REIT + operating partnership sharing a
-            // preferred-share ticker), so they are tracked separately and never drive
-            // replace/skip routing decisions.
-            var existingPrimaryTickers = (
-                await commonStockRepository.GetAllTickers().ToListAsync()
-            ).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var existingSecondaryTickers = (
-                await commonStockRepository.GetAllSecondaryTickers().ToListAsync()
-            ).ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            var state = new StockSyncState
-            {
-                SecCiks = secCiks,
-                ExistingStocks = existingStocks,
-                ExistingCiks = existingCiks,
-                ExistingPrimaryTickers = existingPrimaryTickers,
-                ExistingSecondaryTickers = existingSecondaryTickers,
-                PrimaryTickerToStock = primaryTickerToStock,
-                SecondaryCikToParent = secondaryCikToParent,
-                CommonStockRepository = commonStockRepository,
-                CommonStockManager = commonStockManager,
-                DbContext = dbContext,
-            };
+            var state = await BuildSyncState(secCompanies, scope);
 
             foreach (var secCompany in secCompanies)
             {
@@ -163,6 +117,60 @@ public class CompanySyncService : ICompanySyncService
             _logger.LogError(ex, "Error while syncing companies from SEC API");
             throw;
         }
+    }
+
+    private async Task<StockSyncState> BuildSyncState(
+        List<CompanyInfo> secCompanies,
+        IServiceScope scope
+    )
+    {
+        var commonStockRepository =
+            scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var commonStockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+
+        var secCiks = secCompanies.Select(c => c.Cik).ToHashSet();
+
+        // Load every existing stock so we can detect subsidiaries already attached
+        // as SecondaryCiks on prior syncs. We can't filter by SEC CIKs alone because
+        // the subsidiary's CIK won't match any incoming primary CIK — it lives only
+        // inside another stock's SecondaryCiks list.
+        var allExistingStocks = await commonStockRepository.GetAll().ToListAsync();
+        var existingStocks = allExistingStocks.Where(cs => secCiks.Contains(cs.Cik)).ToList();
+        var existingCiks = existingStocks.Select(cs => cs.Cik).ToHashSet();
+
+        // Build the ticker → stock lookup over every row so ReplaceObsoleteStock can find
+        // a ticker holder whose own CIK dropped out of SEC's feed but who still owns the
+        // primary ticker our incoming company wants.
+        var primaryTickerToStock = allExistingStocks.ToDictionary(s => s.Ticker, s => s);
+
+        var secondaryCikToParent = BuildSecondaryCikToParent(allExistingStocks);
+
+        // Primary tickers are globally unique — collisions on primary mean the incoming
+        // company must replace or skip. Secondary tickers may legitimately overlap across
+        // related SEC filers (e.g. parent REIT + operating partnership sharing a
+        // preferred-share ticker), so they are tracked separately and never drive
+        // replace/skip routing decisions.
+        var existingPrimaryTickers = (
+            await commonStockRepository.GetAllTickers().ToListAsync()
+        ).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingSecondaryTickers = (
+            await commonStockRepository.GetAllSecondaryTickers().ToListAsync()
+        ).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return new StockSyncState
+        {
+            SecCiks = secCiks,
+            ExistingStocks = existingStocks,
+            ExistingCiks = existingCiks,
+            ExistingPrimaryTickers = existingPrimaryTickers,
+            ExistingSecondaryTickers = existingSecondaryTickers,
+            PrimaryTickerToStock = primaryTickerToStock,
+            SecondaryCikToParent = secondaryCikToParent,
+            CommonStockRepository = commonStockRepository,
+            CommonStockManager = commonStockManager,
+            DbContext = dbContext,
+        };
     }
 
     private async Task UpdateExistingStock(
