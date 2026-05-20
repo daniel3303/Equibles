@@ -151,10 +151,7 @@ public class ShortDataTools
 
                 foreach (var r in records.OrderBy(r => r.SettlementDate))
                 {
-                    var changeStr =
-                        r.ChangeInShortPosition >= 0
-                            ? $"+{r.ChangeInShortPosition:N0}"
-                            : r.ChangeInShortPosition.ToString("N0");
+                    var changeStr = FormatSignedChange(r.ChangeInShortPosition);
                     var advStr = r.AverageDailyVolume?.ToString("N0") ?? "—";
                     var dtcStr = r.DaysToCover?.ToString("F1") ?? "—";
                     result.AppendLine(
@@ -219,10 +216,7 @@ public class ShortDataTools
 
                 foreach (var r in records)
                 {
-                    var changeStr =
-                        r.ChangeInShortPosition >= 0
-                            ? $"+{r.ChangeInShortPosition:N0}"
-                            : r.ChangeInShortPosition.ToString("N0");
+                    var changeStr = FormatSignedChange(r.ChangeInShortPosition);
                     var advStr = r.AverageDailyVolume?.ToString("N0") ?? "—";
                     result.AppendLine(
                         $"| {r.CommonStock.Ticker} | {r.CurrentShortPosition:N0} | {changeStr} | {advStr} | {r.DaysToCover:F1} |"
@@ -243,6 +237,9 @@ public class ShortDataTools
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
+
+    private static string FormatSignedChange(long change) =>
+        change >= 0 ? $"+{change:N0}" : change.ToString("N0");
 
     private static DateOnly ParseDateOr(string text, DateOnly fallback) =>
         !string.IsNullOrEmpty(text) && DateOnly.TryParse(text, out var parsed) ? parsed : fallback;
