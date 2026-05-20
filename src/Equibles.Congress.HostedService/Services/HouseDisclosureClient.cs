@@ -27,6 +27,8 @@ public partial class HouseDisclosureClient
     private const string ZipUrlTemplate = BaseUrl + "/public_disc/financial-pdfs/{0}FD.zip";
     private const string PtrPdfUrlTemplate = BaseUrl + "/public_disc/ptr-pdfs/{0}/{1}.pdf";
 
+    private static readonly string[] HonorificPrefixes = ["Hon. ", "Mr. ", "Mrs. ", "Ms. "];
+
     public HouseDisclosureClient(HttpClient httpClient, ILogger<HouseDisclosureClient> logger)
     {
         _httpClient = httpClient;
@@ -140,13 +142,7 @@ public partial class HouseDisclosureClient
                 var prefix = m.Element("Prefix")?.Value?.Trim() ?? "";
                 var first = m.Element("First")?.Value?.Trim() ?? "";
                 var last = m.Element("Last")?.Value?.Trim() ?? "";
-                var name = $"{prefix} {first} {last}"
-                    .Trim()
-                    .Replace("Hon. ", "")
-                    .Replace("Mr. ", "")
-                    .Replace("Mrs. ", "")
-                    .Replace("Ms. ", "")
-                    .Trim();
+                var name = StripHonorificPrefixes($"{prefix} {first} {last}".Trim()).Trim();
 
                 return new HouseFiling(
                     name,
@@ -369,4 +365,11 @@ public partial class HouseDisclosureClient
         DateOnly FilingDate,
         string StateDst
     );
+
+    private static string StripHonorificPrefixes(string name)
+    {
+        foreach (var prefix in HonorificPrefixes)
+            name = name.Replace(prefix, "");
+        return name;
+    }
 }
