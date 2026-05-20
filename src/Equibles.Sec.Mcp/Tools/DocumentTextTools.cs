@@ -40,14 +40,10 @@ public class DocumentTextTools
     {
         try
         {
-            var document = await _documentRepository.GetWithContent(documentId);
-            if (document == null)
-                return $"Document {documentId} not found.";
-            if (document.Content?.FileContent?.Bytes == null)
-                return $"Document {documentId} has no content.";
+            var (document, lines, error) = await LoadDocumentLines(documentId);
+            if (error != null)
+                return error;
 
-            var text = Encoding.UTF8.GetString(document.Content.FileContent.Bytes);
-            var lines = text.Split('\n');
             var matches = new List<int>();
 
             for (var i = 0; i < lines.Length && matches.Count < maxResults; i++)
@@ -128,14 +124,10 @@ public class DocumentTextTools
     {
         try
         {
-            var document = await _documentRepository.GetWithContent(documentId);
-            if (document == null)
-                return $"Document {documentId} not found.";
-            if (document.Content?.FileContent?.Bytes == null)
-                return $"Document {documentId} has no content.";
+            var (document, lines, error) = await LoadDocumentLines(documentId);
+            if (error != null)
+                return error;
 
-            var text = Encoding.UTF8.GetString(document.Content.FileContent.Bytes);
-            var lines = text.Split('\n');
             var totalLines = lines.Length;
 
             // Clamp to valid range
@@ -176,6 +168,20 @@ public class DocumentTextTools
             catch { }
             return "An error occurred while reading document lines. Please try again.";
         }
+    }
+
+    private async Task<(Document Document, string[] Lines, string Error)> LoadDocumentLines(
+        Guid documentId
+    )
+    {
+        var document = await _documentRepository.GetWithContent(documentId);
+        if (document == null)
+            return (null, null, $"Document {documentId} not found.");
+        if (document.Content?.FileContent?.Bytes == null)
+            return (null, null, $"Document {documentId} has no content.");
+
+        var text = Encoding.UTF8.GetString(document.Content.FileContent.Bytes);
+        return (document, text.Split('\n'), null);
     }
 
     private static string FormatLine(int lineNumber, string content)
