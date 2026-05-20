@@ -219,15 +219,19 @@ public class FinancialFactsImportService
     {
         var pairs = parsed.Select(p => (p.Taxonomy, p.Tag)).ToHashSet();
 
+        // Pre-index labels in one pass so the per-pair lookup is O(1); the
+        // prior per-pair scan was O(pairs * parsed) on multi-thousand-fact filings.
+        var firstLabelByPair = parsed
+            .Where(p => !string.IsNullOrEmpty(p.Label))
+            .GroupBy(p => (p.Taxonomy, p.Tag))
+            .ToDictionary(g => g.Key, g => g.First().Label);
+
         var concepts = pairs
             .Select(pair => new FinancialConcept
             {
                 Taxonomy = pair.Taxonomy,
                 Tag = pair.Tag,
-                Label = parsed
-                    .Where(p => p.Taxonomy == pair.Taxonomy && p.Tag == pair.Tag)
-                    .Select(p => p.Label)
-                    .FirstOrDefault(l => !string.IsNullOrEmpty(l)),
+                Label = firstLabelByPair.GetValueOrDefault(pair),
             })
             .ToList();
 
