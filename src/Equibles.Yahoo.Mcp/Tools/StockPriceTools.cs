@@ -5,6 +5,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
+using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -189,23 +190,13 @@ public class StockPriceTools
                 if (kPeriod < 2 || dPeriod < 1)
                     return "kPeriod must be at least 2 and dPeriod at least 1.";
 
-                var stock = await FindStockByTicker(ticker);
-                if (stock == null)
-                    return $"Stock '{ticker}' not found.";
-
-                var start = ParseDateOr(
+                var (stock, records, error) = await LoadAscendingPriceWindow(
+                    ticker,
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-6))
+                    endDate
                 );
-                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
-
-                var records = await _priceRepository
-                    .GetByStock(stock, start, end)
-                    .OrderBy(p => p.Date)
-                    .ToListAsync();
-
-                if (records.Count == 0)
-                    return $"No price data found for {stock.Ticker} in the specified date range.";
+                if (error != null)
+                    return error;
 
                 var highs = records.Select(p => p.High).ToList();
                 var lows = records.Select(p => p.Low).ToList();
@@ -270,23 +261,13 @@ public class StockPriceTools
                 if (period < 2)
                     return "period must be at least 2.";
 
-                var stock = await FindStockByTicker(ticker);
-                if (stock == null)
-                    return $"Stock '{ticker}' not found.";
-
-                var start = ParseDateOr(
+                var (stock, records, error) = await LoadAscendingPriceWindow(
+                    ticker,
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-6))
+                    endDate
                 );
-                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
-
-                var records = await _priceRepository
-                    .GetByStock(stock, start, end)
-                    .OrderBy(p => p.Date)
-                    .ToListAsync();
-
-                if (records.Count == 0)
-                    return $"No price data found for {stock.Ticker} in the specified date range.";
+                if (error != null)
+                    return error;
 
                 var highs = records.Select(p => p.High).ToList();
                 var lows = records.Select(p => p.Low).ToList();
@@ -340,23 +321,13 @@ public class StockPriceTools
         return McpToolExecutor.Execute(
             async () =>
             {
-                var stock = await FindStockByTicker(ticker);
-                if (stock == null)
-                    return $"Stock '{ticker}' not found.";
-
-                var start = ParseDateOr(
+                var (stock, records, error) = await LoadAscendingPriceWindow(
+                    ticker,
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-6))
+                    endDate
                 );
-                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
-
-                var records = await _priceRepository
-                    .GetByStock(stock, start, end)
-                    .OrderBy(p => p.Date)
-                    .ToListAsync();
-
-                if (records.Count == 0)
-                    return $"No price data found for {stock.Ticker} in the specified date range.";
+                if (error != null)
+                    return error;
 
                 var closes = records.Select(p => p.Close).ToList();
                 var volumes = records.Select(p => p.Volume).ToList();
@@ -384,6 +355,34 @@ public class StockPriceTools
             $"ticker: {ticker}",
             ReportError
         );
+    }
+
+    private async Task<(
+        CommonStock Stock,
+        List<DailyStockPrice> Records,
+        string Error
+    )> LoadAscendingPriceWindow(string ticker, string startDate, string endDate)
+    {
+        var stock = await FindStockByTicker(ticker);
+        if (stock == null)
+            return (null, null, $"Stock '{ticker}' not found.");
+
+        var start = ParseDateOr(startDate, DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-6)));
+        var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
+
+        var records = await _priceRepository
+            .GetByStock(stock, start, end)
+            .OrderBy(p => p.Date)
+            .ToListAsync();
+
+        if (records.Count == 0)
+            return (
+                stock,
+                null,
+                $"No price data found for {stock.Ticker} in the specified date range."
+            );
+
+        return (stock, records, null);
     }
 
     private static DateOnly ParseDateOr(string value, DateOnly fallback) =>
