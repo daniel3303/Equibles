@@ -62,16 +62,11 @@ public class CongressTools
                 if (stock == null)
                     return $"Stock '{ticker}' not found.";
 
-                var start =
-                    !string.IsNullOrEmpty(startDate)
-                    && DateOnly.TryParse(startDate, out var parsedStart)
-                        ? parsedStart
-                        : DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1));
-
-                var end =
-                    !string.IsNullOrEmpty(endDate) && DateOnly.TryParse(endDate, out var parsedEnd)
-                        ? parsedEnd
-                        : DateOnly.FromDateTime(DateTime.UtcNow);
+                var start = ParseDateOr(
+                    startDate,
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
+                );
+                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
 
                 var query = _tradeRepository.GetByStock(stock, start, end);
 
@@ -145,16 +140,11 @@ public class CongressTools
                 if (member == null)
                     return $"Member '{memberName}' not found. Use SearchCongressMembers to find the exact name.";
 
-                var start =
-                    !string.IsNullOrEmpty(startDate)
-                    && DateOnly.TryParse(startDate, out var parsedStart)
-                        ? parsedStart
-                        : DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1));
-
-                var end =
-                    !string.IsNullOrEmpty(endDate) && DateOnly.TryParse(endDate, out var parsedEnd)
-                        ? parsedEnd
-                        : DateOnly.FromDateTime(DateTime.UtcNow);
+                var start = ParseDateOr(
+                    startDate,
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
+                );
+                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
 
                 var query = _tradeRepository
                     .GetByMember(member)
@@ -251,4 +241,7 @@ public class CongressTools
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
+
+    private static DateOnly ParseDateOr(string text, DateOnly fallback) =>
+        !string.IsNullOrEmpty(text) && DateOnly.TryParse(text, out var parsed) ? parsed : fallback;
 }
