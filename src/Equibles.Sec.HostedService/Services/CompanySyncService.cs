@@ -334,11 +334,7 @@ public class CompanySyncService : ICompanySyncService
                 }
             );
 
-            state.ExistingCiks.Add(secCompany.Cik);
-            state.ExistingPrimaryTickers.Add(primaryTicker);
-            foreach (var t in secondaryTickers)
-                state.ExistingSecondaryTickers.Add(t);
-            state.ExistingStocks.Add(newStock);
+            AddAndTrack(newStock, secCompany.Cik, primaryTicker, secondaryTickers, state);
 
             _logger.LogInformation(
                 "Replaced obsolete company {OldName} (CIK: {OldCik}) with {NewName} (CIK: {NewCik}) for ticker {Ticker}",
@@ -383,12 +379,7 @@ public class CompanySyncService : ICompanySyncService
                 }
             );
 
-            // Add to tracking sets to avoid duplicates in this run
-            state.ExistingCiks.Add(secCompany.Cik);
-            state.ExistingPrimaryTickers.Add(primaryTicker);
-            foreach (var t in secondaryTickers)
-                state.ExistingSecondaryTickers.Add(t);
-            state.ExistingStocks.Add(newStock);
+            AddAndTrack(newStock, secCompany.Cik, primaryTicker, secondaryTickers, state);
             _logger.LogDebug(
                 "Created new company: {Ticker} - {Name} (CIK: {Cik})",
                 primaryTicker,
@@ -587,6 +578,21 @@ public class CompanySyncService : ICompanySyncService
             }
         }
         return secondaryCikToParent;
+    }
+
+    private static void AddAndTrack(
+        CommonStock newStock,
+        string cik,
+        string primaryTicker,
+        List<string> secondaryTickers,
+        StockSyncState state
+    )
+    {
+        state.ExistingCiks.Add(cik);
+        state.ExistingPrimaryTickers.Add(primaryTicker);
+        foreach (var t in secondaryTickers)
+            state.ExistingSecondaryTickers.Add(t);
+        state.ExistingStocks.Add(newStock);
     }
 
     private static async Task DeleteAndUntrack(CommonStock stock, StockSyncState state)
