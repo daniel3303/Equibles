@@ -560,4 +560,75 @@ public class YahooPriceImportServiceTests : IDisposable
         var updated = _stockRepo.GetAll().Single(s => s.Ticker == "KST");
         updated.SharesOutStanding.Should().Be(5_000_000);
     }
+
+    [Fact]
+    public async Task Import_KeyStatisticsMarketCapDiffers_UpdatesStockMarketCapitalization()
+    {
+        var stock = CreateStock("MKT", "MarketCap Co.");
+        await SeedStocks(stock);
+
+        _yahooClient
+            .GetHistoricalPrices("MKT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns([]);
+        _yahooClient
+            .GetKeyStatistics("MKT")
+            .Returns(
+                new KeyStatistics
+                {
+                    SharesOutstanding = 10_000_000,
+                    MarketCapitalization = 1_500_000_000d,
+                }
+            );
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "MKT");
+        updated.MarketCapitalization.Should().Be(1_500_000_000d);
+        updated.SharesOutStanding.Should().Be(10_000_000);
+    }
+
+    [Fact]
+    public async Task Import_KeyStatisticsMarketCapZero_LeavesExistingMarketCapUntouched()
+    {
+        // Yahoo returns 0 when market cap is unknown — the worker must not overwrite a
+        // previously-known value with that sentinel.
+        var stock = CreateStock("MKT0", "MarketCap Zero Co.");
+        stock.MarketCapitalization = 9_876_543_210d;
+        await SeedStocks(stock);
+
+        _yahooClient
+            .GetHistoricalPrices("MKT0", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns([]);
+        _yahooClient
+            .GetKeyStatistics("MKT0")
+            .Returns(new KeyStatistics { SharesOutstanding = 42, MarketCapitalization = 0 });
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "MKT0");
+        updated.MarketCapitalization.Should().Be(9_876_543_210d);
+        updated.SharesOutStanding.Should().Be(42);
+    }
+
+    [Fact]
+    public async Task Import_KeyStatisticsBothZero_LeavesStockUntouched()
+    {
+        var stock = CreateStock("ZERO", "All Zero Co.");
+        stock.SharesOutStanding = 100;
+        stock.MarketCapitalization = 200d;
+        await SeedStocks(stock);
+
+        _yahooClient
+            .GetHistoricalPrices("ZERO", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns([]);
+        _yahooClient
+            .GetKeyStatistics("ZERO")
+            .Returns(new KeyStatistics { SharesOutstanding = 0, MarketCapitalization = 0 });
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "ZERO");
+        updated.SharesOutStanding.Should().Be(100);
+        updated.MarketCapitalization.Should().Be(200d);
+    }
 }

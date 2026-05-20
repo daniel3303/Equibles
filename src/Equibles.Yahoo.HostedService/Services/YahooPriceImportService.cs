@@ -175,23 +175,44 @@ public class YahooPriceImportService
     )
     {
         var stats = await _yahooClient.GetKeyStatistics(ticker);
-        if (stats == null || stats.SharesOutstanding == 0)
+        if (stats == null)
+            return;
+        // Nothing to write if Yahoo returned both fields as zero (missing/unknown).
+        if (stats.SharesOutstanding == 0 && stats.MarketCapitalization == 0)
             return;
 
         using var scope = _scopeFactory.CreateScope();
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
 
         var stock = await stockRepo.Get(commonStockId);
-        if (stock.SharesOutStanding == stats.SharesOutstanding)
-            return;
 
-        stock.SharesOutStanding = stats.SharesOutstanding;
+        // Per-field conservative writes: only update on actual change, and never
+        // overwrite a known value with 0 (treated as Yahoo "unknown" by the rest of
+        // the codebase).
+        var changed = false;
+        if (stats.SharesOutstanding != 0 && stock.SharesOutStanding != stats.SharesOutstanding)
+        {
+            stock.SharesOutStanding = stats.SharesOutstanding;
+            changed = true;
+        }
+        if (
+            stats.MarketCapitalization != 0
+            && stock.MarketCapitalization != stats.MarketCapitalization
+        )
+        {
+            stock.MarketCapitalization = stats.MarketCapitalization;
+            changed = true;
+        }
+
+        if (!changed)
+            return;
         await stockRepo.SaveChanges();
 
         _logger.LogDebug(
-            "Updated shares outstanding for {Ticker}: {Shares}",
+            "Updated key stats for {Ticker}: shares={Shares} marketCap={MarketCap}",
             ticker,
-            stats.SharesOutstanding
+            stats.SharesOutstanding,
+            stats.MarketCapitalization
         );
     }
 
