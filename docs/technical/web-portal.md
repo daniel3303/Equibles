@@ -8,7 +8,8 @@ Most user-facing data lives under `~/Stocks/{ticker}/{tab}`. The tab pattern is 
 
 The trio:
 
-- **Controller action** in [`StocksController`](../../src/Equibles.Web/Controllers/StocksController.cs) — one action per tab (`Price`, `Holdings`, `ShortVolume`, `ShortInterest`, `Ftd`, `Documents`, `InsiderTrading`, `CongressionalTrades`, `Financials`). Resolves the ticker, calls the matching `StockTabService.LoadXxxTab(stock, ...)`, stashes the result in `ViewData["TabViewModel"]`, returns the shared `Show.cshtml` view.
+- **Controller action** in [`StocksController`](../../src/Equibles.Web/Controllers/StocksController.cs) — one action per tab: `Price`, `Holdings`, `ShortVolume`, `ShortInterest`, `Ftd`, `Documents`, `InsiderTrading`, `CongressionalTrades`, `Financials`.
+- Each action resolves the ticker, calls the matching `StockTabService.LoadXxxTab(stock, ...)`, stashes the result in `ViewData["TabViewModel"]`, and returns the shared `Show.cshtml` view.
 - **Service method** on [`StockTabService`](../../src/Equibles.Web/Services/StockTabService.cs) — `Task<XxxTabViewModel> LoadXxxTab(CommonStock stock, …)`. The only place that talks to repositories for tab data. All query composition lives here.
 - **Razor partial** under [`Views/Stocks/_XxxTab.cshtml`](../../src/Equibles.Web/Views/Stocks/) — typed `@model XxxTabViewModel`. Renders the tab body; the surrounding chrome (breadcrumb, stock header, tab strip) belongs to `Show.cshtml`.
 
