@@ -5,11 +5,22 @@
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold mb-2">@Model.Name</h1>
-        <p class="text-base-content/60">
-            Institutional holder@(string.IsNullOrWhiteSpace(Model.Location) ? "" : " · " + Model.Location) · CIK @Model.Cik
-        </p>
+    <div class="mb-8 flex flex-wrap items-start justify-between gap-3">
+        <div>
+            <h1 class="text-3xl font-bold mb-2">@Model.Name</h1>
+            <p class="text-base-content/60">
+                Institutional holder@(string.IsNullOrWhiteSpace(Model.Location) ? "" : " · " + Model.Location) · CIK @Model.Cik
+            </p>
+        </div>
+        <!-- Action bar — Backtest link only renders when the holder has at least one 13F
+             snapshot, since the route's first useful response needs a rebalance date. -->
+        @if (Model.AvailableReportDates.Count > 0) {
+            <a asp-action="BacktestInstitution" asp-route-cik="@Model.Cik"
+               class="btn btn-outline btn-sm"
+               data-testid="institution-backtest-link">
+                Backtest
+            </a>
+        }
     </div>
 
     @if (Model.Summary.LatestReportDate.HasValue) {
