@@ -134,18 +134,9 @@ public class ProfilesController : BaseController
                 null
             );
 
-        var selectedIndex = 0;
-        if (requestedDate.HasValue)
-        {
-            for (var i = 0; i < distinctReportDates.Count; i++)
-            {
-                if (distinctReportDates[i] == requestedDate.Value)
-                {
-                    selectedIndex = i;
-                    break;
-                }
-            }
-        }
+        var selectedIndex = requestedDate.HasValue
+            ? Math.Max(0, distinctReportDates.ToList().IndexOf(requestedDate.Value))
+            : 0;
         var selected = distinctReportDates[selectedIndex];
         if (selectedIndex >= distinctReportDates.Count - 1)
             return (
