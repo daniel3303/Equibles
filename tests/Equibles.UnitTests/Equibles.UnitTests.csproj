@@ -83,5 +83,6 @@
     <ProjectReference Include="..\..\src\Equibles.Search\Equibles.Search.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Search.Abstractions\Equibles.Search.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Cboe.HostedService\Equibles.Cboe.HostedService.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Messaging\Equibles.Messaging.csproj" />
   </ItemGroup>
 </Project>
