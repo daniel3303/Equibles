@@ -69,17 +69,14 @@ public class DocumentTextTools
             {
                 var lineNumber = lineIndex + 1;
 
-                // Line before
                 if (lineIndex > 0)
                 {
                     result.AppendLine(FormatLine(lineIndex, lines[lineIndex - 1]));
                 }
 
-                // Matched line with bold markers
                 var highlightedLine = HighlightKeyword(lines[lineIndex], keyword);
                 result.AppendLine(FormatLine(lineNumber, highlightedLine));
 
-                // Line after
                 if (lineIndex < lines.Length - 1)
                 {
                     result.AppendLine(FormatLine(lineNumber + 1, lines[lineIndex + 1]));
@@ -130,7 +127,6 @@ public class DocumentTextTools
 
             var totalLines = lines.Length;
 
-            // Clamp to valid range
             startLine = Math.Max(1, startLine);
             endLine = Math.Min(totalLines, endLine);
 
