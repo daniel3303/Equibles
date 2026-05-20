@@ -148,8 +148,12 @@ public class HoldingsBacktestService
             .ToList();
 
         // Forward-fill needs a few days of pre-window prices so day-zero of the simulation
-        // resolves to the last trading day's close even on a weekend or holiday.
-        var priceWindowFrom = resolvedFrom.AddDays(-14);
+        // resolves to the last trading day's close even on a weekend or holiday. Clamp the
+        // subtraction so a near-MinValue `from` (e.g. ?from=0001-01-01) doesn't underflow.
+        var priceWindowFrom =
+            resolvedFrom > DateOnly.MinValue.AddDays(14)
+                ? resolvedFrom.AddDays(-14)
+                : DateOnly.MinValue;
 
         var stockIds = holdings
             .Where(h => h.OptionType == null && h.Value > 0)
