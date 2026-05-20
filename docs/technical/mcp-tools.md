@@ -1,14 +1,14 @@
 # MCP Tools
 
-Catalog of the MCP tools exposed by each `*.Mcp` project and the wiring path through [`Equibles.Mcp`](../src/Equibles.Mcp) into [`Equibles.Mcp.Server`](../src/Equibles.Mcp.Server). Names match what an AI assistant sees in `tools/list`.
+Catalog of the MCP tools exposed by each `*.Mcp` project and the wiring path through [`Equibles.Mcp`](../../src/Equibles.Mcp) into [`Equibles.Mcp.Server`](../../src/Equibles.Mcp.Server). Names match what an AI assistant sees in `tools/list`.
 
 ## Wiring path
 
-- [`EquiblesMcpBuilder`](../src/Equibles.Mcp/EquiblesMcpBuilder.cs) wraps the MCP server builder and tracks registered modules + middleware.
-- The MCP host calls [`services.AddEquiblesMcp(mcp => { ... })`](../src/Equibles.Mcp/Extensions/ServiceCollectionExtensions.cs) once. That call invokes `services.AddMcpServer().WithHttpTransport()` and hands a fluent `EquiblesMcpBuilder` to the configuration lambda.
+- [`EquiblesMcpBuilder`](../../src/Equibles.Mcp/EquiblesMcpBuilder.cs) wraps the MCP server builder and tracks registered modules + middleware.
+- The MCP host calls [`services.AddEquiblesMcp(mcp => { ... })`](../../src/Equibles.Mcp/Extensions/ServiceCollectionExtensions.cs) once. That call invokes `services.AddMcpServer().WithHttpTransport()` and hands a fluent `EquiblesMcpBuilder` to the configuration lambda.
 - Each module ships an `AddXxx(EquiblesMcpBuilder)` extension under `Equibles.<Module>.Mcp.Extensions.McpBuilderExtensions` that calls `builder.AddModule<AssemblyMcpModule<MarkerType>>()`.
-- [`AssemblyMcpModule<TMarker>`](../src/Equibles.Mcp/AssemblyMcpModule.cs) calls `builder.WithToolsFromAssembly(typeof(TMarker).Assembly)` — discovers every `[McpServerToolType]` class in the module assembly and registers its `[McpServerTool]`-attributed methods.
-- The host pipeline mounts the transport at `/mcp` with `app.MapMcp("/mcp")` and gates it via [`ApiKeyMiddleware`](../src/Equibles.Mcp/Middleware/ApiKeyMiddleware.cs) under `UseWhen(ctx.Request.Path.StartsWithSegments("/mcp"))`.
+- [`AssemblyMcpModule<TMarker>`](../../src/Equibles.Mcp/AssemblyMcpModule.cs) calls `builder.WithToolsFromAssembly(typeof(TMarker).Assembly)` — discovers every `[McpServerToolType]` class in the module assembly and registers its `[McpServerTool]`-attributed methods.
+- The host pipeline mounts the transport at `/mcp` with `app.MapMcp("/mcp")` and gates it via [`ApiKeyMiddleware`](../../src/Equibles.Mcp/Middleware/ApiKeyMiddleware.cs) under `UseWhen(ctx.Request.Path.StartsWithSegments("/mcp"))`.
 
 ## Tool catalog
 
@@ -108,7 +108,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 ## Tool implementation conventions
 
-- Every tool method runs through [`McpToolExecutor.Execute`](../src/Equibles.Mcp/McpToolExecutor.cs). It wraps the body in a try/catch, logs failures, reports them via the injected `ErrorManager` (so they show on the Status dashboard), and returns a safe `"An error occurred while executing <ToolName>..."` string instead of throwing across the MCP boundary.
+- Every tool method runs through [`McpToolExecutor.Execute`](../../src/Equibles.Mcp/McpToolExecutor.cs). It wraps the body in a try/catch, logs failures, reports them via the injected `ErrorManager` (so they show on the Status dashboard), and returns a safe `"An error occurred while executing <ToolName>..."` string instead of throwing across the MCP boundary.
 - Tool classes carry `[McpServerToolType]`; tool methods carry `[McpServerTool(Name = "...")]` + a `[Description]` so the MCP client gets a usable schema.
 - Tools return Markdown-formatted strings (tables for tabular data, headings for grouped output). The MCP transport ferries strings; no binary payloads.
 - Tools call repositories directly for reads. Writes are not exposed through MCP — the surface is intentionally read-only.
@@ -116,8 +116,8 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 ## Auth
 
-- `IApiKeyValidator` ([`Equibles.Mcp.Contracts.IApiKeyValidator`](../src/Equibles.Mcp/Contracts)) controls whether the API-key check is enforced.
-- The MCP host registers [`SimpleApiKeyValidator`](../src/Equibles.Mcp.Server/SimpleApiKeyValidator.cs), which reads `McpApiKey` from configuration. Empty / unset → `IsEnabled = false` and `ApiKeyMiddleware` lets every request through.
+- `IApiKeyValidator` ([`Equibles.Mcp.Contracts.IApiKeyValidator`](../../src/Equibles.Mcp/Contracts)) controls whether the API-key check is enforced.
+- The MCP host registers [`SimpleApiKeyValidator`](../../src/Equibles.Mcp.Server/SimpleApiKeyValidator.cs), which reads `McpApiKey` from configuration. Empty / unset → `IsEnabled = false` and `ApiKeyMiddleware` lets every request through.
 - When enabled, requests must include `Authorization: Bearer <key>`. Malformed or missing headers get a 401 with a JSON body — never an unprocessed pass-through.
 - Custom validators can replace `SimpleApiKeyValidator` by registering a different `IApiKeyValidator` implementation in the host's `ConfigureServices`.
 
