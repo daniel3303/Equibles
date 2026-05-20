@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -230,5 +231,63 @@ public class RateLimiterTests
             .BeFalse(
                 "WaitAsync's state machine must not call WaitAsync — recursion grows the inline completion cascade by one frame per iteration and overflowed the stack under sustained saturation (bug #1273)"
             );
+    }
+
+    [Fact]
+    public async Task ConcurrentCallers_ExceedingCapacity_HonorRatePerWindow()
+    {
+        // RateLimiter's core contract — "at most `maxRequests` releases per `timeWindow`"
+        // — is the only thing standing between this app's scrapers and rate-limit bans
+        // from FRED, FINRA, Yahoo, CBOE, SEC, and CFTC. The existing concurrent test
+        // (MultipleRapidRequests_WithinLimit_AllSucceedQuickly) covers exactly `maxRequests`
+        // callers in flight; nothing pins behavior under EXCESS concurrent load, which is
+        // the realistic case when several scrapers share a limiter or a burst hits at once.
+        //
+        // The risk this test pins: a refactor of the WaitAsync while-loop (introduced by
+        // bug #1273's fix) that re-orders the lock/await pair — releasing the lock too late,
+        // skipping the post-Task.Delay re-check, or simplifying CalculateWaitTime — could
+        // let bursts past the contracted ceiling. None of the existing tests would catch it;
+        // CI would stay green and the first sign would be a production ban from upstream.
+        //
+        // Six concurrent callers against capacity=2 in a 200ms window. Every sliding window
+        // of three consecutive completions must span at least the timeWindow, since at the
+        // time the third was permitted the first was still the oldest in the queue and the
+        // limiter must have waited until oldest + timeWindow before allowing the enqueue.
+        const int maxRequests = 2;
+        var timeWindow = TimeSpan.FromMilliseconds(200);
+        var limiter = new RateLimiter(maxRequests: maxRequests, timeWindow: timeWindow);
+
+        var completions = new ConcurrentQueue<long>();
+        var clock = Stopwatch.StartNew();
+
+        var tasks = Enumerable
+            .Range(0, 6)
+            .Select(async _ =>
+            {
+                await limiter.WaitAsync();
+                completions.Enqueue(clock.ElapsedMilliseconds);
+            })
+            .ToArray();
+
+        await Task.WhenAll(tasks);
+
+        var ordered = completions.OrderBy(t => t).ToArray();
+        ordered.Should().HaveCount(6);
+
+        // Tolerance absorbs the small gap between the limiter's internal enqueue and the
+        // test's clock read after `await WaitAsync()` returns. The contract is `>= timeWindow`;
+        // the asserted lower bound is `timeWindow - 25ms` to remain robust to scheduling
+        // jitter on slow CI runners without losing power against a real burst-past-cap regression.
+        var lowerBoundMs = (long)timeWindow.TotalMilliseconds - 25;
+        for (var i = 0; i + maxRequests < ordered.Length; i++)
+        {
+            var spanMs = ordered[i + maxRequests] - ordered[i];
+            spanMs
+                .Should()
+                .BeGreaterThanOrEqualTo(
+                    lowerBoundMs,
+                    $"completions[{i}..{i + maxRequests}] must span ≥ ~{timeWindow.TotalMilliseconds}ms — at the moment the (maxRequests+1)-th release enqueued, the first of the triple was still the oldest entry and the limiter must have waited until it aged out of the window"
+                );
+        }
     }
 }
