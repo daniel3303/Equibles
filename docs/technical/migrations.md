@@ -59,7 +59,7 @@ The `Equibles.ParadeDB.EntityFrameworkCore` package provides the `UseParadeDb()`
 The SEC `Chunk` table carries a BM25 index over `(Id, Content, DocumentType, DocumentId, Ticker, ReportingDate)`:
 
 - Declared in `Equibles.Sec.Data.Models.ChunkConfiguration` via the extension method `HasMethod("bm25")` from the ParadeDB EF provider.
-- The index is used by `RagSearchTools` for vector-free keyword search and by `DocumentTextTools.SearchDocumentKeyword` for in-document search.
+- `RagSearchTools` queries it for vector-free keyword search; `DocumentTextTools.SearchDocumentKeyword` queries it for in-document search.
 - First creation is slow (multi-minute on a fully-populated table); subsequent migrations that touch the index incur the same cost.
 
 ## `NULLS NOT DISTINCT` unique indexes
