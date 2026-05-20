@@ -11,18 +11,23 @@
 
 <div class="max-w-6xl mx-auto px-6 py-8 space-y-8">
 
-    <div class="flex items-center justify-between">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
         <h1 class="text-2xl font-bold">System Status</h1>
-        <!-- Auto-refresh controls -->
-        <div class="flex items-center gap-2">
-            <span class="loading loading-ring loading-xs hidden" data-status-spinner></span>
-            <span class="text-sm text-base-content/50" data-status-countdown></span>
-            <div class="join">
-                <button class="btn btn-xs join-item" data-status-interval="1">1s</button>
-                <button class="btn btn-xs join-item btn-active" data-status-interval="5">5s</button>
-                <button class="btn btn-xs join-item" data-status-interval="30">30s</button>
+        <div class="flex items-center gap-3 flex-wrap">
+            <a asp-action="Activity" asp-controller="Status" class="btn btn-ghost btn-sm">
+                <icon name="signal" size="4" /> Live activity
+            </a>
+            <!-- Auto-refresh controls -->
+            <div class="flex items-center gap-2">
+                <span class="loading loading-ring loading-xs hidden" data-status-spinner></span>
+                <span class="text-sm text-base-content/50" data-status-countdown></span>
+                <div class="join">
+                    <button class="btn btn-xs join-item" data-status-interval="1">1s</button>
+                    <button class="btn btn-xs join-item btn-active" data-status-interval="5">5s</button>
+                    <button class="btn btn-xs join-item" data-status-interval="30">30s</button>
+                </div>
+                <input type="checkbox" class="toggle toggle-sm toggle-success" checked data-status-toggle title="Auto-refresh" />
             </div>
-            <input type="checkbox" class="toggle toggle-sm toggle-success" checked data-status-toggle title="Auto-refresh" />
         </div>
     </div>
 

@@ -28,5 +28,6 @@
     <ProjectReference Include="..\..\src\Equibles.Web\Equibles.Web.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Migrations\Equibles.Migrations.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Mcp.Server\Equibles.Mcp.Server.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Messaging\Equibles.Messaging.csproj" />
   </ItemGroup>
 </Project>
