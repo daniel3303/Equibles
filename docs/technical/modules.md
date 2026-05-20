@@ -6,16 +6,16 @@ Index of the financial-domain modules in `src/`. Each row is one logical domain;
 
 | Module | Source | Key entities (`*.Data`) | Scraper (`*.HostedService`) | MCP tools (`*.Mcp`) |
 |---|---|---|---|---|
-| **SEC** ([`Equibles.Sec.*`](../src/Equibles.Sec.Data)) | SEC EDGAR | `Document` (10-K / 10-Q / 8-K + Form 3/4), `FailToDeliver`, `Chunks/*` | `SecScraperWorker`, `DocumentProcessorWorker`, `FtdScraperWorker` | `Equibles.Sec.Mcp` |
-| **SEC Financial Facts** ([`Equibles.Sec.FinancialFacts.*`](../src/Equibles.Sec.FinancialFacts.Data)) | SEC EDGAR XBRL | `FinancialFact`, `FinancialConcept` | `FinancialFactsScraperWorker` | `Equibles.Sec.FinancialFacts.Mcp` |
-| **Holdings** ([`Equibles.Holdings.*`](../src/Equibles.Holdings.Data)) | SEC 13F-HR | `InstitutionalHolder`, `InstitutionalHolding`, `ProcessedDataSet`, `ProcessedFiling`, `HoldingManagerEntry` | `HoldingsScraperWorker` (bulk), `Holdings13FRealtimeWorker` (per-filing) | `Equibles.Holdings.Mcp` |
-| **Insider Trading** ([`Equibles.InsiderTrading.*`](../src/Equibles.InsiderTrading.Data)) | SEC Form 3 / 4 | `InsiderOwner`, `InsiderTransaction` (with `TransactionCode`, `AcquiredDisposed`, `OwnershipNature` enums) | piggy-backs on SEC — `InsiderTradingFilingProcessor` runs inside `DocumentProcessorWorker` (no scraper project of its own) | `Equibles.InsiderTrading.Mcp` |
-| **Congress** ([`Equibles.Congress.*`](../src/Equibles.Congress.Data)) | House / Senate disclosures | `CongressMember`, `CongressionalTrade` (with `CongressPosition`, `CongressTransactionType` enums) | `CongressionalTradeScraperWorker` | `Equibles.Congress.Mcp` |
-| **FRED** ([`Equibles.Fred.*`](../src/Equibles.Fred.Data)) | Federal Reserve Bank of St. Louis FRED API | `FredSeries`, `FredObservation`, `FredSeriesCategory` | `FredScraperWorker` | `Equibles.Fred.Mcp` |
-| **Yahoo Prices** ([`Equibles.Yahoo.*`](../src/Equibles.Yahoo.Data)) | Yahoo Finance | `DailyStockPrice` (OHLCV + `AdjustedClose`) | `YahooPriceScraperWorker` | `Equibles.Yahoo.Mcp` |
-| **FINRA Short Data** ([`Equibles.Finra.*`](../src/Equibles.Finra.Data)) | FINRA API | `DailyShortVolume`, `ShortInterest` | `FinraScraperWorker` | `Equibles.Finra.Mcp` |
-| **CFTC** ([`Equibles.Cftc.*`](../src/Equibles.Cftc.Data)) | CFTC Commitments of Traders | `CftcContract`, `CftcContractCategory`, `CftcPositionReport` | `CftcScraperWorker` | `Equibles.Cftc.Mcp` |
-| **CBOE** ([`Equibles.Cboe.*`](../src/Equibles.Cboe.Data)) | CBOE | `CboeVixDaily`, `CboePutCallRatio` (with `CboePutCallRatioType` enum) | `CboeScraperWorker` | `Equibles.Cboe.Mcp` |
+| **SEC** ([`Equibles.Sec.*`](../../src/Equibles.Sec.Data)) | SEC EDGAR | `Document` (10-K / 10-Q / 8-K + Form 3/4), `FailToDeliver`, `Chunks/*` | `SecScraperWorker`, `DocumentProcessorWorker`, `FtdScraperWorker` | `Equibles.Sec.Mcp` |
+| **SEC Financial Facts** ([`Equibles.Sec.FinancialFacts.*`](../../src/Equibles.Sec.FinancialFacts.Data)) | SEC EDGAR XBRL | `FinancialFact`, `FinancialConcept` | `FinancialFactsScraperWorker` | `Equibles.Sec.FinancialFacts.Mcp` |
+| **Holdings** ([`Equibles.Holdings.*`](../../src/Equibles.Holdings.Data)) | SEC 13F-HR | `InstitutionalHolder`, `InstitutionalHolding`, `ProcessedDataSet`, `ProcessedFiling`, `HoldingManagerEntry` | `HoldingsScraperWorker` (bulk), `Holdings13FRealtimeWorker` (per-filing) | `Equibles.Holdings.Mcp` |
+| **Insider Trading** ([`Equibles.InsiderTrading.*`](../../src/Equibles.InsiderTrading.Data)) | SEC Form 3 / 4 | `InsiderOwner`, `InsiderTransaction` (with `TransactionCode`, `AcquiredDisposed`, `OwnershipNature` enums) | piggy-backs on SEC — `InsiderTradingFilingProcessor` runs inside `DocumentProcessorWorker` (no scraper project of its own) | `Equibles.InsiderTrading.Mcp` |
+| **Congress** ([`Equibles.Congress.*`](../../src/Equibles.Congress.Data)) | House / Senate disclosures | `CongressMember`, `CongressionalTrade` (with `CongressPosition`, `CongressTransactionType` enums) | `CongressionalTradeScraperWorker` | `Equibles.Congress.Mcp` |
+| **FRED** ([`Equibles.Fred.*`](../../src/Equibles.Fred.Data)) | Federal Reserve Bank of St. Louis FRED API | `FredSeries`, `FredObservation`, `FredSeriesCategory` | `FredScraperWorker` | `Equibles.Fred.Mcp` |
+| **Yahoo Prices** ([`Equibles.Yahoo.*`](../../src/Equibles.Yahoo.Data)) | Yahoo Finance | `DailyStockPrice` (OHLCV + `AdjustedClose`) | `YahooPriceScraperWorker` | `Equibles.Yahoo.Mcp` |
+| **FINRA Short Data** ([`Equibles.Finra.*`](../../src/Equibles.Finra.Data)) | FINRA API | `DailyShortVolume`, `ShortInterest` | `FinraScraperWorker` | `Equibles.Finra.Mcp` |
+| **CFTC** ([`Equibles.Cftc.*`](../../src/Equibles.Cftc.Data)) | CFTC Commitments of Traders | `CftcContract`, `CftcContractCategory`, `CftcPositionReport` | `CftcScraperWorker` | `Equibles.Cftc.Mcp` |
+| **CBOE** ([`Equibles.Cboe.*`](../../src/Equibles.Cboe.Data)) | CBOE | `CboeVixDaily`, `CboePutCallRatio` (with `CboePutCallRatioType` enum) | `CboeScraperWorker` | `Equibles.Cboe.Mcp` |
 
 ## Cross-cutting modules
 
@@ -32,7 +32,7 @@ These do not own a financial-domain dataset; they support every other module.
 
 ## Module nuances
 
-- **Insider Trading has no `.HostedService` project.** Form 3 / Form 4 filings are SEC documents and arrive through the SEC pipeline. `InsiderTradingFilingProcessor` ([`src/Equibles.Sec.HostedService/Services/InsiderTradingFilingProcessor.cs`](../src/Equibles.Sec.HostedService/Services/InsiderTradingFilingProcessor.cs)) runs inside `DocumentProcessorWorker`, parses the form, and writes through the Insider Trading repositories.
+- **Insider Trading has no `.HostedService` project.** Form 3 / Form 4 filings are SEC documents and arrive through the SEC pipeline. `InsiderTradingFilingProcessor` ([`src/Equibles.Sec.HostedService/Services/InsiderTradingFilingProcessor.cs`](../../src/Equibles.Sec.HostedService/Services/InsiderTradingFilingProcessor.cs)) runs inside `DocumentProcessorWorker`, parses the form, and writes through the Insider Trading repositories.
 - **Holdings has two scrapers.** `HoldingsScraperWorker` does the periodic bulk pull; `Holdings13FRealtimeWorker` watches EDGAR for new 13F-HR submissions and ingests them as they post. Both share the same `ProcessedDataSet` / `ProcessedFiling` deduplication bookkeeping.
 - **SEC has three scrapers.** `SecScraperWorker` pulls filings, `DocumentProcessorWorker` normalises and routes them to per-document-type processors, `FtdScraperWorker` pulls fails-to-deliver data. `Equibles.Sec.FinancialFacts.HostedService` is a separate worker that pulls the XBRL fact stream from the same EDGAR root.
 - **The `*.Mcp` project is optional.** A module that has no AI-assistant-facing tools (currently: `Errors`, `Media`, `CommonStocks` — they're internal infrastructure) ships only `.Data` + `.Repositories` (+ `.BusinessLogic` when needed). The MCP host calls `mcp.AddXxx()` only for modules that expose tools.
