@@ -65,6 +65,7 @@ public class YahooPriceImportService
                 var inserted = await ImportTicker(ticker, commonStockId, today, cancellationToken);
                 totalInserted += inserted;
                 await SyncKeyStatistics(ticker, commonStockId, cancellationToken);
+                await SyncCompanyProfile(ticker, commonStockId, cancellationToken);
             }
             catch (HttpRequestException ex)
             {
@@ -192,6 +193,103 @@ public class YahooPriceImportService
             ticker,
             stats.SharesOutstanding
         );
+    }
+
+    private async Task SyncCompanyProfile(
+        string ticker,
+        Guid commonStockId,
+        CancellationToken cancellationToken
+    )
+    {
+        var profile = await _yahooClient.GetCompanyProfile(ticker);
+        if (profile == null || string.IsNullOrWhiteSpace(profile.Industry))
+            return;
+
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var industryRepo = scope.ServiceProvider.GetRequiredService<IndustryRepository>();
+        var sectorRepo = scope.ServiceProvider.GetRequiredService<SectorRepository>();
+
+        // Upsert by case-insensitive name. Yahoo uses a small stable vocabulary, so
+        // collisions are rare and a flat scan over Sector/Industry is fine — both tables
+        // hold tens of rows at steady state. Materialize the lookup once per call.
+        var sectorId = await UpsertSectorIfPresent(sectorRepo, profile.Sector, cancellationToken);
+        var industry = await UpsertIndustry(
+            industryRepo,
+            profile.Industry,
+            sectorId,
+            cancellationToken
+        );
+
+        var stock = await stockRepo.Get(commonStockId);
+        if (stock.IndustryId == industry.Id)
+            return;
+
+        stock.IndustryId = industry.Id;
+        await stockRepo.SaveChanges();
+
+        _logger.LogDebug(
+            "Updated industry for {Ticker}: {Industry} (sector {Sector})",
+            ticker,
+            profile.Industry,
+            profile.Sector ?? "?"
+        );
+    }
+
+    private static async Task<Guid?> UpsertSectorIfPresent(
+        SectorRepository sectorRepo,
+        string sectorName,
+        CancellationToken cancellationToken
+    )
+    {
+        if (string.IsNullOrWhiteSpace(sectorName))
+            return null;
+
+        var existing = await sectorRepo
+            .GetAll()
+            .FirstOrDefaultAsync(s => s.Name.ToLower() == sectorName.ToLower(), cancellationToken);
+        if (existing != null)
+            return existing.Id;
+
+        var sector = new Equibles.CommonStocks.Data.Models.Taxonomies.Sector { Name = sectorName };
+        sectorRepo.Add(sector);
+        await sectorRepo.SaveChanges();
+        return sector.Id;
+    }
+
+    private static async Task<Equibles.CommonStocks.Data.Models.Taxonomies.Industry> UpsertIndustry(
+        IndustryRepository industryRepo,
+        string industryName,
+        Guid? sectorId,
+        CancellationToken cancellationToken
+    )
+    {
+        var existing = await industryRepo
+            .GetAll()
+            .FirstOrDefaultAsync(
+                i => i.Name.ToLower() == industryName.ToLower(),
+                cancellationToken
+            );
+        if (existing != null)
+        {
+            // Backfill the sector link if it was missing — newly-imported industries that
+            // pre-dated the Sector taxonomy would otherwise stay unlinked.
+            if (sectorId.HasValue && existing.SectorId != sectorId)
+            {
+                existing.SectorId = sectorId;
+                await industryRepo.SaveChanges();
+            }
+            return existing;
+        }
+
+        var industry = new Equibles.CommonStocks.Data.Models.Taxonomies.Industry
+        {
+            Name = industryName,
+            SectorId = sectorId,
+        };
+        industryRepo.Add(industry);
+        await industryRepo.SaveChanges();
+        return industry;
     }
 
     private async Task<DateOnly> GetSyncStartDate(
