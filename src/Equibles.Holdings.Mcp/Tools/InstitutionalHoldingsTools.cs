@@ -631,10 +631,7 @@ public class InstitutionalHoldingsTools
         return McpToolExecutor.Execute(
             async () =>
             {
-                var holder = await _holderRepository
-                    .Search(institutionName ?? string.Empty)
-                    .OrderBy(h => h.Name)
-                    .FirstOrDefaultAsync();
+                var holder = await FindHolderByName(institutionName);
                 if (holder == null)
                     return $"No institution found matching '{institutionName}'.";
 
@@ -718,10 +715,7 @@ public class InstitutionalHoldingsTools
         return McpToolExecutor.Execute(
             async () =>
             {
-                var holder = await _holderRepository
-                    .Search(institutionName ?? string.Empty)
-                    .OrderBy(h => h.Name)
-                    .FirstOrDefaultAsync();
+                var holder = await FindHolderByName(institutionName);
                 if (holder == null)
                     return $"No institution found matching '{institutionName}'.";
 
@@ -805,10 +799,7 @@ public class InstitutionalHoldingsTools
                 )
                     return "Unknown bucket. Use one of: initiated, increased, reduced, exited (or omit).";
 
-                var holder = await _holderRepository
-                    .Search(institutionName ?? string.Empty)
-                    .OrderBy(h => h.Name)
-                    .FirstOrDefaultAsync();
+                var holder = await FindHolderByName(institutionName);
                 if (holder == null)
                     return $"No institution found matching '{institutionName}'.";
 
@@ -922,16 +913,10 @@ public class InstitutionalHoldingsTools
         return McpToolExecutor.Execute(
             async () =>
             {
-                var holder1 = await _holderRepository
-                    .Search(institutionName1 ?? string.Empty)
-                    .OrderBy(h => h.Name)
-                    .FirstOrDefaultAsync();
+                var holder1 = await FindHolderByName(institutionName1);
                 if (holder1 == null)
                     return $"No institution found matching '{institutionName1}'.";
-                var holder2 = await _holderRepository
-                    .Search(institutionName2 ?? string.Empty)
-                    .OrderBy(h => h.Name)
-                    .FirstOrDefaultAsync();
+                var holder2 = await FindHolderByName(institutionName2);
                 if (holder2 == null)
                     return $"No institution found matching '{institutionName2}'.";
 
@@ -1053,10 +1038,7 @@ public class InstitutionalHoldingsTools
                 var missing = new List<string>();
                 foreach (var name in names)
                 {
-                    var holder = await _holderRepository
-                        .Search(name)
-                        .OrderBy(h => h.Name)
-                        .FirstOrDefaultAsync();
+                    var holder = await FindHolderByName(name);
                     if (holder == null)
                         missing.Add(name);
                     else
@@ -1154,6 +1136,9 @@ public class InstitutionalHoldingsTools
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
+
+    private Task<InstitutionalHolder> FindHolderByName(string name) =>
+        _holderRepository.Search(name ?? string.Empty).OrderBy(h => h.Name).FirstOrDefaultAsync();
 
     private static bool TryParseReportDate(string input, out DateOnly result)
     {
