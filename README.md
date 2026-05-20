@@ -167,6 +167,7 @@ The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, 
 - **Congressional Trading** — Trades for a ticker, trades by one member, member search
 - **SEC Documents** — Full-text search, semantic search, document browsing, keyword search within filings
 - **Economic Indicators** — FRED data lookup, latest macro snapshot, indicator search across categories
+- **Stock Prices** — Daily OHLCV history with adjusted close, plus latest close across one or more tickers
 - **Futures Positioning** — COT positioning data, latest snapshot across all contracts, contract search
 - **Market Indicators** — VIX historical data, put/call ratios by type (equity, index, total, VIX, ETP)
 
