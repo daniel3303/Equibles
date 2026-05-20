@@ -49,7 +49,7 @@ public class ShortDataTools
             int maxResults = 90
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var stock = await _commonStockRepository.GetByTicker(
@@ -93,10 +93,8 @@ public class ShortDataTools
 
                 return result.ToString();
             },
-            _logger,
             "GetShortVolume",
-            $"ticker: {ticker}",
-            ReportError
+            $"ticker: {ticker}"
         );
     }
 
@@ -114,7 +112,7 @@ public class ShortDataTools
             int maxResults = 24
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var stock = await _commonStockRepository.GetByTicker(
@@ -166,10 +164,8 @@ public class ShortDataTools
 
                 return result.ToString();
             },
-            _logger,
             "GetShortInterest",
-            $"ticker: {ticker}",
-            ReportError
+            $"ticker: {ticker}"
         );
     }
 
@@ -182,7 +178,7 @@ public class ShortDataTools
         [Description("Maximum number of results to return (default: 50)")] int maxResults = 50
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var latestDate = await _shortInterestRepository
@@ -235,12 +231,13 @@ public class ShortDataTools
 
                 return result.ToString();
             },
-            _logger,
             "GetShortInterestSnapshot",
-            $"minDaysToCover: {minDaysToCover}",
-            ReportError
+            $"minDaysToCover: {minDaysToCover}"
         );
     }
+
+    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
+        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
 
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
