@@ -28,6 +28,15 @@ public class QuoteSummaryResult
 
     [JsonProperty("assetProfile")]
     public AssetProfileContainer AssetProfile { get; set; }
+
+    [JsonProperty("summaryDetail")]
+    public SummaryDetailContainer SummaryDetail { get; set; }
+}
+
+public class SummaryDetailContainer
+{
+    [JsonProperty("marketCap")]
+    public YahooRawValue MarketCap { get; set; }
 }
 
 public class AssetProfileContainer
