@@ -130,7 +130,8 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 ## Auth
 
 - `IApiKeyValidator` ([`Equibles.Mcp.Contracts.IApiKeyValidator`](../../src/Equibles.Mcp/Contracts)) controls whether the API-key check is enforced.
-- The MCP host registers [`SimpleApiKeyValidator`](../../src/Equibles.Mcp.Server/SimpleApiKeyValidator.cs), which reads `McpApiKey` from configuration. Empty / unset → `IsEnabled = false` and `ApiKeyMiddleware` lets every request through.
+- The MCP host registers [`SimpleApiKeyValidator`](../../src/Equibles.Mcp.Server/SimpleApiKeyValidator.cs), which reads `McpApiKey` from configuration.
+- When `McpApiKey` is empty or unset, `IsEnabled = false` and `ApiKeyMiddleware` lets every request through.
 - When enabled, requests must include `Authorization: Bearer <key>`. Malformed or missing headers get a 401 with a JSON body — never an unprocessed pass-through.
 - Custom validators can replace `SimpleApiKeyValidator` by registering a different `IApiKeyValidator` implementation in the host's `ConfigureServices`.
 
