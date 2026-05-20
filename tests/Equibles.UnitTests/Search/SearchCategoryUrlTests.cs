@@ -8,17 +8,17 @@ namespace Equibles.UnitTests.Search;
 public class SearchCategoryUrlTests
 {
     [Fact]
-    public void CategoryUrl_ShippedGroupWithNoBrowsePage_ReturnsNull()
+    public void CategoryUrl_ShippedGroupWithNoBrowsePage_FallsBackToSearchPage()
     {
-        // Contract (XML doc): CategoryUrl is the "See all" destination for a group,
-        // "or null when no browse page exists". "Insiders" is a real shipped search
-        // group (InsiderOwnerSearchProvider.Category) with no browse page, so it must
-        // return null even though the URL helper can resolve any action.
+        // Contract (XML doc): CategoryUrl returns a "See all" destination for every shipped
+        // category. Groups with a dedicated browse page resolve to that page; the rest
+        // ("Insiders", "Institutions", "Congress", "SEC Filings") fall back to the search
+        // page filtered to just that category so users always get an expanded result list.
         var url = Substitute.For<IUrlHelper>();
         url.Action(Arg.Any<UrlActionContext>()).Returns("/resolved/path");
 
         var result = url.CategoryUrl("Insiders", "berkshire");
 
-        result.Should().BeNull();
+        result.Should().Be("/resolved/path");
     }
 }

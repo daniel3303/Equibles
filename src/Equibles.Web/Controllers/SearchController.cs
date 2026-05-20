@@ -8,8 +8,12 @@ namespace Equibles.Web.Controllers;
 
 public class SearchController : BaseController
 {
-    // Top hits per group on the overview page; "see all" links go to the existing per-module pages.
-    private const int MaxPerProvider = 6;
+    // Top hits per group on the overview page (all categories visible side by side).
+    private const int MaxPerProviderOverview = 6;
+
+    // Hits per group when one category is selected — the user clicked "See all" / picked a
+    // single category, so show enough to feel like a list rather than the overview cap.
+    private const int MaxPerProviderFocused = 50;
 
     private readonly SearchAggregator _searchAggregator;
 
@@ -34,7 +38,7 @@ public class SearchController : BaseController
         // chips can still list all matched categories even when one is selected.
         var groups = await _searchAggregator.Search(
             q,
-            MaxPerProvider,
+            ResolveMaxPerProvider(category),
             HttpContext.RequestAborted,
             sort,
             dateFrom,
@@ -67,7 +71,7 @@ public class SearchController : BaseController
     {
         var groups = await _searchAggregator.Search(
             q,
-            MaxPerProvider,
+            ResolveMaxPerProvider(category),
             HttpContext.RequestAborted,
             sort,
             dateFrom,
@@ -87,4 +91,7 @@ public class SearchController : BaseController
             }
         );
     }
+
+    private static int ResolveMaxPerProvider(string category) =>
+        string.IsNullOrWhiteSpace(category) ? MaxPerProviderOverview : MaxPerProviderFocused;
 }
