@@ -1,15 +1,12 @@
 using System.Globalization;
 using System.Net;
-using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Cboe.Contracts;
 using Equibles.Integrations.Cboe.Models;
 using Equibles.Integrations.Common.RateLimiter;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Equibles.Integrations.Cboe;
 
-[Service(ServiceLifetime.Scoped, typeof(ICboeClient))]
 public class CboeClient : ICboeClient
 {
     private const string PutCallBaseUrl =
@@ -17,11 +14,6 @@ public class CboeClient : ICboeClient
     private const string VixUrl =
         "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv";
     private const int MaxRetries = 3;
-
-    private static readonly IRateLimiter RateLimiter = new Common.RateLimiter.RateLimiter(
-        maxRequests: 10,
-        timeWindow: TimeSpan.FromMinutes(1)
-    );
 
     private static readonly Dictionary<CboePutCallCsvType, string> CsvFileNames = new()
     {
@@ -34,11 +26,13 @@ public class CboeClient : ICboeClient
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<CboeClient> _logger;
+    private readonly IRateLimiter _rateLimiter;
 
-    public CboeClient(HttpClient httpClient, ILogger<CboeClient> logger)
+    public CboeClient(HttpClient httpClient, ILogger<CboeClient> logger, IRateLimiter rateLimiter)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _rateLimiter = rateLimiter;
     }
 
     public async Task<List<CboePutCallRecord>> DownloadPutCallRatios(CboePutCallCsvType csvType)
@@ -63,7 +57,7 @@ public class CboeClient : ICboeClient
     {
         for (var attempt = 0; attempt <= MaxRetries; attempt++)
         {
-            await RateLimiter.WaitAsync();
+            await _rateLimiter.WaitAsync();
 
             using var response = await _httpClient.GetAsync(url);
 
@@ -76,7 +70,7 @@ public class CboeClient : ICboeClient
                     attempt + 1,
                     MaxRetries
                 );
-                RateLimiter.PauseFor(delay);
+                _rateLimiter.PauseFor(delay);
                 await Task.Delay(delay);
                 continue;
             }
