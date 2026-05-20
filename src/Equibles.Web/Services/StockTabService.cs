@@ -94,6 +94,10 @@ public class StockTabService
 
             var grouped = HoldingsPositionGrouper.Group(allCurrent, allPrevious);
             var bucketCounts = grouped.ToDictionary(g => g.Key, g => g.Value.Count);
+            var (topBuyers, topSellers) = HoldingsTopMoversSelector.Select(
+                grouped,
+                HoldingsTabViewModel.TopMoversPreviewCount
+            );
 
             return new HoldingsTabViewModel
             {
@@ -105,6 +109,10 @@ public class StockTabService
                 HolderCount = allCurrent.Select(h => h.InstitutionalHolderId).Distinct().Count(),
                 GroupedHolders = grouped,
                 BucketCounts = bucketCounts,
+                TopBuyers = topBuyers,
+                TopSellers = topSellers,
+                TotalBuyerCount = HoldingsTopMoversSelector.CountBuyers(grouped),
+                TotalSellerCount = HoldingsTopMoversSelector.CountSellers(grouped),
             };
         }
 

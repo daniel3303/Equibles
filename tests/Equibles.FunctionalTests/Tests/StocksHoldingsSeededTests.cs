@@ -138,5 +138,141 @@ public class StocksHoldingsSeededTests
         await Assertions
             .Expect(unchangedRows.First.Locator("td").First)
             .Not.ToHaveTextAsync("Unknown");
+
+        // No movers in this fixture (every holder reports the same shares quarter over
+        // quarter), so the Top Buyers / Top Sellers cards must NOT render.
+        await Assertions
+            .Expect(page.Locator("[data-testid='holdings-top-buyers']"))
+            .ToHaveCountAsync(0);
+        await Assertions
+            .Expect(page.Locator("[data-testid='holdings-top-sellers']"))
+            .ToHaveCountAsync(0);
+    }
+
+    [Fact]
+    public async Task Holdings_GetForStockWithQuarterlyMovement_RendersTopBuyersAndTopSellersCards()
+    {
+        // Seeds two quarters with explicit movement so the Top Buyers / Top Sellers
+        // cards have something to rank:
+        //   Q1 (prior): holders 1..4 hold 1_000 shares each. Holder 5 does not exist.
+        //   Q2 (latest): holder 1 → 1_500 (Increased Δ +500),
+        //                holder 2 → 800   (Reduced Δ -200),
+        //                holder 3 → gone  (Sold out Δ -1_000),
+        //                holder 4 → 1_000 (Unchanged),
+        //                holder 5 → 2_000 (New Δ +2_000).
+        // Expected Top Buyers: Holder 5 (+2_000), Holder 1 (+500).
+        // Expected Top Sellers: Holder 3 (-1_000), Holder 2 (-200).
+        var stockId = Guid.NewGuid();
+        var prior = new DateOnly(2025, 6, 30);
+        var latest = new DateOnly(2025, 9, 30);
+
+        await _web.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new CommonStock
+                {
+                    Id = stockId,
+                    Ticker = "MSFT",
+                    Name = "Microsoft Corp.",
+                    Cik = "0000789019",
+                }
+            );
+
+            var holders = new InstitutionalHolder[5];
+            for (var i = 0; i < holders.Length; i++)
+            {
+                holders[i] = new InstitutionalHolder
+                {
+                    Cik = $"M{i + 1:D7}",
+                    Name = $"Mover Holder {i + 1}",
+                };
+                db.Add(holders[i]);
+            }
+
+            // Q1 (prior) — holders 1..4 only
+            for (var i = 0; i < 4; i++)
+            {
+                db.Add(
+                    new InstitutionalHolding
+                    {
+                        CommonStockId = stockId,
+                        InstitutionalHolderId = holders[i].Id,
+                        ReportDate = prior,
+                        FilingDate = prior.AddDays(45),
+                        Value = 1_000_000,
+                        Shares = 1_000,
+                        ShareType = ShareType.Shares,
+                        InvestmentDiscretion = InvestmentDiscretion.Sole,
+                    }
+                );
+            }
+
+            // Q2 (latest)
+            var latestShares = new long[]
+            {
+                1_500,
+                800, /* holder 3 sold out */
+                0,
+                1_000,
+                2_000,
+            };
+            for (var i = 0; i < holders.Length; i++)
+            {
+                if (latestShares[i] == 0)
+                    continue;
+                db.Add(
+                    new InstitutionalHolding
+                    {
+                        CommonStockId = stockId,
+                        InstitutionalHolderId = holders[i].Id,
+                        ReportDate = latest,
+                        FilingDate = latest.AddDays(45),
+                        Value = latestShares[i] * 1_000,
+                        Shares = latestShares[i],
+                        ShareType = ShareType.Shares,
+                        InvestmentDiscretion = InvestmentDiscretion.Sole,
+                    }
+                );
+            }
+            await Task.CompletedTask;
+        });
+
+        var page = await _playwright.NewPageAsync(_web.BaseUrl);
+        var response = await page.GotoAsync("/stocks/msft/holdings");
+
+        response.Should().NotBeNull();
+        response!.Status.Should().Be(200);
+
+        // Cards present.
+        await Assertions
+            .Expect(page.Locator("[data-testid='holdings-top-buyers']"))
+            .ToHaveCountAsync(1);
+        await Assertions
+            .Expect(page.Locator("[data-testid='holdings-top-sellers']"))
+            .ToHaveCountAsync(1);
+
+        // Buyer count badge (2 = New + Increased) and seller count badge (2 = Reduced + Sold out).
+        await Assertions
+            .Expect(page.Locator("[data-testid='holdings-top-buyers'] .badge").First)
+            .ToHaveTextAsync("2");
+        await Assertions
+            .Expect(page.Locator("[data-testid='holdings-top-sellers'] .badge").First)
+            .ToHaveTextAsync("2");
+
+        // Top buyer row is Holder 5 (+2_000); top seller row is Holder 3 (-1_000).
+        await Assertions
+            .Expect(
+                page.Locator("[data-testid='holdings-top-buyers'] table tbody tr")
+                    .First.Locator("td")
+                    .First
+            )
+            .ToHaveTextAsync("Mover Holder 5");
+        await Assertions
+            .Expect(
+                page.Locator("[data-testid='holdings-top-sellers'] table tbody tr")
+                    .First.Locator("td")
+                    .First
+            )
+            .ToHaveTextAsync("Mover Holder 3");
     }
 }
