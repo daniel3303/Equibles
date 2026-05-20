@@ -110,14 +110,14 @@ public class ProfilesInstitutionBacktestTests
         html.Should().Contain("data-testid=\"backtest-filters\"");
         html.Should().Contain("data-testid=\"backtest-portfolio-summary\"");
         html.Should().Contain("data-testid=\"backtest-benchmark-summary\"");
-        html.Should().Contain("data-testid=\"backtest-series-table\"");
+        html.Should().Contain("data-testid=\"backtest-chart-card\"");
         html.Should().Contain("Total return");
         html.Should().Contain("Max drawdown");
-        // Flat prices → both series stay at the initial 100 normalized value. Allow either
-        // culture's decimal separator (`100.00` US, `100,00` ES/PT/FR) so the test passes
-        // regardless of the host culture.
-        var hasInitialPoint = html.Contains("100.00") || html.Contains("100,00");
-        hasInitialPoint.Should().BeTrue(html);
+        // The Chart.js bootstrap script serializes the portfolio + benchmark series with
+        // Newtonsoft's default culture-invariant formatting; the flat-100 fixture should
+        // emit at least one "100.0" run in either dataset regardless of host culture.
+        html.Should().Contain("backtest-chart");
+        html.Should().Contain("100.0");
     }
 
     private static InstitutionalHolding MakeHolding(
