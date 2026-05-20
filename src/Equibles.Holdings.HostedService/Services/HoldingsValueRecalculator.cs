@@ -72,39 +72,9 @@ public class HoldingsValueRecalculator
         );
 
         var resolvedPairKeys = prices.Keys.ToHashSet();
-        var totalUpdated = 0;
         var totalGivenUp = 0;
 
-        // Resolve holdings that now have a price
-        foreach (var ((stockId, reportDate), closePrice) in prices)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            using var scope = _scopeFactory.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
-
-            var pendingHoldings = await dbContext
-                .Set<InstitutionalHolding>()
-                .Include(h => h.ManagerEntries)
-                .Where(h =>
-                    h.ValuePending && h.CommonStockId == stockId && h.ReportDate == reportDate
-                )
-                .ToListAsync(cancellationToken);
-
-            foreach (var holding in pendingHoldings)
-            {
-                holding.Value = (long)(holding.Shares * closePrice);
-                holding.ValuePending = false;
-
-                foreach (var entry in holding.ManagerEntries)
-                {
-                    entry.Value = (long)(entry.Shares * closePrice);
-                }
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-            totalUpdated += pendingHoldings.Count;
-        }
+        var totalUpdated = await ResolveHoldingsWithNewPrices(prices, cancellationToken);
 
         // Increment retry count for unresolved pairs and give up after MaxRetries
         var unresolvedPairs = pendingPairs
@@ -163,5 +133,43 @@ public class HoldingsValueRecalculator
             totalUpdated,
             totalGivenUp
         );
+    }
+
+    private async Task<int> ResolveHoldingsWithNewPrices(
+        Dictionary<(Guid CommonStockId, DateOnly Date), decimal> prices,
+        CancellationToken cancellationToken
+    )
+    {
+        var totalUpdated = 0;
+        foreach (var ((stockId, reportDate), closePrice) in prices)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            using var scope = _scopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+
+            var pendingHoldings = await dbContext
+                .Set<InstitutionalHolding>()
+                .Include(h => h.ManagerEntries)
+                .Where(h =>
+                    h.ValuePending && h.CommonStockId == stockId && h.ReportDate == reportDate
+                )
+                .ToListAsync(cancellationToken);
+
+            foreach (var holding in pendingHoldings)
+            {
+                holding.Value = (long)(holding.Shares * closePrice);
+                holding.ValuePending = false;
+
+                foreach (var entry in holding.ManagerEntries)
+                {
+                    entry.Value = (long)(entry.Shares * closePrice);
+                }
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            totalUpdated += pendingHoldings.Count;
+        }
+        return totalUpdated;
     }
 }
