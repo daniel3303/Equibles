@@ -184,7 +184,19 @@ public static class HoldingsBacktestCalculator
         {
             var years = (double)days / 365.25;
             var ratio = (double)(final / initial);
-            cagr = (decimal)(Math.Pow(ratio, 1.0 / years) - 1.0) * 100m;
+            var compounded = Math.Pow(ratio, 1.0 / years) - 1.0;
+            try
+            {
+                cagr = (decimal)compounded * 100m;
+            }
+            catch (OverflowException)
+            {
+                // Extreme single-window moves (e.g. an intraday double on a one-day
+                // window) drive the annualised compounding past decimal.MaxValue;
+                // saturate the CAGR cell rather than aborting the calculation —
+                // TotalReturn% / MaxDrawdown% are still meaningful.
+                cagr = decimal.MaxValue;
+            }
         }
 
         decimal peak = values[0];
