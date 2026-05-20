@@ -49,7 +49,7 @@ public class InstitutionalHoldingsTools
         [Description("Maximum number of holders to return (default: 20)")] int maxResults = 20
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var stock = await _commonStockRepository.GetByTicker(ticker);
@@ -101,10 +101,8 @@ public class InstitutionalHoldingsTools
 
                 return result.ToString();
             },
-            _logger,
             "GetTopHolders",
-            $"ticker: {ticker}",
-            ReportError
+            $"ticker: {ticker}"
         );
     }
 
@@ -118,7 +116,7 @@ public class InstitutionalHoldingsTools
             int maxPeriods = 8
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var stock = await _commonStockRepository.GetByTicker(ticker);
@@ -165,10 +163,8 @@ public class InstitutionalHoldingsTools
 
                 return result.ToString();
             },
-            _logger,
             "GetOwnershipHistory",
-            $"ticker: {ticker}",
-            ReportError
+            $"ticker: {ticker}"
         );
     }
 
@@ -183,7 +179,7 @@ public class InstitutionalHoldingsTools
         [Description("Maximum number of holdings to return (default: 20)")] int maxResults = 20
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var holders = await _holderRepository.Search(institutionName).Take(5).ToListAsync();
@@ -227,10 +223,8 @@ public class InstitutionalHoldingsTools
 
                 return result.ToString();
             },
-            _logger,
             "GetInstitutionPortfolio",
-            $"institution: {institutionName}",
-            ReportError
+            $"institution: {institutionName}"
         );
     }
 
@@ -243,7 +237,7 @@ public class InstitutionalHoldingsTools
         [Description("Maximum number of results to return (default: 10)")] int maxResults = 10
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var holders = await _holderRepository
@@ -270,10 +264,8 @@ public class InstitutionalHoldingsTools
 
                 return result.ToString();
             },
-            _logger,
             "SearchInstitutions",
-            $"query: {query}",
-            ReportError
+            $"query: {query}"
         );
     }
 
@@ -289,7 +281,7 @@ public class InstitutionalHoldingsTools
             int maxResults = 10
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var stock = await _commonStockRepository.GetByTicker(ticker);
@@ -426,10 +418,8 @@ public class InstitutionalHoldingsTools
                     }
                 }
             },
-            _logger,
             "GetTopBuyersSellers",
-            $"ticker: {ticker}",
-            ReportError
+            $"ticker: {ticker}"
         );
     }
 
@@ -445,7 +435,7 @@ public class InstitutionalHoldingsTools
         [Description("Maximum number of stocks to return (default: 20)")] int maxResults = 20
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var normalizedBucket = (bucket ?? string.Empty).Trim().ToLowerInvariant();
@@ -576,10 +566,8 @@ public class InstitutionalHoldingsTools
                     return result.ToString();
                 }
             },
-            _logger,
             "GetMarketWide13FActivity",
-            $"bucket: {bucket}",
-            ReportError
+            $"bucket: {bucket}"
         );
     }
 
@@ -594,7 +582,7 @@ public class InstitutionalHoldingsTools
             string reportDate = null
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var (holder, reportDates, targetDate, error) = await ResolveHolderAndTargetDate(
@@ -650,10 +638,8 @@ public class InstitutionalHoldingsTools
 
                 return result.ToString();
             },
-            _logger,
             "GetInstitutionSummary",
-            $"institution: {institutionName}",
-            ReportError
+            $"institution: {institutionName}"
         );
     }
 
@@ -668,7 +654,7 @@ public class InstitutionalHoldingsTools
             string reportDate = null
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var (holder, _, targetDate, error) = await ResolveHolderAndTargetDate(
@@ -707,10 +693,8 @@ public class InstitutionalHoldingsTools
                 }
                 return result.ToString();
             },
-            _logger,
             "GetInstitutionSectorAllocation",
-            $"institution: {institutionName}",
-            ReportError
+            $"institution: {institutionName}"
         );
     }
 
@@ -731,7 +715,7 @@ public class InstitutionalHoldingsTools
             int maxResults = 20
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var normalizedBucket = bucket?.Trim().ToLowerInvariant();
@@ -826,10 +810,8 @@ public class InstitutionalHoldingsTools
                     result.AppendLine("_No matching buckets._");
                 return result.ToString();
             },
-            _logger,
             "GetInstitutionQuarterlyActivity",
-            $"institution: {institutionName}",
-            ReportError
+            $"institution: {institutionName}"
         );
     }
 
@@ -847,7 +829,7 @@ public class InstitutionalHoldingsTools
         [Description("Maximum number of stocks to return (default: 30)")] int maxResults = 30
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var holder1 = await FindHolderByName(institutionName1);
@@ -930,10 +912,8 @@ public class InstitutionalHoldingsTools
                 }
                 return result.ToString();
             },
-            _logger,
             "GetFundOverlap",
-            $"funds: {institutionName1}, {institutionName2}",
-            ReportError
+            $"funds: {institutionName1}, {institutionName2}"
         );
     }
 
@@ -953,7 +933,7 @@ public class InstitutionalHoldingsTools
         [Description("Maximum number of stocks to return (default: 30)")] int maxResults = 30
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var names = (institutionNames ?? string.Empty)
@@ -1049,12 +1029,13 @@ public class InstitutionalHoldingsTools
                 }
                 return result.ToString();
             },
-            _logger,
             "GetConsensusHoldings",
-            $"names: {institutionNames}",
-            ReportError
+            $"names: {institutionNames}"
         );
     }
+
+    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
+        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
 
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
