@@ -319,25 +319,18 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         bool isAmendment
     )
     {
-        var securityTitle = GetWrappedValue(txElement, "securityTitle")?.Trim();
-        var transactionDateStr = GetWrappedValue(txElement, "transactionDate");
+        string Wrapped(params string[] path) => GetWrappedValue(txElement, path);
+
+        var securityTitle = Wrapped("securityTitle")?.Trim();
+        var transactionDateStr = Wrapped("transactionDate");
         var codeStr = txElement
             .Element("transactionCoding")
             ?.Element("transactionCode")
             ?.Value?.Trim();
-        var sharesStr = GetWrappedValue(txElement, "transactionAmounts", "transactionShares");
-        var priceStr = GetWrappedValue(txElement, "transactionAmounts", "transactionPricePerShare");
-        var adCode = GetWrappedValue(
-            txElement,
-            "transactionAmounts",
-            "transactionAcquiredDisposedCode"
-        )
-            ?.Trim();
-        var sharesAfterStr = GetWrappedValue(
-            txElement,
-            "postTransactionAmounts",
-            "sharesOwnedFollowingTransaction"
-        );
+        var sharesStr = Wrapped("transactionAmounts", "transactionShares");
+        var priceStr = Wrapped("transactionAmounts", "transactionPricePerShare");
+        var adCode = Wrapped("transactionAmounts", "transactionAcquiredDisposedCode")?.Trim();
+        var sharesAfterStr = Wrapped("postTransactionAmounts", "sharesOwnedFollowingTransaction");
         if (!TryParseTransactionDate(transactionDateStr, out var transactionDate))
             return null;
 
