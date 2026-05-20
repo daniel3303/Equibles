@@ -81,6 +81,52 @@ public class YahooQuoteSummaryResponseTests
     }
 
     [Fact]
+    public void Deserialize_SummaryDetailMarketCap_ParsesRawValue()
+    {
+        // Captured shape of a real summaryDetail payload: marketCap is a Yahoo "raw"
+        // value object. The container reads `raw` as a long so trillion-dollar mega-caps
+        // round-trip without overflow.
+        var json = """
+            {
+              "quoteSummary": {
+                "result": [{
+                  "summaryDetail": {
+                    "marketCap": { "raw": 2950000000000, "fmt": "2.95T", "longFmt": "2,950,000,000,000" }
+                  }
+                }],
+                "error": null
+              }
+            }
+            """;
+
+        var response = JsonConvert.DeserializeObject<YahooQuoteSummaryResponse>(json);
+        var detail = response.QuoteSummary.Result[0].SummaryDetail;
+
+        detail.MarketCap.Raw.Should().Be(2_950_000_000_000L);
+    }
+
+    [Fact]
+    public void Deserialize_SummaryDetailMissingMarketCap_LeavesPropertyNull()
+    {
+        // Yahoo omits keys for issuers without coverage (some ETFs, foreign listings);
+        // the container must tolerate the missing marketCap field without throwing.
+        var json = """
+            {
+              "quoteSummary": {
+                "result": [{ "summaryDetail": { } }],
+                "error": null
+              }
+            }
+            """;
+
+        var response = JsonConvert.DeserializeObject<YahooQuoteSummaryResponse>(json);
+        var detail = response.QuoteSummary.Result[0].SummaryDetail;
+
+        detail.Should().NotBeNull();
+        detail.MarketCap.Should().BeNull();
+    }
+
+    [Fact]
     public void Deserialize_AssetProfile_ParsesSectorAndIndustryAndCompanyFields()
     {
         // Captured from a real Yahoo quoteSummary?modules=assetProfile response.

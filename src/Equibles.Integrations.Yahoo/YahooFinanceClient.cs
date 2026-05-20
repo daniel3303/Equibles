@@ -185,17 +185,27 @@ public class YahooFinanceClient : IYahooFinanceClient
     public async Task<KeyStatistics> GetKeyStatistics(string ticker)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
+        // Request defaultKeyStatistics + summaryDetail together — Yahoo returns both
+        // modules in a single HTTP round-trip when separated by a comma, so this costs
+        // nothing extra over the previous shares-only call.
         var url =
-            $"{QuoteSummaryBaseUrl}/{Uri.EscapeDataString(ticker)}?modules=defaultKeyStatistics";
+            $"{QuoteSummaryBaseUrl}/{Uri.EscapeDataString(ticker)}"
+            + "?modules=defaultKeyStatistics,summaryDetail";
 
         var content = await SendWithRetry(url);
         var response = JsonConvert.DeserializeObject<YahooQuoteSummaryResponse>(content);
 
-        var stats = response?.QuoteSummary?.Result?.FirstOrDefault()?.DefaultKeyStatistics;
-        if (stats == null)
+        var result = response?.QuoteSummary?.Result?.FirstOrDefault();
+        if (result == null)
+            return null;
+        if (result.DefaultKeyStatistics == null && result.SummaryDetail == null)
             return null;
 
-        return new KeyStatistics { SharesOutstanding = stats.SharesOutstanding?.Raw ?? 0 };
+        return new KeyStatistics
+        {
+            SharesOutstanding = result.DefaultKeyStatistics?.SharesOutstanding?.Raw ?? 0,
+            MarketCapitalization = result.SummaryDetail?.MarketCap?.Raw ?? 0,
+        };
     }
 
     public async Task<CompanyProfile> GetCompanyProfile(string ticker)
