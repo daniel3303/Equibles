@@ -1,0 +1,29 @@
+# User Guide
+
+How to install Equibles, run it, connect AI assistants to it, and handle the most common operator tasks. Pairs with [`../technical/`](../technical/README.md) (codebase / architecture reference for developers).
+
+If you're new, start with the **install tutorial**, then the **connect-an-assistant tutorial**. The how-to guides cover one task each and can be read in any order.
+
+## Tutorials
+
+Walk-throughs for someone seeing Equibles for the first time.
+
+- [Install Equibles with Docker Compose](tutorial-install.md) — from `git clone` to a running stack at `http://localhost:8080`.
+- [Connect an AI assistant and ask your first question](tutorial-connect-ai-assistant.md) — point Claude Desktop, Claude Code, or ChatGPT at the MCP server and run a real query.
+
+## How-to guides
+
+Task-focused recipes for someone who has Equibles running.
+
+- [Enable login authentication on the web portal](how-to-enable-authentication.md)
+- [Add a FRED API key (free economic-indicator data)](how-to-set-up-fred-api-key.md)
+- [Add a FINRA API key (free short-volume data)](how-to-set-up-finra-api-key.md)
+- [Enable semantic search over SEC filings](how-to-enable-embedding-search.md)
+- [Sync only a chosen list of tickers](how-to-restrict-ticker-sync.md)
+- [Upgrade to the latest release](how-to-upgrade.md)
+- [Back up and restore your database](how-to-back-up-and-restore.md)
+- [Check worker health and recent errors](how-to-view-status-and-errors.md)
+
+## Status
+
+All pages above are **planned**. None are written yet. New pages land one per PR via `/update-docs`, in the order listed (tutorials first, then how-to guides).
