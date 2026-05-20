@@ -50,10 +50,8 @@ public class CftcController : BaseController
                         {
                             MarketCode = c.MarketCode,
                             MarketName = c.MarketName,
-                            CommercialNet =
-                                latest != null ? latest.CommLong - latest.CommShort : null,
-                            NonCommercialNet =
-                                latest != null ? latest.NonCommLong - latest.NonCommShort : null,
+                            CommercialNet = latest?.CommLong - latest?.CommShort,
+                            NonCommercialNet = latest?.NonCommLong - latest?.NonCommShort,
                             LatestDate = latest?.ReportDate,
                         };
                     })
@@ -102,9 +100,8 @@ public class CftcController : BaseController
             CategoryDisplayName = contract.Category.NameForHumans(),
             Reports = reports,
             LatestOpenInterest = latest?.OpenInterest,
-            LatestCommercialNet = latest != null ? latest.CommLong - latest.CommShort : null,
-            LatestNonCommercialNet =
-                latest != null ? latest.NonCommLong - latest.NonCommShort : null,
+            LatestCommercialNet = latest?.CommLong - latest?.CommShort,
+            LatestNonCommercialNet = latest?.NonCommLong - latest?.NonCommShort,
             LatestNonCommSpreads = latest?.NonCommSpreads,
         };
 
