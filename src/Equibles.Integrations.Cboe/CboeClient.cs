@@ -131,6 +131,9 @@ public class CboeClient : ICboeClient
         var records = new List<CboeVixRecord>();
         foreach (var fields in EnumerateCsvRows(content, minFields: 5))
         {
+            bool TryDec(int index, out decimal value) =>
+                decimal.TryParse(fields[index].Trim(), CultureInfo.InvariantCulture, out value);
+
             if (
                 !DateOnly.TryParseExact(
                     fields[0].Trim(),
@@ -142,13 +145,13 @@ public class CboeClient : ICboeClient
             )
                 continue;
 
-            if (!decimal.TryParse(fields[1].Trim(), CultureInfo.InvariantCulture, out var open))
+            if (!TryDec(1, out var open))
                 continue;
-            if (!decimal.TryParse(fields[2].Trim(), CultureInfo.InvariantCulture, out var high))
+            if (!TryDec(2, out var high))
                 continue;
-            if (!decimal.TryParse(fields[3].Trim(), CultureInfo.InvariantCulture, out var low))
+            if (!TryDec(3, out var low))
                 continue;
-            if (!decimal.TryParse(fields[4].Trim(), CultureInfo.InvariantCulture, out var close))
+            if (!TryDec(4, out var close))
                 continue;
 
             records.Add(
