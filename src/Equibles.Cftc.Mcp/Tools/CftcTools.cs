@@ -50,7 +50,7 @@ public class CftcTools
             int maxResults = 52
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var contract = await _contractRepository
@@ -96,10 +96,8 @@ public class CftcTools
 
                 return result.ToString();
             },
-            _logger,
             "GetCftcPositioning",
-            $"marketCode: {marketCode}",
-            ReportError
+            $"marketCode: {marketCode}"
         );
     }
 
@@ -114,7 +112,7 @@ public class CftcTools
             string category = null
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 IQueryable<CftcContract> contractQuery;
@@ -177,10 +175,8 @@ public class CftcTools
 
                 return result.ToString();
             },
-            _logger,
             "GetLatestCftcData",
-            $"category: {category}",
-            ReportError
+            $"category: {category}"
         );
     }
 
@@ -196,7 +192,7 @@ public class CftcTools
         [Description("Maximum number of results to return (default: 20)")] int maxResults = 20
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var contracts = await _contractRepository
@@ -224,12 +220,13 @@ public class CftcTools
 
                 return result.ToString();
             },
-            _logger,
             "SearchCftcMarkets",
-            $"query: {query}",
-            ReportError
+            $"query: {query}"
         );
     }
+
+    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
+        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
 
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
