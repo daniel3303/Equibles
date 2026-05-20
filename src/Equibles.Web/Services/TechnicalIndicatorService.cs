@@ -95,17 +95,19 @@ public static class TechnicalIndicatorService
         for (var i = 1; i < period; i++)
             result.Add(null);
 
-        // First RSI value. avgLoss == 0 ⇒ RS is infinite ⇒ RSI is 100 by
-        // definition (a window with no losses is the overbought extreme).
-        result.Add(avgLoss == 0 ? 100m : Math.Round(100m - 100m / (1m + avgGain / avgLoss), 2));
+        // avgLoss == 0 ⇒ RS is infinite ⇒ RSI is 100 by definition (a window
+        // with no losses is the overbought extreme).
+        static decimal RsiFrom(decimal avgGain, decimal avgLoss) =>
+            avgLoss == 0 ? 100m : Math.Round(100m - 100m / (1m + avgGain / avgLoss), 2);
 
-        // Smoothed RSI for remaining values
+        result.Add(RsiFrom(avgGain, avgLoss));
+
         for (var i = period + 1; i < prices.Count; i++)
         {
             avgGain = (avgGain * (period - 1) + gains[i]) / period;
             avgLoss = (avgLoss * (period - 1) + losses[i]) / period;
 
-            result.Add(avgLoss == 0 ? 100m : Math.Round(100m - 100m / (1m + avgGain / avgLoss), 2));
+            result.Add(RsiFrom(avgGain, avgLoss));
         }
 
         return result;
