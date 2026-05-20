@@ -150,14 +150,9 @@ public class YahooFinanceClient : IYahooFinanceClient
 
     public async Task<List<RecommendationTrend>> GetRecommendationTrends(string ticker)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
-        var url =
-            $"{QuoteSummaryBaseUrl}/{Uri.EscapeDataString(ticker)}?modules=recommendationTrend";
-
-        var content = await SendWithRetry(url);
-        var response = JsonConvert.DeserializeObject<YahooQuoteSummaryResponse>(content);
-
-        var trends = response?.QuoteSummary?.Result?.FirstOrDefault()?.RecommendationTrend?.Trend;
+        var trends = (await GetQuoteSummaryResult(ticker, "recommendationTrend"))
+            ?.RecommendationTrend
+            ?.Trend;
 
         if (trends == null || trends.Count == 0)
             return [];
@@ -184,18 +179,10 @@ public class YahooFinanceClient : IYahooFinanceClient
 
     public async Task<KeyStatistics> GetKeyStatistics(string ticker)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
         // Request defaultKeyStatistics + summaryDetail together — Yahoo returns both
         // modules in a single HTTP round-trip when separated by a comma, so this costs
         // nothing extra over the previous shares-only call.
-        var url =
-            $"{QuoteSummaryBaseUrl}/{Uri.EscapeDataString(ticker)}"
-            + "?modules=defaultKeyStatistics,summaryDetail";
-
-        var content = await SendWithRetry(url);
-        var response = JsonConvert.DeserializeObject<YahooQuoteSummaryResponse>(content);
-
-        var result = response?.QuoteSummary?.Result?.FirstOrDefault();
+        var result = await GetQuoteSummaryResult(ticker, "defaultKeyStatistics,summaryDetail");
         if (result == null)
             return null;
         if (result.DefaultKeyStatistics == null && result.SummaryDetail == null)
@@ -210,13 +197,7 @@ public class YahooFinanceClient : IYahooFinanceClient
 
     public async Task<CompanyProfile> GetCompanyProfile(string ticker)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
-        var url = $"{QuoteSummaryBaseUrl}/{Uri.EscapeDataString(ticker)}?modules=assetProfile";
-
-        var content = await SendWithRetry(url);
-        var response = JsonConvert.DeserializeObject<YahooQuoteSummaryResponse>(content);
-
-        var profile = response?.QuoteSummary?.Result?.FirstOrDefault()?.AssetProfile;
+        var profile = (await GetQuoteSummaryResult(ticker, "assetProfile"))?.AssetProfile;
         if (profile == null)
             return null;
 
@@ -227,6 +208,15 @@ public class YahooFinanceClient : IYahooFinanceClient
             LongBusinessSummary = profile.LongBusinessSummary,
             Website = profile.Website,
         };
+    }
+
+    private async Task<QuoteSummaryResult> GetQuoteSummaryResult(string ticker, string modules)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
+        var url = $"{QuoteSummaryBaseUrl}/{Uri.EscapeDataString(ticker)}?modules={modules}";
+        var content = await SendWithRetry(url);
+        var response = JsonConvert.DeserializeObject<YahooQuoteSummaryResponse>(content);
+        return response?.QuoteSummary?.Result?.FirstOrDefault();
     }
 
     // ── Session management (mirrors FINRA's token caching pattern) ──
