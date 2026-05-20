@@ -259,6 +259,87 @@ public class StockPriceTools
         );
     }
 
+    [McpServerTool(Name = "GetAverageTrueRange")]
+    [Description(
+        "Average True Range (ATR) for a stock. Wilder's volatility measure built from "
+            + "the True Range (max of high-low, |high-prev_close|, |low-prev_close|) and "
+            + "smoothed recursively. Higher ATR means wider daily moves; commonly used "
+            + "for position sizing and stop placement."
+    )]
+    public Task<string> GetAverageTrueRange(
+        [Description("Stock ticker symbol (e.g., AAPL, MSFT)")] string ticker,
+        [Description("Start date in YYYY-MM-DD format (defaults to 6 months ago)")]
+            string startDate = null,
+        [Description("End date in YYYY-MM-DD format (defaults to latest available)")]
+            string endDate = null,
+        [Description("Smoothing window (default: 14)")] int period = 14,
+        [Description("Maximum number of records to return (default: 60, newest first)")]
+            int maxResults = 60
+    )
+    {
+        return McpToolExecutor.Execute(
+            async () =>
+            {
+                if (period < 2)
+                    return "period must be at least 2.";
+
+                var stock = await _commonStockRepository.GetByTicker(
+                    ticker.Trim().ToUpperInvariant()
+                );
+                if (stock == null)
+                    return $"Stock '{ticker}' not found.";
+
+                var start =
+                    !string.IsNullOrEmpty(startDate)
+                    && DateOnly.TryParse(startDate, out var parsedStart)
+                        ? parsedStart
+                        : DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-6));
+
+                var end =
+                    !string.IsNullOrEmpty(endDate) && DateOnly.TryParse(endDate, out var parsedEnd)
+                        ? parsedEnd
+                        : DateOnly.FromDateTime(DateTime.UtcNow);
+
+                var records = await _priceRepository
+                    .GetByStock(stock, start, end)
+                    .OrderBy(p => p.Date)
+                    .ToListAsync();
+
+                if (records.Count == 0)
+                    return $"No price data found for {stock.Ticker} in the specified date range.";
+
+                var highs = records.Select(p => p.High).ToList();
+                var lows = records.Select(p => p.Low).ToList();
+                var closes = records.Select(p => p.Close).ToList();
+                var atr = TechnicalIndicatorService.ComputeAtr(highs, lows, closes, period);
+
+                var result = new StringBuilder();
+                result.AppendLine(
+                    $"Average True Range (period={period}) for {stock.Ticker} ({stock.Name}):"
+                );
+                result.AppendLine();
+                result.AppendLine("| Date | Close | ATR |");
+                result.AppendLine("|------|-------|-----|");
+
+                var emitted = 0;
+                for (var i = records.Count - 1; i >= 0 && emitted < maxResults; i--)
+                {
+                    var atrCell = atr[i].HasValue ? atr[i].Value.ToString("F4") : "—";
+                    result.AppendLine(
+                        $"| {records[i].Date:yyyy-MM-dd} | {records[i].Close:F2} | {atrCell} |"
+                    );
+                    emitted++;
+                }
+
+                return result.ToString();
+            },
+            _logger,
+            "GetAverageTrueRange",
+            $"ticker: {ticker}",
+            ReportError
+        );
+    }
+
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
