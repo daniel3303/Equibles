@@ -108,4 +108,23 @@ public class TechnicalIndicatorServiceAtrTests
 
         atr.Should().BeEmpty();
     }
+
+    [Fact]
+    public void ComputeAtr_GapDownDominatesTrueRange_UsesLowToPreviousCloseTerm()
+    {
+        // A bar that opens far below the previous close — the bar's own H − L range
+        // understates volatility, so TR must pick up |L − prev_close| as the largest
+        // of the three terms. None of the other tests exercise a case where a gap term
+        // strictly dominates H − L, so a bug that dropped the gap term would slip past.
+        // Bar 0: H=100 L=95 C=98 → TR_0 = H − L = 5
+        // Bar 1: H=90  L=85 C=87 → prev_close=98 → max(5, |90−98|=8, |85−98|=13) = 13
+        // 2-period seed at i=1 = mean(5, 13) = 9
+        var highs = new List<decimal> { 100m, 90m };
+        var lows = new List<decimal> { 95m, 85m };
+        var closes = new List<decimal> { 98m, 87m };
+
+        var atr = TechnicalIndicatorService.ComputeAtr(highs, lows, closes, 2);
+
+        atr[1].Should().Be(9m);
+    }
 }
