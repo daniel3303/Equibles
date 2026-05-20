@@ -62,6 +62,80 @@
         </div>
     </div>
 
+    <!-- Top movers — most actionable quarterly signal at a glance.
+         Buyers = New + Increased ranked by Δ shares desc; Sellers = Reduced + Sold out, ranked by Δ shares asc.
+         Each card's "View all" jumps to the corresponding bucket panel below. -->
+    @if (Model.TopBuyers.Count > 0 || Model.TopSellers.Count > 0) {
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            @{
+                var movers = new[]
+                {
+                    new {
+                        Label = "Top Buyers",
+                        Entries = Model.TopBuyers,
+                        Total = Model.TotalBuyerCount,
+                        Anchor = "holdings-bucket-increased",
+                        BadgeCss = "badge-success",
+                        TestId = "holdings-top-buyers",
+                    },
+                    new {
+                        Label = "Top Sellers",
+                        Entries = Model.TopSellers,
+                        Total = Model.TotalSellerCount,
+                        Anchor = "holdings-bucket-reduced",
+                        BadgeCss = "badge-error",
+                        TestId = "holdings-top-sellers",
+                    },
+                };
+            }
+            @foreach (var card in movers) {
+                <div class="card bg-base-100 shadow-sm" data-testid="@card.TestId">
+                    <div class="card-body p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-2">
+                                <h3 class="text-base font-medium m-0">@card.Label</h3>
+                                <span class="badge @card.BadgeCss badge-sm">@card.Total.ToString("N0")</span>
+                            </div>
+                            @if (card.Total > card.Entries.Count) {
+                                <a href="#@card.Anchor" class="link link-hover text-xs">View all</a>
+                            }
+                        </div>
+                        @if (card.Entries.Count == 0) {
+                            <div class="text-xs text-base-content/50">No movers in this direction.</div>
+                        } else {
+                            <div class="overflow-x-auto">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Institution</th>
+                                            <th class="text-right">Δ Shares</th>
+                                            <th class="text-right hidden md:table-cell">Δ Value (USD)</th>
+                                            <th class="text-right hidden lg:table-cell">Prior → New</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var e in card.Entries) {
+                                            var deltaSharesCss = e.DeltaShares > 0 ? "text-success" : e.DeltaShares < 0 ? "text-error" : "";
+                                            var deltaValueCss = e.DeltaValue > 0 ? "text-success" : e.DeltaValue < 0 ? "text-error" : "";
+                                            var deltaSharesSign = e.DeltaShares > 0 ? "+" : "";
+                                            var deltaValueSign = e.DeltaValue > 0 ? "+" : "";
+                                            <tr>
+                                                <td class="max-w-xs truncate">@(e.InstitutionalHolder?.Name ?? "Unknown")</td>
+                                                <td class="text-right font-mono @deltaSharesCss">@deltaSharesSign@e.DeltaShares.ToString("N0")</td>
+                                                <td class="text-right font-mono hidden md:table-cell @deltaValueCss">@deltaValueSign$@e.DeltaValue.ToString("N0")</td>
+                                                <td class="text-right font-mono hidden lg:table-cell text-base-content/60">@e.PreviousShares.ToString("N0") → @e.CurrentShares.ToString("N0")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
     <!-- Position-change buckets -->
     @foreach (var bucket in Buckets) {
         var count = Model.BucketCounts.TryGetValue(bucket.Type, out var c) ? c : 0;
@@ -69,7 +143,7 @@
         var sorted = SortBucket(bucket.Type, entries).ToList();
         var ariaTestId = $"holdings-bucket-{bucket.Type.ToString().ToLowerInvariant()}";
 
-        <div class="collapse collapse-arrow bg-base-100 shadow-sm mb-3" data-testid="@ariaTestId">
+        <div class="collapse collapse-arrow bg-base-100 shadow-sm mb-3" id="@ariaTestId" data-testid="@ariaTestId">
             <input type="checkbox" @(bucket.OpenByDefault && count > 0 ? "checked" : "") />
             <div class="collapse-title flex items-center gap-2 text-base font-medium">
                 <span>@bucket.Label</span>
