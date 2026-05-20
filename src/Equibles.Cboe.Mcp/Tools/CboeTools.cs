@@ -54,16 +54,11 @@ public class CboeTools
                 if (!Enum.TryParse<CboePutCallRatioType>(type, true, out var ratioType))
                     return $"Invalid type '{type}'. Valid types: Total, Equity, Index, Vix, Etp";
 
-                var start =
-                    !string.IsNullOrEmpty(startDate)
-                    && DateOnly.TryParse(startDate, out var parsedStart)
-                        ? parsedStart
-                        : DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3));
-
-                var end =
-                    !string.IsNullOrEmpty(endDate) && DateOnly.TryParse(endDate, out var parsedEnd)
-                        ? parsedEnd
-                        : DateOnly.FromDateTime(DateTime.UtcNow);
+                var start = ParseDateOr(
+                    startDate,
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
+                );
+                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
 
                 var records = await _putCallRepository
                     .GetByType(ratioType, start, end)
@@ -116,16 +111,11 @@ public class CboeTools
         return McpToolExecutor.Execute(
             async () =>
             {
-                var start =
-                    !string.IsNullOrEmpty(startDate)
-                    && DateOnly.TryParse(startDate, out var parsedStart)
-                        ? parsedStart
-                        : DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3));
-
-                var end =
-                    !string.IsNullOrEmpty(endDate) && DateOnly.TryParse(endDate, out var parsedEnd)
-                        ? parsedEnd
-                        : DateOnly.FromDateTime(DateTime.UtcNow);
+                var start = ParseDateOr(
+                    startDate,
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
+                );
+                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
 
                 var records = await _vixRepository
                     .GetByDateRange(start, end)
@@ -162,4 +152,7 @@ public class CboeTools
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
+
+    private static DateOnly ParseDateOr(string text, DateOnly fallback) =>
+        !string.IsNullOrEmpty(text) && DateOnly.TryParse(text, out var parsed) ? parsed : fallback;
 }
