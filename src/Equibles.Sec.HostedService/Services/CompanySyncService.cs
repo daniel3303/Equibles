@@ -223,13 +223,7 @@ public class CompanySyncService : ICompanySyncService
                         "Error removing obsolete company for ticker {Ticker}",
                         primaryTicker
                     );
-                    await _errorReporter.Report(
-                        ErrorSource.DocumentScraper,
-                        "CompanySync.RemoveObsolete",
-                        ex.Message,
-                        ex.StackTrace,
-                        $"ticker: {primaryTicker}"
-                    );
+                    await ReportError("CompanySync.RemoveObsolete", ex, $"ticker: {primaryTicker}");
                     return;
                 }
             }
@@ -289,11 +283,9 @@ public class CompanySyncService : ICompanySyncService
                 secCompany.Name,
                 secCompany.Cik
             );
-            await _errorReporter.Report(
-                ErrorSource.DocumentScraper,
+            await ReportError(
                 "CompanySync.UpdateStock",
-                ex.Message,
-                ex.StackTrace,
+                ex,
                 $"ticker: {primaryTicker}, cik: {secCompany.Cik}"
             );
         }
@@ -374,11 +366,9 @@ public class CompanySyncService : ICompanySyncService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error replacing company for ticker {Ticker}", primaryTicker);
-            await _errorReporter.Report(
-                ErrorSource.DocumentScraper,
+            await ReportError(
                 "CompanySync.ReplaceStock",
-                ex.Message,
-                ex.StackTrace,
+                ex,
                 $"ticker: {primaryTicker}, cik: {secCompany.Cik}"
             );
         }
@@ -434,11 +424,9 @@ public class CompanySyncService : ICompanySyncService
                 secCompany.Name,
                 secCompany.Cik
             );
-            await _errorReporter.Report(
-                ErrorSource.DocumentScraper,
+            await ReportError(
                 "CompanySync.CreateStock",
-                ex.Message,
-                ex.StackTrace,
+                ex,
                 $"ticker: {primaryTicker}, cik: {secCompany.Cik}"
             );
         }
@@ -527,11 +515,9 @@ public class CompanySyncService : ICompanySyncService
                 incoming.Cik,
                 incumbent.Cik
             );
-            await _errorReporter.Report(
-                ErrorSource.DocumentScraper,
+            await ReportError(
                 "CompanySync.ResolveTickerCollision",
-                ex.Message,
-                ex.StackTrace,
+                ex,
                 $"ticker: {ticker}, incoming: {incoming.Cik}, incumbent: {incumbent.Cik}"
             );
         }
@@ -616,6 +602,15 @@ public class CompanySyncService : ICompanySyncService
         }
         return secondaryCikToParent;
     }
+
+    private Task ReportError(string operation, Exception ex, string context) =>
+        _errorReporter.Report(
+            ErrorSource.DocumentScraper,
+            operation,
+            ex.Message,
+            ex.StackTrace,
+            context
+        );
 
     private class StockSyncState
     {
