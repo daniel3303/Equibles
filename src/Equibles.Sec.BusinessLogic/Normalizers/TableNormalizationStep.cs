@@ -151,7 +151,7 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
             var cellText = cell.TextContent.Trim();
             var cellHtml = cell.InnerHtml.Trim();
 
-            if (!string.IsNullOrWhiteSpace(cellText) && cellText != "\u00A0" && cellText != " ")
+            if (IsMeaningfulText(cellText) && cellText != " ")
             {
                 return false;
             }
@@ -184,7 +184,7 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
         foreach (var span in spans)
         {
             var spanText = span.TextContent.Trim();
-            if (!string.IsNullOrWhiteSpace(spanText) && spanText != "\u00A0")
+            if (IsMeaningfulText(spanText))
             {
                 return false;
             }
@@ -221,7 +221,7 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
             if (colIndex < cells.Count)
             {
                 var cellText = cells[colIndex].TextContent.Trim();
-                if (!string.IsNullOrWhiteSpace(cellText) && cellText != "\u00A0")
+                if (IsMeaningfulText(cellText))
                 {
                     return false;
                 }
@@ -245,4 +245,7 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
             }
         }
     }
+
+    private static bool IsMeaningfulText(string text) =>
+        !string.IsNullOrWhiteSpace(text) && text != " ";
 }

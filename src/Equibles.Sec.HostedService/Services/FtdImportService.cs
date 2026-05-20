@@ -68,7 +68,6 @@ public class FtdImportService
             startDate
         );
 
-        // Build ticker map for matching
         var tickerMap = await BuildTickerMap(cancellationToken);
         var cusipsSeeded = 0;
 
@@ -82,10 +81,8 @@ public class FtdImportService
                 if (records.Count == 0)
                     continue;
 
-                // Seed CUSIPs from the FTD data (ticker → CUSIP mapping)
                 cusipsSeeded += await SeedCusips(records, tickerMap, cancellationToken);
 
-                // Import FTD data
                 var imported = await ImportRecords(records, tickerMap, cancellationToken);
 
                 _logger.LogInformation("FTD {File}: imported {Count} records", fileName, imported);
@@ -141,7 +138,6 @@ public class FtdImportService
         CancellationToken cancellationToken
     )
     {
-        // Collect unique ticker→CUSIP pairs where we have a matching stock
         var tickerToCusip = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var record in records)
         {
@@ -159,7 +155,6 @@ public class FtdImportService
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var stockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
 
-        // Load stocks that don't have CUSIPs yet
         var tickers = tickerToCusip.Keys.ToList();
         var stocks = await stockRepo
             .GetByTickers(tickers)
@@ -325,11 +320,9 @@ public class FtdImportService
         var fileNames = new List<string>();
         var now = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        // Clamp to the oldest date the SEC provides FTD data for
         if (startDate < OldestAvailableDate)
             startDate = OldestAvailableDate;
 
-        // Start from the beginning of the start month
         var current = new DateOnly(startDate.Year, startDate.Month, 1);
 
         while (current <= now)
