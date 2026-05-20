@@ -33,37 +33,32 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
             if (string.IsNullOrEmpty(combinedText))
                 continue;
 
+            string headingTag = null;
             if (
                 IsPartHeading(combinedText)
                 && AllSiblingsMatch(siblingSpans, s => IsPartHeading(s.TextContent))
             )
-            {
-                ReplaceNodeWithHeading(parent, "h1", doc);
-                processedParents.Add(parent);
-            }
+                headingTag = "h1";
             else if (
                 IsItemHeading(combinedText)
                 && AllSiblingsMatch(siblingSpans, s => IsItemHeading(s.TextContent))
             )
-            {
-                ReplaceNodeWithHeading(parent, "h2", doc);
-                processedParents.Add(parent);
-            }
+                headingTag = "h2";
             else if (
                 AllSiblingsMatch(
                     siblingSpans,
                     s => !IsApart(s) && (IsBoldSpan(s) || IsAllUppercase(s) || IsCenterAligned(s))
                 )
             )
-            {
-                ReplaceNodeWithHeading(parent, "h3", doc);
-                processedParents.Add(parent);
-            }
+                headingTag = "h3";
             else if (AllSiblingsMatch(siblingSpans, s => IsItalicSpan(s) && !IsApart(s)))
-            {
-                ReplaceNodeWithHeading(parent, "h4", doc);
-                processedParents.Add(parent);
-            }
+                headingTag = "h4";
+
+            if (headingTag == null)
+                continue;
+
+            ReplaceNodeWithHeading(parent, headingTag, doc);
+            processedParents.Add(parent);
         }
     }
 
