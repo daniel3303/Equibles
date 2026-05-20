@@ -59,6 +59,13 @@
             <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Holders:</span> <strong>@Model.HolderCount.ToString("N0")</strong></div>
             <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Value:</span> <strong>$@Model.TotalValue.ToString("N0")</strong></div>
             <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Shares:</span> <strong>@Model.TotalShares.ToString("N0")</strong></div>
+            <!-- CSV download — same ticker + selected date as the page. -->
+            <a class="btn btn-outline btn-sm ml-auto"
+               asp-controller="HoldingsExport" asp-action="Holders"
+               asp-route-ticker="@Model.Ticker" asp-route-date="@Model.SelectedDate.ToString("yyyy-MM-dd")"
+               data-testid="holdings-export-csv">
+                Download CSV
+            </a>
         </div>
     </div>
 
