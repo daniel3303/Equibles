@@ -36,29 +36,23 @@ public class Filing13FXmlParser
         // unscoped first-match would silently grab the wrong element.
         var headerData = Descendant(root, "headerData");
         var coverPage = Descendant(root, "coverPage");
-        var filingManager = coverPage == null ? null : Descendant(coverPage, "filingManager");
-        var address = filingManager == null ? null : Descendant(filingManager, "address");
+        var filingManager = Descendant(coverPage, "filingManager");
+        var address = Descendant(filingManager, "address");
 
-        var xmlCik = headerData == null ? null : Value(Descendant(headerData, "cik"));
+        var xmlCik = Value(Descendant(headerData, "cik"));
 
         var filing = new Parsed13FFiling
         {
             AccessionNumber = accessionNumber,
             Cik = string.IsNullOrEmpty(xmlCik) ? cik?.TrimStart('0') : xmlCik.TrimStart('0'),
             FilingDate = filingDate,
-            PeriodOfReport = ParseSecDate(
-                Value(coverPage == null ? null : Descendant(coverPage, "reportCalendarOrQuarter"))
-            ),
-            IsAmendment = IsAmendmentValue(
-                Value(coverPage == null ? null : Descendant(coverPage, "isAmendment"))
-            ),
-            FilingManagerName = Value(filingManager == null ? null : Child(filingManager, "name")),
-            City = Value(address == null ? null : Child(address, "city")),
-            StateOrCountry = Value(address == null ? null : Child(address, "stateOrCountry")),
-            Form13FFileNumber = Value(
-                coverPage == null ? null : Descendant(coverPage, "form13FFileNumber")
-            ),
-            CrdNumber = Value(coverPage == null ? null : Descendant(coverPage, "crdNumber")),
+            PeriodOfReport = ParseSecDate(Value(Descendant(coverPage, "reportCalendarOrQuarter"))),
+            IsAmendment = IsAmendmentValue(Value(Descendant(coverPage, "isAmendment"))),
+            FilingManagerName = Value(Child(filingManager, "name")),
+            City = Value(Child(address, "city")),
+            StateOrCountry = Value(Child(address, "stateOrCountry")),
+            Form13FFileNumber = Value(Descendant(coverPage, "form13FFileNumber")),
+            CrdNumber = Value(Descendant(coverPage, "crdNumber")),
         };
 
         var otherManagersScope = coverPage ?? root;
@@ -69,7 +63,7 @@ public class Filing13FXmlParser
                 continue;
 
             var inner = Child(otherManager2, "otherManager");
-            var name = Value(inner == null ? null : Child(inner, "name"));
+            var name = Value(Child(inner, "name"));
             if (!string.IsNullOrEmpty(name))
                 filing.OtherManagers[seq] = name;
         }
@@ -110,19 +104,13 @@ public class Filing13FXmlParser
                 {
                     Cusip = Value(Child(info, "cusip")),
                     TitleOfClass = Value(Child(info, "titleOfClass")),
-                    ShareType = Value(amount == null ? null : Child(amount, "sshPrnamtType")),
-                    Shares = ParseLong(Value(amount == null ? null : Child(amount, "sshPrnamt"))),
+                    ShareType = Value(Child(amount, "sshPrnamtType")),
+                    Shares = ParseLong(Value(Child(amount, "sshPrnamt"))),
                     PutCall = Value(Child(info, "putCall")),
                     InvestmentDiscretion = Value(Child(info, "investmentDiscretion")),
-                    VotingAuthSole = ParseLong(
-                        Value(voting == null ? null : Child(voting, "Sole"))
-                    ),
-                    VotingAuthShared = ParseLong(
-                        Value(voting == null ? null : Child(voting, "Shared"))
-                    ),
-                    VotingAuthNone = ParseLong(
-                        Value(voting == null ? null : Child(voting, "None"))
-                    ),
+                    VotingAuthSole = ParseLong(Value(Child(voting, "Sole"))),
+                    VotingAuthShared = ParseLong(Value(Child(voting, "Shared"))),
+                    VotingAuthNone = ParseLong(Value(Child(voting, "None"))),
                     OtherManagerNumber = ParseFirstInt(Value(Child(info, "otherManager"))),
                 }
             );
@@ -140,7 +128,7 @@ public class Filing13FXmlParser
 
     private static XElement Descendant(XElement parent, string localName) =>
         parent
-            .Descendants()
+            ?.Descendants()
             .FirstOrDefault(e =>
                 string.Equals(e.Name.LocalName, localName, StringComparison.OrdinalIgnoreCase)
             );
@@ -154,7 +142,7 @@ public class Filing13FXmlParser
 
     private static XElement Child(XElement parent, string localName) =>
         parent
-            .Elements()
+            ?.Elements()
             .FirstOrDefault(e =>
                 string.Equals(e.Name.LocalName, localName, StringComparison.OrdinalIgnoreCase)
             );
