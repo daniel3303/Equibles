@@ -33,35 +33,26 @@ public class SearchController : BaseController
     )
     {
         ViewData["Title"] = "Search";
-
-        // Aggregator returns every non-empty group; the view filters for display so the category
-        // chips can still list all matched categories even when one is selected.
-        var groups = await _searchAggregator.Search(
-            q,
-            ResolveMaxPerProvider(category),
-            HttpContext.RequestAborted,
-            sort,
-            dateFrom,
-            dateTo
-        );
-
-        return View(
-            new GlobalSearchViewModel
-            {
-                Query = q,
-                Groups = groups,
-                ActiveCategory = category,
-                SortBy = sort,
-                DateFrom = dateFrom,
-                DateTo = dateTo,
-            }
-        );
+        return View(await BuildViewModel(q, category, sort, dateFrom, dateTo));
     }
 
     // Results-only fragment for instant (as-you-type) search. instant-search.js fetches this
     // and swaps it into the page; the markup is identical to Index's results region.
     [HttpGet]
     public async Task<IActionResult> Results(
+        string q,
+        string category,
+        SearchSort sort,
+        DateOnly? dateFrom,
+        DateOnly? dateTo
+    )
+    {
+        return PartialView("_Results", await BuildViewModel(q, category, sort, dateFrom, dateTo));
+    }
+
+    // Aggregator returns every non-empty group; the view filters for display so the category
+    // chips can still list all matched categories even when one is selected.
+    private async Task<GlobalSearchViewModel> BuildViewModel(
         string q,
         string category,
         SearchSort sort,
@@ -78,18 +69,15 @@ public class SearchController : BaseController
             dateTo
         );
 
-        return PartialView(
-            "_Results",
-            new GlobalSearchViewModel
-            {
-                Query = q,
-                Groups = groups,
-                ActiveCategory = category,
-                SortBy = sort,
-                DateFrom = dateFrom,
-                DateTo = dateTo,
-            }
-        );
+        return new GlobalSearchViewModel
+        {
+            Query = q,
+            Groups = groups,
+            ActiveCategory = category,
+            SortBy = sort,
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+        };
     }
 
     private static int ResolveMaxPerProvider(string category) =>
