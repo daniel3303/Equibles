@@ -87,7 +87,18 @@ public class ParadeDbFixture : IAsyncLifetime
     /// and the migrations assembly so any future <c>MigrateAsync</c> call (e.g., reset)
     /// uses the same migration set.
     /// </summary>
-    public EquiblesDbContext CreateDbContext()
+    public EquiblesDbContext CreateDbContext() => CreateDbContext(configure: null);
+
+    /// <summary>
+    /// Returns a fresh <see cref="EquiblesDbContext"/> after applying the
+    /// caller-supplied <paramref name="configure"/> delegate to the
+    /// <see cref="DbContextOptionsBuilder{TContext}"/> — used by tests that
+    /// need to attach EF Core interceptors or otherwise tweak the context
+    /// without duplicating the full production-mirror setup.
+    /// </summary>
+    public EquiblesDbContext CreateDbContext(
+        Action<DbContextOptionsBuilder<EquiblesDbContext>> configure
+    )
     {
         var optionsBuilder = new DbContextOptionsBuilder<EquiblesDbContext>();
         optionsBuilder.UseNpgsql(
@@ -103,6 +114,7 @@ public class ParadeDbFixture : IAsyncLifetime
             }
         );
         optionsBuilder.UseLazyLoadingProxies();
+        configure?.Invoke(optionsBuilder);
 
         IModuleConfiguration[] modules =
         [
