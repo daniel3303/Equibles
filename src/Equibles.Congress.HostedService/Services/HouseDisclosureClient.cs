@@ -137,11 +137,14 @@ public partial class HouseDisclosureClient
             .Where(m => m.Element("FilingType")?.Value == "P")
             .Select(m =>
             {
+                string TrimmedField(string elementName) =>
+                    m.Element(elementName)?.Value?.Trim() ?? "";
+
                 var filingDateStr = m.Element("FilingDate")?.Value;
                 DateOnly.TryParse(filingDateStr, out var filingDate);
-                var prefix = m.Element("Prefix")?.Value?.Trim() ?? "";
-                var first = m.Element("First")?.Value?.Trim() ?? "";
-                var last = m.Element("Last")?.Value?.Trim() ?? "";
+                var prefix = TrimmedField("Prefix");
+                var first = TrimmedField("First");
+                var last = TrimmedField("Last");
                 var name = StripHonorificPrefixes($"{prefix} {first} {last}".Trim()).Trim();
 
                 return new HouseFiling(
