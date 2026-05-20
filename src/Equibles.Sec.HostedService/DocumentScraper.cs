@@ -248,54 +248,12 @@ public class DocumentScraper : IDocumentScraper
 
         try
         {
-            // Subsidiary CIKs share the parent's public ticker (e.g. parent + co-registrant
-            // operating sub). Their filings belong on the parent's stock page, so we fetch
-            // each CIK separately and dedupe by AccessionNumber (globally unique in SEC).
-            var ciks = new List<string> { company.Cik };
-            ciks.AddRange(company.SecondaryCiks);
-
-            var fromDate =
-                _workerOptions.MinSyncDate != null
-                    ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
-                    : (DateOnly?)null;
-
-            var filings = new List<FilingData>();
-            var seenAccessions = new HashSet<string>();
-
-            foreach (var cik in ciks)
-            {
-                List<FilingData> cikFilings;
-                try
-                {
-                    cikFilings = await secEdgarClient.GetCompanyFilings(cik, secFilter, fromDate);
-                }
-                catch (HttpRequestException ex)
-                {
-                    // One CIK failing shouldn't drop the others — log and continue.
-                    _logger.LogWarning(
-                        ex,
-                        "HTTP error fetching {DocumentType} filings for CIK {Cik} ({Ticker})",
-                        documentType,
-                        cik,
-                        company.Ticker
-                    );
-                    RecordError(result, $"Company {company.Ticker} CIK {cik} - {documentType}", ex);
-                    continue;
-                }
-
-                foreach (var filing in cikFilings)
-                {
-                    if (seenAccessions.Add(filing.AccessionNumber))
-                        filings.Add(filing);
-                }
-            }
-
-            _logger.LogDebug(
-                "Found {FilingCount} {DocumentType} filings for {Ticker} across {CikCount} CIK(s)",
-                filings.Count,
+            var filings = await CollectFilingsAcrossCiks(
+                company,
                 documentType,
-                company.Ticker,
-                ciks.Count
+                secFilter,
+                result,
+                secEdgarClient
             );
 
             result.DocumentsFound += filings.Count;
@@ -320,6 +278,67 @@ public class DocumentScraper : IDocumentScraper
                 $"ticker: {company.Ticker}, type: {documentType}"
             );
         }
+    }
+
+    // Subsidiary CIKs share the parent's public ticker (e.g. parent + co-registrant
+    // operating sub). Their filings belong on the parent's stock page, so we fetch
+    // each CIK separately and dedupe by AccessionNumber (globally unique in SEC).
+    private async Task<List<FilingData>> CollectFilingsAcrossCiks(
+        CommonStock company,
+        DocumentType documentType,
+        DocumentTypeFilter secFilter,
+        ScrapingResult result,
+        ISecEdgarClient secEdgarClient
+    )
+    {
+        var ciks = new List<string> { company.Cik };
+        ciks.AddRange(company.SecondaryCiks);
+
+        var fromDate =
+            _workerOptions.MinSyncDate != null
+                ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
+                : (DateOnly?)null;
+
+        var filings = new List<FilingData>();
+        var seenAccessions = new HashSet<string>();
+
+        foreach (var cik in ciks)
+        {
+            List<FilingData> cikFilings;
+            try
+            {
+                cikFilings = await secEdgarClient.GetCompanyFilings(cik, secFilter, fromDate);
+            }
+            catch (HttpRequestException ex)
+            {
+                // One CIK failing shouldn't drop the others — log and continue.
+                _logger.LogWarning(
+                    ex,
+                    "HTTP error fetching {DocumentType} filings for CIK {Cik} ({Ticker})",
+                    documentType,
+                    cik,
+                    company.Ticker
+                );
+                RecordError(result, $"Company {company.Ticker} CIK {cik} - {documentType}", ex);
+                continue;
+            }
+
+            foreach (var filing in cikFilings)
+            {
+                if (seenAccessions.Add(filing.AccessionNumber))
+                    filings.Add(filing);
+            }
+        }
+
+        _logger.LogDebug(
+            "Found {FilingCount} {DocumentType} filings for {Ticker} across {CikCount} CIK(s)",
+            filings.Count,
+            documentType,
+            company.Ticker,
+            ciks.Count
+        );
+
+        return filings;
     }
 
     private async Task ProcessFiling(
