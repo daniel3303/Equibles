@@ -486,53 +486,26 @@ public class HoldingsImportService
             TryParseDateOnly(submission.FilingDate, out var filingDate);
             TryParseDateOnly(submission.PeriodOfReport, out var reportDate);
 
-            var shareType = ParseShareType(GetValue(row, "SSHPRNAMTTYPE"));
-            var optionType = ParseOptionType(GetValue(row, "PUTCALL"));
-            var uniqueKey = BuildHoldingKey(
+            var (holding, managerEntry, valuePending) = ParseHoldingRow(
+                row,
+                accession,
+                cusip,
                 commonStockId,
                 holderId,
+                filingDate,
                 reportDate,
-                shareType,
-                optionType
+                context
             );
-
-            var isAmendment =
-                context.CoverPages.TryGetValue(accession, out var cp)
-                && string.Equals(cp.IsAmendment, "Y", StringComparison.OrdinalIgnoreCase);
-
-            var shares = ParseLong(GetValue(row, "SSHPRNAMT"));
-            var votingAuthSole = ParseLong(GetValue(row, "VOTING_AUTH_SOLE"));
-            var votingAuthShared = ParseLong(GetValue(row, "VOTING_AUTH_SHARED"));
-            var votingAuthNone = ParseLong(GetValue(row, "VOTING_AUTH_NONE"));
-
-            // Calculate value from Yahoo stock price
-            var hasPrice = context.StockPrices.TryGetValue(
-                (commonStockId, reportDate),
-                out var closePrice
-            );
-            var value = hasPrice ? (long)(shares * closePrice) : 0L;
-            var valuePending = !hasPrice;
-
-            var otherManagerNumber = ParseNullableInt(GetValue(row, "OTHERMANAGER"));
-            var discretion = ParseInvestmentDiscretion(GetValue(row, "INVESTMENTDISCRETION"));
-
-            var managerEntry = new HoldingManagerEntry
-            {
-                ManagerNumber = otherManagerNumber,
-                ManagerName = ResolveManagerName(context, accession, otherManagerNumber),
-                Shares = shares,
-                Value = value,
-                InvestmentDiscretion = discretion,
-            };
+            var uniqueKey = BuildHoldingKey(holding);
 
             if (holdingsMap.TryGetValue(uniqueKey, out var existing))
             {
                 totalDuplicates++;
-                existing.Shares += shares;
-                existing.Value += value;
-                existing.VotingAuthSole += votingAuthSole;
-                existing.VotingAuthShared += votingAuthShared;
-                existing.VotingAuthNone += votingAuthNone;
+                existing.Shares += holding.Shares;
+                existing.Value += holding.Value;
+                existing.VotingAuthSole += holding.VotingAuthSole;
+                existing.VotingAuthShared += holding.VotingAuthShared;
+                existing.VotingAuthNone += holding.VotingAuthNone;
                 existing.ManagerEntries.Add(managerEntry);
             }
             else
@@ -540,26 +513,6 @@ public class HoldingsImportService
                 if (valuePending)
                     totalPending++;
 
-                var holding = new InstitutionalHolding
-                {
-                    InstitutionalHolderId = holderId,
-                    CommonStockId = commonStockId,
-                    FilingDate = filingDate,
-                    ReportDate = reportDate,
-                    Value = value,
-                    Shares = shares,
-                    ShareType = shareType,
-                    OptionType = optionType,
-                    InvestmentDiscretion = discretion,
-                    VotingAuthSole = votingAuthSole,
-                    VotingAuthShared = votingAuthShared,
-                    VotingAuthNone = votingAuthNone,
-                    TitleOfClass = GetValue(row, "TITLEOFCLASS"),
-                    Cusip = cusip,
-                    AccessionNumber = accession,
-                    IsAmendment = isAmendment,
-                    ValuePending = valuePending,
-                };
                 holding.ManagerEntries.Add(managerEntry);
                 holdingsMap[uniqueKey] = holding;
             }
@@ -603,6 +556,76 @@ public class HoldingsImportService
             totalDuplicates,
             totalPending
         );
+    }
+
+    private static (
+        InstitutionalHolding Holding,
+        HoldingManagerEntry ManagerEntry,
+        bool ValuePending
+    ) ParseHoldingRow(
+        Dictionary<string, string> row,
+        string accession,
+        string cusip,
+        Guid commonStockId,
+        Guid holderId,
+        DateOnly filingDate,
+        DateOnly reportDate,
+        ImportContext context
+    )
+    {
+        var shareType = ParseShareType(GetValue(row, "SSHPRNAMTTYPE"));
+        var optionType = ParseOptionType(GetValue(row, "PUTCALL"));
+
+        var isAmendment =
+            context.CoverPages.TryGetValue(accession, out var cp)
+            && string.Equals(cp.IsAmendment, "Y", StringComparison.OrdinalIgnoreCase);
+
+        var shares = ParseLong(GetValue(row, "SSHPRNAMT"));
+        var votingAuthSole = ParseLong(GetValue(row, "VOTING_AUTH_SOLE"));
+        var votingAuthShared = ParseLong(GetValue(row, "VOTING_AUTH_SHARED"));
+        var votingAuthNone = ParseLong(GetValue(row, "VOTING_AUTH_NONE"));
+
+        var hasPrice = context.StockPrices.TryGetValue(
+            (commonStockId, reportDate),
+            out var closePrice
+        );
+        var value = hasPrice ? (long)(shares * closePrice) : 0L;
+        var valuePending = !hasPrice;
+
+        var otherManagerNumber = ParseNullableInt(GetValue(row, "OTHERMANAGER"));
+        var discretion = ParseInvestmentDiscretion(GetValue(row, "INVESTMENTDISCRETION"));
+
+        var managerEntry = new HoldingManagerEntry
+        {
+            ManagerNumber = otherManagerNumber,
+            ManagerName = ResolveManagerName(context, accession, otherManagerNumber),
+            Shares = shares,
+            Value = value,
+            InvestmentDiscretion = discretion,
+        };
+
+        var holding = new InstitutionalHolding
+        {
+            InstitutionalHolderId = holderId,
+            CommonStockId = commonStockId,
+            FilingDate = filingDate,
+            ReportDate = reportDate,
+            Value = value,
+            Shares = shares,
+            ShareType = shareType,
+            OptionType = optionType,
+            InvestmentDiscretion = discretion,
+            VotingAuthSole = votingAuthSole,
+            VotingAuthShared = votingAuthShared,
+            VotingAuthNone = votingAuthNone,
+            TitleOfClass = GetValue(row, "TITLEOFCLASS"),
+            Cusip = cusip,
+            AccessionNumber = accession,
+            IsAmendment = isAmendment,
+            ValuePending = valuePending,
+        };
+
+        return (holding, managerEntry, valuePending);
     }
 
     private async Task<int> FlushBatch(
