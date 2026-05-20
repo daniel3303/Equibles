@@ -6,7 +6,8 @@ Every entity in the codebase lives in one shared EF Core migrations history at [
 
 - [`Equibles.Migrations.csproj`](../../src/Equibles.Migrations/Equibles.Migrations.csproj) — references **every** `Equibles.*.Data` project plus `Equibles.Messaging`. The snapshot has to know about every module's entities, so the migrations assembly references them all.
 - [`DesignTimeDbContextFactory.cs`](../../src/Equibles.Migrations/DesignTimeDbContextFactory.cs) — `IDesignTimeDbContextFactory<EquiblesDbContext>` that EF tooling invokes for `dotnet ef ...`.
-- [`designsettings.json`](../../src/Equibles.Migrations/designsettings.json) — connection string the design-time factory reads. Defaults to `Host=localhost;Port=5432;Database=equibles;Username=equibles;Password=equibles`. Override locally with `designsettings.Development.json` (gitignored).
+- [`designsettings.json`](../../src/Equibles.Migrations/designsettings.json) — connection string the design-time factory reads; defaults to `Host=localhost;Port=5432;Database=equibles;Username=equibles;Password=equibles`.
+- Override the default locally with `designsettings.Development.json` (gitignored).
 - [`Migrations/`](../../src/Equibles.Migrations/Migrations) — generated `<timestamp>_<Name>.cs` files plus the `EquiblesDbContextModelSnapshot.cs`.
 
 ## Design-time factory
