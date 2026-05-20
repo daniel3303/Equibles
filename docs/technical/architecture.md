@@ -61,7 +61,8 @@ Data (entities) → Repositories (IQueryable) → Managers (write paths) → Con
 
 ## EF and database
 
-- Single migrations assembly: [`src/Equibles.Migrations`](../../src/Equibles.Migrations). Every host passes `migrationsAssembly: typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly` when calling `AddEquiblesDbContext`.
+- Single migrations assembly: [`src/Equibles.Migrations`](../../src/Equibles.Migrations).
+- Every host passes `migrationsAssembly: typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly` when calling `AddEquiblesDbContext`.
 - Migrations apply on host startup via `await dbContext.Database.MigrateAsync()` with a 1-hour command timeout for index rebuilds.
 - The Npgsql provider is configured with `UseVector()` (pgvector), `UseParadeDb()` (BM25 / `pg_search`), `UseQuerySplittingBehavior(SplitQuery)`, and lazy-loading proxies.
 
