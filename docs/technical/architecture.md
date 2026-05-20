@@ -7,7 +7,9 @@ Equibles is a modular monolith. Each financial domain ships as a set of layered 
 - One shared `EquiblesDbContext` ([`src/Equibles.Data/EquiblesDbContext.cs`](../../src/Equibles.Data/EquiblesDbContext.cs)) — a single `DbContext` against ParadeDB (Postgres + `pgvector` + `pg_search`).
 - The context owns no model declarations of its own. `OnModelCreating` iterates injected `IModuleConfiguration` instances and lets each one register its entities.
 - `IModuleConfiguration.ConfigureEntities(ModelBuilder)` ([`src/Equibles.Data/IModuleConfiguration.cs`](../../src/Equibles.Data/IModuleConfiguration.cs)) is the entire surface a module exposes to the context.
-- `EquiblesModuleBuilder` ([`src/Equibles.Data/EquiblesModuleBuilder.cs`](../../src/Equibles.Data/EquiblesModuleBuilder.cs)) is the fluent registration API — `AddModule<T>()` dedupes by type, `AddAllModules()` reflects across already-loaded `Equibles.*` assemblies and picks up every public `IModuleConfiguration` with a parameterless constructor.
+- `EquiblesModuleBuilder` ([`src/Equibles.Data/EquiblesModuleBuilder.cs`](../../src/Equibles.Data/EquiblesModuleBuilder.cs)) — fluent registration API the host uses to add modules to the shared context.
+- `EquiblesModuleBuilder.AddModule<T>()` dedupes by type, so the same module never registers twice.
+- `EquiblesModuleBuilder.AddAllModules()` reflects across already-loaded `Equibles.*` assemblies and picks up every public `IModuleConfiguration` with a parameterless constructor.
 
 ## Module shape
 
