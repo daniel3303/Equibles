@@ -37,10 +37,10 @@ public class HoldingsScreenerController : BaseController
     {
         filters ??= new ScreenerCriteriaViewModel();
 
-        var reportDates = await _holdingRepository
-            .GetAvailableReportDates()
-            .OrderByDescending(d => d)
-            .ToListAsync();
+        var (reportDates, selectedDate, comparisonDate) = await ResolveScreenerDates(
+            date,
+            compareDate
+        );
 
         var industryOptions = await _industryRepository
             .GetAll()
@@ -55,7 +55,7 @@ public class HoldingsScreenerController : BaseController
             IndustryOptions = industryOptions,
         };
 
-        if (reportDates.Count < 2)
+        if (selectedDate is null)
         {
             // Need at least two quarters to compute deltas; surface a friendly message
             // rather than running the screener against missing data.
@@ -64,18 +64,12 @@ public class HoldingsScreenerController : BaseController
             return View(viewModel);
         }
 
-        var selectedDate =
-            date.HasValue && reportDates.Contains(date.Value) ? date.Value : reportDates[0];
-        var comparisonDate =
-            compareDate.HasValue && reportDates.Contains(compareDate.Value)
-                ? compareDate.Value
-                : reportDates[1];
-        viewModel.SelectedDate = selectedDate;
-        viewModel.ComparisonDate = comparisonDate;
+        viewModel.SelectedDate = selectedDate.Value;
+        viewModel.ComparisonDate = comparisonDate.Value;
 
         var criteria = ToCriteria(filters);
         var rows = await _holdingRepository
-            .Screen(criteria, selectedDate, comparisonDate)
+            .Screen(criteria, selectedDate.Value, comparisonDate.Value)
             .OrderByDescending(r => r.CurrentValue)
             .Take(RowCap)
             .ToListAsync();
@@ -111,19 +105,9 @@ public class HoldingsScreenerController : BaseController
     {
         filters ??= new ScreenerCriteriaViewModel();
 
-        var reportDates = await _holdingRepository
-            .GetAvailableReportDates()
-            .OrderByDescending(d => d)
-            .ToListAsync();
-        if (reportDates.Count < 2)
+        var (_, selectedDate, comparisonDate) = await ResolveScreenerDates(date, compareDate);
+        if (selectedDate is null)
             return NotFound();
-
-        var selectedDate =
-            date.HasValue && reportDates.Contains(date.Value) ? date.Value : reportDates[0];
-        var comparisonDate =
-            compareDate.HasValue && reportDates.Contains(compareDate.Value)
-                ? compareDate.Value
-                : reportDates[1];
 
         var criteria = ToCriteria(filters);
         // CSV export bypasses the UI row cap — analysts who download a CSV expect every
@@ -131,12 +115,13 @@ public class HoldingsScreenerController : BaseController
         // the Screen query is already filtered server-side, so the row count is bounded by
         // the user's criteria rather than the universe.
         var rows = await _holdingRepository
-            .Screen(criteria, selectedDate, comparisonDate)
+            .Screen(criteria, selectedDate.Value, comparisonDate.Value)
             .OrderByDescending(r => r.CurrentValue)
             .ToListAsync();
 
         var csv = BuildCsv(rows);
-        var filename = $"screener-{selectedDate:yyyyMMdd}-vs-{comparisonDate:yyyyMMdd}.csv";
+        var filename =
+            $"screener-{selectedDate.Value:yyyyMMdd}-vs-{comparisonDate.Value:yyyyMMdd}.csv";
         return File(Encoding.UTF8.GetBytes(csv), "text/csv", filename);
     }
 
@@ -180,6 +165,30 @@ public class HoldingsScreenerController : BaseController
         if (!needsQuoting)
             return value;
         return "\"" + value.Replace("\"", "\"\"") + "\"";
+    }
+
+    // Loads available report dates desc and resolves the selected/comparison dates from
+    // the query string. Returns (dates, null, null) when fewer than two distinct report
+    // dates exist so callers can branch into their own "insufficient data" response.
+    private async Task<(
+        List<DateOnly> ReportDates,
+        DateOnly? Selected,
+        DateOnly? Comparison
+    )> ResolveScreenerDates(DateOnly? date, DateOnly? compareDate)
+    {
+        var reportDates = await _holdingRepository
+            .GetAvailableReportDates()
+            .OrderByDescending(d => d)
+            .ToListAsync();
+        if (reportDates.Count < 2)
+            return (reportDates, null, null);
+        var selected =
+            date.HasValue && reportDates.Contains(date.Value) ? date.Value : reportDates[0];
+        var comparison =
+            compareDate.HasValue && reportDates.Contains(compareDate.Value)
+                ? compareDate.Value
+                : reportDates[1];
+        return (reportDates, selected, comparison);
     }
 
     internal static ScreenerCriteria ToCriteria(ScreenerCriteriaViewModel filters) =>
