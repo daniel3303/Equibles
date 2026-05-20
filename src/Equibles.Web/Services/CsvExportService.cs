@@ -40,7 +40,8 @@ public static class CsvExportService
 
     public static string Format(decimal value) => value.ToString(CultureInfo.InvariantCulture);
 
-    public static string Format(DateOnly date) => date.ToString("yyyy-MM-dd");
+    public static string Format(DateOnly date) =>
+        date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     private static void AppendRow(StringBuilder sb, IReadOnlyList<string> fields)
     {
