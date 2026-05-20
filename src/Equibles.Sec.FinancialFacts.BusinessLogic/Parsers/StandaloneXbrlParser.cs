@@ -87,15 +87,9 @@ public class StandaloneXbrlParser
         return facts;
     }
 
-    private static Dictionary<
-        string,
-        (bool IsInstant, DateOnly Start, DateOnly End, List<ParsedXbrlDimension> Dimensions)
-    > BuildContextMap(XElement root)
+    private static Dictionary<string, ParsedContext> BuildContextMap(XElement root)
     {
-        var contexts = new Dictionary<
-            string,
-            (bool, DateOnly, DateOnly, List<ParsedXbrlDimension>)
-        >(StringComparer.Ordinal);
+        var contexts = new Dictionary<string, ParsedContext>(StringComparer.Ordinal);
 
         foreach (var contextElement in root.Elements(ContextElement))
         {
@@ -111,7 +105,7 @@ public class StandaloneXbrlParser
                 continue;
 
             var dimensions = ExtractDimensions(contextElement);
-            contexts[id] = (isInstant, start, end, dimensions);
+            contexts[id] = new ParsedContext(isInstant, start, end, dimensions);
         }
 
         return contexts;
@@ -221,10 +215,7 @@ public class StandaloneXbrlParser
 
     private static bool TryParseFact(
         XElement element,
-        Dictionary<
-            string,
-            (bool IsInstant, DateOnly Start, DateOnly End, List<ParsedXbrlDimension> Dimensions)
-        > contexts,
+        Dictionary<string, ParsedContext> contexts,
         Dictionary<string, string> units,
         out ParsedXbrlFact fact
     )
@@ -286,4 +277,11 @@ public class StandaloneXbrlParser
             return int.MaxValue;
         return int.TryParse(decimalsAttribute, out var value) ? value : null;
     }
+
+    private record struct ParsedContext(
+        bool IsInstant,
+        DateOnly Start,
+        DateOnly End,
+        List<ParsedXbrlDimension> Dimensions
+    );
 }
