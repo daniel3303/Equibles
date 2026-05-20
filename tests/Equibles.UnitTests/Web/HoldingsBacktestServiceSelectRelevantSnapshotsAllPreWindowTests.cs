@@ -54,7 +54,9 @@ public class HoldingsBacktestServiceSelectRelevantSnapshotsAllPreWindowTests
 
         // Sanity-check the construction: all rebalance dates really do
         // precede resolvedFrom under whatever RebalanceDelayDays evaluates to.
-        (mostRecent.AddDays(rebalanceDelay) < resolvedFrom).Should().BeTrue();
+        (mostRecent.AddDays(rebalanceDelay) < resolvedFrom)
+            .Should()
+            .BeTrue();
 
         var result =
             (List<DateOnly>)
