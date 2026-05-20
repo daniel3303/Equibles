@@ -10,5 +10,6 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IModuleConfiguratio
     {
         builder.Entity<CommonStock>();
         builder.Entity<Industry>();
+        builder.Entity<Sector>();
     }
 }
