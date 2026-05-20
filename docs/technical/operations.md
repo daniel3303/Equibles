@@ -87,7 +87,7 @@ Embedding-related variables (override only if running Ollama elsewhere):
 | `Embedding__ModelName` | `bge-m3` |
 | `Embedding__BatchSize` | `10` |
 
-The same `EmbeddingConfig` binding is read by the MCP server's `RagManager` (for query-time embedding) and the worker (for chunk-time embedding). Without both bound to a working endpoint, `RagSearchTools` returns empty results.
+The MCP server's `RagManager` reads the same `EmbeddingConfig` binding for query-time embedding; the worker reads it for chunk-time embedding. Without both bound to a working endpoint, `RagSearchTools` returns empty results.
 
 ## Logging
 
