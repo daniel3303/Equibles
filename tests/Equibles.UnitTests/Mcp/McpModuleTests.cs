@@ -269,6 +269,7 @@ public class McpModuleToolDiscoveryTests
         toolNames.Should().Contain("GetTopBuyersSellers");
         toolNames.Should().Contain("GetMarketWide13FActivity");
         toolNames.Should().Contain("GetInstitutionSummary");
+        toolNames.Should().Contain("GetInstitutionSectorAllocation");
     }
 
     // ── InsiderTrading module specific ──────────────────────────────────
@@ -361,6 +362,7 @@ public class McpModuleToolDiscoveryTests
                     "GetTopBuyersSellers",
                     "GetMarketWide13FActivity",
                     "GetInstitutionSummary",
+                    "GetInstitutionSectorAllocation",
                 }
             },
             {
