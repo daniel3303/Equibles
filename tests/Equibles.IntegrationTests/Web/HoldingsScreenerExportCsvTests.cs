@@ -112,6 +112,45 @@ public class HoldingsScreenerExportCsvTests
     }
 
     [Fact]
+    public async Task ExportCsv_NameWithNewline_IsQuotedToPreserveRowStructure()
+    {
+        // RFC 4180 says: wrap a field in quotes when it contains a quote, comma, OR newline.
+        // The existing comma/quote pin would still pass if `\n` were dropped from the escape
+        // trigger; an unwrapped newline silently splits the row in two for downstream parsers.
+        var q1 = new DateOnly(2024, 9, 30);
+        var q2 = new DateOnly(2024, 12, 31);
+        var holderId = Guid.NewGuid();
+
+        await _fixture.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new InstitutionalHolder
+                {
+                    Id = holderId,
+                    Cik = "0008000004",
+                    Name = "Newline Holder",
+                }
+            );
+            var stock = new CommonStock
+            {
+                Ticker = "NLN",
+                Name = "Acme\nNew Line Inc.",
+                Cik = "0000099995",
+            };
+            db.Add(stock);
+            db.Add(MakeHolding(stock.Id, holderId, q1, 1, 1));
+            db.Add(MakeHolding(stock.Id, holderId, q2, 1, 1));
+            await Task.CompletedTask;
+        });
+
+        var response = await _fixture.Client.GetAsync("/Holdings/Screener/Export.csv");
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        body.Should().Contain("\"Acme\nNew Line Inc.\"");
+    }
+
+    [Fact]
     public async Task ExportCsv_FiltersApplyToDownloadSameAsForm()
     {
         var q1 = new DateOnly(2024, 9, 30);
