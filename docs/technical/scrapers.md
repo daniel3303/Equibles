@@ -9,7 +9,7 @@ How the `*.HostedService` workers ingest data, how the `Equibles.Integrations.*`
 
 The split keeps the database concerns and the protocol concerns testable in isolation. An integration client returns DTOs; the HostedService maps DTOs onto entities.
 
-## Worker base — [`BaseScraperWorker`](../src/Equibles.Worker/BaseScraperWorker.cs)
+## Worker base — [`BaseScraperWorker`](../../src/Equibles.Worker/BaseScraperWorker.cs)
 
 Abstract `BackgroundService` that every scraper extends. Subclass surface:
 
@@ -29,10 +29,10 @@ Built-in behavior:
 
 Subclass-specific extras (worth knowing because they show up in multiple workers):
 
-- `WaitForNextCycle(interval, stoppingToken)` — override hook to interrupt the sleep on an external signal. [`HoldingsScraperWorker`](../src/Equibles.Holdings.HostedService/HoldingsScraperWorker.cs) uses it to wake immediately when `HoldingsRescanSignal` fires after a `StockCusipChanged` event.
+- `WaitForNextCycle(interval, stoppingToken)` — override hook to interrupt the sleep on an external signal. [`HoldingsScraperWorker`](../../src/Equibles.Holdings.HostedService/HoldingsScraperWorker.cs) uses it to wake immediately when `HoldingsRescanSignal` fires after a `StockCusipChanged` event.
 - Per-attempt retry delays exposed as `protected virtual` properties (e.g. `RetryDelays = [30s, 2m, 10m]`) so tests can collapse them without changing production.
 
-## Integration clients — [`Equibles.Integrations.*`](../src/Equibles.Integrations.Common)
+## Integration clients — [`Equibles.Integrations.*`](../../src/Equibles.Integrations.Common)
 
 Each upstream source has its own integration project:
 
@@ -48,7 +48,7 @@ Each upstream source has its own integration project:
 
 Every client follows the same shape: one interface + one implementation registered via `[Service(ServiceLifetime.Scoped, typeof(IXxxClient))]` (the AutoWire attribute from `Equibles.Core.AutoWiring`). The interface lives in `Contracts/`, the DTOs in `Models/`, and the wire/transport details in the client class itself.
 
-### Rate limiting — [`RateLimiter`](../src/Equibles.Integrations.Common/RateLimiter)
+### Rate limiting — [`RateLimiter`](../../src/Equibles.Integrations.Common/RateLimiter)
 
 - `IRateLimiter` with `WaitAsync()` + `PauseFor(TimeSpan)`. Each client owns a `static readonly IRateLimiter` configured for its upstream's published (or reverse-engineered) limit — e.g. Yahoo uses `40 requests / minute`.
 - `WaitAsync()` blocks until the sliding-window counter allows another request; calls itself recursively after the delay so a long pause never silently lets a request through.
@@ -69,17 +69,17 @@ Workers that fetch from a paginated / batched feed maintain a dedup ledger so re
 
 ### Holdings — `ProcessedDataSet` + `ProcessedFiling`
 
-[`ProcessedDataSet`](../src/Equibles.Holdings.Data/Models/ProcessedDataSet.cs):
+[`ProcessedDataSet`](../../src/Equibles.Holdings.Data/Models/ProcessedDataSet.cs):
 
 - Keyed by SEC quarterly bulk-data-set file name (`form13fhr_2024q3_01.zip`).
 - Marks a file as fully ingested so the next `HoldingsScraperWorker` cycle skips it.
 - Stores a `SubmissionCount` for observability.
 - Contains a sentinel row `BackfillGuardFileName = "__backfill-guard__"` — a name that never matches a real file. Its purpose is to keep the table non-empty after `StockCusipChangedConsumer` clears real rows for a backfill, so `BackfillProcessedDataSets` doesn't re-seed history as "processed" before the backfill actually runs.
 
-[`ProcessedFiling`](../src/Equibles.Holdings.Data/Models/ProcessedFiling.cs):
+[`ProcessedFiling`](../../src/Equibles.Holdings.Data/Models/ProcessedFiling.cs):
 
 - Keyed by accession number.
-- Recorded by [`Holdings13FRealtimeWorker`](../src/Equibles.Holdings.HostedService/Holdings13FRealtimeWorker.cs) for every individual 13F-HR submission already handed to the import pipeline.
+- Recorded by [`Holdings13FRealtimeWorker`](../../src/Equibles.Holdings.HostedService/Holdings13FRealtimeWorker.cs) for every individual 13F-HR submission already handed to the import pipeline.
 - An amendment carries a new accession number, so it is still processed; a previously-handled original is never re-processed. Without this ledger, re-sweeping the daily index after an amendment's delete-by-period would upsert stale originals back over the amendment.
 - Filings that produced zero tracked holdings are recorded too — otherwise the same empty filing would be re-downloaded every cycle.
 
@@ -112,7 +112,7 @@ The cursor pattern means re-running is cheap (a single query for `max(date)` per
 
 In-process pub/sub between modules:
 
-- [`HoldingsRescanSignal`](../src/Equibles.Holdings.HostedService/HoldingsRescanSignal.cs) — singleton with an internal `TaskCompletionSource` queue. `StockCusipChangedConsumer` (MassTransit) calls `Signal()` after invalidating processed data; `HoldingsScraperWorker.WaitForNextCycle` races the signal against its 24h timer and wakes on whichever fires first.
+- [`HoldingsRescanSignal`](../../src/Equibles.Holdings.HostedService/HoldingsRescanSignal.cs) — singleton with an internal `TaskCompletionSource` queue. `StockCusipChangedConsumer` (MassTransit) calls `Signal()` after invalidating processed data; `HoldingsScraperWorker.WaitForNextCycle` races the signal against its 24h timer and wakes on whichever fires first.
 - Pattern is reusable. Add a singleton with the same async-signal shape (`WaitAsync` / `Signal`) when one module's events should wake another module's worker.
 
 ## Adding a new scraper
@@ -120,6 +120,6 @@ In-process pub/sub between modules:
 1. Add a new project `src/Equibles.<Module>.HostedService` referencing `Equibles.Worker`, the module's `.Data` and `.Repositories` projects, and the matching `Equibles.Integrations.<Source>`.
 2. Worker class inherits `BaseScraperWorker`. Set `WorkerName`, `SleepInterval`, `ErrorSource`; implement `DoWork`.
 3. Register the worker with `services.AddHostedService<MyScraperWorker>()` from a `ServiceCollectionExtensions.Add<Module>Worker(this IServiceCollection)` method.
-4. Add `builder.Services.Add<Module>Worker()` to [`Equibles.Worker.Host/Program.cs`](../src/Equibles.Worker.Host/Program.cs).
+4. Add `builder.Services.Add<Module>Worker()` to [`Equibles.Worker.Host/Program.cs`](../../src/Equibles.Worker.Host/Program.cs).
 5. If the scraper has tunables, define `<Module>ScraperOptions`, bind it in the host with `services.Configure<...>(builder.Configuration.GetSection("<Module>Scraper"))`, and inject `IOptions<...>` into the worker.
 6. If the source is paginated → write a `Processed<X>` ledger table. If it's a continuous time series → use `SyncDateResolver.Resolve` against `max(date)`.
