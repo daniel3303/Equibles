@@ -84,7 +84,8 @@ Workers that fetch from a paginated / batched feed maintain a dedup ledger so re
 
 - Keyed by accession number.
 - Recorded by [`Holdings13FRealtimeWorker`](../../src/Equibles.Holdings.HostedService/Holdings13FRealtimeWorker.cs) for every individual 13F-HR submission already handed to the import pipeline.
-- An amendment carries a new accession number, so it is still processed; a previously-handled original is never re-processed. Without this ledger, re-sweeping the daily index after an amendment's delete-by-period would upsert stale originals back over the amendment.
+- An amendment carries a new accession number, so it is still processed; a previously-handled original is never re-processed.
+- Without this ledger, re-sweeping the daily index after an amendment's delete-by-period would upsert stale originals back over the amendment.
 - Filings that produced zero tracked holdings are recorded too — otherwise the same empty filing would be re-downloaded every cycle.
 
 ### SEC — `Document` rows act as the ledger
