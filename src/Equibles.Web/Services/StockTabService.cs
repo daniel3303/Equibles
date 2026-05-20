@@ -19,6 +19,8 @@ namespace Equibles.Web.Services;
 [Service]
 public class StockTabService
 {
+    private const int RecentRowLimit = 100;
+
     private readonly InstitutionalHoldingRepository _institutionalHoldingRepository;
     private readonly InstitutionalHolderRepository _institutionalHolderRepository;
     private readonly DailyShortVolumeRepository _dailyShortVolumeRepository;
@@ -171,7 +173,7 @@ public class StockTabService
         var documents = await _documentRepository
             .GetByCompany(stock)
             .OrderByDescending(d => d.ReportingDate)
-            .Take(100)
+            .Take(RecentRowLimit)
             .ToListAsync();
         return new DocumentsTabViewModel { Documents = documents, Ticker = stock.Ticker };
     }
@@ -182,7 +184,7 @@ public class StockTabService
             .GetByStock(stock)
             .Include(t => t.InsiderOwner)
             .OrderByDescending(t => t.TransactionDate)
-            .Take(100)
+            .Take(RecentRowLimit)
             .ToListAsync();
         return new InsiderTradingTabViewModel
         {
@@ -197,7 +199,7 @@ public class StockTabService
             .GetByStock(stock)
             .Include(t => t.CongressMember)
             .OrderByDescending(t => t.TransactionDate)
-            .Take(100)
+            .Take(RecentRowLimit)
             .ToListAsync();
         return new CongressionalTradesTabViewModel { Trades = trades, Ticker = stock.Ticker };
     }
