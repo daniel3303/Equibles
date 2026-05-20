@@ -231,24 +231,18 @@ public static partial class DisclosureParsingHelper
         // so accept the bare letter or the letter followed by a space/'(' in
         // addition to the Senate full words.
         var trimmed = type.Trim();
-        if (
-            trimmed.Contains("Sale", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Contains("Sold", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Equals("S", StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith("S ", StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith("S(", StringComparison.OrdinalIgnoreCase)
-        )
+        if (MatchesType(trimmed, ["Sale", "Sold"], "S"))
             return CongressTransactionType.Sale;
-        if (
-            trimmed.Contains("Purchase", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Contains("Buy", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Equals("P", StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith("P ", StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith("P(", StringComparison.OrdinalIgnoreCase)
-        )
+        if (MatchesType(trimmed, ["Purchase", "Buy"], "P"))
             return CongressTransactionType.Purchase;
         return null;
     }
+
+    private static bool MatchesType(string text, string[] words, string abbreviation) =>
+        words.Any(w => text.Contains(w, StringComparison.OrdinalIgnoreCase))
+        || text.Equals(abbreviation, StringComparison.OrdinalIgnoreCase)
+        || text.StartsWith(abbreviation + " ", StringComparison.OrdinalIgnoreCase)
+        || text.StartsWith(abbreviation + "(", StringComparison.OrdinalIgnoreCase);
 
     public static (long from, long to) ParseAmountRange(string amount)
     {
