@@ -179,6 +179,81 @@ public class HoldingsExportActivityTests
         html.ToLowerInvariant().Should().Contain("/holdings/export/activity");
     }
 
+    [Fact]
+    public async Task ExportActivity_TopBuys_OrdersByDeltaValueDescending()
+    {
+        // The TopBuys section sorts by `CurrentValue - PreviousValue` desc — not by
+        // share-count delta. None of the other Activity tests pin row order (they only
+        // assert via .Contain), so a regression that swapped the sort field would slip
+        // through. SmallShares has a much larger value jump than BigShares; it must lead.
+        var q1 = new DateOnly(2024, 9, 30);
+        var q2 = new DateOnly(2024, 12, 31);
+        var holderA = Guid.NewGuid();
+        var holderB = Guid.NewGuid();
+        var bigSharesStock = Guid.NewGuid();
+        var smallSharesStock = Guid.NewGuid();
+
+        await _fixture.ResetAndSeedAsync(async db =>
+        {
+            db.AddRange(
+                new InstitutionalHolder
+                {
+                    Id = holderA,
+                    Cik = "0009000040",
+                    Name = "Holder A",
+                },
+                new InstitutionalHolder
+                {
+                    Id = holderB,
+                    Cik = "0009000041",
+                    Name = "Holder B",
+                }
+            );
+            db.AddRange(
+                new CommonStock
+                {
+                    Id = bigSharesStock,
+                    Ticker = "BIGS",
+                    Name = "Big Share Move",
+                    Cik = "0007720001",
+                },
+                new CommonStock
+                {
+                    Id = smallSharesStock,
+                    Ticker = "BIGV",
+                    Name = "Big Value Move",
+                    Cik = "0007720002",
+                }
+            );
+            // BIGS: shares 100 → 200 (Δ +100), value 1000 → 1500 (Δ +500).
+            db.Add(MakeHoldingById(bigSharesStock, holderA, q1, 100, 1000));
+            db.Add(MakeHoldingById(bigSharesStock, holderA, q2, 200, 1500));
+            // BIGV: shares 100 → 110 (Δ +10), value 1000 → 3000 (Δ +2000).
+            db.Add(MakeHoldingById(smallSharesStock, holderB, q1, 100, 1000));
+            db.Add(MakeHoldingById(smallSharesStock, holderB, q2, 110, 3000));
+            await Task.CompletedTask;
+        });
+
+        var response = await _fixture.Client.GetAsync(
+            $"/Holdings/Export/Activity?date={q2:yyyy-MM-dd}"
+        );
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadAsStringAsync();
+        var topBuyRows = body.Split('\n').Where(line => line.StartsWith("TopBuys,")).ToList();
+        topBuyRows.Should().HaveCountGreaterThanOrEqualTo(2);
+        var bigvIndex = topBuyRows.FindIndex(line => line.Contains("BIGV"));
+        var bigsIndex = topBuyRows.FindIndex(line => line.Contains("BIGS"));
+        bigvIndex.Should().BeGreaterThanOrEqualTo(0);
+        bigsIndex.Should().BeGreaterThanOrEqualTo(0);
+        bigvIndex
+            .Should()
+            .BeLessThan(
+                bigsIndex,
+                "TopBuys orders by value delta descending; BIGV's +$2000 outranks BIGS's +$500"
+            );
+    }
+
     private static InstitutionalHolding MakeHoldingById(
         Guid stockId,
         Guid holderId,
