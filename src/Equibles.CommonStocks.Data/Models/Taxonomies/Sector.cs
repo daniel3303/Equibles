@@ -1,16 +1,11 @@
 using System.ComponentModel.DataAnnotations;
-using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.Data.Models.Taxonomies;
 
-[Index(nameof(SectorId))]
-public class Industry
+public class Sector
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
     [MaxLength(128)]
     public string Name { get; set; }
-
-    public Guid? SectorId { get; set; }
-    public virtual Sector Sector { get; set; }
 }
