@@ -725,6 +725,82 @@ public class InstitutionalHoldingsTools
         );
     }
 
+    [McpServerTool(Name = "GetInstitutionSectorAllocation")]
+    [Description(
+        "Get an institution's portfolio allocation grouped by industry / sector for its latest 13F report. Returns a markdown table sorted by % of portfolio descending, with stocks lacking an industry classification collapsed into a single 'Unclassified' row at the end. Use this to answer 'is this fund concentrated in tech / energy / generalist?'"
+    )]
+    public Task<string> GetInstitutionSectorAllocation(
+        [Description("Institution name (partial or full — first match wins)")]
+            string institutionName,
+        [Description("Report date in YYYY-MM-DD format (defaults to the holder's latest)")]
+            string reportDate = null
+    )
+    {
+        return McpToolExecutor.Execute(
+            async () =>
+            {
+                var holder = await _holderRepository
+                    .Search(institutionName ?? string.Empty)
+                    .OrderBy(h => h.Name)
+                    .FirstOrDefaultAsync();
+                if (holder == null)
+                    return $"No institution found matching '{institutionName}'.";
+
+                var reportDates = await _holdingRepository
+                    .GetHistoryByHolder(holder)
+                    .Select(h => h.ReportDate)
+                    .Distinct()
+                    .OrderByDescending(d => d)
+                    .ToListAsync();
+                if (reportDates.Count == 0)
+                    return $"No 13F holdings reported by {holder.Name}.";
+
+                DateOnly targetDate;
+                if (
+                    !string.IsNullOrEmpty(reportDate)
+                    && DateOnly.TryParse(reportDate, out var parsed)
+                    && reportDates.Contains(parsed)
+                )
+                    targetDate = parsed;
+                else
+                    targetDate = reportDates[0];
+
+                var holdings = await _holdingRepository
+                    .GetByHolder(holder, targetDate)
+                    .Include(h => h.CommonStock)
+                        .ThenInclude(s => s.Industry)
+                    .ToListAsync();
+                var slices = IndustryAllocationCalculator.Calculate(holdings);
+
+                var result = new StringBuilder();
+                result.AppendLine(
+                    $"Sector allocation — **{holder.Name}** as of {targetDate:yyyy-MM-dd}"
+                );
+                result.AppendLine();
+                if (slices.Count == 0)
+                {
+                    result.AppendLine("_No holdings reported for the selected quarter._");
+                    return result.ToString();
+                }
+
+                result.AppendLine("| # | Industry | # Positions | Value ($M) | % of Portfolio |");
+                result.AppendLine("|---|----------|-------------|------------|----------------|");
+                for (var i = 0; i < slices.Count; i++)
+                {
+                    var s = slices[i];
+                    result.AppendLine(
+                        $"| {i + 1} | {s.IndustryName} | {s.PositionCount:N0} | {s.TotalValue / 1_000_000m:N1} | {s.PercentOfPortfolio:F1}% |"
+                    );
+                }
+                return result.ToString();
+            },
+            _logger,
+            "GetInstitutionSectorAllocation",
+            $"institution: {institutionName}",
+            ReportError
+        );
+    }
+
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
