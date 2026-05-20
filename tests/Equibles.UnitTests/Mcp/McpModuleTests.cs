@@ -401,7 +401,10 @@ public class McpModuleToolDiscoveryTests
                 typeof(ShortDataTools),
                 new[] { "GetShortVolume", "GetShortInterest", "GetShortInterestSnapshot" }
             },
-            { typeof(StockPriceTools), new[] { "GetStockPrices", "GetLatestPrices" } },
+            {
+                typeof(StockPriceTools),
+                new[] { "GetStockPrices", "GetLatestPrices", "GetStochasticOscillator" }
+            },
         };
 
     public static TheoryData<Type> AllToolMarkerTypes =>

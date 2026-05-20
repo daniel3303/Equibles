@@ -1,4 +1,4 @@
-using Equibles.Web.Services;
+using Equibles.Yahoo.Repositories;
 
 namespace Equibles.UnitTests.Web;
 
