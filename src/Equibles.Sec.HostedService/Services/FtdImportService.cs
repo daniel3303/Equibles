@@ -268,43 +268,48 @@ public class FtdImportService
 
         while (await reader.ReadLineAsync(cancellationToken) is { } line)
         {
-            if (string.IsNullOrWhiteSpace(line))
-                continue;
-
-            var parts = line.Split('|');
-            if (parts.Length < 6)
-                continue;
-
-            // Fields: SETTLEMENT DATE|CUSIP|SYMBOL|QUANTITY (FAILS)|DESCRIPTION|PRICE
-            if (
-                !DateOnly.TryParseExact(
-                    parts[0],
-                    "yyyyMMdd",
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.None,
-                    out var date
-                )
-            )
-            {
-                continue;
-            }
-
-            long.TryParse(parts[3], out var quantity);
-            decimal.TryParse(parts[5], CultureInfo.InvariantCulture, out var price);
-
-            records.Add(
-                new FtdRecord
-                {
-                    SettlementDate = date,
-                    Cusip = parts[1].Trim(),
-                    Symbol = parts[2].Trim(),
-                    Quantity = quantity,
-                    Price = price,
-                }
-            );
+            var record = ParseLine(line);
+            if (record != null)
+                records.Add(record);
         }
 
         return records;
+    }
+
+    // Fields: SETTLEMENT DATE|CUSIP|SYMBOL|QUANTITY (FAILS)|DESCRIPTION|PRICE
+    private static FtdRecord ParseLine(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+            return null;
+
+        var parts = line.Split('|');
+        if (parts.Length < 6)
+            return null;
+
+        if (
+            !DateOnly.TryParseExact(
+                parts[0],
+                "yyyyMMdd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var date
+            )
+        )
+        {
+            return null;
+        }
+
+        long.TryParse(parts[3], out var quantity);
+        decimal.TryParse(parts[5], CultureInfo.InvariantCulture, out var price);
+
+        return new FtdRecord
+        {
+            SettlementDate = date,
+            Cusip = parts[1].Trim(),
+            Symbol = parts[2].Trim(),
+            Quantity = quantity,
+            Price = price,
+        };
     }
 
     // Oldest FTD file available on SEC EDGAR is cnsfails201706b.zip (second half of June 2017).
