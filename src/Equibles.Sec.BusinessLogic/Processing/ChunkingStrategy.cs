@@ -124,15 +124,9 @@ public class ChunkingStrategy
         var searchText = text.Substring(start, end - start);
         var sentenceEndings = new[] { ".", "!", "?", "\n\n" };
 
-        var lastIndex = -1;
-        foreach (var ending in sentenceEndings)
-        {
-            var index = searchText.LastIndexOf(ending, StringComparison.Ordinal);
-            if (index > lastIndex)
-            {
-                lastIndex = index;
-            }
-        }
+        var lastIndex = sentenceEndings.Max(ending =>
+            searchText.LastIndexOf(ending, StringComparison.Ordinal)
+        );
 
         return lastIndex > -1 ? start + lastIndex + 1 : -1;
     }
