@@ -70,11 +70,11 @@ public class StockPriceTools
                 if (records.Count == 0)
                     return $"No price data found for {stock.Ticker} in the specified date range.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"Daily prices for {stock.Ticker} ({stock.Name}):");
-                result.AppendLine();
-                result.AppendLine("| Date | Open | High | Low | Close | Volume |");
-                result.AppendLine("|------|------|------|-----|-------|--------|");
+                var result = StartTable(
+                    $"Daily prices for {stock.Ticker} ({stock.Name}):",
+                    "| Date | Open | High | Low | Close | Volume |",
+                    "|------|------|------|-----|-------|--------|"
+                );
 
                 foreach (var p in records.OrderBy(p => p.Date))
                 {
@@ -116,11 +116,11 @@ public class StockPriceTools
                 if (tickerList.Count > 25)
                     return "Maximum 25 tickers per request. Please split into multiple calls.";
 
-                var result = new StringBuilder();
-                result.AppendLine("Latest prices:");
-                result.AppendLine();
-                result.AppendLine("| Ticker | Date | Close | Volume |");
-                result.AppendLine("|--------|------|-------|--------|");
+                var result = StartTable(
+                    "Latest prices:",
+                    "| Ticker | Date | Close | Volume |",
+                    "|--------|------|-------|--------|"
+                );
 
                 foreach (var ticker in tickerList)
                 {
@@ -205,13 +205,11 @@ public class StockPriceTools
                     dPeriod
                 );
 
-                var result = new StringBuilder();
-                result.AppendLine(
-                    $"Stochastic Oscillator (%K={kPeriod}, %D={dPeriod}) for {stock.Ticker} ({stock.Name}):"
+                var result = StartTable(
+                    $"Stochastic Oscillator (%K={kPeriod}, %D={dPeriod}) for {stock.Ticker} ({stock.Name}):",
+                    "| Date | Close | %K | %D |",
+                    "|------|-------|----|----|"
                 );
-                result.AppendLine();
-                result.AppendLine("| Date | Close | %K | %D |");
-                result.AppendLine("|------|-------|----|----|");
 
                 AppendNewestFirstRows(
                     result,
@@ -269,13 +267,11 @@ public class StockPriceTools
                 var closes = records.Select(p => p.Close).ToList();
                 var atr = TechnicalIndicatorService.ComputeAtr(highs, lows, closes, period);
 
-                var result = new StringBuilder();
-                result.AppendLine(
-                    $"Average True Range (period={period}) for {stock.Ticker} ({stock.Name}):"
+                var result = StartTable(
+                    $"Average True Range (period={period}) for {stock.Ticker} ({stock.Name}):",
+                    "| Date | Close | ATR |",
+                    "|------|-------|-----|"
                 );
-                result.AppendLine();
-                result.AppendLine("| Date | Close | ATR |");
-                result.AppendLine("|------|-------|-----|");
 
                 AppendNewestFirstRows(
                     result,
@@ -327,11 +323,11 @@ public class StockPriceTools
                 var volumes = records.Select(p => p.Volume).ToList();
                 var obv = TechnicalIndicatorService.ComputeObv(closes, volumes);
 
-                var result = new StringBuilder();
-                result.AppendLine($"On-Balance Volume for {stock.Ticker} ({stock.Name}):");
-                result.AppendLine();
-                result.AppendLine("| Date | Close | Volume | OBV |");
-                result.AppendLine("|------|-------|--------|-----|");
+                var result = StartTable(
+                    $"On-Balance Volume for {stock.Ticker} ({stock.Name}):",
+                    "| Date | Close | Volume | OBV |",
+                    "|------|-------|--------|-----|"
+                );
 
                 AppendNewestFirstRows(
                     result,
@@ -374,6 +370,16 @@ public class StockPriceTools
             );
 
         return (stock, records, null);
+    }
+
+    private static StringBuilder StartTable(string title, string columnsRow, string separatorRow)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine(title);
+        sb.AppendLine();
+        sb.AppendLine(columnsRow);
+        sb.AppendLine(separatorRow);
+        return sb;
     }
 
     private static void AppendNewestFirstRows(
