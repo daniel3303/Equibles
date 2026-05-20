@@ -3,6 +3,7 @@ using System.Text;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Mcp;
 using Microsoft.EntityFrameworkCore;
@@ -365,28 +366,23 @@ public class InstitutionalHoldingsTools
                 // TODO(#1008): the same aggregation/grouping logic lives in
                 // Equibles.Web.Services.HoldingsPositionGrouper. Consolidate into a shared
                 // Equibles.Holdings.BusinessLogic project once one exists.
-                var currentByHolder = currentHoldings
-                    .GroupBy(h => h.InstitutionalHolderId)
-                    .ToDictionary(
-                        g => g.Key,
-                        g => new HolderAggregate
-                        {
-                            Name = g.First().InstitutionalHolder?.Name ?? "Unknown",
-                            Shares = g.Sum(h => h.Shares),
-                            Value = g.Sum(h => h.Value),
-                        }
-                    );
-                var previousByHolder = previousHoldings
-                    .GroupBy(h => h.InstitutionalHolderId)
-                    .ToDictionary(
-                        g => g.Key,
-                        g => new HolderAggregate
-                        {
-                            Name = g.First().InstitutionalHolder?.Name ?? "Unknown",
-                            Shares = g.Sum(h => h.Shares),
-                            Value = g.Sum(h => h.Value),
-                        }
-                    );
+                static Dictionary<Guid, HolderAggregate> AggregateByHolder(
+                    List<InstitutionalHolding> holdings
+                ) =>
+                    holdings
+                        .GroupBy(h => h.InstitutionalHolderId)
+                        .ToDictionary(
+                            g => g.Key,
+                            g => new HolderAggregate
+                            {
+                                Name = g.First().InstitutionalHolder?.Name ?? "Unknown",
+                                Shares = g.Sum(h => h.Shares),
+                                Value = g.Sum(h => h.Value),
+                            }
+                        );
+
+                var currentByHolder = AggregateByHolder(currentHoldings);
+                var previousByHolder = AggregateByHolder(previousHoldings);
 
                 var allHolderIds = currentByHolder.Keys.Union(previousByHolder.Keys);
                 var movers = allHolderIds
