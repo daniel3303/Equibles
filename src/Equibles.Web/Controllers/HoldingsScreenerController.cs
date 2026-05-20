@@ -4,6 +4,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
 using Equibles.Web.Controllers.Abstract;
+using Equibles.Web.Services;
 using Equibles.Web.ViewModels.Holdings;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -134,9 +135,9 @@ public class HoldingsScreenerController : BaseController
         );
         foreach (var r in rows)
         {
-            sb.Append(EscapeCsvField(r.Ticker)).Append(',');
-            sb.Append(EscapeCsvField(r.Name)).Append(',');
-            sb.Append(EscapeCsvField(r.IndustryName)).Append(',');
+            sb.Append(CsvExportService.EscapeField(r.Ticker)).Append(',');
+            sb.Append(CsvExportService.EscapeField(r.Name)).Append(',');
+            sb.Append(CsvExportService.EscapeField(r.IndustryName)).Append(',');
             sb.Append(r.CurrentFilerCount.ToString(CultureInfo.InvariantCulture)).Append(',');
             sb.Append(r.PreviousFilerCount.ToString(CultureInfo.InvariantCulture)).Append(',');
             sb.Append(r.DeltaFilerCount.ToString(CultureInfo.InvariantCulture)).Append(',');
@@ -153,18 +154,6 @@ public class HoldingsScreenerController : BaseController
             sb.AppendLine();
         }
         return sb.ToString();
-    }
-
-    // RFC 4180 escape: wrap a field in quotes when it contains a quote, comma, or newline;
-    // double any embedded quotes. Empty string passes through unwrapped.
-    private static string EscapeCsvField(string value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        var needsQuoting = value.IndexOfAny(['"', ',', '\n', '\r']) >= 0;
-        if (!needsQuoting)
-            return value;
-        return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
 
     // Loads available report dates desc and resolves the selected/comparison dates from
