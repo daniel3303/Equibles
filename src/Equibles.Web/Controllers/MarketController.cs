@@ -47,7 +47,6 @@ public class MarketController : BaseController
             })
             .ToList();
 
-        // VIX summary
         var latestVix = await _vixRepository
             .GetAll()
             .OrderByDescending(v => v.Date)
@@ -106,7 +105,6 @@ public class MarketController : BaseController
             Records = records,
         };
 
-        // Compute statistics
         var values = records
             .Where(r => r.PutCallRatio.HasValue)
             .Select(r => (double)r.PutCallRatio.Value)
@@ -161,7 +159,6 @@ public class MarketController : BaseController
             if (records.Count > 1)
                 viewModel.PreviousClose = records[1].Close;
 
-            // Moving averages (chronological order)
             var chronological = records.OrderBy(r => r.Date).Select(r => (double)r.Close).ToArray();
             viewModel.Sma20 = chronological.ComputeSma(20, 2);
             viewModel.Sma50 = chronological.ComputeSma(50, 2);
