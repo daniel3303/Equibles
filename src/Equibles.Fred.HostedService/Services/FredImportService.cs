@@ -177,26 +177,12 @@ public class FredImportService
                 continue;
             }
 
-            // FRED returns "." for missing values
-            decimal? value = null;
-            if (
-                record.Value != "."
-                && decimal.TryParse(
-                    record.Value,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    out var parsed
-                )
-            )
-            {
-                value = parsed;
-            }
-
             observations.Add(
                 new FredObservation
                 {
                     FredSeriesId = series.Id,
                     Date = date,
-                    Value = value,
+                    Value = ParseFredValue(record.Value),
                 }
             );
         }
@@ -292,5 +278,19 @@ public class FredImportService
     private static DateOnly? ParseDate(string value)
     {
         return DateOnly.TryParse(value, out var date) ? date : null;
+    }
+
+    // FRED uses the literal "." as its missing-observation sentinel.
+    private static decimal? ParseFredValue(string raw)
+    {
+        if (raw == ".")
+            return null;
+        return decimal.TryParse(
+            raw,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var parsed
+        )
+            ? parsed
+            : null;
     }
 }
