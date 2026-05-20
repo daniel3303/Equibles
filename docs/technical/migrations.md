@@ -1,13 +1,13 @@
 # Migrations and Database
 
-Every entity in the codebase lives in one shared EF Core migrations history at [`src/Equibles.Migrations`](../src/Equibles.Migrations). Host applications apply migrations on startup; new migrations are produced via `dotnet ef` against a design-time factory that wires every module by hand.
+Every entity in the codebase lives in one shared EF Core migrations history at [`src/Equibles.Migrations`](../../src/Equibles.Migrations). Host applications apply migrations on startup; new migrations are produced via `dotnet ef` against a design-time factory that wires every module by hand.
 
 ## Project layout
 
-- [`Equibles.Migrations.csproj`](../src/Equibles.Migrations/Equibles.Migrations.csproj) — references **every** `Equibles.*.Data` project plus `Equibles.Messaging`. The snapshot has to know about every module's entities, so the migrations assembly references them all.
-- [`DesignTimeDbContextFactory.cs`](../src/Equibles.Migrations/DesignTimeDbContextFactory.cs) — `IDesignTimeDbContextFactory<EquiblesDbContext>` that EF tooling invokes for `dotnet ef ...`.
-- [`designsettings.json`](../src/Equibles.Migrations/designsettings.json) — connection string the design-time factory reads. Defaults to `Host=localhost;Port=5432;Database=equibles;Username=equibles;Password=equibles`. Override locally with `designsettings.Development.json` (gitignored).
-- [`Migrations/`](../src/Equibles.Migrations/Migrations) — generated `<timestamp>_<Name>.cs` files plus the `EquiblesDbContextModelSnapshot.cs`.
+- [`Equibles.Migrations.csproj`](../../src/Equibles.Migrations/Equibles.Migrations.csproj) — references **every** `Equibles.*.Data` project plus `Equibles.Messaging`. The snapshot has to know about every module's entities, so the migrations assembly references them all.
+- [`DesignTimeDbContextFactory.cs`](../../src/Equibles.Migrations/DesignTimeDbContextFactory.cs) — `IDesignTimeDbContextFactory<EquiblesDbContext>` that EF tooling invokes for `dotnet ef ...`.
+- [`designsettings.json`](../../src/Equibles.Migrations/designsettings.json) — connection string the design-time factory reads. Defaults to `Host=localhost;Port=5432;Database=equibles;Username=equibles;Password=equibles`. Override locally with `designsettings.Development.json` (gitignored).
+- [`Migrations/`](../../src/Equibles.Migrations/Migrations) — generated `<timestamp>_<Name>.cs` files plus the `EquiblesDbContextModelSnapshot.cs`.
 
 ## Design-time factory
 
@@ -38,7 +38,7 @@ dotnet ef migrations add <Name> \
 
 Hosts call `await dbContext.Database.MigrateAsync()` on startup.
 
-- The Web host owns migration application. `ApplyMigrationsAsync` in [`src/Equibles.Web/Program.cs`](../src/Equibles.Web/Program.cs) creates a scope, resolves `EquiblesDbContext`, sets `Database.SetCommandTimeout(TimeSpan.FromHours(1))`, and runs `MigrateAsync()`. The 1-hour timeout absorbs index rebuilds on first run (BM25 + pgvector indexes on multi-million-row tables can take many minutes).
+- The Web host owns migration application. `ApplyMigrationsAsync` in [`src/Equibles.Web/Program.cs`](../../src/Equibles.Web/Program.cs) creates a scope, resolves `EquiblesDbContext`, sets `Database.SetCommandTimeout(TimeSpan.FromHours(1))`, and runs `MigrateAsync()`. The 1-hour timeout absorbs index rebuilds on first run (BM25 + pgvector indexes on multi-million-row tables can take many minutes).
 - The MCP server does **not** run migrations. Its compose service `depends_on: web (condition: service_healthy)`, so by the time MCP starts the Web host has already finished migrating.
 - The Worker host doesn't call `MigrateAsync` on the EF model either, but it does run `MassTransit__RunMigration=true` so the MassTransit SQL transport tables apply on first boot. The EF tables are still owned by Web.
 - Migrations apply additively. There's no down-migration path in production — `Down` exists in the file but `MigrateAsync` only applies the unapplied `Up` set.
