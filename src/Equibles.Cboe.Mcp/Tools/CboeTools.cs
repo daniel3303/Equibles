@@ -48,7 +48,7 @@ public class CboeTools
             int maxResults = 60
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 if (!Enum.TryParse<CboePutCallRatioType>(type, true, out var ratioType))
@@ -88,10 +88,8 @@ public class CboeTools
 
                 return result.ToString();
             },
-            _logger,
             "GetPutCallRatios",
-            $"type: {type}",
-            ReportError
+            $"type: {type}"
         );
     }
 
@@ -108,7 +106,7 @@ public class CboeTools
             int maxResults = 60
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var start = ParseDateOr(
@@ -141,12 +139,13 @@ public class CboeTools
 
                 return result.ToString();
             },
-            _logger,
             "GetVixHistory",
-            $"startDate: {startDate}",
-            ReportError
+            $"startDate: {startDate}"
         );
     }
+
+    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
+        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
 
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
