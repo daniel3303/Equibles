@@ -164,6 +164,7 @@ The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, 
 
 - **Institutional Holdings** — Top holders, ownership history, institution portfolios, institution search
 - **Insider Trading** — Insider transactions, ownership summary, insider search
+- **Congressional Trading** — Trades for a ticker, trades by one member, member search
 - **SEC Documents** — Full-text search, semantic search, document browsing, keyword search within filings
 - **Economic Indicators** — FRED data lookup, latest macro snapshot, indicator search across categories
 - **Futures Positioning** — COT positioning data, latest snapshot across all contracts, contract search
