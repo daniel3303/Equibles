@@ -336,18 +336,11 @@ public class InstitutionalHoldingsTools
                     .OrderByDescending(d => d)
                     .ToListAsync();
 
-                DateOnly targetDate;
-                if (
+                var targetDate =
                     !string.IsNullOrEmpty(reportDate)
                     && DateOnly.TryParse(reportDate, out var parsed)
-                )
-                {
-                    targetDate = parsed;
-                }
-                else
-                {
-                    targetDate = reportDates.FirstOrDefault();
-                }
+                        ? parsed
+                        : reportDates.FirstOrDefault();
                 if (targetDate == default)
                     return $"No institutional holdings data available for {ticker}.";
 
