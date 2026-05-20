@@ -146,7 +146,8 @@ A `docker compose down` keeps these volumes. `docker compose down -v` deletes th
 
 ## Monitoring
 
-- **Status dashboard** at `~/Status` on the Web host — recent worker errors, per-domain row counts, version banner. The dashboard reads from the `Error` table that every scraper writes to via `ErrorReporter` (see [Scrapers → Error reporting](scrapers.md#error-reporting)).
+- **Status dashboard** at `~/Status` on the Web host — recent worker errors, per-domain row counts, version banner.
+- The dashboard reads from the `Error` table that every scraper writes to via `ErrorReporter` (see [Scrapers → Error reporting](scrapers.md#error-reporting)).
 - **Health check** at `~/healthz` on the Web host — anonymous; Compose uses it as `web`'s health probe.
 - **Container logs** — `docker compose logs -f <service>`. Logs honor `MINIMUM_LOG_LEVEL`.
 - **Postgres metrics** — standard Postgres tooling (`pg_stat_*` views) against the `db` service.
