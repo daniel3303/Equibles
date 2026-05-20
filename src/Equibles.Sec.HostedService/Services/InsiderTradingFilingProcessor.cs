@@ -338,18 +338,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             "postTransactionAmounts",
             "sharesOwnedFollowingTransaction"
         );
-        // Form 4 transactionDate is ISO yyyy-MM-dd (ownership XSD). Parse it
-        // culture-independently — under a non-Gregorian host culture (e.g.
-        // ar-SA Umm al-Qura) culture-sensitive TryParse fails and every
-        // insider transaction would be silently dropped.
-        if (
-            !DateOnly.TryParse(
-                transactionDateStr,
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None,
-                out var transactionDate
-            )
-        )
+        if (!TryParseTransactionDate(transactionDateStr, out var transactionDate))
             return null;
 
         return new InsiderTransaction
@@ -444,6 +433,21 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         // Fix unescaped ampersands in entity names
         return Regex.Replace(xml, @"&(?!(amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)", "&amp;");
     }
+
+    // Form 4 transactionDate is ISO yyyy-MM-dd (ownership XSD). Parse it
+    // culture-independently — under a non-Gregorian host culture (e.g.
+    // ar-SA Umm al-Qura) culture-sensitive TryParse fails and every insider
+    // transaction would be silently dropped.
+    private static bool TryParseTransactionDate(
+        string transactionDateStr,
+        out DateOnly transactionDate
+    ) =>
+        DateOnly.TryParse(
+            transactionDateStr,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None,
+            out transactionDate
+        );
 
     internal static TransactionCode ParseTransactionCode(string code)
     {

@@ -7,6 +7,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Sec.FinancialFacts.Data.Enums;
+using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
 using Equibles.Sec.FinancialFacts.Mcp.Helpers;
 using Equibles.Sec.FinancialFacts.Repositories;
@@ -128,45 +129,15 @@ public class FinancialStatementTools
                     .GroupBy(f => f.FinancialConceptId)
                     .ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.FiledDate).First());
 
-                var result = new StringBuilder();
-                result.AppendLine(
-                    $"{statementType.NameForHumans()} for {stock.Ticker} "
-                        + $"({FactMarkdown.Cell(stock.Name)}) — "
-                        + $"FY{selectedYear} {selectedPeriod.NameForHumans()}:"
+                return RenderStatementTable(
+                    stock,
+                    statementType,
+                    selectedYear,
+                    selectedPeriod,
+                    statementLines,
+                    conceptIdByKey,
+                    latestByConcept
                 );
-                result.AppendLine();
-                result.AppendLine("| Line Item | Value | Unit | Period End | Form | Filed |");
-                result.AppendLine("|-----------|------:|------|-----------|------|-------|");
-
-                var rendered = 0;
-                foreach (var line in statementLines)
-                {
-                    if (
-                        !conceptIdByKey.TryGetValue((line.Taxonomy, line.Tag), out var conceptId)
-                        || !latestByConcept.TryGetValue(conceptId, out var fact)
-                    )
-                    {
-                        result.AppendLine($"| {FactMarkdown.Cell(line.Label)} | — | | | | |");
-                        continue;
-                    }
-
-                    result.AppendLine(
-                        $"| {FactMarkdown.Cell(line.Label)} | "
-                            + $"{FactMarkdown.Value(fact.Value, fact.Unit)} | "
-                            + $"{FactMarkdown.Cell(fact.Unit)} | "
-                            + $"{fact.PeriodEnd:yyyy-MM-dd} | "
-                            + $"{FactMarkdown.Cell(fact.Form?.DisplayName)} | "
-                            + $"{fact.FiledDate:yyyy-MM-dd} |"
-                    );
-                    rendered++;
-                }
-
-                if (rendered == 0)
-                    result.AppendLine(
-                        $"\n_No line items of this statement were reported for the period._"
-                    );
-
-                return result.ToString();
             },
             _logger,
             "GetFinancialStatement",
@@ -174,6 +145,55 @@ public class FinancialStatementTools
                 + $"year: {year}, period: {FactMarkdown.Clean(period)}",
             ReportError
         );
+    }
+
+    private static string RenderStatementTable(
+        CommonStock stock,
+        FinancialStatementType statementType,
+        int selectedYear,
+        SecFiscalPeriod selectedPeriod,
+        IReadOnlyList<StatementLine> statementLines,
+        Dictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
+        Dictionary<Guid, FinancialFact> latestByConcept
+    )
+    {
+        var result = new StringBuilder();
+        result.AppendLine(
+            $"{statementType.NameForHumans()} for {stock.Ticker} "
+                + $"({FactMarkdown.Cell(stock.Name)}) — "
+                + $"FY{selectedYear} {selectedPeriod.NameForHumans()}:"
+        );
+        result.AppendLine();
+        result.AppendLine("| Line Item | Value | Unit | Period End | Form | Filed |");
+        result.AppendLine("|-----------|------:|------|-----------|------|-------|");
+
+        var rendered = 0;
+        foreach (var line in statementLines)
+        {
+            if (
+                !conceptIdByKey.TryGetValue((line.Taxonomy, line.Tag), out var conceptId)
+                || !latestByConcept.TryGetValue(conceptId, out var fact)
+            )
+            {
+                result.AppendLine($"| {FactMarkdown.Cell(line.Label)} | — | | | | |");
+                continue;
+            }
+
+            result.AppendLine(
+                $"| {FactMarkdown.Cell(line.Label)} | "
+                    + $"{FactMarkdown.Value(fact.Value, fact.Unit)} | "
+                    + $"{FactMarkdown.Cell(fact.Unit)} | "
+                    + $"{fact.PeriodEnd:yyyy-MM-dd} | "
+                    + $"{FactMarkdown.Cell(fact.Form?.DisplayName)} | "
+                    + $"{fact.FiledDate:yyyy-MM-dd} |"
+            );
+            rendered++;
+        }
+
+        if (rendered == 0)
+            result.AppendLine($"\n_No line items of this statement were reported for the period._");
+
+        return result.ToString();
     }
 
     private async Task<(
