@@ -223,64 +223,66 @@ public partial class HouseDisclosureClient
 
         foreach (var line in lines)
         {
-            // Look for lines with owner codes (SP, JT, DC, Self) followed by asset description
-            // Transaction lines typically start with an owner code and contain a date pattern
-            var ownerMatch = OwnerCodeRegex().Match(line);
-            if (!ownerMatch.Success)
-                continue;
-
-            var owner = ownerMatch.Groups[1].Value;
-            var remainder = line[ownerMatch.Length..].Trim();
-
-            // Extract ticker from parentheses in asset description
-            var ticker = ExtractTickerFromAssetName(remainder);
-
-            // Look for transaction type and date in same line or next lines
-            // House PTR format: Owner Asset Type Date NotificationDate Amount
-            var dateMatch = DatePatternRegex().Match(remainder);
-            if (!dateMatch.Success)
-                continue;
-
-            var txDateStr = dateMatch.Groups[0].Value;
-            var txDate = ParseDate(txDateStr);
-            if (txDate == null)
-                continue;
-
-            // Extract asset name (everything before the transaction type/date)
-            var assetName = remainder[..dateMatch.Index].Trim();
-
-            // Transaction type appears right before the date: "P 01/14/2025" or "S (partial) 12/31/2024"
-            var txType = ExtractTransactionType(assetName);
-            if (txType == null)
-                continue;
-
-            // Remove the transaction type from the end of the asset name
-            assetName = RemoveTrailingTransactionType(assetName).Trim();
-            if (string.IsNullOrEmpty(assetName) && string.IsNullOrEmpty(ticker))
-                continue;
-
-            // Extract amount — look in the remainder after the date(s)
-            var afterDates = remainder[dateMatch.Index..];
-            var (amountFrom, amountTo) = ParseAmountRange(afterDates);
-
-            transactions.Add(
-                new DisclosureTransaction
-                {
-                    MemberName = filing.MemberName,
-                    Position = CongressPosition.Representative,
-                    Ticker = ticker?.ToUpperInvariant(),
-                    AssetName = Truncate(assetName, 256),
-                    TransactionDate = txDate.Value,
-                    FilingDate = filing.FilingDate,
-                    TransactionType = txType.Value,
-                    OwnerType = owner,
-                    AmountFrom = amountFrom,
-                    AmountTo = amountTo,
-                }
-            );
+            if (TryParseTransactionLine(line, filing, out var transaction))
+                transactions.Add(transaction);
         }
 
         return transactions;
+    }
+
+    private bool TryParseTransactionLine(
+        string line,
+        HouseFiling filing,
+        out DisclosureTransaction transaction
+    )
+    {
+        transaction = null;
+
+        var ownerMatch = OwnerCodeRegex().Match(line);
+        if (!ownerMatch.Success)
+            return false;
+
+        var owner = ownerMatch.Groups[1].Value;
+        var remainder = line[ownerMatch.Length..].Trim();
+        var ticker = ExtractTickerFromAssetName(remainder);
+
+        // House PTR format: Owner Asset Type Date NotificationDate Amount
+        var dateMatch = DatePatternRegex().Match(remainder);
+        if (!dateMatch.Success)
+            return false;
+
+        var txDate = ParseDate(dateMatch.Groups[0].Value);
+        if (txDate == null)
+            return false;
+
+        var assetName = remainder[..dateMatch.Index].Trim();
+
+        // Transaction type appears right before the date: "P 01/14/2025" or "S (partial) 12/31/2024"
+        var txType = ExtractTransactionType(assetName);
+        if (txType == null)
+            return false;
+
+        assetName = RemoveTrailingTransactionType(assetName).Trim();
+        if (string.IsNullOrEmpty(assetName) && string.IsNullOrEmpty(ticker))
+            return false;
+
+        var afterDates = remainder[dateMatch.Index..];
+        var (amountFrom, amountTo) = ParseAmountRange(afterDates);
+
+        transaction = new DisclosureTransaction
+        {
+            MemberName = filing.MemberName,
+            Position = CongressPosition.Representative,
+            Ticker = ticker?.ToUpperInvariant(),
+            AssetName = Truncate(assetName, 256),
+            TransactionDate = txDate.Value,
+            FilingDate = filing.FilingDate,
+            TransactionType = txType.Value,
+            OwnerType = owner,
+            AmountFrom = amountFrom,
+            AmountTo = amountTo,
+        };
+        return true;
     }
 
     private static CongressTransactionType? ExtractTransactionType(string text)
