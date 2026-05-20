@@ -52,14 +52,12 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         var transactionRepository =
             scope.ServiceProvider.GetRequiredService<InsiderTransactionRepository>();
 
-        // Check if already imported by accession number
         var existing = await transactionRepository
             .GetByAccessionNumber(filing.AccessionNumber)
             .AnyAsync();
         if (existing)
             return false;
 
-        // Fetch the XML document from SEC
         var xmlContent = await secEdgarClient.GetDocumentContent(filing);
         if (string.IsNullOrWhiteSpace(xmlContent))
         {
@@ -88,7 +86,6 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             return false;
         }
 
-        // Parse XML
         XDocument doc;
         try
         {
@@ -137,7 +134,6 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             return false;
         }
 
-        // Extract reporting owner
         var ownerElement = root.Element("reportingOwner");
         if (ownerElement == null)
         {
@@ -163,7 +159,6 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             return false;
         }
 
-        // Upsert insider owner
         var owner = await ownerRepository.GetByOwnerCik(ownerCik);
         if (owner == null)
         {
