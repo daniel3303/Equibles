@@ -98,7 +98,6 @@ public class CboeImportService
         if (records.Count == 0)
             return;
 
-        // Get latest stored date for this type
         DateOnly latestStoredDate;
         using (var scope = _scopeFactory.CreateScope())
         {
@@ -107,7 +106,6 @@ public class CboeImportService
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
-        // Filter to only new records
         var newRecords =
             latestStoredDate != default
                 ? records.Where(r => r.Date > latestStoredDate).ToList()
@@ -150,7 +148,6 @@ public class CboeImportService
             if (records.Count == 0)
                 return;
 
-            // Get latest stored date
             DateOnly latestStoredDate;
             using (var scope = _scopeFactory.CreateScope())
             {
@@ -159,7 +156,6 @@ public class CboeImportService
                     .FirstOrDefaultAsync(cancellationToken);
             }
 
-            // Filter to only new records
             var newRecords =
                 latestStoredDate != default
                     ? records.Where(r => r.Date > latestStoredDate).ToList()
