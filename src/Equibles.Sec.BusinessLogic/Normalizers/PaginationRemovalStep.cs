@@ -16,47 +16,22 @@ internal class PaginationRemovalStep : IHtmlNormalizationStep
             var elementsToRemove = new List<INode> { hr };
 
             // Check element before HR for page number
-            var previousSibling = hr.PreviousSibling;
-            while (previousSibling != null)
+            var previousSibling = FindFirstMeaningfulSibling(hr, forward: false);
+            if (previousSibling != null && int.TryParse(previousSibling.TextContent.Trim(), out _))
             {
-                if (
-                    previousSibling.NodeType == NodeType.Comment
-                    || string.IsNullOrWhiteSpace(previousSibling.TextContent)
-                )
-                {
-                    previousSibling = previousSibling.PreviousSibling;
-                    continue;
-                }
-
-                var textContent = previousSibling.TextContent.Trim();
-                if (int.TryParse(textContent, out _))
-                {
-                    elementsToRemove.Add(previousSibling);
-                }
-
-                break;
+                elementsToRemove.Add(previousSibling);
             }
 
             // Check element after HR for Part header
-            var nextSibling = hr.NextSibling;
-            while (nextSibling != null)
+            var nextSibling = FindFirstMeaningfulSibling(hr, forward: true);
+            if (
+                nextSibling != null
+                && nextSibling
+                    .TextContent.Trim()
+                    .StartsWith("Part", StringComparison.OrdinalIgnoreCase)
+            )
             {
-                if (
-                    nextSibling.NodeType == NodeType.Comment
-                    || string.IsNullOrWhiteSpace(nextSibling.TextContent)
-                )
-                {
-                    nextSibling = nextSibling.NextSibling;
-                    continue;
-                }
-
-                var textContent = nextSibling.TextContent.Trim();
-                if (textContent.StartsWith("Part", StringComparison.OrdinalIgnoreCase))
-                {
-                    elementsToRemove.Add(nextSibling);
-                }
-
-                break;
+                elementsToRemove.Add(nextSibling);
             }
 
             foreach (var element in elementsToRemove)
@@ -64,5 +39,23 @@ internal class PaginationRemovalStep : IHtmlNormalizationStep
                 element.Parent?.RemoveChild(element);
             }
         }
+    }
+
+    private static INode FindFirstMeaningfulSibling(INode node, bool forward)
+    {
+        var current = forward ? node.NextSibling : node.PreviousSibling;
+        while (current != null)
+        {
+            if (
+                current.NodeType == NodeType.Comment
+                || string.IsNullOrWhiteSpace(current.TextContent)
+            )
+            {
+                current = forward ? current.NextSibling : current.PreviousSibling;
+                continue;
+            }
+            return current;
+        }
+        return null;
     }
 }
