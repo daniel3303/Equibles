@@ -286,6 +286,94 @@ public class ProfilesController : BaseController
         return View(viewModel);
     }
 
+    [HttpGet("~/Institutions/Combined")]
+    public async Task<IActionResult> CombinedInstitutions(
+        [FromQuery(Name = "ciks")] string[] ciks = null,
+        [FromQuery(Name = "date")] DateOnly? date = null
+    )
+    {
+        ciks ??= [];
+        var distinctCiks = ciks.Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (distinctCiks.Count > InstitutionCombinedViewModel.MaxCiks)
+            return BadRequest(
+                $"At most {InstitutionCombinedViewModel.MaxCiks} CIKs may be combined."
+            );
+
+        var viewModel = new InstitutionCombinedViewModel { RequestedCiks = distinctCiks };
+        ViewData["Title"] = "Combined portfolio";
+
+        if (distinctCiks.Count < InstitutionCombinedViewModel.MinCiks)
+            return View(viewModel);
+
+        var holders = new List<InstitutionalHolder>();
+        foreach (var cik in distinctCiks)
+        {
+            var holder = await _institutionalHolderRepository.GetByCik(cik);
+            if (holder == null)
+                viewModel.MissingCiks.Add(cik);
+            else
+                holders.Add(holder);
+        }
+        if (holders.Count < InstitutionCombinedViewModel.MinCiks)
+            return View(viewModel);
+
+        var perHolderDates = new List<List<DateOnly>>();
+        foreach (var holder in holders)
+        {
+            var dates = await _institutionalHoldingRepository
+                .GetHistoryByHolder(holder)
+                .Select(h => h.ReportDate)
+                .Distinct()
+                .OrderByDescending(d => d)
+                .ToListAsync();
+            perHolderDates.Add(dates);
+        }
+        var commonDates = perHolderDates
+            .Skip(1)
+            .Aggregate((IEnumerable<DateOnly>)perHolderDates[0], (acc, next) => acc.Intersect(next))
+            .OrderByDescending(d => d)
+            .ToList();
+        viewModel.CommonReportDates = commonDates;
+        if (commonDates.Count == 0)
+            return View(viewModel);
+
+        var selected = date ?? commonDates[0];
+        if (!commonDates.Contains(selected))
+            selected = commonDates[0];
+        viewModel.SelectedDate = selected;
+
+        var perFund =
+            new List<(InstitutionalHolder Holder, IReadOnlyList<InstitutionalHolding> Holdings)>();
+        foreach (var holder in holders)
+        {
+            var holdings = await _institutionalHoldingRepository
+                .GetByHolder(holder, selected)
+                .Include(h => h.CommonStock)
+                .ToListAsync();
+            perFund.Add((holder, holdings));
+        }
+        viewModel.Overlap = FundOverlapCalculator.Calculate(perFund, selected);
+
+        // Consensus count per stock = number of funds whose slice has Value > 0. This is
+        // the primary sort key for the combined-portfolio view; the calculator already
+        // sorts by combined value, so we apply consensus on top as a stable secondary
+        // re-sort.
+        foreach (var row in viewModel.Overlap.Rows)
+        {
+            var heldBy = row.Slices.Count(s => s.Value > 0);
+            viewModel.FundsHoldingByStock[row.CommonStockId] = heldBy;
+        }
+        viewModel.Overlap.Rows = viewModel
+            .Overlap.Rows.OrderByDescending(r => viewModel.FundsHoldingByStock[r.CommonStockId])
+            .ThenByDescending(r => r.CombinedValue)
+            .ToList();
+
+        return View(viewModel);
+    }
+
     [HttpGet("~/Insiders/{ownerCik}")]
     public async Task<IActionResult> Insider(string ownerCik)
     {

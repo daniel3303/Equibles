@@ -1,0 +1,91 @@
+@model Equibles.Web.ViewModels.Profiles.InstitutionCombinedViewModel
+
+@{
+    ViewData["Title"] = "Combined portfolio";
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">Combined portfolio</h1>
+        <p class="text-base-content/60">
+            Pool 2–25 funds into a single combined portfolio. Pass CIKs via <code>?ciks=…&amp;ciks=…</code>.
+            Consensus picks (held by the most funds) appear at the top.
+        </p>
+    </div>
+
+    @if (Model.RequestedCiks.Count < Equibles.Web.ViewModels.Profiles.InstitutionCombinedViewModel.MinCiks) {
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body items-center text-center py-12">
+                <div class="text-base-content/30 mb-3">
+                    <icon name="user-group" size="12" />
+                </div>
+                <h3 class="text-base-content/60 mb-2">Pass at least two CIKs to combine</h3>
+                <p class="text-base-content/40 text-sm">Example: <code>/Institutions/Combined?ciks=0001067983&amp;ciks=0001336528&amp;ciks=0001603466</code></p>
+            </div>
+        </div>
+    } else if (Model.MissingCiks.Count > 0 && Model.Overlap == null) {
+        <div class="alert alert-warning" data-testid="combined-missing-ciks">
+            <icon name="exclamation-triangle" size="5" />
+            <span>Could not resolve CIKs: @string.Join(", ", Model.MissingCiks).</span>
+        </div>
+    } else if (Model.Overlap == null) {
+        <div class="alert alert-info" data-testid="combined-no-common-quarter">
+            <icon name="information-circle" size="5" />
+            <span>The selected institutions have no common report date.</span>
+        </div>
+    } else {
+        var overlap = Model.Overlap;
+        <div class="card bg-base-100 shadow-sm mb-6" data-testid="combined-summary">
+            <div class="card-body p-4">
+                <div class="flex flex-wrap items-center gap-3 mb-3 text-xs text-base-content/60">
+                    <span class="badge badge-ghost">Report date: @overlap.ReportDate.ToString("MMM dd, yyyy")</span>
+                    <span class="badge badge-ghost">@overlap.Funds.Count funds combined</span>
+                    <span class="badge badge-ghost">@overlap.UnionPositionCount unique stocks</span>
+                    @if (overlap.IntersectionPositionCount > 0) {
+                        <span class="badge badge-success">@overlap.IntersectionPositionCount held by all</span>
+                    }
+                </div>
+                <ul class="text-sm text-base-content/70 list-disc list-inside">
+                    @foreach (var fund in overlap.Funds) {
+                        <li>@fund.HolderName <span class="text-xs text-base-content/50">CIK @fund.HolderCik</span> — @fund.PositionCount positions, $@fund.TotalValue.ToString("N0")</li>
+                    }
+                </ul>
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm" data-testid="combined-portfolio-table">
+            <div class="overflow-x-auto">
+                <table class="table table-zebra table-sm">
+                    <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Company</th>
+                            <th class="text-right"># Funds</th>
+                            <th class="text-right">Combined Value (USD)</th>
+                            <th class="text-right hidden lg:table-cell">Avg % of portfolio</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in overlap.Rows) {
+                            var heldBy = Model.FundsHoldingByStock.TryGetValue(row.CommonStockId, out var n) ? n : 0;
+                            var heldByCss = heldBy == overlap.Funds.Count ? "badge-success" : heldBy >= overlap.Funds.Count / 2.0 ? "badge-info" : "badge-ghost";
+                            // Avg % across only the funds that actually hold the stock — averaging across
+                            // the zero slices would dilute and mislead.
+                            var heldSlices = row.Slices.Where(s => s.Value > 0).ToList();
+                            var avgPercent = heldSlices.Count > 0
+                                ? heldSlices.Average(s => s.PercentOfPortfolio)
+                                : 0;
+                            <tr>
+                                <td class="font-mono">@row.Ticker</td>
+                                <td class="max-w-xs truncate">@row.Name</td>
+                                <td class="text-right"><span class="badge @heldByCss badge-sm">@heldBy / @overlap.Funds.Count</span></td>
+                                <td class="text-right font-mono">$@row.CombinedValue.ToString("N0")</td>
+                                <td class="text-right font-mono hidden lg:table-cell text-base-content/60">@avgPercent.ToString("F1")%</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
