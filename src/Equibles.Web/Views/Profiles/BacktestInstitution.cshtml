@@ -82,33 +82,83 @@
         </div>
 
         <!-- Slice 2 surfaces the series as a table; slice 3 will replace this with a Chart.js line chart. -->
-        <div class="card bg-base-100 shadow-sm" data-testid="backtest-series-table">
+        <!-- Cumulative-return chart — portfolio vs benchmark, both normalized to 100 at the
+             simulation start. ETF-cloning context wants relative-line comparison, not raw
+             dollar values; values at 100 mean "broke even with the start", 200 = doubled. -->
+        <div class="card bg-base-100 shadow-sm mb-6" data-testid="backtest-chart-card">
             <div class="card-body p-4">
-                <div class="flex items-baseline justify-between mb-2">
-                    <h3 class="text-base font-medium m-0">Daily series</h3>
+                <div class="flex items-baseline justify-between mb-3">
+                    <h3 class="text-base font-medium m-0">Cumulative return (=100)</h3>
                     <span class="text-xs text-base-content/60">@Model.Result.StartDate.ToString("yyyy-MM-dd") → @Model.Result.EndDate.ToString("yyyy-MM-dd") · @Model.Result.Points.Count.ToString("N0") days</span>
                 </div>
-                <div class="overflow-x-auto" style="max-height: 400px;">
-                    <table class="table table-zebra table-sm">
-                        <thead class="sticky top-0 bg-base-100">
-                            <tr>
-                                <th>Date</th>
-                                <th class="text-right">Portfolio (=100)</th>
-                                <th class="text-right">Benchmark (=100)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var point in Model.Result.Points) {
-                                <tr>
-                                    <td class="font-mono">@point.Date.ToString("yyyy-MM-dd")</td>
-                                    <td class="text-right font-mono">@point.PortfolioValue.ToString("F2")</td>
-                                    <td class="text-right font-mono">@point.BenchmarkValue.ToString("F2")</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
+                <div class="h-[360px]">
+                    <canvas id="backtest-chart" data-testid="backtest-chart"></canvas>
                 </div>
             </div>
         </div>
     }
 </div>
+
+@if (hasPoints) {
+    @section Scripts {
+        <script>
+        // Render the portfolio vs benchmark cumulative-return line chart.
+        document.addEventListener('DOMContentLoaded', function () {
+            const ctx = document.getElementById('backtest-chart');
+            if (!ctx || typeof Chart === 'undefined') return;
+
+            const labels = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model.Result.Points.Select(p => p.Date.ToString("yyyy-MM-dd")).ToList()));
+            const portfolio = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model.Result.Points.Select(p => p.PortfolioValue).ToList()));
+            const benchmark = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model.Result.Points.Select(p => p.BenchmarkValue).ToList()));
+            const benchmarkLabel = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model.Benchmark));
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Portfolio (cloned)',
+                            data: portfolio,
+                            borderColor: 'oklch(55% 0.18 250)',
+                            backgroundColor: 'oklch(55% 0.18 250 / 0.08)',
+                            fill: true,
+                            tension: 0.2,
+                            pointRadius: 0,
+                            pointHitRadius: 6,
+                            borderWidth: 2,
+                        },
+                        {
+                            label: 'Benchmark · ' + benchmarkLabel,
+                            data: benchmark,
+                            borderColor: 'oklch(60% 0.15 30)',
+                            borderWidth: 1.5,
+                            borderDash: [4, 2],
+                            pointRadius: 0,
+                            fill: false,
+                            tension: 0.2,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: { ticks: { maxTicksLimit: 12, font: { size: 10 } } },
+                        y: { ticks: { callback: v => Number(v).toFixed(0) } },
+                    },
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => ctx.dataset.label + ': ' + Number(ctx.raw).toFixed(2),
+                            },
+                        },
+                    },
+                },
+            });
+        });
+        </script>
+    }
+}
