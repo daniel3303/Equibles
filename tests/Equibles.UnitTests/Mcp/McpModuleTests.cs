@@ -409,6 +409,7 @@ public class McpModuleToolDiscoveryTests
                     "GetLatestPrices",
                     "GetStochasticOscillator",
                     "GetAverageTrueRange",
+                    "GetOnBalanceVolume",
                 }
             },
         };
