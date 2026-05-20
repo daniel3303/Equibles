@@ -128,15 +128,13 @@ public static partial class DisclosureParsingHelper
 
         var cellTexts = cells.Select(c => HtmlEntity.DeEntitize(c.InnerText).Trim()).ToList();
 
-        var txDate = CleanSentinel(GetCell(cellTexts, cols.Date)) is { } dateStr
-            ? ParseDate(dateStr)
-            : null;
+        var txDate = GetCleanCell(cellTexts, cols.Date) is { } dateStr ? ParseDate(dateStr) : null;
         if (txDate == null)
             return null;
 
         // Senate HTML has ticker in its own column as raw text or <a> tag inner text
-        var ticker = CleanSentinel(GetCell(cellTexts, cols.Ticker));
-        var assetName = CleanSentinel(GetCell(cellTexts, cols.Asset));
+        var ticker = GetCleanCell(cellTexts, cols.Ticker);
+        var assetName = GetCleanCell(cellTexts, cols.Asset);
         if (string.IsNullOrEmpty(ticker) && string.IsNullOrEmpty(assetName))
             return null;
 
@@ -145,14 +143,14 @@ public static partial class DisclosureParsingHelper
             ticker = ExtractTickerFromAssetName(assetName);
 
         // Skip non-stock assets when asset_type column exists
-        var assetType = CleanSentinel(GetCell(cellTexts, cols.AssetType));
+        var assetType = GetCleanCell(cellTexts, cols.AssetType);
         if (
             !string.IsNullOrEmpty(assetType)
             && !assetType.Contains("Stock", StringComparison.OrdinalIgnoreCase)
         )
             return null;
 
-        var txTypeStr = CleanSentinel(GetCell(cellTexts, cols.Type));
+        var txTypeStr = GetCleanCell(cellTexts, cols.Type);
         var txType = ParseTransactionType(txTypeStr);
         if (txType == null)
         {
@@ -164,8 +162,8 @@ public static partial class DisclosureParsingHelper
             return null;
         }
 
-        var owner = CleanSentinel(GetCell(cellTexts, cols.Owner));
-        var amount = CleanSentinel(GetCell(cellTexts, cols.Amount));
+        var owner = GetCleanCell(cellTexts, cols.Owner);
+        var amount = GetCleanCell(cellTexts, cols.Amount);
         var (amountFrom, amountTo) = ParseAmountRange(amount);
 
         return new DisclosureTransaction
@@ -188,6 +186,9 @@ public static partial class DisclosureParsingHelper
 
     public static string CleanSentinel(string value) =>
         string.IsNullOrEmpty(value) || value == EmptySentinel ? null : value;
+
+    private static string GetCleanCell(List<string> cells, int index) =>
+        CleanSentinel(GetCell(cells, index));
 
     public static string Truncate(string value, int maxLength) =>
         value?.Length > maxLength ? value[..maxLength] : value;
