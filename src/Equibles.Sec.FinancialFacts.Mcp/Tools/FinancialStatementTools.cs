@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
@@ -88,37 +89,13 @@ public class FinancialStatementTools
                     requestedPeriod = parsedPeriod;
                 }
 
-                var availablePeriods = await _financialFactRepository
-                    .GetByStock(stock)
-                    .Select(f => new { f.FiscalYear, f.FiscalPeriod })
-                    .Distinct()
-                    .ToListAsync();
-
-                if (availablePeriods.Count == 0)
-                    return $"No structured financial facts have been ingested for {stock.Ticker}.";
-
-                var ordered = availablePeriods
-                    .OrderByDescending(p => p.FiscalYear)
-                    .ThenByDescending(p => ChronologicalRank(p.FiscalPeriod))
-                    .ToList();
-
-                // An explicit year/period must match exactly — never silently
-                // substitute a different period's figures for financial data.
-                // When neither is given, the first (chronologically latest) wins.
-                var selected = ordered.FirstOrDefault(p =>
-                    (year == null || p.FiscalYear == year)
-                    && (requestedPeriod == null || p.FiscalPeriod == requestedPeriod.Value)
+                var (selectedYear, selectedPeriod, periodError) = await ResolveStatementPeriod(
+                    stock,
+                    year,
+                    requestedPeriod
                 );
-
-                if (selected == null)
-                {
-                    var latest = ordered[0];
-                    var wanted =
-                        $"{(year?.ToString() ?? "the latest year")} "
-                        + $"{(requestedPeriod?.NameForHumans() ?? "period")}";
-                    return $"{stock.Ticker} has no data for {wanted}. Latest available: "
-                        + $"FY{latest.FiscalYear} {latest.FiscalPeriod.NameForHumans()}.";
-                }
+                if (periodError != null)
+                    return periodError;
 
                 var statementLines = FinancialStatementConcepts.For(statementType);
                 var taxonomies = statementLines.Select(l => l.Taxonomy).Distinct().ToList();
@@ -139,8 +116,8 @@ public class FinancialStatementTools
                 var facts = await _financialFactRepository
                     .GetByStock(stock)
                     .Where(f =>
-                        f.FiscalYear == selected.FiscalYear
-                        && f.FiscalPeriod == selected.FiscalPeriod
+                        f.FiscalYear == selectedYear
+                        && f.FiscalPeriod == selectedPeriod
                         && conceptIds.Contains(f.FinancialConceptId)
                     )
                     .ToListAsync();
@@ -155,7 +132,7 @@ public class FinancialStatementTools
                 result.AppendLine(
                     $"{statementType.NameForHumans()} for {stock.Ticker} "
                         + $"({FactMarkdown.Cell(stock.Name)}) — "
-                        + $"FY{selected.FiscalYear} {selected.FiscalPeriod.NameForHumans()}:"
+                        + $"FY{selectedYear} {selectedPeriod.NameForHumans()}:"
                 );
                 result.AppendLine();
                 result.AppendLine("| Line Item | Value | Unit | Period End | Form | Filed |");
@@ -197,6 +174,55 @@ public class FinancialStatementTools
                 + $"year: {year}, period: {FactMarkdown.Clean(period)}",
             ReportError
         );
+    }
+
+    private async Task<(
+        int FiscalYear,
+        SecFiscalPeriod FiscalPeriod,
+        string Error
+    )> ResolveStatementPeriod(CommonStock stock, int? year, SecFiscalPeriod? requestedPeriod)
+    {
+        var availablePeriods = await _financialFactRepository
+            .GetByStock(stock)
+            .Select(f => new { f.FiscalYear, f.FiscalPeriod })
+            .Distinct()
+            .ToListAsync();
+
+        if (availablePeriods.Count == 0)
+            return (
+                default,
+                default,
+                $"No structured financial facts have been ingested for {stock.Ticker}."
+            );
+
+        var ordered = availablePeriods
+            .OrderByDescending(p => p.FiscalYear)
+            .ThenByDescending(p => ChronologicalRank(p.FiscalPeriod))
+            .ToList();
+
+        // An explicit year/period must match exactly — never silently
+        // substitute a different period's figures for financial data.
+        // When neither is given, the first (chronologically latest) wins.
+        var selected = ordered.FirstOrDefault(p =>
+            (year == null || p.FiscalYear == year)
+            && (requestedPeriod == null || p.FiscalPeriod == requestedPeriod.Value)
+        );
+
+        if (selected == null)
+        {
+            var latest = ordered[0];
+            var wanted =
+                $"{(year?.ToString() ?? "the latest year")} "
+                + $"{(requestedPeriod?.NameForHumans() ?? "period")}";
+            return (
+                default,
+                default,
+                $"{stock.Ticker} has no data for {wanted}. Latest available: "
+                    + $"FY{latest.FiscalYear} {latest.FiscalPeriod.NameForHumans()}."
+            );
+        }
+
+        return (selected.FiscalYear, selected.FiscalPeriod, null);
     }
 
     private static bool TryParseStatement(string value, out FinancialStatementType type)
