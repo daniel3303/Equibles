@@ -97,4 +97,23 @@ public class CsvExportServiceTests
 
         csv.Should().Be("Ticker\n");
     }
+
+    [Fact]
+    public void Format_Decimal_CultureInvariant_UsesPeriodDecimalSeparator()
+    {
+        // Format(long) is pinned for invariant culture but Format(decimal) is not. A
+        // regression that dropped CultureInfo.InvariantCulture from the decimal overload
+        // would render "123,45" on a comma-decimal locale like de-DE — that corrupts
+        // CSV (the comma becomes a column separator).
+        var prev = Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            Thread.CurrentThread.CurrentCulture = new CultureInfo("de-DE");
+            CsvExportService.Format(123.45m).Should().Be("123.45");
+        }
+        finally
+        {
+            Thread.CurrentThread.CurrentCulture = prev;
+        }
+    }
 }
