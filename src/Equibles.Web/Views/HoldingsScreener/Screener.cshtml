@@ -106,6 +106,13 @@
                     <div class="md:col-span-3 lg:col-span-4 flex flex-wrap gap-2 mt-2">
                         <button type="submit" class="btn btn-primary">Apply filters</button>
                         <a href="@Url.Action(nameof(Equibles.Web.Controllers.HoldingsScreenerController.Screener))" class="btn btn-ghost">Reset</a>
+                        <!-- CSV export receives the same query string so the download
+                             reflects the current filters; bypasses the 200-row UI cap. -->
+                        <a href="@($"{Url.Action(nameof(Equibles.Web.Controllers.HoldingsScreenerController.ExportCsv))}{Context.Request.QueryString}")"
+                           class="btn btn-outline ml-auto"
+                           data-testid="screener-export-csv">
+                            Download CSV
+                        </a>
                     </div>
                 </form>
             </div>

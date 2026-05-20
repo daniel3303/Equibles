@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
@@ -98,6 +100,86 @@ public class HoldingsScreenerController : BaseController
         viewModel.TruncatedToCap = rows.Count >= RowCap;
 
         return View(viewModel);
+    }
+
+    [HttpGet("~/Holdings/Screener/Export.csv")]
+    public async Task<IActionResult> ExportCsv(
+        [FromQuery] ScreenerCriteriaViewModel filters = null,
+        [FromQuery(Name = "date")] DateOnly? date = null,
+        [FromQuery(Name = "compareDate")] DateOnly? compareDate = null
+    )
+    {
+        filters ??= new ScreenerCriteriaViewModel();
+
+        var reportDates = await _holdingRepository
+            .GetAvailableReportDates()
+            .OrderByDescending(d => d)
+            .ToListAsync();
+        if (reportDates.Count < 2)
+            return NotFound();
+
+        var selectedDate =
+            date.HasValue && reportDates.Contains(date.Value) ? date.Value : reportDates[0];
+        var comparisonDate =
+            compareDate.HasValue && reportDates.Contains(compareDate.Value)
+                ? compareDate.Value
+                : reportDates[1];
+
+        var criteria = ToCriteria(filters);
+        // CSV export bypasses the UI row cap — analysts who download a CSV expect every
+        // matching row, not the first 200. Materializing the full result set here is fine:
+        // the Screen query is already filtered server-side, so the row count is bounded by
+        // the user's criteria rather than the universe.
+        var rows = await _holdingRepository
+            .Screen(criteria, selectedDate, comparisonDate)
+            .OrderByDescending(r => r.CurrentValue)
+            .ToListAsync();
+
+        var csv = BuildCsv(rows);
+        var filename = $"screener-{selectedDate:yyyyMMdd}-vs-{comparisonDate:yyyyMMdd}.csv";
+        return File(Encoding.UTF8.GetBytes(csv), "text/csv", filename);
+    }
+
+    internal static string BuildCsv(IReadOnlyList<ScreenerRow> rows)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine(
+            "Ticker,Name,Industry,CurrentFilerCount,PreviousFilerCount,DeltaFilerCount,"
+                + "CurrentValue,PreviousValue,DeltaValue,NewFilerCount,SoldOutFilerCount,PercentOfFloat"
+        );
+        foreach (var r in rows)
+        {
+            sb.Append(EscapeCsvField(r.Ticker)).Append(',');
+            sb.Append(EscapeCsvField(r.Name)).Append(',');
+            sb.Append(EscapeCsvField(r.IndustryName)).Append(',');
+            sb.Append(r.CurrentFilerCount.ToString(CultureInfo.InvariantCulture)).Append(',');
+            sb.Append(r.PreviousFilerCount.ToString(CultureInfo.InvariantCulture)).Append(',');
+            sb.Append(r.DeltaFilerCount.ToString(CultureInfo.InvariantCulture)).Append(',');
+            sb.Append(r.CurrentValue.ToString(CultureInfo.InvariantCulture)).Append(',');
+            sb.Append(r.PreviousValue.ToString(CultureInfo.InvariantCulture)).Append(',');
+            sb.Append(r.DeltaValue.ToString(CultureInfo.InvariantCulture)).Append(',');
+            sb.Append(r.NewFilerCount.ToString(CultureInfo.InvariantCulture)).Append(',');
+            sb.Append(r.SoldOutFilerCount.ToString(CultureInfo.InvariantCulture)).Append(',');
+            sb.Append(
+                r.PercentOfFloat.HasValue
+                    ? r.PercentOfFloat.Value.ToString("F4", CultureInfo.InvariantCulture)
+                    : string.Empty
+            );
+            sb.AppendLine();
+        }
+        return sb.ToString();
+    }
+
+    // RFC 4180 escape: wrap a field in quotes when it contains a quote, comma, or newline;
+    // double any embedded quotes. Empty string passes through unwrapped.
+    private static string EscapeCsvField(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        var needsQuoting = value.IndexOfAny(['"', ',', '\n', '\r']) >= 0;
+        if (!needsQuoting)
+            return value;
+        return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
 
     internal static ScreenerCriteria ToCriteria(ScreenerCriteriaViewModel filters) =>
