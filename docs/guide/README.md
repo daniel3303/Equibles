@@ -23,7 +23,3 @@ Task-focused recipes for someone who has Equibles running.
 - [Upgrade to the latest release](how-to-upgrade.md)
 - [Back up and restore your database](how-to-back-up-and-restore.md)
 - [Check worker health and recent errors](how-to-view-status-and-errors.md)
-
-## Status
-
-All pages above are **planned**. None are written yet. New pages land one per PR via `/update-docs`, in the order listed (tutorials first, then how-to guides).
