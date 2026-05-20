@@ -73,6 +73,14 @@ public class WebAppFixture : IAsyncLifetime
         );
 
         builder.Configuration["ConnectionStrings:DefaultConnection"] = _db.GetConnectionString();
+        // AddMessaging binds MassTransit's SQL transport from this string. Same
+        // container as the app DB to mirror docker-compose, where web and worker
+        // share Postgres.
+        builder.Configuration["ConnectionStrings:TransportConnection"] = _db.GetConnectionString();
+        // No worker in functional tests, so the web host has to create the
+        // transport schema itself. Otherwise the bus fails its health check on
+        // first start and /healthz returns 503.
+        builder.Configuration["MassTransit:RunMigration"] = "true";
         builder.Configuration["DataProtection:KeysDirectory"] = _keysDirectory;
 
         Program.ConfigureServices(builder);

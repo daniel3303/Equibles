@@ -100,6 +100,9 @@ public class ProgramConfigurationTests
             }
         );
         builder.Configuration["ConnectionStrings:DefaultConnection"] = _db.ConnectionString;
+        // AddMessaging binds the SQL transport host from this connection; without
+        // it MassTransit throws "Host cannot be empty" when the SP is built.
+        builder.Configuration["ConnectionStrings:TransportConnection"] = _db.ConnectionString;
         if (!omitKeysDirectoryConfig)
         {
             builder.Configuration["DataProtection:KeysDirectory"] = Path.Combine(
