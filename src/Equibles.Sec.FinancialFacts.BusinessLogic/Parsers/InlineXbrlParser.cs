@@ -290,8 +290,7 @@ public class InlineXbrlParser
             || format.EndsWith("fixedzero", StringComparison.OrdinalIgnoreCase)
         )
         {
-            value = ApplyScaleAndSign(0m, element);
-            return true;
+            return TryApplyScaleAndSign(0m, element, out value);
         }
 
         var parenthesised = raw.StartsWith('(') && raw.EndsWith(')');
@@ -317,8 +316,7 @@ public class InlineXbrlParser
         if (parenthesised)
             parsed = -parsed;
 
-        value = ApplyScaleAndSign(parsed, element);
-        return true;
+        return TryApplyScaleAndSign(parsed, element, out value);
     }
 
     private static string NormaliseDigits(string raw, bool commaDecimal)
@@ -358,15 +356,26 @@ public class InlineXbrlParser
         return stripped;
     }
 
-    private static decimal ApplyScaleAndSign(decimal parsed, IElement element)
+    private static bool TryApplyScaleAndSign(decimal parsed, IElement element, out decimal value)
     {
+        value = 0m;
         var scaleAttribute = element.GetAttribute("scale");
         if (!string.IsNullOrEmpty(scaleAttribute) && int.TryParse(scaleAttribute, out var scale))
         {
             // Positive scale shifts the value up; negative shifts down.
             // We use Pow over a literal multiplier so non-trivial scales
             // (e.g. 6 for "in millions") survive without precision loss.
-            parsed *= (decimal)Math.Pow(10, scale);
+            // A scale large enough to drive Math.Pow(10, scale) — or the
+            // subsequent multiply — past decimal.MaxValue (~7.92e28) is
+            // malformed input; drop the fact instead of aborting the parse.
+            try
+            {
+                parsed *= (decimal)Math.Pow(10, scale);
+            }
+            catch (OverflowException)
+            {
+                return false;
+            }
         }
 
         var signAttribute = element.GetAttribute("sign");
@@ -375,7 +384,8 @@ public class InlineXbrlParser
             parsed = -parsed;
         }
 
-        return parsed;
+        value = parsed;
+        return true;
     }
 
     private static int? ParseDecimals(string decimalsAttribute)

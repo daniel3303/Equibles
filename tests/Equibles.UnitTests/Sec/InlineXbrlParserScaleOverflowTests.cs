@@ -17,9 +17,7 @@ public class InlineXbrlParserScaleOverflowTests
     private const string ResourcesEnd = "</ix:resources></ix:header></div>";
     private const string DocClose = "</body></html>";
 
-    [Fact(
-        Skip = "GH-1215 — ApplyScaleAndSign casts Math.Pow(10, scale) to decimal; a scale >= 29 overflows decimal.MaxValue and aborts the whole filing parse."
-    )]
+    [Fact]
     public void Parse_ExtremeScaleAttribute_DoesNotThrowOnSingleBadFact()
     {
         // Contract: Parse extracts every well-formed ix:nonFraction fact from a filing.
