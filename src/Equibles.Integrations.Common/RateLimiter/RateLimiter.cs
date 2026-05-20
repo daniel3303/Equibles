@@ -17,29 +17,29 @@ public class RateLimiter : IRateLimiter
 
     public async Task WaitAsync()
     {
-        TimeSpan waitTime;
-
-        lock (_lock)
+        while (true)
         {
-            waitTime = CalculateWaitTime();
+            TimeSpan waitTime;
 
-            // If a 429 triggered a pause, wait for the longer of the two
-            var pauseRemaining = _pauseUntil - DateTime.UtcNow;
-            if (pauseRemaining > waitTime)
+            lock (_lock)
             {
-                waitTime = pauseRemaining;
+                waitTime = CalculateWaitTime();
+
+                // If a 429 triggered a pause, wait for the longer of the two
+                var pauseRemaining = _pauseUntil - DateTime.UtcNow;
+                if (pauseRemaining > waitTime)
+                {
+                    waitTime = pauseRemaining;
+                }
+
+                if (waitTime <= TimeSpan.Zero)
+                {
+                    _requestTimes.Enqueue(DateTime.UtcNow);
+                    return;
+                }
             }
 
-            if (waitTime <= TimeSpan.Zero)
-            {
-                _requestTimes.Enqueue(DateTime.UtcNow);
-            }
-        }
-
-        if (waitTime > TimeSpan.Zero)
-        {
             await Task.Delay(waitTime);
-            await WaitAsync();
         }
     }
 

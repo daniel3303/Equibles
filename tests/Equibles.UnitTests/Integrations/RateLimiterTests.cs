@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using Equibles.Integrations.Common.RateLimiter;
 
 namespace Equibles.UnitTests.Integrations;
@@ -161,5 +163,72 @@ public class RateLimiterTests
         // Assert
         limiter.Should().NotBeNull();
         limiter.Should().BeAssignableTo<IRateLimiter>();
+    }
+
+    [Fact]
+    public void WaitAsync_StateMachine_DoesNotCallWaitAsyncRecursively()
+    {
+        // Bug #1273: WaitAsync was written as `await Task.Delay(waitTime); await WaitAsync();`.
+        // Each saturated iteration boxed a fresh state machine and registered an inline
+        // continuation onto the cascade. When the leaf iteration finally completed, the
+        // chain of continuations unwound synchronously on a single stack — one MoveNext
+        // frame per iteration — and under sustained saturation (reproducible by the full
+        // integration test suite) the cascade overflowed the stack and crashed the host.
+        //
+        // A direct stress-test cannot pin this contract: StackOverflowException is
+        // uncatchable and would terminate the test host, polluting unrelated tests.
+        // Instead the test inspects the compiler-generated state machine for WaitAsync
+        // and asserts the structural property that makes the cascade impossible — its
+        // MoveNext must not contain a call back into WaitAsync. Replacing the recursion
+        // with a `while` loop removes that call and is the canonical fix; a future PR
+        // re-introducing `await WaitAsync()` (or any other self-call within the body)
+        // re-introduces the same unbounded cascade and trips this regression.
+        var waitAsync = typeof(RateLimiter).GetMethod(nameof(RateLimiter.WaitAsync));
+        waitAsync.Should().NotBeNull();
+
+        var stateMachineAttr = waitAsync.GetCustomAttribute<AsyncStateMachineAttribute>();
+        stateMachineAttr
+            .Should()
+            .NotBeNull(
+                "WaitAsync should be an async method with a compiler-generated state machine"
+            );
+
+        var moveNext = stateMachineAttr.StateMachineType.GetMethod(
+            "MoveNext",
+            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
+        );
+        moveNext.Should().NotBeNull();
+
+        var body = moveNext.GetMethodBody();
+        body.Should().NotBeNull();
+        var il = body.GetILAsByteArray();
+        il.Should().NotBeNull();
+
+        // The compiler emits a `call`/`callvirt` to WaitAsync using its MethodDef token
+        // (same module). Scanning the IL for the 4-byte token detects the self-call
+        // without depending on full IL-disassembly machinery; tokens are 4-byte aligned
+        // operand values, so false positives in well-formed IL are negligible.
+        var token = waitAsync.MetadataToken;
+        var tokenBytes = BitConverter.GetBytes(token);
+        var selfCallFound = false;
+        for (var i = 0; i <= il.Length - 4; i++)
+        {
+            if (
+                il[i] == tokenBytes[0]
+                && il[i + 1] == tokenBytes[1]
+                && il[i + 2] == tokenBytes[2]
+                && il[i + 3] == tokenBytes[3]
+            )
+            {
+                selfCallFound = true;
+                break;
+            }
+        }
+
+        selfCallFound
+            .Should()
+            .BeFalse(
+                "WaitAsync's state machine must not call WaitAsync — recursion grows the inline completion cascade by one frame per iteration and overflowed the stack under sustained saturation (bug #1273)"
+            );
     }
 }
