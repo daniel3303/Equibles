@@ -693,26 +693,8 @@ public class SecEdgarClient : ISecEdgarClient
                 {
                     Cik = cik,
                     AccessionNumber = accessionNumber,
-                    // SEC submissions feed dates are ISO yyyy-MM-dd. Parse them
-                    // culture-independently — under a non-Gregorian host culture
-                    // (e.g. ar-SA Umm al-Qura) culture-sensitive TryParse fails
-                    // and every filing would be stamped DateOnly.MinValue.
-                    FilingDate = DateOnly.TryParse(
-                        recent.FilingDate[i],
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        System.Globalization.DateTimeStyles.None,
-                        out var fd
-                    )
-                        ? fd
-                        : DateOnly.MinValue,
-                    ReportDate = DateOnly.TryParse(
-                        recent.ReportDate[i],
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        System.Globalization.DateTimeStyles.None,
-                        out var rd
-                    )
-                        ? rd
-                        : DateOnly.MinValue,
+                    FilingDate = ParseInvariantDateOr(recent.FilingDate[i], DateOnly.MinValue),
+                    ReportDate = ParseInvariantDateOr(recent.ReportDate[i], DateOnly.MinValue),
                     Form = recent.Form[i],
                     PrimaryDocument = recent.PrimaryDocument[i],
                     Description = recent.PrimaryDocDescription[i],
@@ -723,6 +705,19 @@ public class SecEdgarClient : ISecEdgarClient
 
         return filings;
     }
+
+    // SEC submissions feed dates are ISO yyyy-MM-dd. Parse them culture-independently —
+    // under a non-Gregorian host culture (e.g. ar-SA Umm al-Qura) culture-sensitive
+    // TryParse fails and every filing would be stamped with the fallback.
+    private static DateOnly ParseInvariantDateOr(string text, DateOnly fallback) =>
+        DateOnly.TryParse(
+            text,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None,
+            out var parsed
+        )
+            ? parsed
+            : fallback;
 
     private static List<FilingData> FilterFilings(
         List<FilingData> filings,
