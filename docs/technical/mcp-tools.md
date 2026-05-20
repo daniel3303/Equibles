@@ -10,7 +10,8 @@ Catalog of the MCP tools exposed by each `*.Mcp` project and the wiring path thr
 - Each module ships an `AddXxx(EquiblesMcpBuilder)` extension under `Equibles.<Module>.Mcp.Extensions.McpBuilderExtensions` that calls `builder.AddModule<AssemblyMcpModule<MarkerType>>()`.
 - [`AssemblyMcpModule<TMarker>`](../../src/Equibles.Mcp/AssemblyMcpModule.cs) calls `builder.WithToolsFromAssembly(typeof(TMarker).Assembly)`.
 - That call discovers every `[McpServerToolType]` class in the module assembly and registers its `[McpServerTool]`-attributed methods.
-- The host pipeline mounts the transport at `/mcp` with `app.MapMcp("/mcp")` and gates it via [`ApiKeyMiddleware`](../../src/Equibles.Mcp/Middleware/ApiKeyMiddleware.cs) under `UseWhen(ctx.Request.Path.StartsWithSegments("/mcp"))`.
+- The host pipeline mounts the transport at `/mcp` with `app.MapMcp("/mcp")`.
+- [`ApiKeyMiddleware`](../../src/Equibles.Mcp/Middleware/ApiKeyMiddleware.cs) gates that path via `UseWhen(ctx.Request.Path.StartsWithSegments("/mcp"))`.
 
 ## Tool catalog
 
