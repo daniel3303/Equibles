@@ -23,6 +23,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetInstitutionPortfolio` — full portfolio of one institution for a `ReportDate`.
 - `SearchInstitutions` — name-search returning matching `InstitutionalHolder` rows.
 - `GetTopBuyersSellers` — biggest absolute share additions and reductions for a ticker vs. the prior `ReportDate`; flags new and sold-out positions.
+- `GetMarketWide13FActivity` — market-wide leaderboard for a quarter, selected by `bucket`: `top-buys`, `top-sells`, `new-positions`, `sold-out-positions`.
 
 ### `mcp.AddInsiderTrading()` — Form 3 / 4
 
