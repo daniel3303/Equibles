@@ -41,6 +41,12 @@ public class WebHostFixture : IAsyncLifetime
 
     public HttpClient Client { get; private set; }
 
+    /// <summary>
+    /// Application root services. Use a scope (<c>Services.CreateScope()</c>)
+    /// before resolving scoped dependencies; never resolve them directly.
+    /// </summary>
+    public IServiceProvider Services => _app.Services;
+
     public async Task InitializeAsync()
     {
         await _db.StartAsync();

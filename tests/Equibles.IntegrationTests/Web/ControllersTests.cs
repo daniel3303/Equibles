@@ -31,6 +31,7 @@ using Equibles.Web.Controllers;
 using Equibles.Web.FlashMessage.Contracts;
 using Equibles.Web.Models;
 using Equibles.Web.Services;
+using Equibles.Web.Services.Activity;
 using Equibles.Web.ViewModels.EconomicData;
 using Equibles.Web.ViewModels.Stocks;
 using Equibles.Yahoo.Data;
@@ -925,6 +926,7 @@ public class StatusControllerTests : IDisposable
             BuildConfiguration(),
             _dbContext,
             _dataCountService,
+            new ActivityFeedBroadcaster(),
             _logger
         );
         controller.ControllerContext = new ControllerContext

@@ -26,6 +26,7 @@ using Equibles.Sec.Repositories;
 using Equibles.Web.Controllers;
 using Equibles.Web.FlashMessage.Contracts;
 using Equibles.Web.Services;
+using Equibles.Web.Services.Activity;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Repositories;
 using Microsoft.AspNetCore.Http;
@@ -110,6 +111,7 @@ public class StatusControllerDeleteHappyTests : IDisposable
             configuration,
             _dbContext,
             dataCountService,
+            new ActivityFeedBroadcaster(),
             Substitute.For<ILogger<StatusController>>()
         );
         controller.ControllerContext = new ControllerContext

@@ -2,10 +2,12 @@ using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Errors.Repositories;
+using Equibles.Messaging.Contracts.Activity;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.FlashMessage.Contracts;
 using Equibles.Web.Models;
 using Equibles.Web.Services;
+using Equibles.Web.Services.Activity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
@@ -20,6 +22,7 @@ public class StatusController : BaseController
     private readonly IConfiguration _configuration;
     private readonly EquiblesDbContext _dbContext;
     private readonly DataCountService _dataCountService;
+    private readonly ActivityFeedBroadcaster _activityFeed;
 
     public StatusController(
         ErrorRepository errorRepository,
@@ -28,6 +31,7 @@ public class StatusController : BaseController
         IConfiguration configuration,
         EquiblesDbContext dbContext,
         DataCountService dataCountService,
+        ActivityFeedBroadcaster activityFeed,
         ILogger<StatusController> logger
     )
         : base(logger)
@@ -38,6 +42,7 @@ public class StatusController : BaseController
         _configuration = configuration;
         _dbContext = dbContext;
         _dataCountService = dataCountService;
+        _activityFeed = activityFeed;
     }
 
     public override void OnActionExecuting(ActionExecutingContext context)
@@ -156,6 +161,55 @@ public class StatusController : BaseController
             }
         );
     }
+
+    [HttpGet("~/Status/Activity/Stream")]
+    public async Task ActivityStream(CancellationToken cancellationToken)
+    {
+        InitSseStream();
+
+        // Hint to load balancers / browsers that the stream is live.
+        Response.Headers["X-Activity-Stream"] = "scraper";
+
+        // Flush the response headers immediately. Without this the headers
+        // sit in the buffer until the first SSE frame is written; that's
+        // fine for a noisy feed but a quiet one leaves the browser waiting
+        // forever for the connection to "open".
+        await Response.Body.FlushAsync(cancellationToken);
+
+        using var subscription = _activityFeed.Subscribe();
+
+        // Replay the small ring buffer so a freshly-opened tab has context,
+        // then forward live events until the client disconnects.
+        foreach (var activity in subscription.Backlog)
+        {
+            await WriteActivityEvent(activity);
+        }
+
+        try
+        {
+            await foreach (var activity in subscription.Reader.ReadAllAsync(cancellationToken))
+            {
+                await WriteActivityEvent(activity);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Browser closed the tab — clean disconnect.
+        }
+    }
+
+    private Task WriteActivityEvent(ScraperActivity activity) =>
+        WriteSseEvent(
+            "activity",
+            new
+            {
+                activity.Source,
+                Severity = activity.Severity.ToString(),
+                activity.Message,
+                activity.Timestamp,
+                activity.CorrelationId,
+            }
+        );
 
     [HttpPost("DeleteAll")]
     [ValidateAntiForgeryToken]
