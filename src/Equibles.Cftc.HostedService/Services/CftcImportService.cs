@@ -6,6 +6,7 @@ using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Cftc.Contracts;
+using Equibles.Worker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -218,24 +219,33 @@ public class CftcImportService
                 .ToHashSet();
         }
 
-        var batch = new List<CftcPositionReport>(InsertBatchSize);
-        var totalInserted = 0;
+        var totalInserted = await BatchPersister.Persist(
+            MapNewReports(),
+            InsertBatchSize,
+            FlushBatch
+        );
 
-        foreach (var record in filtered)
+        if (totalInserted > 0)
         {
-            var date = ParseDate(record.ReportDate);
-            if (date == null)
-                continue;
+            await UpdateContractMetadata(contractIdMap, cancellationToken);
+        }
 
-            var code = record.ContractMarketCode.Trim();
-            if (!contractIdMap.TryGetValue(code, out var contractId))
-                continue;
+        IEnumerable<CftcPositionReport> MapNewReports()
+        {
+            foreach (var record in filtered)
+            {
+                var date = ParseDate(record.ReportDate);
+                if (date == null)
+                    continue;
 
-            if (existingKeys.Contains((contractId, date.Value)))
-                continue;
+                var code = record.ContractMarketCode.Trim();
+                if (!contractIdMap.TryGetValue(code, out var contractId))
+                    continue;
 
-            batch.Add(
-                new CftcPositionReport
+                if (existingKeys.Contains((contractId, date.Value)))
+                    continue;
+
+                yield return new CftcPositionReport
                 {
                     CftcContractId = contractId,
                     ReportDate = date.Value,
@@ -263,28 +273,8 @@ public class CftcImportService
                     TradersNonCommShort = record.TradersNonCommShort,
                     TradersCommLong = record.TradersCommLong,
                     TradersCommShort = record.TradersCommShort,
-                }
-            );
-
-            if (batch.Count >= InsertBatchSize)
-            {
-                await FlushBatch(batch);
-                totalInserted += batch.Count;
-                batch.Clear();
+                };
             }
-        }
-
-        if (batch.Count > 0)
-        {
-            await FlushBatch(batch);
-            totalInserted += batch.Count;
-            batch.Clear();
-        }
-
-        // Update contract metadata
-        if (totalInserted > 0)
-        {
-            await UpdateContractMetadata(contractIdMap, cancellationToken);
         }
 
         _logger.LogInformation(
