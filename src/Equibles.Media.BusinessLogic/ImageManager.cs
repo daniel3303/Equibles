@@ -36,10 +36,8 @@ public class ImageManager : IImageManager
         int? maxHeight
     )
     {
-        // Gets the file extension from the file name
         var fileExtension = Path.GetExtension(fileName)?.TrimStart('.');
 
-        // Gets the file name without extension
         var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(fileName);
 
         if (string.IsNullOrEmpty(fileExtension))
@@ -47,7 +45,6 @@ public class ImageManager : IImageManager
             throw new ArgumentException("The file extension cannot be null or empty.");
         }
 
-        // Get the content type from the file extension
         var contentType = MimeTypeMap.GetMimeType(fileExtension);
         if (string.IsNullOrEmpty(contentType))
         {
