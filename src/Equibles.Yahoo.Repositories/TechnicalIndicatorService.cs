@@ -1,4 +1,4 @@
-namespace Equibles.Web.Services;
+namespace Equibles.Yahoo.Repositories;
 
 /// <summary>
 /// Computes common technical indicators from price series.

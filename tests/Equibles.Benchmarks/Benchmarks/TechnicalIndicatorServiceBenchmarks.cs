@@ -1,5 +1,5 @@
 using BenchmarkDotNet.Attributes;
-using Equibles.Web.Services;
+using Equibles.Yahoo.Repositories;
 
 namespace Equibles.Benchmarks.Benchmarks;
 

@@ -170,6 +170,95 @@ public class StockPriceTools
         );
     }
 
+    [McpServerTool(Name = "GetStochasticOscillator")]
+    [Description(
+        "Stochastic Oscillator (%K and %D) for a stock. %K measures the close relative to "
+            + "the high/low range over the lookback window; %D is the smoothed signal line "
+            + "(simple moving average of %K). Useful for spotting overbought (>80) and "
+            + "oversold (<20) conditions."
+    )]
+    public Task<string> GetStochasticOscillator(
+        [Description("Stock ticker symbol (e.g., AAPL, MSFT)")] string ticker,
+        [Description("Start date in YYYY-MM-DD format (defaults to 6 months ago)")]
+            string startDate = null,
+        [Description("End date in YYYY-MM-DD format (defaults to latest available)")]
+            string endDate = null,
+        [Description("Lookback window for %K (default: 14)")] int kPeriod = 14,
+        [Description("Smoothing window for %D (default: 3)")] int dPeriod = 3,
+        [Description("Maximum number of records to return (default: 60, newest first)")]
+            int maxResults = 60
+    )
+    {
+        return McpToolExecutor.Execute(
+            async () =>
+            {
+                if (kPeriod < 2 || dPeriod < 1)
+                    return "kPeriod must be at least 2 and dPeriod at least 1.";
+
+                var stock = await _commonStockRepository.GetByTicker(
+                    ticker.Trim().ToUpperInvariant()
+                );
+                if (stock == null)
+                    return $"Stock '{ticker}' not found.";
+
+                var start =
+                    !string.IsNullOrEmpty(startDate)
+                    && DateOnly.TryParse(startDate, out var parsedStart)
+                        ? parsedStart
+                        : DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-6));
+
+                var end =
+                    !string.IsNullOrEmpty(endDate) && DateOnly.TryParse(endDate, out var parsedEnd)
+                        ? parsedEnd
+                        : DateOnly.FromDateTime(DateTime.UtcNow);
+
+                var records = await _priceRepository
+                    .GetByStock(stock, start, end)
+                    .OrderBy(p => p.Date)
+                    .ToListAsync();
+
+                if (records.Count == 0)
+                    return $"No price data found for {stock.Ticker} in the specified date range.";
+
+                var highs = records.Select(p => p.High).ToList();
+                var lows = records.Select(p => p.Low).ToList();
+                var closes = records.Select(p => p.Close).ToList();
+                var (k, d) = TechnicalIndicatorService.ComputeStochastic(
+                    highs,
+                    lows,
+                    closes,
+                    kPeriod,
+                    dPeriod
+                );
+
+                var result = new StringBuilder();
+                result.AppendLine(
+                    $"Stochastic Oscillator (%K={kPeriod}, %D={dPeriod}) for {stock.Ticker} ({stock.Name}):"
+                );
+                result.AppendLine();
+                result.AppendLine("| Date | Close | %K | %D |");
+                result.AppendLine("|------|-------|----|----|");
+
+                var emitted = 0;
+                for (var i = records.Count - 1; i >= 0 && emitted < maxResults; i--)
+                {
+                    var kCell = k[i].HasValue ? k[i].Value.ToString("F2") : "—";
+                    var dCell = d[i].HasValue ? d[i].Value.ToString("F2") : "—";
+                    result.AppendLine(
+                        $"| {records[i].Date:yyyy-MM-dd} | {records[i].Close:F2} | {kCell} | {dCell} |"
+                    );
+                    emitted++;
+                }
+
+                return result.ToString();
+            },
+            _logger,
+            "GetStochasticOscillator",
+            $"ticker: {ticker}",
+            ReportError
+        );
+    }
+
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
