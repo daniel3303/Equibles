@@ -26,6 +26,7 @@ Why the indirection through `ViewData` rather than a single `StockDetailViewMode
 |---|---|---|
 | [`StocksController`](../../src/Equibles.Web/Controllers/StocksController.cs) | `~/Stocks/...` | The tab pattern above + landing list + `ShowDocument` + `ShowHolder` per-stock holder detail. |
 | [`ProfilesController`](../../src/Equibles.Web/Controllers/ProfilesController.cs) | `~/Institutions/{cik}`, `~/Insiders/{ownerCik}`, `~/Congress/{id}` | Global (not stock-scoped) profile pages for institutional holders, insider owners, and Congress members. |
+| [`HoldingsActivityController`](../../src/Equibles.Web/Controllers/HoldingsActivityController.cs) | `~/Holdings/Activity` | Market-wide quarterly Top Buys / Top Sells boards aggregated across 13F filers for a `ReportDate`. |
 | [`EconomicDataController`](../../src/Equibles.Web/Controllers/EconomicDataController.cs) | `~/Economy/...` | FRED series browsing — category landing + per-series charts. |
 | [`CftcController`](../../src/Equibles.Web/Controllers/CftcController.cs) | `~/Futures/...` | CFTC positioning per contract / category. |
 | [`MarketController`](../../src/Equibles.Web/Controllers/MarketController.cs) | `~/Market/...` | CBOE VIX + put/call ratios. |
