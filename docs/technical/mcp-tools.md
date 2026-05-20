@@ -121,7 +121,8 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 ## Tool implementation conventions
 
-- Every tool method runs through [`McpToolExecutor.Execute`](../../src/Equibles.Mcp/McpToolExecutor.cs); it wraps the body in a try/catch, logs failures, and reports them via the injected `ErrorManager` so they show on the Status dashboard.
+- Every tool method runs through [`McpToolExecutor.Execute`](../../src/Equibles.Mcp/McpToolExecutor.cs), which wraps the body in a try/catch and logs failures.
+- Failures are reported via the injected `ErrorManager` so they show on the Status dashboard.
 - On failure, `McpToolExecutor.Execute` returns a safe `"An error occurred while executing <ToolName>..."` string instead of throwing across the MCP boundary.
 - Tool classes carry `[McpServerToolType]`; tool methods carry `[McpServerTool(Name = "...")]` + a `[Description]` so the MCP client gets a usable schema.
 - Tools return Markdown-formatted strings (tables for tabular data, headings for grouped output). The MCP transport ferries strings; no binary payloads.
