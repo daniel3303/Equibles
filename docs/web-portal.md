@@ -84,7 +84,7 @@ The Status page is the operator's primary feedback loop — every new scraper th
 ## Adding a new stock tab
 
 1. Add `<TabName>TabViewModel` under `Views/Stocks` (or `ViewModels/Stocks/` for shared/cross-tab types).
-2. Add `LoadXxxTab(CommonStock stock, ...)` to `StockTabService`. Compose the query with `IQueryable<>` over the relevant repositories; project into the view-model in the service, never in the view.
+2. Add `LoadXxxTab(CommonStock stock, ...)` to `StockTabService`. Compose the query with `IQueryable<>` over the repositories your tab needs (e.g. `InstitutionalHoldingRepository` for a Holdings-style tab); project into the view-model in the service, never in the view.
 3. Add the controller action to `StocksController`: resolve ticker, set `ViewData["TabViewModel"]`, return `View("Show", stockDetailViewModel)` with the new tab as `ActiveTab`.
 4. Create `Views/Stocks/_XxxTab.cshtml` typed `@model XxxTabViewModel`. Match the existing partials' density (table-zebra, hidden md/lg breakpoints, empty-state card).
 5. Add the tab link to the tab strip in `Show.cshtml` (`<a asp-action="Xxx" asp-route-ticker="@stock.Ticker" ...>`).
