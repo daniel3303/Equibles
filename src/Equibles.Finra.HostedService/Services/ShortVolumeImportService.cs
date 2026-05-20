@@ -5,6 +5,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Finra.Data.Models;
 using Equibles.Finra.Repositories;
 using Equibles.Integrations.Finra.Contracts;
+using Equibles.Integrations.Finra.Models;
 using Equibles.Worker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -91,37 +92,7 @@ public class ShortVolumeImportService
                     continue;
                 }
 
-                // Aggregate volumes across all markets per stock
-                var aggregated = new Dictionary<Guid, DailyShortVolume>();
-
-                foreach (var record in records)
-                {
-                    if (
-                        string.IsNullOrEmpty(record.Symbol)
-                        || !tickerMap.TryGetValue(record.Symbol, out var commonStockId)
-                    )
-                    {
-                        continue;
-                    }
-
-                    if (aggregated.TryGetValue(commonStockId, out var existing))
-                    {
-                        existing.ShortVolume += record.ShortVolume ?? 0;
-                        existing.ShortExemptVolume += record.ShortExemptVolume ?? 0;
-                        existing.TotalVolume += record.TotalVolume ?? 0;
-                    }
-                    else
-                    {
-                        aggregated[commonStockId] = new DailyShortVolume
-                        {
-                            CommonStockId = commonStockId,
-                            Date = currentDate,
-                            ShortVolume = record.ShortVolume ?? 0,
-                            ShortExemptVolume = record.ShortExemptVolume ?? 0,
-                            TotalVolume = record.TotalVolume ?? 0,
-                        };
-                    }
-                }
+                var aggregated = AggregateVolumesByStock(records, tickerMap, currentDate);
 
                 var totalInserted = await BatchPersister.Persist(
                     aggregated.Values,
@@ -164,5 +135,47 @@ public class ShortVolumeImportService
 
             currentDate = currentDate.AddDays(1);
         }
+    }
+
+    // Aggregate volumes across all markets per stock so one DailyShortVolume row per
+    // (CommonStockId, currentDate) is persisted instead of one per FINRA market venue.
+    private static Dictionary<Guid, DailyShortVolume> AggregateVolumesByStock(
+        List<ShortVolumeRecord> records,
+        IReadOnlyDictionary<string, Guid> tickerMap,
+        DateOnly currentDate
+    )
+    {
+        var aggregated = new Dictionary<Guid, DailyShortVolume>();
+
+        foreach (var record in records)
+        {
+            if (
+                string.IsNullOrEmpty(record.Symbol)
+                || !tickerMap.TryGetValue(record.Symbol, out var commonStockId)
+            )
+            {
+                continue;
+            }
+
+            if (aggregated.TryGetValue(commonStockId, out var existing))
+            {
+                existing.ShortVolume += record.ShortVolume ?? 0;
+                existing.ShortExemptVolume += record.ShortExemptVolume ?? 0;
+                existing.TotalVolume += record.TotalVolume ?? 0;
+            }
+            else
+            {
+                aggregated[commonStockId] = new DailyShortVolume
+                {
+                    CommonStockId = commonStockId,
+                    Date = currentDate,
+                    ShortVolume = record.ShortVolume ?? 0,
+                    ShortExemptVolume = record.ShortExemptVolume ?? 0,
+                    TotalVolume = record.TotalVolume ?? 0,
+                };
+            }
+        }
+
+        return aggregated;
     }
 }
