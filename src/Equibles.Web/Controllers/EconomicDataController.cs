@@ -96,13 +96,16 @@ public class EconomicDataController : BaseController
             Observations = observations,
         };
 
-        var values = observations
+        // Chronological order is needed for SMA; stats are order-invariant so the
+        // same array drives both.
+        var chronological = observations
             .Where(o => o.Value.HasValue)
+            .OrderBy(o => o.Date)
             .Select(o => (double)o.Value.Value)
             .ToArray();
-        if (values.Length > 0)
+        if (chronological.Length > 0)
         {
-            var s = ComputeStats(values, decimals: 4);
+            var s = ComputeStats(chronological, decimals: 4);
             viewModel.Mean = s.Mean;
             viewModel.Min = s.Min;
             viewModel.Max = s.Max;
@@ -111,13 +114,6 @@ public class EconomicDataController : BaseController
             viewModel.LatestValue = observations[0].Value; // observations are desc by date
             if (observations.Count > 1)
                 viewModel.PreviousValue = observations[1].Value;
-
-            // Moving averages (computed on chronological order)
-            var chronological = observations
-                .Where(o => o.Value.HasValue)
-                .OrderBy(o => o.Date)
-                .Select(o => (double)o.Value.Value)
-                .ToArray();
 
             viewModel.Sma20 = ComputeSma(chronological, 20);
             viewModel.Sma50 = ComputeSma(chronological, 50);
