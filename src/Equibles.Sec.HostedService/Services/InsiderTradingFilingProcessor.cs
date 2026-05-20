@@ -159,29 +159,12 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             return false;
         }
 
-        var owner = await ownerRepository.GetByOwnerCik(ownerCik);
-        if (owner == null)
-        {
-            var ownerAddress = ownerElement.Element("reportingOwnerAddress");
-            var ownerRelationship = ownerElement.Element("reportingOwnerRelationship");
-
-            owner = new InsiderOwner
-            {
-                OwnerCik = ownerCik,
-                Name = ownerName,
-                City = ownerAddress?.Element("rptOwnerCity")?.Value?.Trim(),
-                StateOrCountry = ownerAddress?.Element("rptOwnerStateOrCountry")?.Value?.Trim(),
-                IsDirector = ParseBool(ownerRelationship?.Element("isDirector")?.Value),
-                IsOfficer = ParseBool(ownerRelationship?.Element("isOfficer")?.Value),
-                OfficerTitle = ownerRelationship?.Element("officerTitle")?.Value?.Trim(),
-                IsTenPercentOwner = ParseBool(
-                    ownerRelationship?.Element("isTenPercentOwner")?.Value
-                ),
-            };
-
-            ownerRepository.Add(owner);
-            await ownerRepository.SaveChanges();
-        }
+        var owner = await EnsureInsiderOwnerExists(
+            ownerRepository,
+            ownerCik,
+            ownerName,
+            ownerElement
+        );
 
         var isAmendment = filing.Form.Contains("/A", StringComparison.OrdinalIgnoreCase);
 
@@ -266,6 +249,37 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         );
 
         return true;
+    }
+
+    private static async Task<InsiderOwner> EnsureInsiderOwnerExists(
+        InsiderOwnerRepository ownerRepository,
+        string ownerCik,
+        string ownerName,
+        XElement ownerElement
+    )
+    {
+        var owner = await ownerRepository.GetByOwnerCik(ownerCik);
+        if (owner != null)
+            return owner;
+
+        var ownerAddress = ownerElement.Element("reportingOwnerAddress");
+        var ownerRelationship = ownerElement.Element("reportingOwnerRelationship");
+
+        owner = new InsiderOwner
+        {
+            OwnerCik = ownerCik,
+            Name = ownerName,
+            City = ownerAddress?.Element("rptOwnerCity")?.Value?.Trim(),
+            StateOrCountry = ownerAddress?.Element("rptOwnerStateOrCountry")?.Value?.Trim(),
+            IsDirector = ParseBool(ownerRelationship?.Element("isDirector")?.Value),
+            IsOfficer = ParseBool(ownerRelationship?.Element("isOfficer")?.Value),
+            OfficerTitle = ownerRelationship?.Element("officerTitle")?.Value?.Trim(),
+            IsTenPercentOwner = ParseBool(ownerRelationship?.Element("isTenPercentOwner")?.Value),
+        };
+
+        ownerRepository.Add(owner);
+        await ownerRepository.SaveChanges();
+        return owner;
     }
 
     private InsiderTransaction ParseTransaction(
