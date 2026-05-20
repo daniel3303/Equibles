@@ -203,29 +203,13 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
 
         if (transactions.Count == 0)
         {
-            // Form 3 with noSecuritiesOwned — save a 0-shares record so the accession-number
-            // short-circuit at the top of Process() prevents re-fetching this filing every cycle.
-            _logger.LogDebug(
-                "No transactions found for {Ticker} - {AccessionNumber}, saving 0-shares holding",
-                companyTicker,
-                filing.AccessionNumber
+            await SaveNoSecuritiesOwnedSentinel(
+                transactionRepository,
+                owner,
+                companyId,
+                filing,
+                companyTicker
             );
-
-            transactionRepository.Add(
-                new InsiderTransaction
-                {
-                    InsiderOwnerId = owner.Id,
-                    CommonStockId = companyId,
-                    FilingDate = filing.FilingDate,
-                    TransactionDate = filing.ReportDate,
-                    TransactionCode = TransactionCode.Other,
-                    AccessionNumber = filing.AccessionNumber,
-                    SecurityTitle = "No Securities Owned",
-                    TransactionOrder = 0,
-                }
-            );
-            await transactionRepository.SaveChanges();
-
             return true;
         }
 
@@ -280,6 +264,38 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         ownerRepository.Add(owner);
         await ownerRepository.SaveChanges();
         return owner;
+    }
+
+    // Form 3 with noSecuritiesOwned — save a 0-shares record so the accession-number
+    // short-circuit at the top of Process() prevents re-fetching this filing every cycle.
+    private async Task SaveNoSecuritiesOwnedSentinel(
+        InsiderTransactionRepository transactionRepository,
+        InsiderOwner owner,
+        Guid companyId,
+        FilingData filing,
+        string companyTicker
+    )
+    {
+        _logger.LogDebug(
+            "No transactions found for {Ticker} - {AccessionNumber}, saving 0-shares holding",
+            companyTicker,
+            filing.AccessionNumber
+        );
+
+        transactionRepository.Add(
+            new InsiderTransaction
+            {
+                InsiderOwnerId = owner.Id,
+                CommonStockId = companyId,
+                FilingDate = filing.FilingDate,
+                TransactionDate = filing.ReportDate,
+                TransactionCode = TransactionCode.Other,
+                AccessionNumber = filing.AccessionNumber,
+                SecurityTitle = "No Securities Owned",
+                TransactionOrder = 0,
+            }
+        );
+        await transactionRepository.SaveChanges();
     }
 
     private InsiderTransaction ParseTransaction(
