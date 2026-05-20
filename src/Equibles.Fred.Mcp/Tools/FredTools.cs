@@ -47,7 +47,7 @@ public class FredTools
             int maxResults = 100
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var series = await _seriesRepository
@@ -89,10 +89,8 @@ public class FredTools
 
                 return result.ToString();
             },
-            _logger,
             "GetEconomicIndicator",
-            $"seriesId: {seriesId}",
-            ReportError
+            $"seriesId: {seriesId}"
         );
     }
 
@@ -107,7 +105,7 @@ public class FredTools
             string category = null
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 IQueryable<FredSeries> seriesQuery;
@@ -164,10 +162,8 @@ public class FredTools
 
                 return result.ToString();
             },
-            _logger,
             "GetLatestEconomicData",
-            $"category: {category}",
-            ReportError
+            $"category: {category}"
         );
     }
 
@@ -183,7 +179,7 @@ public class FredTools
         [Description("Maximum number of results to return (default: 20)")] int maxResults = 20
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var series = await _seriesRepository
@@ -211,12 +207,13 @@ public class FredTools
 
                 return result.ToString();
             },
-            _logger,
             "SearchEconomicIndicators",
-            $"query: {query}",
-            ReportError
+            $"query: {query}"
         );
     }
+
+    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
+        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
 
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
