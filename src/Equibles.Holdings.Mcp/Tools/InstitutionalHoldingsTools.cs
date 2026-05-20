@@ -217,12 +217,7 @@ public class InstitutionalHoldingsTools
                 }
                 else
                 {
-                    var latestDate = await _holdingRepository
-                        .GetHistoryByHolder(holder)
-                        .Select(h => h.ReportDate)
-                        .Distinct()
-                        .OrderByDescending(d => d)
-                        .FirstOrDefaultAsync();
+                    var latestDate = await GetReportDatesByHolder(holder).FirstOrDefaultAsync();
 
                     if (latestDate == default)
                         return $"No holdings data for {holder.Name}.";
@@ -635,12 +630,7 @@ public class InstitutionalHoldingsTools
                 if (holder == null)
                     return $"No institution found matching '{institutionName}'.";
 
-                var reportDates = await _holdingRepository
-                    .GetHistoryByHolder(holder)
-                    .Select(h => h.ReportDate)
-                    .Distinct()
-                    .OrderByDescending(d => d)
-                    .ToListAsync();
+                var reportDates = await GetReportDatesByHolder(holder).ToListAsync();
                 if (reportDates.Count == 0)
                     return $"No 13F holdings reported by {holder.Name}.";
 
@@ -719,12 +709,7 @@ public class InstitutionalHoldingsTools
                 if (holder == null)
                     return $"No institution found matching '{institutionName}'.";
 
-                var reportDates = await _holdingRepository
-                    .GetHistoryByHolder(holder)
-                    .Select(h => h.ReportDate)
-                    .Distinct()
-                    .OrderByDescending(d => d)
-                    .ToListAsync();
+                var reportDates = await GetReportDatesByHolder(holder).ToListAsync();
                 if (reportDates.Count == 0)
                     return $"No 13F holdings reported by {holder.Name}.";
 
@@ -803,12 +788,7 @@ public class InstitutionalHoldingsTools
                 if (holder == null)
                     return $"No institution found matching '{institutionName}'.";
 
-                var reportDates = await _holdingRepository
-                    .GetHistoryByHolder(holder)
-                    .Select(h => h.ReportDate)
-                    .Distinct()
-                    .OrderByDescending(d => d)
-                    .ToListAsync();
+                var reportDates = await GetReportDatesByHolder(holder).ToListAsync();
                 if (reportDates.Count < 2)
                     return $"{holder.Name} has fewer than two reported quarters — no diff available.";
 
@@ -1050,12 +1030,7 @@ public class InstitutionalHoldingsTools
                 var perHolderDates = new List<List<DateOnly>>();
                 foreach (var holder in holders)
                 {
-                    var dates = await _holdingRepository
-                        .GetHistoryByHolder(holder)
-                        .Select(h => h.ReportDate)
-                        .Distinct()
-                        .OrderByDescending(d => d)
-                        .ToListAsync();
+                    var dates = await GetReportDatesByHolder(holder).ToListAsync();
                     perHolderDates.Add(dates);
                 }
                 var common = perHolderDates
@@ -1139,6 +1114,13 @@ public class InstitutionalHoldingsTools
 
     private Task<InstitutionalHolder> FindHolderByName(string name) =>
         _holderRepository.Search(name ?? string.Empty).OrderBy(h => h.Name).FirstOrDefaultAsync();
+
+    private IQueryable<DateOnly> GetReportDatesByHolder(InstitutionalHolder holder) =>
+        _holdingRepository
+            .GetHistoryByHolder(holder)
+            .Select(h => h.ReportDate)
+            .Distinct()
+            .OrderByDescending(d => d);
 
     private static bool TryParseReportDate(string input, out DateOnly result)
     {
