@@ -209,43 +209,13 @@ public class FinraClient : IFinraClient
 
     public async Task<List<DateOnly>> GetShortInterestSettlementDates()
     {
-        // Query distinct settlement dates via the data endpoint (the /partitions GET returns 403).
-        // Sort descending and extract unique dates across pages.
-        var dates = new HashSet<DateOnly>();
-        var offset = 0;
-
-        while (true)
+        // /partitions GET returns 403; the /data endpoint exposes the same dates by paging.
+        var dates = await CollectSettlementDates(offset => new
         {
-            var query = new
-            {
-                fields = new[] { "settlementDate" },
-                limit = MaxPageSize,
-                offset,
-            };
-
-            var records = await PostQuery<ShortInterestRecord>(
-                "OTCMarket",
-                "consolidatedShortInterest",
-                query
-            );
-            if (records.Count == 0)
-                break;
-
-            foreach (var record in records)
-            {
-                if (
-                    !string.IsNullOrEmpty(record.SettlementDate)
-                    && DateOnly.TryParse(record.SettlementDate, out var date)
-                )
-                {
-                    dates.Add(date);
-                }
-            }
-
-            if (records.Count < MaxPageSize)
-                break;
-            offset += records.Count;
-        }
+            fields = new[] { "settlementDate" },
+            limit = MaxPageSize,
+            offset,
+        });
 
         _logger.LogDebug("Fetched {Count} distinct settlement dates", dates.Count);
         return dates.OrderBy(d => d).ToList();
@@ -258,31 +228,41 @@ public class FinraClient : IFinraClient
 
         _logger.LogDebug("Discovering settlement dates after {Date}", afterDate);
 
+        var dates = await CollectSettlementDates(offset => new
+        {
+            fields = new[] { "settlementDate" },
+            dateRangeFilters = new[]
+            {
+                new
+                {
+                    fieldName = "settlementDate",
+                    startDate = startDateStr,
+                    endDate = endDateStr,
+                },
+            },
+            limit = MaxPageSize,
+            offset,
+        });
+
+        _logger.LogDebug(
+            "Discovered {Count} new settlement dates after {Date}",
+            dates.Count,
+            afterDate
+        );
+        return dates.OrderBy(d => d).ToList();
+    }
+
+    private async Task<HashSet<DateOnly>> CollectSettlementDates(Func<int, object> buildQuery)
+    {
         var dates = new HashSet<DateOnly>();
         var offset = 0;
 
         while (true)
         {
-            var query = new
-            {
-                fields = new[] { "settlementDate" },
-                dateRangeFilters = new[]
-                {
-                    new
-                    {
-                        fieldName = "settlementDate",
-                        startDate = startDateStr,
-                        endDate = endDateStr,
-                    },
-                },
-                limit = MaxPageSize,
-                offset,
-            };
-
             var records = await PostQuery<ShortInterestRecord>(
                 "OTCMarket",
                 "consolidatedShortInterest",
-                query
+                buildQuery(offset)
             );
             if (records.Count == 0)
                 break;
@@ -303,12 +283,7 @@ public class FinraClient : IFinraClient
             offset += records.Count;
         }
 
-        _logger.LogDebug(
-            "Discovered {Count} new settlement dates after {Date}",
-            dates.Count,
-            afterDate
-        );
-        return dates.OrderBy(d => d).ToList();
+        return dates;
     }
 
     private async Task<List<T>> PostQuery<T>(string group, string name, object query)
