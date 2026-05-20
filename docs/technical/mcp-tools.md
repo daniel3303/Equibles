@@ -89,6 +89,8 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 - `GetStockPrices` — daily OHLCV + `AdjustedClose` for a ticker over a date range.
 - `GetLatestPrices` — latest close for one or more tickers.
+- `GetStochasticOscillator` — Stochastic Oscillator (%K and %D) for a ticker over a date range.
+- `GetAverageTrueRange` — Wilder's Average True Range (ATR) volatility measure for a ticker over a date range.
 
 ### `mcp.AddShortData()` — FINRA + SEC FTD
 
