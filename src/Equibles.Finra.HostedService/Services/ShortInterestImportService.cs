@@ -60,7 +60,6 @@ public class ShortInterestImportService
         var trackedStockIds = tickerMap.Values.ToHashSet();
         var reverseMap = tickerMap.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
 
-        // Get known settlement dates from DB
         HashSet<DateOnly> knownDates;
         using (var scope = _scopeFactory.CreateScope())
         {
@@ -69,7 +68,6 @@ public class ShortInterestImportService
             knownDates = dates.ToHashSet();
         }
 
-        // Discover new settlement dates from FINRA (bounded scan)
         var maxKnownDate = knownDates.Count > 0 ? knownDates.Max() : default;
         var minDate = SyncDateResolver.Resolve(default, _workerOptions);
 
@@ -93,7 +91,6 @@ public class ShortInterestImportService
             return;
         }
 
-        // Merge known + new dates
         var allDates = new HashSet<DateOnly>(knownDates);
         allDates.UnionWith(newDates);
 
@@ -121,7 +118,6 @@ public class ShortInterestImportService
 
             try
             {
-                // Determine which tracked stocks are missing data for this date
                 HashSet<Guid> existingStockIds;
                 using (var scope = _scopeFactory.CreateScope())
                 {
@@ -139,7 +135,6 @@ public class ShortInterestImportService
                     continue;
                 }
 
-                // Fetch from FINRA: bulk if all/many missing, filtered if few missing
                 List<ShortInterestRecord> records;
                 var useBulkFetch =
                     missingStockIds.Count == trackedStockIds.Count
