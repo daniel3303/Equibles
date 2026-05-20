@@ -73,6 +73,10 @@ public class WebAppFixture : IAsyncLifetime
         );
 
         builder.Configuration["ConnectionStrings:DefaultConnection"] = _db.GetConnectionString();
+        // AddMessaging binds MassTransit's SQL transport from this string. Same
+        // container as the app DB to mirror docker-compose, where web and worker
+        // share Postgres.
+        builder.Configuration["ConnectionStrings:TransportConnection"] = _db.GetConnectionString();
         builder.Configuration["DataProtection:KeysDirectory"] = _keysDirectory;
 
         Program.ConfigureServices(builder);

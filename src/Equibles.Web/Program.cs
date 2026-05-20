@@ -59,6 +59,18 @@ public partial class Program
         // AddAllRepositories) so new modules join global search with no host change.
         builder.Services.AddEquiblesSearch();
 
+        // MassTransit (Postgres SQL transport + EF outbox in EquiblesDbContext).
+        // Web subscribes to events published by other hosts — e.g. the live
+        // ScraperActivity feed from the worker. The consumer scan is restricted
+        // to Equibles.Web's own assembly: worker-only consumers (e.g. the
+        // Holdings rescan signal handler) require services the web host never
+        // registers, so picking them up here would crash service-provider
+        // validation as soon as a referenced HostedService assembly loads.
+        builder.Services.AddMessaging(
+            builder.Configuration,
+            consumerAssemblies: [typeof(Program).Assembly]
+        );
+
         builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();
         builder.Services.AutoWireServicesFrom<Equibles.Web.Services.StockTabService>();
 
