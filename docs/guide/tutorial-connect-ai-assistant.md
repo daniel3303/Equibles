@@ -77,7 +77,7 @@ Once your chosen assistant lists Equibles tools, try one of these prompts in a n
 - **Economy:** *"Pull the latest unemployment rate from FRED and tell me how it changed over the past year."* (Only works once you've added a FRED API key — see [Add a FRED API key](how-to-set-up-fred-api-key.md).)
 - **Filings:** *"Search Apple's most recent 10-K for the section about supply-chain risk and summarise it."* (Best with the embedding profile enabled — see [Enable semantic search over SEC filings](how-to-enable-embedding-search.md).)
 
-The assistant will call one or more Equibles MCP tools, then summarise the result for you. If a query comes back empty, it usually means the relevant scraper hasn't caught up yet — give it more time and check the Status page.
+The assistant will call one or more Equibles MCP tools, then summarise the result for you. If a query comes back empty, it usually means Equibles hasn't finished fetching that kind of data yet — give the worker a few more minutes and check the Status page.
 
 ## You're done
 
