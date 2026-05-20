@@ -27,24 +27,37 @@ public static partial class DisclosureParsingHelper
 
         foreach (var table in tables)
         {
-            var headerTexts = ExtractHeaderTexts(table);
-            if (headerTexts == null || !IsTransactionTable(headerTexts))
-                continue;
-
-            var cols = MapColumnIndices(headerTexts);
-            var rows = table.SelectNodes(".//tbody//tr");
-            if (rows == null)
-                continue;
-
-            foreach (var row in rows)
-            {
-                var tx = ParseTransactionRow(row, cols, memberName, position, filingDate, logger);
-                if (tx != null)
-                    transactions.Add(tx);
-            }
+            transactions.AddRange(
+                ExtractTransactionsFromTable(table, memberName, position, filingDate, logger)
+            );
         }
 
         return transactions;
+    }
+
+    private static IEnumerable<DisclosureTransaction> ExtractTransactionsFromTable(
+        HtmlNode table,
+        string memberName,
+        CongressPosition position,
+        DateOnly filingDate,
+        ILogger logger
+    )
+    {
+        var headerTexts = ExtractHeaderTexts(table);
+        if (headerTexts == null || !IsTransactionTable(headerTexts))
+            yield break;
+
+        var cols = MapColumnIndices(headerTexts);
+        var rows = table.SelectNodes(".//tbody//tr");
+        if (rows == null)
+            yield break;
+
+        foreach (var row in rows)
+        {
+            var tx = ParseTransactionRow(row, cols, memberName, position, filingDate, logger);
+            if (tx != null)
+                yield return tx;
+        }
     }
 
     private static List<string> ExtractHeaderTexts(HtmlNode table)
