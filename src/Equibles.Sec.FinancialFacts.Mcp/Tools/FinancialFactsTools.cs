@@ -79,9 +79,7 @@ public class FinancialFactsTools
                     return "A ticker symbol is required.";
 
                 if (string.IsNullOrWhiteSpace(concept))
-                    return "A concept is required. Supported: "
-                        + $"{string.Join(", ", FinancialConceptAliases.SupportedAliases)} "
-                        + "(common synonyms like 'sales', 'r&d', 'ocf' also work).";
+                    return $"A concept is required. {SupportedAliasesNote()}";
 
                 var stock = await _commonStockRepository.GetByTicker(
                     ticker.Trim().ToUpperInvariant()
@@ -90,9 +88,7 @@ public class FinancialFactsTools
                     return $"Stock '{ticker}' not found.";
 
                 if (!FinancialConceptAliases.TryResolve(concept, out var conceptRefs))
-                    return $"Unknown concept '{concept}'. Supported: "
-                        + $"{string.Join(", ", FinancialConceptAliases.SupportedAliases)} "
-                        + "(common synonyms like 'sales', 'r&d', 'ocf' also work).";
+                    return $"Unknown concept '{concept}'. {SupportedAliasesNote()}";
 
                 DocumentType formFilter = null;
                 if (!string.IsNullOrWhiteSpace(form))
@@ -212,14 +208,10 @@ public class FinancialFactsTools
             async () =>
             {
                 if (string.IsNullOrWhiteSpace(concept))
-                    return "A concept is required. Supported: "
-                        + $"{string.Join(", ", FinancialConceptAliases.SupportedAliases)} "
-                        + "(common synonyms like 'sales', 'r&d', 'ocf' also work).";
+                    return $"A concept is required. {SupportedAliasesNote()}";
 
                 if (!FinancialConceptAliases.TryResolve(concept, out var conceptRefs))
-                    return $"Unknown concept '{concept}'. Supported: "
-                        + $"{string.Join(", ", FinancialConceptAliases.SupportedAliases)} "
-                        + "(common synonyms like 'sales', 'r&d', 'ocf' also work).";
+                    return $"Unknown concept '{concept}'. {SupportedAliasesNote()}";
 
                 if (!FactArgs.TryParsePeriod(fiscalPeriod, out var period))
                     return $"Unknown period '{fiscalPeriod}'. Use 'FY' or 'Q1'..'Q4'.";
@@ -392,6 +384,13 @@ public class FinancialFactsTools
 
         bound = null;
         return false;
+    }
+
+    private static string SupportedAliasesNote()
+    {
+        return "Supported: "
+            + $"{string.Join(", ", FinancialConceptAliases.SupportedAliases)} "
+            + "(common synonyms like 'sales', 'r&d', 'ocf' also work).";
     }
 
     private Task ReportError(string toolName, string message, string stackTrace, string context)
