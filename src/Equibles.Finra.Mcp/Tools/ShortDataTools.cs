@@ -60,16 +60,11 @@ public class ShortDataTools
 
                 var query = _shortVolumeRepository.GetHistoryByStock(stock);
 
-                var start =
-                    !string.IsNullOrEmpty(startDate)
-                    && DateOnly.TryParse(startDate, out var parsedStart)
-                        ? parsedStart
-                        : DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3));
-
-                var end =
-                    !string.IsNullOrEmpty(endDate) && DateOnly.TryParse(endDate, out var parsedEnd)
-                        ? parsedEnd
-                        : DateOnly.FromDateTime(DateTime.UtcNow);
+                var start = ParseDateOr(
+                    startDate,
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
+                );
+                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
 
                 query = query.Where(d => d.Date >= start && d.Date <= end);
 
@@ -130,16 +125,11 @@ public class ShortDataTools
 
                 var query = _shortInterestRepository.GetHistoryByStock(stock);
 
-                var start =
-                    !string.IsNullOrEmpty(startDate)
-                    && DateOnly.TryParse(startDate, out var parsedStart)
-                        ? parsedStart
-                        : DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1));
-
-                var end =
-                    !string.IsNullOrEmpty(endDate) && DateOnly.TryParse(endDate, out var parsedEnd)
-                        ? parsedEnd
-                        : DateOnly.FromDateTime(DateTime.UtcNow);
+                var start = ParseDateOr(
+                    startDate,
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
+                );
+                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
 
                 query = query.Where(s => s.SettlementDate >= start && s.SettlementDate <= end);
 
@@ -256,4 +246,7 @@ public class ShortDataTools
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
+
+    private static DateOnly ParseDateOr(string text, DateOnly fallback) =>
+        !string.IsNullOrEmpty(text) && DateOnly.TryParse(text, out var parsed) ? parsed : fallback;
 }
