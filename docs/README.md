@@ -16,4 +16,4 @@ Reference for developers working inside the Equibles codebase. The root [`README
 
 ## Status
 
-All pages above are **planned**. None are written yet. New pages land one per PR via `/update-docs`, in the order listed.
+Every page above is written. Subsequent `/update-docs` invocations operate in the maintain lane — one drift fix per PR (stale code reference, missing doc for a module added since the last docs commit, or one unclear sentence).
