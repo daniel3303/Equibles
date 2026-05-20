@@ -391,14 +391,13 @@ public class InstitutionalHoldingsTools
                     {
                         currentByHolder.TryGetValue(id, out var c);
                         previousByHolder.TryGetValue(id, out var p);
-                        return new
-                        {
-                            Name = c?.Name ?? p?.Name ?? "Unknown",
-                            CurrentShares = c?.Shares ?? 0,
-                            PreviousShares = p?.Shares ?? 0,
-                            DeltaShares = (c?.Shares ?? 0) - (p?.Shares ?? 0),
-                            DeltaValue = (c?.Value ?? 0) - (p?.Value ?? 0),
-                        };
+                        return (
+                            Name: c?.Name ?? p?.Name ?? "Unknown",
+                            CurrentShares: c?.Shares ?? 0,
+                            PreviousShares: p?.Shares ?? 0,
+                            DeltaShares: (c?.Shares ?? 0) - (p?.Shares ?? 0),
+                            DeltaValue: (c?.Value ?? 0) - (p?.Value ?? 0)
+                        );
                     })
                     .ToList();
 
@@ -424,52 +423,50 @@ public class InstitutionalHoldingsTools
                     result.AppendLine($"vs prior quarter {previousDate.Value:yyyy-MM-dd}");
                 result.AppendLine();
 
-                result.AppendLine("## Top Buyers");
-                if (topBuyers.Count == 0)
-                {
-                    result.AppendLine("_No buyers this quarter._");
-                }
-                else
-                {
-                    result.AppendLine(
-                        "| # | Institution | Δ Shares | Δ Value ($M) | Prior → New Shares |"
-                    );
-                    result.AppendLine(
-                        "|---|-------------|---------|-------------|------------------|"
-                    );
-                    for (var i = 0; i < topBuyers.Count; i++)
-                    {
-                        var m = topBuyers[i];
-                        result.AppendLine(
-                            $"| {i + 1} | {m.Name} | +{m.DeltaShares:N0} | {m.DeltaValue / 1_000_000m:+#,##0.0;-#,##0.0;0.0} | {m.PreviousShares:N0} → {m.CurrentShares:N0} |"
-                        );
-                    }
-                }
-
+                AppendMoverSection(result, "## Top Buyers", "_No buyers this quarter._", topBuyers);
                 result.AppendLine();
-                result.AppendLine("## Top Sellers");
-                if (topSellers.Count == 0)
-                {
-                    result.AppendLine("_No sellers this quarter._");
-                }
-                else
-                {
-                    result.AppendLine(
-                        "| # | Institution | Δ Shares | Δ Value ($M) | Prior → New Shares |"
-                    );
-                    result.AppendLine(
-                        "|---|-------------|---------|-------------|------------------|"
-                    );
-                    for (var i = 0; i < topSellers.Count; i++)
-                    {
-                        var m = topSellers[i];
-                        result.AppendLine(
-                            $"| {i + 1} | {m.Name} | {m.DeltaShares:N0} | {m.DeltaValue / 1_000_000m:+#,##0.0;-#,##0.0;0.0} | {m.PreviousShares:N0} → {m.CurrentShares:N0} |"
-                        );
-                    }
-                }
+                AppendMoverSection(
+                    result,
+                    "## Top Sellers",
+                    "_No sellers this quarter._",
+                    topSellers
+                );
 
                 return result.ToString();
+
+                static void AppendMoverSection(
+                    StringBuilder sb,
+                    string heading,
+                    string emptyMessage,
+                    IReadOnlyList<(
+                        string Name,
+                        long CurrentShares,
+                        long PreviousShares,
+                        long DeltaShares,
+                        long DeltaValue
+                    )> rows
+                )
+                {
+                    sb.AppendLine(heading);
+                    if (rows.Count == 0)
+                    {
+                        sb.AppendLine(emptyMessage);
+                        return;
+                    }
+                    sb.AppendLine(
+                        "| # | Institution | Δ Shares | Δ Value ($M) | Prior → New Shares |"
+                    );
+                    sb.AppendLine("|---|-------------|---------|-------------|------------------|");
+                    for (var i = 0; i < rows.Count; i++)
+                    {
+                        var m = rows[i];
+                        // `+` for positive deltas; N0 already emits `-` for negatives.
+                        var sign = m.DeltaShares > 0 ? "+" : "";
+                        sb.AppendLine(
+                            $"| {i + 1} | {m.Name} | {sign}{m.DeltaShares:N0} | {m.DeltaValue / 1_000_000m:+#,##0.0;-#,##0.0;0.0} | {m.PreviousShares:N0} → {m.CurrentShares:N0} |"
+                        );
+                    }
+                }
             },
             _logger,
             "GetTopBuyersSellers",
