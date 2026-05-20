@@ -51,7 +51,7 @@ Why the indirection through `ViewData` rather than a single `StockDetailViewMode
 - [`package.json`](../src/Equibles.Web/package.json) — Vite 6, Tailwind v4 (`@tailwindcss/postcss`), DaisyUI v5, plus `chart.js`, `aos`, `typed.js`.
 - [`vite.config.js`](../src/Equibles.Web/vite.config.js) — single entry `src/index.js`, output to `wwwroot/dist/` as `bundle.js` + `main.css`. `emptyOutDir: true` cleans the bundle on each build.
 - [`tailwind.config.js`](../src/Equibles.Web/tailwind.config.js) — content roots are `Views/**/*.cshtml` + `src/**/*.{js,ts}`. DaisyUI plugin loads the custom `equibles` theme (defined inline in the config) plus light / dark fallbacks.
-- `src/css/` holds the entry CSS imported by `index.js`; `src/js/` holds chart wrappers and per-page JS modules. The bundle lazy-imports per-page modules so the Holdings tab doesn't pull Chart.js into the Documents tab.
+- `src/Equibles.Web/src/css/` holds the entry CSS imported by `src/Equibles.Web/src/index.js`; `src/Equibles.Web/src/js/` holds chart wrappers and per-page JS modules. The bundle lazy-imports per-page modules so the Holdings tab doesn't pull Chart.js into the Documents tab.
 - Dev cycle: `npm run start` (Vite watch) alongside the .NET app — `AddRazorRuntimeCompilation()` (Web/Program.cs:105) makes Razor edits live without rebuild; Vite handles the bundle.
 - CI / Docker: `npm ci && npm run build` runs inside the multi-stage Dockerfile so `wwwroot/dist/` is pre-built into the image.
 
