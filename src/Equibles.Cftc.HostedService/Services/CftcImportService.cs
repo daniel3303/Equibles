@@ -320,7 +320,6 @@ public class CftcImportService
         if (string.IsNullOrWhiteSpace(value))
             return null;
 
-        // Try YYYY-MM-DD first (standard format)
         if (
             DateOnly.TryParseExact(
                 value.Trim(),
@@ -332,7 +331,6 @@ public class CftcImportService
         )
             return date;
 
-        // Try YYMMDD (legacy format)
         if (
             DateOnly.TryParseExact(
                 value.Trim(),

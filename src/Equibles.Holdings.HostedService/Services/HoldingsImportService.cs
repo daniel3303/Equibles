@@ -501,6 +501,9 @@ public class HoldingsImportService
                 && string.Equals(cp.IsAmendment, "Y", StringComparison.OrdinalIgnoreCase);
 
             var shares = ParseLong(GetValue(row, "SSHPRNAMT"));
+            var votingAuthSole = ParseLong(GetValue(row, "VOTING_AUTH_SOLE"));
+            var votingAuthShared = ParseLong(GetValue(row, "VOTING_AUTH_SHARED"));
+            var votingAuthNone = ParseLong(GetValue(row, "VOTING_AUTH_NONE"));
 
             // Calculate value from Yahoo stock price
             var hasPrice = context.StockPrices.TryGetValue(
@@ -527,9 +530,9 @@ public class HoldingsImportService
                 totalDuplicates++;
                 existing.Shares += shares;
                 existing.Value += value;
-                existing.VotingAuthSole += ParseLong(GetValue(row, "VOTING_AUTH_SOLE"));
-                existing.VotingAuthShared += ParseLong(GetValue(row, "VOTING_AUTH_SHARED"));
-                existing.VotingAuthNone += ParseLong(GetValue(row, "VOTING_AUTH_NONE"));
+                existing.VotingAuthSole += votingAuthSole;
+                existing.VotingAuthShared += votingAuthShared;
+                existing.VotingAuthNone += votingAuthNone;
                 existing.ManagerEntries.Add(managerEntry);
             }
             else
@@ -548,9 +551,9 @@ public class HoldingsImportService
                     ShareType = shareType,
                     OptionType = optionType,
                     InvestmentDiscretion = discretion,
-                    VotingAuthSole = ParseLong(GetValue(row, "VOTING_AUTH_SOLE")),
-                    VotingAuthShared = ParseLong(GetValue(row, "VOTING_AUTH_SHARED")),
-                    VotingAuthNone = ParseLong(GetValue(row, "VOTING_AUTH_NONE")),
+                    VotingAuthSole = votingAuthSole,
+                    VotingAuthShared = votingAuthShared,
+                    VotingAuthNone = votingAuthNone,
                     TitleOfClass = GetValue(row, "TITLEOFCLASS"),
                     Cusip = cusip,
                     AccessionNumber = accession,
