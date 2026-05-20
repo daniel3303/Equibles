@@ -1,5 +1,7 @@
 using Equibles.Congress.Repositories;
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
+using Equibles.Holdings.Repositories.Models;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.Extensions;
@@ -62,6 +64,16 @@ public class ProfilesController : BaseController
             })
             .ToListAsync();
 
+        // Header strip — pulled with two extra per-quarter materializations so the
+        // existing recent-rows list keeps its top-50 shape.
+        var distinctDates = await _institutionalHoldingRepository
+            .GetHistoryByHolder(holder)
+            .Select(h => h.ReportDate)
+            .Distinct()
+            .OrderByDescending(d => d)
+            .ToListAsync();
+        var summary = await BuildSummary(holder, distinctDates);
+
         ViewData["Title"] = holder.Name;
         return View(
             new InstitutionProfileViewModel
@@ -70,7 +82,36 @@ public class ProfilesController : BaseController
                 Cik = holder.Cik,
                 Location = ProfileFormatting.JoinLocation(holder.City, holder.StateOrCountry),
                 Holdings = holdings,
+                Summary = summary,
             }
+        );
+    }
+
+    private async Task<InstitutionPortfolioSummary> BuildSummary(
+        InstitutionalHolder holder,
+        IReadOnlyList<DateOnly> distinctReportDates
+    )
+    {
+        if (distinctReportDates.Count == 0)
+            return new InstitutionPortfolioSummary { QuartersReported = 0 };
+
+        var latest = distinctReportDates[0];
+        var previous = distinctReportDates.Count > 1 ? distinctReportDates[1] : (DateOnly?)null;
+        var currentHoldings = await _institutionalHoldingRepository
+            .GetByHolder(holder, latest)
+            .ToListAsync();
+        var previousHoldings = previous.HasValue
+            ? await _institutionalHoldingRepository
+                .GetByHolder(holder, previous.Value)
+                .ToListAsync()
+            : [];
+
+        return InstitutionPortfolioSummaryCalculator.Calculate(
+            currentHoldings,
+            previousHoldings,
+            distinctReportDates.Count,
+            latest,
+            previous
         );
     }
 
