@@ -95,21 +95,7 @@ public class HoldingsBacktestService
         var firstRebalance = reportDates[0].AddDays(HoldingsBacktestCalculator.RebalanceDelayDays);
         var resolvedFrom = from ?? firstRebalance;
 
-        // Determine which snapshots feed the simulation: all whose rebalance date falls in
-        // [resolvedFrom, resolvedTo], plus the latest one whose rebalance date precedes
-        // resolvedFrom so the simulation can open with an initial portfolio.
-        var relevant = new List<DateOnly>();
-        DateOnly? lastBeforeWindow = null;
-        foreach (var date in reportDates)
-        {
-            var rebalance = date.AddDays(HoldingsBacktestCalculator.RebalanceDelayDays);
-            if (rebalance < resolvedFrom)
-                lastBeforeWindow = date;
-            else if (rebalance <= resolvedTo)
-                relevant.Add(date);
-        }
-        if (lastBeforeWindow.HasValue && !relevant.Contains(lastBeforeWindow.Value))
-            relevant.Insert(0, lastBeforeWindow.Value);
+        var relevant = SelectRelevantSnapshotDates(reportDates, resolvedFrom, resolvedTo);
 
         if (relevant.Count == 0)
         {
@@ -206,6 +192,30 @@ public class HoldingsBacktestService
                 options.Add(new BacktestBenchmarkOption { Ticker = ticker, Name = stock.Name });
         }
         return options;
+    }
+
+    // Select all snapshots whose rebalance date falls in [resolvedFrom, resolvedTo], plus the
+    // latest one whose rebalance date precedes resolvedFrom so the simulation can open with an
+    // initial portfolio.
+    private static List<DateOnly> SelectRelevantSnapshotDates(
+        IReadOnlyList<DateOnly> reportDates,
+        DateOnly resolvedFrom,
+        DateOnly resolvedTo
+    )
+    {
+        var relevant = new List<DateOnly>();
+        DateOnly? lastBeforeWindow = null;
+        foreach (var date in reportDates)
+        {
+            var rebalance = date.AddDays(HoldingsBacktestCalculator.RebalanceDelayDays);
+            if (rebalance < resolvedFrom)
+                lastBeforeWindow = date;
+            else if (rebalance <= resolvedTo)
+                relevant.Add(date);
+        }
+        if (lastBeforeWindow.HasValue && !relevant.Contains(lastBeforeWindow.Value))
+            relevant.Insert(0, lastBeforeWindow.Value);
+        return relevant;
     }
 
     // OrderBy() must precede the projection — EF can't translate an OrderBy keyed off the
