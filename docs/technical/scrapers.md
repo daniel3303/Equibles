@@ -55,7 +55,8 @@ Every client follows the same shape: one interface + one implementation register
 
 - `IRateLimiter` with `WaitAsync()` + `PauseFor(TimeSpan)`. Each client owns a `static readonly IRateLimiter` configured for its upstream's published (or reverse-engineered) limit — e.g. Yahoo uses `40 requests / minute`.
 - `WaitAsync()` blocks until the sliding-window counter allows another request; calls itself recursively after the delay so a long pause never silently lets a request through.
-- `PauseFor(TimeSpan)` extends the no-go window — used when the upstream returns `429` to widen the cooldown beyond what the steady-state counter would impose. The pause is monotonic (a later, shorter pause never shortens an already-set later deadline).
+- `PauseFor(TimeSpan)` extends the no-go window — used when the upstream returns `429` to widen the cooldown beyond what the steady-state counter would impose.
+- The pause is monotonic: a later, shorter pause never shortens an already-set later deadline.
 
 ### Retry pattern
 
