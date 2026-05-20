@@ -72,17 +72,34 @@ public class HoldingsValueRecalculator
         );
 
         var resolvedPairKeys = prices.Keys.ToHashSet();
-        var totalGivenUp = 0;
 
         var totalUpdated = await ResolveHoldingsWithNewPrices(prices, cancellationToken);
 
-        // Increment retry count for unresolved pairs and give up after MaxRetries
         var unresolvedPairs = pendingPairs
             .Where(p => !resolvedPairKeys.Contains((p.CommonStockId, p.ReportDate)))
+            .Select(p => (p.CommonStockId, p.ReportDate))
             .ToList();
 
-        var now = DateTime.UtcNow;
+        var totalGivenUp = await IncrementRetryForUnresolved(
+            unresolvedPairs,
+            DateTime.UtcNow,
+            cancellationToken
+        );
 
+        _logger.LogInformation(
+            "Recalculated values for {Updated} holdings, gave up on {GivenUp}",
+            totalUpdated,
+            totalGivenUp
+        );
+    }
+
+    private async Task<int> IncrementRetryForUnresolved(
+        IReadOnlyList<(Guid CommonStockId, DateOnly ReportDate)> unresolvedPairs,
+        DateTime now,
+        CancellationToken cancellationToken
+    )
+    {
+        var totalGivenUp = 0;
         foreach (var pair in unresolvedPairs)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -90,7 +107,6 @@ public class HoldingsValueRecalculator
             using var scope = _scopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
 
-            // Only load holdings that are due for retry based on their last retry time
             var holdings = await dbContext
                 .Set<InstitutionalHolding>()
                 .Where(h =>
@@ -127,12 +143,7 @@ public class HoldingsValueRecalculator
                 await dbContext.SaveChangesAsync(cancellationToken);
             }
         }
-
-        _logger.LogInformation(
-            "Recalculated values for {Updated} holdings, gave up on {GivenUp}",
-            totalUpdated,
-            totalGivenUp
-        );
+        return totalGivenUp;
     }
 
     private async Task<int> ResolveHoldingsWithNewPrices(
