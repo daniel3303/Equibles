@@ -179,6 +179,48 @@ public class StockPriceToolsAtrTests : ParadeDbMcpTestBase
         dataRows.Should().OnlyContain(row => row.EndsWith("| — |"));
     }
 
+    [Fact]
+    public async Task GetAverageTrueRange_EmitsRowsNewestFirst()
+    {
+        // Tool description promises "(default: 60, newest first)". None of the other
+        // tests pin the row order — a regression that flipped the loop direction would
+        // still pass them. Five increasing dates; first data row in the table must be
+        // the latest one.
+        var stock = MakeStock();
+        DbContext.Set<CommonStock>().Add(stock);
+        await DbContext.SaveChangesAsync();
+        var start = new DateOnly(2025, 1, 6);
+        for (var i = 0; i < 5; i++)
+        {
+            DbContext
+                .Set<DailyStockPrice>()
+                .Add(
+                    new DailyStockPrice
+                    {
+                        CommonStockId = stock.Id,
+                        Date = start.AddDays(i),
+                        Open = 100m,
+                        High = 101m,
+                        Low = 99m,
+                        Close = 100m,
+                        AdjustedClose = 100m,
+                        Volume = 1,
+                    }
+                );
+        }
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetAverageTrueRange(
+                "AAPL",
+                startDate: start.ToString("yyyy-MM-dd"),
+                endDate: start.AddDays(5).ToString("yyyy-MM-dd")
+            );
+
+        var firstDataRow = result.Split('\n').First(line => line.StartsWith("| 2025-"));
+        firstDataRow.Should().StartWith($"| {start.AddDays(4):yyyy-MM-dd} |");
+    }
+
     private static CommonStock MakeStock() =>
         new()
         {
