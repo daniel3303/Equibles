@@ -649,14 +649,17 @@ public class SecEdgarClient : ISecEdgarClient
 
         foreach (var row in response.Data)
         {
-            if (row.Count <= Math.Max(Math.Max(cikIndex, nameIndex), tickerIndex))
-                continue;
-
-            var cik = row[cikIndex]?.ToString();
-            var name = row[nameIndex]?.ToString();
-            var ticker = row[tickerIndex]?.ToString();
-
-            if (string.IsNullOrEmpty(cik) || string.IsNullOrEmpty(ticker))
+            if (
+                !TryExtractCompanyRow(
+                    row,
+                    cikIndex,
+                    nameIndex,
+                    tickerIndex,
+                    out var cik,
+                    out var name,
+                    out var ticker
+                )
+            )
                 continue;
 
             if (companiesByCik.TryGetValue(cik, out var existing))
@@ -675,6 +678,33 @@ public class SecEdgarClient : ISecEdgarClient
         }
 
         return companiesByCik.Values.ToList();
+    }
+
+    private static bool TryExtractCompanyRow(
+        List<object> row,
+        int cikIndex,
+        int nameIndex,
+        int tickerIndex,
+        out string cik,
+        out string name,
+        out string ticker
+    )
+    {
+        cik = null;
+        name = null;
+        ticker = null;
+
+        if (row.Count <= Math.Max(Math.Max(cikIndex, nameIndex), tickerIndex))
+            return false;
+
+        cik = row[cikIndex]?.ToString();
+        name = row[nameIndex]?.ToString();
+        ticker = row[tickerIndex]?.ToString();
+
+        if (string.IsNullOrEmpty(cik) || string.IsNullOrEmpty(ticker))
+            return false;
+
+        return true;
     }
 
     private static List<FilingData> MapToFilingData(RecentFilings recent, string cik)
