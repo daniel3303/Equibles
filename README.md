@@ -169,7 +169,7 @@ The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, 
 - **Financial Statements** — XBRL fact time series per ticker, cross-ticker fact comparison, full income statement / balance sheet / cash flow per fiscal period
 - **Short Data** — Daily short volume, bi-monthly short interest, and the latest short-interest snapshot across tickers
 - **Economic Indicators** — FRED data lookup, latest macro snapshot, indicator search across categories
-- **Stock Prices** — Daily OHLCV history with adjusted close, plus latest close across one or more tickers
+- **Stock Prices** — Daily OHLCV history with adjusted close, latest close across one or more tickers, and on-demand technical indicators (Stochastic Oscillator, Average True Range, On-Balance Volume)
 - **Futures Positioning** — COT positioning data, latest snapshot across all contracts, contract search
 - **Market Indicators** — VIX historical data, put/call ratios by type (equity, index, total, VIX, ETP)
 
