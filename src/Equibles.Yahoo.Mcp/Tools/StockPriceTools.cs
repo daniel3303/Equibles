@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
@@ -49,9 +50,7 @@ public class StockPriceTools
         return McpToolExecutor.Execute(
             async () =>
             {
-                var stock = await _commonStockRepository.GetByTicker(
-                    ticker.Trim().ToUpperInvariant()
-                );
+                var stock = await FindStockByTicker(ticker);
                 if (stock == null)
                     return $"Stock '{ticker}' not found.";
 
@@ -190,9 +189,7 @@ public class StockPriceTools
                 if (kPeriod < 2 || dPeriod < 1)
                     return "kPeriod must be at least 2 and dPeriod at least 1.";
 
-                var stock = await _commonStockRepository.GetByTicker(
-                    ticker.Trim().ToUpperInvariant()
-                );
+                var stock = await FindStockByTicker(ticker);
                 if (stock == null)
                     return $"Stock '{ticker}' not found.";
 
@@ -273,9 +270,7 @@ public class StockPriceTools
                 if (period < 2)
                     return "period must be at least 2.";
 
-                var stock = await _commonStockRepository.GetByTicker(
-                    ticker.Trim().ToUpperInvariant()
-                );
+                var stock = await FindStockByTicker(ticker);
                 if (stock == null)
                     return $"Stock '{ticker}' not found.";
 
@@ -345,9 +340,7 @@ public class StockPriceTools
         return McpToolExecutor.Execute(
             async () =>
             {
-                var stock = await _commonStockRepository.GetByTicker(
-                    ticker.Trim().ToUpperInvariant()
-                );
+                var stock = await FindStockByTicker(ticker);
                 if (stock == null)
                     return $"Stock '{ticker}' not found.";
 
@@ -397,6 +390,9 @@ public class StockPriceTools
         !string.IsNullOrEmpty(value) && DateOnly.TryParse(value, out var parsed)
             ? parsed
             : fallback;
+
+    private Task<CommonStock> FindStockByTicker(string ticker) =>
+        _commonStockRepository.GetByTicker(ticker.Trim().ToUpperInvariant());
 
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
