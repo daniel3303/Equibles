@@ -88,16 +88,34 @@ public class StockTabService
             // Fetch previous quarter's shares for change % calculation
             var previousSharesByHolder = new Dictionary<Guid, long>();
             var selectedIndex = reportDates.IndexOf(selectedDate);
-            if (selectedIndex >= 0 && selectedIndex < reportDates.Count - 1)
+            var previousDate =
+                selectedIndex >= 0 && selectedIndex < reportDates.Count - 1
+                    ? reportDates[selectedIndex + 1]
+                    : (DateOnly?)null;
+            if (previousDate.HasValue)
             {
-                var previousDate = reportDates[selectedIndex + 1];
                 var holderIds = holdings.Select(h => h.InstitutionalHolderId).ToList();
                 previousSharesByHolder = await _institutionalHoldingRepository
-                    .GetByStock(stock, previousDate)
+                    .GetByStock(stock, previousDate.Value)
                     .Where(h => holderIds.Contains(h.InstitutionalHolderId))
                     .GroupBy(h => h.InstitutionalHolderId)
                     .ToDictionaryAsync(g => g.Key, g => g.Sum(h => h.Shares));
             }
+
+            // Full per-quarter holdings (current + previous) for position-change grouping.
+            // Separate from the top-100 query above so the existing tile rendering is unchanged.
+            var allCurrent = await _institutionalHoldingRepository
+                .GetByStock(stock, selectedDate)
+                .Include(h => h.InstitutionalHolder)
+                .ToListAsync();
+            var allPrevious = previousDate.HasValue
+                ? await _institutionalHoldingRepository
+                    .GetByStock(stock, previousDate.Value)
+                    .Include(h => h.InstitutionalHolder)
+                    .ToListAsync()
+                : [];
+            var grouped = HoldingsPositionGrouper.Group(allCurrent, allPrevious);
+            var bucketCounts = grouped.ToDictionary(g => g.Key, g => g.Value.Count);
 
             return new HoldingsTabViewModel
             {
@@ -110,6 +128,8 @@ public class StockTabService
                 HolderCount = totalHolderCount,
                 DisplayedCount = holdings.Count,
                 PreviousSharesByHolder = previousSharesByHolder,
+                GroupedHolders = grouped,
+                BucketCounts = bucketCounts,
             };
         }
 

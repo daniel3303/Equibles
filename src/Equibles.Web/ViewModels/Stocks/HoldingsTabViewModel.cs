@@ -13,4 +13,8 @@ public class HoldingsTabViewModel
     public int HolderCount { get; set; }
     public int DisplayedCount { get; set; }
     public Dictionary<Guid, long> PreviousSharesByHolder { get; set; } = [];
+
+    public Dictionary<PositionChangeType, List<HolderPositionChange>> GroupedHolders { get; set; } =
+    [];
+    public Dictionary<PositionChangeType, int> BucketCounts { get; set; } = [];
 }
