@@ -394,7 +394,9 @@ public class StockPriceTools
     }
 
     private static DateOnly ParseDateOr(string value, DateOnly fallback) =>
-        !string.IsNullOrEmpty(value) && DateOnly.TryParse(value, out var parsed) ? parsed : fallback;
+        !string.IsNullOrEmpty(value) && DateOnly.TryParse(value, out var parsed)
+            ? parsed
+            : fallback;
 
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
