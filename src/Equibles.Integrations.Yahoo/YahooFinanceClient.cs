@@ -198,6 +198,27 @@ public class YahooFinanceClient : IYahooFinanceClient
         return new KeyStatistics { SharesOutstanding = stats.SharesOutstanding?.Raw ?? 0 };
     }
 
+    public async Task<CompanyProfile> GetCompanyProfile(string ticker)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
+        var url = $"{QuoteSummaryBaseUrl}/{Uri.EscapeDataString(ticker)}?modules=assetProfile";
+
+        var content = await SendWithRetry(url);
+        var response = JsonConvert.DeserializeObject<YahooQuoteSummaryResponse>(content);
+
+        var profile = response?.QuoteSummary?.Result?.FirstOrDefault()?.AssetProfile;
+        if (profile == null)
+            return null;
+
+        return new CompanyProfile
+        {
+            Sector = profile.Sector,
+            Industry = profile.Industry,
+            LongBusinessSummary = profile.LongBusinessSummary,
+            Website = profile.Website,
+        };
+    }
+
     // ── Session management (mirrors FINRA's token caching pattern) ──
 
     // Acquires the Yahoo crumb/cookie over a self-managed HttpClient. Exposed as

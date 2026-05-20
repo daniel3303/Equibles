@@ -11,4 +11,5 @@ public interface IYahooFinanceClient
     );
     Task<List<RecommendationTrend>> GetRecommendationTrends(string ticker);
     Task<KeyStatistics> GetKeyStatistics(string ticker);
+    Task<CompanyProfile> GetCompanyProfile(string ticker);
 }

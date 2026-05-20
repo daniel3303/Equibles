@@ -81,6 +81,64 @@ public class YahooQuoteSummaryResponseTests
     }
 
     [Fact]
+    public void Deserialize_AssetProfile_ParsesSectorAndIndustryAndCompanyFields()
+    {
+        // Captured from a real Yahoo quoteSummary?modules=assetProfile response.
+        // Confirms the Newtonsoft attribute mapping picks up sector / industry as well
+        // as the secondary fields the worker uses for the company profile.
+        var json = """
+            {
+              "quoteSummary": {
+                "result": [{
+                  "assetProfile": {
+                    "industry": "Consumer Electronics",
+                    "sector": "Technology",
+                    "longBusinessSummary": "Apple Inc. designs, manufactures, and markets smartphones, personal computers, tablets, wearables, and accessories worldwide.",
+                    "website": "https://www.apple.com"
+                  }
+                }],
+                "error": null
+              }
+            }
+            """;
+
+        var response = JsonConvert.DeserializeObject<YahooQuoteSummaryResponse>(json);
+        var profile = response.QuoteSummary.Result[0].AssetProfile;
+
+        profile.Sector.Should().Be("Technology");
+        profile.Industry.Should().Be("Consumer Electronics");
+        profile.LongBusinessSummary.Should().StartWith("Apple Inc.");
+        profile.Website.Should().Be("https://www.apple.com");
+    }
+
+    [Fact]
+    public void Deserialize_AssetProfileMissingFields_LeavesPropertiesNull()
+    {
+        // Yahoo occasionally omits fields when not provided by the issuer (especially
+        // for non-US listings or ETFs). The container must tolerate missing keys.
+        var json = """
+            {
+              "quoteSummary": {
+                "result": [{
+                  "assetProfile": {
+                    "sector": "Energy"
+                  }
+                }],
+                "error": null
+              }
+            }
+            """;
+
+        var response = JsonConvert.DeserializeObject<YahooQuoteSummaryResponse>(json);
+        var profile = response.QuoteSummary.Result[0].AssetProfile;
+
+        profile.Sector.Should().Be("Energy");
+        profile.Industry.Should().BeNull();
+        profile.LongBusinessSummary.Should().BeNull();
+        profile.Website.Should().BeNull();
+    }
+
+    [Fact]
     public void Deserialize_AllZeroCounts_ParsesSuccessfully()
     {
         var json = """
