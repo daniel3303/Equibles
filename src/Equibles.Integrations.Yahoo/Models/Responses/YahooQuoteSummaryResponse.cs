@@ -25,6 +25,24 @@ public class QuoteSummaryResult
 
     [JsonProperty("defaultKeyStatistics")]
     public DefaultKeyStatisticsContainer DefaultKeyStatistics { get; set; }
+
+    [JsonProperty("assetProfile")]
+    public AssetProfileContainer AssetProfile { get; set; }
+}
+
+public class AssetProfileContainer
+{
+    [JsonProperty("sector")]
+    public string Sector { get; set; }
+
+    [JsonProperty("industry")]
+    public string Industry { get; set; }
+
+    [JsonProperty("longBusinessSummary")]
+    public string LongBusinessSummary { get; set; }
+
+    [JsonProperty("website")]
+    public string Website { get; set; }
 }
 
 public class DefaultKeyStatisticsContainer
