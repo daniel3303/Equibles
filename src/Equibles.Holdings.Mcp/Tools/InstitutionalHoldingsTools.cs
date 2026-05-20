@@ -310,8 +310,193 @@ public class InstitutionalHoldingsTools
         );
     }
 
+    [McpServerTool(Name = "GetTopBuyersSellers")]
+    [Description(
+        "Get the institutions that moved the needle the most on a stock this quarter — biggest absolute share additions (Top Buyers) and biggest absolute share reductions (Top Sellers) versus the previous 13F report date. Includes new positions (Δ = full position) and sold-out positions (Δ = −prior position). Returns a markdown table with two sections. Use this to surface the most actionable quarterly signal from 13F filings."
+    )]
+    public Task<string> GetTopBuyersSellers(
+        [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
+        [Description("Report date in YYYY-MM-DD format (defaults to latest available)")]
+            string reportDate = null,
+        [Description("Maximum number of buyers and sellers to return per section (default: 10)")]
+            int maxResults = 10
+    )
+    {
+        return McpToolExecutor.Execute(
+            async () =>
+            {
+                var stock = await _commonStockRepository.GetByTicker(ticker);
+                if (stock == null)
+                    return $"Stock '{ticker}' not found.";
+
+                var reportDates = await _holdingRepository
+                    .GetHistoryByStock(stock)
+                    .Select(h => h.ReportDate)
+                    .Distinct()
+                    .OrderByDescending(d => d)
+                    .ToListAsync();
+
+                DateOnly targetDate;
+                if (
+                    !string.IsNullOrEmpty(reportDate)
+                    && DateOnly.TryParse(reportDate, out var parsed)
+                )
+                {
+                    targetDate = parsed;
+                }
+                else
+                {
+                    targetDate = reportDates.FirstOrDefault();
+                }
+                if (targetDate == default)
+                    return $"No institutional holdings data available for {ticker}.";
+
+                var selectedIndex = reportDates.IndexOf(targetDate);
+                var previousDate =
+                    selectedIndex >= 0 && selectedIndex < reportDates.Count - 1
+                        ? reportDates[selectedIndex + 1]
+                        : (DateOnly?)null;
+
+                var currentHoldings = await _holdingRepository
+                    .GetByStock(stock, targetDate)
+                    .Include(h => h.InstitutionalHolder)
+                    .ToListAsync();
+                var previousHoldings = previousDate.HasValue
+                    ? await _holdingRepository
+                        .GetByStock(stock, previousDate.Value)
+                        .Include(h => h.InstitutionalHolder)
+                        .ToListAsync()
+                    : [];
+
+                // Aggregate by holder (one holder may file multiple 13F rows per quarter).
+                // TODO(#1008): the same aggregation/grouping logic lives in
+                // Equibles.Web.Services.HoldingsPositionGrouper. Consolidate into a shared
+                // Equibles.Holdings.BusinessLogic project once one exists.
+                var currentByHolder = currentHoldings
+                    .GroupBy(h => h.InstitutionalHolderId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => new HolderAggregate
+                        {
+                            Name = g.First().InstitutionalHolder?.Name ?? "Unknown",
+                            Shares = g.Sum(h => h.Shares),
+                            Value = g.Sum(h => h.Value),
+                        }
+                    );
+                var previousByHolder = previousHoldings
+                    .GroupBy(h => h.InstitutionalHolderId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => new HolderAggregate
+                        {
+                            Name = g.First().InstitutionalHolder?.Name ?? "Unknown",
+                            Shares = g.Sum(h => h.Shares),
+                            Value = g.Sum(h => h.Value),
+                        }
+                    );
+
+                var allHolderIds = currentByHolder.Keys.Union(previousByHolder.Keys);
+                var movers = allHolderIds
+                    .Select(id =>
+                    {
+                        currentByHolder.TryGetValue(id, out var c);
+                        previousByHolder.TryGetValue(id, out var p);
+                        return new
+                        {
+                            Name = c?.Name ?? p?.Name ?? "Unknown",
+                            CurrentShares = c?.Shares ?? 0,
+                            PreviousShares = p?.Shares ?? 0,
+                            DeltaShares = (c?.Shares ?? 0) - (p?.Shares ?? 0),
+                            DeltaValue = (c?.Value ?? 0) - (p?.Value ?? 0),
+                        };
+                    })
+                    .ToList();
+
+                var topBuyers = movers
+                    .Where(m => m.DeltaShares > 0)
+                    .OrderByDescending(m => m.DeltaShares)
+                    .Take(maxResults)
+                    .ToList();
+                var topSellers = movers
+                    .Where(m => m.DeltaShares < 0)
+                    .OrderBy(m => m.DeltaShares)
+                    .Take(maxResults)
+                    .ToList();
+
+                if (topBuyers.Count == 0 && topSellers.Count == 0)
+                    return $"No quarter-over-quarter movement found for {stock.Name} ({ticker}) as of {targetDate:yyyy-MM-dd}.";
+
+                var result = new StringBuilder();
+                result.AppendLine(
+                    $"Top buyers and sellers of {stock.Name} ({ticker}) as of {targetDate:yyyy-MM-dd}"
+                );
+                if (previousDate.HasValue)
+                    result.AppendLine($"vs prior quarter {previousDate.Value:yyyy-MM-dd}");
+                result.AppendLine();
+
+                result.AppendLine("## Top Buyers");
+                if (topBuyers.Count == 0)
+                {
+                    result.AppendLine("_No buyers this quarter._");
+                }
+                else
+                {
+                    result.AppendLine(
+                        "| # | Institution | Δ Shares | Δ Value ($M) | Prior → New Shares |"
+                    );
+                    result.AppendLine(
+                        "|---|-------------|---------|-------------|------------------|"
+                    );
+                    for (var i = 0; i < topBuyers.Count; i++)
+                    {
+                        var m = topBuyers[i];
+                        result.AppendLine(
+                            $"| {i + 1} | {m.Name} | +{m.DeltaShares:N0} | {m.DeltaValue / 1_000_000m:+#,##0.0;-#,##0.0;0.0} | {m.PreviousShares:N0} → {m.CurrentShares:N0} |"
+                        );
+                    }
+                }
+
+                result.AppendLine();
+                result.AppendLine("## Top Sellers");
+                if (topSellers.Count == 0)
+                {
+                    result.AppendLine("_No sellers this quarter._");
+                }
+                else
+                {
+                    result.AppendLine(
+                        "| # | Institution | Δ Shares | Δ Value ($M) | Prior → New Shares |"
+                    );
+                    result.AppendLine(
+                        "|---|-------------|---------|-------------|------------------|"
+                    );
+                    for (var i = 0; i < topSellers.Count; i++)
+                    {
+                        var m = topSellers[i];
+                        result.AppendLine(
+                            $"| {i + 1} | {m.Name} | {m.DeltaShares:N0} | {m.DeltaValue / 1_000_000m:+#,##0.0;-#,##0.0;0.0} | {m.PreviousShares:N0} → {m.CurrentShares:N0} |"
+                        );
+                    }
+                }
+
+                return result.ToString();
+            },
+            _logger,
+            "GetTopBuyersSellers",
+            $"ticker: {ticker}",
+            ReportError
+        );
+    }
+
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
+    }
+
+    private class HolderAggregate
+    {
+        public string Name { get; set; }
+        public long Shares { get; set; }
+        public long Value { get; set; }
     }
 }
