@@ -61,10 +61,8 @@ public class DocumentScraper : IDocumentScraper
         {
             _logger.LogInformation("Starting document scraping process...");
 
-            // Step 1: Sync companies from SEC API to database
             await _companySyncService.SyncCompaniesFromSecApi();
 
-            // Step 2: Process SEC documents for each company
             var companiesUntracked = await GetAllCompaniesWithNoTracking();
             _logger.LogInformation(
                 "Found {CompanyCount} companies to process for documents",
@@ -81,7 +79,6 @@ public class DocumentScraper : IDocumentScraper
                 result.CompaniesProcessed++;
             }
 
-            // Step 3: Retry deferred filings (normalization failures) after all tickers
             if (result.DeferredFilings.Count > 0)
             {
                 _logger.LogInformation(
@@ -380,7 +377,6 @@ public class DocumentScraper : IDocumentScraper
     {
         try
         {
-            // Detect actual document type from SEC filing's form field
             var detectedType = DocumentTypeExtensions.FromFormName(filing.Form);
             if (detectedType == null)
             {
@@ -395,7 +391,6 @@ public class DocumentScraper : IDocumentScraper
 
             documentType = detectedType;
 
-            // Check if a specialized processor handles this document type
             var processor = _filingProcessors.FirstOrDefault(p => p.CanProcess(documentType));
             if (processor != null)
             {
@@ -407,7 +402,6 @@ public class DocumentScraper : IDocumentScraper
                 return;
             }
 
-            // Default flow: check if document already exists, then create as markdown
             if (
                 await persistenceService.Exists(
                     company,
