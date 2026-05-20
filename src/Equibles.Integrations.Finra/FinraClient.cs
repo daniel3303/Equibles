@@ -145,44 +145,28 @@ public class FinraClient : IFinraClient
 
         while (true)
         {
-            object query;
+            var query = new Dictionary<string, object>
+            {
+                ["fields"] = ShortInterestFields,
+                ["dateRangeFilters"] = new[]
+                {
+                    new
+                    {
+                        fieldName = "settlementDate",
+                        startDate = dateStr,
+                        endDate = dateStr,
+                    },
+                },
+            };
             if (symbols != null)
             {
-                query = new
+                query["domainFilters"] = new[]
                 {
-                    fields = ShortInterestFields,
-                    dateRangeFilters = new[]
-                    {
-                        new
-                        {
-                            fieldName = "settlementDate",
-                            startDate = dateStr,
-                            endDate = dateStr,
-                        },
-                    },
-                    domainFilters = new[] { new { fieldName = "symbolCode", values = symbols } },
-                    limit = MaxPageSize,
-                    offset,
+                    new { fieldName = "symbolCode", values = symbols },
                 };
             }
-            else
-            {
-                query = new
-                {
-                    fields = ShortInterestFields,
-                    dateRangeFilters = new[]
-                    {
-                        new
-                        {
-                            fieldName = "settlementDate",
-                            startDate = dateStr,
-                            endDate = dateStr,
-                        },
-                    },
-                    limit = MaxPageSize,
-                    offset,
-                };
-            }
+            query["limit"] = MaxPageSize;
+            query["offset"] = offset;
 
             var page = await PostQuery<ShortInterestRecord>(
                 "OTCMarket",
