@@ -237,30 +237,7 @@ public class StockTabService
         SecFiscalPeriod? period
     )
     {
-        // Distinct (year, period) pairs the company actually reported. This is a
-        // separate round trip from the per-period fact query below — both are
-        // covered by the [CommonStockId, FiscalYear, FiscalPeriod] index, and
-        // keeping them separate avoids loading every fact just to list periods.
-        var periodKeys = await _financialFactRepository
-            .GetByStock(stock)
-            .Select(f => new { f.FiscalYear, f.FiscalPeriod })
-            .Distinct()
-            .ToListAsync();
-
-        // SecFiscalPeriod's enum ordinal (FullYear=0, Q1=1…Q4=4) is not
-        // chronological — ordering by it would float the annual figure to the
-        // wrong end. The 10-K (FullYear) is filed after Q4 and is the canonical
-        // annual number, so rank it last within its year; default selection
-        // (first option) is then the latest year's annual statement.
-        var availablePeriods = periodKeys
-            .OrderByDescending(p => p.FiscalYear)
-            .ThenByDescending(p => ChronologicalRank(p.FiscalPeriod))
-            .Select(p => new FinancialsPeriodOption(
-                p.FiscalYear,
-                p.FiscalPeriod,
-                $"FY{p.FiscalYear} {p.FiscalPeriod.NameForHumans()}"
-            ))
-            .ToList();
+        var availablePeriods = await BuildAvailablePeriods(stock);
 
         var viewModel = new FinancialsTabViewModel
         {
@@ -288,6 +265,34 @@ public class StockTabService
         );
 
         return viewModel;
+    }
+
+    private async Task<List<FinancialsPeriodOption>> BuildAvailablePeriods(CommonStock stock)
+    {
+        // Distinct (year, period) pairs the company actually reported. This is a
+        // separate round trip from the per-period fact query below — both are
+        // covered by the [CommonStockId, FiscalYear, FiscalPeriod] index, and
+        // keeping them separate avoids loading every fact just to list periods.
+        var periodKeys = await _financialFactRepository
+            .GetByStock(stock)
+            .Select(f => new { f.FiscalYear, f.FiscalPeriod })
+            .Distinct()
+            .ToListAsync();
+
+        // SecFiscalPeriod's enum ordinal (FullYear=0, Q1=1…Q4=4) is not
+        // chronological — ordering by it would float the annual figure to the
+        // wrong end. The 10-K (FullYear) is filed after Q4 and is the canonical
+        // annual number, so rank it last within its year; default selection
+        // (first option) is then the latest year's annual statement.
+        return periodKeys
+            .OrderByDescending(p => p.FiscalYear)
+            .ThenByDescending(p => ChronologicalRank(p.FiscalPeriod))
+            .Select(p => new FinancialsPeriodOption(
+                p.FiscalYear,
+                p.FiscalPeriod,
+                $"FY{p.FiscalYear} {p.FiscalPeriod.NameForHumans()}"
+            ))
+            .ToList();
     }
 
     private async Task<List<FinancialsLineViewModel>> BuildStatementLines(
