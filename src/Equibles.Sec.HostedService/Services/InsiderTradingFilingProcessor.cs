@@ -300,9 +300,6 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             "postTransactionAmounts",
             "sharesOwnedFollowingTransaction"
         );
-        var ownership = GetWrappedValue(txElement, "ownershipNature", "directOrIndirectOwnership")
-            ?.Trim();
-
         // Form 4 transactionDate is ISO yyyy-MM-dd (ownership XSD). Parse it
         // culture-independently — under a non-Gregorian host culture (e.g.
         // ar-SA Umm al-Qura) culture-sensitive TryParse fails and every
@@ -329,7 +326,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             AcquiredDisposed =
                 adCode == "D" ? AcquiredDisposed.Disposed : AcquiredDisposed.Acquired,
             SharesOwnedAfter = ParseLong(sharesAfterStr),
-            OwnershipNature = ownership == "I" ? OwnershipNature.Indirect : OwnershipNature.Direct,
+            OwnershipNature = ParseOwnershipNature(txElement),
             SecurityTitle = securityTitle,
             AccessionNumber = filing.AccessionNumber,
             IsAmendment = isAmendment,
@@ -350,12 +347,6 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             "postTransactionAmounts",
             "sharesOwnedFollowingTransaction"
         );
-        var ownership = GetWrappedValue(
-            holdingElement,
-            "ownershipNature",
-            "directOrIndirectOwnership"
-        )
-            ?.Trim();
 
         return new InsiderTransaction
         {
@@ -368,11 +359,22 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             PricePerShare = 0,
             AcquiredDisposed = AcquiredDisposed.Acquired,
             SharesOwnedAfter = ParseLong(sharesStr),
-            OwnershipNature = ownership == "I" ? OwnershipNature.Indirect : OwnershipNature.Direct,
+            OwnershipNature = ParseOwnershipNature(holdingElement),
             SecurityTitle = securityTitle,
             AccessionNumber = filing.AccessionNumber,
             IsAmendment = isAmendment,
         };
+    }
+
+    // "I" → Indirect, anything else (including "D" and absent) → Direct. The
+    // ownershipNature element is required by the ownership XSD, but legacy
+    // filings sometimes omit or misspell it; defaulting to Direct matches the
+    // existing inline behavior across ParseTransaction / ParseHolding.
+    private static OwnershipNature ParseOwnershipNature(XElement element)
+    {
+        var value = GetWrappedValue(element, "ownershipNature", "directOrIndirectOwnership")
+            ?.Trim();
+        return value == "I" ? OwnershipNature.Indirect : OwnershipNature.Direct;
     }
 
     // SEC ownership XML wraps each field in <field><value>...</value></field>,
