@@ -56,8 +56,8 @@ public class RagSearchTools
                     query,
                     maxResults,
                     parsedType,
-                    startDate.HasValue ? DateOnly.FromDateTime(startDate.Value) : null,
-                    endDate.HasValue ? DateOnly.FromDateTime(endDate.Value) : null
+                    ToDateOnly(startDate),
+                    ToDateOnly(endDate)
                 );
                 return await _ragManager.BuildContext(chunks);
             },
@@ -90,8 +90,8 @@ public class RagSearchTools
                     ticker,
                     maxResults,
                     parsedType,
-                    startDate.HasValue ? DateOnly.FromDateTime(startDate.Value) : null,
-                    endDate.HasValue ? DateOnly.FromDateTime(endDate.Value) : null
+                    ToDateOnly(startDate),
+                    ToDateOnly(endDate)
                 );
                 return await _ragManager.BuildContext(chunks);
             },
@@ -205,4 +205,7 @@ public class RagSearchTools
 
         return DocumentType.FromDisplayName(documentType) ?? DocumentType.FromValue(documentType);
     }
+
+    private static DateOnly? ToDateOnly(DateTime? value) =>
+        value.HasValue ? DateOnly.FromDateTime(value.Value) : null;
 }
