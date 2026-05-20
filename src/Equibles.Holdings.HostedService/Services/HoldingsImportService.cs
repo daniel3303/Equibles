@@ -492,8 +492,13 @@ public class HoldingsImportService
 
             var shareType = ParseShareType(GetValue(row, "SSHPRNAMTTYPE"));
             var optionType = ParseOptionType(GetValue(row, "PUTCALL"));
-            var uniqueKey =
-                $"{commonStockId}|{holderId}|{reportDate}|{(int)shareType}|{optionType?.ToString() ?? ""}";
+            var uniqueKey = BuildHoldingKey(
+                commonStockId,
+                holderId,
+                reportDate,
+                shareType,
+                optionType
+            );
 
             var isAmendment =
                 context.CoverPages.TryGetValue(accession, out var cp)
@@ -612,8 +617,13 @@ public class HoldingsImportService
         var entriesByKey = new Dictionary<string, List<HoldingManagerEntry>>();
         foreach (var h in holdings)
         {
-            var key =
-                $"{h.CommonStockId}|{h.InstitutionalHolderId}|{h.ReportDate}|{(int)h.ShareType}|{h.OptionType?.ToString() ?? ""}";
+            var key = BuildHoldingKey(
+                h.CommonStockId,
+                h.InstitutionalHolderId,
+                h.ReportDate,
+                h.ShareType,
+                h.OptionType
+            );
             entriesByKey[key] = h.ManagerEntries.ToList();
             h.ManagerEntries.Clear();
         }
@@ -658,8 +668,13 @@ public class HoldingsImportService
 
         foreach (var dbHolding in dbHoldings)
         {
-            var key =
-                $"{dbHolding.CommonStockId}|{dbHolding.InstitutionalHolderId}|{dbHolding.ReportDate}|{(int)dbHolding.ShareType}|{dbHolding.OptionType?.ToString() ?? ""}";
+            var key = BuildHoldingKey(
+                dbHolding.CommonStockId,
+                dbHolding.InstitutionalHolderId,
+                dbHolding.ReportDate,
+                dbHolding.ShareType,
+                dbHolding.OptionType
+            );
             if (entriesByKey.TryGetValue(key, out var entries))
             {
                 dbHolding.ManagerEntries.Clear();
@@ -671,4 +686,13 @@ public class HoldingsImportService
 
         return holdings.Count;
     }
+
+    private static string BuildHoldingKey(
+        Guid commonStockId,
+        Guid institutionalHolderId,
+        DateOnly reportDate,
+        ShareType shareType,
+        OptionType? optionType
+    ) =>
+        $"{commonStockId}|{institutionalHolderId}|{reportDate}|{(int)shareType}|{optionType?.ToString() ?? ""}";
 }
