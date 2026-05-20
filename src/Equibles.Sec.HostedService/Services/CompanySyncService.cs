@@ -321,17 +321,11 @@ public class CompanySyncService : ICompanySyncService
         {
             await DeleteAndUntrack(obsoleteStock, state);
 
-            var newStock = await state.CommonStockManager.Create(
-                new CommonStock
-                {
-                    Ticker = primaryTicker,
-                    Name = NormalizeCompanyName(secCompany.Name),
-                    Cik = secCompany.Cik,
-                    SecondaryTickers = secondaryTickers,
-                    Description = $"Company with tickers: {string.Join(", ", secCompany.Tickers)}",
-                    MarketCapitalization = 0,
-                    SharesOutStanding = 0,
-                }
+            var newStock = await CreateCommonStock(
+                secCompany,
+                primaryTicker,
+                secondaryTickers,
+                state
             );
 
             AddAndTrack(newStock, secCompany.Cik, primaryTicker, secondaryTickers, state);
@@ -366,18 +360,7 @@ public class CompanySyncService : ICompanySyncService
         CommonStock newStock = null;
         try
         {
-            newStock = await state.CommonStockManager.Create(
-                new CommonStock
-                {
-                    Ticker = primaryTicker,
-                    Name = NormalizeCompanyName(secCompany.Name),
-                    Cik = secCompany.Cik,
-                    SecondaryTickers = secondaryTickers,
-                    Description = $"Company with tickers: {string.Join(", ", secCompany.Tickers)}",
-                    MarketCapitalization = 0,
-                    SharesOutStanding = 0,
-                }
-            );
+            newStock = await CreateCommonStock(secCompany, primaryTicker, secondaryTickers, state);
 
             AddAndTrack(newStock, secCompany.Cik, primaryTicker, secondaryTickers, state);
             _logger.LogDebug(
@@ -579,6 +562,25 @@ public class CompanySyncService : ICompanySyncService
         }
         return secondaryCikToParent;
     }
+
+    private static Task<CommonStock> CreateCommonStock(
+        CompanyInfo secCompany,
+        string primaryTicker,
+        List<string> secondaryTickers,
+        StockSyncState state
+    ) =>
+        state.CommonStockManager.Create(
+            new CommonStock
+            {
+                Ticker = primaryTicker,
+                Name = NormalizeCompanyName(secCompany.Name),
+                Cik = secCompany.Cik,
+                SecondaryTickers = secondaryTickers,
+                Description = $"Company with tickers: {string.Join(", ", secCompany.Tickers)}",
+                MarketCapitalization = 0,
+                SharesOutStanding = 0,
+            }
+        );
 
     private static void AddAndTrack(
         CommonStock newStock,
