@@ -225,10 +225,8 @@ public partial class HouseDisclosureClient
     {
         var transactions = new List<DisclosureTransaction>();
 
-        for (var i = 0; i < lines.Length; i++)
+        foreach (var line in lines)
         {
-            var line = lines[i];
-
             // Look for lines with owner codes (SP, JT, DC, Self) followed by asset description
             // Transaction lines typically start with an owner code and contain a date pattern
             var ownerMatch = OwnerCodeRegex().Match(line);
