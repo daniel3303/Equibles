@@ -938,6 +938,124 @@ public class InstitutionalHoldingsTools
         );
     }
 
+    [McpServerTool(Name = "GetFundOverlap")]
+    [Description(
+        "Get the 13F portfolio overlap between two institutions for their latest common report date — Jaccard similarity, dollar-weighted overlap, and a side-by-side table of stocks with per-fund shares + percent of portfolio. Use this to answer 'do these two funds own the same stocks?' or 'where do their portfolios diverge?'"
+    )]
+    public Task<string> GetFundOverlap(
+        [Description("First institution name (partial or full — first match wins)")]
+            string institutionName1,
+        [Description("Second institution name (partial or full — first match wins)")]
+            string institutionName2,
+        [Description("Report date in YYYY-MM-DD format (defaults to latest common quarter)")]
+            string reportDate = null,
+        [Description("Maximum number of stocks to return (default: 30)")] int maxResults = 30
+    )
+    {
+        return McpToolExecutor.Execute(
+            async () =>
+            {
+                var holder1 = await _holderRepository
+                    .Search(institutionName1 ?? string.Empty)
+                    .OrderBy(h => h.Name)
+                    .FirstOrDefaultAsync();
+                if (holder1 == null)
+                    return $"No institution found matching '{institutionName1}'.";
+                var holder2 = await _holderRepository
+                    .Search(institutionName2 ?? string.Empty)
+                    .OrderBy(h => h.Name)
+                    .FirstOrDefaultAsync();
+                if (holder2 == null)
+                    return $"No institution found matching '{institutionName2}'.";
+
+                var dates1 = await _holdingRepository
+                    .GetHistoryByHolder(holder1)
+                    .Select(h => h.ReportDate)
+                    .Distinct()
+                    .ToListAsync();
+                var dates2 = await _holdingRepository
+                    .GetHistoryByHolder(holder2)
+                    .Select(h => h.ReportDate)
+                    .Distinct()
+                    .ToListAsync();
+                var common = dates1.Intersect(dates2).OrderByDescending(d => d).ToList();
+                if (common.Count == 0)
+                    return $"{holder1.Name} and {holder2.Name} share no common report dates.";
+
+                DateOnly selected;
+                if (
+                    !string.IsNullOrEmpty(reportDate)
+                    && DateOnly.TryParse(reportDate, out var parsed)
+                    && common.Contains(parsed)
+                )
+                    selected = parsed;
+                else
+                    selected = common[0];
+
+                var holdings1 = await _holdingRepository
+                    .GetByHolder(holder1, selected)
+                    .Include(h => h.CommonStock)
+                    .ToListAsync();
+                var holdings2 = await _holdingRepository
+                    .GetByHolder(holder2, selected)
+                    .Include(h => h.CommonStock)
+                    .ToListAsync();
+                var overlap = FundOverlapCalculator.Calculate(
+                    [
+                        (holder1, (IReadOnlyList<InstitutionalHolding>)holdings1),
+                        (holder2, (IReadOnlyList<InstitutionalHolding>)holdings2),
+                    ],
+                    selected
+                );
+
+                var result = new StringBuilder();
+                result.AppendLine(
+                    $"Portfolio overlap — **{holder1.Name}** vs **{holder2.Name}** as of {selected:yyyy-MM-dd}"
+                );
+                result.AppendLine();
+                result.AppendLine("| Metric | Value |");
+                result.AppendLine("|--------|-------|");
+                result.AppendLine($"| Union positions | {overlap.UnionPositionCount:N0} |");
+                result.AppendLine($"| Shared positions | {overlap.IntersectionPositionCount:N0} |");
+                result.AppendLine(
+                    $"| Jaccard similarity | {overlap.JaccardSimilarityPercent:F1}% |"
+                );
+                result.AppendLine(
+                    $"| $-weighted overlap | {overlap.DollarWeightedOverlapPercent:F1}% |"
+                );
+                result.AppendLine();
+
+                if (overlap.Rows.Count == 0)
+                {
+                    result.AppendLine("_Neither fund reports any positions for this date._");
+                    return result.ToString();
+                }
+
+                result.AppendLine(
+                    "| # | Ticker | Company | A Shares | A % | B Shares | B % | Combined ($M) |"
+                );
+                result.AppendLine(
+                    "|---|--------|---------|---------|-----|---------|-----|---------------|"
+                );
+                var rendered = overlap.Rows.Take(maxResults).ToList();
+                for (var i = 0; i < rendered.Count; i++)
+                {
+                    var row = rendered[i];
+                    var a = row.Slices[0];
+                    var b = row.Slices[1];
+                    result.AppendLine(
+                        $"| {i + 1} | {row.Ticker} | {row.Name} | {(a.Shares > 0 ? a.Shares.ToString("N0") : "—")} | {(a.Value > 0 ? a.PercentOfPortfolio.ToString("F1") + "%" : "—")} | {(b.Shares > 0 ? b.Shares.ToString("N0") : "—")} | {(b.Value > 0 ? b.PercentOfPortfolio.ToString("F1") + "%" : "—")} | {row.CombinedValue / 1_000_000m:N1} |"
+                    );
+                }
+                return result.ToString();
+            },
+            _logger,
+            "GetFundOverlap",
+            $"funds: {institutionName1}, {institutionName2}",
+            ReportError
+        );
+    }
+
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
