@@ -217,16 +217,17 @@ public class StockPriceTools
                 result.AppendLine("| Date | Close | %K | %D |");
                 result.AppendLine("|------|-------|----|----|");
 
-                var emitted = 0;
-                for (var i = records.Count - 1; i >= 0 && emitted < maxResults; i--)
-                {
-                    var kCell = k[i].HasValue ? k[i].Value.ToString("F2") : "—";
-                    var dCell = d[i].HasValue ? d[i].Value.ToString("F2") : "—";
-                    result.AppendLine(
-                        $"| {records[i].Date:yyyy-MM-dd} | {records[i].Close:F2} | {kCell} | {dCell} |"
-                    );
-                    emitted++;
-                }
+                AppendNewestFirstRows(
+                    result,
+                    records.Count,
+                    maxResults,
+                    i =>
+                    {
+                        var kCell = k[i].HasValue ? k[i].Value.ToString("F2") : "—";
+                        var dCell = d[i].HasValue ? d[i].Value.ToString("F2") : "—";
+                        return $"| {records[i].Date:yyyy-MM-dd} | {records[i].Close:F2} | {kCell} | {dCell} |";
+                    }
+                );
 
                 return result.ToString();
             },
@@ -282,15 +283,16 @@ public class StockPriceTools
                 result.AppendLine("| Date | Close | ATR |");
                 result.AppendLine("|------|-------|-----|");
 
-                var emitted = 0;
-                for (var i = records.Count - 1; i >= 0 && emitted < maxResults; i--)
-                {
-                    var atrCell = atr[i].HasValue ? atr[i].Value.ToString("F4") : "—";
-                    result.AppendLine(
-                        $"| {records[i].Date:yyyy-MM-dd} | {records[i].Close:F2} | {atrCell} |"
-                    );
-                    emitted++;
-                }
+                AppendNewestFirstRows(
+                    result,
+                    records.Count,
+                    maxResults,
+                    i =>
+                    {
+                        var atrCell = atr[i].HasValue ? atr[i].Value.ToString("F4") : "—";
+                        return $"| {records[i].Date:yyyy-MM-dd} | {records[i].Close:F2} | {atrCell} |";
+                    }
+                );
 
                 return result.ToString();
             },
@@ -339,14 +341,13 @@ public class StockPriceTools
                 result.AppendLine("| Date | Close | Volume | OBV |");
                 result.AppendLine("|------|-------|--------|-----|");
 
-                var emitted = 0;
-                for (var i = records.Count - 1; i >= 0 && emitted < maxResults; i--)
-                {
-                    result.AppendLine(
+                AppendNewestFirstRows(
+                    result,
+                    records.Count,
+                    maxResults,
+                    i =>
                         $"| {records[i].Date:yyyy-MM-dd} | {records[i].Close:F2} | {records[i].Volume:N0} | {obv[i]:N0} |"
-                    );
-                    emitted++;
-                }
+                );
 
                 return result.ToString();
             },
@@ -383,6 +384,21 @@ public class StockPriceTools
             );
 
         return (stock, records, null);
+    }
+
+    private static void AppendNewestFirstRows(
+        StringBuilder result,
+        int count,
+        int maxResults,
+        Func<int, string> formatRow
+    )
+    {
+        var emitted = 0;
+        for (var i = count - 1; i >= 0 && emitted < maxResults; i--)
+        {
+            result.AppendLine(formatRow(i));
+            emitted++;
+        }
     }
 
     private static DateOnly ParseDateOr(string value, DateOnly fallback) =>
