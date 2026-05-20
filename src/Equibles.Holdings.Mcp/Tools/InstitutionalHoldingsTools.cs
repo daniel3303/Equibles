@@ -499,11 +499,9 @@ public class InstitutionalHoldingsTools
                 if (reportDates.Count == 0)
                     return "No 13F holdings data available.";
 
-                DateOnly targetDate;
-                if (TryParseReportDate(reportDate, out var parsed))
-                    targetDate = parsed;
-                else
-                    targetDate = reportDates[0];
+                var targetDate = TryParseReportDate(reportDate, out var parsed)
+                    ? parsed
+                    : reportDates[0];
                 var targetIndex = reportDates.IndexOf(targetDate);
                 if (targetIndex < 0)
                     return $"Report date {targetDate:yyyy-MM-dd} not found. Available dates: {string.Join(", ", reportDates.Take(5).Select(d => d.ToString("yyyy-MM-dd")))}{(reportDates.Count > 5 ? "…" : "")}.";
@@ -543,8 +541,7 @@ public class InstitutionalHoldingsTools
                                 .Take(maxResults)
                                 .ToListAsync();
                     if (rows.Count == 0)
-                        return result.ToString()
-                            + "_No stocks moved in this direction this quarter._";
+                        return result + "_No stocks moved in this direction this quarter._";
 
                     var stockIds = rows.Select(r => r.CommonStockId).ToList();
                     var stocks = await _commonStockRepository
@@ -584,7 +581,7 @@ public class InstitutionalHoldingsTools
                                 .Take(maxResults)
                                 .ToListAsync();
                     if (rows.Count == 0)
-                        return result.ToString() + "_No stocks in this bucket this quarter._";
+                        return result + "_No stocks in this bucket this quarter._";
 
                     var stockIds = rows.Select(r => r.CommonStockId).ToList();
                     var stocks = await _commonStockRepository
@@ -650,11 +647,10 @@ public class InstitutionalHoldingsTools
                 if (reportDates.Count == 0)
                     return $"No 13F holdings reported by {holder.Name}.";
 
-                DateOnly targetDate;
-                if (TryParseReportDate(reportDate, out var parsed) && reportDates.Contains(parsed))
-                    targetDate = parsed;
-                else
-                    targetDate = reportDates[0];
+                var targetDate =
+                    TryParseReportDate(reportDate, out var parsed) && reportDates.Contains(parsed)
+                        ? parsed
+                        : reportDates[0];
                 var targetIndex = reportDates.IndexOf(targetDate);
                 var previousDate =
                     targetIndex < reportDates.Count - 1
@@ -738,11 +734,10 @@ public class InstitutionalHoldingsTools
                 if (reportDates.Count == 0)
                     return $"No 13F holdings reported by {holder.Name}.";
 
-                DateOnly targetDate;
-                if (TryParseReportDate(reportDate, out var parsed) && reportDates.Contains(parsed))
-                    targetDate = parsed;
-                else
-                    targetDate = reportDates[0];
+                var targetDate =
+                    TryParseReportDate(reportDate, out var parsed) && reportDates.Contains(parsed)
+                        ? parsed
+                        : reportDates[0];
 
                 var holdings = await _holdingRepository
                     .GetByHolder(holder, targetDate)
@@ -826,11 +821,10 @@ public class InstitutionalHoldingsTools
                 if (reportDates.Count < 2)
                     return $"{holder.Name} has fewer than two reported quarters — no diff available.";
 
-                DateOnly targetDate;
-                if (TryParseReportDate(reportDate, out var parsed) && reportDates.Contains(parsed))
-                    targetDate = parsed;
-                else
-                    targetDate = reportDates[0];
+                var targetDate =
+                    TryParseReportDate(reportDate, out var parsed) && reportDates.Contains(parsed)
+                        ? parsed
+                        : reportDates[0];
                 var targetIndex = reportDates.IndexOf(targetDate);
                 if (targetIndex >= reportDates.Count - 1)
                     return $"{targetDate:yyyy-MM-dd} is the oldest reported quarter for {holder.Name} — no prior to compare against.";
@@ -865,13 +859,12 @@ public class InstitutionalHoldingsTools
                 result.AppendLine();
 
                 var rendered = 0;
-                foreach (var section in sections)
+                var selectedSections = sections.Where(s =>
+                    string.IsNullOrEmpty(normalizedBucket)
+                    || s.Label.ToLowerInvariant() == normalizedBucket
+                );
+                foreach (var section in selectedSections)
                 {
-                    if (
-                        !string.IsNullOrEmpty(normalizedBucket)
-                        && section.Label.ToLowerInvariant() != normalizedBucket
-                    )
-                        continue;
                     var rows = grouped[section.Type]
                         .OrderByDescending(r => Math.Abs(r.DeltaValue))
                         .Take(maxResults)
@@ -956,11 +949,10 @@ public class InstitutionalHoldingsTools
                 if (common.Count == 0)
                     return $"{holder1.Name} and {holder2.Name} share no common report dates.";
 
-                DateOnly selected;
-                if (TryParseReportDate(reportDate, out var parsed) && common.Contains(parsed))
-                    selected = parsed;
-                else
-                    selected = common[0];
+                var selected =
+                    TryParseReportDate(reportDate, out var parsed) && common.Contains(parsed)
+                        ? parsed
+                        : common[0];
 
                 var holdings1 = await _holdingRepository
                     .GetByHolder(holder1, selected)
@@ -1095,15 +1087,12 @@ public class InstitutionalHoldingsTools
                 if (common.Count == 0)
                     return "The selected institutions share no common report dates.";
 
-                DateOnly selected;
-                if (
+                var selected =
                     !string.IsNullOrEmpty(reportDate)
                     && DateOnly.TryParse(reportDate, out var parsed)
                     && common.Contains(parsed)
-                )
-                    selected = parsed;
-                else
-                    selected = common[0];
+                        ? parsed
+                        : common[0];
 
                 var perFund =
                     new List<(
@@ -1141,7 +1130,7 @@ public class InstitutionalHoldingsTools
                 result.AppendLine();
 
                 if (rowsWithConsensus.Count == 0)
-                    return result.ToString() + "_No stocks meet the minFunds threshold._";
+                    return result + "_No stocks meet the minFunds threshold._";
 
                 result.AppendLine("| # | Ticker | Company | # Funds | Combined ($M) |");
                 result.AppendLine("|---|--------|---------|---------|---------------|");
