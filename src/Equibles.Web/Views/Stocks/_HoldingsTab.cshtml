@@ -26,6 +26,11 @@
             _ => entries.OrderByDescending(e => e.CurrentValue),
         };
     }
+
+    static (string Label, string BadgeCss) StatusFor(PositionChangeType type) =>
+        Buckets.Where(b => b.Type == type)
+            .Select(b => (b.Label, b.BadgeCss))
+            .FirstOrDefault();
 }
 
 @if (Model.AvailableDates.Count == 0) {
@@ -130,7 +135,7 @@
                                                 <td class="max-w-xs truncate">@(e.InstitutionalHolder?.Name ?? "Unknown")</td>
                                                 <td class="text-right font-mono @deltaSharesCss">@deltaSharesText</td>
                                                 <td class="text-right font-mono hidden md:table-cell @deltaValueCss">@deltaValueText</td>
-                                                <td class="text-right font-mono hidden lg:table-cell text-base-content/60">@e.PreviousShares.ToString("N0") → @e.CurrentShares.ToString("N0")</td>
+                                                <td class="text-right font-mono hidden lg:table-cell text-base-content/60 whitespace-nowrap">@e.PreviousShares.ToString("N0") → @e.CurrentShares.ToString("N0")</td>
                                             </tr>
                                         }
                                     </tbody>
@@ -140,6 +145,67 @@
                     </div>
                 </div>
             }
+        </div>
+    }
+
+    <!-- All Holders — flat view of every holder for the selected report date, default-collapsed.
+         Lets the user scan or sort the whole list without flipping between buckets. -->
+    var allHolders = Model.GroupedHolders
+        .SelectMany(kvp => kvp.Value.Select(h => new { Entry = h, Type = kvp.Key }))
+        .OrderByDescending(x => x.Entry.CurrentValue)
+        .ThenByDescending(x => x.Entry.PreviousValue)
+        .ToList();
+    if (allHolders.Count > 0) {
+        <div class="collapse collapse-arrow bg-base-100 shadow-sm mb-3" id="holdings-all" data-testid="holdings-all">
+            <input type="checkbox" />
+            <div class="collapse-title flex items-center gap-2 text-base font-medium">
+                <span>All Holders</span>
+                <span class="badge badge-neutral badge-sm">@allHolders.Count.ToString("N0")</span>
+            </div>
+            <div class="collapse-content p-0">
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra table-sm">
+                        <thead>
+                            <tr>
+                                <th>Holder</th>
+                                <th>Status</th>
+                                <th class="text-right">Current Shares</th>
+                                <th class="text-right hidden md:table-cell">Previous Shares</th>
+                                <th class="text-right">Δ Shares</th>
+                                <th class="text-right hidden lg:table-cell">Current Value (USD)</th>
+                                <th class="text-right">Δ Value (USD)</th>
+                                <th class="text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var x in allHolders) {
+                                var e = x.Entry;
+                                var status = StatusFor(x.Type);
+                                var deltaSharesCss = e.DeltaShares > 0 ? "text-success" : e.DeltaShares < 0 ? "text-error" : "";
+                                var deltaValueCss = e.DeltaValue > 0 ? "text-success" : e.DeltaValue < 0 ? "text-error" : "";
+                                var deltaSharesText = (e.DeltaShares > 0 ? "+" : e.DeltaShares < 0 ? "-" : "") + Math.Abs(e.DeltaShares).ToString("N0");
+                                var deltaValueText = (e.DeltaValue > 0 ? "+$" : e.DeltaValue < 0 ? "-$" : "$") + Math.Abs(e.DeltaValue).ToString("N0");
+                                <tr>
+                                    <td class="max-w-xs truncate">@(e.InstitutionalHolder?.Name ?? "Unknown")</td>
+                                    <td><span class="badge @status.BadgeCss badge-sm whitespace-nowrap">@status.Label</span></td>
+                                    <td class="text-right font-mono whitespace-nowrap">@e.CurrentShares.ToString("N0")</td>
+                                    <td class="text-right font-mono hidden md:table-cell whitespace-nowrap">@e.PreviousShares.ToString("N0")</td>
+                                    <td class="text-right font-mono whitespace-nowrap @deltaSharesCss">@deltaSharesText</td>
+                                    <td class="text-right font-mono hidden lg:table-cell whitespace-nowrap">$@e.CurrentValue.ToString("N0")</td>
+                                    <td class="text-right font-mono whitespace-nowrap @deltaValueCss">@deltaValueText</td>
+                                    <td class="text-right">
+                                        @if (e.InstitutionalHolder?.Cik != null) {
+                                            <a asp-controller="Stocks" asp-action="ShowHolder"
+                                               asp-route-ticker="@Model.Ticker" asp-route-cik="@e.InstitutionalHolder.Cik"
+                                               class="btn btn-ghost btn-sm">View</a>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     }
 
