@@ -139,6 +139,17 @@ public class StockPriceToolsStochasticTests : ParadeDbMcpTestBase
         dataLines.Should().Be(5);
     }
 
+    [Fact]
+    public async Task GetStochasticOscillator_DPeriodBelowOne_ReturnsValidationMessage()
+    {
+        // Validation guards both periods: kPeriod < 2 || dPeriod < 1. The existing
+        // InvalidPeriods test only exercises the kPeriod side — a regression that dropped
+        // the dPeriod check (e.g. trimmed the `||` clause) would still pass it.
+        var result = await Sut().GetStochasticOscillator("AAPL", kPeriod: 14, dPeriod: 0);
+
+        result.Should().Contain("dPeriod at least 1");
+    }
+
     private static CommonStock MakeStock() =>
         new()
         {
