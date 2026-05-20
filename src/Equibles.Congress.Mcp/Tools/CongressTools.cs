@@ -69,18 +69,7 @@ public class CongressTools
                 var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
 
                 var query = _tradeRepository.GetByStock(stock, start, end);
-
-                if (
-                    !string.IsNullOrEmpty(transactionType)
-                    && Enum.TryParse<CongressTransactionType>(
-                        transactionType,
-                        true,
-                        out var parsedType
-                    )
-                )
-                {
-                    query = query.Where(t => t.TransactionType == parsedType);
-                }
+                query = ApplyTransactionTypeFilter(query, transactionType);
 
                 var trades = await query
                     .Include(t => t.CongressMember)
@@ -149,18 +138,7 @@ public class CongressTools
                 var query = _tradeRepository
                     .GetByMember(member)
                     .Where(t => t.TransactionDate >= start && t.TransactionDate <= end);
-
-                if (
-                    !string.IsNullOrEmpty(transactionType)
-                    && Enum.TryParse<CongressTransactionType>(
-                        transactionType,
-                        true,
-                        out var parsedType
-                    )
-                )
-                {
-                    query = query.Where(t => t.TransactionType == parsedType);
-                }
+                query = ApplyTransactionTypeFilter(query, transactionType);
 
                 var trades = await query
                     .Include(t => t.CommonStock)
@@ -240,6 +218,21 @@ public class CongressTools
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
+    }
+
+    private static IQueryable<CongressionalTrade> ApplyTransactionTypeFilter(
+        IQueryable<CongressionalTrade> query,
+        string transactionType
+    )
+    {
+        if (
+            string.IsNullOrEmpty(transactionType)
+            || !Enum.TryParse<CongressTransactionType>(transactionType, true, out var parsedType)
+        )
+        {
+            return query;
+        }
+        return query.Where(t => t.TransactionType == parsedType);
     }
 
     private static DateOnly ParseDateOr(string text, DateOnly fallback) =>
