@@ -100,4 +100,20 @@ public class TechnicalIndicatorServiceStochasticTests
         k.Should().BeEmpty();
         d.Should().BeEmpty();
     }
+
+    [Fact]
+    public void ComputeStochastic_CloseEqualsLookbackLowestLow_PercentKIsZero()
+    {
+        // Pins the lower bound of the [0, 100] %K band: by definition
+        // 100 * (close - lowestLow) / range, so close == lowestLow ⇒ %K = 0.
+        // The upper bound (100) is already exercised by the strictly-increasing
+        // default-periods test.
+        var highs = new List<decimal> { 10m, 11m, 12m };
+        var lows = new List<decimal> { 5m, 6m, 4m };
+        var closes = new List<decimal> { 7m, 8m, 4m };
+
+        var (k, _) = TechnicalIndicatorService.ComputeStochastic(highs, lows, closes, 3, 3);
+
+        k[2].Should().Be(0m);
+    }
 }
