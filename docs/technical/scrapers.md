@@ -25,7 +25,9 @@ Built-in behavior:
 
 - One try/catch per cycle. Unhandled exceptions go through `ErrorReporter.Report(ErrorSource, "<Worker>.DoWork", ...)` and the loop sleeps to the next cycle instead of crashing the host.
 - `OperationCanceledException` during shutdown logs and exits cleanly — never reported as an error.
-- `RequestRetrySoon()` — sets a flag mid-cycle that swaps the next wait from `SleepInterval` to `NotReadyRetryInterval` (default 2 minutes). Used when a dependency isn't ready yet (e.g. cold-start race where `CommonStock` hasn't been seeded). Flag resets at the start of every cycle.
+- `RequestRetrySoon()` — sets a flag mid-cycle that swaps the next wait from `SleepInterval` to `NotReadyRetryInterval` (default 2 minutes).
+- Used when a dependency isn't ready yet (e.g. cold-start race where `CommonStock` hasn't been seeded).
+- The flag resets at the start of every cycle.
 
 Subclass-specific extras (worth knowing because they show up in multiple workers):
 
