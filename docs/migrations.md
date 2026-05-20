@@ -72,7 +72,7 @@ NpgsqlIndexBuilderExtensions.AreNullsDistinct(
     false);
 ```
 
-Without this, `OptionType=NULL` rows wouldn't conflict with each other, and the import pipeline would happily insert duplicate "no option" 13F holdings. The fluent index is declared in the relevant module's `IModuleConfiguration.ConfigureEntities`, not in the entity attribute (Postgres index syntax doesn't have an `[Index]` analogue for this flag).
+Without this, `OptionType=NULL` rows wouldn't conflict with each other, and the import pipeline would happily insert duplicate "no option" 13F holdings. The fluent index is declared in the owning module's `IModuleConfiguration.ConfigureEntities` (`HoldingsModuleConfiguration` for the index above), not in the entity attribute (Postgres index syntax doesn't have an `[Index]` analogue for this flag).
 
 ## Migration history
 
