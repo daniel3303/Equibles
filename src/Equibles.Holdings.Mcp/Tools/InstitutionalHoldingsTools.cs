@@ -5,6 +5,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
+using Equibles.Holdings.Repositories.Models;
 using Equibles.Mcp;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -796,6 +797,142 @@ public class InstitutionalHoldingsTools
             },
             _logger,
             "GetInstitutionSectorAllocation",
+            $"institution: {institutionName}",
+            ReportError
+        );
+    }
+
+    [McpServerTool(Name = "GetInstitutionQuarterlyActivity")]
+    [Description(
+        "Get an institution's quarterly position-change activity — Initiated / Increased / Reduced / Exited stocks diffed against the immediately prior quarter. Returns the buckets as one markdown section per bucket, sorted by absolute Δ value desc. Use `bucket` to filter to a single bucket. Use this to answer 'what did this fund do this quarter?'"
+    )]
+    public Task<string> GetInstitutionQuarterlyActivity(
+        [Description("Institution name (partial or full — first match wins)")]
+            string institutionName,
+        [Description("Report date in YYYY-MM-DD format (defaults to the holder's latest)")]
+            string reportDate = null,
+        [Description(
+            "Filter to a single bucket: initiated, increased, reduced, exited (omit for all four)"
+        )]
+            string bucket = null,
+        [Description("Maximum number of stocks to return per bucket (default: 20)")]
+            int maxResults = 20
+    )
+    {
+        return McpToolExecutor.Execute(
+            async () =>
+            {
+                var normalizedBucket = bucket?.Trim().ToLowerInvariant();
+                if (
+                    !string.IsNullOrEmpty(normalizedBucket)
+                    && normalizedBucket != "initiated"
+                    && normalizedBucket != "increased"
+                    && normalizedBucket != "reduced"
+                    && normalizedBucket != "exited"
+                )
+                    return "Unknown bucket. Use one of: initiated, increased, reduced, exited (or omit).";
+
+                var holder = await _holderRepository
+                    .Search(institutionName ?? string.Empty)
+                    .OrderBy(h => h.Name)
+                    .FirstOrDefaultAsync();
+                if (holder == null)
+                    return $"No institution found matching '{institutionName}'.";
+
+                var reportDates = await _holdingRepository
+                    .GetHistoryByHolder(holder)
+                    .Select(h => h.ReportDate)
+                    .Distinct()
+                    .OrderByDescending(d => d)
+                    .ToListAsync();
+                if (reportDates.Count < 2)
+                    return $"{holder.Name} has fewer than two reported quarters — no diff available.";
+
+                DateOnly targetDate;
+                if (
+                    !string.IsNullOrEmpty(reportDate)
+                    && DateOnly.TryParse(reportDate, out var parsed)
+                    && reportDates.Contains(parsed)
+                )
+                    targetDate = parsed;
+                else
+                    targetDate = reportDates[0];
+                var targetIndex = reportDates.IndexOf(targetDate);
+                if (targetIndex >= reportDates.Count - 1)
+                    return $"{targetDate:yyyy-MM-dd} is the oldest reported quarter for {holder.Name} — no prior to compare against.";
+
+                var priorDate = reportDates[targetIndex + 1];
+                var currentHoldings = await _holdingRepository
+                    .GetByHolder(holder, targetDate)
+                    .Include(h => h.CommonStock)
+                    .ToListAsync();
+                var previousHoldings = await _holdingRepository
+                    .GetByHolder(holder, priorDate)
+                    .Include(h => h.CommonStock)
+                    .ToListAsync();
+                var grouped = HolderQuarterlyActivityCalculator.Group(
+                    currentHoldings,
+                    previousHoldings
+                );
+
+                var sections = new (StockPositionChangeType Type, string Label)[]
+                {
+                    (StockPositionChangeType.Initiated, "Initiated"),
+                    (StockPositionChangeType.Increased, "Increased"),
+                    (StockPositionChangeType.Reduced, "Reduced"),
+                    (StockPositionChangeType.Exited, "Exited"),
+                };
+
+                var result = new StringBuilder();
+                result.AppendLine(
+                    $"Quarterly activity — **{holder.Name}** as of {targetDate:yyyy-MM-dd}"
+                );
+                result.AppendLine($"vs prior quarter {priorDate:yyyy-MM-dd}");
+                result.AppendLine();
+
+                var rendered = 0;
+                foreach (var section in sections)
+                {
+                    if (
+                        !string.IsNullOrEmpty(normalizedBucket)
+                        && section.Label.ToLowerInvariant() != normalizedBucket
+                    )
+                        continue;
+                    var rows = grouped[section.Type]
+                        .OrderByDescending(r => Math.Abs(r.DeltaValue))
+                        .Take(maxResults)
+                        .ToList();
+                    result.AppendLine($"## {section.Label}");
+                    if (rows.Count == 0)
+                    {
+                        result.AppendLine("_No stocks in this bucket this quarter._");
+                        result.AppendLine();
+                        continue;
+                    }
+                    result.AppendLine(
+                        "| # | Ticker | Company | Prior | New | Δ Shares | Δ Value ($M) |"
+                    );
+                    result.AppendLine(
+                        "|---|--------|---------|-------|-----|---------|-------------|"
+                    );
+                    for (var i = 0; i < rows.Count; i++)
+                    {
+                        var r = rows[i];
+                        var sign = r.DeltaShares > 0 ? "+" : "";
+                        result.AppendLine(
+                            $"| {i + 1} | {r.Ticker} | {r.Name} | {r.PreviousShares:N0} | {r.CurrentShares:N0} | {sign}{r.DeltaShares:N0} | {r.DeltaValue / 1_000_000m:+#,##0.0;-#,##0.0;0.0} |"
+                        );
+                    }
+                    result.AppendLine();
+                    rendered++;
+                }
+
+                if (rendered == 0)
+                    result.AppendLine("_No matching buckets._");
+                return result.ToString();
+            },
+            _logger,
+            "GetInstitutionQuarterlyActivity",
             $"institution: {institutionName}",
             ReportError
         );
