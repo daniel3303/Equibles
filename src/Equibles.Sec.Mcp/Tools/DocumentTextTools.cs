@@ -32,137 +32,148 @@ public class DocumentTextTools
     [Description(
         "Perform a case-insensitive keyword search within a specific SEC filing or earnings call transcript by document ID. Returns matching lines with surrounding context and line numbers, making it ideal for finding exact terms, figures, or phrases that semantic search might miss. Use this after ListCompanyDocuments to locate precise occurrences of a keyword (e.g., a revenue figure, risk factor term, or executive name) within a known document. Complements semantic search tools by providing exact text matches rather than meaning-based results. Use ReadDocumentLines to read broader sections around matches."
     )]
-    public async Task<string> SearchDocumentKeyword(
+    public Task<string> SearchDocumentKeyword(
         [Description("Document ID obtained from ListCompanyDocuments")] Guid documentId,
         [Description("Keyword or phrase to search for (case-insensitive)")] string keyword,
         [Description("Maximum number of matches to return (default: 20)")] int maxResults = 20
     )
     {
-        try
-        {
-            var (document, lines, error) = await LoadDocumentLines(documentId);
-            if (error != null)
-                return error;
-
-            var matches = new List<int>();
-
-            for (var i = 0; i < lines.Length && matches.Count < maxResults; i++)
+        return RunSafe(
+            async () =>
             {
-                if (lines[i].Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                var (document, lines, error) = await LoadDocumentLines(documentId);
+                if (error != null)
+                    return error;
+
+                var matches = new List<int>();
+
+                for (var i = 0; i < lines.Length && matches.Count < maxResults; i++)
                 {
-                    matches.Add(i);
-                }
-            }
-
-            if (matches.Count == 0)
-            {
-                return $"No matches found for \"{keyword}\" in {document.CommonStock.Name} ({document.CommonStock.Ticker}) {document.DocumentType} filed {document.ReportingDate:yyyy-MM-dd}.";
-            }
-
-            var result = new StringBuilder();
-            result.AppendLine(
-                $"Keyword search for \"{keyword}\" in {document.CommonStock.Name} ({document.CommonStock.Ticker}) {document.DocumentType} filed {document.ReportingDate:yyyy-MM-dd} — {matches.Count} matches found:"
-            );
-            result.AppendLine();
-
-            foreach (var lineIndex in matches)
-            {
-                var lineNumber = lineIndex + 1;
-
-                if (lineIndex > 0)
-                {
-                    result.AppendLine(FormatLine(lineIndex, lines[lineIndex - 1]));
+                    if (lines[i].Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                    {
+                        matches.Add(i);
+                    }
                 }
 
-                var highlightedLine = HighlightKeyword(lines[lineIndex], keyword);
-                result.AppendLine(FormatLine(lineNumber, highlightedLine));
-
-                if (lineIndex < lines.Length - 1)
+                if (matches.Count == 0)
                 {
-                    result.AppendLine(FormatLine(lineNumber + 1, lines[lineIndex + 1]));
+                    return $"No matches found for \"{keyword}\" in {document.CommonStock.Name} ({document.CommonStock.Ticker}) {document.DocumentType} filed {document.ReportingDate:yyyy-MM-dd}.";
                 }
 
-                result.AppendLine();
-            }
-
-            return result.ToString();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "SearchDocumentKeyword failed for document {DocumentId}",
-                documentId
-            );
-            try
-            {
-                await _errorManager.Create(
-                    ErrorSource.McpTool,
-                    "SearchDocumentKeyword",
-                    ex.Message,
-                    ex.StackTrace,
-                    $"documentId: {documentId}, keyword: {keyword}"
+                var result = new StringBuilder();
+                result.AppendLine(
+                    $"Keyword search for \"{keyword}\" in {document.CommonStock.Name} ({document.CommonStock.Ticker}) {document.DocumentType} filed {document.ReportingDate:yyyy-MM-dd} — {matches.Count} matches found:"
                 );
-            }
-            catch { }
-            return "An error occurred while searching the document. Please try again.";
-        }
+                result.AppendLine();
+
+                foreach (var lineIndex in matches)
+                {
+                    var lineNumber = lineIndex + 1;
+
+                    if (lineIndex > 0)
+                    {
+                        result.AppendLine(FormatLine(lineIndex, lines[lineIndex - 1]));
+                    }
+
+                    var highlightedLine = HighlightKeyword(lines[lineIndex], keyword);
+                    result.AppendLine(FormatLine(lineNumber, highlightedLine));
+
+                    if (lineIndex < lines.Length - 1)
+                    {
+                        result.AppendLine(FormatLine(lineNumber + 1, lines[lineIndex + 1]));
+                    }
+
+                    result.AppendLine();
+                }
+
+                return result.ToString();
+            },
+            "SearchDocumentKeyword",
+            documentId,
+            $"documentId: {documentId}, keyword: {keyword}",
+            "An error occurred while searching the document. Please try again."
+        );
     }
 
     [McpServerTool(Name = "ReadDocumentLines")]
     [Description(
         "Read a specific range of lines from an SEC filing or earnings call transcript by document ID. Returns numbered lines from the original document text. Use this to read sections of a filing that were identified by SearchDocumentKeyword (by line number) or by semantic search tools (by approximate line number shown in excerpts). Ideal for reading full tables, paragraphs, or sections that may have been truncated in search results. The document ID and line range must be known beforehand — use ListCompanyDocuments to find documents and SearchDocumentKeyword or semantic search to identify relevant line numbers."
     )]
-    public async Task<string> ReadDocumentLines(
+    public Task<string> ReadDocumentLines(
         [Description("Document ID obtained from ListCompanyDocuments")] Guid documentId,
         [Description("First line to read (1-based, inclusive)")] int startLine,
         [Description("Last line to read (1-based, inclusive)")] int endLine
     )
     {
+        return RunSafe(
+            async () =>
+            {
+                var (document, lines, error) = await LoadDocumentLines(documentId);
+                if (error != null)
+                    return error;
+
+                var totalLines = lines.Length;
+
+                startLine = Math.Max(1, startLine);
+                endLine = Math.Min(totalLines, endLine);
+
+                if (startLine > endLine)
+                {
+                    return $"Invalid line range: {startLine} to {endLine} (document has {totalLines:N0} lines).";
+                }
+
+                var result = new StringBuilder();
+                result.AppendLine(
+                    $"{document.CommonStock.Name} ({document.CommonStock.Ticker}) {document.DocumentType} filed {document.ReportingDate:yyyy-MM-dd} — lines {startLine:N0} to {endLine:N0} of {totalLines:N0}:"
+                );
+                result.AppendLine();
+
+                for (var i = startLine - 1; i < endLine; i++)
+                {
+                    result.AppendLine(FormatLine(i + 1, lines[i]));
+                }
+
+                return result.ToString();
+            },
+            "ReadDocumentLines",
+            documentId,
+            $"documentId: {documentId}, lines: {startLine}-{endLine}",
+            "An error occurred while reading document lines. Please try again."
+        );
+    }
+
+    private async Task<string> RunSafe(
+        Func<Task<string>> action,
+        string toolName,
+        Guid documentId,
+        string context,
+        string failureMessage
+    )
+    {
         try
         {
-            var (document, lines, error) = await LoadDocumentLines(documentId);
-            if (error != null)
-                return error;
-
-            var totalLines = lines.Length;
-
-            startLine = Math.Max(1, startLine);
-            endLine = Math.Min(totalLines, endLine);
-
-            if (startLine > endLine)
-            {
-                return $"Invalid line range: {startLine} to {endLine} (document has {totalLines:N0} lines).";
-            }
-
-            var result = new StringBuilder();
-            result.AppendLine(
-                $"{document.CommonStock.Name} ({document.CommonStock.Ticker}) {document.DocumentType} filed {document.ReportingDate:yyyy-MM-dd} — lines {startLine:N0} to {endLine:N0} of {totalLines:N0}:"
-            );
-            result.AppendLine();
-
-            for (var i = startLine - 1; i < endLine; i++)
-            {
-                result.AppendLine(FormatLine(i + 1, lines[i]));
-            }
-
-            return result.ToString();
+            return await action();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "ReadDocumentLines failed for document {DocumentId}", documentId);
+            _logger.LogError(
+                ex,
+                "{ToolName} failed for document {DocumentId}",
+                toolName,
+                documentId
+            );
             try
             {
                 await _errorManager.Create(
                     ErrorSource.McpTool,
-                    "ReadDocumentLines",
+                    toolName,
                     ex.Message,
                     ex.StackTrace,
-                    $"documentId: {documentId}, lines: {startLine}-{endLine}"
+                    context
                 );
             }
             catch { }
-            return "An error occurred while reading document lines. Please try again.";
+            return failureMessage;
         }
     }
 
