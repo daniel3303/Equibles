@@ -158,14 +158,17 @@ public class FredImportService
             return;
         }
 
-        // Parse all dates from API response to determine the range we need to check
-        var apiDates = records
-            .Select(r => DateOnly.TryParse(r.Date, out var d) ? d : (DateOnly?)null)
-            .Where(d => d.HasValue)
-            .Select(d => d.Value)
+        // Parse each record's date once and reuse the (record, date) pairs for
+        // both the range computation and the dedup/insert loop below.
+        var parsedRecords = records
+            .Select(r =>
+                (Record: r, ParsedDate: DateOnly.TryParse(r.Date, out var d) ? d : (DateOnly?)null)
+            )
+            .Where(p => p.ParsedDate.HasValue)
+            .Select(p => (p.Record, Date: p.ParsedDate.Value))
             .ToList();
 
-        if (apiDates.Count == 0)
+        if (parsedRecords.Count == 0)
         {
             _logger.LogDebug(
                 "No parseable dates in FRED API response for {SeriesId}",
@@ -174,8 +177,8 @@ public class FredImportService
             return;
         }
 
-        var minApiDate = apiDates.Min();
-        var maxApiDate = apiDates.Max();
+        var minApiDate = parsedRecords.Min(p => p.Date);
+        var maxApiDate = parsedRecords.Max(p => p.Date);
 
         HashSet<DateOnly> existingDates;
         using (var scope = _scopeFactory.CreateScope())
@@ -202,10 +205,8 @@ public class FredImportService
         var skipped = 0;
         var latestObservationDate = DateOnly.MinValue;
 
-        foreach (var record in records)
+        foreach (var (record, date) in parsedRecords)
         {
-            if (!DateOnly.TryParse(record.Date, out var date))
-                continue;
             if (date > latestObservationDate)
                 latestObservationDate = date;
 
