@@ -79,13 +79,13 @@
                                         @foreach (var row in board.Rows) {
                                             var deltaSharesCss = row.DeltaShares > 0 ? "text-success" : row.DeltaShares < 0 ? "text-error" : "";
                                             var deltaValueCss = row.DeltaValue > 0 ? "text-success" : row.DeltaValue < 0 ? "text-error" : "";
-                                            var deltaSharesSign = row.DeltaShares > 0 ? "+" : "";
-                                            var deltaValueSign = row.DeltaValue > 0 ? "+" : "";
+                                            var deltaSharesText = (row.DeltaShares > 0 ? "+" : row.DeltaShares < 0 ? "-" : "") + Math.Abs(row.DeltaShares).ToString("N0");
+                                            var deltaValueText = (row.DeltaValue > 0 ? "+$" : row.DeltaValue < 0 ? "-$" : "$") + Math.Abs(row.DeltaValue).ToString("N0");
                                             <tr>
                                                 <td class="font-mono">@row.Ticker</td>
                                                 <td class="max-w-xs truncate">@row.Name</td>
-                                                <td class="text-right font-mono @deltaSharesCss">@deltaSharesSign@row.DeltaShares.ToString("N0")</td>
-                                                <td class="text-right font-mono hidden md:table-cell @deltaValueCss">@deltaValueSign$@row.DeltaValue.ToString("N0")</td>
+                                                <td class="text-right font-mono @deltaSharesCss">@deltaSharesText</td>
+                                                <td class="text-right font-mono hidden md:table-cell @deltaValueCss">@deltaValueText</td>
                                                 <td class="text-right font-mono hidden lg:table-cell text-base-content/60">@row.PreviousFilerCount.ToString("N0") → @row.CurrentFilerCount.ToString("N0")</td>
                                                 <td class="text-right">
                                                     <a asp-controller="Stocks" asp-action="Holdings"

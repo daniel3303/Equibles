@@ -182,8 +182,8 @@
                                                     <td class="max-w-xs truncate">@row.Name</td>
                                                     <td class="text-right font-mono">@row.PreviousShares.ToString("N0")</td>
                                                     <td class="text-right font-mono">@row.CurrentShares.ToString("N0")</td>
-                                                    <td class="text-right font-mono @deltaSharesCss">@(row.DeltaShares > 0 ? "+" : "")@row.DeltaShares.ToString("N0")</td>
-                                                    <td class="text-right font-mono @deltaValueCss">@(row.DeltaValue > 0 ? "+" : "")$@row.DeltaValue.ToString("N0")</td>
+                                                    <td class="text-right font-mono @deltaSharesCss">@((row.DeltaShares > 0 ? "+" : row.DeltaShares < 0 ? "-" : "") + Math.Abs(row.DeltaShares).ToString("N0"))</td>
+                                                    <td class="text-right font-mono @deltaValueCss">@((row.DeltaValue > 0 ? "+$" : row.DeltaValue < 0 ? "-$" : "$") + Math.Abs(row.DeltaValue).ToString("N0"))</td>
                                                     <td class="text-right font-mono">@row.PercentOfPortfolio.ToString("F1")%</td>
                                                 </tr>
                                             }
