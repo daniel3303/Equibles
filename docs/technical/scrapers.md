@@ -74,7 +74,8 @@ Workers that fetch from a paginated / batched feed maintain a dedup ledger so re
 - Keyed by SEC quarterly bulk-data-set file name (`form13fhr_2024q3_01.zip`).
 - Marks a file as fully ingested so the next `HoldingsScraperWorker` cycle skips it.
 - Stores a `SubmissionCount` for observability.
-- Contains a sentinel row `BackfillGuardFileName = "__backfill-guard__"` — a name that never matches a real file. Its purpose is to keep the table non-empty after `StockCusipChangedConsumer` clears real rows for a backfill, so `BackfillProcessedDataSets` doesn't re-seed history as "processed" before the backfill actually runs.
+- Contains a sentinel row `BackfillGuardFileName = "__backfill-guard__"` — a name that never matches a real file.
+- The sentinel keeps the table non-empty after `StockCusipChangedConsumer` clears real rows for a backfill, so `BackfillProcessedDataSets` doesn't re-seed history as "processed" before the backfill actually runs.
 
 [`ProcessedFiling`](../../src/Equibles.Holdings.Data/Models/ProcessedFiling.cs):
 
