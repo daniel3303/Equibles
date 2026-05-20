@@ -12,14 +12,23 @@
                 Institutional holder@(string.IsNullOrWhiteSpace(Model.Location) ? "" : " · " + Model.Location) · CIK @Model.Cik
             </p>
         </div>
-        <!-- Action bar — Backtest link only renders when the holder has at least one 13F
-             snapshot, since the route's first useful response needs a rebalance date. -->
+        <!-- Action bar — links only render when the holder has at least one 13F
+             snapshot, since the routes' first useful response needs a rebalance date. -->
         @if (Model.AvailableReportDates.Count > 0) {
-            <a asp-action="BacktestInstitution" asp-route-cik="@Model.Cik"
-               class="btn btn-outline btn-sm"
-               data-testid="institution-backtest-link">
-                Backtest
-            </a>
+            <div class="flex flex-wrap gap-2">
+                <a asp-action="BacktestInstitution" asp-route-cik="@Model.Cik"
+                   class="btn btn-outline btn-sm"
+                   data-testid="institution-backtest-link">
+                    Backtest
+                </a>
+                <a asp-controller="HoldingsExport" asp-action="Institution"
+                   asp-route-cik="@Model.Cik"
+                   asp-route-date="@Model.AvailableReportDates[0].ToString("yyyy-MM-dd")"
+                   class="btn btn-outline btn-sm"
+                   data-testid="institution-export-csv">
+                    Download CSV
+                </a>
+            </div>
         }
     </div>
 
