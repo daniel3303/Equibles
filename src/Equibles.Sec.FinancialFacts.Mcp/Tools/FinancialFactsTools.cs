@@ -272,39 +272,48 @@ public class FinancialFactsTools
                     rows.Add((stock.Ticker, stock.Name, best));
                 }
 
-                var result = new StringBuilder();
-                result.AppendLine(
-                    $"{concept} — {fiscalYear} {period.NameForHumans()} peer comparison:"
-                );
-                result.AppendLine();
-                result.AppendLine("| Ticker | Company | Value | Unit | Form | Filed |");
-                result.AppendLine("|--------|---------|------:|------|------|-------|");
-                foreach (var (ticker, name, fact) in rows)
-                {
-                    result.AppendLine(
-                        $"| {FactMarkdown.Cell(ticker)} | {FactMarkdown.Cell(name)} | "
-                            + $"{FactMarkdown.Value(fact.Value, fact.Unit)} | "
-                            + $"{FactMarkdown.Cell(fact.Unit)} | "
-                            + $"{FactMarkdown.Cell(fact.Form?.DisplayName)} | "
-                            + $"{fact.FiledDate:yyyy-MM-dd} |"
-                    );
-                }
-
-                if (rows.Count == 0)
-                    result.AppendLine(
-                        $"\n_No company reported '{concept}' for {fiscalYear} "
-                            + $"{period.NameForHumans()}._"
-                    );
-
-                if (skipped.Count > 0)
-                    result.AppendLine($"\n_Skipped: {string.Join(", ", skipped)}._");
-
-                return result.ToString();
+                return RenderComparisonTable(concept, fiscalYear, period, rows, skipped);
             },
             "CompareFinancialFact",
             $"tickers: {FactMarkdown.Clean(tickers)}, concept: {FactMarkdown.Clean(concept)}, "
                 + $"year: {fiscalYear}, period: {FactMarkdown.Clean(fiscalPeriod)}"
         );
+    }
+
+    private static string RenderComparisonTable(
+        string concept,
+        int fiscalYear,
+        SecFiscalPeriod period,
+        List<(string Ticker, string Name, FinancialFact Fact)> rows,
+        List<string> skipped
+    )
+    {
+        var result = new StringBuilder();
+        result.AppendLine($"{concept} — {fiscalYear} {period.NameForHumans()} peer comparison:");
+        result.AppendLine();
+        result.AppendLine("| Ticker | Company | Value | Unit | Form | Filed |");
+        result.AppendLine("|--------|---------|------:|------|------|-------|");
+        foreach (var (ticker, name, fact) in rows)
+        {
+            result.AppendLine(
+                $"| {FactMarkdown.Cell(ticker)} | {FactMarkdown.Cell(name)} | "
+                    + $"{FactMarkdown.Value(fact.Value, fact.Unit)} | "
+                    + $"{FactMarkdown.Cell(fact.Unit)} | "
+                    + $"{FactMarkdown.Cell(fact.Form?.DisplayName)} | "
+                    + $"{fact.FiledDate:yyyy-MM-dd} |"
+            );
+        }
+
+        if (rows.Count == 0)
+            result.AppendLine(
+                $"\n_No company reported '{concept}' for {fiscalYear} "
+                    + $"{period.NameForHumans()}._"
+            );
+
+        if (skipped.Count > 0)
+            result.AppendLine($"\n_Skipped: {string.Join(", ", skipped)}._");
+
+        return result.ToString();
     }
 
     // AccessionNumber is the stable final tiebreak for same-day amendments
