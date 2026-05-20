@@ -4,10 +4,10 @@ Equibles is a modular monolith. Each financial domain ships as a set of layered 
 
 ## Composition
 
-- One shared `EquiblesDbContext` ([`src/Equibles.Data/EquiblesDbContext.cs`](../src/Equibles.Data/EquiblesDbContext.cs)) — a single `DbContext` against ParadeDB (Postgres + `pgvector` + `pg_search`).
+- One shared `EquiblesDbContext` ([`src/Equibles.Data/EquiblesDbContext.cs`](../../src/Equibles.Data/EquiblesDbContext.cs)) — a single `DbContext` against ParadeDB (Postgres + `pgvector` + `pg_search`).
 - The context owns no model declarations of its own. `OnModelCreating` iterates injected `IModuleConfiguration` instances and lets each one register its entities.
-- `IModuleConfiguration.ConfigureEntities(ModelBuilder)` ([`src/Equibles.Data/IModuleConfiguration.cs`](../src/Equibles.Data/IModuleConfiguration.cs)) is the entire surface a module exposes to the context.
-- `EquiblesModuleBuilder` ([`src/Equibles.Data/EquiblesModuleBuilder.cs`](../src/Equibles.Data/EquiblesModuleBuilder.cs)) is the fluent registration API — `AddModule<T>()` dedupes by type, `AddAllModules()` reflects across already-loaded `Equibles.*` assemblies and picks up every public `IModuleConfiguration` with a parameterless constructor.
+- `IModuleConfiguration.ConfigureEntities(ModelBuilder)` ([`src/Equibles.Data/IModuleConfiguration.cs`](../../src/Equibles.Data/IModuleConfiguration.cs)) is the entire surface a module exposes to the context.
+- `EquiblesModuleBuilder` ([`src/Equibles.Data/EquiblesModuleBuilder.cs`](../../src/Equibles.Data/EquiblesModuleBuilder.cs)) is the fluent registration API — `AddModule<T>()` dedupes by type, `AddAllModules()` reflects across already-loaded `Equibles.*` assemblies and picks up every public `IModuleConfiguration` with a parameterless constructor.
 
 ## Module shape
 
@@ -59,7 +59,7 @@ Data (entities) → Repositories (IQueryable) → Managers (write paths) → Con
 
 ## EF and database
 
-- Single migrations assembly: [`src/Equibles.Migrations`](../src/Equibles.Migrations). Every host passes `migrationsAssembly: typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly` when calling `AddEquiblesDbContext`.
+- Single migrations assembly: [`src/Equibles.Migrations`](../../src/Equibles.Migrations). Every host passes `migrationsAssembly: typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly` when calling `AddEquiblesDbContext`.
 - Migrations apply on host startup via `await dbContext.Database.MigrateAsync()` with a 1-hour command timeout for index rebuilds.
 - The Npgsql provider is configured with `UseVector()` (pgvector), `UseParadeDb()` (BM25 / `pg_search`), `UseQuerySplittingBehavior(SplitQuery)`, and lazy-loading proxies.
 
