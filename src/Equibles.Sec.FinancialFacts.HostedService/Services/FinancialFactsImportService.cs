@@ -115,24 +115,7 @@ public class FinancialFactsImportService
                 );
             }
 
-            // SEC emits the same (concept, unit, period, accession) tuple more
-            // than once (frame vs non-frame duplicates, restatement re-emits).
-            // Postgres ON CONFLICT DO UPDATE rejects a batch that targets the
-            // same row twice, so collapse to one row per unique-index key,
-            // keeping the latest-filed value.
-            var facts = built
-                .GroupBy(f =>
-                    (
-                        f.CommonStockId,
-                        f.FinancialConceptId,
-                        f.Unit,
-                        f.PeriodStart,
-                        f.PeriodEnd,
-                        f.AccessionNumber
-                    )
-                )
-                .Select(g => g.OrderByDescending(f => f.FiledDate).First())
-                .ToList();
+            var facts = CollapseToNaturalKey(built);
 
             // SyncStatus is advanced only here, after a successful persist, so a
             // failure leaves the checkpoint un-advanced and the company is
@@ -457,6 +440,26 @@ public class FinancialFactsImportService
                 return false;
         }
     }
+
+    // SEC emits the same (concept, unit, period, accession) tuple more
+    // than once (frame vs non-frame duplicates, restatement re-emits).
+    // Postgres ON CONFLICT DO UPDATE rejects a batch that targets the
+    // same row twice, so collapse to one row per unique-index key,
+    // keeping the latest-filed value.
+    private static List<FinancialFact> CollapseToNaturalKey(List<FinancialFact> built) =>
+        built
+            .GroupBy(f =>
+                (
+                    f.CommonStockId,
+                    f.FinancialConceptId,
+                    f.Unit,
+                    f.PeriodStart,
+                    f.PeriodEnd,
+                    f.AccessionNumber
+                )
+            )
+            .Select(g => g.OrderByDescending(f => f.FiledDate).First())
+            .ToList();
 
     private sealed class ParsedFact
     {

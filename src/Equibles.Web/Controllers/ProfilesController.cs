@@ -64,15 +64,15 @@ public class ProfilesController : BaseController
             })
             .ToListAsync();
 
-        // Header strip — pulled with two extra per-quarter materializations so the
-        // existing recent-rows list keeps its top-50 shape.
+        // Header strip + industry allocation — pulled with extra per-quarter
+        // materializations so the existing recent-rows list keeps its top-50 shape.
         var distinctDates = await _institutionalHoldingRepository
             .GetHistoryByHolder(holder)
             .Select(h => h.ReportDate)
             .Distinct()
             .OrderByDescending(d => d)
             .ToListAsync();
-        var summary = await BuildSummary(holder, distinctDates);
+        var (summary, industryAllocation) = await BuildSummaryAndAllocation(holder, distinctDates);
 
         ViewData["Title"] = holder.Name;
         return View(
@@ -83,22 +83,34 @@ public class ProfilesController : BaseController
                 Location = ProfileFormatting.JoinLocation(holder.City, holder.StateOrCountry),
                 Holdings = holdings,
                 Summary = summary,
+                IndustryAllocation = industryAllocation,
             }
         );
     }
 
-    private async Task<InstitutionPortfolioSummary> BuildSummary(
+    private async Task<(
+        InstitutionPortfolioSummary Summary,
+        List<IndustryAllocationSlice> Allocation
+    )> BuildSummaryAndAllocation(
         InstitutionalHolder holder,
         IReadOnlyList<DateOnly> distinctReportDates
     )
     {
         if (distinctReportDates.Count == 0)
-            return new InstitutionPortfolioSummary { QuartersReported = 0 };
+            return (new InstitutionPortfolioSummary { QuartersReported = 0 }, []);
 
         var latest = distinctReportDates[0];
         var previous = distinctReportDates.Count > 1 ? distinctReportDates[1] : (DateOnly?)null;
+        // Current quarter loaded twice — shallow for the summary calculator and again with
+        // the Industry navigation for the allocation calculator. Kept separate so the
+        // summary path doesn't pay the Industry join cost.
         var currentHoldings = await _institutionalHoldingRepository
             .GetByHolder(holder, latest)
+            .ToListAsync();
+        var currentHoldingsWithIndustry = await _institutionalHoldingRepository
+            .GetByHolder(holder, latest)
+            .Include(h => h.CommonStock)
+                .ThenInclude(s => s.Industry)
             .ToListAsync();
         var previousHoldings = previous.HasValue
             ? await _institutionalHoldingRepository
@@ -106,13 +118,15 @@ public class ProfilesController : BaseController
                 .ToListAsync()
             : [];
 
-        return InstitutionPortfolioSummaryCalculator.Calculate(
+        var summary = InstitutionPortfolioSummaryCalculator.Calculate(
             currentHoldings,
             previousHoldings,
             distinctReportDates.Count,
             latest,
             previous
         );
+        var allocation = IndustryAllocationCalculator.Calculate(currentHoldingsWithIndustry);
+        return (summary, allocation);
     }
 
     [HttpGet("~/Insiders/{ownerCik}")]
