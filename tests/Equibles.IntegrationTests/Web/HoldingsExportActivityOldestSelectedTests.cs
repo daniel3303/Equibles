@@ -12,9 +12,7 @@ public class HoldingsExportActivityOldestSelectedTests
 
     public HoldingsExportActivityOldestSelectedTests(WebHostFixture fixture) => _fixture = fixture;
 
-    [Fact(
-        Skip = "GH-1243 — HoldingsExportController.Activity fallback `previousDate = reportDates[1]` returns 200 with a degenerate same-date or backwards-time comparison when the oldest date is selected; expected 404."
-    )]
+    [Fact]
     public async Task ExportActivity_SelectedDateIsOldestAvailable_ReturnsNotFoundBecauseNoPriorQuarter()
     {
         // Contract: the action compares the selected report date against the
