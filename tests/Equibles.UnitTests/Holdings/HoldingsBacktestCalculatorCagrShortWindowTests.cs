@@ -5,9 +5,7 @@ namespace Equibles.UnitTests.Holdings;
 
 public class HoldingsBacktestCalculatorCagrShortWindowTests
 {
-    [Fact(
-        Skip = "GH-1199 — ComputeSummary casts Math.Pow(ratio, 365.25/days) to decimal; a short window with a large gain overflows decimal.MaxValue and throws."
-    )]
+    [Fact]
     public void Calculate_OneDayWindowWithDoublingPortfolio_ReturnsSummaryWithoutOverflow()
     {
         // Contract: Calculate returns a populated BacktestResult — including a
