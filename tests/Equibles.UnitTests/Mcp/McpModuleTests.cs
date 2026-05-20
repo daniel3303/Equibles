@@ -271,6 +271,7 @@ public class McpModuleToolDiscoveryTests
         toolNames.Should().Contain("GetInstitutionSummary");
         toolNames.Should().Contain("GetInstitutionSectorAllocation");
         toolNames.Should().Contain("GetInstitutionQuarterlyActivity");
+        toolNames.Should().Contain("GetFundOverlap");
     }
 
     // ── InsiderTrading module specific ──────────────────────────────────
@@ -365,6 +366,7 @@ public class McpModuleToolDiscoveryTests
                     "GetInstitutionSummary",
                     "GetInstitutionSectorAllocation",
                     "GetInstitutionQuarterlyActivity",
+                    "GetFundOverlap",
                 }
             },
             {
