@@ -96,9 +96,7 @@ public class HoldingsExportController : BaseController
         );
 
         var csv = CsvExportService.BuildCsv(headers, rows);
-        var filename = $"{stock.Ticker}-13F-{selectedDate:yyyy-MM-dd}.csv";
-        Response.Headers.CacheControl = "no-store";
-        return File(Encoding.UTF8.GetBytes(csv), "text/csv", filename);
+        return CsvFile(csv, $"{stock.Ticker}-13F-{selectedDate:yyyy-MM-dd}.csv");
     }
 
     [HttpGet("~/Holdings/Export/Institution")]
@@ -170,9 +168,7 @@ public class HoldingsExportController : BaseController
         );
 
         var csv = CsvExportService.BuildCsv(headers, rows);
-        var filename = $"{Sanitize(holder.Cik)}-portfolio-{selectedDate:yyyy-MM-dd}.csv";
-        Response.Headers.CacheControl = "no-store";
-        return File(Encoding.UTF8.GetBytes(csv), "text/csv", filename);
+        return CsvFile(csv, $"{Sanitize(holder.Cik)}-portfolio-{selectedDate:yyyy-MM-dd}.csv");
     }
 
     [HttpGet("~/Holdings/Export/Activity")]
@@ -256,7 +252,11 @@ public class HoldingsExportController : BaseController
             rows.Add(ChurnRow("SoldOutPositions", row, selectedDate, previousDate, stocks));
 
         var csv = CsvExportService.BuildCsv(headers, rows);
-        var filename = $"13F-activity-{selectedDate:yyyy-MM-dd}.csv";
+        return CsvFile(csv, $"13F-activity-{selectedDate:yyyy-MM-dd}.csv");
+    }
+
+    private FileContentResult CsvFile(string csv, string filename)
+    {
         Response.Headers.CacheControl = "no-store";
         return File(Encoding.UTF8.GetBytes(csv), "text/csv", filename);
     }
