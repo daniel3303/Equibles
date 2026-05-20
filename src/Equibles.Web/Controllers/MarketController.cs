@@ -111,12 +111,12 @@ public class MarketController : BaseController
             .ToArray();
         if (values.Length > 0)
         {
-            var stats = new DescriptiveStatistics(values);
-            viewModel.Mean = stats.Mean.SafeRound(4);
-            viewModel.Median = values.Median().SafeRound(4);
-            viewModel.Min = stats.Minimum.SafeRound(4);
-            viewModel.Max = stats.Maximum.SafeRound(4);
-            viewModel.StdDev = stats.StandardDeviation.SafeRound(4);
+            var s = ComputeStats(values, decimals: 4);
+            viewModel.Mean = s.Mean;
+            viewModel.Median = s.Median;
+            viewModel.Min = s.Min;
+            viewModel.Max = s.Max;
+            viewModel.StdDev = s.StdDev;
             viewModel.LatestRatio = records.FirstOrDefault()?.PutCallRatio;
             if (records.Count > 1)
                 viewModel.PreviousRatio = records[1].PutCallRatio;
@@ -149,12 +149,12 @@ public class MarketController : BaseController
         var values = records.Select(r => (double)r.Close).ToArray();
         if (values.Length > 0)
         {
-            var stats = new DescriptiveStatistics(values);
-            viewModel.Mean = stats.Mean.SafeRound(2);
-            viewModel.Median = values.Median().SafeRound(2);
-            viewModel.Min = stats.Minimum.SafeRound(2);
-            viewModel.Max = stats.Maximum.SafeRound(2);
-            viewModel.StdDev = stats.StandardDeviation.SafeRound(2);
+            var s = ComputeStats(values, decimals: 2);
+            viewModel.Mean = s.Mean;
+            viewModel.Median = s.Median;
+            viewModel.Min = s.Min;
+            viewModel.Max = s.Max;
+            viewModel.StdDev = s.StdDev;
             viewModel.LatestClose = records.FirstOrDefault()?.Close;
             if (records.Count > 1)
                 viewModel.PreviousClose = records[1].Close;
@@ -169,4 +169,24 @@ public class MarketController : BaseController
             "CBOE Volatility Index (VIX) daily history with chart and statistics.";
         return View(viewModel);
     }
+
+    private static StatsSummary ComputeStats(double[] values, int decimals)
+    {
+        var stats = new DescriptiveStatistics(values);
+        return new StatsSummary(
+            Mean: stats.Mean.SafeRound(decimals),
+            Median: values.Median().SafeRound(decimals),
+            Min: stats.Minimum.SafeRound(decimals),
+            Max: stats.Maximum.SafeRound(decimals),
+            StdDev: stats.StandardDeviation.SafeRound(decimals)
+        );
+    }
+
+    private readonly record struct StatsSummary(
+        decimal? Mean,
+        decimal? Median,
+        decimal? Min,
+        decimal? Max,
+        decimal? StdDev
+    );
 }
