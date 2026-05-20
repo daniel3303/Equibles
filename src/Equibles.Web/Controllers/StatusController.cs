@@ -215,63 +215,38 @@ public class StatusController : BaseController
 
         return
         [
-            new WorkerStatus
-            {
-                Name = "SEC Scraper",
-                Description =
-                    "Filings (10-K, 10-Q, 8-K, Form 3/4), document processing, institutional holdings (13F-HR), and fails-to-deliver",
-                Active = secConfigured,
-                Reason = secConfigured
-                    ? "SEC contact email configured"
-                    : "SEC_CONTACT_EMAIL not set — required by SEC EDGAR fair access policy",
-            },
-            new WorkerStatus
-            {
-                Name = "FINRA Scraper",
-                Description = "Daily short volume and short interest",
-                Active = finraConfigured,
-                Reason = finraConfigured
-                    ? "FINRA API credentials configured"
-                    : "Finra:ClientId not set — get a free key at gateway.finra.org/app/api-console",
-            },
-            new WorkerStatus
-            {
-                Name = "Congressional Trade Scraper",
-                Description = "House and Senate stock trade disclosures",
-                Active = true,
-                Reason = "Always active",
-            },
-            new WorkerStatus
-            {
-                Name = "FRED Scraper",
-                Description =
-                    "Economic indicators from the Federal Reserve (interest rates, inflation, employment, GDP)",
-                Active = fredConfigured,
-                Reason = fredConfigured
-                    ? "FRED API key configured"
-                    : "Fred:ApiKey not set — get a free key at fred.stlouisfed.org/docs/api/api_key.html",
-            },
-            new WorkerStatus
-            {
-                Name = "Yahoo Price Scraper",
-                Description = "Daily OHLCV stock prices with technical indicators (SMA, RSI, MACD)",
-                Active = true,
-                Reason = "Always active — no API key required",
-            },
-            new WorkerStatus
-            {
-                Name = "CFTC Scraper",
-                Description = "Commitments of Traders futures positioning data",
-                Active = true,
-                Reason = "Always active — no API key required",
-            },
-            new WorkerStatus
-            {
-                Name = "CBOE Scraper",
-                Description = "VIX volatility index and put/call ratios",
-                Active = true,
-                Reason = "Always active — no API key required",
-            },
+            Configurable(
+                "SEC Scraper",
+                "Filings (10-K, 10-Q, 8-K, Form 3/4), document processing, institutional holdings (13F-HR), and fails-to-deliver",
+                secConfigured,
+                "SEC contact email configured",
+                "SEC_CONTACT_EMAIL not set — required by SEC EDGAR fair access policy"
+            ),
+            Configurable(
+                "FINRA Scraper",
+                "Daily short volume and short interest",
+                finraConfigured,
+                "FINRA API credentials configured",
+                "Finra:ClientId not set — get a free key at gateway.finra.org/app/api-console"
+            ),
+            AlwaysActive(
+                "Congressional Trade Scraper",
+                "House and Senate stock trade disclosures",
+                "Always active"
+            ),
+            Configurable(
+                "FRED Scraper",
+                "Economic indicators from the Federal Reserve (interest rates, inflation, employment, GDP)",
+                fredConfigured,
+                "FRED API key configured",
+                "Fred:ApiKey not set — get a free key at fred.stlouisfed.org/docs/api/api_key.html"
+            ),
+            AlwaysActive(
+                "Yahoo Price Scraper",
+                "Daily OHLCV stock prices with technical indicators (SMA, RSI, MACD)"
+            ),
+            AlwaysActive("CFTC Scraper", "Commitments of Traders futures positioning data"),
+            AlwaysActive("CBOE Scraper", "VIX volatility index and put/call ratios"),
             new WorkerStatus
             {
                 Name = "Embedding Generator",
@@ -285,4 +260,32 @@ public class StatusController : BaseController
             },
         ];
     }
+
+    private static WorkerStatus Configurable(
+        string name,
+        string description,
+        bool configured,
+        string configuredReason,
+        string unconfiguredReason
+    ) =>
+        new()
+        {
+            Name = name,
+            Description = description,
+            Active = configured,
+            Reason = configured ? configuredReason : unconfiguredReason,
+        };
+
+    private static WorkerStatus AlwaysActive(
+        string name,
+        string description,
+        string reason = "Always active — no API key required"
+    ) =>
+        new()
+        {
+            Name = name,
+            Description = description,
+            Active = true,
+            Reason = reason,
+        };
 }
