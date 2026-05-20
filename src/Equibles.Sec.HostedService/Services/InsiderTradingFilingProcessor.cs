@@ -209,33 +209,19 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             transactions.Add(tx);
         }
 
-        var nonDerivTable = root.Element("nonDerivativeTable");
-        if (nonDerivTable != null)
+        void WalkTable(string tableName, string txName, string holdingName)
         {
-            foreach (var txElement in nonDerivTable.Elements("nonDerivativeTransaction"))
-            {
+            var table = root.Element(tableName);
+            if (table == null)
+                return;
+            foreach (var txElement in table.Elements(txName))
                 AddParsed(ParseTransaction(txElement, owner, companyId, filing, isAmendment));
-            }
-
-            foreach (var holdingElement in nonDerivTable.Elements("nonDerivativeHolding"))
-            {
+            foreach (var holdingElement in table.Elements(holdingName))
                 AddParsed(ParseHolding(holdingElement, owner, companyId, filing, isAmendment));
-            }
         }
 
-        var derivTable = root.Element("derivativeTable");
-        if (derivTable != null)
-        {
-            foreach (var txElement in derivTable.Elements("derivativeTransaction"))
-            {
-                AddParsed(ParseTransaction(txElement, owner, companyId, filing, isAmendment));
-            }
-
-            foreach (var holdingElement in derivTable.Elements("derivativeHolding"))
-            {
-                AddParsed(ParseHolding(holdingElement, owner, companyId, filing, isAmendment));
-            }
-        }
+        WalkTable("nonDerivativeTable", "nonDerivativeTransaction", "nonDerivativeHolding");
+        WalkTable("derivativeTable", "derivativeTransaction", "derivativeHolding");
 
         if (transactions.Count == 0)
         {
