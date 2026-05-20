@@ -1,0 +1,170 @@
+@using Equibles.Web.ViewModels.Holdings
+@model ScreenerViewModel
+@{
+    ViewData["Title"] = "13F Stock Screener";
+    ViewData["Menu"] = "Holdings";
+    var filters = Model.Filters;
+    var selectedIndustryIds = new HashSet<Guid>(filters.IndustryIds ?? []);
+}
+
+<div class="max-w-7xl mx-auto px-6 py-8">
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold mb-1" data-testid="screener-heading">13F Stock Screener</h1>
+        <p class="text-base-content/60 text-sm">
+            Cross-sectional filters on institutional-ownership metrics. Filer counts and value totals come from the selected quarter; Δ columns compare to the prior quarter.
+        </p>
+    </div>
+
+    @if (Model.AvailableDates.Count < 2 || !string.IsNullOrWhiteSpace(Model.Reason)) {
+        <div class="alert alert-warning" data-testid="screener-no-data">
+            <span>@(Model.Reason ?? "At least two distinct 13F report dates are required to run the screener.")</span>
+        </div>
+    } else {
+        <!-- Filter form. GET so each filter combo gets its own URL — that makes it shareable
+             and integration tests can round-trip values cleanly. -->
+        <div class="card bg-base-100 shadow-sm mb-6" data-testid="screener-filters">
+            <div class="card-body p-4">
+                <form method="get" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Report quarter</legend>
+                        <select name="date" class="select select-bordered w-full">
+                            @foreach (var date in Model.AvailableDates) {
+                                var isSelected = date == Model.SelectedDate;
+                                <option value="@date.ToString("yyyy-MM-dd")" selected="@(isSelected ? "selected" : null)">@date.ToString("MMM dd, yyyy")</option>
+                            }
+                        </select>
+                    </fieldset>
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Comparison quarter</legend>
+                        <select name="compareDate" class="select select-bordered w-full">
+                            @foreach (var date in Model.AvailableDates) {
+                                var isSelected = date == Model.ComparisonDate;
+                                <option value="@date.ToString("yyyy-MM-dd")" selected="@(isSelected ? "selected" : null)">@date.ToString("MMM dd, yyyy")</option>
+                            }
+                        </select>
+                    </fieldset>
+
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Filers (min / max)</legend>
+                        <div class="flex gap-2">
+                            <input type="number" name="MinFilerCount" value="@filters.MinFilerCount" placeholder="min" class="input input-bordered w-1/2" />
+                            <input type="number" name="MaxFilerCount" value="@filters.MaxFilerCount" placeholder="max" class="input input-bordered w-1/2" />
+                        </div>
+                    </fieldset>
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Δ Filers (min / max)</legend>
+                        <div class="flex gap-2">
+                            <input type="number" name="MinDeltaFilerCount" value="@filters.MinDeltaFilerCount" placeholder="min" class="input input-bordered w-1/2" />
+                            <input type="number" name="MaxDeltaFilerCount" value="@filters.MaxDeltaFilerCount" placeholder="max" class="input input-bordered w-1/2" />
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Total $ value (min / max)</legend>
+                        <div class="flex gap-2">
+                            <input type="number" name="MinTotalValue" value="@filters.MinTotalValue" placeholder="min" class="input input-bordered w-1/2" />
+                            <input type="number" name="MaxTotalValue" value="@filters.MaxTotalValue" placeholder="max" class="input input-bordered w-1/2" />
+                        </div>
+                    </fieldset>
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Δ $ value (min / max)</legend>
+                        <div class="flex gap-2">
+                            <input type="number" name="MinDeltaValue" value="@filters.MinDeltaValue" placeholder="min" class="input input-bordered w-1/2" />
+                            <input type="number" name="MaxDeltaValue" value="@filters.MaxDeltaValue" placeholder="max" class="input input-bordered w-1/2" />
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">% of float (min / max)</legend>
+                        <div class="flex gap-2">
+                            <input type="number" step="0.1" name="MinPctFloat" value="@filters.MinPctFloat" placeholder="min" class="input input-bordered w-1/2" />
+                            <input type="number" step="0.1" name="MaxPctFloat" value="@filters.MaxPctFloat" placeholder="max" class="input input-bordered w-1/2" />
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">New positions (min)</legend>
+                        <input type="number" name="MinNewPositions" value="@filters.MinNewPositions" placeholder="min" class="input input-bordered w-full" />
+                    </fieldset>
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Sold-out positions (min)</legend>
+                        <input type="number" name="MinSoldOutPositions" value="@filters.MinSoldOutPositions" placeholder="min" class="input input-bordered w-full" />
+                    </fieldset>
+
+                    @if (Model.IndustryOptions.Count > 0) {
+                        <fieldset class="fieldset md:col-span-3 lg:col-span-4">
+                            <legend class="fieldset-legend">Industry (multi-select)</legend>
+                            <select name="IndustryIds" multiple size="6" class="select select-bordered w-full" data-testid="screener-industry-select">
+                                @foreach (var option in Model.IndustryOptions) {
+                                    var isSelected = selectedIndustryIds.Contains(option.Id);
+                                    <option value="@option.Id" selected="@(isSelected ? "selected" : null)">@option.Name</option>
+                                }
+                            </select>
+                        </fieldset>
+                    }
+
+                    <div class="md:col-span-3 lg:col-span-4 flex flex-wrap gap-2 mt-2">
+                        <button type="submit" class="btn btn-primary">Apply filters</button>
+                        <a href="@Url.Action(nameof(Equibles.Web.Controllers.HoldingsScreenerController.Screener))" class="btn btn-ghost">Reset</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Result table -->
+        <div class="card bg-base-100 shadow-sm" data-testid="screener-results">
+            <div class="card-body p-4">
+                <div class="flex items-baseline justify-between mb-2">
+                    <h3 class="text-base font-medium m-0">@Model.Rows.Count.ToString("N0") matching stocks</h3>
+                    <span class="text-xs text-base-content/60">
+                        @Model.SelectedDate.ToString("MMM dd, yyyy") vs @Model.ComparisonDate.ToString("MMM dd, yyyy")@(Model.TruncatedToCap ? " · truncated to first " + Equibles.Web.Controllers.HoldingsScreenerController.RowCap.ToString("N0") : "")
+                    </span>
+                </div>
+                @if (Model.Rows.Count == 0) {
+                    <div class="text-xs text-base-content/50 py-6 text-center">No stocks matched the selected filters.</div>
+                } else {
+                    <div class="overflow-x-auto">
+                        <table class="table table-zebra table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Ticker</th>
+                                    <th>Name</th>
+                                    <th>Industry</th>
+                                    <th class="text-right">Filers</th>
+                                    <th class="text-right">Δ Filers</th>
+                                    <th class="text-right">Total $ value</th>
+                                    <th class="text-right">Δ $ value</th>
+                                    <th class="text-right">New</th>
+                                    <th class="text-right">Sold out</th>
+                                    <th class="text-right">% float</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in Model.Rows) {
+                                    var deltaFilerCss = row.DeltaFilerCount > 0 ? "text-success" : row.DeltaFilerCount < 0 ? "text-error" : "";
+                                    var deltaValueCss = row.DeltaValue > 0 ? "text-success" : row.DeltaValue < 0 ? "text-error" : "";
+                                    var deltaFilerText = (row.DeltaFilerCount > 0 ? "+" : row.DeltaFilerCount < 0 ? "-" : "") + Math.Abs(row.DeltaFilerCount).ToString("N0");
+                                    var deltaValueText = (row.DeltaValue > 0 ? "+$" : row.DeltaValue < 0 ? "-$" : "$") + Math.Abs(row.DeltaValue).ToString("N0");
+                                    <tr>
+                                        <td class="font-mono">
+                                            <a asp-controller="Stocks" asp-action="Holdings" asp-route-ticker="@row.Ticker" class="link link-hover">@row.Ticker</a>
+                                        </td>
+                                        <td class="max-w-xs truncate">@row.Name</td>
+                                        <td class="max-w-xs truncate text-base-content/70">@row.IndustryName</td>
+                                        <td class="text-right font-mono">@row.CurrentFilerCount.ToString("N0")</td>
+                                        <td class="text-right font-mono @deltaFilerCss">@deltaFilerText</td>
+                                        <td class="text-right font-mono">$@row.CurrentValue.ToString("N0")</td>
+                                        <td class="text-right font-mono @deltaValueCss">@deltaValueText</td>
+                                        <td class="text-right font-mono">@row.NewFilerCount.ToString("N0")</td>
+                                        <td class="text-right font-mono">@row.SoldOutFilerCount.ToString("N0")</td>
+                                        <td class="text-right font-mono">@(row.PercentOfFloat.HasValue ? row.PercentOfFloat.Value.ToString("F1") + "%" : "—")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
