@@ -208,6 +208,78 @@ public class ProfilesController : BaseController
         return (summary, allocation);
     }
 
+    private async Task<InstitutionsOverlap> LoadInstitutionsOverlap(
+        IReadOnlyList<string> distinctCiks,
+        DateOnly? requestedDate,
+        int minHoldersToCompute,
+        List<string> missingCiks
+    )
+    {
+        var holders = new List<InstitutionalHolder>();
+        foreach (var cik in distinctCiks)
+        {
+            var holder = await _institutionalHolderRepository.GetByCik(cik);
+            if (holder == null)
+                missingCiks.Add(cik);
+            else
+                holders.Add(holder);
+        }
+
+        var result = new InstitutionsOverlap { HolderCount = holders.Count };
+        if (holders.Count < minHoldersToCompute)
+            return result;
+
+        // Common report dates = intersection of each holder's distinct report dates.
+        // First pass collects per-holder sorted distinct dates; intersection happens in
+        // memory so we keep the descending order from the first holder.
+        var perHolderDates = new List<List<DateOnly>>();
+        foreach (var holder in holders)
+        {
+            var dates = await _institutionalHoldingRepository
+                .GetHistoryByHolder(holder)
+                .Select(h => h.ReportDate)
+                .Distinct()
+                .OrderByDescending(d => d)
+                .ToListAsync();
+            perHolderDates.Add(dates);
+        }
+        var commonDates = perHolderDates
+            .Skip(1)
+            .Aggregate((IEnumerable<DateOnly>)perHolderDates[0], (acc, next) => acc.Intersect(next))
+            .OrderByDescending(d => d)
+            .ToList();
+        result.CommonReportDates = commonDates;
+        if (commonDates.Count == 0)
+            return result;
+
+        var selected = requestedDate ?? commonDates[0];
+        if (!commonDates.Contains(selected))
+            selected = commonDates[0];
+        result.SelectedDate = selected;
+
+        // One query per fund — funds-side cardinality is bounded by the caller's MaxCiks.
+        var perFund =
+            new List<(InstitutionalHolder Holder, IReadOnlyList<InstitutionalHolding> Holdings)>();
+        foreach (var holder in holders)
+        {
+            var holdings = await _institutionalHoldingRepository
+                .GetByHolder(holder, selected)
+                .Include(h => h.CommonStock)
+                .ToListAsync();
+            perFund.Add((holder, holdings));
+        }
+        result.Overlap = FundOverlapCalculator.Calculate(perFund, selected);
+        return result;
+    }
+
+    private class InstitutionsOverlap
+    {
+        public int HolderCount { get; set; }
+        public List<DateOnly> CommonReportDates { get; set; } = [];
+        public DateOnly? SelectedDate { get; set; }
+        public FundOverlapResult Overlap { get; set; }
+    }
+
     [HttpGet("~/Institutions/Compare")]
     public async Task<IActionResult> CompareInstitutions(
         [FromQuery(Name = "ciks")] string[] ciks = null,
@@ -230,59 +302,19 @@ public class ProfilesController : BaseController
         if (distinctCiks.Count < InstitutionCompareViewModel.MinCiks)
             return View(viewModel);
 
-        var holders = new List<InstitutionalHolder>();
-        foreach (var cik in distinctCiks)
-        {
-            var holder = await _institutionalHolderRepository.GetByCik(cik);
-            if (holder == null)
-                viewModel.MissingCiks.Add(cik);
-            else
-                holders.Add(holder);
-        }
-        if (holders.Count < InstitutionCompareViewModel.MinCiks)
+        var overlap = await LoadInstitutionsOverlap(
+            distinctCiks,
+            date,
+            InstitutionCompareViewModel.MinCiks,
+            viewModel.MissingCiks
+        );
+        if (overlap.HolderCount < InstitutionCompareViewModel.MinCiks)
             return View(viewModel);
-
-        // Common report dates = intersection of each holder's distinct report dates.
-        // First pass collects per-holder sorted distinct dates; intersection happens in
-        // memory so we keep the descending order from the first holder.
-        var perHolderDates = new List<List<DateOnly>>();
-        foreach (var holder in holders)
-        {
-            var dates = await _institutionalHoldingRepository
-                .GetHistoryByHolder(holder)
-                .Select(h => h.ReportDate)
-                .Distinct()
-                .OrderByDescending(d => d)
-                .ToListAsync();
-            perHolderDates.Add(dates);
-        }
-        var commonDates = perHolderDates
-            .Skip(1)
-            .Aggregate((IEnumerable<DateOnly>)perHolderDates[0], (acc, next) => acc.Intersect(next))
-            .OrderByDescending(d => d)
-            .ToList();
-        viewModel.CommonReportDates = commonDates;
-        if (commonDates.Count == 0)
+        viewModel.CommonReportDates = overlap.CommonReportDates;
+        if (overlap.CommonReportDates.Count == 0)
             return View(viewModel);
-
-        var selected = date ?? commonDates[0];
-        if (!commonDates.Contains(selected))
-            selected = commonDates[0];
-        viewModel.SelectedDate = selected;
-
-        // Pull each fund's holdings for the selected date (one query per fund — the
-        // funds-side cardinality is bounded to 4).
-        var perFund =
-            new List<(InstitutionalHolder Holder, IReadOnlyList<InstitutionalHolding> Holdings)>();
-        foreach (var holder in holders)
-        {
-            var holdings = await _institutionalHoldingRepository
-                .GetByHolder(holder, selected)
-                .Include(h => h.CommonStock)
-                .ToListAsync();
-            perFund.Add((holder, holdings));
-        }
-        viewModel.Overlap = FundOverlapCalculator.Calculate(perFund, selected);
+        viewModel.SelectedDate = overlap.SelectedDate;
+        viewModel.Overlap = overlap.Overlap;
         return View(viewModel);
     }
 
@@ -308,54 +340,19 @@ public class ProfilesController : BaseController
         if (distinctCiks.Count < InstitutionCombinedViewModel.MinCiks)
             return View(viewModel);
 
-        var holders = new List<InstitutionalHolder>();
-        foreach (var cik in distinctCiks)
-        {
-            var holder = await _institutionalHolderRepository.GetByCik(cik);
-            if (holder == null)
-                viewModel.MissingCiks.Add(cik);
-            else
-                holders.Add(holder);
-        }
-        if (holders.Count < InstitutionCombinedViewModel.MinCiks)
+        var overlap = await LoadInstitutionsOverlap(
+            distinctCiks,
+            date,
+            InstitutionCombinedViewModel.MinCiks,
+            viewModel.MissingCiks
+        );
+        if (overlap.HolderCount < InstitutionCombinedViewModel.MinCiks)
             return View(viewModel);
-
-        var perHolderDates = new List<List<DateOnly>>();
-        foreach (var holder in holders)
-        {
-            var dates = await _institutionalHoldingRepository
-                .GetHistoryByHolder(holder)
-                .Select(h => h.ReportDate)
-                .Distinct()
-                .OrderByDescending(d => d)
-                .ToListAsync();
-            perHolderDates.Add(dates);
-        }
-        var commonDates = perHolderDates
-            .Skip(1)
-            .Aggregate((IEnumerable<DateOnly>)perHolderDates[0], (acc, next) => acc.Intersect(next))
-            .OrderByDescending(d => d)
-            .ToList();
-        viewModel.CommonReportDates = commonDates;
-        if (commonDates.Count == 0)
+        viewModel.CommonReportDates = overlap.CommonReportDates;
+        if (overlap.CommonReportDates.Count == 0)
             return View(viewModel);
-
-        var selected = date ?? commonDates[0];
-        if (!commonDates.Contains(selected))
-            selected = commonDates[0];
-        viewModel.SelectedDate = selected;
-
-        var perFund =
-            new List<(InstitutionalHolder Holder, IReadOnlyList<InstitutionalHolding> Holdings)>();
-        foreach (var holder in holders)
-        {
-            var holdings = await _institutionalHoldingRepository
-                .GetByHolder(holder, selected)
-                .Include(h => h.CommonStock)
-                .ToListAsync();
-            perFund.Add((holder, holdings));
-        }
-        viewModel.Overlap = FundOverlapCalculator.Calculate(perFund, selected);
+        viewModel.SelectedDate = overlap.SelectedDate;
+        viewModel.Overlap = overlap.Overlap;
 
         // Consensus count per stock = number of funds whose slice has Value > 0. This is
         // the primary sort key for the combined-portfolio view; the calculator already
