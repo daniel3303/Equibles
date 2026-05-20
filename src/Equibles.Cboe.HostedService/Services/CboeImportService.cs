@@ -5,6 +5,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Cboe.Contracts;
 using Equibles.Integrations.Cboe.Models;
+using Equibles.Worker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -118,37 +119,19 @@ public class CboeImportService
             return;
         }
 
-        var batch = new List<CboePutCallRatio>(InsertBatchSize);
-        var totalInserted = 0;
-
-        foreach (var record in newRecords)
-        {
-            batch.Add(
-                new CboePutCallRatio
-                {
-                    RatioType = ratioType,
-                    Date = record.Date,
-                    CallVolume = record.CallVolume,
-                    PutVolume = record.PutVolume,
-                    TotalVolume = record.TotalVolume,
-                    PutCallRatio = record.PutCallRatio,
-                }
-            );
-
-            if (batch.Count >= InsertBatchSize)
+        var totalInserted = await BatchPersister.Persist(
+            newRecords.Select(r => new CboePutCallRatio
             {
-                await FlushPutCallBatch(batch);
-                totalInserted += batch.Count;
-                batch.Clear();
-            }
-        }
-
-        if (batch.Count > 0)
-        {
-            await FlushPutCallBatch(batch);
-            totalInserted += batch.Count;
-            batch.Clear();
-        }
+                RatioType = ratioType,
+                Date = r.Date,
+                CallVolume = r.CallVolume,
+                PutVolume = r.PutVolume,
+                TotalVolume = r.TotalVolume,
+                PutCallRatio = r.PutCallRatio,
+            }),
+            InsertBatchSize,
+            FlushPutCallBatch
+        );
 
         _logger.LogInformation(
             "CBOE {Type} put/call: imported {Count} new records",
@@ -188,36 +171,18 @@ public class CboeImportService
                 return;
             }
 
-            var batch = new List<CboeVixDaily>(InsertBatchSize);
-            var totalInserted = 0;
-
-            foreach (var record in newRecords)
-            {
-                batch.Add(
-                    new CboeVixDaily
-                    {
-                        Date = record.Date,
-                        Open = record.Open,
-                        High = record.High,
-                        Low = record.Low,
-                        Close = record.Close,
-                    }
-                );
-
-                if (batch.Count >= InsertBatchSize)
+            var totalInserted = await BatchPersister.Persist(
+                newRecords.Select(r => new CboeVixDaily
                 {
-                    await FlushVixBatch(batch);
-                    totalInserted += batch.Count;
-                    batch.Clear();
-                }
-            }
-
-            if (batch.Count > 0)
-            {
-                await FlushVixBatch(batch);
-                totalInserted += batch.Count;
-                batch.Clear();
-            }
+                    Date = r.Date,
+                    Open = r.Open,
+                    High = r.High,
+                    Low = r.Low,
+                    Close = r.Close,
+                }),
+                InsertBatchSize,
+                FlushVixBatch
+            );
 
             _logger.LogInformation("CBOE VIX: imported {Count} new daily records", totalInserted);
         }
