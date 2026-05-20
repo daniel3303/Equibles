@@ -5,9 +5,7 @@ namespace Equibles.UnitTests.Web;
 
 public class CsvExportServiceFormatDateOnlyCultureTests
 {
-    [Fact(
-        Skip = "GH-1186 — Format(DateOnly) doesn't pass InvariantCulture so the thread culture's calendar leaks through (th-TH shifts year by +543)."
-    )]
+    [Fact]
     public void Format_DateOnly_ThaiBuddhistCulture_StillEmitsGregorianIsoDate()
     {
         // Contract (CsvExportService XML doc): "Numeric / DateOnly conversions use the
