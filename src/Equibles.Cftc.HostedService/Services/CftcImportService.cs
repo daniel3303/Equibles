@@ -6,6 +6,7 @@ using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Cftc.Contracts;
+using Equibles.Integrations.Cftc.Models;
 using Equibles.Worker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -239,35 +240,7 @@ public class CftcImportService
                 if (existingKeys.Contains((contractId, date.Value)))
                     continue;
 
-                yield return new CftcPositionReport
-                {
-                    CftcContractId = contractId,
-                    ReportDate = date.Value,
-                    OpenInterest = record.OpenInterest ?? 0,
-                    NonCommLong = record.NonCommLong ?? 0,
-                    NonCommShort = record.NonCommShort ?? 0,
-                    NonCommSpreads = record.NonCommSpreads ?? 0,
-                    CommLong = record.CommLong ?? 0,
-                    CommShort = record.CommShort ?? 0,
-                    TotalRptLong = record.TotalRptLong ?? 0,
-                    TotalRptShort = record.TotalRptShort ?? 0,
-                    NonRptLong = record.NonRptLong ?? 0,
-                    NonRptShort = record.NonRptShort ?? 0,
-                    ChangeOpenInterest = record.ChangeOpenInterest,
-                    ChangeNonCommLong = record.ChangeNonCommLong,
-                    ChangeNonCommShort = record.ChangeNonCommShort,
-                    ChangeCommLong = record.ChangeCommLong,
-                    ChangeCommShort = record.ChangeCommShort,
-                    PctNonCommLong = record.PctNonCommLong,
-                    PctNonCommShort = record.PctNonCommShort,
-                    PctCommLong = record.PctCommLong,
-                    PctCommShort = record.PctCommShort,
-                    TradersTotal = record.TradersTotal,
-                    TradersNonCommLong = record.TradersNonCommLong,
-                    TradersNonCommShort = record.TradersNonCommShort,
-                    TradersCommLong = record.TradersCommLong,
-                    TradersCommShort = record.TradersCommShort,
-                };
+                yield return BuildPositionReport(record, contractId, date.Value);
             }
         }
 
@@ -314,6 +287,41 @@ public class CftcImportService
         repo.AddRange(items);
         await repo.SaveChanges();
     }
+
+    private static CftcPositionReport BuildPositionReport(
+        CftcReportRecord record,
+        Guid contractId,
+        DateOnly reportDate
+    ) =>
+        new()
+        {
+            CftcContractId = contractId,
+            ReportDate = reportDate,
+            OpenInterest = record.OpenInterest ?? 0,
+            NonCommLong = record.NonCommLong ?? 0,
+            NonCommShort = record.NonCommShort ?? 0,
+            NonCommSpreads = record.NonCommSpreads ?? 0,
+            CommLong = record.CommLong ?? 0,
+            CommShort = record.CommShort ?? 0,
+            TotalRptLong = record.TotalRptLong ?? 0,
+            TotalRptShort = record.TotalRptShort ?? 0,
+            NonRptLong = record.NonRptLong ?? 0,
+            NonRptShort = record.NonRptShort ?? 0,
+            ChangeOpenInterest = record.ChangeOpenInterest,
+            ChangeNonCommLong = record.ChangeNonCommLong,
+            ChangeNonCommShort = record.ChangeNonCommShort,
+            ChangeCommLong = record.ChangeCommLong,
+            ChangeCommShort = record.ChangeCommShort,
+            PctNonCommLong = record.PctNonCommLong,
+            PctNonCommShort = record.PctNonCommShort,
+            PctCommLong = record.PctCommLong,
+            PctCommShort = record.PctCommShort,
+            TradersTotal = record.TradersTotal,
+            TradersNonCommLong = record.TradersNonCommLong,
+            TradersNonCommShort = record.TradersNonCommShort,
+            TradersCommLong = record.TradersCommLong,
+            TradersCommShort = record.TradersCommShort,
+        };
 
     private static DateOnly? ParseDate(string value)
     {
