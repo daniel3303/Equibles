@@ -440,23 +440,7 @@ public class CompanySyncService : ICompanySyncService
 
             if (incumbentWins)
             {
-                if (incumbent.SecondaryCiks.Contains(incoming.Cik))
-                    return;
-
-                incumbent.SecondaryCiks = [.. incumbent.SecondaryCiks, incoming.Cik];
-                // Save directly via the repository — manager.Update would re-run the full
-                // uniqueness validation against the incumbent's own Ticker/CIK, which is
-                // an unnecessary round-trip for a SecondaryCiks-only mutation.
-                await state.CommonStockRepository.SaveChanges();
-                state.SecondaryCikToParent[incoming.Cik] = incumbent;
-
-                _logger.LogInformation(
-                    "Attached subsidiary CIK {Cik} ({Name}) to parent {Ticker} (CIK: {ParentCik})",
-                    incoming.Cik,
-                    incoming.Name,
-                    ticker,
-                    incumbent.Cik
-                );
+                await AttachAsSubsidiary(incumbent, incoming, ticker, state);
             }
             else
             {
@@ -489,6 +473,32 @@ public class CompanySyncService : ICompanySyncService
                 $"ticker: {ticker}, incoming: {incoming.Cik}, incumbent: {incumbent.Cik}"
             );
         }
+    }
+
+    private async Task AttachAsSubsidiary(
+        CommonStock incumbent,
+        CompanyInfo incoming,
+        string ticker,
+        StockSyncState state
+    )
+    {
+        if (incumbent.SecondaryCiks.Contains(incoming.Cik))
+            return;
+
+        incumbent.SecondaryCiks = [.. incumbent.SecondaryCiks, incoming.Cik];
+        // Save directly via the repository — manager.Update would re-run the full
+        // uniqueness validation against the incumbent's own Ticker/CIK, which is
+        // an unnecessary round-trip for a SecondaryCiks-only mutation.
+        await state.CommonStockRepository.SaveChanges();
+        state.SecondaryCikToParent[incoming.Cik] = incumbent;
+
+        _logger.LogInformation(
+            "Attached subsidiary CIK {Cik} ({Name}) to parent {Ticker} (CIK: {ParentCik})",
+            incoming.Cik,
+            incoming.Name,
+            ticker,
+            incumbent.Cik
+        );
     }
 
     private async Task<bool> ShouldIncumbentWin(CompanyInfo incoming, CommonStock incumbent)
