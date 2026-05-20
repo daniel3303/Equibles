@@ -103,7 +103,8 @@ The cursor pattern means re-running is cheap (a single query for `max(date)` per
 
 ## Cold-start patterns
 
-- Empty `CommonStock` table → most scrapers `RequestRetrySoon()` and wait `NotReadyRetryInterval` (2 min) instead of the full `SleepInterval` (24h). Pattern handles the first ~30 min after a fresh deploy where `CompanySyncService` is still populating the universe.
+- Empty `CommonStock` table → most scrapers `RequestRetrySoon()` and wait `NotReadyRetryInterval` (2 min) instead of the full `SleepInterval` (24h).
+- The pattern handles the first ~30 min after a fresh deploy while `CompanySyncService` is still populating the universe.
 - Realtime workers depend on the bulk-data backfill having seeded history. Until then the realtime worker still runs but produces no rows; once `BackfillProcessedDataSets` has run, the realtime path takes over.
 
 ## Error reporting
