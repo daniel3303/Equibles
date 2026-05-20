@@ -1,6 +1,6 @@
 # Development
 
-How to build, test, format, and contribute to Equibles. The root [`CONTRIBUTING.md`](../CONTRIBUTING.md) is the short version; this page is the developer reference.
+How to build, test, format, and contribute to Equibles. The root [`CONTRIBUTING.md`](../../CONTRIBUTING.md) is the short version; this page is the developer reference.
 
 ## Prerequisites
 
@@ -49,11 +49,11 @@ Five test projects, each with a distinct scope. The `dotnet test` filter at the 
 
 | Project | Scope | Category filter | Where it runs |
 |---|---|---|---|
-| [`tests/Equibles.UnitTests`](../tests/Equibles.UnitTests) | Pure unit tests (no DB, no network) | none | every PR (`ci.yml`) |
-| [`tests/Equibles.IntegrationTests`](../tests/Equibles.IntegrationTests) | EF Core + Testcontainers (real Postgres in Docker) | none | every PR (`ci.yml`) |
-| [`tests/Equibles.FunctionalTests`](../tests/Equibles.FunctionalTests) | Playwright e2e against a real running Web host | `Category=Functional` | every PR (`functional.yml`, separate workflow) |
-| [`tests/Equibles.SmokeTests`](../tests/Equibles.SmokeTests) | Live contract tests against real upstream APIs (Yahoo, SEC, FRED, …) | `Category=Live` | nightly only (`smoke.yml`, `cron: 0 6 * * *`) |
-| [`tests/Equibles.Benchmarks`](../tests/Equibles.Benchmarks) | BenchmarkDotNet perf harness | not run by `dotnet test` | manual |
+| [`tests/Equibles.UnitTests`](../../tests/Equibles.UnitTests) | Pure unit tests (no DB, no network) | none | every PR (`ci.yml`) |
+| [`tests/Equibles.IntegrationTests`](../../tests/Equibles.IntegrationTests) | EF Core + Testcontainers (real Postgres in Docker) | none | every PR (`ci.yml`) |
+| [`tests/Equibles.FunctionalTests`](../../tests/Equibles.FunctionalTests) | Playwright e2e against a real running Web host | `Category=Functional` | every PR (`functional.yml`, separate workflow) |
+| [`tests/Equibles.SmokeTests`](../../tests/Equibles.SmokeTests) | Live contract tests against real upstream APIs (Yahoo, SEC, FRED, …) | `Category=Live` | nightly only (`smoke.yml`, `cron: 0 6 * * *`) |
+| [`tests/Equibles.Benchmarks`](../../tests/Equibles.Benchmarks) | BenchmarkDotNet perf harness | not run by `dotnet test` | manual |
 
 ### Common test commands
 
@@ -81,7 +81,7 @@ dotnet test tests/Equibles.SmokeTests/Equibles.SmokeTests.csproj --filter "Categ
 - xUnit + FluentAssertions + NSubstitute (the standard repo stack).
 - Naming: `MethodName_Condition_ExpectedResult`; class `{Subject}Tests`; SUT field `_sut`.
 - Integration tests use Testcontainers (`paradedb/paradedb:latest`) so they need Docker running.
-- Coverage config in [`coverage.runsettings`](../coverage.runsettings) — Cobertura output, excludes `Equibles.Migrations`.
+- Coverage config in [`coverage.runsettings`](../../coverage.runsettings) — Cobertura output, excludes `Equibles.Migrations`.
 
 ## Pre-commit hooks
 
@@ -97,7 +97,7 @@ pre-commit install --install-hooks
 prek run --all-files
 ```
 
-What's wired ([`.pre-commit-config.yaml`](../.pre-commit-config.yaml)):
+What's wired ([`.pre-commit-config.yaml`](../../.pre-commit-config.yaml)):
 
 - `no-commit-to-branch` — refuses commits straight to `main`.
 - `mixed-line-ending` → LF, `end-of-file-fixer`, `trailing-whitespace`, `check-merge-conflict`, `check-added-large-files` (`--maxkb=500`), `check-yaml`, `check-json`, `detect-private-key`.
@@ -111,11 +111,11 @@ Hooks aren't authoritative — CI runs the tree-wide gates, so always run `prek 
 
 | Workflow | Triggers | What it checks |
 |---|---|---|
-| [`ci.yml`](../.github/workflows/ci.yml) | every push to `main`, every PR | CSharpier format check → build → `dotnet test --filter "Category!=Functional&Category!=Live"` → Codecov upload → TRX test report |
-| [`functional.yml`](../.github/workflows/functional.yml) | every PR | Playwright e2e on the Web host; uploads traces on failure |
-| [`smoke.yml`](../.github/workflows/smoke.yml) | nightly cron + manual | `Category=Live` tests against real upstream APIs; never a PR gate |
-| [`codeql.yml`](../.github/workflows/codeql.yml) | every PR + scheduled | GitHub CodeQL security scan |
-| [`lint-pr-title.yml`](../.github/workflows/lint-pr-title.yml) | every PR | Conventional-Commits PR title check |
+| [`ci.yml`](../../.github/workflows/ci.yml) | every push to `main`, every PR | CSharpier format check → build → `dotnet test --filter "Category!=Functional&Category!=Live"` → Codecov upload → TRX test report |
+| [`functional.yml`](../../.github/workflows/functional.yml) | every PR | Playwright e2e on the Web host; uploads traces on failure |
+| [`smoke.yml`](../../.github/workflows/smoke.yml) | nightly cron + manual | `Category=Live` tests against real upstream APIs; never a PR gate |
+| [`codeql.yml`](../../.github/workflows/codeql.yml) | every PR + scheduled | GitHub CodeQL security scan |
+| [`lint-pr-title.yml`](../../.github/workflows/lint-pr-title.yml) | every PR | Conventional-Commits PR title check |
 
 `ci.yml` runs lint before test, and the test job depends on lint. A red CSharpier check fails the whole pipeline early.
 
@@ -143,7 +143,7 @@ The `--startup-project` is `Equibles.Migrations` itself — its `DesignTimeDbCon
 - **New stock tab in the portal** — see [Web portal → Adding a new stock tab](web-portal.md#adding-a-new-stock-tab).
 - **New MCP tool** — see [MCP Tools → Adding a new MCP tool](mcp-tools.md#adding-a-new-mcp-tool).
 - **New scraper** — see [Scrapers → Adding a new scraper](scrapers.md#adding-a-new-scraper).
-- **New financial-domain module** — follow [Module shape](architecture.md#module-shape); also add a project reference + `IModuleConfiguration` row to [`DesignTimeDbContextFactory`](../src/Equibles.Migrations/DesignTimeDbContextFactory.cs) so it lands in migrations.
+- **New financial-domain module** — follow [Module shape](architecture.md#module-shape); also add a project reference + `IModuleConfiguration` row to [`DesignTimeDbContextFactory`](../../src/Equibles.Migrations/DesignTimeDbContextFactory.cs) so it lands in migrations.
 
 ## Debugging hosts locally
 
