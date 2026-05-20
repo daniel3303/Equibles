@@ -72,7 +72,7 @@ public class FinancialFactsTools
             bool asOriginallyReported = false
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 if (string.IsNullOrWhiteSpace(ticker))
@@ -167,11 +167,9 @@ public class FinancialFactsTools
 
                 return result.ToString();
             },
-            _logger,
             "GetFinancialFact",
             $"ticker: {FactMarkdown.Clean(ticker)}, concept: {FactMarkdown.Clean(concept)}, "
-                + $"form: {FactMarkdown.Clean(form)}",
-            ReportError
+                + $"form: {FactMarkdown.Clean(form)}"
         );
     }
 
@@ -193,7 +191,7 @@ public class FinancialFactsTools
         [Description("Fiscal period: 'FY' (default) or 'Q1'..'Q4'")] string fiscalPeriod = "FY"
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 if (string.IsNullOrWhiteSpace(concept))
@@ -303,11 +301,9 @@ public class FinancialFactsTools
 
                 return result.ToString();
             },
-            _logger,
             "CompareFinancialFact",
             $"tickers: {FactMarkdown.Clean(tickers)}, concept: {FactMarkdown.Clean(concept)}, "
-                + $"year: {fiscalYear}, period: {FactMarkdown.Clean(fiscalPeriod)}",
-            ReportError
+                + $"year: {fiscalYear}, period: {FactMarkdown.Clean(fiscalPeriod)}"
         );
     }
 
@@ -392,6 +388,9 @@ public class FinancialFactsTools
             + $"{string.Join(", ", FinancialConceptAliases.SupportedAliases)} "
             + "(common synonyms like 'sales', 'r&d', 'ocf' also work).";
     }
+
+    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
+        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
 
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
