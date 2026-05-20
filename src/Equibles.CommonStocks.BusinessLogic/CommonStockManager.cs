@@ -31,10 +31,7 @@ public class CommonStockManager
     /// </summary>
     public async Task SetCusip(CommonStock commonStock, string cusip)
     {
-        if (commonStock == null)
-        {
-            throw new ArgumentNullException(nameof(commonStock));
-        }
+        ArgumentNullException.ThrowIfNull(commonStock);
 
         if (string.Equals(commonStock.Cusip, cusip, StringComparison.OrdinalIgnoreCase))
         {
@@ -60,10 +57,7 @@ public class CommonStockManager
     /// </summary>
     public async Task SetFiscalYearEnd(CommonStock commonStock, int month, int? day)
     {
-        if (commonStock == null)
-        {
-            throw new ArgumentNullException(nameof(commonStock));
-        }
+        ArgumentNullException.ThrowIfNull(commonStock);
 
         if (month is < 1 or > 12)
         {
@@ -106,10 +100,7 @@ public class CommonStockManager
 
     private async Task ValidateCommonStock(CommonStock commonStock, bool isInsert)
     {
-        if (commonStock == null)
-        {
-            throw new ArgumentNullException(nameof(commonStock));
-        }
+        ArgumentNullException.ThrowIfNull(commonStock);
 
         // Required fields: a whitespace-only value is not a provided value.
         // Ticker is the globally-unique key and the lookup key, so accepting
