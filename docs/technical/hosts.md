@@ -25,7 +25,8 @@ The MCP transport exposing financial-domain tools to AI assistants.
 - Every module shipping a `.Mcp` project gets one of these `mcp.AddXxx()` calls.
 - `ConfigurePipeline` mounts the MCP transport at `/mcp` via `app.MapMcp("/mcp")` and wraps that path in `ApiKeyMiddleware` (under `UseWhen`, so the rest of the app stays open for health checks).
 - `IApiKeyValidator` resolves to `SimpleApiKeyValidator`, which reads `McpApiKey` from configuration. Empty / unset = auth disabled.
-- Wires `Equibles.Sec.BusinessLogic.Search.RagManager` via `AutoWireServicesFrom<T>` so MCP SEC tools can run semantic search. Requires the `Embedding` config section to be bound to `EmbeddingConfig`; without that, `EmbeddingConfig.Enabled` is false and semantic search no-ops.
+- Wires `Equibles.Sec.BusinessLogic.Search.RagManager` via `AutoWireServicesFrom<T>` so MCP SEC tools can run semantic search.
+- Requires the `Embedding` config section to be bound to `EmbeddingConfig`; without it, `EmbeddingConfig.Enabled` is false and semantic search no-ops.
 - Does **not** run migrations — the `mcp` compose service depends on `web` being healthy, and `web` owns migration application.
 
 ## Worker Host — [`src/Equibles.Worker.Host`](../../src/Equibles.Worker.Host)
