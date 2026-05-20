@@ -258,15 +258,11 @@ public static partial class DisclosureParsingHelper
         var matches = AmountRegex().Matches(amount);
 
         if (matches.Count >= 2)
-        {
-            long.TryParse(matches[0].Groups[1].Value.Replace(",", ""), out var from);
-            long.TryParse(matches[1].Groups[1].Value.Replace(",", ""), out var to);
-            return (from, to);
-        }
+            return (ParseAmount(matches[0]), ParseAmount(matches[1]));
 
         if (matches.Count == 1)
         {
-            long.TryParse(matches[0].Groups[1].Value.Replace(",", ""), out var val);
+            var val = ParseAmount(matches[0]);
             // A single amount is an open-ended lower bound when phrased as
             // "Over $X" or the House top bracket "$X +" (>= $X) — both map to
             // (val, val). Otherwise it is an upper bound, e.g. "Under $X".
@@ -277,6 +273,12 @@ public static partial class DisclosureParsingHelper
         }
 
         return (0, 0);
+    }
+
+    private static long ParseAmount(Match match)
+    {
+        long.TryParse(match.Groups[1].Value.Replace(",", ""), out var val);
+        return val;
     }
 
     public static bool IsValidDisclosureUrl(string url, string expectedBaseUrl)
