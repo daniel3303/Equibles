@@ -611,15 +611,13 @@ public class InstitutionalHoldingsTools
         return McpToolExecutor.Execute(
             async () =>
             {
-                var holder = await FindHolderByName(institutionName);
-                if (holder == null)
-                    return $"No institution found matching '{institutionName}'.";
+                var (holder, reportDates, targetDate, error) = await ResolveHolderAndTargetDate(
+                    institutionName,
+                    reportDate
+                );
+                if (error != null)
+                    return error;
 
-                var reportDates = await GetReportDatesByHolder(holder).ToListAsync();
-                if (reportDates.Count == 0)
-                    return $"No 13F holdings reported by {holder.Name}.";
-
-                var targetDate = ResolveReportDate(reportDate, reportDates);
                 var targetIndex = reportDates.IndexOf(targetDate);
                 var previousDate =
                     targetIndex < reportDates.Count - 1
@@ -687,15 +685,12 @@ public class InstitutionalHoldingsTools
         return McpToolExecutor.Execute(
             async () =>
             {
-                var holder = await FindHolderByName(institutionName);
-                if (holder == null)
-                    return $"No institution found matching '{institutionName}'.";
-
-                var reportDates = await GetReportDatesByHolder(holder).ToListAsync();
-                if (reportDates.Count == 0)
-                    return $"No 13F holdings reported by {holder.Name}.";
-
-                var targetDate = ResolveReportDate(reportDate, reportDates);
+                var (holder, _, targetDate, error) = await ResolveHolderAndTargetDate(
+                    institutionName,
+                    reportDate
+                );
+                if (error != null)
+                    return error;
 
                 var holdings = await _holdingRepository
                     .GetByHolder(holder, targetDate)
@@ -1082,6 +1077,24 @@ public class InstitutionalHoldingsTools
 
     private Task<InstitutionalHolder> FindHolderByName(string name) =>
         _holderRepository.Search(name ?? string.Empty).OrderBy(h => h.Name).FirstOrDefaultAsync();
+
+    private async Task<(
+        InstitutionalHolder Holder,
+        List<DateOnly> ReportDates,
+        DateOnly TargetDate,
+        string Error
+    )> ResolveHolderAndTargetDate(string institutionName, string reportDate)
+    {
+        var holder = await FindHolderByName(institutionName);
+        if (holder == null)
+            return (null, null, default, $"No institution found matching '{institutionName}'.");
+
+        var reportDates = await GetReportDatesByHolder(holder).ToListAsync();
+        if (reportDates.Count == 0)
+            return (holder, null, default, $"No 13F holdings reported by {holder.Name}.");
+
+        return (holder, reportDates, ResolveReportDate(reportDate, reportDates), null);
+    }
 
     private IQueryable<DateOnly> GetReportDatesByHolder(InstitutionalHolder holder) =>
         _holdingRepository
