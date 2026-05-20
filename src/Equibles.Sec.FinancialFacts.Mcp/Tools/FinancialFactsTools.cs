@@ -132,18 +132,7 @@ public class FinancialFactsTools
                 // caller wants the figure as originally reported.
                 var perPeriod = filtered
                     .GroupBy(f => (f.FiscalYear, f.FiscalPeriod))
-                    .Select(g =>
-                    {
-                        var byPriority = g.OrderBy(f => conceptPriority[f.FinancialConceptId]);
-                        // AccessionNumber is the stable final tiebreak for
-                        // same-day amendments (Postgres has no implicit order).
-                        var ordered = asOriginallyReported
-                            ? byPriority.ThenBy(f => f.FiledDate).ThenBy(f => f.AccessionNumber)
-                            : byPriority
-                                .ThenByDescending(f => f.FiledDate)
-                                .ThenByDescending(f => f.AccessionNumber);
-                        return ordered.First();
-                    })
+                    .Select(g => PickBestFact(g, conceptPriority, asOriginallyReported))
                     .OrderByDescending(f => f.PeriodEnd)
                     .Take(Math.Clamp(maxResults, 1, MaxResultsCap))
                     .ToList();
@@ -266,14 +255,7 @@ public class FinancialFactsTools
                 // implicit row order).
                 var bestByStock = facts
                     .GroupBy(f => f.CommonStockId)
-                    .ToDictionary(
-                        g => g.Key,
-                        g =>
-                            g.OrderBy(f => conceptPriority[f.FinancialConceptId])
-                                .ThenByDescending(f => f.FiledDate)
-                                .ThenByDescending(f => f.AccessionNumber)
-                                .First()
-                    );
+                    .ToDictionary(g => g.Key, g => PickBestFact(g, conceptPriority));
 
                 var rows = new List<(string Ticker, string Name, FinancialFact Fact)>();
                 var skipped = new List<string>();
@@ -327,6 +309,24 @@ public class FinancialFactsTools
                 + $"year: {fiscalYear}, period: {FactMarkdown.Clean(fiscalPeriod)}",
             ReportError
         );
+    }
+
+    // AccessionNumber is the stable final tiebreak for same-day amendments
+    // (Postgres has no implicit row order). `asOriginallyReported` flips the
+    // filing-date / accession ordering to ascending so the earliest filing wins.
+    private static FinancialFact PickBestFact(
+        IEnumerable<FinancialFact> facts,
+        IReadOnlyDictionary<Guid, int> conceptPriority,
+        bool asOriginallyReported = false
+    )
+    {
+        var byPriority = facts.OrderBy(f => conceptPriority[f.FinancialConceptId]);
+        return asOriginallyReported
+            ? byPriority.ThenBy(f => f.FiledDate).ThenBy(f => f.AccessionNumber).First()
+            : byPriority
+                .ThenByDescending(f => f.FiledDate)
+                .ThenByDescending(f => f.AccessionNumber)
+                .First();
     }
 
     private async Task<Dictionary<Guid, int>> ResolveConceptPriority(
