@@ -90,4 +90,12 @@ public class FinancialFact
     public string Frame { get; set; }
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Explicit XBRL dimensions (axis + member pairs) attached to this fact.
+    /// Empty list = consolidated / no-dimension default context, which is the
+    /// only context the SEC Company Facts API returns; dimensional rows arrive
+    /// exclusively from the iXBRL / standalone-XBRL extractor.
+    /// </summary>
+    public virtual List<FinancialFactDimension> Dimensions { get; set; } = [];
 }
