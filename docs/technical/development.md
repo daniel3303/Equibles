@@ -143,7 +143,8 @@ The `--startup-project` is `Equibles.Migrations` itself — its `DesignTimeDbCon
 - **New stock tab in the portal** — see [Web portal → Adding a new stock tab](web-portal.md#adding-a-new-stock-tab).
 - **New MCP tool** — see [MCP Tools → Adding a new MCP tool](mcp-tools.md#adding-a-new-mcp-tool).
 - **New scraper** — see [Scrapers → Adding a new scraper](scrapers.md#adding-a-new-scraper).
-- **New financial-domain module** — follow [Module shape](architecture.md#module-shape); also add a project reference + `IModuleConfiguration` row to [`DesignTimeDbContextFactory`](../../src/Equibles.Migrations/DesignTimeDbContextFactory.cs) so it lands in migrations.
+- **New financial-domain module** — follow [Module shape](architecture.md#module-shape).
+- Also add a project reference + `IModuleConfiguration` row to [`DesignTimeDbContextFactory`](../../src/Equibles.Migrations/DesignTimeDbContextFactory.cs) so the module lands in migrations.
 
 ## Debugging hosts locally
 
