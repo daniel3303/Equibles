@@ -637,6 +637,98 @@ public class InstitutionalHoldingsTools
         );
     }
 
+    [McpServerTool(Name = "GetInstitutionSummary")]
+    [Description(
+        "Get the portfolio summary header for an institutional 13F filer — Reported AUM, position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters reported. Use this to answer 'how big and how concentrated is this fund?' or to compare two funds at a glance. Search resolves by institution name (closest match)."
+    )]
+    public Task<string> GetInstitutionSummary(
+        [Description("Institution name (partial or full — first match wins)")]
+            string institutionName,
+        [Description("Report date in YYYY-MM-DD format (defaults to the holder's latest)")]
+            string reportDate = null
+    )
+    {
+        return McpToolExecutor.Execute(
+            async () =>
+            {
+                var holder = await _holderRepository
+                    .Search(institutionName ?? string.Empty)
+                    .OrderBy(h => h.Name)
+                    .FirstOrDefaultAsync();
+                if (holder == null)
+                    return $"No institution found matching '{institutionName}'.";
+
+                var reportDates = await _holdingRepository
+                    .GetHistoryByHolder(holder)
+                    .Select(h => h.ReportDate)
+                    .Distinct()
+                    .OrderByDescending(d => d)
+                    .ToListAsync();
+                if (reportDates.Count == 0)
+                    return $"No 13F holdings reported by {holder.Name}.";
+
+                DateOnly targetDate;
+                if (
+                    !string.IsNullOrEmpty(reportDate)
+                    && DateOnly.TryParse(reportDate, out var parsed)
+                    && reportDates.Contains(parsed)
+                )
+                    targetDate = parsed;
+                else
+                    targetDate = reportDates[0];
+                var targetIndex = reportDates.IndexOf(targetDate);
+                var previousDate =
+                    targetIndex < reportDates.Count - 1
+                        ? reportDates[targetIndex + 1]
+                        : (DateOnly?)null;
+
+                var currentHoldings = await _holdingRepository
+                    .GetByHolder(holder, targetDate)
+                    .ToListAsync();
+                var previousHoldings = previousDate.HasValue
+                    ? await _holdingRepository.GetByHolder(holder, previousDate.Value).ToListAsync()
+                    : [];
+                var summary = InstitutionPortfolioSummaryCalculator.Calculate(
+                    currentHoldings,
+                    previousHoldings,
+                    reportDates.Count,
+                    targetDate,
+                    previousDate
+                );
+
+                var result = new StringBuilder();
+                result.AppendLine(
+                    $"Portfolio summary — **{holder.Name}** as of {targetDate:yyyy-MM-dd}"
+                );
+                if (previousDate.HasValue)
+                    result.AppendLine($"vs prior quarter {previousDate.Value:yyyy-MM-dd}");
+                result.AppendLine();
+                result.AppendLine("| Metric | Value |");
+                result.AppendLine("|--------|-------|");
+                result.AppendLine($"| Reported AUM | ${summary.ReportedAum:N0} |");
+                result.AppendLine($"| # Positions | {summary.PositionCount:N0} |");
+                result.AppendLine(
+                    $"| Top 10 concentration | {summary.Top10ConcentrationPercent:F1}% |"
+                );
+                result.AppendLine(
+                    $"| Top 25 concentration | {summary.Top25ConcentrationPercent:F1}% |"
+                );
+                result.AppendLine($"| QoQ turnover | {summary.QoQTurnoverPercent:F1}% |");
+                result.AppendLine($"| Quarters reported | {summary.QuartersReported} |");
+                result.AppendLine();
+                result.AppendLine(
+                    "_QoQ turnover = (Σ |Δ shares × current price proxy|) / (2 × AUM), where the per-share price proxy is the current quarter's Value / Shares._"
+                );
+
+                return result.ToString();
+            },
+            _logger,
+            "GetInstitutionSummary",
+            $"institution: {institutionName}",
+            ReportError
+        );
+    }
+
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
