@@ -74,7 +74,7 @@ If you'd rather run the stack in the background, stop it with `Ctrl-C` and run `
 
 ## 5. Open the portal
 
-Point your browser at `http://localhost:8080`. You should see the Equibles home page with a navigation bar that includes **Stocks**, **Economy**, **Futures**, **Market**, and **Status**.
+Point your browser at `http://localhost:8080`. You should see the Equibles home page with a navigation bar that includes **Stocks**, **Economic Data**, **Futures**, **Market**, **MCP**, and **Status**.
 
 Click **Status**. The page will show worker counts (initially all zero or near-zero) and an empty error log. This is normal — the scrapers have just started.
 
@@ -100,7 +100,7 @@ Refresh **Status** occasionally. You'll see the per-domain counts climb. The err
 Once **Status** shows non-zero counts for stocks and prices, you can start exploring. Try:
 
 - **Stocks** → search for `AAPL`. Click into the result. You'll see the tab strip (Price, Holdings, Documents, …). Some tabs will be empty until the matching scraper has caught up.
-- **Economy** → browse FRED indicators by category. (These only appear if you add a free FRED API key — see [How to add a FRED API key](how-to-set-up-fred-api-key.md) when you're ready.)
+- **Economic Data** → browse FRED indicators by category. (These only appear if you add a free FRED API key — see [How to add a FRED API key](how-to-set-up-fred-api-key.md) when you're ready.)
 - **Market** → VIX history and put/call ratios as CBOE catches up.
 
 ## You're done
