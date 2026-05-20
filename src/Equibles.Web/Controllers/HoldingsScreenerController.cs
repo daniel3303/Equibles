@@ -184,11 +184,17 @@ public class HoldingsScreenerController : BaseController
             return (reportDates, null, null);
         var selected =
             date.HasValue && reportDates.Contains(date.Value) ? date.Value : reportDates[0];
-        var comparison =
-            compareDate.HasValue && reportDates.Contains(compareDate.Value)
-                ? compareDate.Value
-                : reportDates[1];
-        return (reportDates, selected, comparison);
+        // The default comparison must track the selected date — picking a fixed
+        // reportDates[1] collapses to selected==comparison when selected is the
+        // second-latest, and to a *newer* comparison when selected is older.
+        var selectedIndex = reportDates.IndexOf(selected);
+        DateOnly? comparison =
+            compareDate.HasValue && reportDates.Contains(compareDate.Value) ? compareDate.Value
+            : selectedIndex < reportDates.Count - 1 ? reportDates[selectedIndex + 1]
+            : null;
+        if (comparison is null)
+            return (reportDates, null, null);
+        return (reportDates, selected, comparison.Value);
     }
 
     internal static ScreenerCriteria ToCriteria(ScreenerCriteriaViewModel filters) =>

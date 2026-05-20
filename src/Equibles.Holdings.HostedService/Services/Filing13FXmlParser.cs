@@ -119,33 +119,25 @@ public class Filing13FXmlParser
         return holdings;
     }
 
+    private static IEnumerable<XElement> WithLocalName(
+        IEnumerable<XElement> source,
+        string localName
+    ) =>
+        source.Where(e =>
+            string.Equals(e.Name.LocalName, localName, StringComparison.OrdinalIgnoreCase)
+        );
+
     private static IEnumerable<XElement> Children(XElement parent, string localName) =>
-        parent
-            .Elements()
-            .Where(e =>
-                string.Equals(e.Name.LocalName, localName, StringComparison.OrdinalIgnoreCase)
-            );
+        WithLocalName(parent.Elements(), localName);
 
     private static XElement Descendant(XElement parent, string localName) =>
-        parent
-            ?.Descendants()
-            .FirstOrDefault(e =>
-                string.Equals(e.Name.LocalName, localName, StringComparison.OrdinalIgnoreCase)
-            );
+        parent == null ? null : WithLocalName(parent.Descendants(), localName).FirstOrDefault();
 
     private static IEnumerable<XElement> Descendants(XElement parent, string localName) =>
-        parent
-            .Descendants()
-            .Where(e =>
-                string.Equals(e.Name.LocalName, localName, StringComparison.OrdinalIgnoreCase)
-            );
+        WithLocalName(parent.Descendants(), localName);
 
     private static XElement Child(XElement parent, string localName) =>
-        parent
-            ?.Elements()
-            .FirstOrDefault(e =>
-                string.Equals(e.Name.LocalName, localName, StringComparison.OrdinalIgnoreCase)
-            );
+        parent == null ? null : WithLocalName(parent.Elements(), localName).FirstOrDefault();
 
     private static string Value(XElement element) => element?.Value.Trim();
 
