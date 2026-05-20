@@ -348,12 +348,7 @@ public class SecEdgarClient : ISecEdgarClient
         )
             throw new ArgumentException("cik, accessionNumber and filename are required");
 
-        // Per-file URL uses unpadded CIK and the accession number with dashes removed.
-        // Padded CIK works too but triggers a 301 redirect; skip the extra hop.
-        var unpaddedCik = cik.TrimStart('0');
-        var accessionNoDashes = accessionNumber.Replace("-", string.Empty);
-        var url =
-            $"{FilesBaseUrl}/Archives/edgar/data/{unpaddedCik}/{accessionNoDashes}/{Uri.EscapeDataString(filename)}";
+        var url = BuildArchiveUrl(cik, accessionNumber, Uri.EscapeDataString(filename));
 
         _logger.LogInformation("Requesting filing artifact: {Url}", url);
 
@@ -476,10 +471,7 @@ public class SecEdgarClient : ISecEdgarClient
         if (string.IsNullOrEmpty(cik) || string.IsNullOrEmpty(accessionNumber))
             throw new ArgumentException("cik and accessionNumber are required");
 
-        var unpaddedCik = cik.TrimStart('0');
-        var accessionNoDashes = accessionNumber.Replace("-", string.Empty);
-        var url =
-            $"{FilesBaseUrl}/Archives/edgar/data/{unpaddedCik}/{accessionNoDashes}/index.json";
+        var url = BuildArchiveUrl(cik, accessionNumber, "index.json");
 
         using var response = await SendWithRetryAsync(url, cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
@@ -770,6 +762,11 @@ public class SecEdgarClient : ISecEdgarClient
     {
         return $"{BaseUrl}{endpoint}";
     }
+
+    // Per-file URL uses unpadded CIK and the accession number with dashes removed.
+    // Padded CIK works too but triggers a 301 redirect; skip the extra hop.
+    private static string BuildArchiveUrl(string cik, string accessionNumber, string suffix) =>
+        $"{FilesBaseUrl}/Archives/edgar/data/{cik.TrimStart('0')}/{accessionNumber.Replace("-", string.Empty)}/{suffix}";
 
     private record CachedResponse(string Url, string Content);
 }
