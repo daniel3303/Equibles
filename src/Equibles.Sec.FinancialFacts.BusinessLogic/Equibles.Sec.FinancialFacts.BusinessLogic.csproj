@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <InternalsVisibleTo Include="Equibles.UnitTests" />
+    <InternalsVisibleTo Include="Equibles.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Equibles.Core.AutoWiring" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.Sec.FinancialFacts.Data\Equibles.Sec.FinancialFacts.Data.csproj" />
+  </ItemGroup>
+</Project>
