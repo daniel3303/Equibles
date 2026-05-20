@@ -74,7 +74,7 @@ public class FinancialFactsImportService
             return;
         }
 
-        var parsed = ParseFacts(response).ToList();
+        var parsed = ParseFacts(response, stock).ToList();
         if (parsed.Count == 0)
         {
             await UpsertSyncStatus(stock, null, cancellationToken);
@@ -168,7 +168,7 @@ public class FinancialFactsImportService
         }
     }
 
-    private IEnumerable<ParsedFact> ParseFacts(CompanyFactsResponse response)
+    private IEnumerable<ParsedFact> ParseFacts(CompanyFactsResponse response, CommonStock stock)
     {
         foreach (var (taxonomyKey, concepts) in response.Facts)
         {
@@ -187,6 +187,19 @@ public class FinancialFactsImportService
                             continue;
 
                         var isInstant = value.Start == null;
+                        var periodStart = value.Start ?? value.End;
+                        // Derive (FiscalYear, FiscalPeriod) from the period the
+                        // fact actually measures — the filing's fy/fp identifies
+                        // the filing, not each comparable-year value inside it
+                        // (#982). Resolver returns null when FYE info is missing
+                        // or the duration shape is unrecognised; the original
+                        // SEC-supplied identity is the fallback.
+                        var resolved = FiscalPeriodResolver.Resolve(
+                            periodStart,
+                            value.End,
+                            stock.FiscalYearEndMonth,
+                            stock.FiscalYearEndDay
+                        );
                         yield return new ParsedFact
                         {
                             Taxonomy = taxonomy,
@@ -196,11 +209,11 @@ public class FinancialFactsImportService
                             PeriodType = isInstant
                                 ? FactPeriodType.Instant
                                 : FactPeriodType.Duration,
-                            PeriodStart = value.Start ?? value.End,
+                            PeriodStart = periodStart,
                             PeriodEnd = value.End,
                             Value = value.Val,
-                            FiscalYear = value.Fy ?? value.End.Year,
-                            FiscalPeriod = fiscalPeriod,
+                            FiscalYear = resolved?.Year ?? value.Fy ?? value.End.Year,
+                            FiscalPeriod = resolved?.Period ?? fiscalPeriod,
                             Form = value.Form,
                             Filed = value.Filed,
                             Accession = value.Accn,
