@@ -76,12 +76,9 @@ public class StatusController : BaseController
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Show(Guid id)
     {
-        var error = await _errorRepository.Get(id);
+        var error = await LoadErrorOrFlashNotFound(id);
         if (error == null)
-        {
-            _flashMessage.Error("Error not found.");
             return RedirectToAction(nameof(Index));
-        }
 
         return View(error);
     }
@@ -90,12 +87,9 @@ public class StatusController : BaseController
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> MarkAsSeen(Guid id)
     {
-        var error = await _errorRepository.Get(id);
+        var error = await LoadErrorOrFlashNotFound(id);
         if (error == null)
-        {
-            _flashMessage.Error("Error not found.");
             return RedirectToAction(nameof(Index));
-        }
 
         await _errorManager.MarkAsSeen(error);
 
@@ -107,17 +101,22 @@ public class StatusController : BaseController
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(Guid id)
     {
-        var error = await _errorRepository.Get(id);
+        var error = await LoadErrorOrFlashNotFound(id);
         if (error == null)
-        {
-            _flashMessage.Error("Error not found.");
             return RedirectToAction(nameof(Index));
-        }
 
         await _errorManager.Delete(error);
 
         _flashMessage.Success("Error deleted.");
         return RedirectToAction(nameof(Index));
+    }
+
+    private async Task<Error> LoadErrorOrFlashNotFound(Guid id)
+    {
+        var error = await _errorRepository.Get(id);
+        if (error == null)
+            _flashMessage.Error("Error not found.");
+        return error;
     }
 
     [HttpGet]
