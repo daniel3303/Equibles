@@ -39,7 +39,12 @@ public static class FundOverlapCalculator
                             Value = g.Sum(h => h.Value),
                         }
                     );
-                return new FundAggregate { Holder = f.Holder, PerStock = perStock };
+                return new FundAggregate
+                {
+                    Holder = f.Holder,
+                    PerStock = perStock,
+                    TotalValue = perStock.Values.Sum(s => s.Value),
+                };
             })
             .ToList();
 
@@ -52,7 +57,7 @@ public static class FundOverlapCalculator
                     HolderCik = fund.Holder.Cik,
                     HolderName = fund.Holder.Name,
                     PositionCount = fund.PerStock.Count,
-                    TotalValue = fund.PerStock.Values.Sum(s => s.Value),
+                    TotalValue = fund.TotalValue,
                 }
             );
         }
@@ -78,15 +83,14 @@ public static class FundOverlapCalculator
                 fund.PerStock.TryGetValue(stockId, out var perStock);
                 ticker ??= perStock?.Ticker;
                 name ??= perStock?.Name;
-                var fundTotal = fund.PerStock.Values.Sum(s => s.Value);
                 var slice = new FundOverlapRowSlice
                 {
                     HolderId = fund.Holder.Id,
                     Shares = perStock?.Shares ?? 0,
                     Value = perStock?.Value ?? 0,
                     PercentOfPortfolio =
-                        fundTotal > 0 && perStock != null
-                            ? (double)perStock.Value / fundTotal * 100.0
+                        fund.TotalValue > 0 && perStock != null
+                            ? (double)perStock.Value / fund.TotalValue * 100.0
                             : 0,
                 };
                 slices.Add(slice);
@@ -138,6 +142,7 @@ public static class FundOverlapCalculator
     {
         public InstitutionalHolder Holder { get; set; }
         public Dictionary<Guid, FundStockAggregate> PerStock { get; set; }
+        public long TotalValue { get; set; }
     }
 
     private class FundStockAggregate
