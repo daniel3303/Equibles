@@ -7,6 +7,10 @@ namespace Equibles.Yahoo.Repositories;
 /// </summary>
 public static class TechnicalIndicatorService
 {
+    // OHLC-derived indicators (SMA, EMA, ATR, Stochastic, MACD) round to this precision.
+    // RSI deliberately uses 2 decimals — it's a conventional 0–100 percentage.
+    private const int RoundingDigits = 4;
+
     public static List<decimal?> ComputeSma(List<decimal> prices, int period)
     {
         var result = new List<decimal?>(prices.Count);
@@ -23,7 +27,7 @@ public static class TechnicalIndicatorService
             {
                 sum += prices[j];
             }
-            result.Add(Math.Round(sum / period, 4));
+            result.Add(Math.Round(sum / period, RoundingDigits));
         }
         return result;
     }
@@ -47,13 +51,13 @@ public static class TechnicalIndicatorService
                 var sum = 0m;
                 for (var j = 0; j < period; j++)
                     sum += prices[j];
-                result.Add(Math.Round(sum / period, 4));
+                result.Add(Math.Round(sum / period, RoundingDigits));
                 continue;
             }
 
             var prevEma = result[i - 1].Value;
             var ema = (prices[i] - prevEma) * multiplier + prevEma;
-            result.Add(Math.Round(ema, 4));
+            result.Add(Math.Round(ema, RoundingDigits));
         }
         return result;
     }
@@ -193,14 +197,14 @@ public static class TechnicalIndicatorService
         for (var i = 0; i < period; i++)
             seed += trueRanges[i];
         seed /= period;
-        result.Add(Math.Round(seed, 4));
+        result.Add(Math.Round(seed, RoundingDigits));
 
         // Wilder smoothing: combine the running ATR with the next TR.
         var atr = seed;
         for (var i = period; i < count; i++)
         {
             atr = (atr * (period - 1) + trueRanges[i]) / period;
-            result.Add(Math.Round(atr, 4));
+            result.Add(Math.Round(atr, RoundingDigits));
         }
 
         return result;
@@ -246,7 +250,10 @@ public static class TechnicalIndicatorService
             var range = highestHigh - lowestLow;
             // Flat range = no momentum signal. Conventional convention is %K = 50 (the
             // neutral midpoint) rather than 0 / divide-by-zero / NaN.
-            var kValue = range == 0 ? 50m : Math.Round(100m * (closes[i] - lowestLow) / range, 4);
+            var kValue =
+                range == 0
+                    ? 50m
+                    : Math.Round(100m * (closes[i] - lowestLow) / range, RoundingDigits);
             k.Add(kValue);
         }
 
@@ -264,7 +271,7 @@ public static class TechnicalIndicatorService
             var sum = 0m;
             for (var j = i - dPeriod + 1; j <= i; j++)
                 sum += k[j].Value;
-            d.Add(Math.Round(sum / dPeriod, 4));
+            d.Add(Math.Round(sum / dPeriod, RoundingDigits));
         }
 
         return (k, d);
@@ -295,7 +302,7 @@ public static class TechnicalIndicatorService
             }
             else
             {
-                var val = Math.Round(fastEma[i].Value - slowEma[i].Value, 4);
+                var val = Math.Round(fastEma[i].Value - slowEma[i].Value, RoundingDigits);
                 macdLine.Add(val);
                 macdValues.Add(val);
             }
@@ -320,7 +327,9 @@ public static class TechnicalIndicatorService
             {
                 var sig = signalIdx < signalFromMacd.Count ? signalFromMacd[signalIdx] : null;
                 signal.Add(sig);
-                histogram.Add(sig != null ? Math.Round(macdLine[i].Value - sig.Value, 4) : null);
+                histogram.Add(
+                    sig != null ? Math.Round(macdLine[i].Value - sig.Value, RoundingDigits) : null
+                );
                 signalIdx++;
             }
         }
