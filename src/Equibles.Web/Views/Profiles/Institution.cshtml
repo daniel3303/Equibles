@@ -49,6 +49,46 @@
         </div>
     }
 
+    @if (Model.IndustryAllocation.Count > 0) {
+        <!-- Sector / industry allocation for the latest reported quarter. Unclassified
+             stocks (no IndustryId on CommonStock) collapse into a single row at the end. -->
+        <div class="card bg-base-100 shadow-sm mb-8" data-testid="institution-industry-allocation">
+            <div class="card-body p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-base font-medium m-0">Sector allocation</h3>
+                    <span class="text-xs text-base-content/50">@Model.IndustryAllocation.Count slices</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra table-sm">
+                        <thead>
+                            <tr>
+                                <th>Industry</th>
+                                <th class="text-right"># Positions</th>
+                                <th class="text-right">Value (USD)</th>
+                                <th class="text-right">% of portfolio</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var slice in Model.IndustryAllocation) {
+                                <tr>
+                                    <td>
+                                        @slice.IndustryName
+                                        @if (slice.IndustryId == null) {
+                                            <span class="badge badge-ghost badge-xs ml-2">no industry</span>
+                                        }
+                                    </td>
+                                    <td class="text-right font-mono">@slice.PositionCount.ToString("N0")</td>
+                                    <td class="text-right font-mono">$@slice.TotalValue.ToString("N0")</td>
+                                    <td class="text-right font-mono">@slice.PercentOfPortfolio.ToString("F1")%</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
     <h2 class="text-xl font-semibold mb-3">Recent holdings</h2>
     @if (Model.Holdings.Count == 0) {
         <div class="text-base-content/60 py-8">No reported holdings.</div>

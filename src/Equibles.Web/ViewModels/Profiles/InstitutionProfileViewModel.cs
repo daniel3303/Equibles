@@ -9,4 +9,5 @@ public class InstitutionProfileViewModel
     public string Location { get; set; }
     public List<HoldingRowViewModel> Holdings { get; set; } = [];
     public InstitutionPortfolioSummary Summary { get; set; } = new();
+    public List<IndustryAllocationSlice> IndustryAllocation { get; set; } = [];
 }
