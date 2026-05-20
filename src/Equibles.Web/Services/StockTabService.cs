@@ -71,63 +71,38 @@ public class StockTabService
 
         if (selectedDate != default)
         {
-            var allHoldings = _institutionalHoldingRepository.GetByStock(stock, selectedDate);
-            var totalHolderCount = await allHoldings
-                .Select(h => h.InstitutionalHolderId)
-                .Distinct()
-                .CountAsync();
-            var totalShares = await allHoldings.SumAsync(h => h.Shares);
-            var totalValue = await allHoldings.SumAsync(h => h.Value);
-
-            var holdings = await allHoldings
+            // Materialize the full current quarter once: drives header stats AND the
+            // position-change grouping. Previously this was two round trips (sum/count
+            // aggregates + a top-100 fetch); the bucketed view needs every holder anyway,
+            // so the in-memory aggregates are cheaper than re-querying.
+            var allCurrent = await _institutionalHoldingRepository
+                .GetByStock(stock, selectedDate)
                 .Include(h => h.InstitutionalHolder)
-                .OrderByDescending(h => h.Value)
-                .Take(100)
                 .ToListAsync();
 
-            // Fetch previous quarter's shares for change % calculation
-            var previousSharesByHolder = new Dictionary<Guid, long>();
             var selectedIndex = reportDates.IndexOf(selectedDate);
             var previousDate =
                 selectedIndex >= 0 && selectedIndex < reportDates.Count - 1
                     ? reportDates[selectedIndex + 1]
                     : (DateOnly?)null;
-            if (previousDate.HasValue)
-            {
-                var holderIds = holdings.Select(h => h.InstitutionalHolderId).ToList();
-                previousSharesByHolder = await _institutionalHoldingRepository
-                    .GetByStock(stock, previousDate.Value)
-                    .Where(h => holderIds.Contains(h.InstitutionalHolderId))
-                    .GroupBy(h => h.InstitutionalHolderId)
-                    .ToDictionaryAsync(g => g.Key, g => g.Sum(h => h.Shares));
-            }
-
-            // Full per-quarter holdings (current + previous) for position-change grouping.
-            // Separate from the top-100 query above so the existing tile rendering is unchanged.
-            var allCurrent = await _institutionalHoldingRepository
-                .GetByStock(stock, selectedDate)
-                .Include(h => h.InstitutionalHolder)
-                .ToListAsync();
             var allPrevious = previousDate.HasValue
                 ? await _institutionalHoldingRepository
                     .GetByStock(stock, previousDate.Value)
                     .Include(h => h.InstitutionalHolder)
                     .ToListAsync()
                 : [];
+
             var grouped = HoldingsPositionGrouper.Group(allCurrent, allPrevious);
             var bucketCounts = grouped.ToDictionary(g => g.Key, g => g.Value.Count);
 
             return new HoldingsTabViewModel
             {
-                Holdings = holdings,
                 AvailableDates = reportDates,
                 SelectedDate = selectedDate,
                 Ticker = stock.Ticker,
-                TotalValue = totalValue,
-                TotalShares = totalShares,
-                HolderCount = totalHolderCount,
-                DisplayedCount = holdings.Count,
-                PreviousSharesByHolder = previousSharesByHolder,
+                TotalValue = allCurrent.Sum(h => h.Value),
+                TotalShares = allCurrent.Sum(h => h.Shares),
+                HolderCount = allCurrent.Select(h => h.InstitutionalHolderId).Distinct().Count(),
                 GroupedHolders = grouped,
                 BucketCounts = bucketCounts,
             };

@@ -1,4 +1,32 @@
-@model Equibles.Web.ViewModels.Stocks.HoldingsTabViewModel
+@using Equibles.Web.ViewModels.Stocks
+@model HoldingsTabViewModel
+
+@functions {
+    record BucketDisplay(PositionChangeType Type, string Label, string BadgeCss, bool OpenByDefault);
+
+    static readonly BucketDisplay[] Buckets = new[]
+    {
+        new BucketDisplay(PositionChangeType.New, "New", "badge-success", true),
+        new BucketDisplay(PositionChangeType.Increased, "Increased", "badge-info", true),
+        new BucketDisplay(PositionChangeType.Reduced, "Reduced", "badge-warning", true),
+        new BucketDisplay(PositionChangeType.SoldOut, "Sold out", "badge-error", true),
+        new BucketDisplay(PositionChangeType.Unchanged, "Unchanged", "badge-ghost", false),
+    };
+
+    static IEnumerable<HolderPositionChange> SortBucket(PositionChangeType type, IEnumerable<HolderPositionChange> entries)
+    {
+        // SoldOut has no current value — sort by what they used to hold.
+        // For change buckets, surface the biggest absolute movement first.
+        // For New/Unchanged, sort by current value desc.
+        return type switch
+        {
+            PositionChangeType.SoldOut => entries.OrderByDescending(e => e.PreviousValue),
+            PositionChangeType.Increased or PositionChangeType.Reduced =>
+                entries.OrderByDescending(e => Math.Abs(e.DeltaShares)),
+            _ => entries.OrderByDescending(e => e.CurrentValue),
+        };
+    }
+}
 
 @if (Model.AvailableDates.Count == 0) {
     <div class="card bg-base-100 shadow-sm">
@@ -32,71 +60,65 @@
             <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Value:</span> <strong>$@Model.TotalValue.ToString("N0")</strong></div>
             <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Shares:</span> <strong>@Model.TotalShares.ToString("N0")</strong></div>
         </div>
-        @if (Model.DisplayedCount < Model.HolderCount) {
-            <div class="text-xs text-base-content/50">Showing top @Model.DisplayedCount of @Model.HolderCount.ToString("N0") holders by value</div>
-        }
     </div>
 
-    <div class="card bg-base-100 shadow-sm">
-        <div class="overflow-x-auto">
-            <table class="table table-zebra table-sm">
-                <thead>
-                    <tr>
-                        <th>Holder</th>
-                        <th class="text-right">Value (USD)</th>
-                        <th class="text-right">Shares</th>
-                        <th class="text-right hidden md:table-cell">Change</th>
-                        <th class="hidden lg:table-cell">Type</th>
-                        <th class="hidden lg:table-cell">Discretion</th>
-                        <th class="hidden lg:table-cell">Filed</th>
-                        <th class="text-right">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var h in Model.Holdings) {
-                        var hasPrevious = Model.PreviousSharesByHolder.TryGetValue(h.InstitutionalHolderId, out var previousShares);
-                        var changePercent = hasPrevious && previousShares > 0
-                            ? (double)(h.Shares - previousShares) / previousShares * 100
-                            : (double?)null;
-                        <tr>
-                            <td class="max-w-xs truncate">@(h.InstitutionalHolder?.Name ?? "Unknown")</td>
-                            <td class="text-right font-mono">$@h.Value.ToString("N0")</td>
-                            <td class="text-right font-mono">@h.Shares.ToString("N0")</td>
-                            <td class="text-right font-mono hidden md:table-cell">
-                                @if (changePercent.HasValue) {
-                                    var css = changePercent.Value > 0 ? "text-success" : changePercent.Value < 0 ? "text-error" : "";
-                                    var sign = changePercent.Value > 0 ? "+" : "";
-                                    <span class="@css">@sign@changePercent.Value.ToString("F1")%</span>
-                                } else if (!hasPrevious) {
-                                    <span class="badge badge-success badge-xs">New</span>
-                                } else {
-                                    <span>—</span>
+    <!-- Position-change buckets -->
+    @foreach (var bucket in Buckets) {
+        var count = Model.BucketCounts.TryGetValue(bucket.Type, out var c) ? c : 0;
+        var entries = Model.GroupedHolders.TryGetValue(bucket.Type, out var list) ? list : new List<HolderPositionChange>();
+        var sorted = SortBucket(bucket.Type, entries).ToList();
+        var ariaTestId = $"holdings-bucket-{bucket.Type.ToString().ToLowerInvariant()}";
+
+        <div class="collapse collapse-arrow bg-base-100 shadow-sm mb-3" data-testid="@ariaTestId">
+            <input type="checkbox" @(bucket.OpenByDefault && count > 0 ? "checked" : "") />
+            <div class="collapse-title flex items-center gap-2 text-base font-medium">
+                <span>@bucket.Label</span>
+                <span class="badge @bucket.BadgeCss badge-sm">@count.ToString("N0")</span>
+            </div>
+            <div class="collapse-content p-0">
+                @if (count == 0) {
+                    <div class="px-4 pb-4 text-xs text-base-content/50">No holders in this bucket.</div>
+                } else {
+                    <div class="overflow-x-auto">
+                        <table class="table table-zebra table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Holder</th>
+                                    <th class="text-right">Current Shares</th>
+                                    <th class="text-right hidden md:table-cell">Previous Shares</th>
+                                    <th class="text-right">Δ Shares</th>
+                                    <th class="text-right hidden lg:table-cell">Current Value (USD)</th>
+                                    <th class="text-right">Δ Value (USD)</th>
+                                    <th class="text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var e in sorted) {
+                                    var deltaSharesCss = e.DeltaShares > 0 ? "text-success" : e.DeltaShares < 0 ? "text-error" : "";
+                                    var deltaValueCss = e.DeltaValue > 0 ? "text-success" : e.DeltaValue < 0 ? "text-error" : "";
+                                    var deltaSharesSign = e.DeltaShares > 0 ? "+" : "";
+                                    var deltaValueSign = e.DeltaValue > 0 ? "+" : "";
+                                    <tr>
+                                        <td class="max-w-xs truncate">@(e.InstitutionalHolder?.Name ?? "Unknown")</td>
+                                        <td class="text-right font-mono">@e.CurrentShares.ToString("N0")</td>
+                                        <td class="text-right font-mono hidden md:table-cell">@e.PreviousShares.ToString("N0")</td>
+                                        <td class="text-right font-mono @deltaSharesCss">@deltaSharesSign@e.DeltaShares.ToString("N0")</td>
+                                        <td class="text-right font-mono hidden lg:table-cell">$@e.CurrentValue.ToString("N0")</td>
+                                        <td class="text-right font-mono @deltaValueCss">@deltaValueSign$@e.DeltaValue.ToString("N0")</td>
+                                        <td class="text-right">
+                                            @if (e.InstitutionalHolder?.Cik != null) {
+                                                <a asp-controller="Stocks" asp-action="ShowHolder"
+                                                   asp-route-ticker="@Model.Ticker" asp-route-cik="@e.InstitutionalHolder.Cik"
+                                                   class="btn btn-ghost btn-sm">View</a>
+                                            }
+                                        </td>
+                                    </tr>
                                 }
-                            </td>
-                            <td class="hidden lg:table-cell">
-                                @switch (h.OptionType) {
-                                    case Equibles.Holdings.Data.Models.OptionType.Call:
-                                        <span class="badge badge-sm badge-success">Call</span>
-                                        break;
-                                    case Equibles.Holdings.Data.Models.OptionType.Put:
-                                        <span class="badge badge-sm badge-error">Put</span>
-                                        break;
-                                    default:
-                                        @h.ShareType
-                                        break;
-                                }
-                            </td>
-                            <td class="hidden lg:table-cell">@h.InvestmentDiscretion</td>
-                            <td class="hidden lg:table-cell text-base-content/60">@h.FilingDate.ToString("yyyy-MM-dd")</td>
-                            <td class="text-right">
-                                <a asp-controller="Stocks" asp-action="ShowHolder"
-                                   asp-route-ticker="@Model.Ticker" asp-route-cik="@h.InstitutionalHolder?.Cik"
-                                   class="btn btn-ghost btn-sm">View</a>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
         </div>
-    </div>
+    }
 }
