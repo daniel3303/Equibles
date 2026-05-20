@@ -161,6 +161,7 @@ A `docker compose down` keeps these volumes. `docker compose down -v` deletes th
 
 - **Migration takes a long time on first boot** — expected; BM25 + pgvector indexes build during the first `MigrateAsync`. Don't kill the `web` container; the 1-hour command timeout is intentional.
 - **MCP returns 401** — `MCP_API_KEY` is set but the client isn't sending `Authorization: Bearer <key>`. To open access, unset `MCP_API_KEY` and `docker compose up -d`.
-- **No data in the portal after `docker compose up`** — scrapers take minutes to hours for the initial backfill, longer the further back `Worker__MinSyncDate` goes. Watch the Status page for progress; data starts showing up as soon as the first cycle of each scraper writes a row.
+- **No data in the portal after `docker compose up`** — scrapers take minutes to hours for the initial backfill, longer the further back `Worker__MinSyncDate` goes.
+- Watch the Status page for progress; data starts showing up as soon as the first cycle of each scraper writes a row.
 - **`CREATE EXTENSION "pg_search" does not exist`** during migration — you're running against a vanilla Postgres image instead of `paradedb/paradedb`. See [Migrations → Postgres extensions](migrations.md#postgres-extensions).
 - **FINRA / FRED scrapers always error** — their API key is set incorrectly. Unset both vars to let them skip gracefully (the rest of the platform runs without them).
