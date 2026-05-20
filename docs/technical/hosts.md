@@ -21,7 +21,8 @@ The MCP transport exposing financial-domain tools to AI assistants.
 
 - Entry: [`Program.cs`](../../src/Equibles.Mcp.Server/Program.cs) (`public partial class Program`).
 - Container: [`Dockerfile`](../../src/Equibles.Mcp.Server/Dockerfile) — `dotnet/aspnet:10.0`, `EXPOSE 8080`. Compose maps `8081:8080` so the public endpoint is `http://localhost:8081/mcp`.
-- `AddEquiblesMcp(mcp => …)` registers per-module tool sets: `mcp.AddHoldings()`, `AddInsiderTrading()`, `AddFred()`, `AddSec()`, `AddFinancialFacts()`, `AddCftc()`, `AddCboe()`, `AddCongress()`, `AddShortData()`, `AddStockPrices()`. Every module shipping a `.Mcp` project gets one of these calls.
+- `AddEquiblesMcp(mcp => …)` registers per-module tool sets: `mcp.AddHoldings()`, `AddInsiderTrading()`, `AddFred()`, `AddSec()`, `AddFinancialFacts()`, `AddCftc()`, `AddCboe()`, `AddCongress()`, `AddShortData()`, `AddStockPrices()`.
+- Every module shipping a `.Mcp` project gets one of these `mcp.AddXxx()` calls.
 - `ConfigurePipeline` mounts the MCP transport at `/mcp` via `app.MapMcp("/mcp")` and wraps that path in `ApiKeyMiddleware` (under `UseWhen`, so the rest of the app stays open for health checks).
 - `IApiKeyValidator` resolves to `SimpleApiKeyValidator`, which reads `McpApiKey` from configuration. Empty / unset = auth disabled.
 - Wires `Equibles.Sec.BusinessLogic.Search.RagManager` via `AutoWireServicesFrom<T>` so MCP SEC tools can run semantic search. Requires the `Embedding` config section to be bound to `EmbeddingConfig`; without that, `EmbeddingConfig.Enabled` is false and semantic search no-ops.
