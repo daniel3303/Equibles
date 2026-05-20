@@ -162,6 +162,13 @@ public class StatusController : BaseController
         );
     }
 
+    [HttpGet("~/Status/Activity")]
+    public IActionResult Activity()
+    {
+        ViewData["Title"] = "Live activity";
+        return View();
+    }
+
     [HttpGet("~/Status/Activity/Stream")]
     public async Task ActivityStream(CancellationToken cancellationToken)
     {

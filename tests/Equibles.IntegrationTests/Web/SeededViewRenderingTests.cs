@@ -128,5 +128,31 @@ public class SeededViewRenderingTests
                 "Seeded test error for view rendering",
                 "the seeded error must appear in the recent-errors table"
             );
+        // LowercaseUrls = true in Program.cs forces the rendered href to /status/activity.
+        html.Should()
+            .Contain(
+                "/status/activity",
+                "the Live activity link must point at the new page so users can navigate to it"
+            );
+    }
+
+    [Fact]
+    public async Task GetStatusActivity_RendersLiveActivityPageWithStreamUrl()
+    {
+        var response = await _fixture.Client.GetAsync("/Status/Activity");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.Content.ReadAsStringAsync();
+        html.Should().Contain("Live activity", "the page heading must render");
+        html.Should()
+            .Contain(
+                "/status/activity/stream",
+                "the JS must point at the SSE endpoint resolved through Url.Action"
+            );
+        html.Should()
+            .Contain(
+                "data-activity-list",
+                "the live-tail list must be present for the script to fill in"
+            );
     }
 }

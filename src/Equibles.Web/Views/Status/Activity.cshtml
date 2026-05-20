@@ -1,0 +1,228 @@
+@{
+    ViewData["Title"] = "Live activity";
+}
+
+<div class="max-w-6xl mx-auto px-6 py-8 space-y-6">
+
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+            <h1 class="text-2xl font-bold">Live activity</h1>
+            <span class="badge badge-ghost gap-1" data-activity-status>
+                <span class="loading loading-ring loading-xs" data-activity-spinner></span>
+                <span data-activity-status-text>Connecting…</span>
+            </span>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <span class="text-xs text-base-content/50" data-activity-counter>0 events</span>
+            <button class="btn btn-ghost btn-sm" data-activity-clear title="Clear visible events">
+                <icon name="trash" size="4" /> Clear
+            </button>
+            <button class="btn btn-ghost btn-sm" data-activity-pause title="Pause live feed">
+                <icon name="pause" size="4" />
+                <span data-activity-pause-label>Pause</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-0">
+            <ul class="divide-y divide-base-200 max-h-[70vh] overflow-y-auto"
+                data-activity-list>
+                <li class="p-6 text-center text-base-content/50" data-activity-empty>
+                    <icon name="signal" size="8" class="mx-auto mb-2 opacity-50" />
+                    <p class="text-sm">No events yet. Scraper events will stream in as they happen.</p>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <p class="text-xs text-base-content/50">
+        Live feed of what the background scrapers are doing right now. Nothing
+        is persisted — close the tab and the history goes with it. Historical
+        errors live on the
+        <a asp-action="Index" asp-controller="Status" class="link link-hover">Status</a>
+        page.
+    </p>
+</div>
+
+@section Scripts {
+    <script>
+        // Live activity feed: consumes the /Status/Activity/Stream SSE endpoint
+        // and renders each ScraperActivity as a row. Capped at 500 events in
+        // the DOM, oldest discarded — matches the broadcaster's server-side
+        // ring buffer. Pause stops appending without dropping the connection.
+        (function () {
+            const STREAM_URL = '@Url.Action("ActivityStream", "Status")';
+            const MAX_ROWS = 500;
+
+            const list = document.querySelector('[data-activity-list]');
+            const empty = list.querySelector('[data-activity-empty]');
+            const counter = document.querySelector('[data-activity-counter]');
+            const clearBtn = document.querySelector('[data-activity-clear]');
+            const pauseBtn = document.querySelector('[data-activity-pause]');
+            const pauseLabel = pauseBtn.querySelector('[data-activity-pause-label]');
+            const statusText = document.querySelector('[data-activity-status-text]');
+            const spinner = document.querySelector('[data-activity-spinner]');
+            const statusBadge = document.querySelector('[data-activity-status]');
+
+            let eventSource = null;
+            let paused = false;
+            let queueWhilePaused = [];
+            let rendered = 0;
+
+            // Tailwind can't see classes that only appear in JS strings — these
+            // names are referenced from main.css @@source inline so Tailwind keeps them.
+            const severityClasses = {
+                Info: 'badge badge-info',
+                Warn: 'badge badge-warning',
+                Error: 'badge badge-error',
+            };
+            const severityIcons = {
+                Info: 'information-circle',
+                Warn: 'exclamation-triangle',
+                Error: 'x-circle',
+            };
+
+            // Stable colour-per-module: deterministic hash so the same source
+            // always gets the same badge tint without a maintained map.
+            function moduleBadgeClass(source) {
+                const palette = [
+                    'badge badge-primary',
+                    'badge badge-secondary',
+                    'badge badge-accent',
+                    'badge badge-neutral',
+                    'badge badge-info',
+                ];
+                let h = 0;
+                for (let i = 0; i < source.length; i++) {
+                    h = (h * 31 + source.charCodeAt(i)) | 0;
+                }
+                return palette[Math.abs(h) % palette.length] + ' badge-sm';
+            }
+
+            // Escape a string for safe use as innerHTML text content
+            function esc(s) {
+                return String(s ?? '')
+                    .replaceAll('&', '&amp;')
+                    .replaceAll('<', '&lt;')
+                    .replaceAll('>', '&gt;')
+                    .replaceAll('"', '&quot;')
+                    .replaceAll("'", '&#39;');
+            }
+
+            // Format an ISO timestamp as HH:MM:SS local time
+            function fmtTime(ts) {
+                try {
+                    const d = new Date(ts);
+                    return d.toLocaleTimeString();
+                } catch {
+                    return ts;
+                }
+            }
+
+            // Render one activity row and append to the list
+            function appendRow(activity) {
+                if (empty && empty.parentNode === list) {
+                    list.removeChild(empty);
+                }
+
+                const row = document.createElement('li');
+                row.className = 'flex items-start gap-3 p-3';
+                const severityClass = severityClasses[activity.Severity] || 'badge badge-ghost';
+                const moduleClass = moduleBadgeClass(activity.Source);
+                row.innerHTML = `
+                    <span class="${severityClass} badge-sm shrink-0" title="${esc(activity.Severity)}">
+                        ${esc(activity.Severity)}
+                    </span>
+                    <span class="${moduleClass} shrink-0" title="${esc(activity.Source)}">
+                        ${esc(activity.Source)}
+                    </span>
+                    <span class="flex-1 text-sm break-words" data-activity-message>
+                        ${esc(activity.Message)}
+                    </span>
+                    <span class="text-xs text-base-content/50 whitespace-nowrap shrink-0">
+                        ${esc(fmtTime(activity.Timestamp))}
+                    </span>
+                `;
+                list.appendChild(row);
+                rendered++;
+
+                // Trim from the top so the visible buffer matches the server cap.
+                while (rendered > MAX_ROWS && list.firstElementChild) {
+                    list.removeChild(list.firstElementChild);
+                    rendered--;
+                }
+
+                counter.textContent = rendered + (rendered === 1 ? ' event' : ' events');
+
+                // Auto-scroll to bottom only if user was already near it — keeps
+                // someone reading older entries from being yanked away.
+                const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 60;
+                if (nearBottom) {
+                    list.scrollTop = list.scrollHeight;
+                }
+            }
+
+            // Set connection-status badge text
+            function setStatus(text, healthy) {
+                statusText.textContent = text;
+                statusBadge.className = 'badge gap-1 ' + (healthy ? 'badge-success' : 'badge-warning');
+                spinner.classList.toggle('hidden', healthy);
+            }
+
+            // Open the SSE connection (browser auto-reconnects on transient drops)
+            function connect() {
+                if (eventSource) eventSource.close();
+                eventSource = new EventSource(STREAM_URL);
+
+                eventSource.addEventListener('open', () => setStatus('Connected', true));
+                eventSource.addEventListener('error', () => setStatus('Reconnecting…', false));
+
+                // Server emits "activity" events; default "message" isn't used.
+                eventSource.addEventListener('activity', (ev) => {
+                    let activity;
+                    try {
+                        activity = JSON.parse(ev.data);
+                    } catch {
+                        return;
+                    }
+
+                    if (paused) {
+                        queueWhilePaused.push(activity);
+                        // Cap the off-screen queue too so a long pause can't
+                        // explode memory.
+                        if (queueWhilePaused.length > MAX_ROWS) {
+                            queueWhilePaused = queueWhilePaused.slice(-MAX_ROWS);
+                        }
+                        return;
+                    }
+                    appendRow(activity);
+                });
+            }
+
+            // Toggle pause / resume; on resume drain the off-screen queue.
+            pauseBtn.addEventListener('click', () => {
+                paused = !paused;
+                pauseLabel.textContent = paused ? 'Resume' : 'Pause';
+                if (!paused && queueWhilePaused.length > 0) {
+                    queueWhilePaused.forEach(appendRow);
+                    queueWhilePaused = [];
+                }
+            });
+
+            // Clear the visible list (and the off-screen queue) without
+            // disconnecting from the server.
+            clearBtn.addEventListener('click', () => {
+                while (list.firstChild) list.removeChild(list.firstChild);
+                if (empty) list.appendChild(empty);
+                rendered = 0;
+                queueWhilePaused = [];
+                counter.textContent = '0 events';
+            });
+
+            setStatus('Connecting…', false);
+            connect();
+        })();
+    </script>
+}
