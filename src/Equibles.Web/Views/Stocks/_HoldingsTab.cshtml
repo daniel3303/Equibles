@@ -117,12 +117,12 @@
                                         @foreach (var e in card.Entries) {
                                             var deltaSharesCss = e.DeltaShares > 0 ? "text-success" : e.DeltaShares < 0 ? "text-error" : "";
                                             var deltaValueCss = e.DeltaValue > 0 ? "text-success" : e.DeltaValue < 0 ? "text-error" : "";
-                                            var deltaSharesSign = e.DeltaShares > 0 ? "+" : "";
-                                            var deltaValueSign = e.DeltaValue > 0 ? "+" : "";
+                                            var deltaSharesText = (e.DeltaShares > 0 ? "+" : e.DeltaShares < 0 ? "-" : "") + Math.Abs(e.DeltaShares).ToString("N0");
+                                            var deltaValueText = (e.DeltaValue > 0 ? "+$" : e.DeltaValue < 0 ? "-$" : "$") + Math.Abs(e.DeltaValue).ToString("N0");
                                             <tr>
                                                 <td class="max-w-xs truncate">@(e.InstitutionalHolder?.Name ?? "Unknown")</td>
-                                                <td class="text-right font-mono @deltaSharesCss">@deltaSharesSign@e.DeltaShares.ToString("N0")</td>
-                                                <td class="text-right font-mono hidden md:table-cell @deltaValueCss">@deltaValueSign$@e.DeltaValue.ToString("N0")</td>
+                                                <td class="text-right font-mono @deltaSharesCss">@deltaSharesText</td>
+                                                <td class="text-right font-mono hidden md:table-cell @deltaValueCss">@deltaValueText</td>
                                                 <td class="text-right font-mono hidden lg:table-cell text-base-content/60">@e.PreviousShares.ToString("N0") → @e.CurrentShares.ToString("N0")</td>
                                             </tr>
                                         }
@@ -170,15 +170,15 @@
                                 @foreach (var e in sorted) {
                                     var deltaSharesCss = e.DeltaShares > 0 ? "text-success" : e.DeltaShares < 0 ? "text-error" : "";
                                     var deltaValueCss = e.DeltaValue > 0 ? "text-success" : e.DeltaValue < 0 ? "text-error" : "";
-                                    var deltaSharesSign = e.DeltaShares > 0 ? "+" : "";
-                                    var deltaValueSign = e.DeltaValue > 0 ? "+" : "";
+                                    var deltaSharesText = (e.DeltaShares > 0 ? "+" : e.DeltaShares < 0 ? "-" : "") + Math.Abs(e.DeltaShares).ToString("N0");
+                                    var deltaValueText = (e.DeltaValue > 0 ? "+$" : e.DeltaValue < 0 ? "-$" : "$") + Math.Abs(e.DeltaValue).ToString("N0");
                                     <tr>
                                         <td class="max-w-xs truncate">@(e.InstitutionalHolder?.Name ?? "Unknown")</td>
                                         <td class="text-right font-mono">@e.CurrentShares.ToString("N0")</td>
                                         <td class="text-right font-mono hidden md:table-cell">@e.PreviousShares.ToString("N0")</td>
-                                        <td class="text-right font-mono @deltaSharesCss">@deltaSharesSign@e.DeltaShares.ToString("N0")</td>
+                                        <td class="text-right font-mono @deltaSharesCss">@deltaSharesText</td>
                                         <td class="text-right font-mono hidden lg:table-cell">$@e.CurrentValue.ToString("N0")</td>
-                                        <td class="text-right font-mono @deltaValueCss">@deltaValueSign$@e.DeltaValue.ToString("N0")</td>
+                                        <td class="text-right font-mono @deltaValueCss">@deltaValueText</td>
                                         <td class="text-right">
                                             @if (e.InstitutionalHolder?.Cik != null) {
                                                 <a asp-controller="Stocks" asp-action="ShowHolder"
