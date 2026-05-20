@@ -43,16 +43,13 @@ public class CftcImportService
 
     public async Task Import(CancellationToken cancellationToken)
     {
-        // Build a lookup of curated contract codes
         var curatedLookup = CuratedContractRegistry.Contracts.ToDictionary(
             c => c.MarketCode.Trim(),
             StringComparer.OrdinalIgnoreCase
         );
 
-        // Ensure all curated contracts exist in DB
         await EnsureContractsExist(curatedLookup, cancellationToken);
 
-        // Determine start year from global latest date or MinSyncDate
         var startYear = await DetermineStartYear(cancellationToken);
         var endYear = DateTime.UtcNow.Year;
 
@@ -158,7 +155,6 @@ public class CftcImportService
         var records = await _cftcClient.DownloadYearlyReport(year);
         _logger.LogDebug("CFTC year {Year}: downloaded {Count} raw records", year, records.Count);
 
-        // Filter to curated contracts only
         var filtered = records
             .Where(r =>
                 r.ContractMarketCode != null
@@ -175,7 +171,6 @@ public class CftcImportService
         if (filtered.Count == 0)
             return;
 
-        // Load contract ID map
         Dictionary<string, Guid> contractIdMap;
         using (var scope = _scopeFactory.CreateScope())
         {
@@ -190,7 +185,6 @@ public class CftcImportService
                 );
         }
 
-        // Load existing dates per contract for deduplication
         var allDates = filtered
             .Select(r => ParseDate(r.ReportDate))
             .Where(d => d.HasValue)
