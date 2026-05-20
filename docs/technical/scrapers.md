@@ -29,7 +29,8 @@ Built-in behavior:
 
 Subclass-specific extras (worth knowing because they show up in multiple workers):
 
-- `WaitForNextCycle(interval, stoppingToken)` — override hook to interrupt the sleep on an external signal. [`HoldingsScraperWorker`](../../src/Equibles.Holdings.HostedService/HoldingsScraperWorker.cs) uses it to wake immediately when `HoldingsRescanSignal` fires after a `StockCusipChanged` event.
+- `WaitForNextCycle(interval, stoppingToken)` — override hook to interrupt the sleep on an external signal.
+- [`HoldingsScraperWorker`](../../src/Equibles.Holdings.HostedService/HoldingsScraperWorker.cs) uses `WaitForNextCycle` to wake immediately when `HoldingsRescanSignal` fires after a `StockCusipChanged` event.
 - Per-attempt retry delays exposed as `protected virtual` properties (e.g. `RetryDelays = [30s, 2m, 10m]`) so tests can collapse them without changing production.
 
 ## Integration clients — [`Equibles.Integrations.*`](../../src/Equibles.Integrations.Common)
