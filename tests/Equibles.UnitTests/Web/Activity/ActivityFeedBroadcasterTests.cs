@@ -63,6 +63,33 @@ public class ActivityFeedBroadcasterTests
     }
 
     [Fact]
+    public void Subscribe_BacklogLargerThanBuffer_ClampsToBufferCapacity()
+    {
+        for (var i = 0; i < 50; i++)
+        {
+            _sut.Publish(MakeActivity("SEC", $"msg-{i}"));
+        }
+
+        using var subscription = _sut.Subscribe(
+            backlogSize: ActivityFeedBroadcaster.BufferCapacity + 1000
+        );
+
+        // Only 50 events were ever published, so the clamp lands well below
+        // BufferCapacity — the assert is that nothing extra is invented.
+        subscription.Backlog.Should().HaveCount(50);
+    }
+
+    [Fact]
+    public void Dispose_CalledTwice_IsIdempotent()
+    {
+        var subscription = _sut.Subscribe();
+        subscription.Dispose();
+        var act = () => subscription.Dispose();
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
     public void Dispose_RemovesSubscriberSoFuturePublishesIgnoreIt()
     {
         var subscription = _sut.Subscribe();
