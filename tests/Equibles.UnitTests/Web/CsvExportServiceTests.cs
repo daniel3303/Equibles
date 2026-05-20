@@ -116,4 +116,23 @@ public class CsvExportServiceTests
             Thread.CurrentThread.CurrentCulture = prev;
         }
     }
+
+    [Fact]
+    public void Format_Double_CultureInvariant_UsesPeriodDecimalSeparator()
+    {
+        // The remaining Format overload not yet pinned for invariant culture. Same risk
+        // as the decimal overload: a regression that dropped InvariantCulture from the
+        // double overload would render 1.5 as "1,5" on de-DE and the comma would corrupt
+        // the surrounding CSV row.
+        var prev = Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            Thread.CurrentThread.CurrentCulture = new CultureInfo("de-DE");
+            CsvExportService.Format(1.5).Should().Be("1.5");
+        }
+        finally
+        {
+            Thread.CurrentThread.CurrentCulture = prev;
+        }
+    }
 }
