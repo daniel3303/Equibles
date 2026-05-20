@@ -178,6 +178,63 @@ public class HoldingsExportHoldersTests
         html.ToLowerInvariant().Should().Contain("/holdings/export/holders");
     }
 
+    [Fact]
+    public async Task ExportHolders_MultipleHolders_OrdersByValueDescending()
+    {
+        // The Holders export orders rows by Value desc. None of the other tests exercise
+        // multi-holder ordering — a regression flipping the sort direction would slip
+        // past every .Contain assertion. WhaleFund's $5M position must appear before
+        // MinnowFund's $1M position in the CSV body.
+        var stockId = Guid.NewGuid();
+        var bigHolderId = Guid.NewGuid();
+        var smallHolderId = Guid.NewGuid();
+        var reportDate = new DateOnly(2024, 12, 31);
+
+        await _fixture.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new CommonStock
+                {
+                    Id = stockId,
+                    Ticker = "GOOG",
+                    Name = "Alphabet Inc.",
+                    Cik = "0001652044",
+                }
+            );
+            db.AddRange(
+                new InstitutionalHolder
+                {
+                    Id = bigHolderId,
+                    Cik = "0009800001",
+                    Name = "WhaleFund",
+                },
+                new InstitutionalHolder
+                {
+                    Id = smallHolderId,
+                    Cik = "0009800002",
+                    Name = "MinnowFund",
+                }
+            );
+            db.Add(MakeHolding(stockId, bigHolderId, reportDate, 50_000, 5_000_000));
+            db.Add(MakeHolding(stockId, smallHolderId, reportDate, 10_000, 1_000_000));
+            await Task.CompletedTask;
+        });
+
+        var response = await _fixture.Client.GetAsync(
+            $"/Holdings/Export/Holders?ticker=GOOG&date={reportDate:yyyy-MM-dd}"
+        );
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var whaleIndex = body.IndexOf("WhaleFund", StringComparison.Ordinal);
+        var minnowIndex = body.IndexOf("MinnowFund", StringComparison.Ordinal);
+        whaleIndex.Should().BeGreaterThanOrEqualTo(0);
+        minnowIndex.Should().BeGreaterThanOrEqualTo(0);
+        whaleIndex
+            .Should()
+            .BeLessThan(minnowIndex, "rows are ordered by Value desc — $5M outranks $1M");
+    }
+
     private static InstitutionalHolding MakeHolding(
         Guid stockId,
         Guid holderId,
