@@ -24,6 +24,18 @@ public class DailyStockPriceRepository : BaseRepository<DailyStockPrice>
             .Where(p => p.CommonStockId == stock.Id && p.Date >= startDate && p.Date <= endDate);
     }
 
+    public IQueryable<DailyStockPrice> GetByStocks(
+        IEnumerable<Guid> stockIds,
+        DateOnly startDate,
+        DateOnly endDate
+    )
+    {
+        return GetAll()
+            .Where(p =>
+                stockIds.Contains(p.CommonStockId) && p.Date >= startDate && p.Date <= endDate
+            );
+    }
+
     public IQueryable<DateOnly> GetLatestDate(CommonStock stock)
     {
         return GetAll()

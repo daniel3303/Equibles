@@ -5,6 +5,7 @@ using Equibles.Holdings.Repositories.Models;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.Extensions;
+using Equibles.Web.Services;
 using Equibles.Web.ViewModels.Profiles;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -23,6 +24,7 @@ public class ProfilesController : BaseController
     private readonly InsiderTransactionRepository _insiderTransactionRepository;
     private readonly CongressMemberRepository _congressMemberRepository;
     private readonly CongressionalTradeRepository _congressionalTradeRepository;
+    private readonly HoldingsBacktestService _holdingsBacktestService;
 
     public ProfilesController(
         InstitutionalHolderRepository institutionalHolderRepository,
@@ -31,6 +33,7 @@ public class ProfilesController : BaseController
         InsiderTransactionRepository insiderTransactionRepository,
         CongressMemberRepository congressMemberRepository,
         CongressionalTradeRepository congressionalTradeRepository,
+        HoldingsBacktestService holdingsBacktestService,
         ILogger<ProfilesController> logger
     )
         : base(logger)
@@ -41,6 +44,7 @@ public class ProfilesController : BaseController
         _insiderTransactionRepository = insiderTransactionRepository;
         _congressMemberRepository = congressMemberRepository;
         _congressionalTradeRepository = congressionalTradeRepository;
+        _holdingsBacktestService = holdingsBacktestService;
     }
 
     [HttpGet("~/Institutions/{cik}")]
@@ -95,6 +99,22 @@ public class ProfilesController : BaseController
                 QuarterlyActivity = quarterlyActivity,
             }
         );
+    }
+
+    [HttpGet("~/Institutions/{cik}/Backtest")]
+    public async Task<IActionResult> BacktestInstitution(
+        string cik,
+        [FromQuery(Name = "from")] DateOnly? from = null,
+        [FromQuery(Name = "to")] DateOnly? to = null,
+        [FromQuery(Name = "benchmark")] string benchmark = null
+    )
+    {
+        var viewModel = await _holdingsBacktestService.Execute(cik, from, to, benchmark);
+        if (viewModel.HolderNotFound)
+            return NotFound();
+
+        ViewData["Title"] = viewModel.HolderName + " · Backtest";
+        return View(viewModel);
     }
 
     private async Task<(
