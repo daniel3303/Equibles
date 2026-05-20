@@ -1,0 +1,114 @@
+@model Equibles.Web.ViewModels.Profiles.BacktestViewModel
+
+@{
+    ViewData["Title"] = (Model.HolderName ?? "Institution") + " · Backtest";
+    var hasPoints = Model.Result.Points.Count > 0;
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold mb-1" data-testid="backtest-heading">@Model.HolderName Backtest</h1>
+        <p class="text-base-content/60 text-sm">
+            Simulates cloning the institution's quarterly 13F portfolio · rebalanced 45 days after each ReportDate (the latest legal filing deadline) · option positions skipped.
+        </p>
+    </div>
+
+    <!-- Filter form — date range + benchmark. Submits via GET so the URL captures the request. -->
+    <div class="card bg-base-100 shadow-sm mb-6" data-testid="backtest-filters">
+        <div class="card-body p-4">
+            <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <fieldset class="fieldset">
+                    <legend class="fieldset-legend">From</legend>
+                    <input type="date" name="from" value="@(Model.RequestedFrom?.ToString("yyyy-MM-dd"))" class="input input-bordered w-full" />
+                </fieldset>
+                <fieldset class="fieldset">
+                    <legend class="fieldset-legend">To</legend>
+                    <input type="date" name="to" value="@(Model.RequestedTo?.ToString("yyyy-MM-dd"))" class="input input-bordered w-full" />
+                </fieldset>
+                <fieldset class="fieldset">
+                    <legend class="fieldset-legend">Benchmark</legend>
+                    <select name="benchmark" class="select select-bordered w-full">
+                        @foreach (var option in Model.BenchmarkOptions) {
+                            var isSelected = string.Equals(option.Ticker, Model.Benchmark, StringComparison.OrdinalIgnoreCase);
+                            <option value="@option.Ticker" selected="@(isSelected ? "selected" : null)">@option.Ticker — @option.Name</option>
+                        }
+                    </select>
+                </fieldset>
+                <div class="flex items-end">
+                    <button type="submit" class="btn btn-primary w-full">Run</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (Model.BenchmarkNotFound) {
+        <div class="alert alert-error mb-6" data-testid="backtest-benchmark-error">
+            <span>@Model.ErrorMessage</span>
+        </div>
+    } else if (!string.IsNullOrWhiteSpace(Model.Result.Reason)) {
+        <div class="alert alert-warning mb-6" data-testid="backtest-reason">
+            <span>@Model.Result.Reason</span>
+        </div>
+    } else if (hasPoints) {
+        <!-- Summary cards: portfolio vs benchmark, identical layout for visual comparison. -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+            @{
+                var rows = new[] {
+                    new { Label = "Portfolio (cloned)", Summary = Model.Result.PortfolioSummary, TestId = "backtest-portfolio-summary" },
+                    new { Label = "Benchmark (" + Model.Benchmark + ")", Summary = Model.Result.BenchmarkSummary, TestId = "backtest-benchmark-summary" },
+                };
+            }
+            @foreach (var row in rows) {
+                <div class="card bg-base-100 shadow-sm" data-testid="@row.TestId">
+                    <div class="card-body p-4">
+                        <h3 class="text-base font-medium mb-2">@row.Label</h3>
+                        <div class="stats stats-vertical sm:stats-horizontal shadow-sm bg-base-200 w-full">
+                            <div class="stat">
+                                <div class="stat-title">Total return</div>
+                                <div class="stat-value text-2xl font-mono">@row.Summary.TotalReturnPercent.ToString("F2")%</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-title">CAGR</div>
+                                <div class="stat-value text-2xl font-mono">@row.Summary.CagrPercent.ToString("F2")%</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-title">Max drawdown</div>
+                                <div class="stat-value text-2xl font-mono">@row.Summary.MaxDrawdownPercent.ToString("F2")%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Slice 2 surfaces the series as a table; slice 3 will replace this with a Chart.js line chart. -->
+        <div class="card bg-base-100 shadow-sm" data-testid="backtest-series-table">
+            <div class="card-body p-4">
+                <div class="flex items-baseline justify-between mb-2">
+                    <h3 class="text-base font-medium m-0">Daily series</h3>
+                    <span class="text-xs text-base-content/60">@Model.Result.StartDate.ToString("yyyy-MM-dd") → @Model.Result.EndDate.ToString("yyyy-MM-dd") · @Model.Result.Points.Count.ToString("N0") days</span>
+                </div>
+                <div class="overflow-x-auto" style="max-height: 400px;">
+                    <table class="table table-zebra table-sm">
+                        <thead class="sticky top-0 bg-base-100">
+                            <tr>
+                                <th>Date</th>
+                                <th class="text-right">Portfolio (=100)</th>
+                                <th class="text-right">Benchmark (=100)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var point in Model.Result.Points) {
+                                <tr>
+                                    <td class="font-mono">@point.Date.ToString("yyyy-MM-dd")</td>
+                                    <td class="text-right font-mono">@point.PortfolioValue.ToString("F2")</td>
+                                    <td class="text-right font-mono">@point.BenchmarkValue.ToString("F2")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
