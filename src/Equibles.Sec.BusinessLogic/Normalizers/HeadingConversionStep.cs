@@ -93,10 +93,8 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         var style = node.GetAttribute("style") ?? "";
         var parentStyle = node.ParentElement?.GetAttribute("style") ?? "";
 
-        return style.Contains("text-align:center")
-            || style.Contains("text-align: center")
-            || parentStyle.Contains("text-align:center")
-            || parentStyle.Contains("text-align: center");
+        return ContainsCssDeclaration(style, "text-align", "center")
+            || ContainsCssDeclaration(parentStyle, "text-align", "center");
     }
 
     private bool IsApart(IElement node)
@@ -160,10 +158,8 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         var style = span.GetAttribute("style") ?? "";
         var innerHtml = span.InnerHtml;
 
-        return style.Contains("font-style:italic")
-            || style.Contains("font-style: italic")
-            || innerHtml.Contains("font-style:italic")
-            || innerHtml.Contains("font-style: italic");
+        return ContainsCssDeclaration(style, "font-style", "italic")
+            || ContainsCssDeclaration(innerHtml, "font-style", "italic");
     }
 
     private void ReplaceNodeWithHeading(IElement node, string headingTag, IHtmlDocument doc)
@@ -178,9 +174,14 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         var style = span.GetAttribute("style") ?? "";
         var innerHtml = span.InnerHtml;
 
-        return style.Contains("font-weight:bold")
-            || style.Contains("font-weight: bold")
-            || innerHtml.Contains("font-weight:bold")
-            || innerHtml.Contains("font-weight: bold");
+        return ContainsCssDeclaration(style, "font-weight", "bold")
+            || ContainsCssDeclaration(innerHtml, "font-weight", "bold");
+    }
+
+    // SEC EDGAR emits inline CSS with and without a space after the colon
+    // (e.g. "font-weight:bold" and "font-weight: bold"); both forms must match.
+    private static bool ContainsCssDeclaration(string source, string property, string value)
+    {
+        return source.Contains($"{property}:{value}") || source.Contains($"{property}: {value}");
     }
 }
