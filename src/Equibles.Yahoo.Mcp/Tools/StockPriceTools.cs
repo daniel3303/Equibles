@@ -48,7 +48,7 @@ public class StockPriceTools
             int maxResults = 250
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var stock = await FindStockByTicker(ticker);
@@ -85,10 +85,8 @@ public class StockPriceTools
 
                 return result.ToString();
             },
-            _logger,
             "GetStockPrices",
-            $"ticker: {ticker}",
-            ReportError
+            $"ticker: {ticker}"
         );
     }
 
@@ -101,7 +99,7 @@ public class StockPriceTools
             string tickers
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var tickerList = tickers
@@ -158,10 +156,8 @@ public class StockPriceTools
 
                 return result.ToString();
             },
-            _logger,
             "GetLatestPrices",
-            $"tickers: {tickers}",
-            ReportError
+            $"tickers: {tickers}"
         );
     }
 
@@ -184,7 +180,7 @@ public class StockPriceTools
             int maxResults = 60
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 if (kPeriod < 2 || dPeriod < 1)
@@ -230,10 +226,8 @@ public class StockPriceTools
 
                 return result.ToString();
             },
-            _logger,
             "GetStochasticOscillator",
-            $"ticker: {ticker}",
-            ReportError
+            $"ticker: {ticker}"
         );
     }
 
@@ -255,7 +249,7 @@ public class StockPriceTools
             int maxResults = 60
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 if (period < 2)
@@ -294,10 +288,8 @@ public class StockPriceTools
 
                 return result.ToString();
             },
-            _logger,
             "GetAverageTrueRange",
-            $"ticker: {ticker}",
-            ReportError
+            $"ticker: {ticker}"
         );
     }
 
@@ -318,7 +310,7 @@ public class StockPriceTools
             int maxResults = 60
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var (stock, records, error) = await LoadAscendingPriceWindow(
@@ -350,10 +342,8 @@ public class StockPriceTools
 
                 return result.ToString();
             },
-            _logger,
             "GetOnBalanceVolume",
-            $"ticker: {ticker}",
-            ReportError
+            $"ticker: {ticker}"
         );
     }
 
@@ -392,6 +382,9 @@ public class StockPriceTools
 
     private Task<CommonStock> FindStockByTicker(string ticker) =>
         _commonStockRepository.GetByTicker(ticker.Trim().ToUpperInvariant());
+
+    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
+        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
 
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
