@@ -80,46 +80,7 @@ public class DocumentScraper : IDocumentScraper
             }
 
             if (result.DeferredFilings.Count > 0)
-            {
-                _logger.LogInformation(
-                    "Retrying {Count} deferred filings after all tickers processed",
-                    result.DeferredFilings.Count
-                );
-
-                var deferred = result.DeferredFilings.ToList();
-                result.DeferredFilings.Clear();
-
-                foreach (var filing in deferred)
-                {
-                    if (cancellationToken.IsCancellationRequested)
-                        break;
-
-                    try
-                    {
-                        await CreateDocument(filing.Company, filing.Filing, filing.DocumentType);
-                        result.DocumentsAdded++;
-
-                        _logger.LogInformation(
-                            "Deferred document succeeded for {Ticker} - {DocumentType} - {FilingDate}",
-                            filing.Company.Ticker,
-                            filing.DocumentType,
-                            filing.Filing.FilingDate
-                        );
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(
-                            ex,
-                            "Skipping document for {Ticker} - {DocumentType} - {FilingDate} after retry: {Message}",
-                            filing.Company.Ticker,
-                            filing.DocumentType,
-                            filing.Filing.FilingDate,
-                            ex.Message
-                        );
-                        result.DocumentsSkipped++;
-                    }
-                }
-            }
+                await RetryDeferredFilings(result, cancellationToken);
 
             result.Duration = DateTime.UtcNow - startTime;
 
@@ -456,6 +417,51 @@ public class DocumentScraper : IDocumentScraper
                 ex,
                 $"ticker: {company.Ticker}, accession: {filing.AccessionNumber}"
             );
+        }
+    }
+
+    private async Task RetryDeferredFilings(
+        ScrapingResult result,
+        CancellationToken cancellationToken
+    )
+    {
+        _logger.LogInformation(
+            "Retrying {Count} deferred filings after all tickers processed",
+            result.DeferredFilings.Count
+        );
+
+        var deferred = result.DeferredFilings.ToList();
+        result.DeferredFilings.Clear();
+
+        foreach (var filing in deferred)
+        {
+            if (cancellationToken.IsCancellationRequested)
+                break;
+
+            try
+            {
+                await CreateDocument(filing.Company, filing.Filing, filing.DocumentType);
+                result.DocumentsAdded++;
+
+                _logger.LogInformation(
+                    "Deferred document succeeded for {Ticker} - {DocumentType} - {FilingDate}",
+                    filing.Company.Ticker,
+                    filing.DocumentType,
+                    filing.Filing.FilingDate
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Skipping document for {Ticker} - {DocumentType} - {FilingDate} after retry: {Message}",
+                    filing.Company.Ticker,
+                    filing.DocumentType,
+                    filing.Filing.FilingDate,
+                    ex.Message
+                );
+                result.DocumentsSkipped++;
+            }
         }
     }
 
