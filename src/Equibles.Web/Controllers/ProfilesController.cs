@@ -234,11 +234,7 @@ public class ProfilesController : BaseController
         [FromQuery(Name = "date")] DateOnly? date = null
     )
     {
-        ciks ??= [];
-        var distinctCiks = ciks.Where(c => !string.IsNullOrWhiteSpace(c))
-            .Select(c => c.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var distinctCiks = NormalizeCiks(ciks);
         if (distinctCiks.Count > InstitutionCompareViewModel.MaxCiks)
             return BadRequest(
                 $"At most {InstitutionCompareViewModel.MaxCiks} CIKs may be compared."
@@ -275,11 +271,7 @@ public class ProfilesController : BaseController
         [FromQuery(Name = "date")] DateOnly? date = null
     )
     {
-        ciks ??= [];
-        var distinctCiks = ciks.Where(c => !string.IsNullOrWhiteSpace(c))
-            .Select(c => c.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var distinctCiks = NormalizeCiks(ciks);
         if (distinctCiks.Count > InstitutionCombinedViewModel.MaxCiks)
             return BadRequest(
                 $"At most {InstitutionCombinedViewModel.MaxCiks} CIKs may be combined."
@@ -447,4 +439,11 @@ public class ProfilesController : BaseController
         }
         return perFund;
     }
+
+    private static List<string> NormalizeCiks(string[] ciks) =>
+        (ciks ?? [])
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 }
