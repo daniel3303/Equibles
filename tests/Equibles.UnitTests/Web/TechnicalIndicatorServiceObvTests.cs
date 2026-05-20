@@ -78,4 +78,18 @@ public class TechnicalIndicatorServiceObvTests
 
         obv.Should().BeEmpty();
     }
+
+    [Fact]
+    public void ComputeObv_ConstantCloses_RemainsAtZero_RegardlessOfVolumes()
+    {
+        // Every close equals the previous → per contract "leave unchanged on equality",
+        // so OBV stays at the seed 0 at every bar. Volumes vary to catch a bug that
+        // compares the wrong series, or that treats equality as an up-move (>=).
+        var closes = new List<decimal> { 10m, 10m, 10m, 10m };
+        var volumes = new List<long> { 100, 250, 500, 750 };
+
+        var obv = TechnicalIndicatorService.ComputeObv(closes, volumes);
+
+        obv.Should().Equal(0L, 0L, 0L, 0L);
+    }
 }
