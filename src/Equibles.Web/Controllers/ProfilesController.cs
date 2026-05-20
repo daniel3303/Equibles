@@ -1,5 +1,7 @@
 using Equibles.Congress.Repositories;
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
+using Equibles.Holdings.Repositories.Projections;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.Extensions;
@@ -48,8 +50,38 @@ public class ProfilesController : BaseController
         if (holder == null)
             return NotFound();
 
-        var holdings = await _institutionalHoldingRepository
-            .GetHistoryByHolder(holder)
+        var holderHistory = _institutionalHoldingRepository.GetHistoryByHolder(holder);
+
+        var reportDates = await holderHistory
+            .Select(holding => holding.ReportDate)
+            .Distinct()
+            .OrderByDescending(date => date)
+            .ToListAsync();
+
+        DateOnly? latestReportDate = reportDates.Count > 0 ? reportDates[0] : null;
+        DateOnly? previousReportDate = reportDates.Count > 1 ? reportDates[1] : null;
+
+        var currentQuarterHoldings = latestReportDate.HasValue
+            ? await _institutionalHoldingRepository
+                .GetByHolder(holder, latestReportDate.Value)
+                .ToListAsync()
+            : new List<InstitutionalHolding>();
+
+        var priorQuarterHoldings = previousReportDate.HasValue
+            ? await _institutionalHoldingRepository
+                .GetByHolder(holder, previousReportDate.Value)
+                .ToListAsync()
+            : new List<InstitutionalHolding>();
+
+        var summary = InstitutionPortfolioSummaryCalculator.Calculate(
+            currentQuarterHoldings,
+            priorQuarterHoldings,
+            reportDates.Count,
+            latestReportDate,
+            previousReportDate
+        );
+
+        var holdings = await holderHistory
             .OrderByDescending(holding => holding.ReportDate)
             .Take(RecentRowLimit)
             .Select(holding => new HoldingRowViewModel
@@ -69,6 +101,7 @@ public class ProfilesController : BaseController
                 Name = holder.Name,
                 Cik = holder.Cik,
                 Location = ProfileFormatting.JoinLocation(holder.City, holder.StateOrCountry),
+                Summary = summary,
                 Holdings = holdings,
             }
         );

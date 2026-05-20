@@ -59,6 +59,57 @@ public class ProfilesControllerViewRenderingTests
     }
 
     [Fact]
+    public async Task GetInstitution_SingleHolding_RendersPortfolioSummaryStatStrip()
+    {
+        // Pin the issue #1011 header strip: the institution profile must render
+        // the AUM / position-count / concentration / turnover stat cards above
+        // the recent-holdings table. A regression that dropped the summary
+        // computation (or hid the strip behind a stale model property) would
+        // leave the page intact except for the stats — assert each card's
+        // data-testid plus the formatted AUM so the failure points at the
+        // broken metric, not at the whole view.
+        await _fixture.ResetAndSeedAsync(async db =>
+        {
+            var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+            var holder = new InstitutionalHolder
+            {
+                Cik = "0000002000",
+                Name = "SUMMARY TEST FUND",
+                City = "Boston",
+                StateOrCountry = "MA",
+            };
+            db.Add(stock);
+            db.Add(holder);
+            db.Add(
+                new InstitutionalHolding
+                {
+                    InstitutionalHolder = holder,
+                    CommonStock = stock,
+                    ReportDate = new DateOnly(2024, 9, 30),
+                    FilingDate = new DateOnly(2024, 11, 14),
+                    Shares = 1_000,
+                    Value = 5_000_000,
+                }
+            );
+            await Task.CompletedTask;
+        });
+
+        var response = await _fixture.Client.GetAsync("/Institutions/0000002000");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.Content.ReadAsStringAsync();
+        html.Should()
+            .Contain("data-testid=\"portfolio-summary\"")
+            .And.Contain("data-testid=\"summary-aum\"")
+            .And.Contain("data-testid=\"summary-position-count\"")
+            .And.Contain("data-testid=\"summary-top10\"")
+            .And.Contain("data-testid=\"summary-turnover\"")
+            .And.Contain("data-testid=\"summary-quarters-reported\"")
+            .And.Contain("$5.0M")
+            .And.Contain("Reported AUM");
+    }
+
+    [Fact]
     public async Task GetInsider_KnownOwnerCikWithTransaction_RendersOwnerRoleAndTradeRow()
     {
         await _fixture.ResetAndSeedAsync(async db =>

@@ -2,15 +2,63 @@
 
 @{
     ViewData["Title"] = Model.Name;
+    var summary = Model.Summary;
+    var hasSummary = summary.LatestReportDate.HasValue;
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
-    <div class="mb-8">
+    <div class="mb-6">
         <h1 class="text-3xl font-bold mb-2">@Model.Name</h1>
         <p class="text-base-content/60">
             Institutional holder@(string.IsNullOrWhiteSpace(Model.Location) ? "" : " · " + Model.Location) · CIK @Model.Cik
         </p>
     </div>
+
+    @if (hasSummary) {
+        <div data-testid="portfolio-summary"
+             class="stats stats-vertical lg:stats-horizontal shadow-sm bg-base-100 mb-8 w-full">
+            <div class="stat">
+                <div class="stat-title">Reported AUM</div>
+                <div class="stat-value text-2xl" data-testid="summary-aum">
+                    $@((summary.ReportedAum / 1_000_000m).ToString("N1"))M
+                </div>
+                <div class="stat-desc">As of @summary.LatestReportDate?.ToString("yyyy-MM-dd")</div>
+            </div>
+            <div class="stat">
+                <div class="stat-title">Positions</div>
+                <div class="stat-value text-2xl" data-testid="summary-position-count">@summary.PositionCount.ToString("N0")</div>
+                <div class="stat-desc">Distinct stocks held</div>
+            </div>
+            <div class="stat">
+                <div class="stat-title">Top 10 concentration</div>
+                <div class="stat-value text-2xl" data-testid="summary-top10">@summary.Top10ConcentrationPercent.ToString("F1")%</div>
+                <div class="stat-desc">Top 25: @summary.Top25ConcentrationPercent.ToString("F1")%</div>
+            </div>
+            <div class="stat">
+                <div class="stat-title">QoQ turnover</div>
+                <div class="stat-value text-2xl" data-testid="summary-turnover"
+                     title="(Σ |Δshares × current price proxy|) ÷ (2 × AUM). A proxy for portfolio change quarter over quarter.">
+                    @(summary.QuarterOverQuarterTurnoverPercent.HasValue
+                        ? summary.QuarterOverQuarterTurnoverPercent.Value.ToString("F1") + "%"
+                        : "—")
+                </div>
+                <div class="stat-desc">
+                    @(summary.PreviousReportDate.HasValue
+                        ? "vs " + summary.PreviousReportDate.Value.ToString("yyyy-MM-dd")
+                        : "No prior quarter")
+                </div>
+            </div>
+            <div class="stat">
+                <div class="stat-title">Quarters reported</div>
+                <div class="stat-value text-2xl" data-testid="summary-quarters-reported">@summary.QuartersReported.ToString("N0")</div>
+                <div class="stat-desc">
+                    @(summary.PreviousReportDate.HasValue
+                        ? "Prior: " + summary.PreviousReportDate.Value.ToString("yyyy-MM-dd")
+                        : "Latest only")
+                </div>
+            </div>
+        </div>
+    }
 
     <h2 class="text-xl font-semibold mb-3">Recent holdings</h2>
     @if (Model.Holdings.Count == 0) {

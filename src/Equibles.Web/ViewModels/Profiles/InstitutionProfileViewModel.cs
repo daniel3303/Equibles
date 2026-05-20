@@ -1,3 +1,5 @@
+using Equibles.Holdings.Repositories.Projections;
+
 namespace Equibles.Web.ViewModels.Profiles;
 
 public class InstitutionProfileViewModel
@@ -5,5 +7,6 @@ public class InstitutionProfileViewModel
     public string Name { get; set; }
     public string Cik { get; set; }
     public string Location { get; set; }
+    public InstitutionPortfolioSummary Summary { get; set; } = new();
     public List<HoldingRowViewModel> Holdings { get; set; } = [];
 }
