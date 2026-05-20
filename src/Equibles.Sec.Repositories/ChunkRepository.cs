@@ -8,6 +8,13 @@ namespace Equibles.Sec.Repositories;
 
 public class ChunkRepository : BaseRepository<Chunk>
 {
+    // Hard ceiling for the BM25 query. SearchAggregator advertises a 5s
+    // per-provider budget via cooperative cancellation, but pdb.parse and
+    // pdb.score don't check the token mid-execution — without this Postgres
+    // happily runs the chunk search for minutes after the aggregator has
+    // already returned Empty, pinning the Npgsql connection (issue #1026).
+    private const int HybridSearchCommandTimeoutSeconds = 5;
+
     public ChunkRepository(EquiblesDbContext dbContext)
         : base(dbContext) { }
 
@@ -53,9 +60,22 @@ public class ChunkRepository : BaseRepository<Chunk>
             query = query.Where(c => c.ReportingDate <= endUtc);
         }
 
-        return await query
-            .OrderByDescending(c => EF.Functions.Score(c.Id))
-            .Take(maxResults)
-            .ToListAsync(cancellationToken);
+        // Set a hard CommandTimeout for this call so Postgres aborts the
+        // statement independently of pdb.parse / pdb.score honouring the
+        // cancellation token, then restore the prior value so other queries
+        // sharing this DbContext are not affected.
+        var originalTimeout = DbContext.Database.GetCommandTimeout();
+        DbContext.Database.SetCommandTimeout(HybridSearchCommandTimeoutSeconds);
+        try
+        {
+            return await query
+                .OrderByDescending(c => EF.Functions.Score(c.Id))
+                .Take(maxResults)
+                .ToListAsync(cancellationToken);
+        }
+        finally
+        {
+            DbContext.Database.SetCommandTimeout(originalTimeout);
+        }
     }
 }
