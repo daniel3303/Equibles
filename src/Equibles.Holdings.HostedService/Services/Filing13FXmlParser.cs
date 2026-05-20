@@ -131,13 +131,13 @@ public class Filing13FXmlParser
         WithLocalName(parent.Elements(), localName);
 
     private static XElement Descendant(XElement parent, string localName) =>
-        parent == null ? null : WithLocalName(parent.Descendants(), localName).FirstOrDefault();
+        parent == null ? null : Descendants(parent, localName).FirstOrDefault();
 
     private static IEnumerable<XElement> Descendants(XElement parent, string localName) =>
         WithLocalName(parent.Descendants(), localName);
 
     private static XElement Child(XElement parent, string localName) =>
-        parent == null ? null : WithLocalName(parent.Elements(), localName).FirstOrDefault();
+        parent == null ? null : Children(parent, localName).FirstOrDefault();
 
     private static string Value(XElement element) => element?.Value.Trim();
 
