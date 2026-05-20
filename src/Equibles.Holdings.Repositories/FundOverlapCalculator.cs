@@ -92,13 +92,13 @@ public static class FundOverlapCalculator
                 slices.Add(slice);
                 combinedValue += slice.Value;
                 if (perStock == null)
+                {
                     allHaveIt = false;
+                }
                 else
                 {
-                    if (perStock.Value < minValue)
-                        minValue = perStock.Value;
-                    if (perStock.Value > maxValue)
-                        maxValue = perStock.Value;
+                    minValue = Math.Min(minValue, perStock.Value);
+                    maxValue = Math.Max(maxValue, perStock.Value);
                 }
             }
             if (allHaveIt)
