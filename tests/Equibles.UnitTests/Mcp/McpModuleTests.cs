@@ -403,7 +403,13 @@ public class McpModuleToolDiscoveryTests
             },
             {
                 typeof(StockPriceTools),
-                new[] { "GetStockPrices", "GetLatestPrices", "GetStochasticOscillator" }
+                new[]
+                {
+                    "GetStockPrices",
+                    "GetLatestPrices",
+                    "GetStochasticOscillator",
+                    "GetAverageTrueRange",
+                }
             },
         };
 
