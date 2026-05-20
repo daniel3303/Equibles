@@ -742,14 +742,8 @@ public class InstitutionalHoldingsTools
                     return $"{targetDate:yyyy-MM-dd} is the oldest reported quarter for {holder.Name} — no prior to compare against.";
 
                 var priorDate = reportDates[targetIndex + 1];
-                var currentHoldings = await _holdingRepository
-                    .GetByHolder(holder, targetDate)
-                    .Include(h => h.CommonStock)
-                    .ToListAsync();
-                var previousHoldings = await _holdingRepository
-                    .GetByHolder(holder, priorDate)
-                    .Include(h => h.CommonStock)
-                    .ToListAsync();
+                var currentHoldings = await LoadHoldingsByHolderWithStock(holder, targetDate);
+                var previousHoldings = await LoadHoldingsByHolderWithStock(holder, priorDate);
                 var grouped = HolderQuarterlyActivityCalculator.Group(
                     currentHoldings,
                     previousHoldings
@@ -855,14 +849,8 @@ public class InstitutionalHoldingsTools
 
                 var selected = ResolveReportDate(reportDate, common);
 
-                var holdings1 = await _holdingRepository
-                    .GetByHolder(holder1, selected)
-                    .Include(h => h.CommonStock)
-                    .ToListAsync();
-                var holdings2 = await _holdingRepository
-                    .GetByHolder(holder2, selected)
-                    .Include(h => h.CommonStock)
-                    .ToListAsync();
+                var holdings1 = await LoadHoldingsByHolderWithStock(holder1, selected);
+                var holdings2 = await LoadHoldingsByHolderWithStock(holder2, selected);
                 var overlap = FundOverlapCalculator.Calculate(
                     [
                         (holder1, (IReadOnlyList<InstitutionalHolding>)holdings1),
@@ -987,10 +975,7 @@ public class InstitutionalHoldingsTools
                     )>();
                 foreach (var holder in holders)
                 {
-                    var holdings = await _holdingRepository
-                        .GetByHolder(holder, selected)
-                        .Include(h => h.CommonStock)
-                        .ToListAsync();
+                    var holdings = await LoadHoldingsByHolderWithStock(holder, selected);
                     perFund.Add((holder, holdings));
                 }
                 var overlap = FundOverlapCalculator.Calculate(perFund, selected);
@@ -1044,6 +1029,15 @@ public class InstitutionalHoldingsTools
 
     private Task<InstitutionalHolder> FindHolderByName(string name) =>
         _holderRepository.Search(name ?? string.Empty).OrderBy(h => h.Name).FirstOrDefaultAsync();
+
+    private Task<List<InstitutionalHolding>> LoadHoldingsByHolderWithStock(
+        InstitutionalHolder holder,
+        DateOnly reportDate
+    ) =>
+        _holdingRepository
+            .GetByHolder(holder, reportDate)
+            .Include(h => h.CommonStock)
+            .ToListAsync();
 
     private async Task<(
         InstitutionalHolder Holder,
