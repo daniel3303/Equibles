@@ -36,70 +36,47 @@ public class Realtime13FArchiveBuilder
         {
             var formType = filing.IsAmendment ? "13F-HR/A" : "13F-HR";
 
-            submission
-                .Append(formType)
-                .Append('\t')
-                .Append(Clean(filing.AccessionNumber))
-                .Append('\t')
-                .Append(filing.FilingDate.ToString("yyyy-MM-dd"))
-                .Append('\t')
-                .Append(filing.PeriodOfReport.ToString("yyyy-MM-dd"))
-                .Append('\t')
-                .Append(Clean(filing.Cik))
-                .Append('\n');
+            AppendRow(
+                submission,
+                formType,
+                Clean(filing.AccessionNumber),
+                filing.FilingDate.ToString("yyyy-MM-dd"),
+                filing.PeriodOfReport.ToString("yyyy-MM-dd"),
+                Clean(filing.Cik)
+            );
 
-            coverPage
-                .Append(Clean(filing.AccessionNumber))
-                .Append('\t')
-                .Append(filing.IsAmendment ? "Y" : "N")
-                .Append('\t')
-                .Append(Clean(filing.FilingManagerName))
-                .Append('\t')
-                .Append(Clean(filing.City))
-                .Append('\t')
-                .Append(Clean(filing.StateOrCountry))
-                .Append('\t')
-                .Append(Clean(filing.Form13FFileNumber))
-                .Append('\t')
-                .Append(Clean(filing.CrdNumber))
-                .Append('\n');
+            AppendRow(
+                coverPage,
+                Clean(filing.AccessionNumber),
+                filing.IsAmendment ? "Y" : "N",
+                Clean(filing.FilingManagerName),
+                Clean(filing.City),
+                Clean(filing.StateOrCountry),
+                Clean(filing.Form13FFileNumber),
+                Clean(filing.CrdNumber)
+            );
 
             foreach (var (seq, name) in filing.OtherManagers)
             {
-                otherManager
-                    .Append(Clean(filing.AccessionNumber))
-                    .Append('\t')
-                    .Append(seq)
-                    .Append('\t')
-                    .Append(Clean(name))
-                    .Append('\n');
+                AppendRow(otherManager, Clean(filing.AccessionNumber), seq, Clean(name));
             }
 
             foreach (var holding in filing.Holdings)
             {
-                infoTable
-                    .Append(Clean(filing.AccessionNumber))
-                    .Append('\t')
-                    .Append(Clean(holding.Cusip))
-                    .Append('\t')
-                    .Append(Clean(holding.ShareType))
-                    .Append('\t')
-                    .Append(Clean(holding.PutCall))
-                    .Append('\t')
-                    .Append(holding.Shares)
-                    .Append('\t')
-                    .Append(holding.VotingAuthSole)
-                    .Append('\t')
-                    .Append(holding.VotingAuthShared)
-                    .Append('\t')
-                    .Append(holding.VotingAuthNone)
-                    .Append('\t')
-                    .Append(Clean(holding.TitleOfClass))
-                    .Append('\t')
-                    .Append(holding.OtherManagerNumber?.ToString() ?? string.Empty)
-                    .Append('\t')
-                    .Append(Clean(holding.InvestmentDiscretion))
-                    .Append('\n');
+                AppendRow(
+                    infoTable,
+                    Clean(filing.AccessionNumber),
+                    Clean(holding.Cusip),
+                    Clean(holding.ShareType),
+                    Clean(holding.PutCall),
+                    holding.Shares,
+                    holding.VotingAuthSole,
+                    holding.VotingAuthShared,
+                    holding.VotingAuthNone,
+                    Clean(holding.TitleOfClass),
+                    holding.OtherManagerNumber?.ToString() ?? string.Empty,
+                    Clean(holding.InvestmentDiscretion)
+                );
             }
         }
 
@@ -122,6 +99,14 @@ public class Realtime13FArchiveBuilder
 
         // Disposing the returned archive transitively disposes this stream.
         return new ZipArchive(new MemoryStream(zipBytes), ZipArchiveMode.Read);
+    }
+
+    // Bulk-dataset TSV rows are tab-separated and newline-terminated; AppendJoin
+    // handles each field via value.ToString(), matching the per-overload Append
+    // calls byte-for-byte so behavior reconciles with the bulk import path.
+    private static void AppendRow(StringBuilder sb, params object[] fields)
+    {
+        sb.AppendJoin('\t', fields).Append('\n');
     }
 
     private static void WriteEntry(ZipArchive archive, string name, StringBuilder content)
