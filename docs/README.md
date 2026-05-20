@@ -4,5 +4,5 @@ An open-source, self-hosted mini Bloomberg Terminal for AI agents — scrapes, s
 
 ## Sections
 
-- [Technical docs](technical/README.md) — codebase, architecture, modules. For developers.
 - [User guide](guide/README.md) — install, configure, and use the project. For end users.
+- [Technical docs](technical/README.md) — codebase, architecture, modules. For developers.
