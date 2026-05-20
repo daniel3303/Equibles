@@ -1056,6 +1056,141 @@ public class InstitutionalHoldingsTools
         );
     }
 
+    [McpServerTool(Name = "GetConsensusHoldings")]
+    [Description(
+        "Get the consensus / combined portfolio of 2-25 institutions for their latest common report date. Returns stocks ranked by how many of the supplied funds hold them (descending), then by combined value. Filter by `minFunds` to only show stocks held by at least that many funds. Use this to answer 'what do these funds agree on?' or 'show me the top picks across these N investors combined.'"
+    )]
+    public Task<string> GetConsensusHoldings(
+        [Description(
+            "Comma- or semicolon-separated institution names (partial or full — first match wins per name). 2-25 names."
+        )]
+            string institutionNames,
+        [Description("Report date in YYYY-MM-DD format (defaults to latest common quarter)")]
+            string reportDate = null,
+        [Description("Minimum number of funds a stock must be held by to appear (default: 1)")]
+            int minFunds = 1,
+        [Description("Maximum number of stocks to return (default: 30)")] int maxResults = 30
+    )
+    {
+        return McpToolExecutor.Execute(
+            async () =>
+            {
+                var names = (institutionNames ?? string.Empty)
+                    .Split(
+                        [',', ';'],
+                        StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+                    )
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (names.Count < 2)
+                    return "Pass at least two institution names (comma-separated).";
+                if (names.Count > 25)
+                    return "At most 25 institutions can be combined.";
+
+                var holders = new List<InstitutionalHolder>();
+                var missing = new List<string>();
+                foreach (var name in names)
+                {
+                    var holder = await _holderRepository
+                        .Search(name)
+                        .OrderBy(h => h.Name)
+                        .FirstOrDefaultAsync();
+                    if (holder == null)
+                        missing.Add(name);
+                    else
+                        holders.Add(holder);
+                }
+                if (holders.Count < 2)
+                    return $"Could not resolve enough institutions. Missing: {string.Join(", ", missing)}.";
+
+                var perHolderDates = new List<List<DateOnly>>();
+                foreach (var holder in holders)
+                {
+                    var dates = await _holdingRepository
+                        .GetHistoryByHolder(holder)
+                        .Select(h => h.ReportDate)
+                        .Distinct()
+                        .OrderByDescending(d => d)
+                        .ToListAsync();
+                    perHolderDates.Add(dates);
+                }
+                var common = perHolderDates
+                    .Skip(1)
+                    .Aggregate(
+                        (IEnumerable<DateOnly>)perHolderDates[0],
+                        (acc, next) => acc.Intersect(next)
+                    )
+                    .OrderByDescending(d => d)
+                    .ToList();
+                if (common.Count == 0)
+                    return "The selected institutions share no common report dates.";
+
+                DateOnly selected;
+                if (
+                    !string.IsNullOrEmpty(reportDate)
+                    && DateOnly.TryParse(reportDate, out var parsed)
+                    && common.Contains(parsed)
+                )
+                    selected = parsed;
+                else
+                    selected = common[0];
+
+                var perFund =
+                    new List<(
+                        InstitutionalHolder Holder,
+                        IReadOnlyList<InstitutionalHolding> Holdings
+                    )>();
+                foreach (var holder in holders)
+                {
+                    var holdings = await _holdingRepository
+                        .GetByHolder(holder, selected)
+                        .Include(h => h.CommonStock)
+                        .ToListAsync();
+                    perFund.Add((holder, holdings));
+                }
+                var overlap = FundOverlapCalculator.Calculate(perFund, selected);
+
+                var rowsWithConsensus = overlap
+                    .Rows.Select(r => new { Row = r, HeldBy = r.Slices.Count(s => s.Value > 0) })
+                    .Where(x => x.HeldBy >= Math.Max(1, minFunds))
+                    .OrderByDescending(x => x.HeldBy)
+                    .ThenByDescending(x => x.Row.CombinedValue)
+                    .Take(maxResults)
+                    .ToList();
+
+                var result = new StringBuilder();
+                result.AppendLine(
+                    $"Consensus holdings — **{holders.Count} funds** as of {selected:yyyy-MM-dd}"
+                );
+                if (missing.Count > 0)
+                    result.AppendLine($"_Could not resolve: {string.Join(", ", missing)}._");
+                result.AppendLine();
+                result.AppendLine("Funds:");
+                foreach (var h in holders)
+                    result.AppendLine($"- {h.Name} (CIK {h.Cik})");
+                result.AppendLine();
+
+                if (rowsWithConsensus.Count == 0)
+                    return result.ToString() + "_No stocks meet the minFunds threshold._";
+
+                result.AppendLine("| # | Ticker | Company | # Funds | Combined ($M) |");
+                result.AppendLine("|---|--------|---------|---------|---------------|");
+                for (var i = 0; i < rowsWithConsensus.Count; i++)
+                {
+                    var x = rowsWithConsensus[i];
+                    result.AppendLine(
+                        $"| {i + 1} | {x.Row.Ticker} | {x.Row.Name} | {x.HeldBy}/{holders.Count} | {x.Row.CombinedValue / 1_000_000m:N1} |"
+                    );
+                }
+                return result.ToString();
+            },
+            _logger,
+            "GetConsensusHoldings",
+            $"names: {institutionNames}",
+            ReportError
+        );
+    }
+
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
