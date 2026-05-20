@@ -45,7 +45,7 @@ public class InsiderTradingTools
         [Description("Maximum number of transactions to return (default: 50)")] int maxResults = 50
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var stock = await _commonStockRepository.GetByTicker(ticker);
@@ -92,10 +92,8 @@ public class InsiderTradingTools
 
                 return result.ToString();
             },
-            _logger,
             "GetInsiderTransactions",
-            $"ticker: {ticker}",
-            ReportError
+            $"ticker: {ticker}"
         );
     }
 
@@ -107,7 +105,7 @@ public class InsiderTradingTools
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var stock = await _commonStockRepository.GetByTicker(ticker);
@@ -156,10 +154,8 @@ public class InsiderTradingTools
 
                 return result.ToString();
             },
-            _logger,
             "GetInsiderOwnership",
-            $"ticker: {ticker}",
-            ReportError
+            $"ticker: {ticker}"
         );
     }
 
@@ -172,7 +168,7 @@ public class InsiderTradingTools
         [Description("Maximum number of results (default: 10)")] int maxResults = 10
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var insiders = await _ownerRepository.Search(query).Take(maxResults).ToListAsync();
@@ -202,12 +198,13 @@ public class InsiderTradingTools
 
                 return result.ToString();
             },
-            _logger,
             "SearchInsiders",
-            $"query: {query}",
-            ReportError
+            $"query: {query}"
         );
     }
+
+    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
+        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
 
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
