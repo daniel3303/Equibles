@@ -21,22 +21,21 @@ public class StocksHoldingsSeededTests
     }
 
     [Fact]
-    public async Task Holdings_GetForStockWithMultipleQuartersAndManyHolders_RendersDateSelectorAndTopHundredByValue()
+    public async Task Holdings_GetForStockWithMultipleQuartersAndManyHolders_RendersPositionChangeBuckets()
     {
         // Seeds 4 quarter-end report dates × 200 distinct InstitutionalHolders = 800
-        // InstitutionalHolding rows so the page has substantially more data than
-        // StockTabService.LoadHoldingsTab's Top-100 cap and more than one ReportDate.
-        // The assertion pins five behaviours that the existing empty-state test cannot prove
-        // together: (a) the date selector lists every distinct ReportDate, (b) the most-recent
-        // quarter is selected when no ?date= query string is supplied, (c) the distinct
-        // HolderCount aggregation reflects all 200 holders for that quarter, (d) the
-        // OrderByDescending(Value).Take(100) end-to-end keeps the highest-Value holder at the
-        // top of the rendered table (the InstitutionalHolder.Include is exercised — without it
-        // the first column would render "Unknown"), and (e) the "Showing top X of Y" caption
-        // appears once DisplayedCount < HolderCount. AutoDetectChangesEnabled is disabled
-        // during the bulk insert so the per-row change-tracker cost stays off the O(n²) path.
+        // InstitutionalHolding rows so the page exercises the position-change grouping
+        // across substantially more than one ReportDate. Every holder reports the same
+        // share count in every quarter, so for the most-recent quarter (vs the one before)
+        // all 200 holders land in the Unchanged bucket and the other four buckets are empty.
+        // The assertion pins: (a) the date selector lists every distinct ReportDate,
+        // (b) the most-recent quarter is selected when no ?date= query string is supplied,
+        // (c) all five position-change panels render with the correct counts, (d) the
+        // Unchanged bucket's table contains a row per seeded holder (the
+        // .Include(h => h.InstitutionalHolder) executes — without it the first column
+        // would render "Unknown"). AutoDetectChangesEnabled is disabled during the bulk
+        // insert so the per-row change-tracker cost stays off the O(n²) path.
         const int holderCount = 200;
-        const int displayedRowCap = 100;
         var stockId = Guid.NewGuid();
         var reportDates = new[]
         {
@@ -108,30 +107,36 @@ public class StocksHoldingsSeededTests
         await Assertions.Expect(dateSelect.Locator("option")).ToHaveCountAsync(reportDates.Length);
         await Assertions.Expect(dateSelect).ToHaveValueAsync(mostRecentDate.ToString("yyyy-MM-dd"));
 
-        var rows = page.Locator("table tbody tr");
-        await Assertions.Expect(rows).ToHaveCountAsync(displayedRowCap);
-
-        // The view renders OrderByDescending(Value), so the first row's holder name must be
-        // the highest-Value seeded holder (i = holderCount - 1 → "Test Holder 200"). This
-        // proves the .Include(h => h.InstitutionalHolder) executes against the populated
-        // table — without it the cell would render the "Unknown" fallback.
+        // All five position-change panels are present.
         await Assertions
-            .Expect(rows.First.Locator("td").First)
-            .ToHaveTextAsync($"Test Holder {holderCount:D3}");
+            .Expect(page.Locator("[data-testid^='holdings-bucket-']"))
+            .ToHaveCountAsync(5);
 
-        // Caption only renders when DisplayedCount < HolderCount — pins both the Top-100 cap
-        // and the distinct-holder aggregation across the 200 seeded rows for this quarter.
+        // Bucket counts: 200 Unchanged, 0 in the other four buckets.
         await Assertions
             .Expect(
-                page.Locator("div.text-xs")
-                    .Filter(
-                        new()
-                        {
-                            HasTextString =
-                                $"Showing top {displayedRowCap} of {holderCount:N0} holders by value",
-                        }
-                    )
+                page.Locator("[data-testid='holdings-bucket-unchanged'] .collapse-title .badge")
             )
-            .ToHaveCountAsync(1);
+            .ToHaveTextAsync("200");
+        foreach (var emptyBucket in new[] { "new", "increased", "reduced", "soldout" })
+        {
+            await Assertions
+                .Expect(
+                    page.Locator(
+                        $"[data-testid='holdings-bucket-{emptyBucket}'] .collapse-title .badge"
+                    )
+                )
+                .ToHaveTextAsync("0");
+        }
+
+        // Unchanged panel's table renders one row per seeded holder, and the
+        // .Include(h => h.InstitutionalHolder) populates the holder name (no "Unknown").
+        var unchangedRows = page.Locator(
+            "[data-testid='holdings-bucket-unchanged'] table tbody tr"
+        );
+        await Assertions.Expect(unchangedRows).ToHaveCountAsync(holderCount);
+        await Assertions
+            .Expect(unchangedRows.First.Locator("td").First)
+            .Not.ToHaveTextAsync("Unknown");
     }
 }
