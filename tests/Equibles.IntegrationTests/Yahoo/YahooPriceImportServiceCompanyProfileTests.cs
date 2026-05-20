@@ -155,6 +155,26 @@ public class YahooPriceImportServiceCompanyProfileTests : IDisposable
     }
 
     [Fact]
+    public async Task Import_WhitespaceIndustry_LeavesStockUntouchedAndCreatesNoRows()
+    {
+        // The guard is `IsNullOrWhiteSpace(profile.Industry)`, not `IsNullOrEmpty` — a
+        // regression that weakened it to the latter would let a whitespace-only industry
+        // through and create an Industry row with a blank name. The existing `null profile`
+        // pin doesn't cover this path.
+        var stock = SeedStock("WSI");
+        _yahooClient
+            .GetCompanyProfile("WSI")
+            .Returns(new CompanyProfile { Sector = "Technology", Industry = "   " });
+
+        await _service.Import(CancellationToken.None);
+
+        var refreshed = _stockRepo.GetAll().Single(s => s.Id == stock.Id);
+        refreshed.IndustryId.Should().BeNull();
+        _sectorRepo.GetAll().Should().BeEmpty();
+        _industryRepo.GetAll().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Import_IndustryAlreadyExistsWithoutSector_BackfillsTheSectorLink()
     {
         // Existing industry rows that pre-date the Sector taxonomy: the worker must
