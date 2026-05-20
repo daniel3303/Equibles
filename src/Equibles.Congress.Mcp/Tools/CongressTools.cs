@@ -53,7 +53,7 @@ public class CongressTools
             int maxResults = 50
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var stock = await _commonStockRepository.GetByTicker(
@@ -109,10 +109,8 @@ public class CongressTools
 
                 return result.ToString();
             },
-            _logger,
             "GetCongressionalTrades",
-            $"ticker: {ticker}",
-            ReportError
+            $"ticker: {ticker}"
         );
     }
 
@@ -133,7 +131,7 @@ public class CongressTools
             int maxResults = 50
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var member = await _memberRepository.GetByName(memberName.Trim());
@@ -188,10 +186,8 @@ public class CongressTools
 
                 return result.ToString();
             },
-            _logger,
             "GetMemberTrades",
-            $"memberName: {memberName}",
-            ReportError
+            $"memberName: {memberName}"
         );
     }
 
@@ -205,7 +201,7 @@ public class CongressTools
         [Description("Maximum number of results to return (default: 20)")] int maxResults = 20
     )
     {
-        return McpToolExecutor.Execute(
+        return Execute(
             async () =>
             {
                 var members = await _memberRepository
@@ -230,12 +226,13 @@ public class CongressTools
 
                 return result.ToString();
             },
-            _logger,
             "SearchCongressMembers",
-            $"query: {query}",
-            ReportError
+            $"query: {query}"
         );
     }
+
+    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
+        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
 
     private Task ReportError(string toolName, string message, string stackTrace, string context)
     {
