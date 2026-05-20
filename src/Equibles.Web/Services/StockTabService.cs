@@ -69,58 +69,58 @@ public class StockTabService
 
         var selectedDate = date ?? reportDates.FirstOrDefault();
 
-        if (selectedDate != default)
+        if (selectedDate == default)
         {
-            // Materialize the full current quarter once: drives header stats AND the
-            // position-change grouping. Previously this was two round trips (sum/count
-            // aggregates + a top-100 fetch); the bucketed view needs every holder anyway,
-            // so the in-memory aggregates are cheaper than re-querying.
-            var allCurrent = await _institutionalHoldingRepository
-                .GetByStock(stock, selectedDate)
-                .Include(h => h.InstitutionalHolder)
-                .ToListAsync();
-
-            var selectedIndex = reportDates.IndexOf(selectedDate);
-            var previousDate =
-                selectedIndex >= 0 && selectedIndex < reportDates.Count - 1
-                    ? reportDates[selectedIndex + 1]
-                    : (DateOnly?)null;
-            var allPrevious = previousDate.HasValue
-                ? await _institutionalHoldingRepository
-                    .GetByStock(stock, previousDate.Value)
-                    .Include(h => h.InstitutionalHolder)
-                    .ToListAsync()
-                : [];
-
-            var grouped = HoldingsPositionGrouper.Group(allCurrent, allPrevious);
-            var bucketCounts = grouped.ToDictionary(g => g.Key, g => g.Value.Count);
-            var (topBuyers, topSellers) = HoldingsTopMoversSelector.Select(
-                grouped,
-                HoldingsTabViewModel.TopMoversPreviewCount
-            );
-
             return new HoldingsTabViewModel
             {
                 AvailableDates = reportDates,
                 SelectedDate = selectedDate,
                 Ticker = stock.Ticker,
-                TotalValue = allCurrent.Sum(h => h.Value),
-                TotalShares = allCurrent.Sum(h => h.Shares),
-                HolderCount = allCurrent.Select(h => h.InstitutionalHolderId).Distinct().Count(),
-                GroupedHolders = grouped,
-                BucketCounts = bucketCounts,
-                TopBuyers = topBuyers,
-                TopSellers = topSellers,
-                TotalBuyerCount = HoldingsTopMoversSelector.CountBuyers(grouped),
-                TotalSellerCount = HoldingsTopMoversSelector.CountSellers(grouped),
             };
         }
+
+        // Materialize the full current quarter once: drives header stats AND the
+        // position-change grouping. Previously this was two round trips (sum/count
+        // aggregates + a top-100 fetch); the bucketed view needs every holder anyway,
+        // so the in-memory aggregates are cheaper than re-querying.
+        var allCurrent = await _institutionalHoldingRepository
+            .GetByStock(stock, selectedDate)
+            .Include(h => h.InstitutionalHolder)
+            .ToListAsync();
+
+        var selectedIndex = reportDates.IndexOf(selectedDate);
+        var previousDate =
+            selectedIndex >= 0 && selectedIndex < reportDates.Count - 1
+                ? reportDates[selectedIndex + 1]
+                : (DateOnly?)null;
+        var allPrevious = previousDate.HasValue
+            ? await _institutionalHoldingRepository
+                .GetByStock(stock, previousDate.Value)
+                .Include(h => h.InstitutionalHolder)
+                .ToListAsync()
+            : [];
+
+        var grouped = HoldingsPositionGrouper.Group(allCurrent, allPrevious);
+        var bucketCounts = grouped.ToDictionary(g => g.Key, g => g.Value.Count);
+        var (topBuyers, topSellers) = HoldingsTopMoversSelector.Select(
+            grouped,
+            HoldingsTabViewModel.TopMoversPreviewCount
+        );
 
         return new HoldingsTabViewModel
         {
             AvailableDates = reportDates,
             SelectedDate = selectedDate,
             Ticker = stock.Ticker,
+            TotalValue = allCurrent.Sum(h => h.Value),
+            TotalShares = allCurrent.Sum(h => h.Shares),
+            HolderCount = allCurrent.Select(h => h.InstitutionalHolderId).Distinct().Count(),
+            GroupedHolders = grouped,
+            BucketCounts = bucketCounts,
+            TopBuyers = topBuyers,
+            TopSellers = topSellers,
+            TotalBuyerCount = HoldingsTopMoversSelector.CountBuyers(grouped),
+            TotalSellerCount = HoldingsTopMoversSelector.CountSellers(grouped),
         };
     }
 

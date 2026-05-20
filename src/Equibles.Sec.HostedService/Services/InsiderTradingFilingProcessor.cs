@@ -295,37 +295,27 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         bool isAmendment
     )
     {
-        var securityTitle = txElement.Element("securityTitle")?.Element("value")?.Value?.Trim();
-        var transactionDateStr = txElement.Element("transactionDate")?.Element("value")?.Value;
+        var securityTitle = GetWrappedValue(txElement, "securityTitle")?.Trim();
+        var transactionDateStr = GetWrappedValue(txElement, "transactionDate");
         var codeStr = txElement
             .Element("transactionCoding")
             ?.Element("transactionCode")
             ?.Value?.Trim();
-        var sharesStr = txElement
-            .Element("transactionAmounts")
-            ?.Element("transactionShares")
-            ?.Element("value")
-            ?.Value;
-        var priceStr = txElement
-            .Element("transactionAmounts")
-            ?.Element("transactionPricePerShare")
-            ?.Element("value")
-            ?.Value;
-        var adCode = txElement
-            .Element("transactionAmounts")
-            ?.Element("transactionAcquiredDisposedCode")
-            ?.Element("value")
-            ?.Value?.Trim();
-        var sharesAfterStr = txElement
-            .Element("postTransactionAmounts")
-            ?.Element("sharesOwnedFollowingTransaction")
-            ?.Element("value")
-            ?.Value;
-        var ownership = txElement
-            .Element("ownershipNature")
-            ?.Element("directOrIndirectOwnership")
-            ?.Element("value")
-            ?.Value?.Trim();
+        var sharesStr = GetWrappedValue(txElement, "transactionAmounts", "transactionShares");
+        var priceStr = GetWrappedValue(txElement, "transactionAmounts", "transactionPricePerShare");
+        var adCode = GetWrappedValue(
+            txElement,
+            "transactionAmounts",
+            "transactionAcquiredDisposedCode"
+        )
+            ?.Trim();
+        var sharesAfterStr = GetWrappedValue(
+            txElement,
+            "postTransactionAmounts",
+            "sharesOwnedFollowingTransaction"
+        );
+        var ownership = GetWrappedValue(txElement, "ownershipNature", "directOrIndirectOwnership")
+            ?.Trim();
 
         // Form 4 transactionDate is ISO yyyy-MM-dd (ownership XSD). Parse it
         // culture-independently — under a non-Gregorian host culture (e.g.
@@ -368,20 +358,18 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         bool isAmendment
     )
     {
-        var securityTitle = holdingElement
-            .Element("securityTitle")
-            ?.Element("value")
-            ?.Value?.Trim();
-        var sharesStr = holdingElement
-            .Element("postTransactionAmounts")
-            ?.Element("sharesOwnedFollowingTransaction")
-            ?.Element("value")
-            ?.Value;
-        var ownership = holdingElement
-            .Element("ownershipNature")
-            ?.Element("directOrIndirectOwnership")
-            ?.Element("value")
-            ?.Value?.Trim();
+        var securityTitle = GetWrappedValue(holdingElement, "securityTitle")?.Trim();
+        var sharesStr = GetWrappedValue(
+            holdingElement,
+            "postTransactionAmounts",
+            "sharesOwnedFollowingTransaction"
+        );
+        var ownership = GetWrappedValue(
+            holdingElement,
+            "ownershipNature",
+            "directOrIndirectOwnership"
+        )
+            ?.Trim();
 
         return new InsiderTransaction
         {
@@ -399,6 +387,19 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             AccessionNumber = filing.AccessionNumber,
             IsAmendment = isAmendment,
         };
+    }
+
+    // SEC ownership XML wraps each field in <field><value>...</value></field>,
+    // sometimes nested under a grouping element (transactionAmounts, etc.).
+    // Walk the path then read the inner <value>.
+    private static string GetWrappedValue(XElement parent, params string[] path)
+    {
+        var element = parent;
+        foreach (var name in path)
+        {
+            element = element?.Element(name);
+        }
+        return element?.Element("value")?.Value;
     }
 
     internal static string SanitizeXml(string xml)

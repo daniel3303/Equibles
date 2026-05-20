@@ -89,6 +89,115 @@
         </div>
     }
 
+    @if (Model.QuarterlyActivity.Count > 0 && Model.ActivityPriorDate.HasValue) {
+        <!-- Latest-quarter activity — pivots #1007's per-stock buckets on the holder:
+             Initiated / Increased / Reduced / Exited, capped at 50 rows per bucket.
+             A quarter selector lets the user browse past quarters; submission re-loads
+             with ?activityDate=YYYY-MM-DD. The oldest quarter has no prior to compare
+             against and is omitted from the selector. -->
+        <div class="card bg-base-100 shadow-sm mb-8" data-testid="institution-quarterly-activity">
+            <div class="card-body p-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <h3 class="text-base font-medium m-0">Latest quarter activity</h3>
+                    @if (Model.AvailableReportDates.Count > 1) {
+                        <div class="flex items-center gap-2 text-sm">
+                            <span class="text-base-content/60">Quarter:</span>
+                            <select class="select select-bordered select-sm"
+                                onchange="window.location.href='?activityDate=' + this.value">
+                                @foreach (var date in Model.AvailableReportDates) {
+                                    if (date == Model.AvailableReportDates[^1]) { continue; }
+                                    var isSelected = date == Model.ActivityDate;
+                                    if (isSelected) {
+                                        <option value="@date.ToString("yyyy-MM-dd")" selected>@date.ToString("MMM dd, yyyy")</option>
+                                    } else {
+                                        <option value="@date.ToString("yyyy-MM-dd")">@date.ToString("MMM dd, yyyy")</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                    }
+                </div>
+                <div class="text-xs text-base-content/50 mb-3">
+                    Comparing @Model.ActivityDate?.ToString("MMM dd, yyyy") vs prior @Model.ActivityPriorDate.Value.ToString("MMM dd, yyyy").
+                </div>
+                @{
+                    var buckets = new[]
+                    {
+                        new {
+                            Type = Equibles.Holdings.Repositories.Models.StockPositionChangeType.Initiated,
+                            Label = "Initiated",
+                            BadgeCss = "badge-success",
+                            TestId = "activity-bucket-initiated",
+                        },
+                        new {
+                            Type = Equibles.Holdings.Repositories.Models.StockPositionChangeType.Increased,
+                            Label = "Increased",
+                            BadgeCss = "badge-info",
+                            TestId = "activity-bucket-increased",
+                        },
+                        new {
+                            Type = Equibles.Holdings.Repositories.Models.StockPositionChangeType.Reduced,
+                            Label = "Reduced",
+                            BadgeCss = "badge-warning",
+                            TestId = "activity-bucket-reduced",
+                        },
+                        new {
+                            Type = Equibles.Holdings.Repositories.Models.StockPositionChangeType.Exited,
+                            Label = "Exited",
+                            BadgeCss = "badge-error",
+                            TestId = "activity-bucket-exited",
+                        },
+                    };
+                }
+                <div class="grid grid-cols-1 gap-4">
+                    @foreach (var bucket in buckets) {
+                        var rows = Model.QuarterlyActivity.TryGetValue(bucket.Type, out var list) ? list : new List<Equibles.Holdings.Repositories.Models.StockPositionChange>();
+                        <div class="rounded-md border border-base-200 p-3" data-testid="@bucket.TestId">
+                            <div class="flex items-center gap-2 mb-2">
+                                <h4 class="text-sm font-medium m-0">@bucket.Label</h4>
+                                <span class="badge @bucket.BadgeCss badge-sm">@rows.Count.ToString("N0")</span>
+                            </div>
+                            @if (rows.Count == 0) {
+                                <div class="text-xs text-base-content/50">No stocks in this bucket for the selected quarter.</div>
+                            } else {
+                                <div class="overflow-x-auto">
+                                    <table class="table table-xs">
+                                        <thead>
+                                            <tr>
+                                                <th>Ticker</th>
+                                                <th>Company</th>
+                                                <th class="text-right">Prior</th>
+                                                <th class="text-right">New</th>
+                                                <th class="text-right">Δ Shares</th>
+                                                <th class="text-right">Δ Value (USD)</th>
+                                                <th class="text-right">% Portfolio</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var row in rows) {
+                                                var deltaSharesCss = row.DeltaShares > 0 ? "text-success" : row.DeltaShares < 0 ? "text-error" : "";
+                                                var deltaValueCss = row.DeltaValue > 0 ? "text-success" : row.DeltaValue < 0 ? "text-error" : "";
+                                                <tr>
+                                                    <td class="font-mono">@row.Ticker</td>
+                                                    <td class="max-w-xs truncate">@row.Name</td>
+                                                    <td class="text-right font-mono">@row.PreviousShares.ToString("N0")</td>
+                                                    <td class="text-right font-mono">@row.CurrentShares.ToString("N0")</td>
+                                                    <td class="text-right font-mono @deltaSharesCss">@(row.DeltaShares > 0 ? "+" : "")@row.DeltaShares.ToString("N0")</td>
+                                                    <td class="text-right font-mono @deltaValueCss">@(row.DeltaValue > 0 ? "+" : "")$@row.DeltaValue.ToString("N0")</td>
+                                                    <td class="text-right font-mono">@row.PercentOfPortfolio.ToString("F1")%</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
     <h2 class="text-xl font-semibold mb-3">Recent holdings</h2>
     @if (Model.Holdings.Count == 0) {
         <div class="text-base-content/60 py-8">No reported holdings.</div>
