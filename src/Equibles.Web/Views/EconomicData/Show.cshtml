@@ -146,12 +146,12 @@
                 </div>
             } else {
                 <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
-                    <table class="table table-zebra table-sm">
+                    <table class="table table-zebra table-sm" aria-label="Series observations">
                         <thead class="sticky top-0 bg-base-100 z-10">
                             <tr>
-                                <th>Date</th>
-                                <th class="text-right">Value</th>
-                                <th class="text-right hidden sm:table-cell">Change %</th>
+                                <th scope="col">Date</th>
+                                <th scope="col" class="text-right">Value</th>
+                                <th scope="col" class="text-right hidden sm:table-cell">Change %</th>
                             </tr>
                         </thead>
                         <tbody>

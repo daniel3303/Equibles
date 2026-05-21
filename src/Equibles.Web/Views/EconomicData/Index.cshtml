@@ -22,15 +22,15 @@
                 <div class="card-body p-4 lg:p-6">
                     <h2 class="card-title text-lg mb-3">@category.DisplayName</h2>
                     <div class="overflow-x-auto">
-                        <table class="table table-zebra table-sm">
+                        <table class="table table-zebra table-sm" aria-label="@(category.DisplayName) series">
                             <thead>
                                 <tr>
-                                    <th>Series</th>
-                                    <th>Name</th>
-                                    <th class="hidden md:table-cell">Frequency</th>
-                                    <th class="text-right">Latest Value</th>
-                                    <th class="text-right hidden sm:table-cell">Date</th>
-                                    <th class="w-8"></th>
+                                    <th scope="col">Series</th>
+                                    <th scope="col">Name</th>
+                                    <th scope="col" class="hidden md:table-cell">Frequency</th>
+                                    <th scope="col" class="text-right">Latest Value</th>
+                                    <th scope="col" class="text-right hidden sm:table-cell">Date</th>
+                                    <th scope="col" class="w-8"><span class="sr-only">Open</span></th>
                                 </tr>
                             </thead>
                             <tbody>
