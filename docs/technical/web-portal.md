@@ -37,7 +37,7 @@ Why the indirection through `ViewData` rather than a single `StockDetailViewMode
 | [`CftcController`](../../src/Equibles.Web/Controllers/CftcController.cs) | `~/Futures/...` | CFTC positioning per contract / category. |
 | [`MarketController`](../../src/Equibles.Web/Controllers/MarketController.cs) | `~/Market/...` | CBOE VIX + put/call ratios. |
 | [`SearchController`](../../src/Equibles.Web/Controllers/SearchController.cs) | `~/Search?q=…` | Aggregate search across registered `ISearchProvider`s. |
-| [`StatusController`](../../src/Equibles.Web/Controllers/StatusController.cs) | `~/Status` | Worker health, data counts, error log dashboard. |
+| [`StatusController`](../../src/Equibles.Web/Controllers/StatusController.cs) | `~/Status`, `~/Status/Activity`, `~/Status/Activity/Stream` | Worker health, data counts, error log dashboard + the live scraper activity page (SSE-driven). |
 | [`ChangelogController`](../../src/Equibles.Web/Controllers/ChangelogController.cs) | `~/Changelog` | Renders `CHANGELOG.md`. |
 | [`HomeController`](../../src/Equibles.Web/Controllers/HomeController.cs) | `~/` | Landing page. |
 | [`AuthController`](../../src/Equibles.Web/Controllers/AuthController.cs) | `~/Auth/...` | Login form used by the env-based auth scheme. |
@@ -89,6 +89,25 @@ Why the indirection through `ViewData` rather than a single `StockDetailViewMode
 - [`ChangelogService`](../../src/Equibles.Web/Services/ChangelogService.cs) — parses `CHANGELOG.md` for the version banner.
 
 The Status page is the operator's primary feedback loop — every new scraper that calls `ErrorReporter.Report(...)` shows up there automatically.
+
+## Live activity feed
+
+`~/Status/Activity` is the real-time companion to the Status dashboard. While the Status page shows persisted state (worker config, row counts, the error log), the Activity page tails what each scraper is doing **right now**.
+
+End-to-end shape:
+
+1. `BaseScraperWorker` (every scraper inherits it) and `ErrorReporter` publish `ScraperActivity` messages on the MassTransit bus — `Source`, `Severity` (`Info` / `Warn` / `Error`), `Message`, `Timestamp`, `CorrelationId`. Lifecycle events from the worker, error events from the reporter.
+2. The web host's `ScraperActivityConsumer` ([`Services/Activity/ScraperActivityConsumer.cs`](../../src/Equibles.Web/Services/Activity/ScraperActivityConsumer.cs)) receives each message and hands it to the in-process `ActivityFeedBroadcaster` (singleton, ring buffer of 500 events + per-subscriber bounded channel with `DropOldest`).
+3. `GET /Status/Activity/Stream` is an SSE endpoint that subscribes one bounded channel per browser tab, replays the small backlog, then forwards each new event as an `event: activity` SSE frame.
+4. The Razor page at `~/Status/Activity` opens an `EventSource` and renders rows live with DaisyUI styling — severity badge, stable-per-source colour badge, wall-clock timestamp; pause / resume / clear controls.
+
+Design notes:
+
+- **Not persisted.** A message with no listeners is dropped on the floor. Historical errors keep going through `ErrorReporter` to the database; the activity feed is purely a live view.
+- **Fire-and-forget.** Publishers call `IBus.Publish` directly so the activity event never goes through the EF outbox — a stuck DB transaction must not stall the scraper to push a status crumb.
+- **Best-effort.** Both `BaseScraperWorker` and `ErrorReporter` swallow publish failures (debug-level log only). A missing `IBus` (tests, hosts without messaging) makes activity publishing a no-op rather than a crash.
+- **Backpressure-safe.** Each browser gets its own 256-slot bounded channel with `BoundedChannelFullMode.DropOldest`. A paused tab cannot back up the bus.
+- **Cross-process.** Because the bus is Postgres SQL transport, events flow worker → DB → web → browser without any direct worker↔web connection. Multiple web replicas each get their own consumer endpoint (`AllowMultiple = true` on the consumer) and each forwards events to its own connected browsers.
 
 ## Conventions
 
