@@ -213,10 +213,39 @@ public class FtdImportService
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+
+        // Guards GH-1591: CompanySync can delete a CommonStock between
+        // BuildTickerMap and this flush. Without filtering, one stale
+        // CommonStockId trips FK_FailToDeliver_CommonStock_CommonStockId and
+        // rolls back the entire UpsertRange — dropping rows for surviving
+        // stocks alongside the orphan.
+        var stockIds = items.Select(i => i.CommonStockId).Distinct().ToHashSet();
+        var existingIds = (
+            await stockRepo
+                .GetAll()
+                .Where(s => stockIds.Contains(s.Id))
+                .Select(s => s.Id)
+                .ToListAsync()
+        ).ToHashSet();
+
+        var safeItems = items.Where(i => existingIds.Contains(i.CommonStockId)).ToList();
+        var skipped = items.Count - safeItems.Count;
+        if (skipped > 0)
+        {
+            _logger.LogWarning(
+                "FTD batch: skipping {Count} rows whose parent CommonStock was removed before flush",
+                skipped
+            );
+        }
+        if (safeItems.Count == 0)
+        {
+            return;
+        }
 
         await dbContext
             .Set<FailToDeliver>()
-            .UpsertRange(items)
+            .UpsertRange(safeItems)
             .On(f => new { f.CommonStockId, f.SettlementDate })
             .WhenMatched(
                 (existing, incoming) =>

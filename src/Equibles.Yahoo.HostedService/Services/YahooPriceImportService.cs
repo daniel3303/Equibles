@@ -143,6 +143,24 @@ public class YahooPriceImportService
     private async Task FlushPriceBatch(List<DailyStockPrice> batch)
     {
         using var scope = _scopeFactory.CreateScope();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+
+        // Each batch holds rows for a single ticker, so a single existence check
+        // is enough. Guards GH-1591: CompanySync can delete the parent CommonStock
+        // between TickerMapService.Build and this flush, which would otherwise
+        // trip FK_DailyStockPrice_CommonStock_CommonStockId at SaveChanges.
+        var commonStockId = batch[0].CommonStockId;
+        var stockExists = await stockRepo.GetAll().AnyAsync(s => s.Id == commonStockId);
+        if (!stockExists)
+        {
+            _logger.LogWarning(
+                "Skipping {Count} prices for CommonStock {Id}: parent row was removed before flush",
+                batch.Count,
+                commonStockId
+            );
+            return;
+        }
+
         var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
         repo.AddRange(batch);
         await repo.SaveChanges();
