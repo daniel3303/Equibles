@@ -101,10 +101,11 @@
 
     <!-- Pagination -->
     @if (Model.TotalPages > 1) {
-        <div class="flex justify-center mt-6">
+        <nav class="flex justify-center mt-6" aria-label="Stocks pagination">
             <div class="join">
                 @if (Model.Page > 1) {
-                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="@(Model.Page - 1)" class="join-item btn btn-sm">Previous</a>
+                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="@(Model.Page - 1)"
+                       class="join-item btn btn-sm" aria-label="Go to previous page">Previous</a>
                 }
 
                 @{
@@ -113,29 +114,34 @@
                 }
 
                 @if (startPage > 1) {
-                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="1" class="join-item btn btn-sm">1</a>
+                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="1"
+                       class="join-item btn btn-sm" aria-label="Go to page 1">1</a>
                     @if (startPage > 2) {
-                        <span class="join-item btn btn-sm btn-disabled">...</span>
+                        <span class="join-item btn btn-sm btn-disabled" aria-hidden="true">...</span>
                     }
                 }
 
                 @for (var i = startPage; i <= endPage; i++) {
                     <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="@i"
-                       class="join-item btn btn-sm @(i == Model.Page ? "btn-active" : "")">@i</a>
+                       class="join-item btn btn-sm @(i == Model.Page ? "btn-active" : "")"
+                       aria-label="Go to page @i"
+                       aria-current="@(i == Model.Page ? "page" : null)">@i</a>
                 }
 
                 @if (endPage < Model.TotalPages) {
                     @if (endPage < Model.TotalPages - 1) {
-                        <span class="join-item btn btn-sm btn-disabled">...</span>
+                        <span class="join-item btn btn-sm btn-disabled" aria-hidden="true">...</span>
                     }
-                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="@Model.TotalPages" class="join-item btn btn-sm">@Model.TotalPages</a>
+                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="@Model.TotalPages"
+                       class="join-item btn btn-sm" aria-label="Go to page @Model.TotalPages">@Model.TotalPages</a>
                 }
 
                 @if (Model.Page < Model.TotalPages) {
-                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="@(Model.Page + 1)" class="join-item btn btn-sm">Next</a>
+                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="@(Model.Page + 1)"
+                       class="join-item btn btn-sm" aria-label="Go to next page">Next</a>
                 }
             </div>
-        </div>
+        </nav>
     }
 </div>
 
