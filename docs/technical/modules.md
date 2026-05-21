@@ -46,7 +46,8 @@ These do not own a financial-domain dataset; they support every other module.
 - **The `*.Mcp` project is optional.**
 - A module without AI-assistant-facing tools ships only `.Data` + `.Repositories` (+ `.BusinessLogic` when needed); the current set is `Errors`, `Media`, `CommonStocks` — internal infrastructure.
 - The MCP host calls `mcp.AddXxx()` only for modules that expose tools.
-- **Module dependencies are declared in the `.Data` extension method.** For example, `Equibles.Sec.Data.Extensions.ModuleBuilderExtensions.AddSec()` calls `AddCommonStocks()` and `AddMedia()` before adding itself.
+- **Module dependencies are declared in the `.Data` extension method.**
+- Example: `Equibles.Sec.Data.Extensions.ModuleBuilderExtensions.AddSec()` calls `AddCommonStocks()` and `AddMedia()` before adding itself.
 - Any host that registers SEC gets the prerequisites without listing them.
 
 ## Reading a module quickly
