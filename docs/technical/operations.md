@@ -143,7 +143,9 @@ A `docker compose down` keeps these volumes. `docker compose down -v` deletes th
 
 - Snapshot the `db-data` volume with your usual Postgres tooling: `docker compose exec db pg_dump -U postgres equibles | gzip > equibles-$(date +%F).sql.gz`.
 - Restoring is the reverse: `gunzip -c equibles-….sql.gz | docker compose exec -T db psql -U postgres equibles`.
-- The other volumes (`web-keys`, `ollama-data`) are regenerable. Losing `web-keys` invalidates outstanding auth cookies (users have to log in again); losing `ollama-data` means re-downloading the embedding model.
+- The other volumes (`web-keys`, `ollama-data`) are regenerable.
+  - Losing `web-keys` invalidates outstanding auth cookies (users have to log in again).
+  - Losing `ollama-data` means re-downloading the embedding model.
 
 ## Monitoring
 
