@@ -5,7 +5,8 @@ Running and maintaining a self-hosted Equibles deployment. Configuration catalog
 ## Configuration loading
 
 - Every host (Web, MCP, Worker) reads configuration in this order, later sources overriding earlier ones: `appsettings.json` → `appsettings.<Env>.json` → environment variables.
-- `docker-compose.yml` passes the values from your `.env` file (via `${VAR:-default}` substitution) into each service as environment variables — the typical operator never edits `appsettings.json` directly.
+- `docker-compose.yml` passes the values from your `.env` file (via `${VAR:-default}` substitution) into each service as environment variables.
+- The typical operator never edits `appsettings.json` directly.
 - Nested settings use the double-underscore form: `Sec__ContactEmail` becomes `Sec:ContactEmail` in the .NET config tree; array entries use a numeric segment: `Worker__TickersToSync__0`.
 
 ## Required
