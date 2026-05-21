@@ -99,8 +99,11 @@ public class FtdImportService
                 }
                 else
                 {
+                    // Pre-2021 FTD ZIPs (cnsfails20*) routinely return 404 — SEC
+                    // moved their archive. The plain warning carries the only
+                    // useful signal ("URL may have changed"); the exception's
+                    // stack trace adds nothing but noise, so drop it.
                     _logger.LogWarning(
-                        ex,
                         "FTD file {File} returned 404 but is older than 2 months — possible URL change",
                         fileName
                     );
