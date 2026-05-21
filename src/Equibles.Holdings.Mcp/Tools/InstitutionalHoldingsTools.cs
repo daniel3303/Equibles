@@ -79,31 +79,52 @@ public class InstitutionalHoldingsTools
                 if (holdings.Count == 0)
                     return $"No institutional holdings found for {ticker} as of {targetDate:yyyy-MM-dd}.";
 
-                var result = new StringBuilder();
-                result.AppendLine(
-                    $"Top institutional holders of {stock.Name} ({ticker}) as of {targetDate:yyyy-MM-dd}:"
+                return RenderTopHoldersTable(
+                    stock,
+                    ticker,
+                    targetDate,
+                    totalInstitutions,
+                    totalSharesAll,
+                    totalValueAll,
+                    holdings
                 );
-                result.AppendLine(
-                    $"Showing {holdings.Count} of {totalInstitutions} institutions. Total: {totalSharesAll:N0} shares, ${totalValueAll / 1_000_000m:N1}M value"
-                );
-                result.AppendLine();
-                result.AppendLine("| # | Institution | Shares | Value ($M) | % of Total |");
-                result.AppendLine("|---|------------|--------|-----------|-----------|");
-
-                for (var i = 0; i < holdings.Count; i++)
-                {
-                    var h = holdings[i];
-                    var pct = totalSharesAll > 0 ? (double)h.Shares / totalSharesAll * 100 : 0;
-                    result.AppendLine(
-                        $"| {i + 1} | {h.InstitutionalHolder.Name} | {h.Shares:N0} | {h.Value / 1_000_000m:N1} | {pct:F2}% |"
-                    );
-                }
-
-                return result.ToString();
             },
             "GetTopHolders",
             $"ticker: {ticker}"
         );
+    }
+
+    private static string RenderTopHoldersTable(
+        CommonStock stock,
+        string ticker,
+        DateOnly targetDate,
+        int totalInstitutions,
+        long totalSharesAll,
+        long totalValueAll,
+        List<InstitutionalHolding> holdings
+    )
+    {
+        var result = new StringBuilder();
+        result.AppendLine(
+            $"Top institutional holders of {stock.Name} ({ticker}) as of {targetDate:yyyy-MM-dd}:"
+        );
+        result.AppendLine(
+            $"Showing {holdings.Count} of {totalInstitutions} institutions. Total: {totalSharesAll:N0} shares, ${totalValueAll / 1_000_000m:N1}M value"
+        );
+        result.AppendLine();
+        result.AppendLine("| # | Institution | Shares | Value ($M) | % of Total |");
+        result.AppendLine("|---|------------|--------|-----------|-----------|");
+
+        for (var i = 0; i < holdings.Count; i++)
+        {
+            var h = holdings[i];
+            var pct = totalSharesAll > 0 ? (double)h.Shares / totalSharesAll * 100 : 0;
+            result.AppendLine(
+                $"| {i + 1} | {h.InstitutionalHolder.Name} | {h.Shares:N0} | {h.Value / 1_000_000m:N1} | {pct:F2}% |"
+            );
+        }
+
+        return result.ToString();
     }
 
     [McpServerTool(Name = "GetOwnershipHistory")]
