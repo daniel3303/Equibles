@@ -100,31 +100,8 @@ public class HoldingsImportService
         var submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase);
         await foreach (var row in context.TsvParser.ParseEntry(submissionEntry))
         {
-            var formType = GetValue(row, "SUBMISSIONTYPE");
-            if (formType is not ("13F-HR" or "13F-HR/A"))
-                continue;
-
-            var accession = GetValue(row, "ACCESSION_NUMBER");
-            if (string.IsNullOrEmpty(accession))
-                continue;
-
-            var periodOfReport = GetValue(row, "PERIODOFREPORT");
-            if (
-                TryParseDateOnly(periodOfReport, out var reportDateCheck)
-                && reportDateCheck < context.MinReportDate
-            )
-            {
-                continue;
-            }
-
-            submissions[accession] = new SubmissionRow
-            {
-                AccessionNumber = accession,
-                FilingDate = GetValue(row, "FILING_DATE"),
-                PeriodOfReport = periodOfReport,
-                FormType = formType,
-                Cik = GetValue(row, "CIK"),
-            };
+            if (TryParseSubmissionRow(row, context.MinReportDate, out var submission))
+                submissions[submission.AccessionNumber] = submission;
         }
 
         if (submissions.Count == 0)
@@ -135,6 +112,40 @@ public class HoldingsImportService
 
         _logger.LogInformation("Found {Count} 13F-HR submissions", submissions.Count);
         context.Submissions = submissions;
+        return true;
+    }
+
+    private static bool TryParseSubmissionRow(
+        Dictionary<string, string> row,
+        DateOnly minReportDate,
+        out SubmissionRow submission
+    )
+    {
+        submission = null;
+
+        var formType = GetValue(row, "SUBMISSIONTYPE");
+        if (formType is not ("13F-HR" or "13F-HR/A"))
+            return false;
+
+        var accession = GetValue(row, "ACCESSION_NUMBER");
+        if (string.IsNullOrEmpty(accession))
+            return false;
+
+        var periodOfReport = GetValue(row, "PERIODOFREPORT");
+        if (
+            TryParseDateOnly(periodOfReport, out var reportDateCheck)
+            && reportDateCheck < minReportDate
+        )
+            return false;
+
+        submission = new SubmissionRow
+        {
+            AccessionNumber = accession,
+            FilingDate = GetValue(row, "FILING_DATE"),
+            PeriodOfReport = periodOfReport,
+            FormType = formType,
+            Cik = GetValue(row, "CIK"),
+        };
         return true;
     }
 
