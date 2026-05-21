@@ -133,19 +133,25 @@ public class HoldingsScreenerController : BaseController
             "Ticker,Name,Industry,CurrentFilerCount,PreviousFilerCount,DeltaFilerCount,"
                 + "CurrentValue,PreviousValue,DeltaValue,NewFilerCount,SoldOutFilerCount,PercentOfFloat"
         );
+
+        void AppendString(string value) =>
+            sb.Append(CsvExportService.EscapeField(value)).Append(',');
+        void AppendNumber(long value) =>
+            sb.Append(value.ToString(CultureInfo.InvariantCulture)).Append(',');
+
         foreach (var r in rows)
         {
-            sb.Append(CsvExportService.EscapeField(r.Ticker)).Append(',');
-            sb.Append(CsvExportService.EscapeField(r.Name)).Append(',');
-            sb.Append(CsvExportService.EscapeField(r.IndustryName)).Append(',');
-            sb.Append(r.CurrentFilerCount.ToString(CultureInfo.InvariantCulture)).Append(',');
-            sb.Append(r.PreviousFilerCount.ToString(CultureInfo.InvariantCulture)).Append(',');
-            sb.Append(r.DeltaFilerCount.ToString(CultureInfo.InvariantCulture)).Append(',');
-            sb.Append(r.CurrentValue.ToString(CultureInfo.InvariantCulture)).Append(',');
-            sb.Append(r.PreviousValue.ToString(CultureInfo.InvariantCulture)).Append(',');
-            sb.Append(r.DeltaValue.ToString(CultureInfo.InvariantCulture)).Append(',');
-            sb.Append(r.NewFilerCount.ToString(CultureInfo.InvariantCulture)).Append(',');
-            sb.Append(r.SoldOutFilerCount.ToString(CultureInfo.InvariantCulture)).Append(',');
+            AppendString(r.Ticker);
+            AppendString(r.Name);
+            AppendString(r.IndustryName);
+            AppendNumber(r.CurrentFilerCount);
+            AppendNumber(r.PreviousFilerCount);
+            AppendNumber(r.DeltaFilerCount);
+            AppendNumber(r.CurrentValue);
+            AppendNumber(r.PreviousValue);
+            AppendNumber(r.DeltaValue);
+            AppendNumber(r.NewFilerCount);
+            AppendNumber(r.SoldOutFilerCount);
             sb.Append(
                 r.PercentOfFloat.HasValue
                     ? r.PercentOfFloat.Value.ToString("F4", CultureInfo.InvariantCulture)
