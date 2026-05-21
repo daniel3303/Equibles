@@ -201,7 +201,7 @@ public class FinancialFactsImportService
     {
         if (!TryMapFiscalPeriod(value.Fp, out var fiscalPeriod))
             return null;
-        if (string.IsNullOrEmpty(value.Accn))
+        if (string.IsNullOrWhiteSpace(value.Accn))
             return null;
 
         var isInstant = value.Start == null;

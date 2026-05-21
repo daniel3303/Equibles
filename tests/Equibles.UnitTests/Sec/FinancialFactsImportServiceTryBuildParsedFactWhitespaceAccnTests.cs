@@ -24,7 +24,7 @@ public class FinancialFactsImportServiceTryBuildParsedFactWhitespaceAccnTests
     // a regression mode where a SEC payload with a blanked accession produces
     // a ParsedFact whose Accession is whitespace, silently corrupting downstream
     // dedup-by-accession and the (AccessionNumber, ...) unique index lookups.
-    [Fact(Skip = "GH-1514 — TryBuildParsedFact emits ParsedFact with whitespace-only Accn")]
+    [Fact]
     public void TryBuildParsedFact_WhitespaceOnlyAccn_ReturnsNull()
     {
         var value = new CompanyFactValue
