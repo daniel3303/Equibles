@@ -248,12 +248,12 @@
                                     <td class="whitespace-nowrap text-sm text-base-content/50">@error.CreationTime.ToString("yyyy-MM-dd HH:mm")</td>
                                     <td>
                                         <div class="flex items-center gap-1">
-                                            <a asp-action="Show" asp-route-id="@error.Id" class="btn btn-ghost btn-xs">
+                                            <a asp-action="Show" asp-route-id="@error.Id" class="btn btn-ghost btn-xs" aria-label="View error details" title="View">
                                                 <icon name="eye" size="4" />
                                             </a>
                                             <form asp-action="Delete" asp-route-id="@error.Id" class="form-confirm" data-message="Delete this error?">
                                                 @Html.AntiForgeryToken()
-                                                <button type="submit" class="btn btn-ghost btn-xs text-error">
+                                                <button type="submit" class="btn btn-ghost btn-xs text-error" aria-label="Delete this error" title="Delete">
                                                     <icon name="trash" size="4" />
                                                 </button>
                                             </form>
