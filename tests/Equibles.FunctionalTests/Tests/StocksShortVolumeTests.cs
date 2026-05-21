@@ -73,7 +73,7 @@ public class StocksShortVolumeTests
         response!.Status.Should().Be(200);
 
         await Assertions
-            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Short Volume Data" }))
+            .Expect(page.Locator("h2").Filter(new() { HasTextString = "No Short Volume Data" }))
             .ToHaveCountAsync(0);
         await Assertions.Expect(page.Locator("#short-volume-chart")).ToHaveCountAsync(1);
 
@@ -114,7 +114,7 @@ public class StocksShortVolumeTests
         response!.Status.Should().Be(200);
 
         await Assertions
-            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Short Volume Data" }))
+            .Expect(page.Locator("h2").Filter(new() { HasTextString = "No Short Volume Data" }))
             .ToHaveCountAsync(1);
     }
 }

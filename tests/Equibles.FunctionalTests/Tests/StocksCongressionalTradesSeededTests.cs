@@ -104,7 +104,7 @@ public class StocksCongressionalTradesSeededTests
 
         // Non-empty branch executed — the empty-state h3 must NOT be present.
         await Assertions
-            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Congressional Trades" }))
+            .Expect(page.Locator("h2").Filter(new() { HasTextString = "No Congressional Trades" }))
             .ToHaveCountAsync(0);
 
         var rows = page.Locator("table tbody tr");

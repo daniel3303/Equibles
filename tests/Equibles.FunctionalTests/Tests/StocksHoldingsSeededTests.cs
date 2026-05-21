@@ -99,7 +99,7 @@ public class StocksHoldingsSeededTests
         response!.Status.Should().Be(200);
 
         await Assertions
-            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Holdings Data" }))
+            .Expect(page.Locator("h2").Filter(new() { HasTextString = "No Holdings Data" }))
             .ToHaveCountAsync(0);
 
         var dateSelect = page.Locator("select#holdings-date");
