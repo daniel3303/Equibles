@@ -25,6 +25,14 @@ public class InstitutionalHoldingsTools
         "sold-out-positions",
     ];
 
+    private static readonly string[] ValidInstitutionActivityBuckets =
+    [
+        "initiated",
+        "increased",
+        "reduced",
+        "exited",
+    ];
+
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly InstitutionalHolderRepository _holderRepository;
     private readonly CommonStockRepository _commonStockRepository;
@@ -832,10 +840,7 @@ public class InstitutionalHoldingsTools
                 var normalizedBucket = bucket?.Trim().ToLowerInvariant();
                 if (
                     !string.IsNullOrEmpty(normalizedBucket)
-                    && normalizedBucket != "initiated"
-                    && normalizedBucket != "increased"
-                    && normalizedBucket != "reduced"
-                    && normalizedBucket != "exited"
+                    && !ValidInstitutionActivityBuckets.Contains(normalizedBucket)
                 )
                     return "Unknown bucket. Use one of: initiated, increased, reduced, exited (or omit).";
 
