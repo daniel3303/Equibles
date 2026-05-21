@@ -226,27 +226,36 @@ public class InstitutionalHoldingsTools
                 if (holdings.Count == 0)
                     return $"No holdings found for {holder.Name} as of {targetDate:yyyy-MM-dd}.";
 
-                var result = new StringBuilder();
-                result.AppendLine(
-                    $"Portfolio of {holder.Name} (CIK: {holder.Cik}) as of {targetDate:yyyy-MM-dd}:"
-                );
-                result.AppendLine();
-                result.AppendLine("| # | Ticker | Company | Shares | Value ($M) |");
-                result.AppendLine("|---|--------|---------|--------|-----------|");
-
-                for (var i = 0; i < holdings.Count; i++)
-                {
-                    var h = holdings[i];
-                    result.AppendLine(
-                        $"| {i + 1} | {h.CommonStock.Ticker} | {h.CommonStock.Name} | {h.Shares:N0} | {h.Value / 1_000_000m:N1} |"
-                    );
-                }
-
-                return result.ToString();
+                return RenderInstitutionPortfolio(holder, targetDate, holdings);
             },
             "GetInstitutionPortfolio",
             $"institution: {institutionName}"
         );
+    }
+
+    private static string RenderInstitutionPortfolio(
+        InstitutionalHolder holder,
+        DateOnly targetDate,
+        List<InstitutionalHolding> holdings
+    )
+    {
+        var result = new StringBuilder();
+        result.AppendLine(
+            $"Portfolio of {holder.Name} (CIK: {holder.Cik}) as of {targetDate:yyyy-MM-dd}:"
+        );
+        result.AppendLine();
+        result.AppendLine("| # | Ticker | Company | Shares | Value ($M) |");
+        result.AppendLine("|---|--------|---------|--------|-----------|");
+
+        for (var i = 0; i < holdings.Count; i++)
+        {
+            var h = holdings[i];
+            result.AppendLine(
+                $"| {i + 1} | {h.CommonStock.Ticker} | {h.CommonStock.Name} | {h.Shares:N0} | {h.Value / 1_000_000m:N1} |"
+            );
+        }
+
+        return result.ToString();
     }
 
     [McpServerTool(Name = "SearchInstitutions")]
