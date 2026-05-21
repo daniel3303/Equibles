@@ -149,44 +149,48 @@ public class InstitutionalHoldingsTools
                 if (reportDates.Count == 0)
                     return $"No institutional holdings history available for {ticker}.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"Institutional ownership history for {stock.Name} ({ticker}):");
-                result.AppendLine();
-                result.AppendLine(
-                    "| Report Date | Institutions | Total Shares | Total Value ($M) | Change |"
-                );
-                result.AppendLine(
-                    "|------------|-------------|-------------|-----------------|--------|"
-                );
-
-                long previousShares = 0;
-                foreach (var date in reportDates.OrderBy(d => d))
-                {
-                    var holdings = await _holdingRepository.GetByStock(stock, date).ToListAsync();
-                    var totalShares = holdings.Sum(h => h.Shares);
-                    var totalValue = holdings.Sum(h => h.Value);
-                    var institutionCount = holdings
-                        .Select(h => h.InstitutionalHolderId)
-                        .Distinct()
-                        .Count();
-
-                    var change =
-                        previousShares > 0
-                            ? $"{(double)(totalShares - previousShares) / previousShares * 100:+0.0;-0.0}%"
-                            : "—";
-
-                    result.AppendLine(
-                        $"| {date:yyyy-MM-dd} | {institutionCount:N0} | {totalShares:N0} | {totalValue / 1_000_000m:N1} | {change} |"
-                    );
-
-                    previousShares = totalShares;
-                }
-
-                return result.ToString();
+                return await RenderOwnershipHistory(stock, ticker, reportDates);
             },
             "GetOwnershipHistory",
             $"ticker: {ticker}"
         );
+    }
+
+    private async Task<string> RenderOwnershipHistory(
+        CommonStock stock,
+        string ticker,
+        List<DateOnly> reportDates
+    )
+    {
+        var result = new StringBuilder();
+        result.AppendLine($"Institutional ownership history for {stock.Name} ({ticker}):");
+        result.AppendLine();
+        result.AppendLine(
+            "| Report Date | Institutions | Total Shares | Total Value ($M) | Change |"
+        );
+        result.AppendLine("|------------|-------------|-------------|-----------------|--------|");
+
+        long previousShares = 0;
+        foreach (var date in reportDates.OrderBy(d => d))
+        {
+            var holdings = await _holdingRepository.GetByStock(stock, date).ToListAsync();
+            var totalShares = holdings.Sum(h => h.Shares);
+            var totalValue = holdings.Sum(h => h.Value);
+            var institutionCount = holdings.Select(h => h.InstitutionalHolderId).Distinct().Count();
+
+            var change =
+                previousShares > 0
+                    ? $"{(double)(totalShares - previousShares) / previousShares * 100:+0.0;-0.0}%"
+                    : "—";
+
+            result.AppendLine(
+                $"| {date:yyyy-MM-dd} | {institutionCount:N0} | {totalShares:N0} | {totalValue / 1_000_000m:N1} | {change} |"
+            );
+
+            previousShares = totalShares;
+        }
+
+        return result.ToString();
     }
 
     [McpServerTool(Name = "GetInstitutionPortfolio")]
