@@ -20,9 +20,7 @@ public class HoldingsImportServiceTryParseOtherManagerRowWhitespaceNameTests
     // blanked NAME is malformed and should be rejected — not surfaced
     // downstream where it lands in the (Accession → SequenceNumber → Name)
     // map and gets attached to filings as a "valid manager named '   '".
-    [Fact(
-        Skip = "GH-1544 — TryParseOtherManagerRow accepts whitespace-only NAME instead of rejecting"
-    )]
+    [Fact]
     public void TryParseOtherManagerRow_WhitespaceOnlyName_ReturnsFalse()
     {
         var sut = new HoldingsImportService(
