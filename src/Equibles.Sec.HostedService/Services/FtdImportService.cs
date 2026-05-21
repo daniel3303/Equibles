@@ -300,7 +300,8 @@ public class FtdImportService
         }
 
         long.TryParse(parts[3], out var quantity);
-        decimal.TryParse(parts[5], CultureInfo.InvariantCulture, out var price);
+        if (!decimal.TryParse(parts[5], CultureInfo.InvariantCulture, out var price))
+            return null;
 
         return new FtdRecord
         {

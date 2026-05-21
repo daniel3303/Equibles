@@ -13,7 +13,7 @@ public class FtdImportServiceParseLineNonNumericPriceTests
     // meaningful and observable value (delisted / no-bid securities), and
     // silently coercing "unparseable" into 0 corrupts downstream price-weighted
     // FTD aggregates with a value distinct from "we couldn't parse this row".
-    [Fact(Skip = "GH-1596 — ParseLine emits record with Price=0 for non-numeric price")]
+    [Fact]
     public void ParseLine_NonNumericPrice_ReturnsNull()
     {
         var method = typeof(FtdImportService).GetMethod(
