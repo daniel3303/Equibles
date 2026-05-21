@@ -105,20 +105,9 @@ public class CommonStockManager
         // Required fields: a whitespace-only value is not a provided value.
         // Ticker is the globally-unique key and the lookup key, so accepting
         // whitespace would corrupt the uniqueness invariant and ticker lookups.
-        if (string.IsNullOrWhiteSpace(commonStock.Ticker))
-        {
-            throw new DomainValidationException("Ticker is required");
-        }
-
-        if (string.IsNullOrWhiteSpace(commonStock.Name))
-        {
-            throw new DomainValidationException("Name is required");
-        }
-
-        if (string.IsNullOrWhiteSpace(commonStock.Cik))
-        {
-            throw new DomainValidationException("Cik is required");
-        }
+        RequireNonBlank(commonStock.Ticker, "Ticker");
+        RequireNonBlank(commonStock.Name, "Name");
+        RequireNonBlank(commonStock.Cik, "Cik");
 
         if (commonStock.MarketCapitalization < 0)
         {
@@ -151,5 +140,13 @@ public class CommonStockManager
         // companies. In SEC filings a preferred-share ticker can legitimately appear under both
         // the parent REIT filer and its operating-partnership filer, so cross-company overlap
         // is valid. Lookups resolve ambiguity via GetByTicker's primary-first ordering.
+    }
+
+    private static void RequireNonBlank(string value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new DomainValidationException($"{name} is required");
+        }
     }
 }
