@@ -20,33 +20,7 @@ public static class FundOverlapCalculator
         if (funds.Count == 0)
             return result;
 
-        // Aggregate each fund's positions per stock. The aggregation collapses multiple
-        // discretion rows for the same stock so the per-fund slice is one entry per
-        // CommonStockId.
-        var fundAggregates = funds
-            .Select(f =>
-            {
-                var perStock = f
-                    .Holdings.GroupBy(h => h.CommonStockId)
-                    .ToDictionary(
-                        g => g.Key,
-                        g => new FundStockAggregate
-                        {
-                            CommonStockId = g.Key,
-                            Ticker = g.First().CommonStock?.Ticker,
-                            Name = g.First().CommonStock?.Name,
-                            Shares = g.Sum(h => h.Shares),
-                            Value = g.Sum(h => h.Value),
-                        }
-                    );
-                return new FundAggregate
-                {
-                    Holder = f.Holder,
-                    PerStock = perStock,
-                    TotalValue = perStock.Values.Sum(s => s.Value),
-                };
-            })
-            .ToList();
+        var fundAggregates = funds.Select(BuildFundAggregate).ToList();
 
         foreach (var fund in fundAggregates)
         {
@@ -136,6 +110,34 @@ public static class FundOverlapCalculator
 
         result.Rows = result.Rows.OrderByDescending(r => r.CombinedValue).ToList();
         return result;
+    }
+
+    // Aggregate each fund's positions per stock. The aggregation collapses multiple
+    // discretion rows for the same stock so the per-fund slice is one entry per
+    // CommonStockId.
+    private static FundAggregate BuildFundAggregate(
+        (InstitutionalHolder Holder, IReadOnlyList<InstitutionalHolding> Holdings) fund
+    )
+    {
+        var perStock = fund
+            .Holdings.GroupBy(h => h.CommonStockId)
+            .ToDictionary(
+                g => g.Key,
+                g => new FundStockAggregate
+                {
+                    CommonStockId = g.Key,
+                    Ticker = g.First().CommonStock?.Ticker,
+                    Name = g.First().CommonStock?.Name,
+                    Shares = g.Sum(h => h.Shares),
+                    Value = g.Sum(h => h.Value),
+                }
+            );
+        return new FundAggregate
+        {
+            Holder = fund.Holder,
+            PerStock = perStock,
+            TotalValue = perStock.Values.Sum(s => s.Value),
+        };
     }
 
     private class FundAggregate
