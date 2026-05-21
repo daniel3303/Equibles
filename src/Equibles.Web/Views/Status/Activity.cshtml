@@ -15,10 +15,10 @@
 
         <div class="flex items-center gap-2">
             <span class="text-xs text-base-content/50" data-activity-counter>0 events</span>
-            <button class="btn btn-ghost btn-sm" data-activity-clear title="Clear visible events">
+            <button type="button" class="btn btn-ghost btn-sm" data-activity-clear title="Clear visible events">
                 <icon name="trash" size="4" /> Clear
             </button>
-            <button class="btn btn-ghost btn-sm" data-activity-pause title="Pause live feed">
+            <button type="button" class="btn btn-ghost btn-sm" data-activity-pause aria-pressed="false" title="Pause live feed">
                 <icon name="pause" size="4" />
                 <span data-activity-pause-label>Pause</span>
             </button>
@@ -219,6 +219,8 @@
             pauseBtn.addEventListener('click', () => {
                 paused = !paused;
                 pauseLabel.textContent = paused ? 'Resume' : 'Pause';
+                pauseBtn.setAttribute('aria-pressed', paused ? 'true' : 'false');
+                pauseBtn.setAttribute('title', paused ? 'Resume live feed' : 'Pause live feed');
                 if (!paused && queueWhilePaused.length > 0) {
                     queueWhilePaused.forEach(appendRow);
                     queueWhilePaused = [];
