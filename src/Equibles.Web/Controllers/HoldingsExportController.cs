@@ -27,7 +27,7 @@ public class HoldingsExportController : BaseController
         _holderRepository = holderRepository;
     }
 
-    [HttpGet("~/Holdings/Export/Holders")]
+    [HttpGet("~/holdings/export/holders")]
     public async Task<IActionResult> Holders(string ticker, DateOnly? date)
     {
         if (string.IsNullOrWhiteSpace(ticker))
@@ -98,7 +98,7 @@ public class HoldingsExportController : BaseController
         return CsvFile(csv, $"{stock.Ticker}-13F-{selectedDate:yyyy-MM-dd}.csv");
     }
 
-    [HttpGet("~/Holdings/Export/Institution")]
+    [HttpGet("~/holdings/export/institution")]
     public async Task<IActionResult> Institution(string cik, DateOnly? date)
     {
         if (string.IsNullOrWhiteSpace(cik))
@@ -169,7 +169,7 @@ public class HoldingsExportController : BaseController
         return CsvFile(csv, $"{Sanitize(holder.Cik)}-portfolio-{selectedDate:yyyy-MM-dd}.csv");
     }
 
-    [HttpGet("~/Holdings/Export/Activity")]
+    [HttpGet("~/holdings/export/activity")]
     public async Task<IActionResult> Activity(DateOnly? date)
     {
         var reportDates = await _holdingRepository

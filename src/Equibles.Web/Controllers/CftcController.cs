@@ -24,7 +24,7 @@ public class CftcController : BaseController
         _reportRepository = reportRepository;
     }
 
-    [HttpGet("~/Futures")]
+    [HttpGet("~/futures")]
     public async Task<IActionResult> Index()
     {
         var allContracts = await _contractRepository
@@ -62,7 +62,7 @@ public class CftcController : BaseController
         return View(new CftcIndexViewModel { Categories = categories });
     }
 
-    [HttpGet("~/Futures/{marketCode}")]
+    [HttpGet("~/futures/{marketCode}")]
     public async Task<IActionResult> Show(string marketCode)
     {
         if (string.IsNullOrWhiteSpace(marketCode))

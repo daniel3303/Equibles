@@ -101,17 +101,17 @@ public class StocksController : BaseController
     }
 
     // Default stock page — redirects to Price tab
-    [HttpGet("~/Stocks/{ticker}")]
+    [HttpGet("~/stocks/{ticker}")]
     public IActionResult Show(string ticker)
     {
         return RedirectToAction(nameof(Price), new { ticker });
     }
 
-    [HttpGet("~/Stocks/{ticker}/Price")]
+    [HttpGet("~/stocks/{ticker}/price")]
     public Task<IActionResult> Price(string ticker) =>
         ShowStockTab(ticker, "price", async s => await _stockTabService.LoadPriceTab(s));
 
-    [HttpGet("~/Stocks/{ticker}/Holdings")]
+    [HttpGet("~/stocks/{ticker}/holdings")]
     public Task<IActionResult> Holdings(string ticker, DateOnly? date) =>
         ShowStockTab(
             ticker,
@@ -119,7 +119,7 @@ public class StocksController : BaseController
             async s => await _stockTabService.LoadHoldingsTab(s, date)
         );
 
-    [HttpGet("~/Stocks/{ticker}/ShortVolume")]
+    [HttpGet("~/stocks/{ticker}/shortvolume")]
     public Task<IActionResult> ShortVolume(string ticker) =>
         ShowStockTab(
             ticker,
@@ -127,7 +127,7 @@ public class StocksController : BaseController
             async s => await _stockTabService.LoadShortVolumeTab(s)
         );
 
-    [HttpGet("~/Stocks/{ticker}/ShortInterest")]
+    [HttpGet("~/stocks/{ticker}/shortinterest")]
     public Task<IActionResult> ShortInterest(string ticker) =>
         ShowStockTab(
             ticker,
@@ -135,11 +135,11 @@ public class StocksController : BaseController
             async s => await _stockTabService.LoadShortInterestTab(s)
         );
 
-    [HttpGet("~/Stocks/{ticker}/Ftd")]
+    [HttpGet("~/stocks/{ticker}/ftd")]
     public Task<IActionResult> Ftd(string ticker) =>
         ShowStockTab(ticker, "ftd", async s => await _stockTabService.LoadFtdTab(s));
 
-    [HttpGet("~/Stocks/{ticker}/Financials")]
+    [HttpGet("~/stocks/{ticker}/financials")]
     public Task<IActionResult> Financials(
         string ticker,
         FinancialStatementType statement = FinancialStatementType.IncomeStatement,
@@ -152,11 +152,11 @@ public class StocksController : BaseController
             async s => await _stockTabService.LoadFinancialsTab(s, statement, year, period)
         );
 
-    [HttpGet("~/Stocks/{ticker}/Documents")]
+    [HttpGet("~/stocks/{ticker}/documents")]
     public Task<IActionResult> Documents(string ticker) =>
         ShowStockTab(ticker, "documents", async s => await _stockTabService.LoadDocumentsTab(s));
 
-    [HttpGet("~/Stocks/{ticker}/InsiderTrading")]
+    [HttpGet("~/stocks/{ticker}/insidertrading")]
     public Task<IActionResult> InsiderTrading(string ticker) =>
         ShowStockTab(
             ticker,
@@ -164,7 +164,7 @@ public class StocksController : BaseController
             async s => await _stockTabService.LoadInsiderTradingTab(s)
         );
 
-    [HttpGet("~/Stocks/{ticker}/CongressionalTrades")]
+    [HttpGet("~/stocks/{ticker}/congressionaltrades")]
     public Task<IActionResult> CongressionalTrades(string ticker) =>
         ShowStockTab(
             ticker,
@@ -206,7 +206,7 @@ public class StocksController : BaseController
         return viewModel;
     }
 
-    [HttpGet("~/Stocks/{ticker}/Documents/{id:guid}")]
+    [HttpGet("~/stocks/{ticker}/documents/{id:guid}")]
     public async Task<IActionResult> ShowDocument(string ticker, Guid id)
     {
         var document = await _documentRepository.GetWithContent(id);
@@ -234,7 +234,7 @@ public class StocksController : BaseController
         return View(viewModel);
     }
 
-    [HttpGet("~/Stocks/{ticker}/Holders/{cik}")]
+    [HttpGet("~/stocks/{ticker}/holders/{cik}")]
     public async Task<IActionResult> ShowHolder(string ticker, string cik)
     {
         var stock = await _commonStockRepository.GetByTicker(ticker.ToUpper());

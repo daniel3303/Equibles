@@ -29,7 +29,7 @@ public class HoldingsScreenerController : BaseController
         _industryRepository = industryRepository;
     }
 
-    [HttpGet("~/Holdings/Screener")]
+    [HttpGet("~/holdings/screener")]
     public async Task<IActionResult> Screener(
         [FromQuery] ScreenerCriteriaViewModel filters = null,
         [FromQuery(Name = "date")] DateOnly? date = null,
@@ -97,7 +97,7 @@ public class HoldingsScreenerController : BaseController
         return View(viewModel);
     }
 
-    [HttpGet("~/Holdings/Screener/Export.csv")]
+    [HttpGet("~/holdings/screener/export.csv")]
     public async Task<IActionResult> ExportCsv(
         [FromQuery] ScreenerCriteriaViewModel filters = null,
         [FromQuery(Name = "date")] DateOnly? date = null,

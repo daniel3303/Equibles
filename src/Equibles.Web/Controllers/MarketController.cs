@@ -26,7 +26,7 @@ public class MarketController : BaseController
         _vixRepository = vixRepository;
     }
 
-    [HttpGet("~/Market")]
+    [HttpGet("~/market")]
     public async Task<IActionResult> Index()
     {
         var latestRatios = await _putCallRepository.GetLatestPerType().ToListAsync();
@@ -73,7 +73,7 @@ public class MarketController : BaseController
         );
     }
 
-    [HttpGet("~/Market/PutCallRatio/{type}")]
+    [HttpGet("~/market/putcallratio/{type}")]
     public async Task<IActionResult> PutCallRatio(string type)
     {
         // Enum.TryParse accepts any numeric string in range (e.g. "999" -> an
@@ -128,7 +128,7 @@ public class MarketController : BaseController
         return View(viewModel);
     }
 
-    [HttpGet("~/Market/Vix")]
+    [HttpGet("~/market/vix")]
     public async Task<IActionResult> Vix()
     {
         var records = await _vixRepository
