@@ -489,7 +489,10 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
     {
         if (string.IsNullOrEmpty(value))
             return 0;
-        return long.TryParse(value, out var result) ? result : (long)ParseDecimal(value);
+        if (long.TryParse(value, out var result))
+            return result;
+        var d = ParseDecimal(value);
+        return d > long.MaxValue || d < long.MinValue ? 0 : (long)d;
     }
 
     internal static decimal ParseDecimal(string value)

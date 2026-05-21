@@ -30,7 +30,7 @@ public class InsiderTradingFilingProcessorParseLongOverflowTests
     // existing decimal-fallback pin covers the well-formed-fractional case
     // ("1234.5678"); this pin covers the overflow case that would crash the
     // filing processor.
-    [Fact(Skip = "GH-1673 — ParseLong throws OverflowException on out-of-range digit-only input")]
+    [Fact]
     public void ParseLong_OverflowDecimalString_DoesNotThrow()
     {
         // 19 nines = 9_999_999_999_999_999_999 ≈ 1.0e19, strictly greater than
