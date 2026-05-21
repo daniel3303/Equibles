@@ -122,7 +122,7 @@
         <div class="card bg-base-100 shadow-sm" data-testid="screener-results">
             <div class="card-body p-4">
                 <div class="flex items-baseline justify-between mb-2">
-                    <h3 class="text-base font-medium m-0">@Model.Rows.Count.ToString("N0") matching stocks</h3>
+                    <h2 class="text-base font-medium m-0">@Model.Rows.Count.ToString("N0") matching stocks</h2>
                     <span class="text-xs text-base-content/60">
                         @Model.SelectedDate.ToString("MMM dd, yyyy") vs @Model.ComparisonDate.ToString("MMM dd, yyyy")@(Model.TruncatedToCap ? " · truncated to first " + Equibles.Web.Controllers.HoldingsScreenerController.RowCap.ToString("N0") : "")
                     </span>

@@ -5,13 +5,15 @@
     ViewData["Menu"] = "Holdings";
 }
 
+<h1 class="text-2xl font-bold mb-4">13F Quarterly Activity</h1>
+
 @if (Model.AvailableDates.Count == 0) {
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body items-center text-center py-12">
             <div class="text-base-content/30 mb-3">
                 <icon name="building-office" size="12" />
             </div>
-            <h3 class="text-base-content/60 mb-2">No 13F data yet</h3>
+            <h2 class="text-base-content/60 mb-2">No 13F data yet</h2>
             <p class="text-base-content/40 text-sm">Once at least one quarter of 13F filings has been ingested, the market-wide activity boards appear here.</p>
         </div>
     </div>
@@ -64,7 +66,7 @@
                 <div class="card bg-base-100 shadow-sm" data-testid="@board.TestId">
                     <div class="card-body p-4">
                         <div class="flex items-center gap-2 mb-2">
-                            <h3 class="text-base font-medium m-0">@board.Label</h3>
+                            <h2 class="text-base font-medium m-0">@board.Label</h2>
                             <span class="badge @board.BadgeCss badge-sm">@board.Rows.Count.ToString("N0")</span>
                         </div>
                         @if (board.Rows.Count == 0) {
@@ -121,7 +123,7 @@
                 <div class="card bg-base-100 shadow-sm" data-testid="@board.TestId">
                     <div class="card-body p-4">
                         <div class="flex items-center gap-2 mb-2">
-                            <h3 class="text-base font-medium m-0">@board.Label</h3>
+                            <h2 class="text-base font-medium m-0">@board.Label</h2>
                             <span class="badge @board.BadgeCss badge-sm">@board.Rows.Count.ToString("N0")</span>
                         </div>
                         @if (board.Rows.Count == 0) {
