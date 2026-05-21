@@ -74,7 +74,7 @@ public class StocksShortInterestTests
         response!.Status.Should().Be(200);
 
         await Assertions
-            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Short Interest Data" }))
+            .Expect(page.Locator("h2").Filter(new() { HasTextString = "No Short Interest Data" }))
             .ToHaveCountAsync(0);
         await Assertions.Expect(page.Locator("#short-interest-chart")).ToHaveCountAsync(1);
 
@@ -115,7 +115,7 @@ public class StocksShortInterestTests
         response!.Status.Should().Be(200);
 
         await Assertions
-            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Short Interest Data" }))
+            .Expect(page.Locator("h2").Filter(new() { HasTextString = "No Short Interest Data" }))
             .ToHaveCountAsync(1);
     }
 }

@@ -48,7 +48,7 @@ public class StocksCongressionalTradesTests
         response!.Status.Should().Be(200);
 
         await Assertions
-            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Congressional Trades" }))
+            .Expect(page.Locator("h2").Filter(new() { HasTextString = "No Congressional Trades" }))
             .ToHaveCountAsync(1);
     }
 }

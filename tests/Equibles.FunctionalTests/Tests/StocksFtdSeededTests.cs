@@ -76,10 +76,10 @@ public class StocksFtdSeededTests
         response!.Status.Should().Be(200);
 
         await Assertions
-            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Fails to Deliver Data" }))
+            .Expect(page.Locator("h2").Filter(new() { HasTextString = "No Fails to Deliver Data" }))
             .ToHaveCountAsync(0);
         await Assertions
-            .Expect(page.Locator("h3").Filter(new() { HasTextString = "Fails to Deliver History" }))
+            .Expect(page.Locator("h2").Filter(new() { HasTextString = "Fails to Deliver History" }))
             .ToHaveCountAsync(1);
 
         var rows = page.Locator("table tbody tr");

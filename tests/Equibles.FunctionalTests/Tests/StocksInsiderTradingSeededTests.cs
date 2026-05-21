@@ -94,7 +94,7 @@ public class StocksInsiderTradingSeededTests
         response!.Status.Should().Be(200);
 
         await Assertions
-            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Insider Trading Data" }))
+            .Expect(page.Locator("h2").Filter(new() { HasTextString = "No Insider Trading Data" }))
             .ToHaveCountAsync(0);
 
         var rows = page.Locator("table tbody tr");

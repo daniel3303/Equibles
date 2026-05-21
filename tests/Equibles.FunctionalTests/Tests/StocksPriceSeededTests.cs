@@ -89,10 +89,10 @@ public class StocksPriceSeededTests
         response!.Status.Should().Be(200);
 
         await Assertions
-            .Expect(page.Locator("h3").Filter(new() { HasTextString = "No Price Data" }))
+            .Expect(page.Locator("h2").Filter(new() { HasTextString = "No Price Data" }))
             .ToHaveCountAsync(0);
         await Assertions
-            .Expect(page.Locator("h3").Filter(new() { HasTextString = "Price & Moving Averages" }))
+            .Expect(page.Locator("h2").Filter(new() { HasTextString = "Price & Moving Averages" }))
             .ToHaveCountAsync(1);
 
         // Data Range text is rendered as `{first.Date} — {last.Date}` (em-dash). The text
