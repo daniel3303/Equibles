@@ -28,7 +28,11 @@
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body p-0">
             <ul class="divide-y divide-base-200 max-h-[70vh] overflow-y-auto"
-                data-activity-list>
+                data-activity-list
+                aria-label="Live scraper activity"
+                aria-live="polite"
+                aria-relevant="additions"
+                aria-atomic="false">
                 <li class="p-6 text-center text-base-content/50" data-activity-empty>
                     <icon name="signal" size="8" class="mx-auto mb-2 opacity-50" />
                     <p class="text-sm">No events yet. Scraper events will stream in as they happen.</p>
