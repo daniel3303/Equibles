@@ -144,57 +144,38 @@ public class CftcClient : ICftcClient
     private static CftcReportRecord ParseLine(string line, Dictionary<string, int> columnIndex)
     {
         var fields = SplitCsvLine(line);
+        string Get(string column) => GetField(fields, columnIndex, column);
 
-        var record = new CftcReportRecord
+        return new CftcReportRecord
         {
-            MarketAndExchangeName = GetField(fields, columnIndex, "Market_and_Exchange_Names"),
-            ReportDate =
-                GetField(fields, columnIndex, "Report_Date_as_YYYY-MM-DD")
-                ?? GetField(fields, columnIndex, "As_of_Date_In_Form_YYMMDD"),
-            ContractMarketCode = GetField(fields, columnIndex, "CFTC_Contract_Market_Code"),
-            OpenInterest = ParseLong(GetField(fields, columnIndex, "Open_Interest_All")),
-            NonCommLong = ParseLong(GetField(fields, columnIndex, "NonComm_Positions_Long_All")),
-            NonCommShort = ParseLong(GetField(fields, columnIndex, "NonComm_Positions_Short_All")),
-            NonCommSpreads = ParseLong(
-                GetField(fields, columnIndex, "NonComm_Positions_Spread_All")
-            ),
-            CommLong = ParseLong(GetField(fields, columnIndex, "Comm_Positions_Long_All")),
-            CommShort = ParseLong(GetField(fields, columnIndex, "Comm_Positions_Short_All")),
-            TotalRptLong = ParseLong(GetField(fields, columnIndex, "Tot_Rpt_Positions_Long_All")),
-            TotalRptShort = ParseLong(GetField(fields, columnIndex, "Tot_Rpt_Positions_Short_All")),
-            NonRptLong = ParseLong(GetField(fields, columnIndex, "NonRpt_Positions_Long_All")),
-            NonRptShort = ParseLong(GetField(fields, columnIndex, "NonRpt_Positions_Short_All")),
-            ChangeOpenInterest = ParseLong(
-                GetField(fields, columnIndex, "Change_in_Open_Interest_All")
-            ),
-            ChangeNonCommLong = ParseLong(
-                GetField(fields, columnIndex, "Change_in_NonComm_Long_All")
-            ),
-            ChangeNonCommShort = ParseLong(
-                GetField(fields, columnIndex, "Change_in_NonComm_Short_All")
-            ),
-            ChangeCommLong = ParseLong(GetField(fields, columnIndex, "Change_in_Comm_Long_All")),
-            ChangeCommShort = ParseLong(GetField(fields, columnIndex, "Change_in_Comm_Short_All")),
-            PctNonCommLong = ParseDecimal(
-                GetField(fields, columnIndex, "Pct_of_OI_NonComm_Long_All")
-            ),
-            PctNonCommShort = ParseDecimal(
-                GetField(fields, columnIndex, "Pct_of_OI_NonComm_Short_All")
-            ),
-            PctCommLong = ParseDecimal(GetField(fields, columnIndex, "Pct_of_OI_Comm_Long_All")),
-            PctCommShort = ParseDecimal(GetField(fields, columnIndex, "Pct_of_OI_Comm_Short_All")),
-            TradersTotal = ParseInt(GetField(fields, columnIndex, "Traders_Tot_All")),
-            TradersNonCommLong = ParseInt(
-                GetField(fields, columnIndex, "Traders_NonComm_Long_All")
-            ),
-            TradersNonCommShort = ParseInt(
-                GetField(fields, columnIndex, "Traders_NonComm_Short_All")
-            ),
-            TradersCommLong = ParseInt(GetField(fields, columnIndex, "Traders_Comm_Long_All")),
-            TradersCommShort = ParseInt(GetField(fields, columnIndex, "Traders_Comm_Short_All")),
+            MarketAndExchangeName = Get("Market_and_Exchange_Names"),
+            ReportDate = Get("Report_Date_as_YYYY-MM-DD") ?? Get("As_of_Date_In_Form_YYMMDD"),
+            ContractMarketCode = Get("CFTC_Contract_Market_Code"),
+            OpenInterest = ParseLong(Get("Open_Interest_All")),
+            NonCommLong = ParseLong(Get("NonComm_Positions_Long_All")),
+            NonCommShort = ParseLong(Get("NonComm_Positions_Short_All")),
+            NonCommSpreads = ParseLong(Get("NonComm_Positions_Spread_All")),
+            CommLong = ParseLong(Get("Comm_Positions_Long_All")),
+            CommShort = ParseLong(Get("Comm_Positions_Short_All")),
+            TotalRptLong = ParseLong(Get("Tot_Rpt_Positions_Long_All")),
+            TotalRptShort = ParseLong(Get("Tot_Rpt_Positions_Short_All")),
+            NonRptLong = ParseLong(Get("NonRpt_Positions_Long_All")),
+            NonRptShort = ParseLong(Get("NonRpt_Positions_Short_All")),
+            ChangeOpenInterest = ParseLong(Get("Change_in_Open_Interest_All")),
+            ChangeNonCommLong = ParseLong(Get("Change_in_NonComm_Long_All")),
+            ChangeNonCommShort = ParseLong(Get("Change_in_NonComm_Short_All")),
+            ChangeCommLong = ParseLong(Get("Change_in_Comm_Long_All")),
+            ChangeCommShort = ParseLong(Get("Change_in_Comm_Short_All")),
+            PctNonCommLong = ParseDecimal(Get("Pct_of_OI_NonComm_Long_All")),
+            PctNonCommShort = ParseDecimal(Get("Pct_of_OI_NonComm_Short_All")),
+            PctCommLong = ParseDecimal(Get("Pct_of_OI_Comm_Long_All")),
+            PctCommShort = ParseDecimal(Get("Pct_of_OI_Comm_Short_All")),
+            TradersTotal = ParseInt(Get("Traders_Tot_All")),
+            TradersNonCommLong = ParseInt(Get("Traders_NonComm_Long_All")),
+            TradersNonCommShort = ParseInt(Get("Traders_NonComm_Short_All")),
+            TradersCommLong = ParseInt(Get("Traders_Comm_Long_All")),
+            TradersCommShort = ParseInt(Get("Traders_Comm_Short_All")),
         };
-
-        return record;
     }
 
     private static string[] SplitCsvLine(string line)
