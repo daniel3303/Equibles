@@ -1,3 +1,4 @@
+using System.Globalization;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
@@ -288,7 +289,14 @@ public class FredImportService
         var result = new List<(FredObservationRecord, DateOnly)>(records.Count);
         foreach (var r in records)
         {
-            if (DateOnly.TryParse(r.Date, out var date))
+            if (
+                DateOnly.TryParse(
+                    r.Date,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var date
+                )
+            )
                 result.Add((r, date));
         }
         return result;
