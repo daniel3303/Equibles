@@ -183,13 +183,7 @@ public class FredImportService
         var totalInserted = await BatchPersister.Persist(
             observations,
             InsertBatchSize,
-            async batch =>
-            {
-                using var scope = _scopeFactory.CreateScope();
-                var repo = scope.ServiceProvider.GetRequiredService<FredObservationRepository>();
-                repo.AddRange(batch);
-                await repo.SaveChanges();
-            }
+            FlushObservationBatch
         );
 
         await UpdateSeriesMetadata(series.Id, latestObservationDate);
@@ -208,6 +202,14 @@ public class FredImportService
             totalInserted,
             curated.SeriesId
         );
+    }
+
+    private async Task FlushObservationBatch(List<FredObservation> batch)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<FredObservationRepository>();
+        repo.AddRange(batch);
+        await repo.SaveChanges();
     }
 
     private async Task UpdateSeriesMetadata(Guid seriesId, DateOnly latestObservationDate)
