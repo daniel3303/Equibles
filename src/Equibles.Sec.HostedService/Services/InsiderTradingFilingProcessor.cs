@@ -108,38 +108,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
 
         var isAmendment = filing.Form.Contains("/A", StringComparison.OrdinalIgnoreCase);
 
-        // Both non-derivative and derivative XML tables share the same element names for the
-        // fields we extract (securityTitle, transactionDate, transactionCoding, transactionAmounts,
-        // postTransactionAmounts, ownershipNature). The SecurityTitle distinguishes the instrument
-        // type (e.g., "Common Stock" vs "Stock Option (Right to Buy)"). For derivatives, Shares
-        // and PricePerShare refer to the derivative instrument, not the underlying security.
-        //
-        // TransactionOrder is the 0-based position of the row within its filing — assigned as
-        // we parse so the (AccessionNumber, TransactionOrder) unique index has a stable key.
-        // The XML's document order is the only natural identity Form 4 transactions have.
-        var transactions = new List<InsiderTransaction>();
-
-        void AddParsed(InsiderTransaction tx)
-        {
-            if (tx == null)
-                return;
-            tx.TransactionOrder = transactions.Count;
-            transactions.Add(tx);
-        }
-
-        void WalkTable(string tableName, string txName, string holdingName)
-        {
-            var table = root.Element(tableName);
-            if (table == null)
-                return;
-            foreach (var txElement in table.Elements(txName))
-                AddParsed(ParseTransaction(txElement, owner, companyId, filing, isAmendment));
-            foreach (var holdingElement in table.Elements(holdingName))
-                AddParsed(ParseHolding(holdingElement, owner, companyId, filing, isAmendment));
-        }
-
-        WalkTable("nonDerivativeTable", "nonDerivativeTransaction", "nonDerivativeHolding");
-        WalkTable("derivativeTable", "derivativeTransaction", "derivativeHolding");
+        var transactions = ParseAllTransactions(root, owner, companyId, filing, isAmendment);
 
         if (transactions.Count == 0)
         {
@@ -173,6 +142,50 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         );
 
         return true;
+    }
+
+    // Both non-derivative and derivative XML tables share the same element names for the
+    // fields we extract (securityTitle, transactionDate, transactionCoding, transactionAmounts,
+    // postTransactionAmounts, ownershipNature). The SecurityTitle distinguishes the instrument
+    // type (e.g., "Common Stock" vs "Stock Option (Right to Buy)"). For derivatives, Shares
+    // and PricePerShare refer to the derivative instrument, not the underlying security.
+    //
+    // TransactionOrder is the 0-based position of the row within its filing — assigned as
+    // we parse so the (AccessionNumber, TransactionOrder) unique index has a stable key.
+    // The XML's document order is the only natural identity Form 4 transactions have.
+    private List<InsiderTransaction> ParseAllTransactions(
+        XElement root,
+        InsiderOwner owner,
+        Guid companyId,
+        FilingData filing,
+        bool isAmendment
+    )
+    {
+        var transactions = new List<InsiderTransaction>();
+
+        void AddParsed(InsiderTransaction tx)
+        {
+            if (tx == null)
+                return;
+            tx.TransactionOrder = transactions.Count;
+            transactions.Add(tx);
+        }
+
+        void WalkTable(string tableName, string txName, string holdingName)
+        {
+            var table = root.Element(tableName);
+            if (table == null)
+                return;
+            foreach (var txElement in table.Elements(txName))
+                AddParsed(ParseTransaction(txElement, owner, companyId, filing, isAmendment));
+            foreach (var holdingElement in table.Elements(holdingName))
+                AddParsed(ParseHolding(holdingElement, owner, companyId, filing, isAmendment));
+        }
+
+        WalkTable("nonDerivativeTable", "nonDerivativeTransaction", "nonDerivativeHolding");
+        WalkTable("derivativeTable", "derivativeTransaction", "derivativeHolding");
+
+        return transactions;
     }
 
     private async Task<XElement> TryParseOwnershipRoot(
