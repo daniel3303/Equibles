@@ -479,44 +479,13 @@ public class InstitutionalHoldingsTools
 
                 if (normalizedBucket is "top-buys" or "top-sells")
                 {
-                    var activity = _holdingRepository.GetQuarterlyActivity(
+                    return await RenderMarketActivityMovers(
+                        normalizedBucket,
                         targetDate,
-                        previousDate.Value
+                        previousDate.Value,
+                        maxResults,
+                        result
                     );
-                    var movers = activity.Where(a => a.CurrentShares != a.PreviousShares);
-                    var rows =
-                        normalizedBucket == "top-buys"
-                            ? await movers
-                                .Where(a => a.CurrentShares > a.PreviousShares)
-                                .OrderByDescending(a => a.CurrentValue - a.PreviousValue)
-                                .Take(maxResults)
-                                .ToListAsync()
-                            : await movers
-                                .Where(a => a.CurrentShares < a.PreviousShares)
-                                .OrderBy(a => a.CurrentValue - a.PreviousValue)
-                                .Take(maxResults)
-                                .ToListAsync();
-                    if (rows.Count == 0)
-                        return result + "_No stocks moved in this direction this quarter._";
-
-                    var stockIds = rows.Select(r => r.CommonStockId).ToList();
-                    var stocks = await _commonStockRepository
-                        .GetAll()
-                        .Where(s => stockIds.Contains(s.Id))
-                        .ToDictionaryAsync(s => s.Id);
-
-                    result.AppendLine("| # | Ticker | Company | Δ Shares | Δ Value ($M) |");
-                    result.AppendLine("|---|--------|---------|---------|-------------|");
-                    for (var i = 0; i < rows.Count; i++)
-                    {
-                        var r = rows[i];
-                        stocks.TryGetValue(r.CommonStockId, out var s);
-                        var sign = r.DeltaShares > 0 ? "+" : "";
-                        result.AppendLine(
-                            $"| {i + 1} | {s?.Ticker ?? "—"} | {s?.Name ?? "Unknown"} | {sign}{r.DeltaShares:N0} | {r.DeltaValue / 1_000_000m:+#,##0.0;-#,##0.0;0.0} |"
-                        );
-                    }
-                    return result.ToString();
                 }
                 else
                 {
@@ -532,6 +501,51 @@ public class InstitutionalHoldingsTools
             "GetMarketWide13FActivity",
             $"bucket: {bucket}"
         );
+    }
+
+    private async Task<string> RenderMarketActivityMovers(
+        string normalizedBucket,
+        DateOnly targetDate,
+        DateOnly previousDate,
+        int maxResults,
+        StringBuilder result
+    )
+    {
+        var activity = _holdingRepository.GetQuarterlyActivity(targetDate, previousDate);
+        var movers = activity.Where(a => a.CurrentShares != a.PreviousShares);
+        var rows =
+            normalizedBucket == "top-buys"
+                ? await movers
+                    .Where(a => a.CurrentShares > a.PreviousShares)
+                    .OrderByDescending(a => a.CurrentValue - a.PreviousValue)
+                    .Take(maxResults)
+                    .ToListAsync()
+                : await movers
+                    .Where(a => a.CurrentShares < a.PreviousShares)
+                    .OrderBy(a => a.CurrentValue - a.PreviousValue)
+                    .Take(maxResults)
+                    .ToListAsync();
+        if (rows.Count == 0)
+            return result + "_No stocks moved in this direction this quarter._";
+
+        var stockIds = rows.Select(r => r.CommonStockId).ToList();
+        var stocks = await _commonStockRepository
+            .GetAll()
+            .Where(s => stockIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id);
+
+        result.AppendLine("| # | Ticker | Company | Δ Shares | Δ Value ($M) |");
+        result.AppendLine("|---|--------|---------|---------|-------------|");
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var r = rows[i];
+            stocks.TryGetValue(r.CommonStockId, out var s);
+            var sign = r.DeltaShares > 0 ? "+" : "";
+            result.AppendLine(
+                $"| {i + 1} | {s?.Ticker ?? "—"} | {s?.Name ?? "Unknown"} | {sign}{r.DeltaShares:N0} | {r.DeltaValue / 1_000_000m:+#,##0.0;-#,##0.0;0.0} |"
+            );
+        }
+        return result.ToString();
     }
 
     private async Task<string> RenderMarketActivityChurn(
