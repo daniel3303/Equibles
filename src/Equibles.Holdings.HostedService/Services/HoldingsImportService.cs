@@ -459,7 +459,7 @@ public class HoldingsImportService
         }
 
         name = GetValue(row, "NAME");
-        if (string.IsNullOrEmpty(name))
+        if (string.IsNullOrWhiteSpace(name))
             return false;
 
         return true;
