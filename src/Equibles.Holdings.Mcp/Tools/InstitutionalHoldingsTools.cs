@@ -612,35 +612,39 @@ public class InstitutionalHoldingsTools
                     previousDate
                 );
 
-                var result = new StringBuilder();
-                result.AppendLine(
-                    $"Portfolio summary — **{holder.Name}** as of {targetDate:yyyy-MM-dd}"
-                );
-                if (previousDate.HasValue)
-                    result.AppendLine($"vs prior quarter {previousDate.Value:yyyy-MM-dd}");
-                result.AppendLine();
-                result.AppendLine("| Metric | Value |");
-                result.AppendLine("|--------|-------|");
-                result.AppendLine($"| Reported AUM | ${summary.ReportedAum:N0} |");
-                result.AppendLine($"| # Positions | {summary.PositionCount:N0} |");
-                result.AppendLine(
-                    $"| Top 10 concentration | {summary.Top10ConcentrationPercent:F1}% |"
-                );
-                result.AppendLine(
-                    $"| Top 25 concentration | {summary.Top25ConcentrationPercent:F1}% |"
-                );
-                result.AppendLine($"| QoQ turnover | {summary.QoQTurnoverPercent:F1}% |");
-                result.AppendLine($"| Quarters reported | {summary.QuartersReported} |");
-                result.AppendLine();
-                result.AppendLine(
-                    "_QoQ turnover = (Σ |Δ shares × current price proxy|) / (2 × AUM), where the per-share price proxy is the current quarter's Value / Shares._"
-                );
-
-                return result.ToString();
+                return RenderInstitutionSummary(holder, targetDate, previousDate, summary);
             },
             "GetInstitutionSummary",
             $"institution: {institutionName}"
         );
+    }
+
+    private static string RenderInstitutionSummary(
+        InstitutionalHolder holder,
+        DateOnly targetDate,
+        DateOnly? previousDate,
+        InstitutionPortfolioSummary summary
+    )
+    {
+        var result = new StringBuilder();
+        result.AppendLine($"Portfolio summary — **{holder.Name}** as of {targetDate:yyyy-MM-dd}");
+        if (previousDate.HasValue)
+            result.AppendLine($"vs prior quarter {previousDate.Value:yyyy-MM-dd}");
+        result.AppendLine();
+        result.AppendLine("| Metric | Value |");
+        result.AppendLine("|--------|-------|");
+        result.AppendLine($"| Reported AUM | ${summary.ReportedAum:N0} |");
+        result.AppendLine($"| # Positions | {summary.PositionCount:N0} |");
+        result.AppendLine($"| Top 10 concentration | {summary.Top10ConcentrationPercent:F1}% |");
+        result.AppendLine($"| Top 25 concentration | {summary.Top25ConcentrationPercent:F1}% |");
+        result.AppendLine($"| QoQ turnover | {summary.QoQTurnoverPercent:F1}% |");
+        result.AppendLine($"| Quarters reported | {summary.QuartersReported} |");
+        result.AppendLine();
+        result.AppendLine(
+            "_QoQ turnover = (Σ |Δ shares × current price proxy|) / (2 × AUM), where the per-share price proxy is the current quarter's Value / Shares._"
+        );
+
+        return result.ToString();
     }
 
     [McpServerTool(Name = "GetInstitutionSectorAllocation")]
