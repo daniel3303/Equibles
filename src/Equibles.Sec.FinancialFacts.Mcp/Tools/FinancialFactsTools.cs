@@ -230,22 +230,7 @@ public class FinancialFactsTools
                     .GroupBy(f => f.CommonStockId)
                     .ToDictionary(g => g.Key, g => PickBestFact(g, conceptPriority));
 
-                var rows = new List<(string Ticker, string Name, FinancialFact Fact)>();
-                var skipped = new List<string>();
-                foreach (var ticker in requested)
-                {
-                    if (!stockByTicker.TryGetValue(ticker, out var stock))
-                    {
-                        skipped.Add($"{FactMarkdown.Cell(ticker)} (not found)");
-                        continue;
-                    }
-                    if (!bestByStock.TryGetValue(stock.Id, out var best))
-                    {
-                        skipped.Add($"{FactMarkdown.Cell(ticker)} (no data)");
-                        continue;
-                    }
-                    rows.Add((stock.Ticker, stock.Name, best));
-                }
+                var (rows, skipped) = BuildComparisonRows(requested, stockByTicker, bestByStock);
 
                 return RenderComparisonTable(concept, fiscalYear, period, rows, skipped);
             },
@@ -284,6 +269,34 @@ public class FinancialFactsTools
         }
 
         return result.ToString();
+    }
+
+    private static (
+        List<(string Ticker, string Name, FinancialFact Fact)> Rows,
+        List<string> Skipped
+    ) BuildComparisonRows(
+        IReadOnlyList<string> requested,
+        IReadOnlyDictionary<string, CommonStock> stockByTicker,
+        IReadOnlyDictionary<Guid, FinancialFact> bestByStock
+    )
+    {
+        var rows = new List<(string Ticker, string Name, FinancialFact Fact)>();
+        var skipped = new List<string>();
+        foreach (var ticker in requested)
+        {
+            if (!stockByTicker.TryGetValue(ticker, out var stock))
+            {
+                skipped.Add($"{FactMarkdown.Cell(ticker)} (not found)");
+                continue;
+            }
+            if (!bestByStock.TryGetValue(stock.Id, out var best))
+            {
+                skipped.Add($"{FactMarkdown.Cell(ticker)} (no data)");
+                continue;
+            }
+            rows.Add((stock.Ticker, stock.Name, best));
+        }
+        return (rows, skipped);
     }
 
     private static string RenderComparisonTable(
