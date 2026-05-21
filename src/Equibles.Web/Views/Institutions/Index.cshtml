@@ -1,0 +1,165 @@
+@using Equibles.Web.ViewModels.Institutions
+@model InstitutionBrowserViewModel
+
+@{
+    ViewData["Title"] = "Institutions";
+    ViewData["Description"] = "Browse and search the 13F institutional filer universe — fund managers, advisers, banks, and trusts that file Form 13F with the SEC.";
+
+    // Active filters carried across pagination links so paging never drops them.
+    var filterRoute = new Dictionary<string, string>();
+    if (!string.IsNullOrEmpty(Model.Search)) {
+        filterRoute["search"] = Model.Search;
+    }
+    if (Model.Sort != InstitutionSort.Name) {
+        filterRoute["sort"] = Model.Sort.ToString();
+    }
+    var hasFilters = filterRoute.Count > 0;
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">Institutions</h1>
+        <p class="text-base-content/60">
+            Browse @Model.TotalCount.ToString("N0") 13F filers
+            @if (Model.LatestReportDate.HasValue) {
+                <span> · per-filer aggregates from the latest 13F quarter (@Model.LatestReportDate.Value.ToString("MMM dd, yyyy"))</span>
+            } else {
+                <span> · no 13F data ingested yet</span>
+            }
+        </p>
+    </div>
+
+    <!-- Search + sort (plain query-param names, bound to InstitutionsController.Index) -->
+    <form method="get" class="mb-6">
+        <div class="flex flex-wrap gap-3 items-end">
+            <label class="form-control">
+                <span class="label-text text-sm mb-1">Search</span>
+                <input type="text" name="search" value="@Model.Search"
+                       class="input input-bordered w-64"
+                       aria-label="Search institutions by name"
+                       placeholder="Institution name..." />
+            </label>
+            <label class="form-control">
+                <span class="label-text text-sm mb-1">Sort by</span>
+                <select name="sort" class="select select-bordered" aria-label="Sort institutions">
+                    @foreach (var option in Html.GetEnumSelectList<InstitutionSort>()) {
+                        <option value="@option.Value"
+                                selected="@(option.Value == ((int)Model.Sort).ToString())">
+                            @option.Text
+                        </option>
+                    }
+                </select>
+            </label>
+            <button type="submit" class="btn btn-primary">Apply</button>
+            @if (hasFilters) {
+                <a asp-action="Index" class="btn btn-ghost">Clear</a>
+            }
+        </div>
+    </form>
+
+    <!-- Results Table -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table table-zebra table-sm" aria-label="Institutions" data-testid="institutions-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col" class="hidden md:table-cell">CIK</th>
+                        <th scope="col" class="hidden lg:table-cell">Location</th>
+                        <th scope="col" class="text-right"># Positions</th>
+                        <th scope="col" class="text-right hidden md:table-cell">Total $ Value ($M)</th>
+                        <th scope="col" class="w-8"><span class="sr-only">Open</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var inst in Model.Institutions) {
+                        var location = string.Join(", ", new[] { inst.City, inst.StateOrCountry }.Where(s => !string.IsNullOrEmpty(s)));
+                        <tr class="hover cursor-pointer institution-row"
+                            data-href="@Url.Action("Institution", "Profiles", new { cik = inst.Cik })">
+                            <td class="max-w-xs">
+                                <a asp-action="Institution" asp-controller="Profiles" asp-route-cik="@inst.Cik"
+                                   class="font-semibold link link-primary">@inst.Name</a>
+                            </td>
+                            <td class="hidden md:table-cell font-mono text-sm text-base-content/60">@inst.Cik</td>
+                            <td class="hidden lg:table-cell text-sm text-base-content/60">@(string.IsNullOrEmpty(location) ? "—" : location)</td>
+                            <td class="text-right font-mono">@inst.PositionCount.ToString("N0")</td>
+                            <td class="text-right font-mono hidden md:table-cell">@((inst.TotalValue / 1_000_000m).ToString("N1"))</td>
+                            <td class="text-base-content/30">
+                                <icon name="chevron-right" size="4" />
+                            </td>
+                        </tr>
+                    }
+                    @if (Model.Institutions.Count == 0) {
+                        <tr>
+                            <td colspan="6" class="text-center py-10 text-base-content/60">
+                                @if (Model.LatestReportDate.HasValue) {
+                                    <span>No institutions match these filters.</span>
+                                } else {
+                                    <span>No 13F filers have been ingested yet. The Most-Held and per-institution pages light up once the worker finishes its first 13F cycle.</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    @if (Model.TotalPages > 1) {
+        <nav class="flex justify-center mt-6" aria-label="Institutions pagination" data-testid="institutions-pager">
+            <div class="join">
+                @if (Model.Page > 1) {
+                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="@(Model.Page - 1)"
+                       class="join-item btn btn-sm" aria-label="Go to previous page">Previous</a>
+                }
+
+                @{
+                    var startPage = Math.Max(1, Model.Page - 2);
+                    var endPage = Math.Min(Model.TotalPages, Model.Page + 2);
+                }
+
+                @if (startPage > 1) {
+                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="1"
+                       class="join-item btn btn-sm" aria-label="Go to page 1">1</a>
+                    @if (startPage > 2) {
+                        <span class="join-item btn btn-sm btn-disabled" aria-hidden="true">...</span>
+                    }
+                }
+
+                @for (var i = startPage; i <= endPage; i++) {
+                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="@i"
+                       class="join-item btn btn-sm @(i == Model.Page ? "btn-active" : "")"
+                       aria-label="Go to page @i"
+                       aria-current="@(i == Model.Page ? "page" : null)">@i</a>
+                }
+
+                @if (endPage < Model.TotalPages) {
+                    @if (endPage < Model.TotalPages - 1) {
+                        <span class="join-item btn btn-sm btn-disabled" aria-hidden="true">...</span>
+                    }
+                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="@Model.TotalPages"
+                       class="join-item btn btn-sm" aria-label="Go to page @Model.TotalPages">@Model.TotalPages</a>
+                }
+
+                @if (Model.Page < Model.TotalPages) {
+                    <a asp-action="Index" asp-all-route-data="filterRoute" asp-route-page="@(Model.Page + 1)"
+                       class="join-item btn btn-sm" aria-label="Go to next page">Next</a>
+                }
+            </div>
+        </nav>
+    }
+</div>
+
+@section Scripts {
+    <script>
+    // Row-click navigation: same UX as the Stocks index — clicking anywhere on
+    // a row (other than an inner link) navigates to the institution profile.
+    document.querySelectorAll('.institution-row').forEach(function(row) {
+        row.addEventListener('click', function(e) {
+            if (e.target.closest('a')) return; // let native link clicks through
+            window.location.href = this.dataset.href;
+        });
+    });
+    </script>
+}
