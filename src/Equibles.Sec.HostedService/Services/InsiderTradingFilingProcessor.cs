@@ -74,37 +74,9 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         if (root == null)
             return false;
 
-        var ownerElement = root.Element("reportingOwner");
-        if (ownerElement == null)
-        {
-            _logger.LogWarning(
-                "Missing reportingOwner element for {Ticker} - {AccessionNumber}",
-                companyOutContext.Ticker,
-                filing.AccessionNumber
-            );
+        var owner = await TryResolveOwner(root, ownerRepository, filing, companyTicker);
+        if (owner == null)
             return false;
-        }
-
-        var ownerId = ownerElement.Element("reportingOwnerId");
-        var ownerCik = ownerId?.Element("rptOwnerCik")?.Value?.Trim();
-        var ownerName = ownerId?.Element("rptOwnerName")?.Value?.Trim();
-
-        if (string.IsNullOrEmpty(ownerCik) || string.IsNullOrEmpty(ownerName))
-        {
-            _logger.LogWarning(
-                "Missing owner CIK or name for {Ticker} - {AccessionNumber}",
-                companyOutContext.Ticker,
-                filing.AccessionNumber
-            );
-            return false;
-        }
-
-        var owner = await EnsureInsiderOwnerExists(
-            ownerRepository,
-            ownerCik,
-            ownerName,
-            ownerElement
-        );
 
         var isAmendment = filing.Form.Contains("/A", StringComparison.OrdinalIgnoreCase);
 
@@ -259,6 +231,41 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         }
 
         return root;
+    }
+
+    private async Task<InsiderOwner> TryResolveOwner(
+        XElement root,
+        InsiderOwnerRepository ownerRepository,
+        FilingData filing,
+        string companyTicker
+    )
+    {
+        var ownerElement = root.Element("reportingOwner");
+        if (ownerElement == null)
+        {
+            _logger.LogWarning(
+                "Missing reportingOwner element for {Ticker} - {AccessionNumber}",
+                companyTicker,
+                filing.AccessionNumber
+            );
+            return null;
+        }
+
+        var ownerId = ownerElement.Element("reportingOwnerId");
+        var ownerCik = ownerId?.Element("rptOwnerCik")?.Value?.Trim();
+        var ownerName = ownerId?.Element("rptOwnerName")?.Value?.Trim();
+
+        if (string.IsNullOrEmpty(ownerCik) || string.IsNullOrEmpty(ownerName))
+        {
+            _logger.LogWarning(
+                "Missing owner CIK or name for {Ticker} - {AccessionNumber}",
+                companyTicker,
+                filing.AccessionNumber
+            );
+            return null;
+        }
+
+        return await EnsureInsiderOwnerExists(ownerRepository, ownerCik, ownerName, ownerElement);
     }
 
     private static async Task<InsiderOwner> EnsureInsiderOwnerExists(
