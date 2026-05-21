@@ -355,6 +355,7 @@ public class FtdImportService
         if (
             fileName.Length >= 17
             && int.TryParse(fileName.AsSpan(8, 4), out var year)
+            && year is >= 1 and <= 9999
             && int.TryParse(fileName.AsSpan(12, 2), out var month)
             && month is >= 1 and <= 12
         )
