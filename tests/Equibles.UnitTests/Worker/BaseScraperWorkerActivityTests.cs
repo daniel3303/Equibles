@@ -76,6 +76,56 @@ public class BaseScraperWorkerActivityTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_NoBusRegistered_CycleStillRunsToCompletion()
+    {
+        // Hosts that wire BaseScraperWorker without messaging (legacy code paths,
+        // future micro-host slices) must keep working — publish lookups fall
+        // back to no-op, so DoWork still runs and the cycle still loops.
+        var scope = Substitute.For<IServiceScope>();
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        serviceProvider.GetService(typeof(IBus)).Returns((object?)null);
+        scope.ServiceProvider.Returns(serviceProvider);
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        scopeFactory.CreateScope().Returns(scope);
+
+        var reporter = new ErrorReporter(scopeFactory, Substitute.For<ILogger<ErrorReporter>>());
+        using var worker = new ActivityTestWorker(
+            _logger,
+            scopeFactory,
+            reporter,
+            sleepInterval: TimeSpan.FromSeconds(30)
+        );
+
+        await worker.StartAsync(CancellationToken.None);
+        await WaitUntil(() => worker.DoWorkCalls >= 1);
+        await worker.StopAsync(CancellationToken.None);
+
+        worker.DoWorkCalls.Should().BeGreaterThanOrEqualTo(1);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_BusPublishThrows_CycleStillCompletes()
+    {
+        // Broker errors must never crash the scraper. If Publish throws, the
+        // worker should still progress through DoWork and the sleep block.
+        _bus.Publish(Arg.Any<ScraperActivity>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromException(new InvalidOperationException("broker down")));
+
+        using var worker = new ActivityTestWorker(
+            _logger,
+            _scopeFactory,
+            _errorReporter,
+            sleepInterval: TimeSpan.FromSeconds(30)
+        );
+
+        await worker.StartAsync(CancellationToken.None);
+        await WaitUntil(() => worker.DoWorkCalls >= 1);
+        await worker.StopAsync(CancellationToken.None);
+
+        worker.DoWorkCalls.Should().BeGreaterThanOrEqualTo(1);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_DoWorkThrows_ErrorReporterPublishesErrorSeverityActivity()
     {
         var failure = new InvalidOperationException("boom");

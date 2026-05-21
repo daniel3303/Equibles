@@ -47,6 +47,30 @@ public class ErrorReporterTests
     }
 
     [Fact]
+    public async Task Report_BusPublishThrows_SwallowsAndContinues()
+    {
+        // A broker hiccup must never propagate through ErrorReporter — it's
+        // called from every scraper's catch block, and rethrowing would
+        // replace the original error in the activity feed with a Publish
+        // failure that's not what the operator needs to see.
+        var bus = Substitute.For<IBus>();
+        bus.Publish(Arg.Any<ScraperActivity>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromException(new InvalidOperationException("broker down")));
+        var scope = Substitute.For<IServiceScope>();
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        serviceProvider.GetService(typeof(IBus)).Returns(bus);
+        scope.ServiceProvider.Returns(serviceProvider);
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        scopeFactory.CreateScope().Returns(scope);
+
+        var sut = new ErrorReporter(scopeFactory, Substitute.For<ILogger<ErrorReporter>>());
+
+        var act = () => sut.Report(ErrorSource.Other, "Ctx", "msg", stackTrace: null);
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
     public async Task Report_NoBusRegistered_DoesNotThrow()
     {
         // The activity feed is opportunistic — a host without IBus
