@@ -47,7 +47,7 @@
                 @{
                     var activeSearchQuery = Context.Request.Query["q"].ToString();
                 }
-                <form asp-controller="Search" asp-action="Index" method="get" class="hidden lg:block">
+                <form asp-controller="Search" asp-action="Index" method="get" role="search" aria-label="Global search" class="hidden lg:block">
                     <div class="join">
                         <input id="navbar-search-input" type="search" name="q" value="@activeSearchQuery"
                                class="input input-sm input-bordered join-item w-48 xl:w-64"
