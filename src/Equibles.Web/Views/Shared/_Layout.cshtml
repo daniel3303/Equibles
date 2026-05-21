@@ -28,9 +28,35 @@
                 <nav class="hidden lg:flex items-center gap-6 whitespace-nowrap" aria-label="Main navigation">
                     <a asp-action="Index" asp-controller="Home" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Home</a>
                     <a asp-action="Index" asp-controller="Stocks" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Stocks</a>
-                    <a asp-action="Index" asp-controller="EconomicData" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Economic Data</a>
-                    <a asp-action="Index" asp-controller="Cftc" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Futures</a>
-                    <a asp-action="Index" asp-controller="Market" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Market</a>
+                    <a asp-action="Index" asp-controller="Institutions" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">Institutions</a>
+                    <!-- "More" groups the less-visited datasets (Economic Data / Futures / Market)
+                         behind a DaisyUI dropdown so the primary nav stays readable on medium viewports. -->
+                    <div class="dropdown dropdown-bottom">
+                        <button type="button" tabindex="0"
+                                class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors flex items-center gap-1 cursor-pointer"
+                                aria-haspopup="menu" aria-controls="navbar-more-menu">
+                            More
+                            <icon name="chevron-down" size="3" />
+                        </button>
+                        <ul id="navbar-more-menu" tabindex="0" role="menu" aria-label="More datasets"
+                            class="dropdown-content menu bg-base-100 rounded-box z-50 w-56 p-2 shadow-lg border border-base-200 mt-2">
+                            <li>
+                                <a asp-action="Index" asp-controller="EconomicData">
+                                    <icon name="presentation-chart-line" size="4" /> Economic Data
+                                </a>
+                            </li>
+                            <li>
+                                <a asp-action="Index" asp-controller="Cftc">
+                                    <icon name="scale" size="4" /> Futures
+                                </a>
+                            </li>
+                            <li>
+                                <a asp-action="Index" asp-controller="Market">
+                                    <icon name="chart-bar-square" size="4" /> Market
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
                     <a asp-action="Connect" asp-controller="Home" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">MCP</a>
                     <a asp-action="Index" asp-controller="Status" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors flex items-center gap-1">
                         Status
@@ -93,6 +119,11 @@
                         <li>
                             <a asp-action="Index" asp-controller="Stocks">
                                 <icon name="chart-bar" size="4" /> Stocks
+                            </a>
+                        </li>
+                        <li>
+                            <a asp-action="Index" asp-controller="Institutions">
+                                <icon name="building-library" size="4" /> Institutions
                             </a>
                         </li>
                         <li>
