@@ -519,6 +519,8 @@ public class HoldingsImportService
             return false;
         if (!string.Equals(coverPage.IsAmendment, "Y", StringComparison.OrdinalIgnoreCase))
             return false;
+        if (string.IsNullOrWhiteSpace(submission.Cik))
+            return false;
         if (!context.CikToHolderId.TryGetValue(submission.Cik, out holderId))
             return false;
         if (!TryParseDateOnly(submission.PeriodOfReport, out reportDate))

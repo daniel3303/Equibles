@@ -22,9 +22,7 @@ public class HoldingsImportServiceTryResolveAmendmentTargetNullCikTests
     // Dictionary<string, Guid> throws ArgumentNullException on a null key, so
     // an unguarded call aborts the entire amendment-reconciliation pass on the
     // first malformed row instead of skipping it.
-    [Fact(
-        Skip = "GH-1628 — TryResolveAmendmentTarget throws ArgumentNullException on null Cik instead of returning false"
-    )]
+    [Fact]
     public void TryResolveAmendmentTarget_NullCik_ReturnsFalseWithoutThrowing()
     {
         var accession = "0000950123-24-006477";
