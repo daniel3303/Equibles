@@ -63,13 +63,13 @@
     <!-- Results Table -->
     <div class="card bg-base-100 shadow-sm">
         <div class="overflow-x-auto">
-            <table class="table table-zebra table-sm">
+            <table class="table table-zebra table-sm" aria-label="Stocks">
                 <thead>
                     <tr>
-                        <th>Ticker</th>
-                        <th>Name</th>
-                        <th class="hidden lg:table-cell">CUSIP</th>
-                        <th class="w-8"></th>
+                        <th scope="col">Ticker</th>
+                        <th scope="col">Name</th>
+                        <th scope="col" class="hidden lg:table-cell">CUSIP</th>
+                        <th scope="col" class="w-8"><span class="sr-only">Open</span></th>
                     </tr>
                 </thead>
                 <tbody>
