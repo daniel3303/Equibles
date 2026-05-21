@@ -121,7 +121,7 @@
                 }
             }
 
-            // Render one activity row and append to the list
+            // Render one activity row at the top of the list (newest first).
             function appendRow(activity) {
                 if (empty && empty.parentNode === list) {
                     list.removeChild(empty);
@@ -145,22 +145,32 @@
                         ${esc(fmtTime(activity.Timestamp))}
                     </span>
                 `;
-                list.appendChild(row);
+
+                // Track scroll state before mutating so we can either stay at
+                // the live edge (scrollTop≈0) or hold the user in place when
+                // they've scrolled into history.
+                const wasAtTop = list.scrollTop < 40;
+
+                list.prepend(row);
                 rendered++;
 
-                // Trim from the top so the visible buffer matches the server cap.
-                while (rendered > MAX_ROWS && list.firstElementChild) {
-                    list.removeChild(list.firstElementChild);
+                // Trim from the bottom so the visible buffer matches the
+                // server-side ring buffer cap. Oldest rows fall off the end.
+                while (rendered > MAX_ROWS && list.lastElementChild) {
+                    list.removeChild(list.lastElementChild);
                     rendered--;
                 }
 
                 counter.textContent = rendered + (rendered === 1 ? ' event' : ' events');
 
-                // Auto-scroll to bottom only if user was already near it — keeps
-                // someone reading older entries from being yanked away.
-                const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 60;
-                if (nearBottom) {
-                    list.scrollTop = list.scrollHeight;
+                if (wasAtTop) {
+                    // Stay glued to the live edge.
+                    list.scrollTop = 0;
+                } else {
+                    // User is reading older entries — keep their viewport
+                    // anchored on the row they were looking at, not yanked
+                    // up by the newly-prepended row.
+                    list.scrollTop += row.offsetHeight;
                 }
             }
 
