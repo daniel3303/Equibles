@@ -647,6 +647,33 @@ public class InstitutionalHoldingsTools
         return result.ToString();
     }
 
+    private static string RenderSectorAllocationTable(
+        InstitutionalHolder holder,
+        DateOnly targetDate,
+        List<IndustryAllocationSlice> slices
+    )
+    {
+        var result = new StringBuilder();
+        result.AppendLine($"Sector allocation — **{holder.Name}** as of {targetDate:yyyy-MM-dd}");
+        result.AppendLine();
+        if (slices.Count == 0)
+        {
+            result.AppendLine("_No holdings reported for the selected quarter._");
+            return result.ToString();
+        }
+
+        result.AppendLine("| # | Industry | # Positions | Value ($M) | % of Portfolio |");
+        result.AppendLine("|---|----------|-------------|------------|----------------|");
+        for (var i = 0; i < slices.Count; i++)
+        {
+            var s = slices[i];
+            result.AppendLine(
+                $"| {i + 1} | {s.IndustryName} | {s.PositionCount:N0} | {s.TotalValue / 1_000_000m:N1} | {s.PercentOfPortfolio:F1}% |"
+            );
+        }
+        return result.ToString();
+    }
+
     [McpServerTool(Name = "GetInstitutionSectorAllocation")]
     [Description(
         "Get an institution's portfolio allocation grouped by industry / sector for its latest 13F report. Returns a markdown table sorted by % of portfolio descending, with stocks lacking an industry classification collapsed into a single 'Unclassified' row at the end. Use this to answer 'is this fund concentrated in tech / energy / generalist?'"
@@ -675,27 +702,7 @@ public class InstitutionalHoldingsTools
                     .ToListAsync();
                 var slices = IndustryAllocationCalculator.Calculate(holdings);
 
-                var result = new StringBuilder();
-                result.AppendLine(
-                    $"Sector allocation — **{holder.Name}** as of {targetDate:yyyy-MM-dd}"
-                );
-                result.AppendLine();
-                if (slices.Count == 0)
-                {
-                    result.AppendLine("_No holdings reported for the selected quarter._");
-                    return result.ToString();
-                }
-
-                result.AppendLine("| # | Industry | # Positions | Value ($M) | % of Portfolio |");
-                result.AppendLine("|---|----------|-------------|------------|----------------|");
-                for (var i = 0; i < slices.Count; i++)
-                {
-                    var s = slices[i];
-                    result.AppendLine(
-                        $"| {i + 1} | {s.IndustryName} | {s.PositionCount:N0} | {s.TotalValue / 1_000_000m:N1} | {s.PercentOfPortfolio:F1}% |"
-                    );
-                }
-                return result.ToString();
+                return RenderSectorAllocationTable(holder, targetDate, slices);
             },
             "GetInstitutionSectorAllocation",
             $"institution: {institutionName}"
