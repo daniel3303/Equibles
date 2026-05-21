@@ -68,18 +68,27 @@
         </div>
     </div>
 
+    @{
+        // Each "tab" is a full-page navigation, not an in-page tabpanel — so
+        // ARIA tab/tablist roles would mislead assistive tech (they expect
+        // arrow-key panel switching). Render as a <nav> landmark with normal
+        // links and mark the active one via aria-current="page".
+        string TabBtnClass(string id) =>
+            "btn btn-sm " + (activeTab == id ? "btn-primary" : "btn-ghost border border-base-300");
+        string TabAriaCurrent(string id) => activeTab == id ? "page" : null;
+    }
     <!-- Tabs -->
-    <div role="tablist" class="flex flex-wrap gap-2 mb-6">
-        <a role="tab" class="btn btn-sm @(activeTab == "price" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Price" asp-route-ticker="@stock.Ticker">Price History</a>
-        <a role="tab" class="btn btn-sm @(activeTab == "holdings" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Holdings" asp-route-ticker="@stock.Ticker">Institutional Holders</a>
-        <a role="tab" class="btn btn-sm @(activeTab == "short-volume" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="ShortVolume" asp-route-ticker="@stock.Ticker">Short Volume</a>
-        <a role="tab" class="btn btn-sm @(activeTab == "short-interest" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="ShortInterest" asp-route-ticker="@stock.Ticker">Short Interest</a>
-        <a role="tab" class="btn btn-sm @(activeTab == "ftd" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Ftd" asp-route-ticker="@stock.Ticker">Fails to Deliver</a>
-        <a role="tab" class="btn btn-sm @(activeTab == "financials" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Financials" asp-route-ticker="@stock.Ticker">Financials</a>
-        <a role="tab" class="btn btn-sm @(activeTab == "documents" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="Documents" asp-route-ticker="@stock.Ticker">SEC Filings</a>
-        <a role="tab" class="btn btn-sm @(activeTab == "insider-trading" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="InsiderTrading" asp-route-ticker="@stock.Ticker">Insider Trades</a>
-        <a role="tab" class="btn btn-sm @(activeTab == "congressional-trades" ? "btn-primary" : "btn-ghost border border-base-300")" asp-action="CongressionalTrades" asp-route-ticker="@stock.Ticker">Congressional Trades</a>
-    </div>
+    <nav class="flex flex-wrap gap-2 mb-6" aria-label="@(stock.Ticker) sections">
+        <a class="@TabBtnClass("price")" aria-current="@TabAriaCurrent("price")" asp-action="Price" asp-route-ticker="@stock.Ticker">Price History</a>
+        <a class="@TabBtnClass("holdings")" aria-current="@TabAriaCurrent("holdings")" asp-action="Holdings" asp-route-ticker="@stock.Ticker">Institutional Holders</a>
+        <a class="@TabBtnClass("short-volume")" aria-current="@TabAriaCurrent("short-volume")" asp-action="ShortVolume" asp-route-ticker="@stock.Ticker">Short Volume</a>
+        <a class="@TabBtnClass("short-interest")" aria-current="@TabAriaCurrent("short-interest")" asp-action="ShortInterest" asp-route-ticker="@stock.Ticker">Short Interest</a>
+        <a class="@TabBtnClass("ftd")" aria-current="@TabAriaCurrent("ftd")" asp-action="Ftd" asp-route-ticker="@stock.Ticker">Fails to Deliver</a>
+        <a class="@TabBtnClass("financials")" aria-current="@TabAriaCurrent("financials")" asp-action="Financials" asp-route-ticker="@stock.Ticker">Financials</a>
+        <a class="@TabBtnClass("documents")" aria-current="@TabAriaCurrent("documents")" asp-action="Documents" asp-route-ticker="@stock.Ticker">SEC Filings</a>
+        <a class="@TabBtnClass("insider-trading")" aria-current="@TabAriaCurrent("insider-trading")" asp-action="InsiderTrading" asp-route-ticker="@stock.Ticker">Insider Trades</a>
+        <a class="@TabBtnClass("congressional-trades")" aria-current="@TabAriaCurrent("congressional-trades")" asp-action="CongressionalTrades" asp-route-ticker="@stock.Ticker">Congressional Trades</a>
+    </nav>
 
     <!-- Tab Content (server-rendered) -->
     <div>
