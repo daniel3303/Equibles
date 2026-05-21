@@ -215,20 +215,21 @@ public class HoldingsImportService
     )
     {
         coverPage = null;
+        string Get(string field) => GetValue(row, field);
 
-        var accession = GetValue(row, "ACCESSION_NUMBER");
+        var accession = Get("ACCESSION_NUMBER");
         if (string.IsNullOrEmpty(accession) || !submissions.ContainsKey(accession))
             return false;
 
         coverPage = new CoverPageRow
         {
             AccessionNumber = accession,
-            IsAmendment = GetValue(row, "ISAMENDMENT"),
-            CompanyName = GetValue(row, "FILINGMANAGER_NAME"),
-            City = GetValue(row, "FILINGMANAGER_CITY"),
-            StateOrCountry = GetValue(row, "FILINGMANAGER_STATEORCOUNTRY"),
-            Form13FFileNumber = GetValue(row, "FORM13FFILENUMBER"),
-            CrdNumber = GetValue(row, "CRDNUMBER"),
+            IsAmendment = Get("ISAMENDMENT"),
+            CompanyName = Get("FILINGMANAGER_NAME"),
+            City = Get("FILINGMANAGER_CITY"),
+            StateOrCountry = Get("FILINGMANAGER_STATEORCOUNTRY"),
+            Form13FFileNumber = Get("FORM13FFILENUMBER"),
+            CrdNumber = Get("CRDNUMBER"),
         };
         return true;
     }
