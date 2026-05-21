@@ -141,13 +141,15 @@ public static partial class DisclosureParsingHelper
 
         var cellTexts = cells.Select(c => HtmlEntity.DeEntitize(c.InnerText).Trim()).ToList();
 
-        var txDate = GetCleanCell(cellTexts, cols.Date) is { } dateStr ? ParseDate(dateStr) : null;
+        string Cell(int columnIndex) => GetCleanCell(cellTexts, columnIndex);
+
+        var txDate = Cell(cols.Date) is { } dateStr ? ParseDate(dateStr) : null;
         if (txDate == null)
             return null;
 
         // Senate HTML has ticker in its own column as raw text or <a> tag inner text
-        var ticker = GetCleanCell(cellTexts, cols.Ticker);
-        var assetName = GetCleanCell(cellTexts, cols.Asset);
+        var ticker = Cell(cols.Ticker);
+        var assetName = Cell(cols.Asset);
         if (string.IsNullOrEmpty(ticker) && string.IsNullOrEmpty(assetName))
             return null;
 
@@ -156,14 +158,14 @@ public static partial class DisclosureParsingHelper
             ticker = ExtractTickerFromAssetName(assetName);
 
         // Skip non-stock assets when asset_type column exists
-        var assetType = GetCleanCell(cellTexts, cols.AssetType);
+        var assetType = Cell(cols.AssetType);
         if (
             !string.IsNullOrEmpty(assetType)
             && !assetType.Contains("Stock", StringComparison.OrdinalIgnoreCase)
         )
             return null;
 
-        var txTypeStr = GetCleanCell(cellTexts, cols.Type);
+        var txTypeStr = Cell(cols.Type);
         var txType = ParseTransactionType(txTypeStr);
         if (txType == null)
         {
@@ -175,8 +177,8 @@ public static partial class DisclosureParsingHelper
             return null;
         }
 
-        var owner = GetCleanCell(cellTexts, cols.Owner);
-        var amount = GetCleanCell(cellTexts, cols.Amount);
+        var owner = Cell(cols.Owner);
+        var amount = Cell(cols.Amount);
         var (amountFrom, amountTo) = ParseAmountRange(amount);
 
         return new DisclosureTransaction
