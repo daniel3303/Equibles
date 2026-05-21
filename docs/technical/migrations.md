@@ -35,7 +35,8 @@ dotnet ef migrations add <Name> \
 - Name format: `PascalCase` describing the change, e.g. `AddProcessedFiling`, `WidenInsiderTransactionUniqueIndexForMultiTxPerFiling`.
 - A new `Equibles.<Module>.Data` project doesn't appear in migrations until it's added to both `Equibles.Migrations.csproj` (`<ProjectReference>`) and `DesignTimeDbContextFactory.modules`.
 - Both edits land in the same PR as the new module.
-- Inspect the generated `.cs` before committing. `Up`/`Down` are inferred from the snapshot diff and occasionally produce noisier changes than intended (column reorders, index rebuilds) — rewrite if needed before committing.
+- Inspect the generated `.cs` before committing.
+- `Up`/`Down` are inferred from the snapshot diff and occasionally produce noisier changes than intended (column reorders, index rebuilds) — rewrite if needed.
 
 ## Applying migrations
 
