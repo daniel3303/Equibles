@@ -15,7 +15,7 @@ public class FtdImportServiceParseLineNonNumericQuantityTests
     // Quantity = 0 record (which silently corrupts downstream FTD aggregates
     // — zero failed-to-deliver shares is itself a meaningful and distinct
     // value from "we couldn't parse this row").
-    [Fact(Skip = "GH-1438 — ParseLine emits record with Quantity=0 for non-numeric quantity")]
+    [Fact]
     public void ParseLine_NonNumericQuantity_ReturnsNull()
     {
         var method = typeof(FtdImportService).GetMethod(
