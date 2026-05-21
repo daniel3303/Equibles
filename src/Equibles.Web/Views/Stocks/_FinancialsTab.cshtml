@@ -22,7 +22,7 @@
     <div class="mb-4 text-sm">
         <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
             <div class="flex items-center gap-2 shrink-0">
-                <span class="text-base-content/60 whitespace-nowrap">Statement:</span>
+                <label for="financials-statement" class="text-base-content/60 whitespace-nowrap">Statement:</label>
                 <select id="financials-statement" class="select select-bordered select-sm">
                     @foreach (var type in Enum.GetValues<FinancialStatementType>()) {
                         if (type == Model.StatementType) {
@@ -34,7 +34,7 @@
                 </select>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-                <span class="text-base-content/60 whitespace-nowrap">Period:</span>
+                <label for="financials-period" class="text-base-content/60 whitespace-nowrap">Period:</label>
                 <select id="financials-period" class="select select-bordered select-sm">
                     @foreach (var p in Model.AvailablePeriods) {
                         if (p.Token == selectedToken) {
