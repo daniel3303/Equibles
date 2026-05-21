@@ -116,22 +116,7 @@ public class HoldingsBacktestService
             ))
             .ToListAsync();
 
-        var snapshots = holdings
-            .GroupBy(h => h.ReportDate)
-            .OrderBy(g => g.Key)
-            .Select(g => new BacktestQuarterSnapshot
-            {
-                ReportDate = g.Key,
-                Positions = g.Select(h => new BacktestPosition
-                    {
-                        CommonStockId = h.CommonStockId,
-                        Shares = h.Shares,
-                        Value = h.Value,
-                        IsOption = h.OptionType != null,
-                    })
-                    .ToList(),
-            })
-            .ToList();
+        var snapshots = BuildQuarterSnapshots(holdings);
 
         // Forward-fill needs a few days of pre-window prices so day-zero of the simulation
         // resolves to the last trading day's close even on a weekend or holiday. Clamp the
@@ -181,6 +166,26 @@ public class HoldingsBacktestService
 
         return viewModel;
     }
+
+    private static List<BacktestQuarterSnapshot> BuildQuarterSnapshots(
+        IReadOnlyList<BacktestHoldingRow> holdings
+    ) =>
+        holdings
+            .GroupBy(h => h.ReportDate)
+            .OrderBy(g => g.Key)
+            .Select(g => new BacktestQuarterSnapshot
+            {
+                ReportDate = g.Key,
+                Positions = g.Select(h => new BacktestPosition
+                    {
+                        CommonStockId = h.CommonStockId,
+                        Shares = h.Shares,
+                        Value = h.Value,
+                        IsOption = h.OptionType != null,
+                    })
+                    .ToList(),
+            })
+            .ToList();
 
     private async Task<List<BacktestBenchmarkOption>> LoadBenchmarkOptions()
     {
