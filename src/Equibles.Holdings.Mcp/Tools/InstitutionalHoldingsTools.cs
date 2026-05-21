@@ -17,6 +17,14 @@ namespace Equibles.Holdings.Mcp.Tools;
 [McpServerToolType]
 public class InstitutionalHoldingsTools
 {
+    private static readonly string[] ValidActivityBuckets =
+    [
+        "top-buys",
+        "top-sells",
+        "new-positions",
+        "sold-out-positions",
+    ];
+
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly InstitutionalHolderRepository _holderRepository;
     private readonly CommonStockRepository _commonStockRepository;
@@ -497,13 +505,8 @@ public class InstitutionalHoldingsTools
             async () =>
             {
                 var normalizedBucket = (bucket ?? string.Empty).Trim().ToLowerInvariant();
-                if (
-                    normalizedBucket != "top-buys"
-                    && normalizedBucket != "top-sells"
-                    && normalizedBucket != "new-positions"
-                    && normalizedBucket != "sold-out-positions"
-                )
-                    return "Unknown bucket. Use one of: top-buys, top-sells, new-positions, sold-out-positions.";
+                if (!ValidActivityBuckets.Contains(normalizedBucket))
+                    return $"Unknown bucket. Use one of: {string.Join(", ", ValidActivityBuckets)}.";
 
                 var (targetDate, previousDate, error) = await ResolveMarketActivityDates(
                     reportDate
