@@ -33,6 +33,8 @@ public class InstitutionalHoldingsTools
         "exited",
     ];
 
+    private static readonly string[] ValidMostHeldSorts = ["filers", "filersdelta", "value"];
+
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly InstitutionalHolderRepository _holderRepository;
     private readonly CommonStockRepository _commonStockRepository;
@@ -674,6 +676,109 @@ public class InstitutionalHoldingsTools
             var count = normalizedBucket == "new-positions" ? r.NewFilerCount : r.SoldOutFilerCount;
             result.AppendLine(
                 $"| {i + 1} | {s?.Ticker ?? "—"} | {s?.Name ?? "Unknown"} | {count:N0} |"
+            );
+        }
+        return result.ToString();
+    }
+
+    [McpServerTool(Name = "GetMostHeldStocks")]
+    [Description(
+        "Get the cross-sectional ranking of stocks by institutional 13F breadth for a given quarter. Returns the stocks ranked by number of 13F filers reporting them as a holding (default), or by quarter-over-quarter change in filer count (warming / cooling heat map), or by total reported dollar value. Includes Δ filers vs the prior quarter, total value, Δ value, and the stock's share of the 13F universe. Use this to answer 'which stocks are most owned by institutions right now, and is breadth expanding or contracting?'"
+    )]
+    public Task<string> GetMostHeldStocks(
+        [Description("Report date in YYYY-MM-DD format (defaults to latest available)")]
+            string reportDate = null,
+        [Description(
+            "Sort by: 'filers' (default, # of 13F filers desc), 'filersDelta' (QoQ filer-count delta desc — heat map of warming names), or 'value' (current total reported $ value desc)"
+        )]
+            string sort = "filers",
+        [Description("Maximum number of stocks to return (default: 25)")] int maxResults = 25
+    )
+    {
+        return Execute(
+            async () =>
+            {
+                var normalizedSort = (sort ?? "filers").Trim().ToLowerInvariant();
+                if (!ValidMostHeldSorts.Contains(normalizedSort))
+                    return $"Unknown sort. Use one of: {string.Join(", ", ValidMostHeldSorts)}.";
+
+                var (targetDate, previousDate, error) = await ResolveMarketActivityDates(
+                    reportDate
+                );
+                if (error != null)
+                    return error;
+
+                var ranking = _holdingRepository.GetMostHeld(targetDate, previousDate);
+                ranking = normalizedSort switch
+                {
+                    "filersdelta" => ranking
+                        .OrderByDescending(a => a.CurrentFilerCount - a.PreviousFilerCount)
+                        .ThenByDescending(a => a.CurrentFilerCount),
+                    "value" => ranking
+                        .OrderByDescending(a => a.CurrentValue)
+                        .ThenByDescending(a => a.CurrentFilerCount),
+                    _ => ranking
+                        .OrderByDescending(a => a.CurrentFilerCount)
+                        .ThenByDescending(a => a.CurrentValue),
+                };
+                var rows = await ranking.Take(maxResults).ToListAsync();
+                if (rows.Count == 0)
+                    return $"No stocks were held by 13F filers as of {targetDate:yyyy-MM-dd}.";
+
+                var universeFilers = await _holdingRepository
+                    .GetUniqueFilerIds(targetDate)
+                    .CountAsync();
+                var stockIds = rows.Select(r => r.CommonStockId).ToList();
+                var stocks = await _commonStockRepository
+                    .GetAll()
+                    .Where(s => stockIds.Contains(s.Id))
+                    .ToDictionaryAsync(s => s.Id);
+
+                return RenderMostHeldStocksTable(
+                    targetDate,
+                    previousDate,
+                    normalizedSort,
+                    universeFilers,
+                    rows,
+                    stocks
+                );
+            },
+            "GetMostHeldStocks",
+            $"sort: {sort}, max: {maxResults}"
+        );
+    }
+
+    private static string RenderMostHeldStocksTable(
+        DateOnly targetDate,
+        DateOnly previousDate,
+        string sort,
+        int universeFilers,
+        List<MarketWideStockActivity> rows,
+        IDictionary<Guid, CommonStock> stocks
+    )
+    {
+        var result = new StringBuilder();
+        result.AppendLine($"Most-held 13F stocks as of {targetDate:yyyy-MM-dd}");
+        result.AppendLine(
+            $"vs prior quarter {previousDate:yyyy-MM-dd} · {universeFilers:N0} filers in the 13F universe"
+        );
+        result.AppendLine($"Sorted by: {sort}");
+        result.AppendLine();
+        result.AppendLine(
+            "| # | Ticker | Company | # Filers | Δ Filers (QoQ) | Total $ Value ($M) | Δ $ Value ($M) | % of 13F Universe |"
+        );
+        result.AppendLine(
+            "|---|--------|---------|----------|----------------|--------------------|----------------|-------------------|"
+        );
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var r = rows[i];
+            stocks.TryGetValue(r.CommonStockId, out var s);
+            var pct = universeFilers > 0 ? (double)r.CurrentFilerCount / universeFilers * 100.0 : 0;
+            var deltaFilers = r.CurrentFilerCount - r.PreviousFilerCount;
+            var filerSign = deltaFilers > 0 ? "+" : "";
+            result.AppendLine(
+                $"| {i + 1} | {s?.Ticker ?? "—"} | {s?.Name ?? "Unknown"} | {r.CurrentFilerCount:N0} | {filerSign}{deltaFilers:N0} | {r.CurrentValue / 1_000_000m:N1} | {r.DeltaValue / 1_000_000m:+#,##0.0;-#,##0.0;0.0} | {pct:F1}% |"
             );
         }
         return result.ToString();
