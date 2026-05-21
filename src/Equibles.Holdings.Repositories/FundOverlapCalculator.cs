@@ -45,58 +45,14 @@ public static class FundOverlapCalculator
 
         foreach (var stockId in allStockIds)
         {
-            string ticker = null;
-            string name = null;
-            var slices = new List<FundOverlapRowSlice>();
-            long combinedValue = 0;
-            long minValue = long.MaxValue;
-            long maxValue = 0;
-            var allHaveIt = true;
-            foreach (var fund in fundAggregates)
-            {
-                fund.PerStock.TryGetValue(stockId, out var perStock);
-                ticker ??= perStock?.Ticker;
-                name ??= perStock?.Name;
-                var slice = new FundOverlapRowSlice
-                {
-                    HolderId = fund.Holder.Id,
-                    Shares = perStock?.Shares ?? 0,
-                    Value = perStock?.Value ?? 0,
-                    PercentOfPortfolio =
-                        fund.TotalValue > 0 && perStock != null
-                            ? (double)perStock.Value / fund.TotalValue * 100.0
-                            : 0,
-                };
-                slices.Add(slice);
-                combinedValue += slice.Value;
-                if (perStock == null)
-                {
-                    allHaveIt = false;
-                }
-                else
-                {
-                    minValue = Math.Min(minValue, perStock.Value);
-                    maxValue = Math.Max(maxValue, perStock.Value);
-                }
-            }
+            var (row, minValue, maxValue, allHaveIt) = BuildStockRow(stockId, fundAggregates);
             if (allHaveIt)
             {
                 intersectionCount++;
                 dollarWeightedNumerator += minValue;
             }
             dollarWeightedDenominator += maxValue;
-
-            result.Rows.Add(
-                new FundOverlapRow
-                {
-                    CommonStockId = stockId,
-                    Ticker = ticker,
-                    Name = name,
-                    Slices = slices,
-                    IsCommon = allHaveIt,
-                    CombinedValue = combinedValue,
-                }
-            );
+            result.Rows.Add(row);
         }
 
         result.UnionPositionCount = allStockIds.Count;
@@ -110,6 +66,58 @@ public static class FundOverlapCalculator
 
         result.Rows = result.Rows.OrderByDescending(r => r.CombinedValue).ToList();
         return result;
+    }
+
+    private static (FundOverlapRow Row, long MinValue, long MaxValue, bool AllHaveIt) BuildStockRow(
+        Guid stockId,
+        List<FundAggregate> fundAggregates
+    )
+    {
+        string ticker = null;
+        string name = null;
+        var slices = new List<FundOverlapRowSlice>();
+        long combinedValue = 0;
+        long minValue = long.MaxValue;
+        long maxValue = 0;
+        var allHaveIt = true;
+        foreach (var fund in fundAggregates)
+        {
+            fund.PerStock.TryGetValue(stockId, out var perStock);
+            ticker ??= perStock?.Ticker;
+            name ??= perStock?.Name;
+            var slice = new FundOverlapRowSlice
+            {
+                HolderId = fund.Holder.Id,
+                Shares = perStock?.Shares ?? 0,
+                Value = perStock?.Value ?? 0,
+                PercentOfPortfolio =
+                    fund.TotalValue > 0 && perStock != null
+                        ? (double)perStock.Value / fund.TotalValue * 100.0
+                        : 0,
+            };
+            slices.Add(slice);
+            combinedValue += slice.Value;
+            if (perStock == null)
+            {
+                allHaveIt = false;
+            }
+            else
+            {
+                minValue = Math.Min(minValue, perStock.Value);
+                maxValue = Math.Max(maxValue, perStock.Value);
+            }
+        }
+
+        var row = new FundOverlapRow
+        {
+            CommonStockId = stockId,
+            Ticker = ticker,
+            Name = name,
+            Slices = slices,
+            IsCommon = allHaveIt,
+            CombinedValue = combinedValue,
+        };
+        return (row, minValue, maxValue, allHaveIt);
     }
 
     // Aggregate each fund's positions per stock. The aggregation collapses multiple
