@@ -505,34 +505,18 @@ public class InstitutionalHoldingsTools
                 )
                     return "Unknown bucket. Use one of: top-buys, top-sells, new-positions, sold-out-positions.";
 
-                var reportDates = await _holdingRepository
-                    .GetAvailableReportDates()
-                    .Distinct()
-                    .OrderByDescending(d => d)
-                    .ToListAsync();
-                if (reportDates.Count == 0)
-                    return "No 13F holdings data available.";
-
-                var targetDate = TryParseReportDate(reportDate, out var parsed)
-                    ? parsed
-                    : reportDates[0];
-                var targetIndex = reportDates.IndexOf(targetDate);
-                if (targetIndex < 0)
-                    return $"Report date {targetDate:yyyy-MM-dd} not found. Available dates: {string.Join(", ", reportDates.Take(5).Select(d => d.ToString("yyyy-MM-dd")))}{(reportDates.Count > 5 ? "…" : "")}.";
-
-                var previousDate =
-                    targetIndex < reportDates.Count - 1
-                        ? reportDates[targetIndex + 1]
-                        : (DateOnly?)null;
-                if (!previousDate.HasValue)
-                    return $"No prior quarter to compare against for {targetDate:yyyy-MM-dd}.";
+                var (targetDate, previousDate, error) = await ResolveMarketActivityDates(
+                    reportDate
+                );
+                if (error != null)
+                    return error;
 
                 // Headline + comparison subtitle.
                 var result = new StringBuilder();
                 result.AppendLine(
                     $"Market-wide 13F **{normalizedBucket}** for {targetDate:yyyy-MM-dd}"
                 );
-                result.AppendLine($"vs prior quarter {previousDate.Value:yyyy-MM-dd}");
+                result.AppendLine($"vs prior quarter {previousDate:yyyy-MM-dd}");
                 result.AppendLine();
 
                 if (normalizedBucket is "top-buys" or "top-sells")
@@ -540,7 +524,7 @@ public class InstitutionalHoldingsTools
                     return await RenderMarketActivityMovers(
                         normalizedBucket,
                         targetDate,
-                        previousDate.Value,
+                        previousDate,
                         maxResults,
                         result
                     );
@@ -550,7 +534,7 @@ public class InstitutionalHoldingsTools
                     return await RenderMarketActivityChurn(
                         normalizedBucket,
                         targetDate,
-                        previousDate.Value,
+                        previousDate,
                         maxResults,
                         result
                     );
@@ -559,6 +543,39 @@ public class InstitutionalHoldingsTools
             "GetMarketWide13FActivity",
             $"bucket: {bucket}"
         );
+    }
+
+    private async Task<(
+        DateOnly Target,
+        DateOnly Previous,
+        string Error
+    )> ResolveMarketActivityDates(string reportDate)
+    {
+        var reportDates = await _holdingRepository
+            .GetAvailableReportDates()
+            .Distinct()
+            .OrderByDescending(d => d)
+            .ToListAsync();
+        if (reportDates.Count == 0)
+            return (default, default, "No 13F holdings data available.");
+
+        var targetDate = TryParseReportDate(reportDate, out var parsed) ? parsed : reportDates[0];
+        var targetIndex = reportDates.IndexOf(targetDate);
+        if (targetIndex < 0)
+            return (
+                default,
+                default,
+                $"Report date {targetDate:yyyy-MM-dd} not found. Available dates: {string.Join(", ", reportDates.Take(5).Select(d => d.ToString("yyyy-MM-dd")))}{(reportDates.Count > 5 ? "…" : "")}."
+            );
+
+        if (targetIndex >= reportDates.Count - 1)
+            return (
+                default,
+                default,
+                $"No prior quarter to compare against for {targetDate:yyyy-MM-dd}."
+            );
+
+        return (targetDate, reportDates[targetIndex + 1], null);
     }
 
     private async Task<string> RenderMarketActivityMovers(
