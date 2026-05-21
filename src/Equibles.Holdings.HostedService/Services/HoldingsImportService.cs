@@ -128,7 +128,7 @@ public class HoldingsImportService
             return false;
 
         var accession = GetValue(row, "ACCESSION_NUMBER");
-        if (string.IsNullOrEmpty(accession))
+        if (string.IsNullOrWhiteSpace(accession))
             return false;
 
         var periodOfReport = GetValue(row, "PERIODOFREPORT");

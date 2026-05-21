@@ -16,9 +16,7 @@ public class HoldingsImportServiceTryParseSubmissionRowWhitespaceAccessionTests
     // downstream where it lands in the Submissions dictionary keyed by a
     // whitespace string and propagates through every join (COVERPAGE, FILER
     // mapping, INFOTABLE).
-    [Fact(
-        Skip = "GH-1563 — TryParseSubmissionRow accepts whitespace-only ACCESSION_NUMBER instead of rejecting"
-    )]
+    [Fact]
     public void TryParseSubmissionRow_WhitespaceOnlyAccessionNumber_ReturnsFalse()
     {
         var minReportDate = new DateOnly(2024, 1, 1);
