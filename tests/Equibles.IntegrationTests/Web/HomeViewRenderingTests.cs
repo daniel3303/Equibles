@@ -31,6 +31,26 @@ public class HomeViewRenderingTests
     }
 
     [Fact]
+    public async Task GetIndex_TitleTagDoesNotDuplicateTheEquiblesBrand()
+    {
+        // _Head.cshtml appends " - Equibles" to ViewData["Title"]. If the view
+        // sets a Title that already starts with "Equibles", the rendered
+        // <title> doubles the brand — that's bad for OG / Twitter previews
+        // (they share the same value). Pin the contract: brand appears once.
+        var response = await _fixture.Client.GetAsync("/");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.Content.ReadAsStringAsync();
+        var match = System.Text.RegularExpressions.Regex.Match(html, "<title[^>]*>([^<]*)</title>");
+        match.Success.Should().BeTrue("the page must render a <title>");
+        var titleText = match.Groups[1].Value;
+        System
+            .Text.RegularExpressions.Regex.Matches(titleText, "Equibles")
+            .Count.Should()
+            .Be(1, $"brand should appear exactly once in <title>, got: {titleText!}");
+    }
+
+    [Fact]
     public async Task GetConnect_RendersConnectViewWithMcpUrl()
     {
         var response = await _fixture.Client.GetAsync("/Home/Connect");
