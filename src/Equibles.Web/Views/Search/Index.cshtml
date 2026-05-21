@@ -36,6 +36,7 @@
     </div>
 
     <form id="global-search-form" method="get" asp-controller="Search" asp-action="Index"
+          role="search" aria-label="Site search"
           data-results-url="@Url.Action("Results")">
         <!-- Sticky search bar: stays visible while the user scrolls through long result lists.
              instant-search.js progressively enhances this; without JS it submits a normal GET. -->
