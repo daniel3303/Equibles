@@ -72,11 +72,10 @@ public class FinraClient : IFinraClient
         _logger.LogDebug("Fetching daily short volume for {Date}", dateStr);
 
         var results = new List<ShortVolumeRecord>();
-        var offset = 0;
-
-        while (true)
-        {
-            var query = new
+        await PaginateQuery<ShortVolumeRecord>(
+            "OTCMarket",
+            "regShoDaily",
+            offset => new
             {
                 fields = new[]
                 {
@@ -98,18 +97,9 @@ public class FinraClient : IFinraClient
                 },
                 limit = MaxPageSize,
                 offset,
-            };
-
-            var page = await PostQuery<ShortVolumeRecord>("OTCMarket", "regShoDaily", query);
-            if (page.Count == 0)
-                break;
-
-            results.AddRange(page);
-            if (page.Count < MaxPageSize)
-                break;
-
-            offset += page.Count;
-        }
+            },
+            results.AddRange
+        );
 
         _logger.LogDebug("Fetched {Count} short volume records for {Date}", results.Count, dateStr);
         return results;
@@ -141,47 +131,37 @@ public class FinraClient : IFinraClient
         );
 
         var results = new List<ShortInterestRecord>();
-        var offset = 0;
-
-        while (true)
-        {
-            var query = new Dictionary<string, object>
+        await PaginateQuery<ShortInterestRecord>(
+            "OTCMarket",
+            "consolidatedShortInterest",
+            offset =>
             {
-                ["fields"] = ShortInterestFields,
-                ["dateRangeFilters"] = new[]
+                var query = new Dictionary<string, object>
                 {
-                    new
+                    ["fields"] = ShortInterestFields,
+                    ["dateRangeFilters"] = new[]
                     {
-                        fieldName = "settlementDate",
-                        startDate = dateStr,
-                        endDate = dateStr,
+                        new
+                        {
+                            fieldName = "settlementDate",
+                            startDate = dateStr,
+                            endDate = dateStr,
+                        },
                     },
-                },
-            };
-            if (symbols != null)
-            {
-                query["domainFilters"] = new[]
-                {
-                    new { fieldName = "symbolCode", values = symbols },
                 };
-            }
-            query["limit"] = MaxPageSize;
-            query["offset"] = offset;
-
-            var page = await PostQuery<ShortInterestRecord>(
-                "OTCMarket",
-                "consolidatedShortInterest",
-                query
-            );
-            if (page.Count == 0)
-                break;
-
-            results.AddRange(page);
-            if (page.Count < MaxPageSize)
-                break;
-
-            offset += page.Count;
-        }
+                if (symbols != null)
+                {
+                    query["domainFilters"] = new[]
+                    {
+                        new { fieldName = "symbolCode", values = symbols },
+                    };
+                }
+                query["limit"] = MaxPageSize;
+                query["offset"] = offset;
+                return query;
+            },
+            results.AddRange
+        );
 
         _logger.LogDebug(
             "Fetched {Count} short interest records for {Date}",
@@ -239,35 +219,47 @@ public class FinraClient : IFinraClient
     private async Task<HashSet<DateOnly>> CollectSettlementDates(Func<int, object> buildQuery)
     {
         var dates = new HashSet<DateOnly>();
-        var offset = 0;
-
-        while (true)
-        {
-            var records = await PostQuery<ShortInterestRecord>(
-                "OTCMarket",
-                "consolidatedShortInterest",
-                buildQuery(offset)
-            );
-            if (records.Count == 0)
-                break;
-
-            foreach (var record in records)
+        await PaginateQuery<ShortInterestRecord>(
+            "OTCMarket",
+            "consolidatedShortInterest",
+            buildQuery,
+            records =>
             {
-                if (
-                    !string.IsNullOrEmpty(record.SettlementDate)
-                    && DateOnly.TryParse(record.SettlementDate, out var date)
-                )
+                foreach (var record in records)
                 {
-                    dates.Add(date);
+                    if (
+                        !string.IsNullOrEmpty(record.SettlementDate)
+                        && DateOnly.TryParse(record.SettlementDate, out var date)
+                    )
+                    {
+                        dates.Add(date);
+                    }
                 }
             }
-
-            if (records.Count < MaxPageSize)
-                break;
-            offset += records.Count;
-        }
-
+        );
         return dates;
+    }
+
+    private async Task PaginateQuery<T>(
+        string group,
+        string name,
+        Func<int, object> buildQuery,
+        Action<List<T>> onPage
+    )
+    {
+        var offset = 0;
+        while (true)
+        {
+            var page = await PostQuery<T>(group, name, buildQuery(offset));
+            if (page.Count == 0)
+                break;
+
+            onPage(page);
+            if (page.Count < MaxPageSize)
+                break;
+
+            offset += page.Count;
+        }
     }
 
     private async Task<List<T>> PostQuery<T>(string group, string name, object query)
