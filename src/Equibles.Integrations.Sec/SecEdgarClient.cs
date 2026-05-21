@@ -716,35 +716,47 @@ public class SecEdgarClient : ISecEdgarClient
 
         for (var i = 0; i < recent.AccessionNumber.Count; i++)
         {
-            // SEC can emit a ragged payload where a secondary array is shorter
-            // than AccessionNumber. Skip rows that cannot be fully mapped rather
-            // than throw, mirroring ParseCompaniesFromResponse's short-row guard.
-            if (
-                recent.FilingDate.Count <= i
-                || recent.ReportDate.Count <= i
-                || recent.Form.Count <= i
-                || recent.PrimaryDocument.Count <= i
-                || recent.PrimaryDocDescription.Count <= i
-            )
-                continue;
-
-            var accessionNumber = recent.AccessionNumber[i];
-            filings.Add(
-                new FilingData
-                {
-                    Cik = cik,
-                    AccessionNumber = accessionNumber,
-                    FilingDate = ParseInvariantDateOr(recent.FilingDate[i], DateOnly.MinValue),
-                    ReportDate = ParseInvariantDateOr(recent.ReportDate[i], DateOnly.MinValue),
-                    Form = recent.Form[i],
-                    PrimaryDocument = recent.PrimaryDocument[i],
-                    Description = recent.PrimaryDocDescription[i],
-                    DocumentUrl = GetDocumentUrl(cik, accessionNumber),
-                }
-            );
+            if (TryBuildFilingDataAt(recent, cik, i, out var filing))
+                filings.Add(filing);
         }
 
         return filings;
+    }
+
+    private static bool TryBuildFilingDataAt(
+        RecentFilings recent,
+        string cik,
+        int i,
+        out FilingData filing
+    )
+    {
+        filing = null;
+
+        // SEC can emit a ragged payload where a secondary array is shorter
+        // than AccessionNumber. Skip rows that cannot be fully mapped rather
+        // than throw, mirroring ParseCompaniesFromResponse's short-row guard.
+        if (
+            recent.FilingDate.Count <= i
+            || recent.ReportDate.Count <= i
+            || recent.Form.Count <= i
+            || recent.PrimaryDocument.Count <= i
+            || recent.PrimaryDocDescription.Count <= i
+        )
+            return false;
+
+        var accessionNumber = recent.AccessionNumber[i];
+        filing = new FilingData
+        {
+            Cik = cik,
+            AccessionNumber = accessionNumber,
+            FilingDate = ParseInvariantDateOr(recent.FilingDate[i], DateOnly.MinValue),
+            ReportDate = ParseInvariantDateOr(recent.ReportDate[i], DateOnly.MinValue),
+            Form = recent.Form[i],
+            PrimaryDocument = recent.PrimaryDocument[i],
+            Description = recent.PrimaryDocDescription[i],
+            DocumentUrl = GetDocumentUrl(cik, accessionNumber),
+        };
+        return true;
     }
 
     // SEC submissions feed dates are ISO yyyy-MM-dd. Parse them culture-independently —
