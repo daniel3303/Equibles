@@ -14,7 +14,7 @@ public class FtdImportServiceIsRecentFtdFileYearZeroTests
     // zeros (a corrupted/zero-prefixed filename surfacing from SEC, a mirror, or
     // any caller that hands the helper an attacker-shaped or accidentally-empty
     // string) crashes the scrape cycle instead of being silently rejected.
-    [Fact(Skip = "GH-1350 — IsRecentFtdFile throws on year=0 instead of returning false")]
+    [Fact]
     public void IsRecentFtdFile_YearZero_ReturnsFalse()
     {
         var result = FtdImportService.IsRecentFtdFile("cnsfails000001a.zip");
