@@ -81,59 +81,58 @@ public class ShortVolumeImportService
                 continue;
             }
 
-            try
-            {
-                var records = await _finraClient.GetDailyShortVolume(currentDate);
-
-                if (records.Count == 0)
-                {
-                    _logger.LogDebug("No short volume data for {Date}, skipping", currentDate);
-                    currentDate = currentDate.AddDays(1);
-                    continue;
-                }
-
-                var aggregated = AggregateVolumesByStock(records, tickerMap, currentDate);
-
-                var totalInserted = await BatchPersister.Persist(
-                    aggregated.Values,
-                    InsertBatchSize,
-                    async batch =>
-                    {
-                        using var scope = _scopeFactory.CreateScope();
-                        var repo =
-                            scope.ServiceProvider.GetRequiredService<DailyShortVolumeRepository>();
-                        repo.AddRange(batch);
-                        await repo.SaveChanges();
-                    }
-                );
-
-                _logger.LogInformation(
-                    "Imported {Count} short volume records for {Date}",
-                    totalInserted,
-                    currentDate
-                );
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Failed to fetch short volume for {Date}, skipping",
-                    currentDate
-                );
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error importing short volume for {Date}", currentDate);
-                await _errorReporter.Report(
-                    ErrorSource.FinraScraper,
-                    "ShortVolume.ImportDate",
-                    ex.Message,
-                    ex.StackTrace,
-                    $"date: {currentDate}"
-                );
-            }
-
+            await ImportSingleDay(currentDate, tickerMap);
             currentDate = currentDate.AddDays(1);
+        }
+    }
+
+    private async Task ImportSingleDay(DateOnly date, IReadOnlyDictionary<string, Guid> tickerMap)
+    {
+        try
+        {
+            var records = await _finraClient.GetDailyShortVolume(date);
+
+            if (records.Count == 0)
+            {
+                _logger.LogDebug("No short volume data for {Date}, skipping", date);
+                return;
+            }
+
+            var aggregated = AggregateVolumesByStock(records, tickerMap, date);
+
+            var totalInserted = await BatchPersister.Persist(
+                aggregated.Values,
+                InsertBatchSize,
+                async batch =>
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var repo =
+                        scope.ServiceProvider.GetRequiredService<DailyShortVolumeRepository>();
+                    repo.AddRange(batch);
+                    await repo.SaveChanges();
+                }
+            );
+
+            _logger.LogInformation(
+                "Imported {Count} short volume records for {Date}",
+                totalInserted,
+                date
+            );
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch short volume for {Date}, skipping", date);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error importing short volume for {Date}", date);
+            await _errorReporter.Report(
+                ErrorSource.FinraScraper,
+                "ShortVolume.ImportDate",
+                ex.Message,
+                ex.StackTrace,
+                $"date: {date}"
+            );
         }
     }
 
