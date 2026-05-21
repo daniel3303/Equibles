@@ -10,6 +10,14 @@
     @await RenderSectionAsync("Styles", false)
 </head>
 <body class="bg-base-200 min-h-screen flex flex-col">
+    <!-- Skip link: first focusable element so keyboard users can jump past the
+         navbar into the page's main content (WCAG 2.4.1 Bypass Blocks). The
+         link is visually hidden by default and reveals itself on focus. -->
+    <a href="#main-content"
+       class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:rounded focus:bg-primary focus:text-primary-content focus:outline-2 focus:outline-primary-content">
+        Skip to main content
+    </a>
+
     <!-- Navbar -->
     <div class="navbar bg-base-100 border-b border-base-200 min-h-0 h-14 sticky top-0 z-40">
         <div class="max-w-6xl mx-auto w-full px-6 flex items-center">
@@ -120,7 +128,7 @@
     <partial name="_VersionBanner" />
 
     <!-- Main Content -->
-    <main class="flex-1 relative">
+    <main id="main-content" tabindex="-1" class="flex-1 relative">
         @body
     </main>
 
