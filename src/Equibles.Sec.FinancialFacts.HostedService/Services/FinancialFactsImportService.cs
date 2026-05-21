@@ -435,7 +435,7 @@ public class FinancialFactsImportService
 
     private static bool TryMapTaxonomy(string key, out FactTaxonomy taxonomy)
     {
-        switch (key.ToLowerInvariant())
+        switch (key?.ToLowerInvariant())
         {
             case "us-gaap":
                 taxonomy = FactTaxonomy.UsGaap;
