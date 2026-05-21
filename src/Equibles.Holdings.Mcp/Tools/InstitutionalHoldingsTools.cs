@@ -520,55 +520,63 @@ public class InstitutionalHoldingsTools
                 }
                 else
                 {
-                    var churn = _holdingRepository.GetQuarterlyNewSoldOutPositions(
+                    return await RenderMarketActivityChurn(
+                        normalizedBucket,
                         targetDate,
-                        previousDate.Value
+                        previousDate.Value,
+                        maxResults,
+                        result
                     );
-                    var rows =
-                        normalizedBucket == "new-positions"
-                            ? await churn
-                                .Where(c => c.NewFilerCount > 0)
-                                .OrderByDescending(c => c.NewFilerCount)
-                                .Take(maxResults)
-                                .ToListAsync()
-                            : await churn
-                                .Where(c => c.SoldOutFilerCount > 0)
-                                .OrderByDescending(c => c.SoldOutFilerCount)
-                                .Take(maxResults)
-                                .ToListAsync();
-                    if (rows.Count == 0)
-                        return result + "_No stocks in this bucket this quarter._";
-
-                    var stockIds = rows.Select(r => r.CommonStockId).ToList();
-                    var stocks = await _commonStockRepository
-                        .GetAll()
-                        .Where(s => stockIds.Contains(s.Id))
-                        .ToDictionaryAsync(s => s.Id);
-
-                    var label =
-                        normalizedBucket == "new-positions"
-                            ? "# Filers Initiated"
-                            : "# Filers Exited";
-                    result.AppendLine($"| # | Ticker | Company | {label} |");
-                    result.AppendLine("|---|--------|---------|-------------|");
-                    for (var i = 0; i < rows.Count; i++)
-                    {
-                        var r = rows[i];
-                        stocks.TryGetValue(r.CommonStockId, out var s);
-                        var count =
-                            normalizedBucket == "new-positions"
-                                ? r.NewFilerCount
-                                : r.SoldOutFilerCount;
-                        result.AppendLine(
-                            $"| {i + 1} | {s?.Ticker ?? "—"} | {s?.Name ?? "Unknown"} | {count:N0} |"
-                        );
-                    }
-                    return result.ToString();
                 }
             },
             "GetMarketWide13FActivity",
             $"bucket: {bucket}"
         );
+    }
+
+    private async Task<string> RenderMarketActivityChurn(
+        string normalizedBucket,
+        DateOnly targetDate,
+        DateOnly previousDate,
+        int maxResults,
+        StringBuilder result
+    )
+    {
+        var churn = _holdingRepository.GetQuarterlyNewSoldOutPositions(targetDate, previousDate);
+        var rows =
+            normalizedBucket == "new-positions"
+                ? await churn
+                    .Where(c => c.NewFilerCount > 0)
+                    .OrderByDescending(c => c.NewFilerCount)
+                    .Take(maxResults)
+                    .ToListAsync()
+                : await churn
+                    .Where(c => c.SoldOutFilerCount > 0)
+                    .OrderByDescending(c => c.SoldOutFilerCount)
+                    .Take(maxResults)
+                    .ToListAsync();
+        if (rows.Count == 0)
+            return result + "_No stocks in this bucket this quarter._";
+
+        var stockIds = rows.Select(r => r.CommonStockId).ToList();
+        var stocks = await _commonStockRepository
+            .GetAll()
+            .Where(s => stockIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id);
+
+        var label = normalizedBucket == "new-positions" ? "# Filers Initiated" : "# Filers Exited";
+        result.AppendLine($"| # | Ticker | Company | {label} |");
+        result.AppendLine("|---|--------|---------|-------------|");
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var r = rows[i];
+            stocks.TryGetValue(r.CommonStockId, out var s);
+            var count = normalizedBucket == "new-positions" ? r.NewFilerCount : r.SoldOutFilerCount;
+            result.AppendLine(
+                $"| {i + 1} | {s?.Ticker ?? "—"} | {s?.Name ?? "Unknown"} | {count:N0} |"
+            );
+        }
+        return result.ToString();
     }
 
     [McpServerTool(Name = "GetInstitutionSummary")]
