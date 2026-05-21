@@ -17,7 +17,7 @@ public class FredImportServiceParseDateHijriCultureTests
     // fails and the helper returns null. ObservationStart / ObservationEnd are
     // then persisted as null, silently corrupting every freshly-seeded
     // FredSeries on Hijri-locale hosts.
-    [Fact(Skip = "GH-1652 — ParseDate returns null for ISO date under ar-SA culture")]
+    [Fact]
     public void ParseDate_IsoDateUnderHijriCulture_DoesNotReturnNull()
     {
         var method = typeof(FredImportService).GetMethod(

@@ -276,7 +276,14 @@ public class FredImportService
 
     private static DateOnly? ParseDate(string value)
     {
-        return DateOnly.TryParse(value, out var date) ? date : null;
+        return DateOnly.TryParse(
+            value,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var date
+        )
+            ? date
+            : null;
     }
 
     // Parse each FRED record's date once so callers can reuse the (record, date)
