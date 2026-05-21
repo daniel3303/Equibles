@@ -43,16 +43,16 @@
     <!-- Error Details -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-            <h3 class="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-1">Created</h3>
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-1">Created</h2>
             <p>@Model.CreationTime.ToString("yyyy-MM-dd HH:mm:ss")</p>
         </div>
         <div>
-            <h3 class="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-1">Context</h3>
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-1">Context</h2>
             <p>@Model.Context</p>
         </div>
         @if (!string.IsNullOrEmpty(Model.RequestSummary)) {
             <div>
-                <h3 class="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-1">Request Summary</h3>
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-1">Request Summary</h2>
                 <p class="text-sm break-all">@Model.RequestSummary</p>
             </div>
         }
@@ -60,7 +60,7 @@
 
     <!-- Message -->
     <div>
-        <h3 class="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-2">Message</h3>
+        <h2 class="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-2">Message</h2>
         <div class="bg-base-200 rounded-lg p-4">
             <p class="whitespace-pre-wrap">@Model.Message</p>
         </div>
@@ -69,7 +69,7 @@
     <!-- Stack Trace -->
     @if (!string.IsNullOrEmpty(Model.StackTrace)) {
         <div>
-            <h3 class="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-2">Stack Trace</h3>
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-2">Stack Trace</h2>
             <div class="bg-base-200 rounded-lg p-4 overflow-x-auto">
                 <pre><code class="text-xs">@Model.StackTrace</code></pre>
             </div>
