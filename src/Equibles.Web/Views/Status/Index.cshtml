@@ -14,8 +14,14 @@
     <div class="flex items-center justify-between gap-3 flex-wrap">
         <h1 class="text-2xl font-bold">System Status</h1>
         <div class="flex items-center gap-3 flex-wrap">
-            <a asp-action="Activity" asp-controller="Status" class="btn btn-ghost btn-sm">
-                <icon name="signal" size="4" /> Live activity
+            <!-- Pulsing dot + filled success background mark the live feed as actionable
+                 and distinct from the surrounding ghost buttons. -->
+            <a asp-action="Activity" asp-controller="Status" class="btn btn-success btn-sm gap-2">
+                <span class="relative flex size-2" aria-hidden="true">
+                    <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-success-content opacity-75"></span>
+                    <span class="relative inline-flex size-2 rounded-full bg-success-content"></span>
+                </span>
+                Live activity
             </a>
             <!-- Auto-refresh controls -->
             <div class="flex items-center gap-2">
