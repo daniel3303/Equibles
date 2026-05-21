@@ -68,6 +68,20 @@ public class FinancialFactsImportService
             return;
         }
 
+        // Guards GH-1591: the stock can be deleted during the network call
+        // above. Without this check, every UpsertSyncStatus and FlushFacts
+        // path below trips FK_*_CommonStock_CommonStockId on Postgres. The
+        // cycle is per-stock, so a single existence check covers all writes.
+        if (!await CommonStockStillExists(stock, cancellationToken))
+        {
+            _logger.LogWarning(
+                "CommonStock {Id} ({Ticker}) no longer exists; skipping financial facts import",
+                stock.Id,
+                stock.Ticker
+            );
+            return;
+        }
+
         if (response == null || response.Facts.Count == 0)
         {
             await UpsertSyncStatus(stock, null, cancellationToken);
@@ -358,6 +372,19 @@ public class FinancialFactsImportService
             AccessionNumber = p.Accession,
             Frame = p.Frame,
         };
+    }
+
+    private async Task<bool> CommonStockStillExists(
+        CommonStock stock,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        return await dbContext
+            .Set<CommonStock>()
+            .AsNoTracking()
+            .AnyAsync(s => s.Id == stock.Id, cancellationToken);
     }
 
     private async Task FlushFacts(List<FinancialFact> items)
