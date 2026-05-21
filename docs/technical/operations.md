@@ -122,7 +122,8 @@ git pull
 docker compose up -d --build
 ```
 
-- Migrations apply automatically on `web` startup via `MigrateAsync()`. See [Migrations](migrations.md) for details (1-hour command timeout absorbs first-run index rebuilds; BM25 / pgvector indexes can take minutes).
+- Migrations apply automatically on `web` startup via `MigrateAsync()`. See [Migrations](migrations.md) for details.
+- A 1-hour command timeout absorbs first-run index rebuilds; BM25 / pgvector indexes can take minutes.
 - Read [`CHANGELOG.md`](../../CHANGELOG.md) before a major version bump — breaking changes (rare) get a callout there.
 - The Web portal's update banner (when `CHECK_FOR_UPDATES=true`) tells you when a newer release is available.
 
