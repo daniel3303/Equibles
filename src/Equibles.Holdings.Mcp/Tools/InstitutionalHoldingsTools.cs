@@ -840,43 +840,59 @@ public class InstitutionalHoldingsTools
                     previousHoldings
                 );
 
-                var sections = new (StockPositionChangeType Type, string Label)[]
-                {
-                    (StockPositionChangeType.Initiated, "Initiated"),
-                    (StockPositionChangeType.Increased, "Increased"),
-                    (StockPositionChangeType.Reduced, "Reduced"),
-                    (StockPositionChangeType.Exited, "Exited"),
-                };
-
-                var result = new StringBuilder();
-                result.AppendLine(
-                    $"Quarterly activity — **{holder.Name}** as of {targetDate:yyyy-MM-dd}"
+                return RenderQuarterlyActivity(
+                    holder,
+                    targetDate,
+                    priorDate,
+                    grouped,
+                    normalizedBucket,
+                    maxResults
                 );
-                result.AppendLine($"vs prior quarter {priorDate:yyyy-MM-dd}");
-                result.AppendLine();
-
-                var rendered = 0;
-                var selectedSections = sections.Where(s =>
-                    string.IsNullOrEmpty(normalizedBucket)
-                    || s.Label.ToLowerInvariant() == normalizedBucket
-                );
-                foreach (var section in selectedSections)
-                {
-                    var rows = grouped[section.Type]
-                        .OrderByDescending(r => Math.Abs(r.DeltaValue))
-                        .Take(maxResults)
-                        .ToList();
-                    if (AppendActivitySection(result, section.Label, rows))
-                        rendered++;
-                }
-
-                if (rendered == 0)
-                    result.AppendLine("_No matching buckets._");
-                return result.ToString();
             },
             "GetInstitutionQuarterlyActivity",
             $"institution: {institutionName}"
         );
+    }
+
+    private static string RenderQuarterlyActivity(
+        InstitutionalHolder holder,
+        DateOnly targetDate,
+        DateOnly priorDate,
+        Dictionary<StockPositionChangeType, List<StockPositionChange>> grouped,
+        string normalizedBucket,
+        int maxResults
+    )
+    {
+        var sections = new (StockPositionChangeType Type, string Label)[]
+        {
+            (StockPositionChangeType.Initiated, "Initiated"),
+            (StockPositionChangeType.Increased, "Increased"),
+            (StockPositionChangeType.Reduced, "Reduced"),
+            (StockPositionChangeType.Exited, "Exited"),
+        };
+
+        var result = new StringBuilder();
+        result.AppendLine($"Quarterly activity — **{holder.Name}** as of {targetDate:yyyy-MM-dd}");
+        result.AppendLine($"vs prior quarter {priorDate:yyyy-MM-dd}");
+        result.AppendLine();
+
+        var rendered = 0;
+        var selectedSections = sections.Where(s =>
+            string.IsNullOrEmpty(normalizedBucket) || s.Label.ToLowerInvariant() == normalizedBucket
+        );
+        foreach (var section in selectedSections)
+        {
+            var rows = grouped[section.Type]
+                .OrderByDescending(r => Math.Abs(r.DeltaValue))
+                .Take(maxResults)
+                .ToList();
+            if (AppendActivitySection(result, section.Label, rows))
+                rendered++;
+        }
+
+        if (rendered == 0)
+            result.AppendLine("_No matching buckets._");
+        return result.ToString();
     }
 
     private static bool AppendActivitySection(
