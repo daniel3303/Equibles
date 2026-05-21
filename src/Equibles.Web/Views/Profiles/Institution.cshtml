@@ -75,7 +75,7 @@
         <div class="card bg-base-100 shadow-sm mb-8" data-testid="institution-industry-allocation">
             <div class="card-body p-4">
                 <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-base font-medium m-0">Sector allocation</h3>
+                    <h2 class="text-base font-medium m-0">Sector allocation</h2>
                     <span class="text-xs text-base-content/50">@Model.IndustryAllocation.Count slices</span>
                 </div>
                 <div class="overflow-x-auto">
@@ -118,7 +118,7 @@
         <div class="card bg-base-100 shadow-sm mb-8" data-testid="institution-quarterly-activity">
             <div class="card-body p-4">
                 <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
-                    <h3 class="text-base font-medium m-0">Latest quarter activity</h3>
+                    <h2 class="text-base font-medium m-0">Latest quarter activity</h2>
                     @if (Model.AvailableReportDates.Count > 1) {
                         <div class="flex items-center gap-2 text-sm">
                             <span class="text-base-content/60">Quarter:</span>
@@ -174,7 +174,7 @@
                         var rows = Model.QuarterlyActivity.TryGetValue(bucket.Type, out var list) ? list : new List<Equibles.Holdings.Repositories.Models.StockPositionChange>();
                         <div class="rounded-md border border-base-200 p-3" data-testid="@bucket.TestId">
                             <div class="flex items-center gap-2 mb-2">
-                                <h4 class="text-sm font-medium m-0">@bucket.Label</h4>
+                                <h3 class="text-sm font-medium m-0">@bucket.Label</h3>
                                 <span class="badge @bucket.BadgeCss badge-sm">@rows.Count.ToString("N0")</span>
                             </div>
                             @if (rows.Count == 0) {
