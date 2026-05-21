@@ -20,7 +20,7 @@
     <div class="mb-4 text-sm">
         <div class="flex flex-wrap items-center gap-x-5 gap-y-2 mb-1">
             <div class="flex items-center gap-2 shrink-0">
-                <span class="text-base-content/60 whitespace-nowrap">Report Date:</span>
+                <label for="activity-date" class="text-base-content/60 whitespace-nowrap">Report Date:</label>
                 <select id="activity-date" class="select select-bordered select-sm"
                     onchange="window.location.href='Activity?date=' + this.value">
                     @foreach (var date in Model.AvailableDates) {

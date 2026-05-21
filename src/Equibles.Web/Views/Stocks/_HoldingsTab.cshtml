@@ -48,7 +48,7 @@
     <div class="mb-4 text-sm">
         <div class="flex flex-wrap lg:flex-nowrap items-center gap-x-5 gap-y-2 mb-1">
             <div class="flex items-center gap-2 shrink-0">
-                <span class="text-base-content/60 whitespace-nowrap">Report Date:</span>
+                <label for="holdings-date" class="text-base-content/60 whitespace-nowrap">Report Date:</label>
                 <select id="holdings-date" class="select select-bordered select-sm"
                     onchange="window.location.href='Holdings?date=' + this.value">
                     @foreach (var date in Model.AvailableDates) {
