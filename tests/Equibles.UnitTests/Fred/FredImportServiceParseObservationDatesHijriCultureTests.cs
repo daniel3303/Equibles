@@ -7,7 +7,7 @@ namespace Equibles.UnitTests.Fred;
 
 public class FredImportServiceParseObservationDatesHijriCultureTests
 {
-    [Fact(Skip = "GH-1501 — ParseObservationDates silently drops every observation under ar-SA")]
+    [Fact]
     public void ParseObservationDates_IsoDateUnderHijriCulture_DoesNotSilentlyDropRecord()
     {
         // FRED's observation feed always emits ISO `yyyy-MM-dd` dates. The
