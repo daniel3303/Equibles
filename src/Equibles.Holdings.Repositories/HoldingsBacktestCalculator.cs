@@ -177,28 +177,41 @@ public static class HoldingsBacktestCalculator
             return new BacktestStrategySummary();
 
         var totalReturn = (final / initial - 1m) * 100m;
+        var cagr = ComputeCagr(initial, final, values.Count - 1);
+        var maxDrawdown = ComputeMaxDrawdown(values);
 
-        var days = (decimal)(values.Count - 1);
-        decimal cagr = 0m;
-        if (days > 0 && final > 0)
+        return new BacktestStrategySummary
         {
-            var years = (double)days / 365.25;
-            var ratio = (double)(final / initial);
-            var compounded = Math.Pow(ratio, 1.0 / years) - 1.0;
-            try
-            {
-                cagr = (decimal)compounded * 100m;
-            }
-            catch (OverflowException)
-            {
-                // Extreme single-window moves (e.g. an intraday double on a one-day
-                // window) drive the annualised compounding past decimal.MaxValue;
-                // saturate the CAGR cell rather than aborting the calculation —
-                // TotalReturn% / MaxDrawdown% are still meaningful.
-                cagr = decimal.MaxValue;
-            }
-        }
+            TotalReturnPercent = Math.Round(totalReturn, 2),
+            CagrPercent = Math.Round(cagr, 2),
+            MaxDrawdownPercent = Math.Round(maxDrawdown, 2),
+        };
+    }
 
+    private static decimal ComputeCagr(decimal initial, decimal final, int dayCount)
+    {
+        if (dayCount <= 0 || final <= 0)
+            return 0m;
+
+        var years = dayCount / 365.25;
+        var ratio = (double)(final / initial);
+        var compounded = Math.Pow(ratio, 1.0 / years) - 1.0;
+        try
+        {
+            return (decimal)compounded * 100m;
+        }
+        catch (OverflowException)
+        {
+            // Extreme single-window moves (e.g. an intraday double on a one-day
+            // window) drive the annualised compounding past decimal.MaxValue;
+            // saturate the CAGR cell rather than aborting the calculation —
+            // TotalReturn% / MaxDrawdown% are still meaningful.
+            return decimal.MaxValue;
+        }
+    }
+
+    private static decimal ComputeMaxDrawdown(IReadOnlyList<decimal> values)
+    {
         decimal peak = values[0];
         decimal maxDrawdown = 0m;
         foreach (var v in values)
@@ -212,12 +225,6 @@ public static class HoldingsBacktestCalculator
                     maxDrawdown = dd;
             }
         }
-
-        return new BacktestStrategySummary
-        {
-            TotalReturnPercent = Math.Round(totalReturn, 2),
-            CagrPercent = Math.Round(cagr, 2),
-            MaxDrawdownPercent = Math.Round(maxDrawdown, 2),
-        };
+        return maxDrawdown;
     }
 }
