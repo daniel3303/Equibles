@@ -1126,42 +1126,52 @@ public class InstitutionalHoldingsTools
                 var overlap = FundOverlapCalculator.Calculate(perFund, selected);
 
                 var rowsWithConsensus = overlap
-                    .Rows.Select(r => new { Row = r, HeldBy = r.Slices.Count(s => s.Value > 0) })
+                    .Rows.Select(r => (Row: r, HeldBy: r.Slices.Count(s => s.Value > 0)))
                     .Where(x => x.HeldBy >= Math.Max(1, minFunds))
                     .OrderByDescending(x => x.HeldBy)
                     .ThenByDescending(x => x.Row.CombinedValue)
                     .Take(maxResults)
                     .ToList();
 
-                var result = new StringBuilder();
-                result.AppendLine(
-                    $"Consensus holdings — **{holders.Count} funds** as of {selected:yyyy-MM-dd}"
-                );
-                if (missing.Count > 0)
-                    result.AppendLine($"_Could not resolve: {string.Join(", ", missing)}._");
-                result.AppendLine();
-                result.AppendLine("Funds:");
-                foreach (var h in holders)
-                    result.AppendLine($"- {h.Name} (CIK {h.Cik})");
-                result.AppendLine();
-
-                if (rowsWithConsensus.Count == 0)
-                    return result + "_No stocks meet the minFunds threshold._";
-
-                result.AppendLine("| # | Ticker | Company | # Funds | Combined ($M) |");
-                result.AppendLine("|---|--------|---------|---------|---------------|");
-                for (var i = 0; i < rowsWithConsensus.Count; i++)
-                {
-                    var x = rowsWithConsensus[i];
-                    result.AppendLine(
-                        $"| {i + 1} | {x.Row.Ticker} | {x.Row.Name} | {x.HeldBy}/{holders.Count} | {x.Row.CombinedValue / 1_000_000m:N1} |"
-                    );
-                }
-                return result.ToString();
+                return RenderConsensusHoldingsTable(holders, missing, selected, rowsWithConsensus);
             },
             "GetConsensusHoldings",
             $"names: {institutionNames}"
         );
+    }
+
+    private static string RenderConsensusHoldingsTable(
+        List<InstitutionalHolder> holders,
+        List<string> missing,
+        DateOnly selected,
+        List<(FundOverlapRow Row, int HeldBy)> rowsWithConsensus
+    )
+    {
+        var result = new StringBuilder();
+        result.AppendLine(
+            $"Consensus holdings — **{holders.Count} funds** as of {selected:yyyy-MM-dd}"
+        );
+        if (missing.Count > 0)
+            result.AppendLine($"_Could not resolve: {string.Join(", ", missing)}._");
+        result.AppendLine();
+        result.AppendLine("Funds:");
+        foreach (var h in holders)
+            result.AppendLine($"- {h.Name} (CIK {h.Cik})");
+        result.AppendLine();
+
+        if (rowsWithConsensus.Count == 0)
+            return result + "_No stocks meet the minFunds threshold._";
+
+        result.AppendLine("| # | Ticker | Company | # Funds | Combined ($M) |");
+        result.AppendLine("|---|--------|---------|---------|---------------|");
+        for (var i = 0; i < rowsWithConsensus.Count; i++)
+        {
+            var x = rowsWithConsensus[i];
+            result.AppendLine(
+                $"| {i + 1} | {x.Row.Ticker} | {x.Row.Name} | {x.HeldBy}/{holders.Count} | {x.Row.CombinedValue / 1_000_000m:N1} |"
+            );
+        }
+        return result.ToString();
     }
 
     private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
