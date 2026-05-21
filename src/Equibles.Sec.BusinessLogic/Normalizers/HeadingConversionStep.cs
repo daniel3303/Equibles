@@ -33,33 +33,37 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
             if (string.IsNullOrEmpty(combinedText))
                 continue;
 
-            string headingTag = null;
-            if (
-                IsPartHeading(combinedText)
-                && AllSiblingsMatch(siblingSpans, s => IsPartHeading(s.TextContent))
-            )
-                headingTag = "h1";
-            else if (
-                IsItemHeading(combinedText)
-                && AllSiblingsMatch(siblingSpans, s => IsItemHeading(s.TextContent))
-            )
-                headingTag = "h2";
-            else if (
-                AllSiblingsMatch(
-                    siblingSpans,
-                    s => !IsApart(s) && (IsBoldSpan(s) || IsAllUppercase(s) || IsCenterAligned(s))
-                )
-            )
-                headingTag = "h3";
-            else if (AllSiblingsMatch(siblingSpans, s => IsItalicSpan(s) && !IsApart(s)))
-                headingTag = "h4";
-
+            var headingTag = ClassifyHeadingTag(combinedText, siblingSpans);
             if (headingTag == null)
                 continue;
 
             ReplaceNodeWithHeading(parent, headingTag, doc);
             processedParents.Add(parent);
         }
+    }
+
+    private string ClassifyHeadingTag(string combinedText, List<IElement> siblingSpans)
+    {
+        if (
+            IsPartHeading(combinedText)
+            && AllSiblingsMatch(siblingSpans, s => IsPartHeading(s.TextContent))
+        )
+            return "h1";
+        if (
+            IsItemHeading(combinedText)
+            && AllSiblingsMatch(siblingSpans, s => IsItemHeading(s.TextContent))
+        )
+            return "h2";
+        if (
+            AllSiblingsMatch(
+                siblingSpans,
+                s => !IsApart(s) && (IsBoldSpan(s) || IsAllUppercase(s) || IsCenterAligned(s))
+            )
+        )
+            return "h3";
+        if (AllSiblingsMatch(siblingSpans, s => IsItalicSpan(s) && !IsApart(s)))
+            return "h4";
+        return null;
     }
 
     private bool AllSiblingsMatch(List<IElement> spans, Func<IElement, bool> condition)
