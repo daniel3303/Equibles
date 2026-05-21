@@ -1,0 +1,151 @@
+@using Equibles.Web.ViewModels.Holdings
+@model HoldingsMostHeldViewModel
+@{
+    ViewData["Title"] = "Most-Held Stocks";
+    ViewData["Menu"] = "Holdings";
+
+    var pageSize = HoldingsMostHeldViewModel.PageSize;
+    var firstRowNumber = (Model.Page - 1) * pageSize + 1;
+}
+
+<h1 class="text-2xl font-bold mb-4">Most-Held Stocks</h1>
+
+@if (Model.AvailableDates.Count == 0) {
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body items-center text-center py-12">
+            <div class="text-base-content/30 mb-3">
+                <icon name="building-office" size="12" />
+            </div>
+            <h2 class="text-base-content/60 mb-2">No 13F data yet</h2>
+            <p class="text-base-content/40 text-sm">Once at least one quarter of 13F filings has been ingested, the most-held ranking appears here.</p>
+        </div>
+    </div>
+} else {
+    <!-- ReportDate + sort selector + universe size header. -->
+    <div class="mb-4 text-sm">
+        <div class="flex flex-wrap items-center gap-x-5 gap-y-2 mb-1">
+            <div class="flex items-center gap-2 shrink-0">
+                <label for="most-held-date" class="text-base-content/60 whitespace-nowrap">Report Date:</label>
+                <select id="most-held-date" class="select select-bordered select-sm"
+                    onchange="window.location.href='MostHeld?date=' + this.value + '&sort=@Model.Sort'">
+                    @foreach (var date in Model.AvailableDates) {
+                        var isSelected = date == Model.SelectedDate;
+                        if (isSelected) {
+                            <option value="@date.ToString("yyyy-MM-dd")" selected>@date.ToString("MMM dd, yyyy")</option>
+                        } else {
+                            <option value="@date.ToString("yyyy-MM-dd")">@date.ToString("MMM dd, yyyy")</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <label for="most-held-sort" class="text-base-content/60 whitespace-nowrap">Sort by:</label>
+                <select id="most-held-sort" class="select select-bordered select-sm"
+                    onchange="window.location.href='MostHeld?date=@Model.SelectedDate.ToString("yyyy-MM-dd")&sort=' + this.value">
+                    <option value="@HoldingsMostHeldViewModel.SortFilers" selected="@(Model.Sort == HoldingsMostHeldViewModel.SortFilers)"># Filers</option>
+                    <option value="@HoldingsMostHeldViewModel.SortFilersDelta" selected="@(Model.Sort == HoldingsMostHeldViewModel.SortFilersDelta)">Δ Filers (QoQ)</option>
+                    <option value="@HoldingsMostHeldViewModel.SortValue" selected="@(Model.Sort == HoldingsMostHeldViewModel.SortValue)">Total $ Value</option>
+                </select>
+            </div>
+            @if (Model.PreviousDate.HasValue) {
+                <div class="text-xs text-base-content/50">vs prior quarter @Model.PreviousDate.Value.ToString("MMM dd, yyyy") · @Model.TotalUniverseFilers.ToString("N0") filers in the 13F universe</div>
+            } else {
+                <div class="text-xs text-base-content/50">@Model.TotalUniverseFilers.ToString("N0") filers in the 13F universe — no prior quarter, deltas not shown.</div>
+            }
+        </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-sm" data-testid="most-held-table">
+        <div class="card-body p-4">
+            @if (Model.Rows.Count == 0) {
+                <div class="text-xs text-base-content/50">No stocks were held in the selected quarter.</div>
+            } else {
+                <div class="overflow-x-auto">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th scope="col" class="text-right w-12">#</th>
+                                <th scope="col">Ticker</th>
+                                <th scope="col">Company</th>
+                                <th scope="col" class="text-right"># 13F Filers</th>
+                                <th scope="col" class="text-right">Δ Filers (QoQ)</th>
+                                <th scope="col" class="text-right hidden md:table-cell">Total $ Value</th>
+                                <th scope="col" class="text-right hidden md:table-cell">Δ $ Value (QoQ)</th>
+                                <th scope="col" class="text-right hidden lg:table-cell">% of 13F Universe</th>
+                                <th scope="col" class="text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{ var rowNumber = firstRowNumber; }
+                            @foreach (var row in Model.Rows) {
+                                var deltaFilersCss = row.DeltaFilerCount > 0 ? "text-success" : row.DeltaFilerCount < 0 ? "text-error" : "";
+                                var deltaFilersText = (row.DeltaFilerCount > 0 ? "+" : row.DeltaFilerCount < 0 ? "-" : "") + Math.Abs(row.DeltaFilerCount).ToString("N0");
+                                var deltaValueCss = row.DeltaValue > 0 ? "text-success" : row.DeltaValue < 0 ? "text-error" : "";
+                                var deltaValueText = (row.DeltaValue > 0 ? "+$" : row.DeltaValue < 0 ? "-$" : "$") + Math.Abs(row.DeltaValue).ToString("N0");
+                                <tr>
+                                    <td class="text-right text-base-content/60">@rowNumber.ToString("N0")</td>
+                                    <td class="font-mono">@row.Ticker</td>
+                                    <td class="max-w-xs truncate">@row.Name</td>
+                                    <td class="text-right font-mono">@row.CurrentFilerCount.ToString("N0")</td>
+                                    <td class="text-right font-mono @deltaFilersCss">
+                                        @if (Model.PreviousDate.HasValue) {
+                                            @deltaFilersText
+                                        } else {
+                                            <span class="text-base-content/40">—</span>
+                                        }
+                                    </td>
+                                    <td class="text-right font-mono hidden md:table-cell">$@row.CurrentValue.ToString("N0")</td>
+                                    <td class="text-right font-mono hidden md:table-cell @deltaValueCss">
+                                        @if (Model.PreviousDate.HasValue) {
+                                            @deltaValueText
+                                        } else {
+                                            <span class="text-base-content/40">—</span>
+                                        }
+                                    </td>
+                                    <td class="text-right font-mono hidden lg:table-cell">@row.PercentOfUniverse.ToString("F1")%</td>
+                                    <td class="text-right">
+                                        <a asp-controller="Stocks" asp-action="Holdings"
+                                           asp-route-ticker="@row.Ticker"
+                                           asp-route-date="@Model.SelectedDate.ToString("yyyy-MM-dd")"
+                                           class="btn btn-ghost btn-sm">View</a>
+                                    </td>
+                                </tr>
+                                rowNumber++;
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (Model.TotalPages > 1) {
+                    <!-- Pager footer — DaisyUI .join with prev/next links that preserve date+sort. -->
+                    <div class="flex items-center justify-between mt-3" data-testid="most-held-pager">
+                        <div class="text-xs text-base-content/60">
+                            Page @Model.Page.ToString("N0") of @Model.TotalPages.ToString("N0") · @Model.TotalRows.ToString("N0") stocks
+                        </div>
+                        <div class="join">
+                            @if (Model.Page > 1) {
+                                <a class="join-item btn btn-sm"
+                                   asp-action="MostHeld"
+                                   asp-route-date="@Model.SelectedDate.ToString("yyyy-MM-dd")"
+                                   asp-route-sort="@Model.Sort"
+                                   asp-route-page="@(Model.Page - 1)">«</a>
+                            } else {
+                                <button class="join-item btn btn-sm btn-disabled" disabled>«</button>
+                            }
+                            <button class="join-item btn btn-sm btn-active">@Model.Page.ToString("N0")</button>
+                            @if (Model.Page < Model.TotalPages) {
+                                <a class="join-item btn btn-sm"
+                                   asp-action="MostHeld"
+                                   asp-route-date="@Model.SelectedDate.ToString("yyyy-MM-dd")"
+                                   asp-route-sort="@Model.Sort"
+                                   asp-route-page="@(Model.Page + 1)">»</a>
+                            } else {
+                                <button class="join-item btn btn-sm btn-disabled" disabled>»</button>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+}

@@ -112,6 +112,105 @@ public class HoldingsActivityController : BaseController
         return View(viewModel);
     }
 
+    [HttpGet("~/Holdings/MostHeld")]
+    public async Task<IActionResult> MostHeld(DateOnly? date, string sort, int page = 1)
+    {
+        var reportDates = await _holdingRepository
+            .GetAvailableReportDates()
+            .OrderByDescending(d => d)
+            .ToListAsync();
+
+        var normalizedSort = sort switch
+        {
+            HoldingsMostHeldViewModel.SortFilersDelta => HoldingsMostHeldViewModel.SortFilersDelta,
+            HoldingsMostHeldViewModel.SortValue => HoldingsMostHeldViewModel.SortValue,
+            _ => HoldingsMostHeldViewModel.SortFilers,
+        };
+        var viewModel = new HoldingsMostHeldViewModel
+        {
+            AvailableDates = reportDates,
+            Sort = normalizedSort,
+            Page = Math.Max(1, page),
+        };
+        if (reportDates.Count == 0)
+            return View(viewModel);
+
+        var requestedIndex = date.HasValue ? reportDates.IndexOf(date.Value) : -1;
+        var selectedIndex = requestedIndex < 0 ? 0 : requestedIndex;
+        var selectedDate = reportDates[selectedIndex];
+        viewModel.SelectedDate = selectedDate;
+
+        var previousDate =
+            selectedIndex < reportDates.Count - 1
+                ? reportDates[selectedIndex + 1]
+                : (DateOnly?)null;
+        viewModel.PreviousDate = previousDate;
+
+        // GetMostHeld needs both args; when no prior quarter exists we pass the
+        // same date — the previous-side columns end up mirroring current, and the
+        // view renders delta cells as "—" because PreviousDate is null.
+        var priorForRepo = previousDate ?? selectedDate;
+        var rankingQuery = _holdingRepository.GetMostHeld(selectedDate, priorForRepo);
+
+        viewModel.TotalRows = await rankingQuery.CountAsync();
+        viewModel.TotalUniverseFilers = await _holdingRepository
+            .GetUniqueFilerIds(selectedDate)
+            .CountAsync();
+        var skip = (viewModel.Page - 1) * HoldingsMostHeldViewModel.PageSize;
+
+        var orderedQuery = normalizedSort switch
+        {
+            HoldingsMostHeldViewModel.SortFilersDelta => rankingQuery
+                .OrderByDescending(a => a.CurrentFilerCount - a.PreviousFilerCount)
+                .ThenByDescending(a => a.CurrentFilerCount),
+            HoldingsMostHeldViewModel.SortValue => rankingQuery
+                .OrderByDescending(a => a.CurrentValue)
+                .ThenByDescending(a => a.CurrentFilerCount),
+            _ => rankingQuery
+                .OrderByDescending(a => a.CurrentFilerCount)
+                .ThenByDescending(a => a.CurrentValue),
+        };
+
+        var pageRows = await orderedQuery
+            .Skip(skip)
+            .Take(HoldingsMostHeldViewModel.PageSize)
+            .ToListAsync();
+
+        var stockIds = pageRows.Select(r => r.CommonStockId).ToList();
+        var stocks = await _commonStockRepository
+            .GetAll()
+            .Where(s => stockIds.Contains(s.Id))
+            .Select(s => new StockLabel
+            {
+                Id = s.Id,
+                Ticker = s.Ticker,
+                Name = s.Name,
+            })
+            .ToDictionaryAsync(s => s.Id);
+
+        var universe = viewModel.TotalUniverseFilers;
+        viewModel.Rows = pageRows
+            .Select(r =>
+            {
+                stocks.TryGetValue(r.CommonStockId, out var stock);
+                return new HoldingsMostHeldRow
+                {
+                    CommonStockId = r.CommonStockId,
+                    Ticker = stock?.Ticker ?? "—",
+                    Name = stock?.Name ?? "Unknown",
+                    CurrentFilerCount = r.CurrentFilerCount,
+                    PreviousFilerCount = r.PreviousFilerCount,
+                    CurrentValue = r.CurrentValue,
+                    PreviousValue = r.PreviousValue,
+                    PercentOfUniverse =
+                        universe > 0 ? (double)r.CurrentFilerCount / universe * 100.0 : 0,
+                };
+            })
+            .ToList();
+
+        return View(viewModel);
+    }
+
     private static HoldingsActivityRow MapChurnRow(
         Equibles.Holdings.Repositories.Models.MarketWideStockChurn churn,
         IDictionary<Guid, StockLabel> stocks
