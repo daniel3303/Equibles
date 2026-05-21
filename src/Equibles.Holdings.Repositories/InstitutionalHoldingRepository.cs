@@ -78,6 +78,46 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             });
     }
 
+    // Per-stock breadth across two 13F quarters: the same aggregates as
+    // GetQuarterlyActivity but with sold-out stocks (CurrentFilerCount == 0)
+    // filtered out, so the "most held" ranking is a list of currently-held
+    // names. The caller decides the order (typically CurrentFilerCount desc);
+    // the % of 13F universe is derived against
+    // GetUniqueFilerCount(currentReportDate).
+    public IQueryable<MarketWideStockActivity> GetMostHeld(DateOnly current, DateOnly previous)
+    {
+        return GetAll()
+            .Where(h => h.ReportDate == current || h.ReportDate == previous)
+            .GroupBy(h => h.CommonStockId)
+            .Select(g => new MarketWideStockActivity
+            {
+                CommonStockId = g.Key,
+                CurrentShares = g.Sum(h => h.ReportDate == current ? h.Shares : 0L),
+                PreviousShares = g.Sum(h => h.ReportDate == previous ? h.Shares : 0L),
+                CurrentValue = g.Sum(h => h.ReportDate == current ? h.Value : 0L),
+                PreviousValue = g.Sum(h => h.ReportDate == previous ? h.Value : 0L),
+                CurrentFilerCount = g.Where(h => h.ReportDate == current)
+                    .Select(h => h.InstitutionalHolderId)
+                    .Distinct()
+                    .Count(),
+                PreviousFilerCount = g.Where(h => h.ReportDate == previous)
+                    .Select(h => h.InstitutionalHolderId)
+                    .Distinct()
+                    .Count(),
+            })
+            .Where(a => a.CurrentFilerCount > 0);
+    }
+
+    // Total distinct 13F filers reporting on a given quarter — the denominator
+    // for the "% of 13F universe" column on the most-held page.
+    public IQueryable<Guid> GetUniqueFilerIds(DateOnly reportDate)
+    {
+        return GetAll()
+            .Where(h => h.ReportDate == reportDate)
+            .Select(h => h.InstitutionalHolderId)
+            .Distinct();
+    }
+
     // Per-stock churn between two 13F quarters: how many filers initiated a position
     // (in current, not in prior) and how many exited (in prior, not in current).
     // Implemented as two NOT-EXISTS subqueries against the same table — EF Core
