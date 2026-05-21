@@ -299,7 +299,9 @@ public class FtdImportService
             return null;
         }
 
-        long.TryParse(parts[3], out var quantity);
+        if (!long.TryParse(parts[3], out var quantity))
+            return null;
+
         if (!decimal.TryParse(parts[5], CultureInfo.InvariantCulture, out var price))
             return null;
 
