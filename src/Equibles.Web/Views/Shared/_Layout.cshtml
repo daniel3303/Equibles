@@ -72,10 +72,14 @@
                 }
                 <!-- Mobile nav menu -->
                 <div class="dropdown dropdown-end lg:hidden">
-                    <div tabindex="0" role="button" class="btn btn-ghost btn-sm">
+                    <div tabindex="0" role="button" class="btn btn-ghost btn-sm"
+                         aria-label="Open navigation menu"
+                         aria-haspopup="menu"
+                         aria-controls="mobile-nav-menu">
                         <icon name="bars-3" size="5" />
                     </div>
-                    <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-50 w-48 p-2 shadow-lg border border-base-200 mt-2">
+                    <ul id="mobile-nav-menu" tabindex="0" role="menu" aria-label="Mobile navigation"
+                        class="dropdown-content menu bg-base-100 rounded-box z-50 w-48 p-2 shadow-lg border border-base-200 mt-2">
                         <li>
                             <a asp-action="Index" asp-controller="Search">
                                 <icon name="magnifying-glass" size="4" /> Search
