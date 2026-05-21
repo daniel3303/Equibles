@@ -775,29 +775,8 @@ public class InstitutionalHoldingsTools
                         .OrderByDescending(r => Math.Abs(r.DeltaValue))
                         .Take(maxResults)
                         .ToList();
-                    result.AppendLine($"## {section.Label}");
-                    if (rows.Count == 0)
-                    {
-                        result.AppendLine("_No stocks in this bucket this quarter._");
-                        result.AppendLine();
-                        continue;
-                    }
-                    result.AppendLine(
-                        "| # | Ticker | Company | Prior | New | Δ Shares | Δ Value ($M) |"
-                    );
-                    result.AppendLine(
-                        "|---|--------|---------|-------|-----|---------|-------------|"
-                    );
-                    for (var i = 0; i < rows.Count; i++)
-                    {
-                        var r = rows[i];
-                        var sign = r.DeltaShares > 0 ? "+" : "";
-                        result.AppendLine(
-                            $"| {i + 1} | {r.Ticker} | {r.Name} | {r.PreviousShares:N0} | {r.CurrentShares:N0} | {sign}{r.DeltaShares:N0} | {r.DeltaValue / 1_000_000m:+#,##0.0;-#,##0.0;0.0} |"
-                        );
-                    }
-                    result.AppendLine();
-                    rendered++;
+                    if (AppendActivitySection(result, section.Label, rows))
+                        rendered++;
                 }
 
                 if (rendered == 0)
@@ -807,6 +786,33 @@ public class InstitutionalHoldingsTools
             "GetInstitutionQuarterlyActivity",
             $"institution: {institutionName}"
         );
+    }
+
+    private static bool AppendActivitySection(
+        StringBuilder result,
+        string label,
+        List<StockPositionChange> rows
+    )
+    {
+        result.AppendLine($"## {label}");
+        if (rows.Count == 0)
+        {
+            result.AppendLine("_No stocks in this bucket this quarter._");
+            result.AppendLine();
+            return false;
+        }
+        result.AppendLine("| # | Ticker | Company | Prior | New | Δ Shares | Δ Value ($M) |");
+        result.AppendLine("|---|--------|---------|-------|-----|---------|-------------|");
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var r = rows[i];
+            var sign = r.DeltaShares > 0 ? "+" : "";
+            result.AppendLine(
+                $"| {i + 1} | {r.Ticker} | {r.Name} | {r.PreviousShares:N0} | {r.CurrentShares:N0} | {sign}{r.DeltaShares:N0} | {r.DeltaValue / 1_000_000m:+#,##0.0;-#,##0.0;0.0} |"
+            );
+        }
+        result.AppendLine();
+        return true;
     }
 
     [McpServerTool(Name = "GetFundOverlap")]
