@@ -409,22 +409,15 @@ public class HoldingsImportService
         );
         await foreach (var row in context.TsvParser.ParseEntry(entry))
         {
-            var accession = GetValue(row, "ACCESSION_NUMBER");
-            if (string.IsNullOrEmpty(accession) || !context.Submissions.ContainsKey(accession))
-                continue;
-
-            var seqStr = GetValue(row, "SEQUENCENUMBER");
-            if (!int.TryParse(seqStr, out var seq))
-            {
-                _logger.LogDebug(
-                    "Failed to parse sequence number '{SeqStr}' in OTHERMANAGER2.tsv",
-                    seqStr
-                );
-                continue;
-            }
-
-            var name = GetValue(row, "NAME");
-            if (string.IsNullOrEmpty(name))
+            if (
+                !TryParseOtherManagerRow(
+                    row,
+                    context.Submissions,
+                    out var accession,
+                    out var seq,
+                    out var name
+                )
+            )
                 continue;
 
             if (!managers.TryGetValue(accession, out var seqMap))
@@ -438,6 +431,38 @@ public class HoldingsImportService
 
         context.OtherManagers = managers;
         _logger.LogInformation("Parsed other-manager mappings for {Count} filings", managers.Count);
+    }
+
+    private bool TryParseOtherManagerRow(
+        Dictionary<string, string> row,
+        Dictionary<string, SubmissionRow> submissions,
+        out string accession,
+        out int seq,
+        out string name
+    )
+    {
+        seq = 0;
+        name = null;
+
+        accession = GetValue(row, "ACCESSION_NUMBER");
+        if (string.IsNullOrEmpty(accession) || !submissions.ContainsKey(accession))
+            return false;
+
+        var seqStr = GetValue(row, "SEQUENCENUMBER");
+        if (!int.TryParse(seqStr, out seq))
+        {
+            _logger.LogDebug(
+                "Failed to parse sequence number '{SeqStr}' in OTHERMANAGER2.tsv",
+                seqStr
+            );
+            return false;
+        }
+
+        name = GetValue(row, "NAME");
+        if (string.IsNullOrEmpty(name))
+            return false;
+
+        return true;
     }
 
     private async Task HandleAmendments(ImportContext context, CancellationToken cancellationToken)
