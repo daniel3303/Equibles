@@ -333,7 +333,7 @@ public class FtdImportService
 
         while (current <= now)
         {
-            var yearMonth = current.ToString("yyyyMM");
+            var yearMonth = current.ToString("yyyyMM", CultureInfo.InvariantCulture);
 
             // The 'a' file for June 2017 doesn't exist — only 'b' is available
             if (current != OldestAvailableDate)

@@ -13,7 +13,7 @@ public class FtdImportServiceGetFileNamesThaiCultureTests
     // formats in Buddhist (Gregorian + 543). 2017-06 then renders as "256006",
     // every URL 404s, and the scrape silently produces zero records on Thai-
     // locale hosts. Parallel precedent: FredImportServiceParseDateHijriCulture.
-    [Fact(Skip = "GH-1679 — GetFileNames emits Buddhist-calendar year under th-TH")]
+    [Fact]
     public void GetFileNames_UnderThaiCulture_EmitsGregorianYearInFileName()
     {
         var original = CultureInfo.CurrentCulture;
