@@ -107,10 +107,13 @@ public class YahooFinanceClient : IYahooFinanceClient
             // like a holiday gap (skipped) rather than emitted as an
             // OHLC-impossible bar (e.g. High=0 while Close>0) or aborting the
             // whole import.
-            var open = i < quote.Open.Count ? quote.Open[i] : null;
-            var high = i < quote.High.Count ? quote.High[i] : null;
-            var low = i < quote.Low.Count ? quote.Low[i] : null;
-            var close = i < quote.Close.Count ? quote.Close[i] : null;
+            T? At<T>(List<T?> col)
+                where T : struct => i < col.Count ? col[i] : null;
+
+            var open = At(quote.Open);
+            var high = At(quote.High);
+            var low = At(quote.Low);
+            var close = At(quote.Close);
             if (open == null || high == null || low == null || close == null)
             {
                 skipped++;
@@ -129,11 +132,10 @@ public class YahooFinanceClient : IYahooFinanceClient
                     // on a holiday-edge row. Both mean "unavailable" → fall
                     // back to the day's Close, never 0.
                     AdjustedClose = Math.Round(
-                        (adjCloseList != null && i < adjCloseList.Count ? adjCloseList[i] : null)
-                            ?? close.Value,
+                        (adjCloseList != null ? At(adjCloseList) : null) ?? close.Value,
                         4
                     ),
-                    Volume = (i < quote.Volume.Count ? quote.Volume[i] : null) ?? 0,
+                    Volume = At(quote.Volume) ?? 0,
                 }
             );
         }
