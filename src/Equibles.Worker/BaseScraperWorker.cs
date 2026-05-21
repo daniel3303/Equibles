@@ -1,5 +1,7 @@
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.Messaging.Contracts.Activity;
+using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -17,6 +19,55 @@ public abstract class BaseScraperWorker : BackgroundService
     protected abstract string WorkerName { get; }
     protected abstract TimeSpan SleepInterval { get; }
     protected abstract ErrorSource ErrorSource { get; }
+
+    /// <summary>
+    /// Resolves the bus lazily — direct <see cref="IBus.Publish{T}"/> calls
+    /// don't go through the EF outbox, so activity events stay fire-and-forget
+    /// (a dropped event is fine; a stuck transaction would be worse). Returns
+    /// null if no bus is registered, so tests and any host that wires the
+    /// worker without messaging still run.
+    /// </summary>
+    private IBus TryGetBus()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        return scope.ServiceProvider.GetService<IBus>();
+    }
+
+    private async Task PublishActivity(
+        ScraperActivitySeverity severity,
+        string message,
+        CancellationToken cancellationToken
+    )
+    {
+        var bus = TryGetBus();
+        if (bus is null)
+            return;
+
+        try
+        {
+            await bus.Publish(
+                new ScraperActivity(
+                    Source: WorkerName,
+                    Severity: severity,
+                    Message: message,
+                    Timestamp: DateTimeOffset.UtcNow,
+                    CorrelationId: Guid.NewGuid().ToString()
+                ),
+                cancellationToken
+            );
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Shutting down — swallow.
+        }
+        catch (Exception ex)
+        {
+            // The activity feed is best-effort. A failure here must never
+            // crash the scraper; log at Debug so it shows under verbose
+            // logging but doesn't pollute normal runs.
+            Logger.LogDebug(ex, "Failed to publish ScraperActivity for {Worker}", WorkerName);
+        }
+    }
 
     /// <summary>
     /// Wait used after a cycle that called <see cref="RequestRetrySoon"/> —
@@ -54,6 +105,8 @@ public abstract class BaseScraperWorker : BackgroundService
             Logger.LogInformation("{Worker} running at: {Time}", WorkerName, DateTimeOffset.Now);
             _retrySoonRequested = false;
 
+            await PublishActivity(ScraperActivitySeverity.Info, "cycle started", stoppingToken);
+
             try
             {
                 await DoWork(stoppingToken);
@@ -61,11 +114,19 @@ public abstract class BaseScraperWorker : BackgroundService
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 Logger.LogInformation("{Worker} cancelled", WorkerName);
+                await PublishActivity(
+                    ScraperActivitySeverity.Warn,
+                    "cancelled",
+                    CancellationToken.None
+                );
                 return;
             }
             catch (Exception ex)
             {
                 Logger.LogCritical(ex, "Critical error in {Worker}", WorkerName);
+                // ErrorReporter publishes its own ScraperActivity with the same
+                // source + the error message, so the activity feed gets a row
+                // without double-emitting here.
                 await ErrorReporter.Report(
                     ErrorSource,
                     $"{WorkerName}.DoWork",
@@ -82,8 +143,24 @@ public abstract class BaseScraperWorker : BackgroundService
                 WorkerName,
                 interval
             );
+            await PublishActivity(
+                _retrySoonRequested ? ScraperActivitySeverity.Warn : ScraperActivitySeverity.Info,
+                _retrySoonRequested
+                    ? $"not ready, retrying in {FormatInterval(interval)}"
+                    : $"cycle complete, sleeping {FormatInterval(interval)}",
+                stoppingToken
+            );
             await WaitForNextCycle(interval, stoppingToken);
         }
+    }
+
+    private static string FormatInterval(TimeSpan interval)
+    {
+        if (interval.TotalHours >= 1)
+            return $"{interval.TotalHours:0.#}h";
+        if (interval.TotalMinutes >= 1)
+            return $"{interval.TotalMinutes:0.#}m";
+        return $"{interval.TotalSeconds:0}s";
     }
 
     /// <summary>
