@@ -47,7 +47,7 @@ public class ProfilesController : BaseController
         _holdingsBacktestService = holdingsBacktestService;
     }
 
-    [HttpGet("~/Institutions/{cik}")]
+    [HttpGet("~/institutions/{cik}")]
     public async Task<IActionResult> Institution(string cik, DateOnly? activityDate = null)
     {
         var holder = await _institutionalHolderRepository.GetByCik(cik);
@@ -101,7 +101,7 @@ public class ProfilesController : BaseController
         );
     }
 
-    [HttpGet("~/Institutions/{cik}/Backtest")]
+    [HttpGet("~/institutions/{cik}/backtest")]
     public async Task<IActionResult> BacktestInstitution(
         string cik,
         [FromQuery(Name = "from")] DateOnly? from = null,
@@ -211,7 +211,7 @@ public class ProfilesController : BaseController
         return (summary, allocation);
     }
 
-    [HttpGet("~/Institutions/Compare")]
+    [HttpGet("~/institutions/compare")]
     public async Task<IActionResult> CompareInstitutions(
         [FromQuery(Name = "ciks")] string[] ciks = null,
         [FromQuery(Name = "date")] DateOnly? date = null
@@ -246,7 +246,7 @@ public class ProfilesController : BaseController
         return View(viewModel);
     }
 
-    [HttpGet("~/Institutions/Combined")]
+    [HttpGet("~/institutions/combined")]
     public async Task<IActionResult> CombinedInstitutions(
         [FromQuery(Name = "ciks")] string[] ciks = null,
         [FromQuery(Name = "date")] DateOnly? date = null
@@ -296,7 +296,7 @@ public class ProfilesController : BaseController
         return View(viewModel);
     }
 
-    [HttpGet("~/Insiders/{ownerCik}")]
+    [HttpGet("~/insiders/{ownerCik}")]
     public async Task<IActionResult> Insider(string ownerCik)
     {
         var owner = await _insiderOwnerRepository.GetByOwnerCik(ownerCik);
@@ -334,7 +334,7 @@ public class ProfilesController : BaseController
         );
     }
 
-    [HttpGet("~/Congress/{id:guid}")]
+    [HttpGet("~/congress/{id:guid}")]
     public async Task<IActionResult> Member(Guid id)
     {
         var member = await _congressMemberRepository.Get(id);

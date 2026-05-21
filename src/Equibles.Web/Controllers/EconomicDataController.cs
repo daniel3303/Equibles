@@ -65,7 +65,7 @@ public class EconomicDataController : BaseController
         return View(new EconomyIndexViewModel { Categories = categories });
     }
 
-    [HttpGet("~/EconomicData/{seriesId}")]
+    [HttpGet("~/economicdata/{seriesId}")]
     public async Task<IActionResult> Show(string seriesId)
     {
         if (string.IsNullOrWhiteSpace(seriesId))

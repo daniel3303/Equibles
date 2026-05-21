@@ -88,7 +88,7 @@ public class StatusController : BaseController
         return View(error);
     }
 
-    [HttpPost("{id:guid}/MarkAsSeen")]
+    [HttpPost("{id:guid}/markasseen")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> MarkAsSeen(Guid id)
     {
@@ -102,7 +102,7 @@ public class StatusController : BaseController
         return RedirectToAction(nameof(Show), new { id });
     }
 
-    [HttpPost("{id:guid}/Delete")]
+    [HttpPost("{id:guid}/delete")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(Guid id)
     {
@@ -162,14 +162,14 @@ public class StatusController : BaseController
         );
     }
 
-    [HttpGet("~/Status/Activity")]
+    [HttpGet("~/status/activity")]
     public IActionResult Activity()
     {
         ViewData["Title"] = "Live activity";
         return View();
     }
 
-    [HttpGet("~/Status/Activity/Stream")]
+    [HttpGet("~/status/activity/stream")]
     public async Task ActivityStream(CancellationToken cancellationToken)
     {
         InitSseStream();
@@ -218,7 +218,7 @@ public class StatusController : BaseController
             }
         );
 
-    [HttpPost("DeleteAll")]
+    [HttpPost("deleteall")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteAll()
     {

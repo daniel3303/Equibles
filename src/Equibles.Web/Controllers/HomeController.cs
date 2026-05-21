@@ -13,7 +13,7 @@ public class HomeController : BaseController
         _configuration = configuration;
     }
 
-    [HttpGet("/Home/Error/{statusCode?}")]
+    [HttpGet("/home/error/{statusCode?}")]
     public IActionResult Error(int? statusCode = null)
     {
         var code = statusCode ?? 500;

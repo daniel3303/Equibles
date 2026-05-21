@@ -23,7 +23,7 @@ public class HoldingsActivityController : BaseController
         _commonStockRepository = commonStockRepository;
     }
 
-    [HttpGet("~/Holdings/Activity")]
+    [HttpGet("~/holdings/activity")]
     public async Task<IActionResult> Activity(DateOnly? date)
     {
         var reportDates = await _holdingRepository
