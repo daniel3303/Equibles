@@ -39,7 +39,8 @@ The background-scraper host. Plain `Host.CreateApplicationBuilder` (not `WebAppl
 - `AddMessaging(builder.Configuration)` configures MassTransit on the Postgres SQL transport with the EF outbox sitting inside `EquiblesDbContext`.
 - The transport connection comes from `ConnectionStrings__TransportConnection`.
 - `MassTransit__RunMigration=true` makes the worker apply the transport schema on first run.
-- One scraper-options bind per source: `WorkerOptions`, `DocumentScraperOptions`, `FinraOptions` + `FinraScraperOptions`, `FredOptions` + `FredScraperOptions`, `FtdScraperOptions`, `FinancialFactsScraperOptions`, `YahooPriceScraperOptions`, `CftcScraperOptions`, `CboeScraperOptions`.
+- One scraper-options bind per source.
+- Current binds: `WorkerOptions`, `DocumentScraperOptions`, `FinraOptions` + `FinraScraperOptions`, `FredOptions` + `FredScraperOptions`, `FtdScraperOptions`, `FinancialFactsScraperOptions`, `YahooPriceScraperOptions`, `CftcScraperOptions`, `CboeScraperOptions`.
 - Each scraper reads its own section so per-source tuning never leaks across modules.
 - `AddSecWorker()`, `AddSecFinancialFactsWorker()`, `AddFinraWorker()`, `AddFredWorker()`, `AddYahooWorker()`, `AddCftcWorker()`, `AddCboeWorker()`, `AddCongressWorker()`, `AddHoldingsWorker()` register the `BackgroundService` workers from each `.HostedService` project.
 - `AddWorkerServices()` wires the cross-cutting worker plumbing (`SyncDateResolver`, etc.).
