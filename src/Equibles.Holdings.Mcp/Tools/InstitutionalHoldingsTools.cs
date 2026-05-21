@@ -869,50 +869,57 @@ public class InstitutionalHoldingsTools
                     selected
                 );
 
-                var result = new StringBuilder();
-                result.AppendLine(
-                    $"Portfolio overlap — **{holder1.Name}** vs **{holder2.Name}** as of {selected:yyyy-MM-dd}"
-                );
-                result.AppendLine();
-                result.AppendLine("| Metric | Value |");
-                result.AppendLine("|--------|-------|");
-                result.AppendLine($"| Union positions | {overlap.UnionPositionCount:N0} |");
-                result.AppendLine($"| Shared positions | {overlap.IntersectionPositionCount:N0} |");
-                result.AppendLine(
-                    $"| Jaccard similarity | {overlap.JaccardSimilarityPercent:F1}% |"
-                );
-                result.AppendLine(
-                    $"| $-weighted overlap | {overlap.DollarWeightedOverlapPercent:F1}% |"
-                );
-                result.AppendLine();
-
-                if (overlap.Rows.Count == 0)
-                {
-                    result.AppendLine("_Neither fund reports any positions for this date._");
-                    return result.ToString();
-                }
-
-                result.AppendLine(
-                    "| # | Ticker | Company | A Shares | A % | B Shares | B % | Combined ($M) |"
-                );
-                result.AppendLine(
-                    "|---|--------|---------|---------|-----|---------|-----|---------------|"
-                );
-                var rendered = overlap.Rows.Take(maxResults).ToList();
-                for (var i = 0; i < rendered.Count; i++)
-                {
-                    var row = rendered[i];
-                    var a = row.Slices[0];
-                    var b = row.Slices[1];
-                    result.AppendLine(
-                        $"| {i + 1} | {row.Ticker} | {row.Name} | {(a.Shares > 0 ? a.Shares.ToString("N0") : "—")} | {(a.Value > 0 ? a.PercentOfPortfolio.ToString("F1") + "%" : "—")} | {(b.Shares > 0 ? b.Shares.ToString("N0") : "—")} | {(b.Value > 0 ? b.PercentOfPortfolio.ToString("F1") + "%" : "—")} | {row.CombinedValue / 1_000_000m:N1} |"
-                    );
-                }
-                return result.ToString();
+                return RenderOverlapTable(holder1, holder2, selected, overlap, maxResults);
             },
             "GetFundOverlap",
             $"funds: {institutionName1}, {institutionName2}"
         );
+    }
+
+    private static string RenderOverlapTable(
+        InstitutionalHolder holder1,
+        InstitutionalHolder holder2,
+        DateOnly selected,
+        FundOverlapResult overlap,
+        int maxResults
+    )
+    {
+        var result = new StringBuilder();
+        result.AppendLine(
+            $"Portfolio overlap — **{holder1.Name}** vs **{holder2.Name}** as of {selected:yyyy-MM-dd}"
+        );
+        result.AppendLine();
+        result.AppendLine("| Metric | Value |");
+        result.AppendLine("|--------|-------|");
+        result.AppendLine($"| Union positions | {overlap.UnionPositionCount:N0} |");
+        result.AppendLine($"| Shared positions | {overlap.IntersectionPositionCount:N0} |");
+        result.AppendLine($"| Jaccard similarity | {overlap.JaccardSimilarityPercent:F1}% |");
+        result.AppendLine($"| $-weighted overlap | {overlap.DollarWeightedOverlapPercent:F1}% |");
+        result.AppendLine();
+
+        if (overlap.Rows.Count == 0)
+        {
+            result.AppendLine("_Neither fund reports any positions for this date._");
+            return result.ToString();
+        }
+
+        result.AppendLine(
+            "| # | Ticker | Company | A Shares | A % | B Shares | B % | Combined ($M) |"
+        );
+        result.AppendLine(
+            "|---|--------|---------|---------|-----|---------|-----|---------------|"
+        );
+        var rendered = overlap.Rows.Take(maxResults).ToList();
+        for (var i = 0; i < rendered.Count; i++)
+        {
+            var row = rendered[i];
+            var a = row.Slices[0];
+            var b = row.Slices[1];
+            result.AppendLine(
+                $"| {i + 1} | {row.Ticker} | {row.Name} | {(a.Shares > 0 ? a.Shares.ToString("N0") : "—")} | {(a.Value > 0 ? a.PercentOfPortfolio.ToString("F1") + "%" : "—")} | {(b.Shares > 0 ? b.Shares.ToString("N0") : "—")} | {(b.Value > 0 ? b.PercentOfPortfolio.ToString("F1") + "%" : "—")} | {row.CombinedValue / 1_000_000m:N1} |"
+            );
+        }
+        return result.ToString();
     }
 
     [McpServerTool(Name = "GetConsensusHoldings")]
