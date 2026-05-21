@@ -18,9 +18,7 @@ public class HoldingsImportServiceDeduplicateSubmissionsWhitespaceCikTests
     // treat whitespace identically to null/empty — otherwise two submissions
     // with Cik="   " and the same PeriodOfReport collapse into one and a
     // legitimate filing disappears.
-    [Fact(
-        Skip = "GH-1583 — DeduplicateSubmissions groups submissions with whitespace-only Cik instead of skipping"
-    )]
+    [Fact]
     public void DeduplicateSubmissions_WhitespaceOnlyCik_SkippedFromGrouping()
     {
         var context = new ImportContext

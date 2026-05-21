@@ -154,7 +154,7 @@ public class HoldingsImportService
         var superseded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var byCikAndPeriod = context
             .Submissions.Values.Where(s =>
-                !string.IsNullOrEmpty(s.Cik) && !string.IsNullOrEmpty(s.PeriodOfReport)
+                !string.IsNullOrWhiteSpace(s.Cik) && !string.IsNullOrWhiteSpace(s.PeriodOfReport)
             )
             .GroupBy(s => $"{s.Cik}|{s.PeriodOfReport}")
             .Where(g => g.Count() > 1);
