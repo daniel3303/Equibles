@@ -971,21 +971,9 @@ public class InstitutionalHoldingsTools
                 if (holder2 == null)
                     return $"No institution found matching '{institutionName2}'.";
 
-                var dates1 = await _holdingRepository
-                    .GetHistoryByHolder(holder1)
-                    .Select(h => h.ReportDate)
-                    .Distinct()
-                    .ToListAsync();
-                var dates2 = await _holdingRepository
-                    .GetHistoryByHolder(holder2)
-                    .Select(h => h.ReportDate)
-                    .Distinct()
-                    .ToListAsync();
-                var common = dates1.Intersect(dates2).OrderByDescending(d => d).ToList();
-                if (common.Count == 0)
-                    return $"{holder1.Name} and {holder2.Name} share no common report dates.";
-
-                var selected = ResolveReportDate(reportDate, common);
+                var (selected, error) = await ResolveCommonReportDate(holder1, holder2, reportDate);
+                if (error != null)
+                    return error;
 
                 var holdings1 = await LoadHoldingsByHolderWithStock(holder1, selected);
                 var holdings2 = await LoadHoldingsByHolderWithStock(holder2, selected);
@@ -1002,6 +990,29 @@ public class InstitutionalHoldingsTools
             "GetFundOverlap",
             $"funds: {institutionName1}, {institutionName2}"
         );
+    }
+
+    private async Task<(DateOnly Selected, string Error)> ResolveCommonReportDate(
+        InstitutionalHolder holder1,
+        InstitutionalHolder holder2,
+        string reportDate
+    )
+    {
+        var dates1 = await _holdingRepository
+            .GetHistoryByHolder(holder1)
+            .Select(h => h.ReportDate)
+            .Distinct()
+            .ToListAsync();
+        var dates2 = await _holdingRepository
+            .GetHistoryByHolder(holder2)
+            .Select(h => h.ReportDate)
+            .Distinct()
+            .ToListAsync();
+        var common = dates1.Intersect(dates2).OrderByDescending(d => d).ToList();
+        if (common.Count == 0)
+            return (default, $"{holder1.Name} and {holder2.Name} share no common report dates.");
+
+        return (ResolveReportDate(reportDate, common), null);
     }
 
     private static string RenderOverlapTable(
