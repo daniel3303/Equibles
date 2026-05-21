@@ -40,21 +40,11 @@
                         </button>
                         <ul id="navbar-more-menu" tabindex="0" role="menu" aria-label="More datasets"
                             class="dropdown-content menu bg-base-100 rounded-box z-50 w-56 p-2 shadow-lg border border-base-200 mt-2">
-                            <li>
-                                <a asp-action="Index" asp-controller="EconomicData">
-                                    <icon name="presentation-chart-line" size="4" /> Economic Data
-                                </a>
-                            </li>
-                            <li>
-                                <a asp-action="Index" asp-controller="Cftc">
-                                    <icon name="scale" size="4" /> Futures
-                                </a>
-                            </li>
-                            <li>
-                                <a asp-action="Index" asp-controller="Market">
-                                    <icon name="chart-bar-square" size="4" /> Market
-                                </a>
-                            </li>
+                            <!-- No icons — the top nav peers (Home/Stocks/Institutions/MCP/Status)
+                                 are text-only, and the desktop dropdown should match. -->
+                            <li><a asp-action="Index" asp-controller="EconomicData">Economic Data</a></li>
+                            <li><a asp-action="Index" asp-controller="Cftc">Futures</a></li>
+                            <li><a asp-action="Index" asp-controller="Market">Market</a></li>
                         </ul>
                     </div>
                     <a asp-action="Connect" asp-controller="Home" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">MCP</a>
