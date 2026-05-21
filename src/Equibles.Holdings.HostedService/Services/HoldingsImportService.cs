@@ -199,24 +199,37 @@ public class HoldingsImportService
         var coverPages = new Dictionary<string, CoverPageRow>(StringComparer.OrdinalIgnoreCase);
         await foreach (var row in context.TsvParser.ParseEntry(coverPageEntry))
         {
-            var accession = GetValue(row, "ACCESSION_NUMBER");
-            if (string.IsNullOrEmpty(accession) || !context.Submissions.ContainsKey(accession))
-                continue;
-
-            coverPages[accession] = new CoverPageRow
-            {
-                AccessionNumber = accession,
-                IsAmendment = GetValue(row, "ISAMENDMENT"),
-                CompanyName = GetValue(row, "FILINGMANAGER_NAME"),
-                City = GetValue(row, "FILINGMANAGER_CITY"),
-                StateOrCountry = GetValue(row, "FILINGMANAGER_STATEORCOUNTRY"),
-                Form13FFileNumber = GetValue(row, "FORM13FFILENUMBER"),
-                CrdNumber = GetValue(row, "CRDNUMBER"),
-            };
+            if (TryParseCoverPageRow(row, context.Submissions, out var coverPage))
+                coverPages[coverPage.AccessionNumber] = coverPage;
         }
 
         _logger.LogInformation("Parsed {Count} cover pages", coverPages.Count);
         context.CoverPages = coverPages;
+        return true;
+    }
+
+    private static bool TryParseCoverPageRow(
+        Dictionary<string, string> row,
+        Dictionary<string, SubmissionRow> submissions,
+        out CoverPageRow coverPage
+    )
+    {
+        coverPage = null;
+
+        var accession = GetValue(row, "ACCESSION_NUMBER");
+        if (string.IsNullOrEmpty(accession) || !submissions.ContainsKey(accession))
+            return false;
+
+        coverPage = new CoverPageRow
+        {
+            AccessionNumber = accession,
+            IsAmendment = GetValue(row, "ISAMENDMENT"),
+            CompanyName = GetValue(row, "FILINGMANAGER_NAME"),
+            City = GetValue(row, "FILINGMANAGER_CITY"),
+            StateOrCountry = GetValue(row, "FILINGMANAGER_STATEORCOUNTRY"),
+            Form13FFileNumber = GetValue(row, "FORM13FFILENUMBER"),
+            CrdNumber = GetValue(row, "CRDNUMBER"),
+        };
         return true;
     }
 
