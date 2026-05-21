@@ -15,7 +15,7 @@
                 <a asp-controller="Status" asp-action="Index" class="hover:text-base-content flex items-center gap-1">
                     Status
                     @if (ViewData["StatusBadgeCount"] is int footerBadge && footerBadge > 0) {
-                        <span class="badge badge-warning badge-xs">@footerBadge</span>
+                        <span class="badge badge-warning badge-xs" aria-label="@footerBadge status alerts">@footerBadge</span>
                     }
                 </a>
                 <a href="https://github.com/daniel3303/Equibles" target="_blank" rel="noopener" aria-label="Equibles on GitHub" title="GitHub" class="hover:text-base-content">
