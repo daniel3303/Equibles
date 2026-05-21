@@ -15,9 +15,7 @@ public class FinancialFactsImportServiceTryMapTaxonomyNullKeyTests
     // instead of falling to the default arm. The Try* contract says "never
     // throw on bad input — return false" — any future caller (refactor,
     // parameterised matrix, defensive caller) that hands in null would crash.
-    [Fact(
-        Skip = "GH-1577 — TryMapTaxonomy throws NullReferenceException on null key instead of returning false"
-    )]
+    [Fact]
     public void TryMapTaxonomy_NullKey_ReturnsFalseWithoutThrowing()
     {
         var method = typeof(FinancialFactsImportService).GetMethod(
