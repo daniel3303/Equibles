@@ -1089,16 +1089,8 @@ public class InstitutionalHoldingsTools
         string reportDate
     )
     {
-        var dates1 = await _holdingRepository
-            .GetHistoryByHolder(holder1)
-            .Select(h => h.ReportDate)
-            .Distinct()
-            .ToListAsync();
-        var dates2 = await _holdingRepository
-            .GetHistoryByHolder(holder2)
-            .Select(h => h.ReportDate)
-            .Distinct()
-            .ToListAsync();
+        var dates1 = await GetReportDatesByHolder(holder1).ToListAsync();
+        var dates2 = await GetReportDatesByHolder(holder2).ToListAsync();
         var common = dates1.Intersect(dates2).OrderByDescending(d => d).ToList();
         if (common.Count == 0)
             return (default, $"{holder1.Name} and {holder2.Name} share no common report dates.");
