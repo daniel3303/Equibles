@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
@@ -52,11 +53,9 @@ public class ShortDataTools
         return Execute(
             async () =>
             {
-                var stock = await _commonStockRepository.GetByTicker(
-                    ticker.Trim().ToUpperInvariant()
-                );
-                if (stock == null)
-                    return $"Stock '{ticker}' not found.";
+                var (stock, stockError) = await ResolveStockByTicker(ticker);
+                if (stockError != null)
+                    return stockError;
 
                 var query = _shortVolumeRepository.GetHistoryByStock(stock);
 
@@ -115,11 +114,9 @@ public class ShortDataTools
         return Execute(
             async () =>
             {
-                var stock = await _commonStockRepository.GetByTicker(
-                    ticker.Trim().ToUpperInvariant()
-                );
-                if (stock == null)
-                    return $"Stock '{ticker}' not found.";
+                var (stock, stockError) = await ResolveStockByTicker(ticker);
+                if (stockError != null)
+                    return stockError;
 
                 var query = _shortInterestRepository.GetHistoryByStock(stock);
 
@@ -243,4 +240,12 @@ public class ShortDataTools
 
     private static DateOnly ParseDateOr(string text, DateOnly fallback) =>
         !string.IsNullOrEmpty(text) && DateOnly.TryParse(text, out var parsed) ? parsed : fallback;
+
+    private async Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker)
+    {
+        var stock = await _commonStockRepository.GetByTicker(ticker.Trim().ToUpperInvariant());
+        if (stock == null)
+            return (null, $"Stock '{ticker}' not found.");
+        return (stock, null);
+    }
 }
