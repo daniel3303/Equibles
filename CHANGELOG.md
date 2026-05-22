@@ -9,6 +9,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [1.1.0] — 2026-05-22
+
+### Added
+
 #### Holdings / 13F
 
 - Near-real-time 13F-HR ingestion — picks up new 13F filings shortly after
@@ -285,5 +299,6 @@ First tagged release.
 - Background worker — scrapers and document processor.
 - Docker Compose stack (ParadeDB + web + MCP + worker), with an optional vector-embedding profile.
 
-[Unreleased]: https://github.com/daniel3303/Equibles/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/daniel3303/Equibles/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/daniel3303/Equibles/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/daniel3303/Equibles/releases/tag/v1.0.0

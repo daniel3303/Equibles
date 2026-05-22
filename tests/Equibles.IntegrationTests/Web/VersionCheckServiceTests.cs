@@ -119,7 +119,7 @@ public class VersionCheckServiceTests
 
         Assert.True(result.UpdateAvailable);
         Assert.Equal("99.0.0", result.LatestVersion);
-        Assert.Equal("1.0.0", result.CurrentVersion);
+        Assert.Equal("1.1.0", result.CurrentVersion);
         Assert.Equal(
             "https://github.com/daniel3303/Equibles/releases/tag/v99.0.0",
             result.ReleaseUrl
@@ -129,20 +129,20 @@ public class VersionCheckServiceTests
     [Fact]
     public async Task Get_SameVersion_DoesNotReportUpdate()
     {
-        var handler = new StubHttpMessageHandler("{\"tag_name\":\"v1.0.0\"}");
+        var handler = new StubHttpMessageHandler("{\"tag_name\":\"v1.1.0\"}");
         var sut = CreateService(handler);
 
         var result = await WaitForRefresh(sut);
 
         Assert.False(result.UpdateAvailable);
-        Assert.Equal("1.0.0", result.LatestVersion);
+        Assert.Equal("1.1.0", result.LatestVersion);
     }
 
     [Fact]
     public async Task Get_FourSegmentSameVersionTag_DoesNotReportSpuriousUpdate()
     {
-        // Regression: "v1.0.0.0" must not compare as newer than assembly "1.0.0".
-        var handler = new StubHttpMessageHandler("{\"tag_name\":\"v1.0.0.0\"}");
+        // Regression: "v1.1.0.0" must not compare as newer than assembly "1.1.0".
+        var handler = new StubHttpMessageHandler("{\"tag_name\":\"v1.1.0.0\"}");
         var sut = CreateService(handler);
 
         var result = await WaitForRefresh(sut);
