@@ -120,7 +120,12 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
                 var currentCell = cells[colIndex];
                 var nextCell = cells[colIndex + 1];
 
-                var cleanTitle = RemoveCurrencySymbols(currentCell.TextContent.Trim());
+                var currentText = currentCell.TextContent.Trim();
+                var nextText = nextCell.TextContent.Trim();
+                if (string.IsNullOrWhiteSpace(currentText) || !IsEmptyCell(nextText))
+                    continue;
+
+                var cleanTitle = RemoveCurrencySymbols(currentText);
                 nextCell.InnerHtml = cleanTitle;
                 currentCell.Remove();
             }

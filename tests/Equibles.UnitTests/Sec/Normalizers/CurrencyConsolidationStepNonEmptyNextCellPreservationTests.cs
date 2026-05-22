@@ -16,9 +16,7 @@ namespace Equibles.UnitTests.Sec.Normalizers;
 /// </summary>
 public class CurrencyConsolidationStepNonEmptyNextCellPreservationTests
 {
-    [Fact(
-        Skip = "GH-1778 — ProcessCurrencyColumnsForConsolidation does not re-apply the per-row IsEmptyCell(nextCell) gate, so header labels in non-empty next cells are overwritten"
-    )]
+    [Fact]
     public void Execute_HeaderRowWithLabelInNextCell_PreservesLabelDuringConsolidation()
     {
         // Two-row table: row 0 has cells ["", "Q1", ""] — a header with a
