@@ -37,7 +37,11 @@ public class HoldingsPositionGrouperMultipleFilingsLatestHoldingTests
             ReportDate = new DateOnly(2024, 12, 31),
         };
 
-        var result = HoldingsPositionGrouper.Group([earlier, later], []);
+        var result = HoldingsPositionGrouper.Group(
+            [earlier, later],
+            [],
+            filersWithCurrentQuarterFilings: null
+        );
 
         var entry = result[PositionChangeType.New].Should().ContainSingle().Subject;
         entry.CurrentHolding.Id.Should().Be(later.Id);

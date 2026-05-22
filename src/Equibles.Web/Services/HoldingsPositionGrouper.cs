@@ -5,9 +5,20 @@ namespace Equibles.Web.Services;
 
 public static class HoldingsPositionGrouper
 {
+    /// <param name="filersWithCurrentQuarterFilings">
+    /// Set of <see cref="InstitutionalHolder"/> ids known to have filed a 13F
+    /// for the current quarter (against any stock). Holders that filed last
+    /// quarter but are not in this set are treated as "not-yet-filed" rather
+    /// than "Sold-Out" — without this filter, a freshly-ingested universe
+    /// (or any quarter shortly after the 45-day SEC deadline) reports the
+    /// entire backlog of un-filed holders as having exited the stock.
+    /// Pass <c>null</c> to disable the filter and fall back to the pre-fix
+    /// behaviour (every previous-only holder lands in Sold-Out).
+    /// </param>
     public static Dictionary<PositionChangeType, List<HolderPositionChange>> Group(
         IReadOnlyList<InstitutionalHolding> currentHoldings,
-        IReadOnlyList<InstitutionalHolding> previousHoldings
+        IReadOnlyList<InstitutionalHolding> previousHoldings,
+        IReadOnlySet<Guid> filersWithCurrentQuarterFilings
     )
     {
         var currentByHolder = AggregateByHolder(currentHoldings);
@@ -44,6 +55,16 @@ public static class HoldingsPositionGrouper
         foreach (var (holderId, previous) in previousByHolder)
         {
             if (currentByHolder.ContainsKey(holderId))
+                continue;
+
+            // A holder that didn't file ANY 13F for the current quarter
+            // hasn't sold out — they just haven't reported yet. Skip them
+            // from the Sold-Out bucket unless the caller explicitly opts
+            // out of the filter (filersWithCurrentQuarterFilings == null).
+            if (
+                filersWithCurrentQuarterFilings != null
+                && !filersWithCurrentQuarterFilings.Contains(holderId)
+            )
                 continue;
 
             result[PositionChangeType.SoldOut]
