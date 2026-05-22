@@ -15,9 +15,7 @@ namespace Equibles.UnitTests.Sec.Normalizers;
 /// </summary>
 public class TableNormalizationStepImageOnlyColumnPreservationTests
 {
-    [Fact(
-        Skip = "GH-1797 — IsColumnEmpty looks at cell.TextContent only; a column whose cells each contain only an <img> (or other non-text visual element) is dropped by RemoveEmptyColumns"
-    )]
+    [Fact]
     public void Execute_ColumnWhereEveryCellIsImageOnly_PreservesColumn()
     {
         // The right column on every row is a single <img> — no text, no

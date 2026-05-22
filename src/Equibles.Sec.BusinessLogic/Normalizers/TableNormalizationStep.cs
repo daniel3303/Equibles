@@ -138,26 +138,36 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
 
         foreach (var cell in cells)
         {
-            var cellText = cell.TextContent.Trim();
-            var cellHtml = cell.InnerHtml.Trim();
-
-            if (IsMeaningfulText(cellText) && cellText != " ")
+            if (!IsCellEmpty(cell))
             {
                 return false;
             }
+        }
 
-            if (
-                !string.IsNullOrWhiteSpace(cellHtml)
-                && cellHtml != "&nbsp;"
-                && cellHtml != "&#160;"
-                && !cellHtml.Contains(
-                    "white-space:pre-wrap;font-family:Arial;font-kerning:none;min-width:fit-content;\"> </span>"
-                )
-                && !IsOnlyWhitespaceSpan(cellHtml)
+        return true;
+    }
+
+    private bool IsCellEmpty(IElement cell)
+    {
+        var cellText = cell.TextContent.Trim();
+        var cellHtml = cell.InnerHtml.Trim();
+
+        if (IsMeaningfulText(cellText) && cellText != " ")
+        {
+            return false;
+        }
+
+        if (
+            !string.IsNullOrWhiteSpace(cellHtml)
+            && cellHtml != "&nbsp;"
+            && cellHtml != "&#160;"
+            && !cellHtml.Contains(
+                "white-space:pre-wrap;font-family:Arial;font-kerning:none;min-width:fit-content;\"> </span>"
             )
-            {
-                return false;
-            }
+            && !IsOnlyWhitespaceSpan(cellHtml)
+        )
+        {
+            return false;
         }
 
         return true;
@@ -208,13 +218,9 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
         foreach (var row in rows)
         {
             var cells = HtmlElementExtensions.DirectChildCells(row);
-            if (colIndex < cells.Count)
+            if (colIndex < cells.Count && !IsCellEmpty(cells[colIndex]))
             {
-                var cellText = cells[colIndex].TextContent.Trim();
-                if (IsMeaningfulText(cellText))
-                {
-                    return false;
-                }
+                return false;
             }
         }
 
