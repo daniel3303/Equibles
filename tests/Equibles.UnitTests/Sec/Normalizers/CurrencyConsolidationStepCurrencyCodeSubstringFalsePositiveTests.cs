@@ -18,9 +18,7 @@ namespace Equibles.UnitTests.Sec.Normalizers;
 /// </summary>
 public class CurrencyConsolidationStepCurrencyCodeSubstringFalsePositiveTests
 {
-    [Fact(
-        Skip = "GH-1795 — DetectCurrency's text.Contains(code) branch substring-matches ISO codes inside unrelated acronyms (USDA/USDC/EUREKA), shredding labels and appending a misleading currency note"
-    )]
+    [Fact]
     public void Execute_LabelEmbedsCurrencyCodeAsSubstring_LeavesTableUnchanged()
     {
         // "USDA inspected facilities" embeds "USD" inside the acronym "USDA"

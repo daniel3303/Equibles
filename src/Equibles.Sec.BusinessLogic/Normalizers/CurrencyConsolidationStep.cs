@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 
@@ -13,6 +14,14 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
         ["JPY"] = ("¥", "Japanese Yen"),
         ["INR"] = ("₹", "Indian Rupees"),
     };
+
+    // Word-boundary match per code so acronyms like USDA / USDC / EUREKA that
+    // embed an ISO code as a substring are not mistaken for currency cells.
+    private static readonly Dictionary<string, Regex> CurrencyCodeRegexes =
+        CurrencyMap.Keys.ToDictionary(
+            code => code,
+            code => new Regex($@"\b{Regex.Escape(code)}\b", RegexOptions.Compiled)
+        );
 
     public void Execute(IHtmlDocument doc)
     {
@@ -98,7 +107,7 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
     {
         foreach (var (code, (symbol, _)) in CurrencyMap)
         {
-            if (text.Contains(symbol) || text.Contains(code))
+            if (text.Contains(symbol) || CurrencyCodeRegexes[code].IsMatch(text))
                 return code;
         }
         return null;
@@ -136,7 +145,8 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
     {
         foreach (var (code, (symbol, _)) in CurrencyMap)
         {
-            text = text.Replace(symbol, "").Replace(code, "");
+            text = text.Replace(symbol, "");
+            text = CurrencyCodeRegexes[code].Replace(text, "");
         }
         return text.Trim();
     }
