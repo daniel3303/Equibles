@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Common.RateLimiter;
 using Equibles.Integrations.Yahoo.Contracts;
@@ -384,21 +385,17 @@ public class YahooFinanceClient : IYahooFinanceClient
 
     // ── Helpers ──
 
-    private static void ApplyBrowserHeaders(HttpClient client)
-    {
-        client.DefaultRequestHeaders.UserAgent.ParseAdd(BrowserUserAgent);
-        client.DefaultRequestHeaders.TryAddWithoutValidation(
-            "Accept",
-            "text/html,application/json,*/*"
-        );
-        client.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Language", "en-US,en;q=0.9");
-    }
+    private static void ApplyBrowserHeaders(HttpClient client) =>
+        ApplyBrowserHeaders(client.DefaultRequestHeaders);
 
-    private static void ApplyBrowserHeaders(HttpRequestMessage request)
+    private static void ApplyBrowserHeaders(HttpRequestMessage request) =>
+        ApplyBrowserHeaders(request.Headers);
+
+    private static void ApplyBrowserHeaders(HttpRequestHeaders headers)
     {
-        request.Headers.UserAgent.ParseAdd(BrowserUserAgent);
-        request.Headers.TryAddWithoutValidation("Accept", "text/html,application/json,*/*");
-        request.Headers.TryAddWithoutValidation("Accept-Language", "en-US,en;q=0.9");
+        headers.UserAgent.ParseAdd(BrowserUserAgent);
+        headers.TryAddWithoutValidation("Accept", "text/html,application/json,*/*");
+        headers.TryAddWithoutValidation("Accept-Language", "en-US,en;q=0.9");
     }
 
     private static long ToUnixTimestamp(DateOnly date)
