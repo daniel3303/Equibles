@@ -192,12 +192,12 @@ public class HoldingsActivityController : BaseController
         viewModel.Rows = pageRows
             .Select(r =>
             {
-                stocks.TryGetValue(r.CommonStockId, out var stock);
+                var (ticker, name) = ResolveStockCells(stocks, r.CommonStockId);
                 return new HoldingsMostHeldRow
                 {
                     CommonStockId = r.CommonStockId,
-                    Ticker = stock?.Ticker ?? "—",
-                    Name = stock?.Name ?? "Unknown",
+                    Ticker = ticker,
+                    Name = name,
                     CurrentFilerCount = r.CurrentFilerCount,
                     PreviousFilerCount = r.PreviousFilerCount,
                     CurrentValue = r.CurrentValue,
@@ -216,12 +216,12 @@ public class HoldingsActivityController : BaseController
         IDictionary<Guid, StockLabel> stocks
     )
     {
-        stocks.TryGetValue(churn.CommonStockId, out var stock);
+        var (ticker, name) = ResolveStockCells(stocks, churn.CommonStockId);
         return new HoldingsActivityRow
         {
             CommonStockId = churn.CommonStockId,
-            Ticker = stock?.Ticker ?? "—",
-            Name = stock?.Name ?? "Unknown",
+            Ticker = ticker,
+            Name = name,
             NewFilerCount = churn.NewFilerCount,
             SoldOutFilerCount = churn.SoldOutFilerCount,
         };
@@ -232,17 +232,26 @@ public class HoldingsActivityController : BaseController
         IDictionary<Guid, StockLabel> stocks
     )
     {
-        stocks.TryGetValue(activity.CommonStockId, out var stock);
+        var (ticker, name) = ResolveStockCells(stocks, activity.CommonStockId);
         return new HoldingsActivityRow
         {
             CommonStockId = activity.CommonStockId,
-            Ticker = stock?.Ticker ?? "—",
-            Name = stock?.Name ?? "Unknown",
+            Ticker = ticker,
+            Name = name,
             DeltaShares = activity.DeltaShares,
             DeltaValue = activity.DeltaValue,
             CurrentFilerCount = activity.CurrentFilerCount,
             PreviousFilerCount = activity.PreviousFilerCount,
         };
+    }
+
+    private static (string Ticker, string Name) ResolveStockCells(
+        IDictionary<Guid, StockLabel> stocks,
+        Guid stockId
+    )
+    {
+        stocks.TryGetValue(stockId, out var stock);
+        return (stock?.Ticker ?? "—", stock?.Name ?? "Unknown");
     }
 
     private class StockLabel
