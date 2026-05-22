@@ -195,8 +195,8 @@ public class StandaloneXbrlParser
         {
             var numerator = divide.Element(NumeratorElement);
             var denominator = divide.Element(DenominatorElement);
-            var numeratorMeasure = numerator?.Element(MeasureElement)?.Value;
-            var denominatorMeasure = denominator?.Element(MeasureElement)?.Value;
+            var numeratorMeasure = numerator?.Element(MeasureElement)?.Value?.Trim();
+            var denominatorMeasure = denominator?.Element(MeasureElement)?.Value?.Trim();
             if (string.IsNullOrEmpty(numeratorMeasure) || string.IsNullOrEmpty(denominatorMeasure))
                 return null;
             var numeratorLocal = StripPrefix(numeratorMeasure);
@@ -207,7 +207,7 @@ public class StandaloneXbrlParser
         }
 
         var measure = unitElement.Element(MeasureElement);
-        var measureValue = measure?.Value;
+        var measureValue = measure?.Value?.Trim();
         if (string.IsNullOrEmpty(measureValue))
             return null;
         return StripPrefix(measureValue);
