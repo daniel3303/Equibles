@@ -314,7 +314,7 @@ public partial class HouseDisclosureClient
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < MaxRetries)
             {
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+                var delay = ExponentialBackoff(attempt);
                 _logger.LogWarning(
                     "House disclosure rate limited (429), retrying in {Delay}s",
                     delay.TotalSeconds
@@ -327,7 +327,7 @@ public partial class HouseDisclosureClient
 
             if ((int)response.StatusCode >= 500 && attempt < MaxRetries)
             {
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+                var delay = ExponentialBackoff(attempt);
                 _logger.LogWarning(
                     "House disclosure server error ({StatusCode}), retrying in {Delay}s",
                     (int)response.StatusCode,
@@ -345,6 +345,9 @@ public partial class HouseDisclosureClient
             $"Max retries ({MaxRetries}) exceeded for House disclosure request: {url}"
         );
     }
+
+    private static TimeSpan ExponentialBackoff(int attempt) =>
+        TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
 
     // Owner codes: SP (Spouse), JT (Joint), DC (Dependent Child), or at line start
     [GeneratedRegex(@"^(SP|JT|DC|Self)\b", RegexOptions.IgnoreCase)]
