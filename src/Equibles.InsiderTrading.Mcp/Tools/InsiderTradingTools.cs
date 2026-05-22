@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
@@ -48,9 +49,9 @@ public class InsiderTradingTools
         return Execute(
             async () =>
             {
-                var stock = await _commonStockRepository.GetByTicker(ticker);
-                if (stock == null)
-                    return $"Stock '{ticker}' not found.";
+                var (stock, stockError) = await ResolveStockByTicker(ticker);
+                if (stockError != null)
+                    return stockError;
 
                 var transactions = await _transactionRepository
                     .GetByStock(stock)
@@ -108,9 +109,9 @@ public class InsiderTradingTools
         return Execute(
             async () =>
             {
-                var stock = await _commonStockRepository.GetByTicker(ticker);
-                if (stock == null)
-                    return $"Stock '{ticker}' not found.";
+                var (stock, stockError) = await ResolveStockByTicker(ticker);
+                if (stockError != null)
+                    return stockError;
 
                 var byStock = _transactionRepository.GetByStock(stock);
 
@@ -221,5 +222,13 @@ public class InsiderTradingTools
         if (owner.IsTenPercentOwner)
             roles.Add("10% Owner");
         return roles.Count > 0 ? string.Join(", ", roles) : "Insider";
+    }
+
+    private async Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker)
+    {
+        var stock = await _commonStockRepository.GetByTicker(ticker);
+        if (stock == null)
+            return (null, $"Stock '{ticker}' not found.");
+        return (stock, null);
     }
 }
