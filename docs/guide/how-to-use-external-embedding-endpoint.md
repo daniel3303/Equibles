@@ -41,7 +41,7 @@ Use this when you want to avoid the extra ~3 GB Docker download, share a GPU acr
     docker compose up -d
     ```
 
-4. **Check progress on the Status page** at `http://localhost:8080/status`. The **chunks with embeddings** count should climb from zero. If it stays at zero, check `docker compose logs worker` for `Embedding endpoint returned`-style errors — the most common causes are an unreachable URL, the model not pulled on the endpoint, or a model-name mismatch.
+4. **Check progress on the Status page** at `http://localhost:8080/status`. The **chunks with embeddings** count should climb from zero. If it stays at zero, check `docker compose logs worker` for errors and confirm: the endpoint URL is reachable from the worker container, the model is available on the endpoint, and `Embedding__ModelName` matches the model name exactly.
 
 5. **Try a semantic-search prompt** against your AI assistant once the first batch of chunks is embedded (a few minutes):
 
