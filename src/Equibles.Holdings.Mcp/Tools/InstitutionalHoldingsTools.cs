@@ -935,9 +935,9 @@ public class InstitutionalHoldingsTools
                 )
                     return "Unknown bucket. Use one of: initiated, increased, reduced, exited (or omit).";
 
-                var holder = await FindHolderByName(institutionName);
-                if (holder == null)
-                    return $"No institution found matching '{institutionName}'.";
+                var (holder, holderError) = await ResolveHolderByName(institutionName);
+                if (holderError != null)
+                    return holderError;
 
                 var reportDates = await GetReportDatesByHolder(holder).ToListAsync();
                 if (reportDates.Count < 2)
@@ -1055,12 +1055,12 @@ public class InstitutionalHoldingsTools
         return Execute(
             async () =>
             {
-                var holder1 = await FindHolderByName(institutionName1);
-                if (holder1 == null)
-                    return $"No institution found matching '{institutionName1}'.";
-                var holder2 = await FindHolderByName(institutionName2);
-                if (holder2 == null)
-                    return $"No institution found matching '{institutionName2}'.";
+                var (holder1, holder1Error) = await ResolveHolderByName(institutionName1);
+                if (holder1Error != null)
+                    return holder1Error;
+                var (holder2, holder2Error) = await ResolveHolderByName(institutionName2);
+                if (holder2Error != null)
+                    return holder2Error;
 
                 var (selected, error) = await ResolveCommonReportDate(holder1, holder2, reportDate);
                 if (error != null)
@@ -1279,6 +1279,14 @@ public class InstitutionalHoldingsTools
     private Task<InstitutionalHolder> FindHolderByName(string name) =>
         _holderRepository.Search(name ?? string.Empty).OrderBy(h => h.Name).FirstOrDefaultAsync();
 
+    private async Task<(InstitutionalHolder Holder, string Error)> ResolveHolderByName(string name)
+    {
+        var holder = await FindHolderByName(name);
+        if (holder == null)
+            return (null, $"No institution found matching '{name}'.");
+        return (holder, null);
+    }
+
     private async Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker)
     {
         var stock = await _commonStockRepository.GetByTicker(ticker);
@@ -1318,9 +1326,9 @@ public class InstitutionalHoldingsTools
         string Error
     )> ResolveHolderAndTargetDate(string institutionName, string reportDate)
     {
-        var holder = await FindHolderByName(institutionName);
-        if (holder == null)
-            return (null, null, default, $"No institution found matching '{institutionName}'.");
+        var (holder, holderError) = await ResolveHolderByName(institutionName);
+        if (holderError != null)
+            return (null, null, default, holderError);
 
         var reportDates = await GetReportDatesByHolder(holder).ToListAsync();
         if (reportDates.Count == 0)
