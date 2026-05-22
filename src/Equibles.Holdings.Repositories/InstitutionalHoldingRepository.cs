@@ -84,29 +84,8 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // names. The caller decides the order (typically CurrentFilerCount desc);
     // the % of 13F universe is derived against
     // GetUniqueFilerCount(currentReportDate).
-    public IQueryable<MarketWideStockActivity> GetMostHeld(DateOnly current, DateOnly previous)
-    {
-        return GetAll()
-            .Where(h => h.ReportDate == current || h.ReportDate == previous)
-            .GroupBy(h => h.CommonStockId)
-            .Select(g => new MarketWideStockActivity
-            {
-                CommonStockId = g.Key,
-                CurrentShares = g.Sum(h => h.ReportDate == current ? h.Shares : 0L),
-                PreviousShares = g.Sum(h => h.ReportDate == previous ? h.Shares : 0L),
-                CurrentValue = g.Sum(h => h.ReportDate == current ? h.Value : 0L),
-                PreviousValue = g.Sum(h => h.ReportDate == previous ? h.Value : 0L),
-                CurrentFilerCount = g.Where(h => h.ReportDate == current)
-                    .Select(h => h.InstitutionalHolderId)
-                    .Distinct()
-                    .Count(),
-                PreviousFilerCount = g.Where(h => h.ReportDate == previous)
-                    .Select(h => h.InstitutionalHolderId)
-                    .Distinct()
-                    .Count(),
-            })
-            .Where(a => a.CurrentFilerCount > 0);
-    }
+    public IQueryable<MarketWideStockActivity> GetMostHeld(DateOnly current, DateOnly previous) =>
+        GetQuarterlyActivity(current, previous).Where(a => a.CurrentFilerCount > 0);
 
     // Total distinct 13F filers reporting on a given quarter — the denominator
     // for the "% of 13F universe" column on the most-held page.
