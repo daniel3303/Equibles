@@ -20,7 +20,7 @@ public interface IDocumentPersistenceService
         DateOnly reportingDate,
         DateOnly reportingForDate,
         string sourceUrl,
-        string accessionNumber,
+        string accessionNumber = null,
         CancellationToken cancellationToken = default
     );
 }
