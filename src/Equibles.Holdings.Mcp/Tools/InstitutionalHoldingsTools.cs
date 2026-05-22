@@ -623,10 +623,10 @@ public class InstitutionalHoldingsTools
         for (var i = 0; i < rows.Count; i++)
         {
             var r = rows[i];
-            stocks.TryGetValue(r.CommonStockId, out var s);
+            var (ticker, name) = ResolveStockCells(stocks, r.CommonStockId);
             var sign = r.DeltaShares > 0 ? "+" : "";
             result.AppendLine(
-                $"| {i + 1} | {s?.Ticker ?? "—"} | {s?.Name ?? "Unknown"} | {sign}{r.DeltaShares:N0} | {r.DeltaValue / 1_000_000m:+#,##0.0;-#,##0.0;0.0} |"
+                $"| {i + 1} | {ticker} | {name} | {sign}{r.DeltaShares:N0} | {r.DeltaValue / 1_000_000m:+#,##0.0;-#,##0.0;0.0} |"
             );
         }
         return result.ToString();
@@ -664,11 +664,9 @@ public class InstitutionalHoldingsTools
         for (var i = 0; i < rows.Count; i++)
         {
             var r = rows[i];
-            stocks.TryGetValue(r.CommonStockId, out var s);
+            var (ticker, name) = ResolveStockCells(stocks, r.CommonStockId);
             var count = normalizedBucket == "new-positions" ? r.NewFilerCount : r.SoldOutFilerCount;
-            result.AppendLine(
-                $"| {i + 1} | {s?.Ticker ?? "—"} | {s?.Name ?? "Unknown"} | {count:N0} |"
-            );
+            result.AppendLine($"| {i + 1} | {ticker} | {name} | {count:N0} |");
         }
         return result.ToString();
     }
@@ -761,12 +759,12 @@ public class InstitutionalHoldingsTools
         for (var i = 0; i < rows.Count; i++)
         {
             var r = rows[i];
-            stocks.TryGetValue(r.CommonStockId, out var s);
+            var (ticker, name) = ResolveStockCells(stocks, r.CommonStockId);
             var pct = universeFilers > 0 ? (double)r.CurrentFilerCount / universeFilers * 100.0 : 0;
             var deltaFilers = r.CurrentFilerCount - r.PreviousFilerCount;
             var filerSign = deltaFilers > 0 ? "+" : "";
             result.AppendLine(
-                $"| {i + 1} | {s?.Ticker ?? "—"} | {s?.Name ?? "Unknown"} | {r.CurrentFilerCount:N0} | {filerSign}{deltaFilers:N0} | {r.CurrentValue / 1_000_000m:N1} | {r.DeltaValue / 1_000_000m:+#,##0.0;-#,##0.0;0.0} | {pct:F1}% |"
+                $"| {i + 1} | {ticker} | {name} | {r.CurrentFilerCount:N0} | {filerSign}{deltaFilers:N0} | {r.CurrentValue / 1_000_000m:N1} | {r.DeltaValue / 1_000_000m:+#,##0.0;-#,##0.0;0.0} | {pct:F1}% |"
             );
         }
         return result.ToString();
@@ -1303,6 +1301,15 @@ public class InstitutionalHoldingsTools
             .GetAll()
             .Where(s => stockIds.Contains(s.Id))
             .ToDictionaryAsync(s => s.Id);
+
+    private static (string Ticker, string Name) ResolveStockCells(
+        IDictionary<Guid, CommonStock> stocks,
+        Guid stockId
+    )
+    {
+        stocks.TryGetValue(stockId, out var s);
+        return (s?.Ticker ?? "—", s?.Name ?? "Unknown");
+    }
 
     private async Task<(
         InstitutionalHolder Holder,
