@@ -32,7 +32,7 @@
                     <button class="btn btn-xs join-item btn-active" data-status-interval="5">5s</button>
                     <button class="btn btn-xs join-item" data-status-interval="30">30s</button>
                 </div>
-                <input type="checkbox" class="toggle toggle-sm toggle-success" checked data-status-toggle title="Auto-refresh" />
+                <input type="checkbox" class="toggle toggle-sm toggle-success" checked data-status-toggle title="Auto-refresh" aria-label="Auto-refresh" />
             </div>
         </div>
     </div>
@@ -217,7 +217,8 @@
             <form asp-action="Index" class="mb-4">
                 <input type="hidden" name="source" value="@sourceFilter" />
                 <input type="text" name="search" value="@search" placeholder="Search errors..."
-                       class="input input-bordered input-sm w-full max-w-md" />
+                       class="input input-bordered input-sm w-full max-w-md"
+                       aria-label="Search errors" />
             </form>
 
             @if (Model.RecentErrors.Count == 0) {
