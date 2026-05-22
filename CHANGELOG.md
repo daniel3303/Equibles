@@ -11,6 +11,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- `IDocumentPersistenceService.Save` accepts `accessionNumber` as an optional
+  parameter (`= null`) so non-SEC document callers (e.g. earnings-call
+  transcripts) don't have to thread a value they don't have. SEC scrapers
+  still pass the accession number explicitly; the FinancialFacts importer
+  continues to link facts to documents via the existing
+  `WHERE AccessionNumber IS NOT NULL` filter.
+
 ### Deprecated
 
 ### Removed
