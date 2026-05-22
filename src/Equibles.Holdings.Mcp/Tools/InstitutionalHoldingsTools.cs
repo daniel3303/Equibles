@@ -616,11 +616,7 @@ public class InstitutionalHoldingsTools
         if (rows.Count == 0)
             return result + "_No stocks moved in this direction this quarter._";
 
-        var stockIds = rows.Select(r => r.CommonStockId).ToList();
-        var stocks = await _commonStockRepository
-            .GetAll()
-            .Where(s => stockIds.Contains(s.Id))
-            .ToDictionaryAsync(s => s.Id);
+        var stocks = await LoadStocksByIds(rows.Select(r => r.CommonStockId).ToList());
 
         result.AppendLine("| # | Ticker | Company | Δ Shares | Δ Value ($M) |");
         result.AppendLine("|---|--------|---------|---------|-------------|");
@@ -660,11 +656,7 @@ public class InstitutionalHoldingsTools
         if (rows.Count == 0)
             return result + "_No stocks in this bucket this quarter._";
 
-        var stockIds = rows.Select(r => r.CommonStockId).ToList();
-        var stocks = await _commonStockRepository
-            .GetAll()
-            .Where(s => stockIds.Contains(s.Id))
-            .ToDictionaryAsync(s => s.Id);
+        var stocks = await LoadStocksByIds(rows.Select(r => r.CommonStockId).ToList());
 
         var label = normalizedBucket == "new-positions" ? "# Filers Initiated" : "# Filers Exited";
         result.AppendLine($"| # | Ticker | Company | {label} |");
@@ -728,11 +720,7 @@ public class InstitutionalHoldingsTools
                 var universeFilers = await _holdingRepository
                     .GetUniqueFilerIds(targetDate)
                     .CountAsync();
-                var stockIds = rows.Select(r => r.CommonStockId).ToList();
-                var stocks = await _commonStockRepository
-                    .GetAll()
-                    .Where(s => stockIds.Contains(s.Id))
-                    .ToDictionaryAsync(s => s.Id);
+                var stocks = await LoadStocksByIds(rows.Select(r => r.CommonStockId).ToList());
 
                 return RenderMostHeldStocksTable(
                     targetDate,
@@ -1309,6 +1297,12 @@ public class InstitutionalHoldingsTools
             .GetByHolder(holder, reportDate)
             .Include(h => h.CommonStock)
             .ToListAsync();
+
+    private Task<Dictionary<Guid, CommonStock>> LoadStocksByIds(List<Guid> stockIds) =>
+        _commonStockRepository
+            .GetAll()
+            .Where(s => stockIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id);
 
     private async Task<(
         InstitutionalHolder Holder,
