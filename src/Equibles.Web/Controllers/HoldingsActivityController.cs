@@ -26,10 +26,7 @@ public class HoldingsActivityController : BaseController
     [HttpGet("~/holdings/activity")]
     public async Task<IActionResult> Activity(DateOnly? date)
     {
-        var reportDates = await _holdingRepository
-            .GetAvailableReportDates()
-            .OrderByDescending(d => d)
-            .ToListAsync();
+        var reportDates = await LoadAvailableReportDates();
 
         var viewModel = new HoldingsActivityViewModel { AvailableDates = reportDates };
         if (reportDates.Count == 0)
@@ -108,10 +105,7 @@ public class HoldingsActivityController : BaseController
     [HttpGet("~/Holdings/MostHeld")]
     public async Task<IActionResult> MostHeld(DateOnly? date, string sort, int page = 1)
     {
-        var reportDates = await _holdingRepository
-            .GetAvailableReportDates()
-            .OrderByDescending(d => d)
-            .ToListAsync();
+        var reportDates = await LoadAvailableReportDates();
 
         var normalizedSort = sort switch
         {
@@ -230,6 +224,9 @@ public class HoldingsActivityController : BaseController
             PreviousFilerCount = activity.PreviousFilerCount,
         };
     }
+
+    private Task<List<DateOnly>> LoadAvailableReportDates() =>
+        _holdingRepository.GetAvailableReportDates().OrderByDescending(d => d).ToListAsync();
 
     private static (DateOnly Selected, DateOnly? Previous) ResolveSelectedAndPriorDate(
         DateOnly? requested,
