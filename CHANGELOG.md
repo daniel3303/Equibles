@@ -9,12 +9,33 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [1.1.1] — 2026-05-22
+
+### Added
+
 - Covering index on `InstitutionalHolding (CommonStockId, ReportDate)` with
   `INCLUDE (InstitutionalHolderId, Value, Shares)`. Lets the per-stock
   ownership-trend rollup on `/Stocks/{ticker}/Holdings` run as an index-only
   scan instead of a bitmap heap scan with lossy blocks. Heavy names like
   AAPL (~76k holdings across 18+ quarters) dropped from ~14 s to ~3 s cold
-  load locally; warm cached responses are unaffected.
+  load locally; warm cached responses are unaffected. The annotation is
+  inlined directly into the `Initial` migration — fresh deployments and
+  upgrades from earlier `1.1.x` both run a single `CreateIndex` with the
+  `INCLUDE` list attached.
+- New end-user guide pages (`docs/guide/`): how-to — change how far back
+  data syncs; how-to — use the existing embedding endpoint; FAQ —
+  disable the update-available banner; FAQ — how much disk space
+  Equibles needs; FAQ — wipe the database and start over.
 
 ### Changed
 
@@ -25,13 +46,61 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   continues to link facts to documents via the existing
   `WHERE AccessionNumber IS NOT NULL` filter.
 
-### Deprecated
-
-### Removed
-
 ### Fixed
 
-### Security
+#### SEC document normalization
+
+- `TableNormalizationStep` no longer drops rows whose only content is an
+  `<img>` (or any other non-text visual element — `<br>`, `<canvas>`,
+  `<svg>`, `<iframe>`). The previous behavior erased signature-image rows
+  on 10-K signature pages because `IsOnlyWhitespaceSpan` treated "zero
+  spans" as "visually empty".
+- `TableNormalizationStep` also no longer drops *columns* whose cells each
+  contain only a non-text visual element. `IsColumnEmpty` previously
+  checked `cell.TextContent` alone; the row-side HTML-aware emptiness
+  check is now shared between rows and columns.
+- `CurrencyConsolidationStep` no longer treats unrelated uppercase
+  acronyms (`USDA`, `USDC`, `EUREKA`) as currency cells. ISO code
+  detection switched from `text.Contains(code)` to a word-boundary match,
+  so a row label like "USDA inspected facilities" is left intact and no
+  longer triggers a spurious "All values are in US Dollars." note.
+- `CurrencyConsolidationStep` re-applies the per-row gate during the
+  processing pass, so a header row with a non-empty next cell (e.g. a
+  "Q1" label in column 1) is no longer silently overwritten when another
+  row in the same column trips the consolidation gate.
+- `PaginationRemovalStep` requires a word boundary after `Part` when
+  scanning paragraphs after an `<hr>`. Previously a paragraph starting
+  with "Partnership agreement", "Particular circumstances", or "Parts
+  inventory" was removed alongside genuine "Part I" / "Part II" headers.
+- `HeadingConversionStep.IsPartHeading` no longer throws
+  `IndexOutOfRangeException` when the post-`PART` suffix is composed
+  entirely of split delimiters (e.g. `Part -`). The throw used to abort
+  the whole normalization pipeline for the affected filing.
+
+#### SEC financial facts (XBRL)
+
+- `StandaloneXbrlParser.ResolveUnit` trims leading/trailing whitespace
+  around the `xbrli:measure` QName before resolving, per the XBRL spec's
+  `collapse` whitespace facet. A padded measure like `"  iso4217:USD  "`
+  now emits `Unit = "USD"` instead of `"USD  "`, matching
+  `InlineXbrlParser.ResolveUnit`. Fixes silent value-column
+  misclassification in downstream FinancialFacts tools when the two
+  parsers disagreed on the same logical input.
+- `StripPrefix` / `ResolveUnit` drop XBRL facts whose measure has an
+  empty local name (e.g. `iso4217:`). Previously the fact ended up in
+  the output with `Unit = ""`, which is unusable downstream.
+
+#### Web / accessibility
+
+- AJAX modal titles use `<h2>` to keep the page heading hierarchy intact
+  (was an `<h5>`, producing a heading-level skip from the navbar `<h1>`).
+- MCP-client accordion radio buttons, the worker status page search box,
+  and the status page auto-refresh toggle now carry `aria-label`s for
+  screen readers.
+- The site navbar is wrapped in a `<header>` landmark so assistive tech
+  can jump to it directly.
+- The home-page CTA row wraps on narrow viewports instead of overflowing
+  horizontally.
 
 ## [1.1.0] — 2026-05-22
 
@@ -54,7 +123,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   (filer count, delta filer count, total value, delta value, percent of
   float, new / sold-out positions, industry), CSV export, and configurable
   comparison quarter.
-- `/Institutions` — browseable, searchable index of every 13F filer with
+- `/Institutions` — browsable, searchable index of every 13F filer with
   per-filer position count and total dollar value at the latest 13F quarter.
   Sort by name, position count desc, or value desc.
 - `/Institutions/Compare` — side-by-side overlap view between two filers,
@@ -313,6 +382,7 @@ First tagged release.
 - Background worker — scrapers and document processor.
 - Docker Compose stack (ParadeDB + web + MCP + worker), with an optional vector-embedding profile.
 
-[Unreleased]: https://github.com/daniel3303/Equibles/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/daniel3303/Equibles/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/daniel3303/Equibles/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/daniel3303/Equibles/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/daniel3303/Equibles/releases/tag/v1.0.0
