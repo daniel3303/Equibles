@@ -9,6 +9,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Covering index on `InstitutionalHolding (CommonStockId, ReportDate)` with
+  `INCLUDE (InstitutionalHolderId, Value, Shares)`. Lets the per-stock
+  ownership-trend rollup on `/Stocks/{ticker}/Holdings` run as an index-only
+  scan instead of a bitmap heap scan with lossy blocks. Heavy names like
+  AAPL (~76k holdings across 18+ quarters) dropped from ~14 s to ~3 s cold
+  load locally; warm cached responses are unaffected.
+
 ### Changed
 
 - `IDocumentPersistenceService.Save` accepts `accessionNumber` as an optional
