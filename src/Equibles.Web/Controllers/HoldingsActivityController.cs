@@ -35,15 +35,8 @@ public class HoldingsActivityController : BaseController
         if (reportDates.Count == 0)
             return View(viewModel);
 
-        var requestedIndex = date.HasValue ? reportDates.IndexOf(date.Value) : -1;
-        var selectedIndex = requestedIndex < 0 ? 0 : requestedIndex;
-        var selectedDate = reportDates[selectedIndex];
+        var (selectedDate, previousDate) = ResolveSelectedAndPriorDate(date, reportDates);
         viewModel.SelectedDate = selectedDate;
-
-        var previousDate =
-            selectedIndex < reportDates.Count - 1
-                ? reportDates[selectedIndex + 1]
-                : (DateOnly?)null;
         viewModel.PreviousDate = previousDate;
         if (!previousDate.HasValue)
             return View(viewModel);
@@ -135,15 +128,8 @@ public class HoldingsActivityController : BaseController
         if (reportDates.Count == 0)
             return View(viewModel);
 
-        var requestedIndex = date.HasValue ? reportDates.IndexOf(date.Value) : -1;
-        var selectedIndex = requestedIndex < 0 ? 0 : requestedIndex;
-        var selectedDate = reportDates[selectedIndex];
+        var (selectedDate, previousDate) = ResolveSelectedAndPriorDate(date, reportDates);
         viewModel.SelectedDate = selectedDate;
-
-        var previousDate =
-            selectedIndex < reportDates.Count - 1
-                ? reportDates[selectedIndex + 1]
-                : (DateOnly?)null;
         viewModel.PreviousDate = previousDate;
 
         // GetMostHeld needs both args; when no prior quarter exists we pass the
@@ -243,6 +229,21 @@ public class HoldingsActivityController : BaseController
             CurrentFilerCount = activity.CurrentFilerCount,
             PreviousFilerCount = activity.PreviousFilerCount,
         };
+    }
+
+    private static (DateOnly Selected, DateOnly? Previous) ResolveSelectedAndPriorDate(
+        DateOnly? requested,
+        List<DateOnly> reportDates
+    )
+    {
+        var requestedIndex = requested.HasValue ? reportDates.IndexOf(requested.Value) : -1;
+        var selectedIndex = requestedIndex < 0 ? 0 : requestedIndex;
+        var selected = reportDates[selectedIndex];
+        var previous =
+            selectedIndex < reportDates.Count - 1
+                ? reportDates[selectedIndex + 1]
+                : (DateOnly?)null;
+        return (selected, previous);
     }
 
     private static (string Ticker, string Name) ResolveStockCells(
