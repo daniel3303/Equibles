@@ -1089,13 +1089,24 @@ public class InstitutionalHoldingsTools
         string reportDate
     )
     {
-        var dates1 = await GetReportDatesByHolder(holder1).ToListAsync();
-        var dates2 = await GetReportDatesByHolder(holder2).ToListAsync();
-        var common = dates1.Intersect(dates2).OrderByDescending(d => d).ToList();
+        var common = await ComputeCommonReportDates([holder1, holder2]);
         if (common.Count == 0)
             return (default, $"{holder1.Name} and {holder2.Name} share no common report dates.");
 
         return (ResolveReportDate(reportDate, common), null);
+    }
+
+    private async Task<List<DateOnly>> ComputeCommonReportDates(IList<InstitutionalHolder> holders)
+    {
+        var perHolder = new List<List<DateOnly>>(holders.Count);
+        foreach (var holder in holders)
+            perHolder.Add(await GetReportDatesByHolder(holder).ToListAsync());
+
+        return perHolder
+            .Skip(1)
+            .Aggregate((IEnumerable<DateOnly>)perHolder[0], (acc, next) => acc.Intersect(next))
+            .OrderByDescending(d => d)
+            .ToList();
     }
 
     private static string RenderOverlapTable(
@@ -1188,20 +1199,7 @@ public class InstitutionalHoldingsTools
                 if (holders.Count < 2)
                     return $"Could not resolve enough institutions. Missing: {string.Join(", ", missing)}.";
 
-                var perHolderDates = new List<List<DateOnly>>();
-                foreach (var holder in holders)
-                {
-                    var dates = await GetReportDatesByHolder(holder).ToListAsync();
-                    perHolderDates.Add(dates);
-                }
-                var common = perHolderDates
-                    .Skip(1)
-                    .Aggregate(
-                        (IEnumerable<DateOnly>)perHolderDates[0],
-                        (acc, next) => acc.Intersect(next)
-                    )
-                    .OrderByDescending(d => d)
-                    .ToList();
+                var common = await ComputeCommonReportDates(holders);
                 if (common.Count == 0)
                     return "The selected institutions share no common report dates.";
 
