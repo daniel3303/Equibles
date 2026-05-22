@@ -141,14 +141,8 @@ public class ProfilesController : BaseController
             );
 
         var prior = distinctReportDates[selectedIndex + 1];
-        var currentHoldings = await _institutionalHoldingRepository
-            .GetByHolder(holder, selected)
-            .Include(h => h.CommonStock)
-            .ToListAsync();
-        var previousHoldings = await _institutionalHoldingRepository
-            .GetByHolder(holder, prior)
-            .Include(h => h.CommonStock)
-            .ToListAsync();
+        var currentHoldings = await LoadHoldingsByHolderWithStock(holder, selected);
+        var previousHoldings = await LoadHoldingsByHolderWithStock(holder, prior);
 
         var grouped = HolderQuarterlyActivityCalculator.Group(currentHoldings, previousHoldings);
 
@@ -400,10 +394,7 @@ public class ProfilesController : BaseController
             new List<(InstitutionalHolder Holder, IReadOnlyList<InstitutionalHolding> Holdings)>();
         foreach (var holder in holders)
         {
-            var holdings = await _institutionalHoldingRepository
-                .GetByHolder(holder, selected)
-                .Include(h => h.CommonStock)
-                .ToListAsync();
+            var holdings = await LoadHoldingsByHolderWithStock(holder, selected);
             perFund.Add((holder, holdings));
         }
         return perFund;
@@ -415,6 +406,15 @@ public class ProfilesController : BaseController
             .Select(h => h.ReportDate)
             .Distinct()
             .OrderByDescending(d => d)
+            .ToListAsync();
+
+    private Task<List<InstitutionalHolding>> LoadHoldingsByHolderWithStock(
+        InstitutionalHolder holder,
+        DateOnly reportDate
+    ) =>
+        _institutionalHoldingRepository
+            .GetByHolder(holder, reportDate)
+            .Include(h => h.CommonStock)
             .ToListAsync();
 
     private static DateOnly ResolveSelectedDate(DateOnly? requested, List<DateOnly> available) =>
