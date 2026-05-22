@@ -102,7 +102,23 @@ public class StockTabService
                 .ToListAsync()
             : [];
 
-        var grouped = HoldingsPositionGrouper.Group(allCurrent, allPrevious);
+        // Universe-wide set of filers known to have filed a 13F for the
+        // selected quarter — drives the Sold-Out bucket filter so filers who
+        // simply haven't reported yet aren't mislabelled as exiting the stock.
+        var filersWithCurrentQuarterFilings = (
+            await _institutionalHoldingRepository
+                .GetAll()
+                .Where(h => h.ReportDate == selectedDate)
+                .Select(h => h.InstitutionalHolderId)
+                .Distinct()
+                .ToListAsync()
+        ).ToHashSet();
+
+        var grouped = HoldingsPositionGrouper.Group(
+            allCurrent,
+            allPrevious,
+            filersWithCurrentQuarterFilings
+        );
         var bucketCounts = grouped.ToDictionary(g => g.Key, g => g.Value.Count);
         var (topBuyers, topSellers) = HoldingsTopMoversSelector.Select(
             grouped,

@@ -163,6 +163,7 @@ public class StocksHoldingsSeededTests
         // Expected Top Buyers: Holder 5 (+2_000), Holder 1 (+500).
         // Expected Top Sellers: Holder 3 (-1_000), Holder 2 (-200).
         var stockId = Guid.NewGuid();
+        var anchorStockId = Guid.NewGuid();
         var prior = new DateOnly(2025, 6, 30);
         var latest = new DateOnly(2025, 9, 30);
 
@@ -177,6 +178,19 @@ public class StocksHoldingsSeededTests
                     Cik = "0000789019",
                 }
             );
+            // Anchor stock — gives Holder 3 a Q2 13F filing on a different
+            // ticker so the Sold-Out filter recognises them as "filed this
+            // quarter, just not for MSFT" (genuine signal) instead of
+            // "hasn't filed yet" (which is now correctly excluded).
+            db.Add(
+                new CommonStock
+                {
+                    Id = anchorStockId,
+                    Ticker = "ANCH",
+                    Name = "Anchor Corp.",
+                    Cik = "0000999999",
+                }
+            );
 
             var holders = new InstitutionalHolder[5];
             for (var i = 0; i < holders.Length; i++)
@@ -188,6 +202,23 @@ public class StocksHoldingsSeededTests
                 };
                 db.Add(holders[i]);
             }
+
+            // Holder 3 reports a Q2 13F against the anchor stock — proves to
+            // the Sold-Out filter that they ARE filing the latest quarter,
+            // they just exited MSFT.
+            db.Add(
+                new InstitutionalHolding
+                {
+                    CommonStockId = anchorStockId,
+                    InstitutionalHolderId = holders[2].Id,
+                    ReportDate = latest,
+                    FilingDate = latest.AddDays(45),
+                    Value = 1_000_000,
+                    Shares = 1_000,
+                    ShareType = ShareType.Shares,
+                    InvestmentDiscretion = InvestmentDiscretion.Sole,
+                }
+            );
 
             // Q1 (prior) — holders 1..4 only
             for (var i = 0; i < 4; i++)

@@ -9,7 +9,7 @@ public class HoldingsPositionGrouperTests
     [Fact]
     public void Group_BothInputsEmpty_ReturnsEmptyBuckets()
     {
-        var result = HoldingsPositionGrouper.Group([], []);
+        var result = HoldingsPositionGrouper.Group([], [], filersWithCurrentQuarterFilings: null);
 
         result.Should().ContainKey(PositionChangeType.New).WhoseValue.Should().BeEmpty();
         result.Should().ContainKey(PositionChangeType.Increased).WhoseValue.Should().BeEmpty();
@@ -24,7 +24,11 @@ public class HoldingsPositionGrouperTests
         var holderId = Guid.NewGuid();
         var current = Holding(holderId, shares: 100, value: 1000);
 
-        var result = HoldingsPositionGrouper.Group([current], []);
+        var result = HoldingsPositionGrouper.Group(
+            [current],
+            [],
+            filersWithCurrentQuarterFilings: null
+        );
 
         result[PositionChangeType.New].Should().HaveCount(1);
         result[PositionChangeType.New][0].InstitutionalHolderId.Should().Be(holderId);
@@ -40,7 +44,11 @@ public class HoldingsPositionGrouperTests
         var holderId = Guid.NewGuid();
         var previous = Holding(holderId, shares: 100, value: 1000);
 
-        var result = HoldingsPositionGrouper.Group([], [previous]);
+        var result = HoldingsPositionGrouper.Group(
+            [],
+            [previous],
+            filersWithCurrentQuarterFilings: null
+        );
 
         result[PositionChangeType.SoldOut].Should().HaveCount(1);
         var entry = result[PositionChangeType.SoldOut][0];
@@ -59,7 +67,11 @@ public class HoldingsPositionGrouperTests
         var current = Holding(holderId, shares: 150, value: 1500);
         var previous = Holding(holderId, shares: 100, value: 1000);
 
-        var result = HoldingsPositionGrouper.Group([current], [previous]);
+        var result = HoldingsPositionGrouper.Group(
+            [current],
+            [previous],
+            filersWithCurrentQuarterFilings: null
+        );
 
         result[PositionChangeType.Increased].Should().HaveCount(1);
         result[PositionChangeType.Increased][0].DeltaShares.Should().Be(50);
@@ -72,7 +84,11 @@ public class HoldingsPositionGrouperTests
         var current = Holding(holderId, shares: 60, value: 600);
         var previous = Holding(holderId, shares: 100, value: 1000);
 
-        var result = HoldingsPositionGrouper.Group([current], [previous]);
+        var result = HoldingsPositionGrouper.Group(
+            [current],
+            [previous],
+            filersWithCurrentQuarterFilings: null
+        );
 
         result[PositionChangeType.Reduced].Should().HaveCount(1);
         result[PositionChangeType.Reduced][0].DeltaShares.Should().Be(-40);
@@ -85,7 +101,11 @@ public class HoldingsPositionGrouperTests
         var current = Holding(holderId, shares: 100, value: 1100);
         var previous = Holding(holderId, shares: 100, value: 1000);
 
-        var result = HoldingsPositionGrouper.Group([current], [previous]);
+        var result = HoldingsPositionGrouper.Group(
+            [current],
+            [previous],
+            filersWithCurrentQuarterFilings: null
+        );
 
         result[PositionChangeType.Unchanged].Should().HaveCount(1);
         result[PositionChangeType.Unchanged][0].DeltaShares.Should().Be(0);
@@ -100,7 +120,11 @@ public class HoldingsPositionGrouperTests
         var current2 = Holding(holderId, shares: 70, value: 700);
         var previous = Holding(holderId, shares: 100, value: 1000);
 
-        var result = HoldingsPositionGrouper.Group([current1, current2], [previous]);
+        var result = HoldingsPositionGrouper.Group(
+            [current1, current2],
+            [previous],
+            filersWithCurrentQuarterFilings: null
+        );
 
         // Two filings sum to 100 shares — same as previous → Unchanged.
         result[PositionChangeType.Unchanged].Should().HaveCount(1);
@@ -131,7 +155,11 @@ public class HoldingsPositionGrouperTests
             Holding(soldOutId, 100, 1000),
         };
 
-        var result = HoldingsPositionGrouper.Group(current, previous);
+        var result = HoldingsPositionGrouper.Group(
+            current,
+            previous,
+            filersWithCurrentQuarterFilings: null
+        );
 
         result[PositionChangeType.New]
             .Should()
@@ -158,6 +186,48 @@ public class HoldingsPositionGrouperTests
             .ContainSingle()
             .Which.InstitutionalHolderId.Should()
             .Be(soldOutId);
+    }
+
+    [Fact]
+    public void Group_PreviousHolderDidNotFileCurrentQuarter_ExcludedFromSoldOut()
+    {
+        // Regression for the AAPL "Sold out" tab listing Vanguard / BlackRock /
+        // etc. on a freshly-ingested universe: a holder who appears at the
+        // previous report date but has filed NO 13F for the current quarter
+        // hasn't sold out — they just haven't filed yet. The filter set is
+        // the universe-wide list of holders known to have filed for the
+        // current quarter (against any stock).
+        var holderId = Guid.NewGuid();
+        var previous = Holding(holderId, shares: 100, value: 1000);
+
+        var result = HoldingsPositionGrouper.Group(
+            [],
+            [previous],
+            filersWithCurrentQuarterFilings: new HashSet<Guid>()
+        );
+
+        result[PositionChangeType.SoldOut].Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Group_PreviousHolderFiledCurrentQuarterButExcludesStock_ClassifiesAsSoldOut()
+    {
+        // Counter-case: when the holder IS in the filers-who-reported set but
+        // doesn't carry this stock, that's a genuine Sold-Out signal.
+        var holderId = Guid.NewGuid();
+        var previous = Holding(holderId, shares: 100, value: 1000);
+
+        var result = HoldingsPositionGrouper.Group(
+            [],
+            [previous],
+            filersWithCurrentQuarterFilings: new HashSet<Guid> { holderId }
+        );
+
+        result[PositionChangeType.SoldOut]
+            .Should()
+            .ContainSingle()
+            .Which.InstitutionalHolderId.Should()
+            .Be(holderId);
     }
 
     private static InstitutionalHolding Holding(Guid holderId, long shares, long value)
