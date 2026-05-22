@@ -341,21 +341,20 @@ public class YahooFinanceClient : IYahooFinanceClient
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < MaxRetries)
             {
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+                var delay = ExponentialBackoff(attempt);
                 _logger.LogWarning(
                     "Yahoo rate limited (429), retrying in {Delay}s (attempt {Attempt}/{Max})",
                     delay.TotalSeconds,
                     attempt + 1,
                     MaxRetries
                 );
-                RateLimiter.PauseFor(delay);
-                await Task.Delay(delay);
+                await WaitForRetry(delay);
                 continue;
             }
 
             if ((int)response.StatusCode >= 500 && attempt < MaxRetries)
             {
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+                var delay = ExponentialBackoff(attempt);
                 _logger.LogWarning(
                     "Yahoo server error ({StatusCode}), retrying in {Delay}s (attempt {Attempt}/{Max})",
                     (int)response.StatusCode,
@@ -363,8 +362,7 @@ public class YahooFinanceClient : IYahooFinanceClient
                     attempt + 1,
                     MaxRetries
                 );
-                RateLimiter.PauseFor(delay);
-                await Task.Delay(delay);
+                await WaitForRetry(delay);
                 continue;
             }
 
@@ -373,6 +371,15 @@ public class YahooFinanceClient : IYahooFinanceClient
         }
 
         throw new HttpRequestException("Max retries exceeded for Yahoo Finance request");
+    }
+
+    private static TimeSpan ExponentialBackoff(int attempt) =>
+        TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+
+    private static async Task WaitForRetry(TimeSpan delay)
+    {
+        RateLimiter.PauseFor(delay);
+        await Task.Delay(delay);
     }
 
     // ── Helpers ──
