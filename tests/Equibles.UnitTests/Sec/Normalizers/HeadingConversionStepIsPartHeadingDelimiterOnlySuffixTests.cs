@@ -17,9 +17,7 @@ namespace Equibles.UnitTests.Sec.Normalizers;
 /// </summary>
 public class HeadingConversionStepIsPartHeadingDelimiterOnlySuffixTests
 {
-    [Fact(
-        Skip = "GH-1771 — IsPartHeading throws IndexOutOfRangeException when post-'PART ' suffix is all split delimiters"
-    )]
+    [Fact]
     public void IsPartHeading_PartFollowedByDelimiterOnlySuffix_ReturnsFalseWithoutThrowing()
     {
         var method = typeof(HeadingConversionStep).GetMethod(

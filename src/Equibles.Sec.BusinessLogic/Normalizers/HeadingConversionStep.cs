@@ -126,10 +126,13 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
             var afterPart = upperText.Substring(5).Trim();
             if (!string.IsNullOrEmpty(afterPart))
             {
-                var firstWord = afterPart.Split(
+                var tokens = afterPart.Split(
                     [' ', '.', '-', ':'],
                     StringSplitOptions.RemoveEmptyEntries
-                )[0];
+                );
+                if (tokens.Length == 0)
+                    return false;
+                var firstWord = tokens[0];
                 return !string.IsNullOrEmpty(firstWord) && firstWord.All(char.IsLetter);
             }
         }
