@@ -85,10 +85,7 @@ public class StockTabService
         // position-change grouping. Previously this was two round trips (sum/count
         // aggregates + a top-100 fetch); the bucketed view needs every holder anyway,
         // so the in-memory aggregates are cheaper than re-querying.
-        var allCurrent = await _institutionalHoldingRepository
-            .GetByStock(stock, selectedDate)
-            .Include(h => h.InstitutionalHolder)
-            .ToListAsync();
+        var allCurrent = await LoadHoldingsByStockWithHolder(stock, selectedDate);
 
         var selectedIndex = reportDates.IndexOf(selectedDate);
         var previousDate =
@@ -96,10 +93,7 @@ public class StockTabService
                 ? reportDates[selectedIndex + 1]
                 : (DateOnly?)null;
         var allPrevious = previousDate.HasValue
-            ? await _institutionalHoldingRepository
-                .GetByStock(stock, previousDate.Value)
-                .Include(h => h.InstitutionalHolder)
-                .ToListAsync()
+            ? await LoadHoldingsByStockWithHolder(stock, previousDate.Value)
             : [];
 
         // Universe-wide set of filers known to have filed a 13F for the
@@ -401,4 +395,13 @@ public class StockTabService
             Holdings = holdings,
         };
     }
+
+    private Task<List<InstitutionalHolding>> LoadHoldingsByStockWithHolder(
+        CommonStock stock,
+        DateOnly reportDate
+    ) =>
+        _institutionalHoldingRepository
+            .GetByStock(stock, reportDate)
+            .Include(h => h.InstitutionalHolder)
+            .ToListAsync();
 }
