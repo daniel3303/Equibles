@@ -24,12 +24,7 @@ internal class PaginationRemovalStep : IHtmlNormalizationStep
 
             // Check element after HR for Part header
             var nextSibling = FindFirstMeaningfulSibling(hr, forward: true);
-            if (
-                nextSibling != null
-                && nextSibling
-                    .TextContent.Trim()
-                    .StartsWith("Part", StringComparison.OrdinalIgnoreCase)
-            )
+            if (nextSibling != null && IsPartHeader(nextSibling.TextContent))
             {
                 elementsToRemove.Add(nextSibling);
             }
@@ -39,6 +34,21 @@ internal class PaginationRemovalStep : IHtmlNormalizationStep
                 element.Parent?.RemoveChild(element);
             }
         }
+    }
+
+    // Mirrors HeadingConversionStep.IsPartHeading: only treat the after-HR
+    // sibling as a Part header when "Part" is followed by a whitespace
+    // boundary, so ordinary words that merely start with "Part" (Partnership,
+    // Particular, …) are not deleted.
+    private static bool IsPartHeader(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        var upperText = text.ToUpperInvariant().Trim();
+        return upperText.StartsWith("PART")
+            && upperText.Length > 4
+            && char.IsWhiteSpace(upperText[4]);
     }
 
     private static INode FindFirstMeaningfulSibling(INode node, bool forward)

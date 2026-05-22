@@ -16,9 +16,7 @@ namespace Equibles.UnitTests.Sec.Normalizers;
 /// </summary>
 public class PaginationRemovalStepPartPrefixWordBoundaryTests
 {
-    [Fact(
-        Skip = "GH-1780 — PaginationRemovalStep.Execute uses StartsWith(\"Part\") without a word-boundary guard, removing paragraphs that merely start with a Part-prefixed word"
-    )]
+    [Fact]
     public void Execute_HrFollowedByParagraphStartingWithPartPrefixedWord_PreservesParagraph()
     {
         // The paragraph after the <hr> is "Partnership agreement", not a Part
