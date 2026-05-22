@@ -70,9 +70,9 @@ public class InstitutionalHoldingsTools
         return Execute(
             async () =>
             {
-                var stock = await _commonStockRepository.GetByTicker(ticker);
-                if (stock == null)
-                    return $"Stock '{ticker}' not found.";
+                var (stock, stockError) = await ResolveStockByTicker(ticker);
+                if (stockError != null)
+                    return stockError;
 
                 var (targetDate, found) = await TryResolveLatestReportDate(
                     reportDate,
@@ -158,9 +158,9 @@ public class InstitutionalHoldingsTools
         return Execute(
             async () =>
             {
-                var stock = await _commonStockRepository.GetByTicker(ticker);
-                if (stock == null)
-                    return $"Stock '{ticker}' not found.";
+                var (stock, stockError) = await ResolveStockByTicker(ticker);
+                if (stockError != null)
+                    return stockError;
 
                 var reportDates = await GetReportDatesByStock(stock).Take(maxPeriods).ToListAsync();
 
@@ -336,9 +336,9 @@ public class InstitutionalHoldingsTools
         return Execute(
             async () =>
             {
-                var stock = await _commonStockRepository.GetByTicker(ticker);
-                if (stock == null)
-                    return $"Stock '{ticker}' not found.";
+                var (stock, stockError) = await ResolveStockByTicker(ticker);
+                if (stockError != null)
+                    return stockError;
 
                 var reportDates = await GetReportDatesByStock(stock).ToListAsync();
 
@@ -1278,6 +1278,14 @@ public class InstitutionalHoldingsTools
 
     private Task<InstitutionalHolder> FindHolderByName(string name) =>
         _holderRepository.Search(name ?? string.Empty).OrderBy(h => h.Name).FirstOrDefaultAsync();
+
+    private async Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker)
+    {
+        var stock = await _commonStockRepository.GetByTicker(ticker);
+        if (stock == null)
+            return (null, $"Stock '{ticker}' not found.");
+        return (stock, null);
+    }
 
     private Task<List<InstitutionalHolding>> LoadHoldingsByHolderWithStock(
         InstitutionalHolder holder,
