@@ -45,19 +45,32 @@ public class InstitutionsController : BaseController
             .Select(h => (DateOnly?)h.ReportDate)
             .MaxAsync();
 
-        // Per-filer aggregate at the universe-latest report date. EF Core
-        // translates this to a single GROUP BY pushed to Postgres; the
-        // GroupJoin below preserves filers that didn't report in the latest
-        // quarter (their aggregate row is null → rendered as 0).
+        // Per-filer aggregate at each filer's OWN most-recent 13F report. The
+        // universe-latest approach drops historical filers (e.g. Scion's 2022
+        // book never shows up once the universe ticks past 2022), so the table
+        // would mis-report active book sizes as zero. The two-stage shape (max
+        // date per holder + join + group) translates to a single Postgres
+        // query with a self-join.
+        var perFilerLatest = _dbContext
+            .Set<InstitutionalHolding>()
+            .GroupBy(h => h.InstitutionalHolderId)
+            .Select(g => new { HolderId = g.Key, LatestDate = g.Max(h => h.ReportDate) });
+
         var aggByHolder = _dbContext
             .Set<InstitutionalHolding>()
-            .Where(h => latestReportDate != null && h.ReportDate == latestReportDate.Value)
+            .Join(
+                perFilerLatest,
+                h => new { Holder = h.InstitutionalHolderId, Date = h.ReportDate },
+                l => new { Holder = l.HolderId, Date = l.LatestDate },
+                (h, _) => h
+            )
             .GroupBy(h => h.InstitutionalHolderId)
             .Select(g => new
             {
                 HolderId = g.Key,
                 Positions = g.Count(),
                 Value = g.Sum(h => h.Value),
+                LatestDate = g.Max(h => h.ReportDate),
             });
 
         var holders = _holderRepository.Search(search ?? string.Empty);
@@ -95,6 +108,7 @@ public class InstitutionsController : BaseController
                 StateOrCountry = x.h.StateOrCountry,
                 PositionCount = x.agg != null ? x.agg.Positions : 0,
                 TotalValue = x.agg != null ? x.agg.Value : 0L,
+                LatestReportDate = x.agg != null ? (DateOnly?)x.agg.LatestDate : null,
             })
             .ToListAsync();
 
