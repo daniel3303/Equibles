@@ -16,9 +16,7 @@ namespace Equibles.UnitTests.Sec.Normalizers;
 /// </summary>
 public class TableNormalizationStepImageCellRowPreservationTests
 {
-    [Fact(
-        Skip = "GH-1776 — IsOnlyWhitespaceSpan returns true when the cell HTML has zero <span> elements, so any row whose only content is an <img> (or other non-span visual element) is dropped by RemoveEmptyRows"
-    )]
+    [Fact]
     public void Execute_RowWithImageOnlyCell_PreservesRow()
     {
         // Cell content: a single <img> — no text, no spans. The contract for

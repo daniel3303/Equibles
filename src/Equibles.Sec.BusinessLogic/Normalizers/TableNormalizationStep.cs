@@ -169,7 +169,7 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
 
         var spans = tempDoc.QuerySelectorAll("span").ToList();
         if (spans.Count == 0)
-            return true;
+            return false;
 
         foreach (var span in spans)
         {
