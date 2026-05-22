@@ -116,7 +116,7 @@ public class FredClient : IFredClient
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < MaxRetries)
             {
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+                var delay = ExponentialBackoff(attempt);
                 _logger.LogWarning(
                     "FRED rate limited (429), retrying in {Delay}s (attempt {Attempt}/{Max})",
                     delay.TotalSeconds,
@@ -130,7 +130,7 @@ public class FredClient : IFredClient
 
             if ((int)response.StatusCode >= 500 && attempt < MaxRetries)
             {
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+                var delay = ExponentialBackoff(attempt);
                 _logger.LogWarning(
                     "FRED server error ({StatusCode}), retrying in {Delay}s (attempt {Attempt}/{Max})",
                     (int)response.StatusCode,
@@ -148,4 +148,7 @@ public class FredClient : IFredClient
 
         throw new HttpRequestException("Max retries exceeded for FRED API request");
     }
+
+    private static TimeSpan ExponentialBackoff(int attempt) =>
+        TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
 }
