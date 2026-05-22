@@ -20,6 +20,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Add a FINRA API key (free short-volume data)](how-to-set-up-finra-api-key.md)
 - [Enable semantic search over SEC filings](how-to-enable-embedding-search.md)
 - [Sync only a chosen list of tickers](how-to-restrict-ticker-sync.md)
+- [Change how far back data syncs](how-to-change-sync-start-date.md)
 - [Upgrade to the latest release](how-to-upgrade.md)
 - [Back up and restore your database](how-to-back-up-and-restore.md)
 - [Check worker health and recent errors](how-to-view-status-and-errors.md)
