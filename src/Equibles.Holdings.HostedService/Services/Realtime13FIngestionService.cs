@@ -198,11 +198,7 @@ public class Realtime13FIngestionService
         await using var scope = _scopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<ProcessedFilingRepository>();
 
-        var processed = await repo.GetByAccessionNumbers(accessionNumbers.ToList())
-            .Select(p => p.AccessionNumber)
-            .ToListAsync(cancellationToken);
-
-        return new HashSet<string>(processed, StringComparer.OrdinalIgnoreCase);
+        return await LoadProcessedSet(repo, accessionNumbers, cancellationToken);
     }
 
     private async Task RecordProcessed(
@@ -218,10 +214,7 @@ public class Realtime13FIngestionService
 
         // Re-check inside the write scope: a parallel sweep (or the quarterly
         // worker) may have recorded some of these between discovery and now.
-        var existing = await repo.GetByAccessionNumbers(accessionNumbers.ToList())
-            .Select(p => p.AccessionNumber)
-            .ToListAsync(cancellationToken);
-        var existingSet = new HashSet<string>(existing, StringComparer.OrdinalIgnoreCase);
+        var existingSet = await LoadProcessedSet(repo, accessionNumbers, cancellationToken);
 
         foreach (var accession in accessionNumbers)
         {
@@ -230,6 +223,19 @@ public class Realtime13FIngestionService
         }
 
         await repo.SaveChanges();
+    }
+
+    private static async Task<HashSet<string>> LoadProcessedSet(
+        ProcessedFilingRepository repo,
+        IEnumerable<string> accessionNumbers,
+        CancellationToken cancellationToken
+    )
+    {
+        var processed = await repo.GetByAccessionNumbers(accessionNumbers.ToList())
+            .Select(p => p.AccessionNumber)
+            .ToListAsync(cancellationToken);
+
+        return new HashSet<string>(processed, StringComparer.OrdinalIgnoreCase);
     }
 
     private async Task<Parsed13FFiling> ParseFiling(
