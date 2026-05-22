@@ -1,5 +1,6 @@
 using System.Text;
 using Equibles.CommonStocks.Repositories;
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.Services;
@@ -37,12 +38,9 @@ public class HoldingsExportController : BaseController
         if (stock == null)
             return NotFound();
 
-        var reportDates = await _holdingRepository
-            .GetHistoryByStock(stock)
-            .Select(h => h.ReportDate)
-            .Distinct()
-            .OrderByDescending(d => d)
-            .ToListAsync();
+        var reportDates = await LoadDistinctReportDates(
+            _holdingRepository.GetHistoryByStock(stock)
+        );
         if (reportDates.Count == 0)
             return NotFound();
 
@@ -108,12 +106,9 @@ public class HoldingsExportController : BaseController
         if (holder == null)
             return NotFound();
 
-        var reportDates = await _holdingRepository
-            .GetHistoryByHolder(holder)
-            .Select(h => h.ReportDate)
-            .Distinct()
-            .OrderByDescending(d => d)
-            .ToListAsync();
+        var reportDates = await LoadDistinctReportDates(
+            _holdingRepository.GetHistoryByHolder(holder)
+        );
         if (reportDates.Count == 0)
             return NotFound();
 
@@ -258,6 +253,10 @@ public class HoldingsExportController : BaseController
         Response.Headers.CacheControl = "no-store";
         return File(Encoding.UTF8.GetBytes(csv), "text/csv", filename);
     }
+
+    private static Task<List<DateOnly>> LoadDistinctReportDates(
+        IQueryable<InstitutionalHolding> source
+    ) => source.Select(h => h.ReportDate).Distinct().OrderByDescending(d => d).ToListAsync();
 
     private static DateOnly ResolveSelectedDate(DateOnly? requested, List<DateOnly> available) =>
         requested.HasValue && available.Contains(requested.Value) ? requested.Value : available[0];
