@@ -264,14 +264,14 @@ public class HoldingsExportController : BaseController
         IDictionary<Guid, StockLabel> stocks
     )
     {
-        stocks.TryGetValue(row.CommonStockId, out var stock);
+        var (ticker, name) = ResolveStockCells(stocks, row.CommonStockId);
         return
         [
             board,
             CsvExportService.Format(current),
             CsvExportService.Format(previous),
-            stock?.Ticker ?? string.Empty,
-            stock?.Name ?? string.Empty,
+            ticker,
+            name,
             CsvExportService.Format((long)row.CurrentFilerCount),
             CsvExportService.Format((long)row.PreviousFilerCount),
             CsvExportService.Format(row.CurrentShares - row.PreviousShares),
@@ -289,14 +289,14 @@ public class HoldingsExportController : BaseController
         IDictionary<Guid, StockLabel> stocks
     )
     {
-        stocks.TryGetValue(row.CommonStockId, out var stock);
+        var (ticker, name) = ResolveStockCells(stocks, row.CommonStockId);
         return
         [
             board,
             CsvExportService.Format(current),
             CsvExportService.Format(previous),
-            stock?.Ticker ?? string.Empty,
-            stock?.Name ?? string.Empty,
+            ticker,
+            name,
             string.Empty,
             string.Empty,
             string.Empty,
@@ -304,6 +304,15 @@ public class HoldingsExportController : BaseController
             CsvExportService.Format((long)row.NewFilerCount),
             CsvExportService.Format((long)row.SoldOutFilerCount),
         ];
+    }
+
+    private static (string Ticker, string Name) ResolveStockCells(
+        IDictionary<Guid, StockLabel> stocks,
+        Guid stockId
+    )
+    {
+        stocks.TryGetValue(stockId, out var stock);
+        return (stock?.Ticker ?? string.Empty, stock?.Name ?? string.Empty);
     }
 
     private record StockLabel(Guid Id, string Ticker, string Name);
