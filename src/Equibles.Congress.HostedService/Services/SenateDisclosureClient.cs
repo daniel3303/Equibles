@@ -218,7 +218,7 @@ public class SenateDisclosureClient : IAsyncDisposable
                     );
                     throw;
                 }
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+                var delay = ExponentialBackoff(attempt);
                 _logger.LogWarning(
                     "Browser fetch error for {Url}, retrying in {Delay}s (attempt {Attempt}/{MaxRetries}): {Message}",
                     url,
@@ -237,7 +237,7 @@ public class SenateDisclosureClient : IAsyncDisposable
             var isRetryable = status == 429 || status >= 500;
             if (isRetryable && attempt < MaxRetries)
             {
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+                var delay = ExponentialBackoff(attempt);
                 _logger.LogWarning(
                     "Senate eFD returned {Status} for {Url}, retrying in {Delay}s (attempt {Attempt}/{MaxRetries})",
                     status,
@@ -274,6 +274,9 @@ public class SenateDisclosureClient : IAsyncDisposable
             $"Max retries ({MaxRetries}) exceeded for Senate eFD request: {url}"
         );
     }
+
+    private static TimeSpan ExponentialBackoff(int attempt) =>
+        TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
 
     public async ValueTask DisposeAsync()
     {
