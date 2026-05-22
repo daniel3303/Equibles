@@ -19,6 +19,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Add a FRED API key (free economic-indicator data)](how-to-set-up-fred-api-key.md)
 - [Add a FINRA API key (free short-volume data)](how-to-set-up-finra-api-key.md)
 - [Enable semantic search over SEC filings](how-to-enable-embedding-search.md)
+- [Use an existing embedding endpoint (Ollama or OpenAI-compatible)](how-to-use-external-embedding-endpoint.md)
 - [Sync only a chosen list of tickers](how-to-restrict-ticker-sync.md)
 - [Change how far back data syncs](how-to-change-sync-start-date.md)
 - [Upgrade to the latest release](how-to-upgrade.md)
