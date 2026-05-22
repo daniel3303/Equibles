@@ -14,9 +14,7 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class StandaloneXbrlParserPrefixOnlyMeasureTests
 {
-    [Fact(
-        Skip = "GH-1774 — ResolveUnit returns empty string instead of null when measure has empty local name, so the fact is emitted with Unit=\"\""
-    )]
+    [Fact]
     public void Parse_MeasureIsPrefixOnlyQName_SkipsFactsReferencingThatUnit()
     {
         // The unit's <xbrli:measure> is "iso4217:" — well-formed XML, but

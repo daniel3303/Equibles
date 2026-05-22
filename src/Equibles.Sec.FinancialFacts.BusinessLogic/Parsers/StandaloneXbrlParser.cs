@@ -199,18 +199,29 @@ public class StandaloneXbrlParser
             var denominatorMeasure = denominator?.Element(MeasureElement)?.Value;
             if (string.IsNullOrEmpty(numeratorMeasure) || string.IsNullOrEmpty(denominatorMeasure))
                 return null;
-            return $"{StripPrefix(numeratorMeasure)}/{StripPrefix(denominatorMeasure)}";
+            var numeratorLocal = StripPrefix(numeratorMeasure);
+            var denominatorLocal = StripPrefix(denominatorMeasure);
+            if (numeratorLocal == null || denominatorLocal == null)
+                return null;
+            return $"{numeratorLocal}/{denominatorLocal}";
         }
 
         var measure = unitElement.Element(MeasureElement);
         var measureValue = measure?.Value;
-        return string.IsNullOrEmpty(measureValue) ? null : StripPrefix(measureValue);
+        if (string.IsNullOrEmpty(measureValue))
+            return null;
+        return StripPrefix(measureValue);
     }
 
+    // Returns null when the QName has a prefix but an empty local name
+    // (e.g. "iso4217:"); such a measure is unresolvable.
     private static string StripPrefix(string qname)
     {
         var colonIdx = qname.IndexOf(':');
-        return colonIdx >= 0 ? qname.Substring(colonIdx + 1) : qname;
+        if (colonIdx < 0)
+            return qname;
+        var local = qname.Substring(colonIdx + 1);
+        return local.Length == 0 ? null : local;
     }
 
     private static bool TryParseFact(
