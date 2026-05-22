@@ -70,12 +70,7 @@ public class ProfilesController : BaseController
 
         // Header strip + industry allocation — pulled with extra per-quarter
         // materializations so the existing recent-rows list keeps its top-50 shape.
-        var distinctDates = await _institutionalHoldingRepository
-            .GetHistoryByHolder(holder)
-            .Select(h => h.ReportDate)
-            .Distinct()
-            .OrderByDescending(d => d)
-            .ToListAsync();
+        var distinctDates = await LoadReportDatesByHolder(holder);
         var (summary, industryAllocation) = await BuildSummaryAndAllocation(holder, distinctDates);
         var (quarterlyActivity, activityResolved, activityPrior) = await BuildQuarterlyActivity(
             holder,
@@ -385,12 +380,7 @@ public class ProfilesController : BaseController
         var perHolderDates = new List<List<DateOnly>>();
         foreach (var holder in holders)
         {
-            var dates = await _institutionalHoldingRepository
-                .GetHistoryByHolder(holder)
-                .Select(h => h.ReportDate)
-                .Distinct()
-                .OrderByDescending(d => d)
-                .ToListAsync();
+            var dates = await LoadReportDatesByHolder(holder);
             perHolderDates.Add(dates);
         }
         return perHolderDates
@@ -418,6 +408,14 @@ public class ProfilesController : BaseController
         }
         return perFund;
     }
+
+    private Task<List<DateOnly>> LoadReportDatesByHolder(InstitutionalHolder holder) =>
+        _institutionalHoldingRepository
+            .GetHistoryByHolder(holder)
+            .Select(h => h.ReportDate)
+            .Distinct()
+            .OrderByDescending(d => d)
+            .ToListAsync();
 
     private static DateOnly ResolveSelectedDate(DateOnly? requested, List<DateOnly> available) =>
         requested.HasValue && available.Contains(requested.Value) ? requested.Value : available[0];
