@@ -15,9 +15,7 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class StandaloneXbrlParserPaddedMeasureTests
 {
-    [Fact(
-        Skip = "GH-1799 — StandaloneXbrlParser.ResolveUnit does not trim measure text, so a padded QName like \"  iso4217:USD  \" emits Unit=\"USD  \" instead of \"USD\""
-    )]
+    [Fact]
     public void Parse_MeasureHasSurroundingWhitespace_TrimsBeforeResolving()
     {
         // Both parsers receive the same logical input; both must produce the
