@@ -22,7 +22,7 @@
         <p class="text-base-content/60">
             Browse @Model.TotalCount.ToString("N0") 13F filers
             @if (Model.LatestReportDate.HasValue) {
-                <span> · per-filer aggregates from the latest 13F quarter (@Model.LatestReportDate.Value.ToString("MMM dd, yyyy"))</span>
+                <span> · aggregates from each filer's most-recent 13F report (universe latest @Model.LatestReportDate.Value.ToString("MMM dd, yyyy"))</span>
             } else {
                 <span> · no 13F data ingested yet</span>
             }
@@ -68,6 +68,7 @@
                         <th scope="col" class="hidden lg:table-cell">Location</th>
                         <th scope="col" class="text-right"># Positions</th>
                         <th scope="col" class="text-right hidden md:table-cell">Total $ Value ($M)</th>
+                        <th scope="col" class="text-right hidden xl:table-cell">Last filed</th>
                         <th scope="col" class="w-8"><span class="sr-only">Open</span></th>
                     </tr>
                 </thead>
@@ -84,6 +85,7 @@
                             <td class="hidden lg:table-cell text-sm text-base-content/60">@(string.IsNullOrEmpty(location) ? "—" : location)</td>
                             <td class="text-right font-mono">@inst.PositionCount.ToString("N0")</td>
                             <td class="text-right font-mono hidden md:table-cell">@((inst.TotalValue / 1_000_000m).ToString("N1"))</td>
+                            <td class="text-right font-mono text-sm text-base-content/60 hidden xl:table-cell">@(inst.LatestReportDate?.ToString("yyyy-MM-dd") ?? "—")</td>
                             <td class="text-base-content/30">
                                 <icon name="chevron-right" size="4" />
                             </td>
@@ -91,7 +93,7 @@
                     }
                     @if (Model.Institutions.Count == 0) {
                         <tr>
-                            <td colspan="6" class="text-center py-10 text-base-content/60">
+                            <td colspan="7" class="text-center py-10 text-base-content/60">
                                 @if (Model.LatestReportDate.HasValue) {
                                     <span>No institutions match these filters.</span>
                                 } else {
