@@ -194,9 +194,7 @@ public class StockPriceTools
                 if (error != null)
                     return error;
 
-                var highs = records.Select(p => p.High).ToList();
-                var lows = records.Select(p => p.Low).ToList();
-                var closes = records.Select(p => p.Close).ToList();
+                var (highs, lows, closes) = ExtractHighLowClose(records);
                 var (k, d) = TechnicalIndicatorService.ComputeStochastic(
                     highs,
                     lows,
@@ -262,9 +260,7 @@ public class StockPriceTools
                 if (error != null)
                     return error;
 
-                var highs = records.Select(p => p.High).ToList();
-                var lows = records.Select(p => p.Low).ToList();
-                var closes = records.Select(p => p.Close).ToList();
+                var (highs, lows, closes) = ExtractHighLowClose(records);
                 var atr = TechnicalIndicatorService.ComputeAtr(highs, lows, closes, period);
 
                 var result = StartTable(
@@ -396,6 +392,17 @@ public class StockPriceTools
             emitted++;
         }
     }
+
+    private static (
+        List<decimal> Highs,
+        List<decimal> Lows,
+        List<decimal> Closes
+    ) ExtractHighLowClose(List<DailyStockPrice> records) =>
+        (
+            records.Select(p => p.High).ToList(),
+            records.Select(p => p.Low).ToList(),
+            records.Select(p => p.Close).ToList()
+        );
 
     private static DateOnly ParseDateOr(string value, DateOnly fallback) =>
         !string.IsNullOrEmpty(value) && DateOnly.TryParse(value, out var parsed)
