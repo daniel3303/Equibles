@@ -81,16 +81,7 @@ public class HoldingsActivityController : BaseController
             .Concat(soldOutPositionsAgg.Select(c => c.CommonStockId))
             .Distinct()
             .ToList();
-        var stocks = await _commonStockRepository
-            .GetAll()
-            .Where(s => stockIds.Contains(s.Id))
-            .Select(s => new StockLabel
-            {
-                Id = s.Id,
-                Ticker = s.Ticker,
-                Name = s.Name,
-            })
-            .ToDictionaryAsync(s => s.Id);
+        var stocks = await LoadStockLabels(stockIds);
 
         viewModel.TopBuys = topBuysAgg.Select(a => MapRow(a, stocks)).ToList();
         viewModel.TopSells = topSellsAgg.Select(a => MapRow(a, stocks)).ToList();
@@ -157,16 +148,7 @@ public class HoldingsActivityController : BaseController
             .ToListAsync();
 
         var stockIds = pageRows.Select(r => r.CommonStockId).ToList();
-        var stocks = await _commonStockRepository
-            .GetAll()
-            .Where(s => stockIds.Contains(s.Id))
-            .Select(s => new StockLabel
-            {
-                Id = s.Id,
-                Ticker = s.Ticker,
-                Name = s.Name,
-            })
-            .ToDictionaryAsync(s => s.Id);
+        var stocks = await LoadStockLabels(stockIds);
 
         var universe = viewModel.TotalUniverseFilers;
         viewModel.Rows = pageRows
@@ -227,6 +209,18 @@ public class HoldingsActivityController : BaseController
 
     private Task<List<DateOnly>> LoadAvailableReportDates() =>
         _holdingRepository.GetAvailableReportDates().OrderByDescending(d => d).ToListAsync();
+
+    private Task<Dictionary<Guid, StockLabel>> LoadStockLabels(List<Guid> stockIds) =>
+        _commonStockRepository
+            .GetAll()
+            .Where(s => stockIds.Contains(s.Id))
+            .Select(s => new StockLabel
+            {
+                Id = s.Id,
+                Ticker = s.Ticker,
+                Name = s.Name,
+            })
+            .ToDictionaryAsync(s => s.Id);
 
     private static (DateOnly Selected, DateOnly? Previous) ResolveSelectedAndPriorDate(
         DateOnly? requested,
