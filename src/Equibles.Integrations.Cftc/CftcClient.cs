@@ -53,7 +53,7 @@ public class CftcClient : ICftcClient
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < MaxRetries)
             {
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+                var delay = ExponentialBackoff(attempt);
                 _logger.LogWarning(
                     "CFTC rate limited (429), retrying in {Delay}s (attempt {Attempt}/{Max})",
                     delay.TotalSeconds,
@@ -67,7 +67,7 @@ public class CftcClient : ICftcClient
 
             if ((int)response.StatusCode >= 500 && attempt < MaxRetries)
             {
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+                var delay = ExponentialBackoff(attempt);
                 _logger.LogWarning(
                     "CFTC server error ({StatusCode}), retrying in {Delay}s (attempt {Attempt}/{Max})",
                     (int)response.StatusCode,
@@ -90,6 +90,9 @@ public class CftcClient : ICftcClient
 
         throw new HttpRequestException("Max retries exceeded for CFTC download");
     }
+
+    private static TimeSpan ExponentialBackoff(int attempt) =>
+        TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
 
     private async Task<List<CftcReportRecord>> ParseZipArchive(Stream zipStream)
     {
