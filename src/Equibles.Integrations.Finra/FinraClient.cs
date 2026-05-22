@@ -299,7 +299,7 @@ public class FinraClient : IFinraClient
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < MaxRetries)
             {
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+                var delay = ExponentialBackoff(attempt);
                 _logger.LogWarning(
                     "Rate limited (429), retrying in {Delay}s (attempt {Attempt}/{Max})",
                     delay.TotalSeconds,
@@ -312,7 +312,7 @@ public class FinraClient : IFinraClient
 
             if ((int)response.StatusCode >= 500 && attempt < MaxRetries)
             {
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+                var delay = ExponentialBackoff(attempt);
                 _logger.LogWarning(
                     "Server error ({StatusCode}), retrying in {Delay}s (attempt {Attempt}/{Max})",
                     (int)response.StatusCode,
@@ -330,6 +330,9 @@ public class FinraClient : IFinraClient
 
         throw new HttpRequestException("Max retries exceeded for FINRA API request");
     }
+
+    private static TimeSpan ExponentialBackoff(int attempt) =>
+        TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
 
     private async Task<string> GetAccessToken()
     {
