@@ -1308,11 +1308,16 @@ namespace Equibles.Migrations.Migrations
                 )
                 .Annotation("Npgsql:NullsDistinct", false);
 
-            migrationBuilder.CreateIndex(
-                name: "IX_InstitutionalHolding_CommonStockId_ReportDate",
-                table: "InstitutionalHolding",
-                columns: new[] { "CommonStockId", "ReportDate" }
-            );
+            migrationBuilder
+                .CreateIndex(
+                    name: "IX_InstitutionalHolding_CommonStockId_ReportDate",
+                    table: "InstitutionalHolding",
+                    columns: new[] { "CommonStockId", "ReportDate" }
+                )
+                .Annotation(
+                    "Npgsql:IndexInclude",
+                    new[] { "InstitutionalHolderId", "Value", "Shares" }
+                );
 
             migrationBuilder.CreateIndex(
                 name: "IX_InstitutionalHolding_FilingDate",
