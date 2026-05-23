@@ -6,9 +6,12 @@ export default defineConfig({
         outDir: 'wwwroot/dist',
         emptyOutDir: true,
         rollupOptions: {
-            input: resolve(__dirname, 'src/index.js'),
+            input: {
+                bundle: resolve(__dirname, 'src/index.js'),
+                chart: resolve(__dirname, 'src/chart.js'),
+            },
             output: {
-                entryFileNames: 'bundle.js',
+                entryFileNames: '[name].js',
                 assetFileNames: (assetInfo) => {
                     if (assetInfo.name?.endsWith('.css')) {
                         return 'main.css'

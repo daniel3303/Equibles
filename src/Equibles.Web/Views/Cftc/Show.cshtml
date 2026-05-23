@@ -139,6 +139,7 @@
 
 @if (chronological.Count > 0) {
     @section Scripts {
+        <partial name="_ChartJs" />
         <script>
         // Render CFTC positioning chart with Commercial and Non-Commercial net lines
         document.addEventListener('DOMContentLoaded', function() {
