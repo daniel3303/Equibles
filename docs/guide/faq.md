@@ -53,3 +53,16 @@ The download starts immediately when you click the button — no extra steps. Th
 ## Can I use Equibles with AI tools other than Claude and ChatGPT?
 
 Yes. Equibles exposes its data through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/), which is an open standard. Any AI tool that supports connecting to an MCP server over HTTP can use it — you just point the tool at `http://localhost:8081/mcp` (add an `Authorization: Bearer <key>` header if you've [set an API key](how-to-secure-mcp-api-key.md)). The [connect-an-assistant tutorial](tutorial-connect-ai-assistant.md) walks through Claude Desktop, Claude Code, and ChatGPT Desktop specifically, but the same URL and tools work with Cursor, Windsurf, Cline, Continue, and any other MCP-compatible client. Check your tool's documentation for where to add an MCP server URL.
+
+## How do I change the default ports?
+
+Edit the port mappings in `docker-compose.yml`. Each service has a `ports:` entry in `"host:container"` format — change the number on the left (the host port) while leaving the number on the right (the container port) unchanged. The defaults are:
+
+| Service | Default host port | What it serves |
+|---------|------------------|----------------|
+| `db` | 5432 | PostgreSQL (ParadeDB) |
+| `web` | 8080 | Web portal |
+| `mcp` | 8081 | MCP server |
+| `embedding` | 11434 | Ollama (only with the embedding profile) |
+
+For example, to move the web portal to port 9090, change `"8080:8080"` to `"9090:8080"` under the `web` service, then run `docker compose up -d`. If you change the MCP port, remember to update your AI assistant's config to match (see [Connect an AI assistant](tutorial-connect-ai-assistant.md)).
