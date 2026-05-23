@@ -15,7 +15,7 @@ namespace Equibles.UnitTests.Congress;
 public class DisclosureParsingHelperTruncateSurrogatePairTests
 {
     // Truncate should not produce a string containing an unpaired surrogate.
-    [Fact(Skip = "GH-1885 — Truncate splits surrogate pairs")]
+    [Fact]
     public void Truncate_MaxLengthSplitsSurrogatePair_ResultContainsNoOrphanSurrogate()
     {
         // "🏛" (U+1F3DB, Classical Building) is a surrogate pair: 🏛
