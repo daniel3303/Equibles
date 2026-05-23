@@ -4,6 +4,7 @@ using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Holdings.HostedService;
 using Equibles.Holdings.HostedService.Services;
+using Equibles.Holdings.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.IntegrationTests.Helpers;
@@ -98,6 +99,8 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
                 _contexts.Add(ctx);
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesDbContext)).Returns(ctx);
+                sp.GetService(typeof(ProcessedDataSetRepository))
+                    .Returns(new ProcessedDataSetRepository(ctx));
                 var importService = new HoldingsImportService(
                     scopeFactory,
                     Substitute.For<ILogger<HoldingsImportService>>(),
