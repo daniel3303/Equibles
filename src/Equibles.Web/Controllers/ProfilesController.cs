@@ -235,6 +235,45 @@ public class ProfilesController : BaseController
         return View(viewModel);
     }
 
+    [HttpGet("~/institutions/overlap")]
+    public async Task<IActionResult> OverlapMatrix(
+        [FromQuery(Name = "ciks")] string[] ciks = null,
+        [FromQuery(Name = "date")] DateOnly? date = null
+    )
+    {
+        var splitCiks = (ciks ?? [])
+            .SelectMany(c => c.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries))
+            .ToArray();
+        var distinctCiks = NormalizeCiks(splitCiks);
+        if (distinctCiks.Count > InstitutionOverlapMatrixViewModel.MaxCiks)
+            return BadRequest(
+                $"At most {InstitutionOverlapMatrixViewModel.MaxCiks} CIKs may be compared."
+            );
+
+        var viewModel = new InstitutionOverlapMatrixViewModel { RequestedCiks = distinctCiks };
+        ViewData["Title"] = "Overlap matrix";
+
+        if (distinctCiks.Count < InstitutionOverlapMatrixViewModel.MinCiks)
+            return View(viewModel);
+
+        var holders = await LoadHoldersByCik(distinctCiks, viewModel.MissingCiks);
+        if (holders.Count < InstitutionOverlapMatrixViewModel.MinCiks)
+            return View(viewModel);
+
+        var commonDates = await FindCommonReportDates(holders);
+        viewModel.CommonReportDates = commonDates;
+        if (commonDates.Count == 0)
+            return View(viewModel);
+
+        var selected = ResolveSelectedDate(date, commonDates);
+        viewModel.SelectedDate = selected;
+
+        var perFund = await LoadPerFundHoldings(holders, selected);
+        var overlap = FundOverlapCalculator.Calculate(perFund, selected);
+        viewModel.Matrix = FundOverlapCalculator.ComputePairwiseOverlap(overlap);
+        return View(viewModel);
+    }
+
     [HttpGet("~/institutions/combined")]
     public async Task<IActionResult> CombinedInstitutions(
         [FromQuery(Name = "ciks")] string[] ciks = null,
