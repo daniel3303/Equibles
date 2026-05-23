@@ -26,6 +26,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Upgrade to the latest release](how-to-upgrade.md)
 - [Back up and restore your database](how-to-back-up-and-restore.md)
 - [Change the log level for troubleshooting](how-to-change-log-level.md)
+- [Use the 13F holdings screener](how-to-use-holdings-screener.md)
 - [Check worker health and recent errors](how-to-view-status-and-errors.md)
 
 ## FAQ
