@@ -14,9 +14,7 @@ namespace Equibles.UnitTests.Finra;
 /// </summary>
 public class FinraClientGetDailyShortVolumeCultureTests
 {
-    [Fact(
-        Skip = "GH-1915 — GetDailyShortVolume sends Hijri dates on non-Gregorian culture threads"
-    )]
+    [Fact]
     public async Task GetDailyShortVolume_HijriCultureThread_SendsGregorianDateInRequest()
     {
         string capturedBody = null;
