@@ -27,10 +27,6 @@
         };
     }
 
-    static (string Label, string BadgeCss) StatusFor(PositionChangeType type) =>
-        Buckets.Where(b => b.Type == type)
-            .Select(b => (b.Label, b.BadgeCss))
-            .FirstOrDefault();
 }
 
 @if (Model.AvailableDates.Count == 0) {
@@ -168,7 +164,6 @@
                         <thead>
                             <tr>
                                 <th scope="col">Holder</th>
-                                <th scope="col">Status</th>
                                 <th scope="col" class="text-right">Current Shares</th>
                                 <th scope="col" class="text-right hidden md:table-cell">Previous Shares</th>
                                 <th scope="col" class="text-right">Δ Shares</th>
@@ -180,14 +175,12 @@
                         <tbody>
                             @foreach (var x in allHolders) {
                                 var e = x.Entry;
-                                var status = StatusFor(x.Type);
                                 var deltaSharesCss = e.DeltaShares > 0 ? "text-success" : e.DeltaShares < 0 ? "text-error" : "";
                                 var deltaValueCss = e.DeltaValue > 0 ? "text-success" : e.DeltaValue < 0 ? "text-error" : "";
                                 var deltaSharesText = (e.DeltaShares > 0 ? "+" : e.DeltaShares < 0 ? "-" : "") + Math.Abs(e.DeltaShares).ToString("N0");
                                 var deltaValueText = (e.DeltaValue > 0 ? "+$" : e.DeltaValue < 0 ? "-$" : "$") + Math.Abs(e.DeltaValue).ToString("N0");
                                 <tr>
                                     <td class="max-w-xs truncate">@(e.InstitutionalHolder?.Name ?? "Unknown")</td>
-                                    <td><span class="badge @status.BadgeCss badge-sm whitespace-nowrap">@status.Label</span></td>
                                     <td class="text-right font-mono whitespace-nowrap">@e.CurrentShares.ToString("N0")</td>
                                     <td class="text-right font-mono hidden md:table-cell whitespace-nowrap">@e.PreviousShares.ToString("N0")</td>
                                     <td class="text-right font-mono whitespace-nowrap @deltaSharesCss">@deltaSharesText</td>
