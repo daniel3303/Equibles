@@ -386,7 +386,7 @@ public class SecEdgarClient : ISecEdgarClient
         // fixed-width layout, so column-offset parsing is fragile. The master
         // index is unambiguous: CIK|Company Name|Form Type|Date Filed|File Name.
         var url =
-            $"{FilesBaseUrl}/Archives/edgar/daily-index/{date.Year}/QTR{quarter}/master.{date:yyyyMMdd}.idx";
+            $"{FilesBaseUrl}/Archives/edgar/daily-index/{date.Year}/QTR{quarter}/master.{date.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture)}.idx";
 
         using var response = await SendWithRetryAsync(url, cancellationToken);
 
