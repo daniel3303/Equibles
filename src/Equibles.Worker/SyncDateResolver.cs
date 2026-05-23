@@ -14,7 +14,9 @@ public static class SyncDateResolver
     {
         if (latestDateInDb != default)
         {
-            return latestDateInDb.AddDays(1);
+            return latestDateInDb == DateOnly.MaxValue
+                ? DateOnly.MaxValue
+                : latestDateInDb.AddDays(1);
         }
 
         return workerOptions.MinSyncDate.HasValue
