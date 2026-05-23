@@ -83,3 +83,7 @@ You do **not** need .NET, Node.js, or PostgreSQL installed locally — Docker pr
 ## What is a 13F filing?
 
 A 13F is a quarterly report that large institutional investment managers (hedge funds, mutual funds, pension funds, insurance companies, etc.) are required to file with the SEC. Any manager with at least $100 million in qualifying assets must disclose their U.S. equity holdings — which stocks they own, how many shares, and the dollar value — within 45 days of each calendar quarter end. Equibles ingests these filings automatically and uses them to power the [Institutional Holders](tutorial-explore-stock.md) tab on stock profiles, the [Holdings Screener](how-to-use-holdings-screener.md), the [Holdings Activity](how-to-view-holdings-activity.md) page, and [institution portfolios](how-to-browse-institutions.md).
+
+## Does Equibles support non-US stocks?
+
+Not currently. All data sources are U.S.-focused: SEC EDGAR for filings and holdings, Yahoo Finance for U.S.-listed stock prices, FINRA for short data, FRED for U.S. economic indicators, and the U.S. Congress for congressional trades. The stock universe is built from companies that file with the SEC, which means U.S.-listed equities and foreign companies that cross-list in the U.S. via ADRs (American Depositary Receipts). International exchanges, non-U.S. regulators, and non-dollar-denominated instruments are not covered.
