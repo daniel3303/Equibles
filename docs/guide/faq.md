@@ -30,3 +30,9 @@ Equibles scrapes several public and free-tier data sources automatically. Each s
 | **CFTC** | Commitments of Traders reports (futures positioning) | Every 24 hours |
 
 The SEC filing and document-processing scrapers run nearly continuously (every 15 seconds) to pick up new filings as they appear on EDGAR. All other scrapers default to a 24-hour cycle. You don't need API keys for SEC, Yahoo, Congress, CBOE, or CFTC — those work out of the box. FRED and FINRA require free API keys; without them those scrapers are simply skipped.
+
+## Can I run Equibles without Docker?
+
+Yes, but Docker is strongly recommended. Equibles requires [ParadeDB](https://www.paradedb.com/) — a PostgreSQL distribution that bundles the `pgvector` and `pg_search` extensions — not a plain PostgreSQL server. The database migrations create BM25 full-text indexes and vector columns that only work when those extensions are installed. If you run against vanilla PostgreSQL, startup will fail with `CREATE EXTENSION "pg_search" does not exist`.
+
+To run without Docker, you would need to: install ParadeDB (or install PostgreSQL with `pgvector` and `pg_search` manually), install the .NET 10 SDK, build the solution with `dotnet build`, and run each host project (`Equibles.Web`, `Equibles.Mcp.Server`, `Equibles.Worker.Host`) separately. The `docker-compose.yml` is the reference for which environment variables each service expects. This path is not officially documented or supported — Docker Compose handles all of this in one command.
