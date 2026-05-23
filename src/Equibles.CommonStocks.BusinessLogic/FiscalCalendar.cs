@@ -93,6 +93,15 @@ public static class FiscalCalendar
         var endMonth = endMonthRaw <= 0 ? endMonthRaw + 12 : endMonthRaw;
         var endYear = endMonthRaw <= 0 ? fiscalYear - 1 : fiscalYear;
 
+        if (endYear is < 1 or > 9999)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(fiscalYear),
+                fiscalYear,
+                "The resulting calendar year falls outside DateOnly's supported range (1–9999)."
+            );
+        }
+
         return new DateOnly(endYear, endMonth, DateTime.DaysInMonth(endYear, endMonth));
     }
 
