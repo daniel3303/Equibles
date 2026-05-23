@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Data.Extensions;
@@ -8,6 +9,7 @@ using Equibles.Web.FlashMessage;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Serilog.Events;
@@ -125,6 +127,21 @@ public partial class Program
         builder.Services.AddSession();
         builder.Services.AddFlashMessage();
         builder.Services.AddHealthChecks();
+
+        builder.Services.AddResponseCompression(options =>
+        {
+            options.EnableForHttps = true;
+            options.Providers.Add<BrotliCompressionProvider>();
+            options.Providers.Add<GzipCompressionProvider>();
+        });
+        builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
+        {
+            options.Level = CompressionLevel.Fastest;
+        });
+        builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+        {
+            options.Level = CompressionLevel.Fastest;
+        });
     }
 
     public static async Task ApplyMigrationsAsync(WebApplication app)
@@ -143,6 +160,7 @@ public partial class Program
             app.UseExceptionHandler("/Home/Error");
         }
 
+        app.UseResponseCompression();
         app.UseStaticFiles();
         app.UseRouting();
         app.UseSession();
