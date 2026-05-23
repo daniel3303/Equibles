@@ -154,6 +154,7 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
             && int.TryParse(name[..4], out var year)
             && int.TryParse(name[5..], out var quarter)
             && quarter is >= 1 and <= 4
+            && year is >= 1 and <= 9999
         )
         {
             var endMonth = quarter * 3;
@@ -192,7 +193,7 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
         if (monthNumber == 0)
             return null;
 
-        if (!int.TryParse(part[5..], out var year))
+        if (!int.TryParse(part[5..], out var year) || year is < 1 or > 9999)
             return null;
 
         if (day < 1 || day > DateTime.DaysInMonth(year, monthNumber))

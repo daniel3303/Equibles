@@ -9,7 +9,7 @@ namespace Equibles.UnitTests.Holdings;
 /// </summary>
 public class Holdings13FRealtimeWorkerParseDataSetEndDateYearZeroTests
 {
-    [Fact(Skip = "GH-1937 — ParseDataSetEndDate throws on year 0 in old-format file names")]
+    [Fact]
     public void ParseDataSetEndDate_OldFormatYearZero_ReturnsNullInsteadOfThrowing()
     {
         // Year 0 passes int.TryParse and quarter validation, but
