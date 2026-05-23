@@ -33,7 +33,7 @@ public static class HoldingsBacktestCalculator
             return result;
         }
 
-        var horizonCap = from.AddYears(MaxYears);
+        var horizonCap = from.Year > 9999 - MaxYears ? DateOnly.MaxValue : from.AddYears(MaxYears);
         if (to > horizonCap)
             to = horizonCap;
         result.EndDate = to;
@@ -77,7 +77,7 @@ public static class HoldingsBacktestCalculator
 
         Rebalance(holdings, ordered[snapshotIdx].Snapshot, startDate, portfolioValue, priceOf);
 
-        for (var day = startDate; day <= to; day = day.AddDays(1))
+        for (var day = startDate; ; day = day.AddDays(1))
         {
             // Advance through any rebalance dates that fall on/before `day`. Mark to market
             // with the prior holdings first so the rebalance uses an honest portfolio value.
@@ -101,6 +101,9 @@ public static class HoldingsBacktestCalculator
                     BenchmarkValue = Math.Round(benchValue, 4),
                 }
             );
+
+            if (day >= to)
+                break;
         }
 
         if (result.Points.Count > 0)
