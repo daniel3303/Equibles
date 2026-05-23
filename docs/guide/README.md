@@ -25,6 +25,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Change how far back data syncs](how-to-change-sync-start-date.md)
 - [Upgrade to the latest release](how-to-upgrade.md)
 - [Back up and restore your database](how-to-back-up-and-restore.md)
+- [Change the log level for troubleshooting](how-to-change-log-level.md)
 - [Check worker health and recent errors](how-to-view-status-and-errors.md)
 
 ## FAQ
