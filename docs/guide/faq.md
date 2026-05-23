@@ -66,3 +66,16 @@ Edit the port mappings in `docker-compose.yml`. Each service has a `ports:` entr
 | `embedding` | 11434 | Ollama (only with the embedding profile) |
 
 For example, to move the web portal to port 9090, change `"8080:8080"` to `"9090:8080"` under the `web` service, then run `docker compose up -d`. If you change the MCP port, remember to update your AI assistant's config to match (see [Connect an AI assistant](tutorial-connect-ai-assistant.md)).
+
+## What are the minimum system requirements?
+
+| Requirement | Minimum | Recommended |
+|-------------|---------|-------------|
+| **Docker** | Engine 20.10+ or Docker Desktop (with `docker compose` v2) | Latest stable |
+| **RAM** | 2 GB free | 4 GB free (8 GB if enabling the [embedding profile](how-to-enable-embedding-search.md)) |
+| **Disk** | 5 GB free | 10 GB+ (grows as scrapers backfill history) |
+| **CPU** | Any modern x86-64 or ARM64 | 2+ cores for comfortable scraping speed |
+| **OS** | Linux, macOS, or Windows (via Docker Desktop / WSL 2) | Any that runs Docker |
+| **Network** | Outbound HTTPS access to SEC EDGAR, Yahoo Finance, and other data sources | No inbound ports required unless you expose the portal externally |
+
+You do **not** need .NET, Node.js, or PostgreSQL installed locally — Docker provides everything. See the [install tutorial](tutorial-install.md) for setup steps.
