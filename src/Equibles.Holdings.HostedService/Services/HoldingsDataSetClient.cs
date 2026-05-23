@@ -134,10 +134,10 @@ public class HoldingsDataSetClient
         return fileNames;
     }
 
-    private static string FormatDatePart(DateOnly date)
+    internal static string FormatDatePart(DateOnly date)
     {
         return date.ToString("dd", CultureInfo.InvariantCulture)
             + date.ToString("MMM", CultureInfo.InvariantCulture).ToLower()
-            + date.ToString("yyyy");
+            + date.ToString("yyyy", CultureInfo.InvariantCulture);
     }
 }
