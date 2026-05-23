@@ -144,7 +144,7 @@ public class HoldingsImportService
             FilingDate = GetValue(row, "FILING_DATE"),
             PeriodOfReport = periodOfReport,
             FormType = formType,
-            Cik = GetValue(row, "CIK"),
+            Cik = GetValue(row, "CIK")?.TrimStart('0'),
         };
         return true;
     }
