@@ -42,7 +42,7 @@ public class CboeClient : ICboeClient
         _logger.LogDebug("Downloading CBOE put/call ratios from {Url}", url);
 
         var content = await DownloadWithRetry(url);
-        return ParsePutCallCsv(content);
+        return ParsePutCallCsv(content, csvType);
     }
 
     public async Task<List<CboeVixRecord>> DownloadVixHistory()
@@ -99,8 +99,14 @@ public class CboeClient : ICboeClient
     private static TimeSpan ExponentialBackoff(int attempt) =>
         TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
 
-    private static List<CboePutCallRecord> ParsePutCallCsv(string content)
+    // The VIX CSV ships columns in a different order than all other put/call
+    // CSVs: Date,Ratio,PutVol,CallVol,TotalVol vs Date,CallVol,PutVol,TotalVol,Ratio.
+    private static List<CboePutCallRecord> ParsePutCallCsv(
+        string content,
+        CboePutCallCsvType csvType
+    )
     {
+        var isVix = csvType == CboePutCallCsvType.Vix;
         var records = new List<CboePutCallRecord>();
         foreach (var fields in EnumerateCsvRows(content, minFields: 5))
         {
@@ -119,10 +125,10 @@ public class CboeClient : ICboeClient
                 new CboePutCallRecord
                 {
                     Date = date,
-                    CallVolume = ParseLong(fields[1]),
+                    CallVolume = ParseLong(fields[isVix ? 3 : 1]),
                     PutVolume = ParseLong(fields[2]),
-                    TotalVolume = ParseLong(fields[3]),
-                    PutCallRatio = ParseDecimal(fields[4]),
+                    TotalVolume = ParseLong(fields[isVix ? 4 : 3]),
+                    PutCallRatio = ParseDecimal(fields[isVix ? 1 : 4]),
                 }
             );
         }
