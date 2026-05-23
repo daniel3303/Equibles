@@ -45,7 +45,15 @@ public static class HoldingsBacktestCalculator
         }
 
         var ordered = snapshots
-            .Select(s => (Snapshot: s, RebalanceDate: s.ReportDate.AddDays(RebalanceDelayDays)))
+            .Select(s =>
+                (
+                    Snapshot: s,
+                    RebalanceDate: s.ReportDate.DayNumber
+                    > DateOnly.MaxValue.DayNumber - RebalanceDelayDays
+                        ? DateOnly.MaxValue
+                        : s.ReportDate.AddDays(RebalanceDelayDays)
+                )
+            )
             .OrderBy(x => x.RebalanceDate)
             .ToList();
 
