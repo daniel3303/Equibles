@@ -16,6 +16,20 @@
         </p>
     </div>
 
+    @if (!Model.Categories.Any()) {
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body items-center text-center py-16">
+                <icon name="chart-bar" size="12" class="text-base-content/20 mb-4" />
+                <p class="text-base-content/60 mb-1">No economic indicators have been imported yet.</p>
+                <p class="text-sm text-base-content/40">
+                    Configure a
+                    <a href="https://fred.stlouisfed.org/docs/api/api_key.html" target="_blank" rel="noopener" class="link link-primary">FRED API key</a>
+                    and run the FRED scraper to start importing data.
+                </p>
+            </div>
+        </div>
+    }
+
     <div class="space-y-6">
         @foreach (var category in Model.Categories) {
             <div class="card bg-base-100 shadow-sm">
