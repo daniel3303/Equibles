@@ -15,7 +15,7 @@ public class HoldingsBacktestCalculatorNearMaxDateOverflowTests
 {
     private static readonly Guid StockA = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-    [Fact(Skip = "GH-1846 — AddYears overflow on dates near DateOnly.MaxValue")]
+    [Fact]
     public void Calculate_FromNearDateOnlyMaxValue_DoesNotThrow()
     {
         var from = new DateOnly(9995, 1, 1);
