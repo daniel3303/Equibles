@@ -36,3 +36,16 @@ The SEC filing and document-processing scrapers run nearly continuously (every 1
 Yes, but Docker is strongly recommended. Equibles requires [ParadeDB](https://www.paradedb.com/) — a PostgreSQL distribution that bundles the `pgvector` and `pg_search` extensions — not a plain PostgreSQL server. The database migrations create BM25 full-text indexes and vector columns that only work when those extensions are installed. If you run against vanilla PostgreSQL, startup will fail with `CREATE EXTENSION "pg_search" does not exist`.
 
 To run without Docker, you would need to: install ParadeDB (or install PostgreSQL with `pgvector` and `pg_search` manually), install the .NET 10 SDK, build the solution with `dotnet build`, and run each host project (`Equibles.Web`, `Equibles.Mcp.Server`, `Equibles.Worker.Host`) separately. The `docker-compose.yml` is the reference for which environment variables each service expects. This path is not officially documented or supported — Docker Compose handles all of this in one command.
+
+## How do I export data from the web portal?
+
+Several pages in the web portal have a **Download CSV** button that exports the data you're currently viewing. Look for it in these places:
+
+| Page | What it exports |
+|------|----------------|
+| **Stock profile → Holdings tab** | All institutional holders of that stock for the selected report date (holder name, shares, value, percentage). |
+| **Institution profile** | The institution's full 13F portfolio for the selected quarter (ticker, shares, value, percentage). |
+| **Holdings Screener** | The filtered screener results matching your current query (whatever columns the screener shows). |
+| **Holdings Activity** | Quarter-over-quarter position changes (new positions, increased, decreased, sold) for the selected report date. |
+
+The download starts immediately when you click the button — no extra steps. The file is a standard CSV that opens in Excel, Google Sheets, or any spreadsheet tool.
