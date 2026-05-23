@@ -101,9 +101,7 @@ public class StockTabService
         // old query fetched ALL distinct filers market-wide for the quarter —
         // millions of rows — just to build a HashSet. We only need to know
         // whether each "gap" holder filed any 13F this quarter at all.
-        var currentHolderIds = allCurrent
-            .Select(h => h.InstitutionalHolderId)
-            .ToHashSet();
+        var currentHolderIds = allCurrent.Select(h => h.InstitutionalHolderId).ToHashSet();
         var previousOnlyHolderIds = allPrevious
             .Select(h => h.InstitutionalHolderId)
             .Where(id => !currentHolderIds.Contains(id))
