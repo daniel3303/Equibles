@@ -462,4 +462,19 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     : null,
         });
     }
+
+    public IQueryable<FilingActivitySummary> GetFilingActivitySummary(
+        CommonStock stock,
+        DateOnly since
+    )
+    {
+        return GetAll()
+            .Where(h => h.CommonStockId == stock.Id && h.FilingDate >= since)
+            .GroupBy(h => h.CommonStockId)
+            .Select(g => new FilingActivitySummary
+            {
+                FilingCount = g.Select(h => h.AccessionNumber).Distinct().Count(),
+                FilerCount = g.Select(h => h.InstitutionalHolderId).Distinct().Count(),
+            });
+    }
 }

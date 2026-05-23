@@ -61,6 +61,7 @@ public class StocksControllerShowDocumentCrossTickerTests
         var sut = new StocksController(
             new CommonStockRepository(ctx),
             institutionalHolderRepository: null!,
+            institutionalHoldingRepository: null!,
             new DocumentRepository(ctx),
             stockTabService: null!,
             Substitute.For<ILogger<StocksController>>()

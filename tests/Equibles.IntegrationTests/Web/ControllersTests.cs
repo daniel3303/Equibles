@@ -274,6 +274,7 @@ public class StocksControllerTests : IDisposable
     private readonly EquiblesDbContext _dbContext;
     private readonly CommonStockRepository _commonStockRepository;
     private readonly InstitutionalHolderRepository _institutionalHolderRepository;
+    private readonly InstitutionalHoldingRepository _institutionalHoldingRepository;
     private readonly DocumentRepository _documentRepository;
     private readonly StockTabService _stockTabService;
     private readonly ILogger<StocksController> _logger = Substitute.For<
@@ -295,6 +296,7 @@ public class StocksControllerTests : IDisposable
 
         _commonStockRepository = new CommonStockRepository(_dbContext);
         _institutionalHolderRepository = new InstitutionalHolderRepository(_dbContext);
+        _institutionalHoldingRepository = new InstitutionalHoldingRepository(_dbContext);
         _documentRepository = new DocumentRepository(_dbContext);
         _stockTabService = new StockTabService(
             new InstitutionalHoldingRepository(_dbContext),
@@ -321,6 +323,7 @@ public class StocksControllerTests : IDisposable
         var controller = new StocksController(
             _commonStockRepository,
             _institutionalHolderRepository,
+            _institutionalHoldingRepository,
             _documentRepository,
             _stockTabService,
             _logger
