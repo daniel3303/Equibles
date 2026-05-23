@@ -13,15 +13,12 @@ namespace Equibles.UnitTests.CommonStocks;
 /// </summary>
 public class FiscalCalendarQuarterEndDateYearUnderflowTests
 {
-    [Fact(Skip = "GH-1873 — GetQuarterEndDate year underflow to calendar year 0")]
-    public void GetQuarterEndDate_FiscalYear1MarchFyeQ1_DoesNotThrow()
+    [Fact]
+    public void GetQuarterEndDate_FiscalYear1MarchFyeQ1_ThrowsArgumentOutOfRange()
     {
         // March FYE: Q1 ends in June of the PREVIOUS calendar year (fiscalYear - 1 = 0).
         var act = () => FiscalCalendar.GetQuarterEndDate(1, 1, 3);
 
-        act.Should()
-            .NotThrow(
-                "GetQuarterEndDate should handle fiscal year 1 gracefully when the quarter walks to calendar year 0"
-            );
+        act.Should().ThrowExactly<ArgumentOutOfRangeException>().WithParameterName("fiscalYear");
     }
 }
