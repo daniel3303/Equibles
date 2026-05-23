@@ -87,3 +87,7 @@ A 13F is a quarterly report that large institutional investment managers (hedge 
 ## Does Equibles support non-US stocks?
 
 Not currently. All data sources are U.S.-focused: SEC EDGAR for filings and holdings, Yahoo Finance for U.S.-listed stock prices, FINRA for short data, FRED for U.S. economic indicators, and the U.S. Congress for congressional trades. The stock universe is built from companies that file with the SEC, which means U.S.-listed equities and foreign companies that cross-list in the U.S. via ADRs (American Depositary Receipts). International exchanges, non-U.S. regulators, and non-dollar-denominated instruments are not covered.
+
+## Does Equibles provide real-time data?
+
+No — Equibles is designed for research and analysis, not live trading. Stock prices from Yahoo Finance are end-of-day and update once every 24 hours. SEC filings appear within minutes of being published on EDGAR (the scraper polls every ~15 seconds), but the filings themselves are not real-time market data. Institutional holdings from 13F filings are quarterly and arrive with a 45-day lag. Short volume from FINRA and economic indicators from FRED are published daily or less frequently by those agencies. For the exact sync cadence of each data source, see [What data sources does Equibles pull from?](#what-data-sources-does-equibles-pull-from-and-how-often-do-they-update).
