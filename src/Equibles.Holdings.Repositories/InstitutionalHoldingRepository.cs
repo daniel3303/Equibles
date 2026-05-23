@@ -213,6 +213,8 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 TotalValue = g.Sum(h => h.Value),
                 FilerCount = g.Select(h => h.InstitutionalHolderId).Distinct().Count(),
                 PositionCount = g.Count(),
+                StockCount = g.Select(h => h.CommonStockId).Distinct().Count(),
+                FilingCount = g.Select(h => h.AccessionNumber).Distinct().Count(),
             });
     }
 
