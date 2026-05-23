@@ -14,7 +14,7 @@ public class HoldingsBacktestCalculatorRebalanceDateOverflowTests
 {
     private static readonly Guid StockA = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-    [Fact(Skip = "GH-1930 — ReportDate.AddDays(45) overflows near DateOnly.MaxValue")]
+    [Fact]
     public void Calculate_SnapshotReportDateNearMaxValue_DoesNotThrow()
     {
         // ReportDate 9999-11-20 + 45 days = 10000-01-04, which exceeds
