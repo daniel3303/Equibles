@@ -161,7 +161,27 @@ public partial class Program
         }
 
         app.UseResponseCompression();
-        app.UseStaticFiles();
+
+        app.UseStaticFiles(
+            new StaticFileOptions
+            {
+                OnPrepareResponse = ctx =>
+                {
+                    var headers = ctx.Context.Response.Headers;
+
+                    if (ctx.Context.Request.Path.StartsWithSegments("/dist"))
+                    {
+                        // Vite-built assets use asp-append-version (content hash query string),
+                        // so they can be cached indefinitely — a new hash busts the cache on deploy.
+                        headers.CacheControl = "public, max-age=31536000, immutable";
+                    }
+                    else
+                    {
+                        headers.CacheControl = "public, max-age=86400";
+                    }
+                },
+            }
+        );
         app.UseRouting();
         app.UseSession();
         app.UseAuthentication();
