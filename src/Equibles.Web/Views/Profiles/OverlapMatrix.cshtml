@@ -1,0 +1,161 @@
+@using Equibles.Web.ViewModels.Profiles
+@model InstitutionOverlapMatrixViewModel
+
+@{
+    ViewData["Title"] = "Overlap Matrix";
+    ViewData["Description"] = "Pairwise overlap of institutional 13F holdings — count of shared tickers between each pair.";
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">Institution Overlap Matrix</h1>
+        <p class="text-base-content/60">
+            Pairwise shared-ticker counts between selected 13F filers
+        </p>
+    </div>
+
+    <!-- CIK Input Form -->
+    <form method="get" class="mb-6">
+        <div class="flex flex-wrap gap-3 items-end">
+            <label class="form-control flex-1 min-w-[300px]">
+                <span class="label-text text-sm mb-1">CIKs (comma or space-separated, @InstitutionOverlapMatrixViewModel.MinCiks–@InstitutionOverlapMatrixViewModel.MaxCiks)</span>
+                <input type="text" name="ciks" value="@string.Join(", ", Model.RequestedCiks)"
+                       class="input input-bordered w-full"
+                       placeholder="e.g. 0001067983, 0001603466, 0001350694"
+                       aria-label="Institutional holder CIKs" />
+            </label>
+            @if (Model.CommonReportDates.Count > 0) {
+                <label class="form-control">
+                    <span class="label-text text-sm mb-1">Report Date</span>
+                    <select name="date" class="select select-bordered" aria-label="Report date">
+                        @foreach (var d in Model.CommonReportDates) {
+                            var isSelected = Model.SelectedDate.HasValue && d == Model.SelectedDate.Value;
+                            if (isSelected) {
+                                <option value="@d.ToString("yyyy-MM-dd")" selected>@d.ToString("MMM dd, yyyy")</option>
+                            } else {
+                                <option value="@d.ToString("yyyy-MM-dd")">@d.ToString("MMM dd, yyyy")</option>
+                            }
+                        }
+                    </select>
+                </label>
+            }
+            <button type="submit" class="btn btn-primary">Compare</button>
+        </div>
+    </form>
+
+    @if (Model.MissingCiks.Count > 0) {
+        <div class="alert alert-warning mb-4">
+            <icon name="exclamation-triangle" size="5" />
+            <span>CIKs not found: @string.Join(", ", Model.MissingCiks)</span>
+        </div>
+    }
+
+    @if (Model.RequestedCiks.Count < InstitutionOverlapMatrixViewModel.MinCiks) {
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body items-center text-center py-12">
+                <div class="text-base-content/30 mb-3">
+                    <icon name="table-cells" size="12" />
+                </div>
+                <h2 class="text-base-content/60 mb-2">Enter at least @InstitutionOverlapMatrixViewModel.MinCiks CIKs</h2>
+                <p class="text-base-content/40 text-sm">Paste institutional holder CIKs above to see how their 13F portfolios overlap.</p>
+            </div>
+        </div>
+    } else if (Model.CommonReportDates.Count == 0 && Model.MissingCiks.Count < Model.RequestedCiks.Count) {
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body items-center text-center py-12">
+                <h2 class="text-base-content/60 mb-2">No common report dates</h2>
+                <p class="text-base-content/40 text-sm">The selected institutions don't share any 13F reporting quarter.</p>
+            </div>
+        </div>
+    } else if (Model.Matrix != null) {
+        var n = Model.Matrix.Funds.Count;
+        var maxOverlap = 0;
+        for (var i = 0; i < n; i++)
+            for (var j = 0; j < n; j++)
+                if (i != j && Model.Matrix.SharedTickerCounts[i][j] > maxOverlap)
+                    maxOverlap = Model.Matrix.SharedTickerCounts[i][j];
+
+        <div class="text-sm text-base-content/50 mb-3">
+            @Model.Matrix.ReportDate.ToString("MMM dd, yyyy") · @n institutions
+        </div>
+
+        <!-- Matrix Table -->
+        <div class="card bg-base-100 shadow-sm mb-6">
+            <div class="card-body p-4 lg:p-6">
+                <h2 class="font-semibold text-sm mb-3">Shared Ticker Counts</h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-sm" aria-label="Pairwise overlap matrix" data-testid="overlap-matrix-table">
+                        <thead>
+                            <tr>
+                                <th scope="col"></th>
+                                @for (var j = 0; j < n; j++) {
+                                    <th scope="col" class="text-center text-xs max-w-[100px] truncate" title="@Model.Matrix.Funds[j].HolderName">
+                                        @Model.Matrix.Funds[j].HolderCik
+                                    </th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (var i = 0; i < n; i++) {
+                                <tr>
+                                    <th scope="row" class="text-xs max-w-[150px] truncate font-semibold" title="@Model.Matrix.Funds[i].HolderName">
+                                        <a asp-action="Institution" asp-controller="Profiles" asp-route-cik="@Model.Matrix.Funds[i].HolderCik"
+                                           class="link link-primary">@Model.Matrix.Funds[i].HolderName</a>
+                                    </th>
+                                    @for (var j = 0; j < n; j++) {
+                                        var count = Model.Matrix.SharedTickerCounts[i][j];
+                                        if (i == j) {
+                                            <td class="text-center font-mono text-sm bg-base-200 font-semibold" title="Total positions for @Model.Matrix.Funds[i].HolderName">
+                                                @count.ToString("N0")
+                                            </td>
+                                        } else {
+                                            var intensity = maxOverlap > 0 ? (double)count / maxOverlap : 0;
+                                            var bgOpacity = (intensity * 0.3 + 0.05).ToString("F2");
+                                            <td class="text-center font-mono text-sm"
+                                                style="background-color: oklch(55% 0.15 250 / @bgOpacity)"
+                                                title="@count shared tickers between @Model.Matrix.Funds[i].HolderName and @Model.Matrix.Funds[j].HolderName">
+                                                @count.ToString("N0")
+                                            </td>
+                                        }
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fund Summary -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4 lg:p-6">
+                <h2 class="font-semibold text-sm mb-3">Fund Summary</h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra table-sm" aria-label="Fund summaries">
+                        <thead>
+                            <tr>
+                                <th scope="col">Institution</th>
+                                <th scope="col" class="hidden md:table-cell">CIK</th>
+                                <th scope="col" class="text-right">Positions</th>
+                                <th scope="col" class="text-right hidden md:table-cell">Total Value ($M)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var fund in Model.Matrix.Funds) {
+                                <tr>
+                                    <td>
+                                        <a asp-action="Institution" asp-controller="Profiles" asp-route-cik="@fund.HolderCik"
+                                           class="link link-primary font-semibold">@fund.HolderName</a>
+                                    </td>
+                                    <td class="hidden md:table-cell font-mono text-sm text-base-content/60">@fund.HolderCik</td>
+                                    <td class="text-right font-mono">@fund.PositionCount.ToString("N0")</td>
+                                    <td class="text-right font-mono hidden md:table-cell">@((fund.TotalValue / 1_000_000m).ToString("N1"))</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
