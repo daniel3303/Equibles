@@ -10,7 +10,7 @@ namespace Equibles.UnitTests.Holdings;
 /// </summary>
 public class Holdings13FRealtimeWorkerParseDataSetEndDateInvalidDayTests
 {
-    [Fact(Skip = "GH-1911 — ParseDataSetEndDate throws on invalid day-of-month")]
+    [Fact]
     public void ParseDataSetEndDate_InvalidDayOfMonth_ReturnsNullInsteadOfThrowing()
     {
         // Feb has at most 29 days; day 31 should be gracefully rejected, not throw.
