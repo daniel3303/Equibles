@@ -49,3 +49,7 @@ Several pages in the web portal have a **Download CSV** button that exports the 
 | **Holdings Activity** | Quarter-over-quarter position changes (new positions, increased, decreased, sold) for the selected report date. |
 
 The download starts immediately when you click the button — no extra steps. The file is a standard CSV that opens in Excel, Google Sheets, or any spreadsheet tool.
+
+## Can I use Equibles with AI tools other than Claude and ChatGPT?
+
+Yes. Equibles exposes its data through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/), which is an open standard. Any AI tool that supports connecting to an MCP server over HTTP can use it — you just point the tool at `http://localhost:8081/mcp` (add an `Authorization: Bearer <key>` header if you've [set an API key](how-to-secure-mcp-api-key.md)). The [connect-an-assistant tutorial](tutorial-connect-ai-assistant.md) walks through Claude Desktop, Claude Code, and ChatGPT Desktop specifically, but the same URL and tools work with Cursor, Windsurf, Cline, Continue, and any other MCP-compatible client. Check your tool's documentation for where to add an MCP server URL.
