@@ -78,6 +78,7 @@ public class StocksControllerHoldingsTabTests : IDisposable
         var controller = new StocksController(
             new CommonStockRepository(_dbContext),
             new InstitutionalHolderRepository(_dbContext),
+            new InstitutionalHoldingRepository(_dbContext),
             new DocumentRepository(_dbContext),
             stockTabService,
             Substitute.For<ILogger<StocksController>>()

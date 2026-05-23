@@ -46,6 +46,7 @@ public class StocksControllerShowHolderNotFoundTests : IDisposable
         var controller = new StocksController(
             new CommonStockRepository(_dbContext),
             new InstitutionalHolderRepository(_dbContext),
+            institutionalHoldingRepository: null!,
             new DocumentRepository(_dbContext),
             // LoadHolderDetail must never be reached on this path, so the
             // service is intentionally null — a regression that dropped the

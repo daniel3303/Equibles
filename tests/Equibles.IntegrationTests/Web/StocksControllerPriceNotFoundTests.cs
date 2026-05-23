@@ -41,6 +41,7 @@ public class StocksControllerPriceNotFoundTests : IDisposable
         var controller = new StocksController(
             new CommonStockRepository(_dbContext),
             institutionalHolderRepository: null!,
+            institutionalHoldingRepository: null!,
             documentRepository: null!,
             // Must 404 before any tab load — a dropped null-stock guard would
             // NRE here instead of returning NotFound.

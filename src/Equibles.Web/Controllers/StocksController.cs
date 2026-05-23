@@ -14,14 +14,18 @@ namespace Equibles.Web.Controllers;
 
 public class StocksController : BaseController
 {
+    private const int FilingActivityDays = 30;
+
     private readonly CommonStockRepository _commonStockRepository;
     private readonly InstitutionalHolderRepository _institutionalHolderRepository;
+    private readonly InstitutionalHoldingRepository _institutionalHoldingRepository;
     private readonly DocumentRepository _documentRepository;
     private readonly StockTabService _stockTabService;
 
     public StocksController(
         CommonStockRepository commonStockRepository,
         InstitutionalHolderRepository institutionalHolderRepository,
+        InstitutionalHoldingRepository institutionalHoldingRepository,
         DocumentRepository documentRepository,
         StockTabService stockTabService,
         ILogger<StocksController> logger
@@ -30,6 +34,7 @@ public class StocksController : BaseController
     {
         _commonStockRepository = commonStockRepository;
         _institutionalHolderRepository = institutionalHolderRepository;
+        _institutionalHoldingRepository = institutionalHoldingRepository;
         _documentRepository = documentRepository;
         _stockTabService = stockTabService;
     }
@@ -183,6 +188,15 @@ public class StocksController : BaseController
             return NotFound();
 
         var viewModel = BuildStockViewModel(stock, activeTab);
+
+        var since = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-FilingActivityDays);
+        var filingActivity = await _institutionalHoldingRepository
+            .GetFilingActivitySummary(stock, since)
+            .FirstOrDefaultAsync();
+        viewModel.RecentFilingCount = filingActivity?.FilingCount ?? 0;
+        viewModel.RecentFilerCount = filingActivity?.FilerCount ?? 0;
+        viewModel.FilingActivityDays = FilingActivityDays;
+
         ViewData["TabViewModel"] = await loadTab(stock);
         return View("Show", viewModel);
     }

@@ -63,6 +63,15 @@
                             <a href="@stock.Website" target="_blank" rel="noopener" class="text-sm text-primary hover:underline truncate block">@stock.Website</a>
                         </div>
                     }
+                    @if (Model.RecentFilingCount > 0) {
+                        <div>
+                            <div class="text-xs text-base-content/50 uppercase tracking-wider">13F Activity (@(Model.FilingActivityDays)d)</div>
+                            <div class="flex items-center gap-2">
+                                <span class="badge badge-info badge-sm">@Model.RecentFilingCount filings</span>
+                                <span class="badge badge-ghost badge-sm">@Model.RecentFilerCount filers</span>
+                            </div>
+                        </div>
+                    }
                 </div>
             </div>
         </div>
