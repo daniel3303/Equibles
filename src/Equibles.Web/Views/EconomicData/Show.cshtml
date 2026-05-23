@@ -187,6 +187,7 @@
 
 @if (chronological.Count > 0) {
     @section Scripts {
+        <partial name="_ChartJs" />
         <script>
         // Render economy indicator line chart with 20/50-period SMA overlays
         document.addEventListener('DOMContentLoaded', function() {

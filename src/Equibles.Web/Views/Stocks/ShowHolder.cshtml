@@ -136,6 +136,7 @@
         </div>
 
         @if (chartHoldings.Count >= 2) {
+            <partial name="_ChartJs" />
             <script>
             // Render holder position line chart showing shares over time
             document.addEventListener('DOMContentLoaded', function() {

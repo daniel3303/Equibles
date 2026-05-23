@@ -145,6 +145,7 @@
 
 @if (chronological.Count > 0) {
     @section Scripts {
+        <partial name="_ChartJs" />
         <script>
         // Render put/call ratio line chart
         document.addEventListener('DOMContentLoaded', function() {

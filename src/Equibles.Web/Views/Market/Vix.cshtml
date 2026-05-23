@@ -155,6 +155,7 @@
 
 @if (chronological.Count > 0) {
     @section Scripts {
+        <partial name="_ChartJs" />
         <script>
         // Render VIX chart with SMA-20 and SMA-50 overlays
         document.addEventListener('DOMContentLoaded', function() {

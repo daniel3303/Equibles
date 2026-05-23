@@ -13,10 +13,6 @@ if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     });
 }
 
-// Chart.js (global for inline chart scripts)
-import Chart from 'chart.js/auto';
-window.Chart = Chart;
-
 // Custom modules
 import './js/loader';
 import './js/messages';
