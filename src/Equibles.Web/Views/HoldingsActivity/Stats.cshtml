@@ -1,0 +1,117 @@
+@using Equibles.Web.ViewModels.Holdings
+@model StatsDashboardViewModel
+
+@{
+    ViewData["Title"] = "13F Statistics";
+    ViewData["Description"] = "Market-wide 13F aggregate statistics — filers, filings, stocks covered, and assets under management per quarter.";
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">13F Statistics</h1>
+        <p class="text-base-content/60">
+            Market-wide aggregate statistics across all 13F-HR filers
+        </p>
+    </div>
+
+    @if (Model.Latest == null) {
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body items-center text-center py-12">
+                <div class="text-base-content/30 mb-3">
+                    <icon name="chart-bar" size="12" />
+                </div>
+                <h2 class="text-base-content/60 mb-2">No 13F data yet</h2>
+                <p class="text-base-content/40 text-sm">Once at least one quarter of 13F filings has been ingested, the statistics appear here.</p>
+            </div>
+        </div>
+    } else {
+        <!-- Latest Quarter Summary Cards -->
+        <div class="flex items-baseline gap-2 mb-3">
+            <h2 class="font-semibold text-sm">Latest Quarter</h2>
+            <span class="text-xs text-base-content/50">@Model.Latest.ReportDate.ToString("MMM dd, yyyy")</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Filers</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.Latest.FilerCount.ToString("N0")</div>
+                </div>
+            </div>
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Filings</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.Latest.FilingCount.ToString("N0")</div>
+                </div>
+            </div>
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Stocks</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.Latest.StockCount.ToString("N0")</div>
+                </div>
+            </div>
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Positions</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.Latest.PositionCount.ToString("N0")</div>
+                </div>
+            </div>
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Avg Pos/Filer</div>
+                    <div class="text-lg font-bold tabular-nums">@Model.Latest.AvgPositionsPerFiler.ToString("F1")</div>
+                </div>
+            </div>
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Total AUM</div>
+                    <div class="text-lg font-bold tabular-nums">$@((Model.Latest.TotalValue / 1_000_000_000m).ToString("N1"))B</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Historical Table -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4 lg:p-6">
+                <h2 class="font-semibold text-sm mb-3">Quarterly History</h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra table-sm" aria-label="Quarterly 13F statistics" data-testid="stats-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Report Date</th>
+                                <th scope="col" class="text-right">Filers</th>
+                                <th scope="col" class="text-right">Filings</th>
+                                <th scope="col" class="text-right hidden md:table-cell">Stocks</th>
+                                <th scope="col" class="text-right hidden md:table-cell">Positions</th>
+                                <th scope="col" class="text-right hidden lg:table-cell">Avg Pos/Filer</th>
+                                <th scope="col" class="text-right">AUM ($B)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (var i = 0; i < Model.Snapshots.Count; i++) {
+                                var snap = Model.Snapshots[i];
+                                var prev = i + 1 < Model.Snapshots.Count ? Model.Snapshots[i + 1] : null;
+                                var filerDelta = prev != null ? snap.FilerCount - prev.FilerCount : (int?)null;
+                                <tr>
+                                    <td class="font-mono text-sm">@snap.ReportDate.ToString("yyyy-MM-dd")</td>
+                                    <td class="text-right font-mono">
+                                        @snap.FilerCount.ToString("N0")
+                                        @if (filerDelta.HasValue && filerDelta.Value != 0) {
+                                            <span class="text-xs @(filerDelta.Value > 0 ? "text-success" : "text-error")">
+                                                @(filerDelta.Value > 0 ? "+" : "")@filerDelta.Value.ToString("N0")
+                                            </span>
+                                        }
+                                    </td>
+                                    <td class="text-right font-mono">@snap.FilingCount.ToString("N0")</td>
+                                    <td class="text-right font-mono hidden md:table-cell">@snap.StockCount.ToString("N0")</td>
+                                    <td class="text-right font-mono hidden md:table-cell">@snap.PositionCount.ToString("N0")</td>
+                                    <td class="text-right font-mono hidden lg:table-cell">@snap.AvgPositionsPerFiler.ToString("F1")</td>
+                                    <td class="text-right font-mono">@((snap.TotalValue / 1_000_000_000m).ToString("N1"))</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>

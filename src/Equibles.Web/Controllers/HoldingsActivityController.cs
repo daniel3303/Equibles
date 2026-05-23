@@ -116,6 +116,17 @@ public class HoldingsActivityController : BaseController
         );
     }
 
+    [HttpGet("~/holdings/stats")]
+    public async Task<IActionResult> Stats()
+    {
+        var snapshots = await _holdingRepository
+            .GetAumByReportDate()
+            .OrderByDescending(a => a.ReportDate)
+            .ToListAsync();
+
+        return View(new StatsDashboardViewModel { Snapshots = snapshots });
+    }
+
     [HttpGet("~/holdings/double-down")]
     public async Task<IActionResult> DoubleDown(DateOnly? date, double? minPct, int page = 1)
     {
