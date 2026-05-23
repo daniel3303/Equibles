@@ -207,9 +207,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         holding.AccessionNumber.Should().Be("ACC-001");
         holding.ManagerEntries.Should().ContainSingle().Which.Shares.Should().Be(1000);
         // UpsertInstitutionalHolders side-effect: the new CIK was inserted with cover-page metadata.
-        var holder = await verify
-            .Set<InstitutionalHolder>()
-            .SingleAsync(h => h.Cik == "0001067983");
+        var holder = await verify.Set<InstitutionalHolder>().SingleAsync(h => h.Cik == "1067983");
         holder.Name.Should().Be("Berkshire Hathaway");
         holder.City.Should().Be("Omaha");
     }
@@ -486,7 +484,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         var holder = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
-            Cik = "0001067983",
+            Cik = "1067983",
             Name = "Berkshire Hathaway",
         };
         var reportDate = new DateOnly(2024, 9, 30);
