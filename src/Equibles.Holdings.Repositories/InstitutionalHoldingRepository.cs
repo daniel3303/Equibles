@@ -141,6 +141,60 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             });
     }
 
+    // Recent filings feed: groups holdings by accession number to produce one row
+    // per filing, ordered by import timestamp. Joins InstitutionalHolder for filer
+    // metadata and uses a NOT EXISTS subquery to flag first-time filers (no holdings
+    // from any earlier report date).
+    public IQueryable<RecentFiling> GetRecentFilings()
+    {
+        var filings = GetAll()
+            .GroupBy(h => new
+            {
+                h.AccessionNumber,
+                h.InstitutionalHolderId,
+                h.FilingDate,
+                h.ReportDate,
+                h.IsAmendment,
+            })
+            .Select(g => new
+            {
+                g.Key.AccessionNumber,
+                g.Key.InstitutionalHolderId,
+                g.Key.FilingDate,
+                g.Key.ReportDate,
+                g.Key.IsAmendment,
+                PositionCount = g.Count(),
+                TotalValue = g.Sum(h => h.Value),
+                ImportedAt = g.Min(h => h.CreationTime),
+            });
+
+        return filings.Join(
+            DbContext.Set<InstitutionalHolder>(),
+            f => f.InstitutionalHolderId,
+            h => h.Id,
+            (f, h) =>
+                new RecentFiling
+                {
+                    AccessionNumber = f.AccessionNumber,
+                    InstitutionalHolderId = f.InstitutionalHolderId,
+                    FilerName = h.Name,
+                    FilerCik = h.Cik,
+                    FilingDate = f.FilingDate,
+                    ReportDate = f.ReportDate,
+                    PositionCount = f.PositionCount,
+                    TotalValue = f.TotalValue,
+                    IsAmendment = f.IsAmendment,
+                    ImportedAt = f.ImportedAt,
+                    IsNewFiler = !DbContext
+                        .Set<InstitutionalHolding>()
+                        .Any(prior =>
+                            prior.InstitutionalHolderId == f.InstitutionalHolderId
+                            && prior.ReportDate < f.ReportDate
+                        ),
+                }
+        );
+    }
+
     // Cross-sectional 13F screener. Aggregates per-stock filer-count / total-value /
     // new-position / sold-out-position metrics across the two snapshots in a single SQL
     // round trip, joins CommonStock + Industry for display columns and the % of float
