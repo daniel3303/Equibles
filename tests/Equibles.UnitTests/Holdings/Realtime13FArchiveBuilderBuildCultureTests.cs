@@ -13,7 +13,7 @@ namespace Equibles.UnitTests.Holdings;
 /// </summary>
 public class Realtime13FArchiveBuilderBuildCultureTests
 {
-    [Fact(Skip = "GH-1894 — Build emits Hijri dates on non-Gregorian culture threads")]
+    [Fact]
     public void Build_HijriCultureThread_EmitsGregorianIsoDates()
     {
         var prev = CultureInfo.CurrentCulture;

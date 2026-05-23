@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using Equibles.Core.AutoWiring;
@@ -40,8 +41,8 @@ public class Realtime13FArchiveBuilder
                 submission,
                 formType,
                 Clean(filing.AccessionNumber),
-                filing.FilingDate.ToString("yyyy-MM-dd"),
-                filing.PeriodOfReport.ToString("yyyy-MM-dd"),
+                filing.FilingDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                filing.PeriodOfReport.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 Clean(filing.Cik)
             );
 
