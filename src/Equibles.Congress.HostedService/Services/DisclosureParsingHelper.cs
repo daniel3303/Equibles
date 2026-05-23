@@ -210,7 +210,8 @@ public static partial class DisclosureParsingHelper
         if (value == null || value.Length <= maxLength)
             return value;
 
-        var end = char.IsHighSurrogate(value[maxLength - 1]) ? maxLength - 1 : maxLength;
+        var end =
+            maxLength > 0 && char.IsHighSurrogate(value[maxLength - 1]) ? maxLength - 1 : maxLength;
         return value[..end];
     }
 
