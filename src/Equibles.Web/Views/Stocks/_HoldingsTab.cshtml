@@ -118,7 +118,6 @@
                                             <th scope="col">Institution</th>
                                             <th scope="col" class="text-right">Δ Shares</th>
                                             <th scope="col" class="text-right hidden md:table-cell">Δ Value (USD)</th>
-                                            <th scope="col" class="text-right hidden lg:table-cell">Prior → New</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -131,7 +130,6 @@
                                                 <td class="max-w-xs truncate">@(e.InstitutionalHolder?.Name ?? "Unknown")</td>
                                                 <td class="text-right font-mono @deltaSharesCss">@deltaSharesText</td>
                                                 <td class="text-right font-mono hidden md:table-cell @deltaValueCss">@deltaValueText</td>
-                                                <td class="text-right font-mono hidden lg:table-cell text-base-content/60 whitespace-nowrap">@e.PreviousShares.ToString("N0") → @e.CurrentShares.ToString("N0")</td>
                                             </tr>
                                         }
                                     </tbody>
