@@ -13,7 +13,7 @@ namespace Equibles.UnitTests.Core;
 /// </summary>
 public class SyncDateResolverMaxValueOverflowTests
 {
-    [Fact(Skip = "GH-1878 — AddDays(1) overflows on DateOnly.MaxValue")]
+    [Fact]
     public void Resolve_LatestDateIsMaxValue_DoesNotThrow()
     {
         var act = () => SyncDateResolver.Resolve(DateOnly.MaxValue, new WorkerOptions());
