@@ -37,4 +37,14 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
     {
         return GetAll().Where(t => t.AccessionNumber == accessionNumber);
     }
+
+    public IQueryable<InsiderTransaction> GetRecentByType(TransactionCode code, DateOnly since)
+    {
+        return GetAll().Where(t => t.TransactionCode == code && t.TransactionDate >= since);
+    }
+
+    public IQueryable<InsiderTransaction> GetRecent(DateOnly since)
+    {
+        return GetAll().Where(t => t.TransactionDate >= since);
+    }
 }
