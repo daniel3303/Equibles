@@ -11,7 +11,7 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class FiscalPeriodResolverYearOverflowTests
 {
-    [Fact(Skip = "GH-1876 — CreateSafe overflows to year 10000")]
+    [Fact]
     public void Resolve_PeriodEndInYear9999_DoesNotThrow()
     {
         // A quarterly period ending Dec 31 9999 with a December FYE triggers

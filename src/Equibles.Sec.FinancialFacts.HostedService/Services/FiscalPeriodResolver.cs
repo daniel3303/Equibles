@@ -113,6 +113,10 @@ internal static class FiscalPeriodResolver
     // never throws.
     private static DateOnly CreateSafe(int year, int month, int day)
     {
+        if (year < 1)
+            return DateOnly.MinValue;
+        if (year > 9999)
+            return DateOnly.MaxValue;
         var maxDay = DateTime.DaysInMonth(year, month);
         return new DateOnly(year, month, Math.Min(day, maxDay));
     }
