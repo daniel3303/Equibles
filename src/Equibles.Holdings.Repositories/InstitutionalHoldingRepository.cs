@@ -141,6 +141,70 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             });
     }
 
+    public IQueryable<AumSnapshot> GetAumByReportDate()
+    {
+        return GetAll()
+            .GroupBy(h => h.ReportDate)
+            .Select(g => new AumSnapshot
+            {
+                ReportDate = g.Key,
+                TotalValue = g.Sum(h => h.Value),
+                FilerCount = g.Select(h => h.InstitutionalHolderId).Distinct().Count(),
+                PositionCount = g.Count(),
+            });
+    }
+
+    public IQueryable<SectorAllocationSnapshot> GetSectorAllocationByReportDate()
+    {
+        var aggregated = GetAll()
+            .Join(
+                DbContext.Set<CommonStock>(),
+                h => h.CommonStockId,
+                s => s.Id,
+                (h, s) =>
+                    new
+                    {
+                        h.ReportDate,
+                        h.Value,
+                        s.IndustryId,
+                    }
+            )
+            .Join(
+                DbContext.Set<CommonStocks.Data.Models.Taxonomies.Industry>(),
+                x => x.IndustryId,
+                i => i.Id,
+                (x, i) =>
+                    new
+                    {
+                        x.ReportDate,
+                        x.Value,
+                        i.SectorId,
+                    }
+            )
+            .Where(x => x.SectorId != null)
+            .GroupBy(x => new { x.ReportDate, SectorId = (Guid)x.SectorId })
+            .Select(g => new
+            {
+                g.Key.ReportDate,
+                g.Key.SectorId,
+                TotalValue = g.Sum(x => x.Value),
+            });
+
+        return aggregated.Join(
+            DbContext.Set<CommonStocks.Data.Models.Taxonomies.Sector>(),
+            a => a.SectorId,
+            s => s.Id,
+            (a, s) =>
+                new SectorAllocationSnapshot
+                {
+                    ReportDate = a.ReportDate,
+                    SectorId = a.SectorId,
+                    SectorName = s.Name,
+                    TotalValue = a.TotalValue,
+                }
+        );
+    }
+
     // Recent filings feed: groups holdings by accession number to produce one row
     // per filing, ordered by import timestamp. Joins InstitutionalHolder for filer
     // metadata and uses a NOT EXISTS subquery to flag first-time filers (no holdings
