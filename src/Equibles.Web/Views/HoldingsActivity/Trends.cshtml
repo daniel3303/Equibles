@@ -1,0 +1,236 @@
+@using Equibles.Web.ViewModels.Holdings
+@model TrendChartsViewModel
+
+@{
+    ViewData["Title"] = "13F Trend Charts";
+    ViewData["Description"] = "Market-wide 13F trends — total assets under management, sector allocation, and filer activity over time.";
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">13F Trend Charts</h1>
+        <p class="text-base-content/60">
+            Market-wide aggregates across all 13F-HR filers by report date
+        </p>
+    </div>
+
+    @if (Model.AumSnapshots.Count == 0) {
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body items-center text-center py-12">
+                <div class="text-base-content/30 mb-3">
+                    <icon name="chart-bar" size="12" />
+                </div>
+                <h2 class="text-base-content/60 mb-2">No 13F data yet</h2>
+                <p class="text-base-content/40 text-sm">Once at least one quarter of 13F filings has been ingested, the trend charts appear here.</p>
+            </div>
+        </div>
+    } else {
+        <!-- AUM Over Time -->
+        <div class="card bg-base-100 shadow-sm mb-6">
+            <div class="card-body p-4 lg:p-6">
+                <h2 class="font-semibold text-sm mb-3">Total Assets Under Management</h2>
+                <div class="h-[320px]">
+                    <canvas id="aum-chart" role="img" aria-label="Total AUM trend chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filer & Position Count Over Time -->
+        <div class="card bg-base-100 shadow-sm mb-6">
+            <div class="card-body p-4 lg:p-6">
+                <h2 class="font-semibold text-sm mb-3">Filers and Positions</h2>
+                <div class="h-[320px]">
+                    <canvas id="filer-chart" role="img" aria-label="Filer and position count trend chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sector Allocation Over Time -->
+        @if (Model.SectorAllocations.Count > 0) {
+            <div class="card bg-base-100 shadow-sm mb-6">
+                <div class="card-body p-4 lg:p-6">
+                    <h2 class="font-semibold text-sm mb-3">Sector Allocation</h2>
+                    <div class="h-[400px]">
+                        <canvas id="sector-chart" role="img" aria-label="Sector allocation trend chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@if (Model.AumSnapshots.Count > 0) {
+    @section Scripts {
+        <partial name="_ChartJs" />
+        <script>
+        // Render 13F trend charts
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof Chart === 'undefined') return;
+
+            const aumLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+                Model.AumSnapshots.Select(a => a.ReportDate.ToString("yyyy-MM-dd")).ToList()));
+            const aumValues = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+                Model.AumSnapshots.Select(a => a.TotalValue / 1_000_000_000m).ToList()));
+            const filerCounts = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+                Model.AumSnapshots.Select(a => a.FilerCount).ToList()));
+            const positionCounts = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+                Model.AumSnapshots.Select(a => a.PositionCount).ToList()));
+
+            const sharedOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+                scales: {
+                    x: { ticks: { maxTicksLimit: 12, font: { size: 10 } }, grid: { display: false } },
+                    y: { ticks: { font: { size: 10 } } }
+                }
+            };
+
+            // AUM chart
+            new Chart(document.getElementById('aum-chart'), {
+                type: 'line',
+                data: {
+                    labels: aumLabels,
+                    datasets: [{
+                        label: 'Total AUM ($B)',
+                        data: aumValues,
+                        borderColor: 'oklch(55% 0.15 250)',
+                        backgroundColor: 'oklch(55% 0.15 250 / 0.08)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 3,
+                        pointHitRadius: 6,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    ...sharedOptions,
+                    scales: {
+                        ...sharedOptions.scales,
+                        y: { ...sharedOptions.scales.y, title: { display: true, text: 'USD (Billions)', font: { size: 10 } } }
+                    }
+                }
+            });
+
+            // Filer + position count chart (dual axis)
+            new Chart(document.getElementById('filer-chart'), {
+                type: 'line',
+                data: {
+                    labels: aumLabels,
+                    datasets: [{
+                        label: 'Unique Filers',
+                        data: filerCounts,
+                        borderColor: 'oklch(65% 0.2 145)',
+                        backgroundColor: 'oklch(65% 0.2 145 / 0.08)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 3,
+                        pointHitRadius: 6,
+                        borderWidth: 2,
+                        yAxisID: 'y'
+                    }, {
+                        label: 'Total Positions',
+                        data: positionCounts,
+                        borderColor: 'oklch(65% 0.15 30)',
+                        borderWidth: 1.5,
+                        borderDash: [4, 2],
+                        pointRadius: 2,
+                        fill: false,
+                        tension: 0.3,
+                        yAxisID: 'y1'
+                    }]
+                },
+                options: {
+                    ...sharedOptions,
+                    scales: {
+                        x: sharedOptions.scales.x,
+                        y: {
+                            type: 'linear',
+                            position: 'left',
+                            title: { display: true, text: 'Filers', font: { size: 10 } },
+                            ticks: { font: { size: 10 } }
+                        },
+                        y1: {
+                            type: 'linear',
+                            position: 'right',
+                            title: { display: true, text: 'Positions', font: { size: 10 } },
+                            ticks: { font: { size: 10 } },
+                            grid: { drawOnChartArea: false }
+                        }
+                    }
+                }
+            });
+
+            // Sector allocation stacked area chart
+            @if (Model.SectorAllocations.Count > 0) {
+                var sectorNames = Model.SectorAllocations
+                    .Select(s => s.SectorName ?? "Unknown")
+                    .Distinct()
+                    .OrderBy(n => n)
+                    .ToList();
+                var sectorDates = Model.SectorAllocations
+                    .Select(s => s.ReportDate)
+                    .Distinct()
+                    .OrderBy(d => d)
+                    .ToList();
+                var sectorLookup = Model.SectorAllocations
+                    .ToDictionary(s => (s.ReportDate, s.SectorName ?? "Unknown"), s => s.TotalValue);
+
+                <text>
+                const sectorLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+                    sectorDates.Select(d => d.ToString("yyyy-MM-dd")).ToList()));
+                const sectorColors = [
+                    'oklch(55% 0.15 250)', 'oklch(65% 0.2 145)', 'oklch(65% 0.15 30)',
+                    'oklch(55% 0.2 310)', 'oklch(60% 0.15 80)', 'oklch(50% 0.15 200)',
+                    'oklch(70% 0.1 60)', 'oklch(55% 0.2 170)', 'oklch(60% 0.2 350)',
+                    'oklch(65% 0.1 120)', 'oklch(55% 0.15 290)', 'oklch(70% 0.15 15)'
+                ];
+                const sectorDatasets = [];
+                </text>
+
+                @for (var i = 0; i < sectorNames.Count; i++) {
+                    var sector = sectorNames[i];
+                    var values = sectorDates
+                        .Select(d => sectorLookup.TryGetValue((d, sector), out var v) ? v / 1_000_000_000m : 0m)
+                        .ToList();
+                    <text>
+                    sectorDatasets.push({
+                        label: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(sector)),
+                        data: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(values)),
+                        backgroundColor: sectorColors[@i % sectorColors.length] + ' / 0.6)',
+                        borderColor: sectorColors[@i % sectorColors.length],
+                        borderWidth: 1,
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0
+                    });
+                    </text>
+                }
+
+                <text>
+                new Chart(document.getElementById('sector-chart'), {
+                    type: 'line',
+                    data: { labels: sectorLabels, datasets: sectorDatasets },
+                    options: {
+                        ...sharedOptions,
+                        plugins: {
+                            ...sharedOptions.plugins,
+                            legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } }
+                        },
+                        scales: {
+                            x: sharedOptions.scales.x,
+                            y: {
+                                stacked: true,
+                                title: { display: true, text: 'USD (Billions)', font: { size: 10 } },
+                                ticks: { font: { size: 10 } }
+                            }
+                        }
+                    }
+                });
+                </text>
+            }
+        });
+        </script>
+    }
+}
