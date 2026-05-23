@@ -141,6 +141,68 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             });
     }
 
+    // Double-down report: per-(holder, stock) positions where the share-count
+    // increase from the prior quarter exceeds a given percentage threshold,
+    // ranked by conviction (largest % increase first). Joins holder + stock
+    // for display names so the caller doesn't need a second round trip.
+    public IQueryable<DoubleDownPosition> GetDoubleDownPositions(
+        DateOnly current,
+        DateOnly previous,
+        double minPctIncrease
+    )
+    {
+        var aggregated = GetAll()
+            .Where(h => h.ReportDate == current || h.ReportDate == previous)
+            .GroupBy(h => new { h.InstitutionalHolderId, h.CommonStockId })
+            .Select(g => new
+            {
+                g.Key.InstitutionalHolderId,
+                g.Key.CommonStockId,
+                CurrentShares = g.Sum(h => h.ReportDate == current ? h.Shares : 0L),
+                PreviousShares = g.Sum(h => h.ReportDate == previous ? h.Shares : 0L),
+                CurrentValue = g.Sum(h => h.ReportDate == current ? h.Value : 0L),
+                PreviousValue = g.Sum(h => h.ReportDate == previous ? h.Value : 0L),
+            })
+            .Where(a => a.PreviousShares > 0 && a.CurrentShares > a.PreviousShares)
+            .Where(a =>
+                (double)(a.CurrentShares - a.PreviousShares) / a.PreviousShares * 100.0
+                >= minPctIncrease
+            );
+
+        return aggregated
+            .Join(
+                DbContext.Set<InstitutionalHolder>(),
+                a => a.InstitutionalHolderId,
+                h => h.Id,
+                (a, h) =>
+                    new
+                    {
+                        a,
+                        FilerName = h.Name,
+                        FilerCik = h.Cik,
+                    }
+            )
+            .Join(
+                DbContext.Set<CommonStock>(),
+                x => x.a.CommonStockId,
+                s => s.Id,
+                (x, s) =>
+                    new DoubleDownPosition
+                    {
+                        InstitutionalHolderId = x.a.InstitutionalHolderId,
+                        FilerName = x.FilerName,
+                        FilerCik = x.FilerCik,
+                        CommonStockId = x.a.CommonStockId,
+                        Ticker = s.Ticker,
+                        StockName = s.Name,
+                        CurrentShares = x.a.CurrentShares,
+                        PreviousShares = x.a.PreviousShares,
+                        CurrentValue = x.a.CurrentValue,
+                        PreviousValue = x.a.PreviousValue,
+                    }
+            );
+    }
+
     public IQueryable<AumSnapshot> GetAumByReportDate()
     {
         return GetAll()
