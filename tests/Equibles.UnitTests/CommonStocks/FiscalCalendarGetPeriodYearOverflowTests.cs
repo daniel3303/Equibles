@@ -11,7 +11,7 @@ namespace Equibles.UnitTests.CommonStocks;
 /// </summary>
 public class FiscalCalendarGetPeriodYearOverflowTests
 {
-    [Fact(Skip = "GH-1884 — GetPeriod year overflow to fiscal year 10000")]
+    [Fact]
     public void GetPeriod_MaxValueDateWithNonDecemberFye_ThrowsArgumentOutOfRange()
     {
         // Dec 31, 9999 with June FYE: fiscalYear = 9999 + 1 = 10000.

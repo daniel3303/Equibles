@@ -41,6 +41,15 @@ public static class FiscalCalendar
         // calendar year; a date after it belongs to the one ending next year.
         var fiscalYear = date.Month <= fiscalYearEndMonth ? date.Year : date.Year + 1;
 
+        if (fiscalYear > 9999)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(date),
+                date,
+                "The resulting fiscal year falls outside DateOnly's supported range (1–9999)."
+            );
+        }
+
         var fiscalStartMonth = fiscalYearEndMonth % 12 + 1;
         var monthsIntoYear = (date.Month - fiscalStartMonth + 12) % 12;
         var quarter = monthsIntoYear / MonthsPerQuarter + 1;
