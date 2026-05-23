@@ -15,6 +15,7 @@ Walk-throughs for someone seeing Equibles for the first time.
 
 Task-focused recipes for someone who has Equibles running.
 
+- [Secure the MCP server with an API key](how-to-secure-mcp-api-key.md)
 - [Enable login authentication on the web portal](how-to-enable-authentication.md)
 - [Add a FRED API key (free economic-indicator data)](how-to-set-up-fred-api-key.md)
 - [Add a FINRA API key (free short-volume data)](how-to-set-up-finra-api-key.md)
