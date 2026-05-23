@@ -79,3 +79,7 @@ For example, to move the web portal to port 9090, change `"8080:8080"` to `"9090
 | **Network** | Outbound HTTPS access to SEC EDGAR, Yahoo Finance, and other data sources | No inbound ports required unless you expose the portal externally |
 
 You do **not** need .NET, Node.js, or PostgreSQL installed locally — Docker provides everything. See the [install tutorial](tutorial-install.md) for setup steps.
+
+## What is a 13F filing?
+
+A 13F is a quarterly report that large institutional investment managers (hedge funds, mutual funds, pension funds, insurance companies, etc.) are required to file with the SEC. Any manager with at least $100 million in qualifying assets must disclose their U.S. equity holdings — which stocks they own, how many shares, and the dollar value — within 45 days of each calendar quarter end. Equibles ingests these filings automatically and uses them to power the [Institutional Holders](tutorial-explore-stock.md) tab on stock profiles, the [Holdings Screener](how-to-use-holdings-screener.md), the [Holdings Activity](how-to-view-holdings-activity.md) page, and [institution portfolios](how-to-browse-institutions.md).
