@@ -151,7 +151,7 @@
         .ToList();
     if (allHolders.Count > 0) {
         <div class="collapse collapse-arrow bg-base-100 shadow-sm mb-3" id="holdings-all" data-testid="holdings-all">
-            <input type="checkbox" />
+            <input type="checkbox" aria-label="Toggle All Holders section" />
             <div class="collapse-title flex items-center gap-2 text-base font-medium">
                 <span>All Holders</span>
                 <span class="badge badge-neutral badge-sm">@allHolders.Count.ToString("N0")</span>
@@ -208,7 +208,7 @@
         var ariaTestId = $"holdings-bucket-{bucket.Type.ToString().ToLowerInvariant()}";
 
         <div class="collapse collapse-arrow bg-base-100 shadow-sm mb-3" id="@ariaTestId" data-testid="@ariaTestId">
-            <input type="checkbox" @(bucket.OpenByDefault && count > 0 ? "checked" : "") />
+            <input type="checkbox" aria-label="Toggle @bucket.Label section" @(bucket.OpenByDefault && count > 0 ? "checked" : "") />
             <div class="collapse-title flex items-center gap-2 text-base font-medium">
                 <span>@bucket.Label</span>
                 <span class="badge @bucket.BadgeCss badge-sm">@count.ToString("N0")</span>
