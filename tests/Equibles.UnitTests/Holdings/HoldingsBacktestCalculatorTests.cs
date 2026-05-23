@@ -265,6 +265,152 @@ public class HoldingsBacktestCalculatorTests
         result.Points.Should().BeEmpty();
     }
 
+    [Fact]
+    public void Calculate_ZeroBenchmarkPrice_ReturnsReasonString()
+    {
+        var snapshot = SingleStockSnapshot(new DateOnly(2024, 3, 31), StockA, 1_000_000);
+
+        var result = HoldingsBacktestCalculator.Calculate(
+            [snapshot],
+            new DateOnly(2024, 5, 15),
+            new DateOnly(2024, 5, 20),
+            (_, _) => 100m,
+            _ => 0m
+        );
+
+        result.Reason.Should().Contain("no benchmark price");
+        result.Points.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Calculate_ZeroValuePositions_AreExcluded()
+    {
+        var snapshot = new BacktestQuarterSnapshot
+        {
+            ReportDate = new DateOnly(2024, 3, 31),
+            Positions =
+            {
+                new BacktestPosition
+                {
+                    CommonStockId = StockA,
+                    Shares = 10_000,
+                    Value = 1_000_000,
+                    IsOption = false,
+                },
+                new BacktestPosition
+                {
+                    CommonStockId = StockB,
+                    Shares = 5_000,
+                    Value = 0,
+                    IsOption = false,
+                },
+            },
+        };
+        var rebalanceDate = new DateOnly(2024, 5, 15);
+
+        var result = HoldingsBacktestCalculator.Calculate(
+            [snapshot],
+            from: rebalanceDate,
+            to: rebalanceDate.AddDays(5),
+            priceOf: (_, _) => 100m,
+            benchmarkPriceOf: _ => 100m
+        );
+
+        result.Reason.Should().BeNull();
+        result.Points.Should().AllSatisfy(p => p.PortfolioValue.Should().Be(100m));
+    }
+
+    [Fact]
+    public void Calculate_ZeroPriceForHolding_ExcludesFromMarkToMarket()
+    {
+        var snapshot = new BacktestQuarterSnapshot
+        {
+            ReportDate = new DateOnly(2024, 3, 31),
+            Positions =
+            {
+                new BacktestPosition
+                {
+                    CommonStockId = StockA,
+                    Shares = 10_000,
+                    Value = 500_000,
+                    IsOption = false,
+                },
+                new BacktestPosition
+                {
+                    CommonStockId = StockB,
+                    Shares = 10_000,
+                    Value = 500_000,
+                    IsOption = false,
+                },
+            },
+        };
+        var rebalanceDate = new DateOnly(2024, 5, 15);
+
+        var result = HoldingsBacktestCalculator.Calculate(
+            [snapshot],
+            from: rebalanceDate,
+            to: rebalanceDate.AddDays(3),
+            priceOf: (stockId, day) =>
+            {
+                if (stockId == StockB && day > rebalanceDate)
+                    return 0m;
+                return 100m;
+            },
+            benchmarkPriceOf: _ => 100m
+        );
+
+        result.Reason.Should().BeNull();
+        result.Points.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void Calculate_PortfolioGains50Percent_CorrectTotalReturn()
+    {
+        var snapshot = SingleStockSnapshot(new DateOnly(2024, 3, 31), StockA, 1_000_000);
+        var rebalanceDate = new DateOnly(2024, 5, 15);
+
+        var result = HoldingsBacktestCalculator.Calculate(
+            [snapshot],
+            from: rebalanceDate,
+            to: rebalanceDate.AddDays(2),
+            priceOf: (_, day) =>
+            {
+                var offset = day.DayNumber - rebalanceDate.DayNumber;
+                return offset switch
+                {
+                    0 => 100m,
+                    1 => 125m,
+                    _ => 150m,
+                };
+            },
+            benchmarkPriceOf: _ => 100m
+        );
+
+        result.Reason.Should().BeNull();
+        result.PortfolioSummary.TotalReturnPercent.Should().Be(50m);
+    }
+
+    [Fact]
+    public void Calculate_BenchmarkPriceNull_FallsBackToStartPrice()
+    {
+        var snapshot = SingleStockSnapshot(new DateOnly(2024, 3, 31), StockA, 1_000_000);
+        var rebalanceDate = new DateOnly(2024, 5, 15);
+
+        var result = HoldingsBacktestCalculator.Calculate(
+            [snapshot],
+            from: rebalanceDate,
+            to: rebalanceDate.AddDays(3),
+            priceOf: (_, _) => 100m,
+            benchmarkPriceOf: day => day == rebalanceDate ? 100m : null
+        );
+
+        result.Reason.Should().BeNull();
+        result
+            .Points.Where(p => p.Date > rebalanceDate)
+            .Should()
+            .AllSatisfy(p => p.BenchmarkValue.Should().Be(100m));
+    }
+
     private static BacktestQuarterSnapshot SingleStockSnapshot(
         DateOnly reportDate,
         Guid stockId,

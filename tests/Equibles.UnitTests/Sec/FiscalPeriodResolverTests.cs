@@ -272,4 +272,229 @@ public class FiscalPeriodResolverTests
 
         result.Should().Be((2024, SecFiscalPeriod.Q3));
     }
+
+    [Fact]
+    public void Resolve_FyeMonthZero_ReturnsNull()
+    {
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2023, 01, 01),
+            periodEnd: new DateOnly(2023, 12, 31),
+            fyeMonth: 0,
+            fyeDay: 31
+        );
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void Resolve_FyeDayZero_ReturnsNull()
+    {
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2023, 01, 01),
+            periodEnd: new DateOnly(2023, 12, 31),
+            fyeMonth: 12,
+            fyeDay: 0
+        );
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void Resolve_AnnualDecemberFye_ReturnsFullYear()
+    {
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2023, 01, 01),
+            periodEnd: new DateOnly(2023, 12, 31),
+            fyeMonth: 12,
+            fyeDay: 31
+        );
+
+        result.Should().Be((2023, SecFiscalPeriod.FullYear));
+    }
+
+    [Fact]
+    public void Resolve_AnnualJuneFye_ReturnsFullYear()
+    {
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2023, 07, 01),
+            periodEnd: new DateOnly(2024, 06, 30),
+            fyeMonth: 6,
+            fyeDay: 30
+        );
+
+        result.Should().Be((2024, SecFiscalPeriod.FullYear));
+    }
+
+    [Fact]
+    public void Resolve_52WeekFiler_MatchesWithinWindow()
+    {
+        // Apple-style: nominal FYE 09/30 but actual period ends 09/28.
+        // The 2-day drift is within FyeMatchWindowDays (14).
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2023, 10, 01),
+            periodEnd: new DateOnly(2024, 09, 28),
+            fyeMonth: 9,
+            fyeDay: 30
+        );
+
+        result.Should().Be((2024, SecFiscalPeriod.FullYear));
+    }
+
+    [Fact]
+    public void Resolve_InstantAtDecemberFye_ReturnsFullYear()
+    {
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2024, 12, 31),
+            periodEnd: new DateOnly(2024, 12, 31),
+            fyeMonth: 12,
+            fyeDay: 31
+        );
+
+        result.Should().Be((2024, SecFiscalPeriod.FullYear));
+    }
+
+    [Fact]
+    public void Resolve_Q1_DecemberFye()
+    {
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2024, 01, 01),
+            periodEnd: new DateOnly(2024, 03, 31),
+            fyeMonth: 12,
+            fyeDay: 31
+        );
+
+        result.Should().Be((2024, SecFiscalPeriod.Q1));
+    }
+
+    [Fact]
+    public void Resolve_Q2_DecemberFye_HalfYear()
+    {
+        // YTD cumulative through Q2 — 182 days (within 170-190 half-year range).
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2024, 01, 01),
+            periodEnd: new DateOnly(2024, 06, 30),
+            fyeMonth: 12,
+            fyeDay: 31
+        );
+
+        result.Should().Be((2024, SecFiscalPeriod.Q2));
+    }
+
+    [Fact]
+    public void Resolve_Q3_DecemberFye_NineMonth()
+    {
+        // YTD cumulative through Q3 — 274 days (within 260-280 nine-month range).
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2024, 01, 01),
+            periodEnd: new DateOnly(2024, 09, 30),
+            fyeMonth: 12,
+            fyeDay: 31
+        );
+
+        result.Should().Be((2024, SecFiscalPeriod.Q3));
+    }
+
+    [Fact]
+    public void Resolve_Q1_MarchFye()
+    {
+        // FYE March 31. Fiscal year Apr 2024 - Mar 2025.
+        // Q1 = Apr-Jun 2024. endingFye = 2025-03-31, year = 2025.
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2024, 04, 01),
+            periodEnd: new DateOnly(2024, 06, 30),
+            fyeMonth: 3,
+            fyeDay: 31
+        );
+
+        result.Should().Be((2025, SecFiscalPeriod.Q1));
+    }
+
+    [Fact]
+    public void Resolve_Q2_JuneFye_HalfYear()
+    {
+        // FYE June 30. Fiscal year Jul 2024 - Jun 2025.
+        // Half-year cumulative = Jul-Dec 2024.
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2024, 07, 01),
+            periodEnd: new DateOnly(2024, 12, 31),
+            fyeMonth: 6,
+            fyeDay: 30
+        );
+
+        result.Should().Be((2025, SecFiscalPeriod.Q2));
+    }
+
+    [Fact]
+    public void Resolve_200DayDuration_ReturnsNull()
+    {
+        // 200 days falls between half-year (170-190) and nine-month (260-280) ranges.
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2024, 01, 01),
+            periodEnd: new DateOnly(2024, 07, 19),
+            fyeMonth: 12,
+            fyeDay: 31
+        );
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void Resolve_AnnualButFyeTooFar_ReturnsNull()
+    {
+        // Annual-length period (365 days) but FYE is far from periodEnd.
+        // Period ends 2024-06-15 with FYE 12/31 — closest FYE candidate is
+        // Dec 31, which is ~6 months away, well beyond the 14-day window.
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2023, 06, 16),
+            periodEnd: new DateOnly(2024, 06, 15),
+            fyeMonth: 12,
+            fyeDay: 31
+        );
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void Resolve_Feb29Fye_NonLeapYear_ClampsToFeb28()
+    {
+        // FYE Feb 29 in a non-leap year: CreateSafe clamps to Feb 28.
+        // Annual period ending Feb 28, 2023 should resolve because the
+        // clamped FYE (Feb 28) is within the 14-day window.
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2022, 03, 01),
+            periodEnd: new DateOnly(2023, 02, 28),
+            fyeMonth: 2,
+            fyeDay: 29
+        );
+
+        result.Should().Be((2023, SecFiscalPeriod.FullYear));
+    }
+
+    [Fact]
+    public void Resolve_PeriodEndYear1_AnnualDoesNotThrow()
+    {
+        // Year=1: CreateSafe(0,...) returns DateOnly.MinValue. Annual path
+        // uses ClosestTo which handles MinValue fine, no AddYears call.
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(1, 1, 1),
+            periodEnd: new DateOnly(1, 12, 31),
+            fyeMonth: 12,
+            fyeDay: 31
+        );
+
+        result.Should().Be((1, SecFiscalPeriod.FullYear));
+    }
+
+    [Fact]
+    public void Resolve_PeriodEndYear1_QuarterlyThrows()
+    {
+        // Quarterly path calls endingFye.AddYears(-1) which underflows when
+        // endingFye is year 1. This documents the current limitation.
+        var periodStart = new DateOnly(1, 1, 1);
+        var periodEnd = new DateOnly(1, 3, 31);
+
+        var act = () => FiscalPeriodResolver.Resolve(periodStart, periodEnd, 12, 31);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
 }

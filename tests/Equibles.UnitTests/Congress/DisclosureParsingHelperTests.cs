@@ -29,6 +29,17 @@ public class DisclosureParsingHelperTests
     }
 
     [Theory]
+    [InlineData("S(full)", CongressTransactionType.Sale)]
+    [InlineData("P(partial)", CongressTransactionType.Purchase)]
+    public void ParseTransactionType_AbbreviationWithParenNoSpace_ReturnsExpected(
+        string input,
+        CongressTransactionType expected
+    )
+    {
+        DisclosureParsingHelper.ParseTransactionType(input).Should().Be(expected);
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("Exchange")]
@@ -76,6 +87,14 @@ public class DisclosureParsingHelperTests
         var (from, to) = DisclosureParsingHelper.ParseAmountRange("$15,000");
         from.Should().Be(0);
         to.Should().Be(15000);
+    }
+
+    [Fact]
+    public void ParseAmountRange_UnderAmount_ReturnsUpperBound()
+    {
+        var (from, to) = DisclosureParsingHelper.ParseAmountRange("Under $1,000");
+        from.Should().Be(0);
+        to.Should().Be(1000);
     }
 
     [Theory]
@@ -197,6 +216,12 @@ public class DisclosureParsingHelperTests
     }
 
     [Fact]
+    public void Truncate_ValueExactlyMaxLength_ReturnsOriginal()
+    {
+        DisclosureParsingHelper.Truncate("abc", 3).Should().Be("abc");
+    }
+
+    [Fact]
     public void Truncate_OverLimit_Truncated()
     {
         DisclosureParsingHelper.Truncate("abcdefghij", 5).Should().Be("abcde");
@@ -206,6 +231,25 @@ public class DisclosureParsingHelperTests
     public void Truncate_Null_ReturnsNull()
     {
         DisclosureParsingHelper.Truncate(null, 10).Should().BeNull();
+    }
+
+    [Fact]
+    public void Truncate_EmptyString_ReturnsEmpty()
+    {
+        DisclosureParsingHelper.Truncate("", 5).Should().Be("");
+    }
+
+    [Fact]
+    public void Truncate_LowSurrogateAtBoundary_TruncatesNormally()
+    {
+        // "🏛" (U+1F3DB) is a surrogate pair: high \uD83C at index 0, low \uDFDB at index 1.
+        // maxLength=2 lands AFTER the low surrogate — the full pair fits, so the
+        // surrogate guard must NOT back up. This is the inverse of the sibling test
+        // in TruncateSurrogatePairTests (which lands ON the high surrogate).
+        var input = "🏛trailing"; // length = 2 + 8 = 10
+        var result = DisclosureParsingHelper.Truncate(input, 2);
+
+        result.Should().Be("🏛");
     }
 
     // ── IsValidDisclosureUrl ────────────────────────────────────────────
@@ -349,23 +393,9 @@ public class DisclosureParsingHelperTests
     [Fact]
     public void ParseTransactionsFromHtml_BothTransactionAndNotificationDateColumns_UsesTransactionDate()
     {
-        // Senate HTML disclosures regularly carry BOTH a "Transaction Date" (when the
-        // member traded) AND a "Notification Date" (when the filing was acknowledged) —
-        // the two can differ by weeks. MapColumnIndices' priority chain (transaction →
-        // notification → any-date) hinges on this distinction: every analyst-facing
-        // metric (timing relative to legislation, frontrunning windows) is computed from
-        // the transaction date, never the notification date.
-        //
-        // The risk this test pins: a refactor that simplifies to a single
-        // `FindIndex(h => h.Contains("date"))` would pick the FIRST date-matching column.
-        // Because Senate often renders Notification first, the helper would silently
-        // record FilingDate-ish values as TransactionDate, blowing up every "trades
-        // within N days of a hearing" query downstream. The existing positive test only
-        // has one date column — neither this nor the integration tests catch the
-        // priority regression.
-        //
-        // Notification Date 2024-07-01 is deliberately placed BEFORE Transaction Date
-        // 2024-06-15 so the simplified fallback would pick the wrong column.
+        // Pins MapColumnIndices' date-column priority: "Transaction Date" wins over
+        // "Notification Date". Notification placed first to catch regressions that
+        // simplify to a single Contains("date") match.
         var html = """
             <html><body>
             <table>
@@ -406,11 +436,8 @@ public class DisclosureParsingHelperTests
     [Fact]
     public void ParseTransactionsFromHtml_UnrecognizedTransactionType_SkipsRow()
     {
-        // Congress disclosures occasionally carry transaction types that the
-        // enum intentionally doesn't model — "Exchange" and "Receive" are
-        // called out by the comment above ParseTransactionType. Those rows
-        // must be skipped (not silently recorded as a Purchase or Sale),
-        // pinning the LogDebug + return-null branch in ParseTransactionRow.
+        // "Exchange"/"Receive" are intentionally unmodeled — rows must be
+        // skipped, not silently recorded as Purchase/Sale.
         var html = """
             <html><body>
             <table>
@@ -448,19 +475,8 @@ public class DisclosureParsingHelperTests
     [Fact]
     public void ParseTransactionsFromHtml_TableWithoutTheadButFirstRowTh_ReadsHeadersFromFirstRow()
     {
-        // Congress disclosure HTML — particularly older House PTRs and
-        // hand-coded staff exports — frequently omits a `<thead>` and
-        // simply places `<th>` cells in the first `<tr>` of `<tbody>` (or
-        // bare, with no tbody at all). `ExtractHeaderTexts` handles this
-        // with a null-coalescing fallback: `SelectNodes(".//thead//th") ??
-        // SelectNodes(".//tr[1]//th")`. Every other parse test in this
-        // file uses a proper `<thead>`, so the fallback branch is
-        // unexercised — a refactor that drops the `??` (or that mis-orders
-        // it) would silently start returning zero transactions on the
-        // entire class of thead-less filings, with no visible failure
-        // because IsTransactionTable would receive an empty header list
-        // and return false. Pin the fallback with a deliberately
-        // thead-less table that carries a real Purchase row.
+        // Pins ExtractHeaderTexts' fallback: SelectNodes(".//tr[1]//th")
+        // when no <thead> exists. Older House PTRs use this layout.
         var html = """
             <html><body>
             <table>
@@ -538,35 +554,8 @@ public class DisclosureParsingHelperTests
     [Fact]
     public void ParseTransactionsFromHtml_DescriptionHeaderInsteadOfAssetName_PopulatesAssetNameFromDescriptionColumn()
     {
-        // MapColumnIndices resolves the asset column via a three-tier fallback:
-        //   1. Contains("asset") && Contains("name")  → "Asset Name" (primary)
-        //   2. Contains("asset") && !Contains("type") → bare "Asset" (rare)
-        //   3. Contains("description")                → "Description" (older House PTRs)
-        // Every existing happy-path pin in this file uses "Asset Name" (tier 1).
-        // Tier 3 is exercised by older House PTR exports and some hand-coded
-        // staff submissions that label the asset column "Description" rather than
-        // "Asset Name" — IsTransactionTable also accepts "description" in its
-        // hasAsset gate (`Any(h.Contains("description"))`) so these tables make
-        // it past the table-detection check; they then rely on the third-tier
-        // assetCol fallback to actually pluck the column.
-        //
-        // The risk this pin catches: a refactor that "tidies up" the assetCol
-        // chain — e.g. collapses to just `Contains("asset")` — would compile
-        // cleanly, pass every existing Asset-Name test, AND pass
-        // IsTransactionTable, then silently set cols.Asset = -1 for every
-        // Description-only table. GetCell returns null on -1, CleanSentinel
-        // passes null through, the assetName check in ParseTransactionRow
-        // falls back to the ticker (which is present here as "AAPL"), the
-        // transaction IS still recorded — but with AssetName=null. Downstream
-        // consumers that group by AssetName (the "trades by company" UI, the
-        // CSV export's Description column) silently lose context for every
-        // legacy-format row.
-        //
-        // Pin: a House PTR header with no "Asset Name" or bare "Asset" — only
-        // "Description". The valid row carries AAPL ticker + Apple text. The
-        // assertion checks AssetName is populated from the Description column,
-        // proving the third-tier fallback fired. Without the fallback, AssetName
-        // would be null.
+        // Pins assetCol tier-3 fallback: Contains("description"). Older House
+        // PTRs label the asset column "Description" instead of "Asset Name".
         var html = """
             <html><body>
             <table>
@@ -606,26 +595,8 @@ public class DisclosureParsingHelperTests
     [Fact]
     public void ParseTransactionsFromHtml_BareAssetHeaderWithoutNameOrType_PopulatesAssetNameFromSecondTierFallback()
     {
-        // Sibling pin to ParseTransactionsFromHtml_DescriptionHeaderInsteadOfAssetName.
-        // MapColumnIndices' assetCol three-tier fallback:
-        //   1. Contains("asset") && Contains("name")  → "Asset Name" (covered by happy-path tests)
-        //   2. Contains("asset") && !Contains("type") → bare "Asset" (this pin)
-        //   3. Contains("description")                → "Description" (covered by sibling)
-        // Tier 2 — bare "Asset" header without "Name" and not "Asset Type" — fires
-        // for older House PTR exports and hand-coded staff submissions that label the
-        // asset column simply "Asset". The `!Contains("type")` clause is load-bearing:
-        // it must distinguish "Asset" from "Asset Type" (which IS present in modern
-        // House PTRs alongside "Asset Name" — see ParseTransactionsFromHtml_ValidTable_…).
-        // Without the negative clause, a regression like `Contains("asset")` alone
-        // would silently pick up "Asset Type" as the asset column, populating
-        // AssetName with the asset-type string ("Stock", "Bond Fund") instead of
-        // the actual asset description.
-        //
-        // The two existing sibling pins (Asset Name → tier 1, Description → tier 3)
-        // don't exercise tier 2 — neither would catch a regression that drops the
-        // middle FindIndex call entirely (collapsing the chain from 3 tiers to 2).
-        // Pin tier 2 with a deliberately bare "Asset" header so the middle fallback
-        // is required to fire.
+        // Pins assetCol tier-2 fallback: Contains("asset") && !Contains("type").
+        // Bare "Asset" header must resolve correctly and not collide with "Asset Type".
         var html = """
             <html><body>
             <table>
@@ -664,81 +635,9 @@ public class DisclosureParsingHelperTests
     [Fact]
     public void ParseTransactionsFromHtml_RowWithEmptySentinelInTransactionDateColumn_IsSilentlySkipped()
     {
-        // ParseTransactionRow's first guard after column extraction is:
-        //   var txDate = CleanSentinel(GetCell(cellTexts, cols.Date)) is { } dateStr ? ParseDate(dateStr) : null;
-        //   if (txDate == null) return null;
-        // The CleanSentinel + `is { }` chain handles three cases that all yield txDate=null:
-        //   1. cols.Date == -1 (column missing entirely) → GetCell returns null → CleanSentinel(null) returns null → `is { }` pattern fails → skip
-        //   2. Empty cell ("" or whitespace) → CleanSentinel returns null → skip
-        //   3. "--" empty sentinel → CleanSentinel returns null → skip
-        //   4. Non-sentinel but unparseable date → ParseDate returns null → skip
-        //
-        // Case 3 — the "--" empty sentinel in the DATE column — is structurally
-        // distinct from every existing pin and uniquely catches a specific class
-        // of refactor regressions:
-        //
-        //   • A "simplify CleanSentinel" refactor that drops the `value == EmptySentinel`
-        //     check (or that changes the sentinel constant from "--" to e.g. "—" em-dash,
-        //     "N/A", or empty string) would compile, pass every existing test (none of
-        //     which exercises "--" in the date column), and silently let "--" flow into
-        //     ParseDate which would yield null via its IsNullOrWhiteSpace+TryParse
-        //     fall-through. The row would still skip — but for a DIFFERENT reason, and
-        //     the per-row diagnostic context degrades (operators reading the
-        //     "Skipping transaction with unrecognized type" debug log won't see
-        //     this row because the type check comes AFTER the date guard).
-        //
-        //   • A refactor that "tightens" the `is { } dateStr ? ParseDate(dateStr) : null`
-        //     pattern to a simpler `ParseDate(GetCell(cellTexts, cols.Date))` would
-        //     skip CleanSentinel entirely. ParseDate("--") returns null via
-        //     IsNullOrWhiteSpace=false, TryParse fail, TryParseExact fail — same
-        //     observable outcome (row skipped). But the CleanSentinel layer is
-        //     load-bearing for OTHER columns where the sentinel-vs-empty distinction
-        //     matters (the existing `NonStockAssetType_Filtered` test relies on
-        //     `--` in the Owner column being treated as null, not as the literal
-        //     string "--"). Dropping CleanSentinel for the date path would
-        //     subtly couple-uncouple the helper across columns.
-        //
-        //   • Inversion of the conditional: `is null` instead of `is { } dateStr`,
-        //     under the (false) intuition of "let me explicit-null-check this":
-        //       var txDate = CleanSentinel(...) is null ? null : ParseDate(...);
-        //     would compile but break the variable capture — `dateStr` wouldn't
-        //     be in scope. A worse refactor that pre-captured the cleaned value
-        //     and then null-checked would observably work the same. Hard to
-        //     write a regression test that catches this specific case.
-        //
-        // The existing pins this complements:
-        //   • `NonStockAssetType_Filtered` puts "--" in the Owner column — proves
-        //     the sentinel is recognized for owner attribution. Does NOT exercise
-        //     the date-column sentinel.
-        //   • `ParseDate_InvalidOrNull_ReturnsNull` proves ParseDate returns null
-        //     for null/empty/"not-a-date". Does NOT exercise CleanSentinel.
-        //   • `CleanSentinel_DashDash_ReturnsNull` proves CleanSentinel maps "--"
-        //     to null. Does NOT exercise the end-to-end ParseTransactionRow flow.
-        // The three-pin family separately validates the components; this fourth
-        // pin proves they wire together correctly when "--" appears specifically
-        // in the date column. A regression in any single component (CleanSentinel
-        // not recognizing "--", ParseDate not rejecting "--", or
-        // ParseTransactionRow short-circuiting differently) is caught here.
-        //
-        // Production trigger: Senate eFD occasionally renders the transaction-date
-        // column as "--" when the filer omits an explicit transaction date (e.g.
-        // for amended filings where only the filing date is known). The expected
-        // behavior is to skip the row silently — the partial data isn't useful
-        // for the "trades within N days of a hearing" analytics that drive the
-        // dashboard.
-        //
-        // Construction: a header with all the standard transaction-table columns,
-        // one row where the Transaction Date cell is "--" but every OTHER cell
-        // (ticker, asset, type, amount) is fully populated. The assertion checks
-        // that the result is empty — proving the date guard fired, NOT some
-        // downstream filter. To distinguish this from "the table wasn't detected
-        // as a transaction table at all" (IsTransactionTable failure), the
-        // assertion would need to include a second VALID row whose date IS
-        // populated, then assert exactly one transaction in the result. But that
-        // doubles the test surface; the simpler "empty result with valid-shaped
-        // row" assertion is enough since IsTransactionTable's hasDate check looks
-        // at the HEADER text ("transaction date"), not at the cell content —
-        // the header still passes that check.
+        // Pins the CleanSentinel → ParseDate → null → skip chain when the
+        // date cell is "--". Senate eFD uses this for amended filings where
+        // only the filing date is known.
         var html = """
             <html><body>
             <table>
@@ -776,25 +675,8 @@ public class DisclosureParsingHelperTests
     [Fact]
     public void ParseTransactionsFromHtml_FilerColumnInsteadOfOwner_PopulatesOwnerTypeFromFilerColumn()
     {
-        // MapColumnIndices resolves the owner column with `h.Contains("owner") ||
-        // h.Contains("filer")`. The two alternatives are independent: House PTRs use
-        // an "Owner" column (Self / SP / JT / DC), Senate disclosures use a "Filer"
-        // column (Joint / Self / Spouse). Every existing happy-path pin in this file
-        // uses an "Owner" column; the `|| h.Contains("filer")` arm is unpinned and
-        // a refactor that "simplifies" the alternation to just `Contains("owner")`
-        // would compile cleanly, pass every existing test, and silently null out
-        // OwnerType for every Senate row in production — losing the joint vs spouse
-        // vs self distinction the analytics tier displays as the trade attribution.
-        //
-        // The failure mode is invisible: the row still parses (date/ticker/asset
-        // come through), the transaction is recorded, but the OwnerType column in
-        // the DB receives null where it used to carry "Joint" or "Spouse". The
-        // dashboard's "trades attributed to spouse" filter silently empties out.
-        //
-        // Pin the filer-column path with a Senate-style header. The assertion
-        // checks OwnerType on the parsed transaction — proving the filer column
-        // was actually resolved AND that its value flowed through GetCell →
-        // CleanSentinel → Truncate to the persisted field.
+        // Pins ownerCol's Contains("filer") fallback — Senate uses "Filer Type"
+        // instead of "Owner". Without this arm, OwnerType silently nulls out.
         var html = """
             <html><body>
             <table>
@@ -833,23 +715,12 @@ public class DisclosureParsingHelperTests
     }
 
     // ── Partial-branch fills ────────────────────────────────────────────
-    // Each test below pins the false/null arm of a `?.` / `??` / `&&` / `||`
-    // / pattern-match branch that the existing happy-path fixtures don't
-    // currently traverse. Identified from coverlet's cobertura
-    // `condition-coverage` attribute over the production code.
 
     [Fact]
     public void ParseTransactionsFromHtml_TableWithNoTheadAndNoLeadingThRow_SkipsTableSilently()
     {
-        // Pins ExtractHeaderTexts' null-coalesce + null-conditional fallthrough:
-        //   var headers = SelectNodes(".//thead//th") ?? SelectNodes(".//tr[1]//th");
-        //   return headers?.Select(...).ToList();
-        // and the caller's `headerTexts == null ||` short-circuit. Existing pins
-        // cover thead-present (happy path) and thead-less-but-first-row-th
-        // (TableWithoutTheadButFirstRowTh) — neither hits the case where BOTH
-        // selectors miss, which is what a malformed HTML scrape would produce.
-        // Without the `==null` guard in the caller, IsTransactionTable would NRE
-        // on a null headerTexts.
+        // Pins ExtractHeaderTexts returning null when both thead//th and
+        // tr[1]//th selectors miss — prevents NRE in IsTransactionTable.
         var html = """
             <html><body>
             <table>
@@ -878,13 +749,8 @@ public class DisclosureParsingHelperTests
     [Fact]
     public void ParseTransactionsFromHtml_OnlyNotificationDateColumnNoTransactionDate_UsesNotificationDateAsTxDate()
     {
-        // Pins MapColumnIndices' first dateCol fallback:
-        //   if (dateCol == -1) dateCol = FindIndex(h.Contains("notification") && h.Contains("date"));
-        // The existing BothTransactionAndNotificationDateColumns pin includes a
-        // Transaction Date column, so the first FindIndex succeeds and this
-        // fallback never fires. Pin a table with ONLY a "Notification Date"
-        // so the helper has to fall through to the second tier; the parsed
-        // TransactionDate must come from that column.
+        // Pins dateCol tier-2 fallback: "Notification Date" when no
+        // "Transaction Date" column exists.
         var html = """
             <html><body>
             <table>
@@ -923,12 +789,7 @@ public class DisclosureParsingHelperTests
     [Fact]
     public void ParseTransactionsFromHtml_OnlyGenericDateColumn_UsesItAsTxDate()
     {
-        // Pins MapColumnIndices' SECOND dateCol fallback:
-        //   if (dateCol == -1) dateCol = FindIndex(h.Contains("date"));
-        // — the most permissive arm. Fires for legacy / hand-rolled tables that
-        // use a bare "Date" header. Together with the notification-only sibling
-        // above and the existing transaction-date primary pin, the three-tier
-        // chain is fully exercised.
+        // Pins dateCol tier-3 fallback: bare "Date" header (legacy tables).
         var html = """
             <html><body>
             <table>
@@ -967,14 +828,7 @@ public class DisclosureParsingHelperTests
     [Fact]
     public void ParseTransactionsFromHtml_BareTypeHeaderWithoutTransactionPrefix_ResolvesTypeColumn()
     {
-        // Pins MapColumnIndices' typeCol fallback:
-        //   if (typeCol == -1) typeCol = FindIndex(h == "type");
-        // Without the fallback, tables that label the transaction column simply
-        // "Type" (older House PTR exports, hand-coded staff submissions) would
-        // never resolve cols.Type — every row would skip on the type==null
-        // guard in ParseTransactionRow. The exact-match `h == "type"` (NOT
-        // `Contains("type")`) is load-bearing: it must distinguish "Type" from
-        // "Asset Type" which is a different column entirely.
+        // Pins typeCol fallback: exact "type" match (not "Asset Type").
         var html = """
             <html><body>
             <table>
@@ -1013,14 +867,8 @@ public class DisclosureParsingHelperTests
     [Fact]
     public void ParseTransactionsFromHtml_RowWithNoCellElements_IsSilentlySkipped()
     {
-        // Pins ParseTransactionRow's first null guard:
-        //   var cells = row.SelectNodes(".//td");
-        //   if (cells == null) return null;
-        // HtmlAgilityPack's SelectNodes returns null (not empty) when no match.
-        // A `<tr>` with no `<td>` descendants — common in real-world disclosure
-        // HTML where the body contains `<tr><th>...</th></tr>` separator rows
-        // alongside actual data rows — would NRE on the next `.Select` without
-        // the guard.
+        // Pins ParseTransactionRow's null guard on SelectNodes(".//td") — a
+        // <tr> with only <th> cells must not NRE.
         var html = """
             <html><body>
             <table>
@@ -1052,14 +900,7 @@ public class DisclosureParsingHelperTests
     [Fact]
     public void ParseTransactionsFromHtml_RowWithValidDateButEmptyTickerAndEmptyAsset_IsSkipped()
     {
-        // Pins ParseTransactionRow's both-empty short-circuit:
-        //   if (string.IsNullOrEmpty(ticker) && string.IsNullOrEmpty(assetName)) return null;
-        // Existing tests always have at least one of ticker/asset populated,
-        // so the `&&`-true arm has never fired. Without it, downstream
-        // ExtractTickerFromAssetName would dereference a null asset and the
-        // emitted transaction would carry both an empty ticker and an empty
-        // asset name — useless for analytics but not invalid enough for any
-        // later filter to drop.
+        // Pins both-empty guard: ticker + assetName both null/empty → skip row.
         var html = """
             <html><body>
             <table>
@@ -1097,16 +938,8 @@ public class DisclosureParsingHelperTests
     [Fact]
     public void ParseTransactionsFromHtml_AssetNameWithoutParenthesizedTicker_RecordsTransactionWithNullTicker()
     {
-        // Pins the `Ticker = ticker?.ToUpperInvariant()` null-conditional on
-        // the final DisclosureTransaction. Reaches it via the path where:
-        //   - ticker cell is empty (CleanSentinel returns null)
-        //   - asset cell is populated (so the both-empty guard doesn't trip)
-        //   - asset name has no parenthesized ticker pattern, so
-        //     ExtractTickerFromAssetName returns null
-        // Without the `?.`, calling ToUpperInvariant on a null ticker would
-        // NRE at row-construction time. Existing tests always derive a ticker
-        // (either from the column or from the asset name's parens), so the
-        // null arm has never fired.
+        // Pins ticker?.ToUpperInvariant() null path — asset present but no
+        // parenthesized ticker and no ticker column value.
         var html = """
             <html><body>
             <table>
