@@ -34,7 +34,9 @@ public class CboeClientTests
             + "Disclaimer: data provided by CBOE,,,,\n"
             + "01/15/2025,100000,80000,200000,0.80\n";
 
-        var records = (List<CboePutCallRecord>)ParsePutCallCsvMethod.Invoke(null, [csv]);
+        var records =
+            (List<CboePutCallRecord>)
+                ParsePutCallCsvMethod.Invoke(null, [csv, CboePutCallCsvType.Total]);
 
         records.Should().ContainSingle().Which.Date.Should().Be(new DateOnly(2025, 1, 15));
     }
@@ -74,7 +76,9 @@ public class CboeClientTests
             + "01/15/2025,100\n"
             + "01/16/2025,100000,80000,200000,0.80\n";
 
-        var records = (List<CboePutCallRecord>)ParsePutCallCsvMethod.Invoke(null, [csv]);
+        var records =
+            (List<CboePutCallRecord>)
+                ParsePutCallCsvMethod.Invoke(null, [csv, CboePutCallCsvType.Total]);
 
         records.Should().ContainSingle().Which.Date.Should().Be(new DateOnly(2025, 1, 16));
     }
@@ -227,7 +231,9 @@ public class CboeClientTests
         var csv =
             "Date,Call Volume,Put Volume,Total Volume,P/C Ratio\n" + "12/25/2024,100,200,300,2.0\n";
 
-        var records = (List<CboePutCallRecord>)ParsePutCallCsvMethod.Invoke(null, [csv]);
+        var records =
+            (List<CboePutCallRecord>)
+                ParsePutCallCsvMethod.Invoke(null, [csv, CboePutCallCsvType.Total]);
 
         records.Should().ContainSingle();
         var record = records[0];
