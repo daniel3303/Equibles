@@ -99,11 +99,12 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
         await using var scope = ScopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
 
-        var processedFileNames = await repo.GetAll()
-            .Select(p => p.FileName)
-            .ToListAsync();
+        var processedFileNames = await repo.GetAll().Select(p => p.FileName).ToListAsync();
 
-        var processedSet = new HashSet<string>(processedFileNames, StringComparer.OrdinalIgnoreCase);
+        var processedSet = new HashSet<string>(
+            processedFileNames,
+            StringComparer.OrdinalIgnoreCase
+        );
 
         // Walk the file names in reverse (most recent first) to find the latest
         // processed data set whose coverage end date we can parse.
@@ -147,8 +148,13 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
         }
 
         // Old format: "2023q4"
-        if (name.Length == 6 && name[4] == 'q' && int.TryParse(name[..4], out var year)
-            && int.TryParse(name[5..], out var quarter) && quarter is >= 1 and <= 4)
+        if (
+            name.Length == 6
+            && name[4] == 'q'
+            && int.TryParse(name[..4], out var year)
+            && int.TryParse(name[5..], out var quarter)
+            && quarter is >= 1 and <= 4
+        )
         {
             var endMonth = quarter * 3;
             return new DateOnly(year, endMonth, DateTime.DaysInMonth(year, endMonth));
@@ -169,10 +175,19 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
         var monthStr = part[2..5].ToLowerInvariant();
         var monthNumber = monthStr switch
         {
-            "jan" => 1, "feb" => 2, "mar" => 3, "apr" => 4,
-            "may" => 5, "jun" => 6, "jul" => 7, "aug" => 8,
-            "sep" => 9, "oct" => 10, "nov" => 11, "dec" => 12,
-            _ => 0
+            "jan" => 1,
+            "feb" => 2,
+            "mar" => 3,
+            "apr" => 4,
+            "may" => 5,
+            "jun" => 6,
+            "jul" => 7,
+            "aug" => 8,
+            "sep" => 9,
+            "oct" => 10,
+            "nov" => 11,
+            "dec" => 12,
+            _ => 0,
         };
         if (monthNumber == 0)
             return null;
