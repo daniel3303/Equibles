@@ -6,6 +6,7 @@ using Equibles.Holdings.Repositories;
 using Equibles.Worker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+
 namespace Equibles.Holdings.HostedService;
 
 /// <summary>
