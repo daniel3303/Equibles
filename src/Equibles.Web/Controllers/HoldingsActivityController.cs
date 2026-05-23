@@ -116,6 +116,45 @@ public class HoldingsActivityController : BaseController
         );
     }
 
+    [HttpGet("~/holdings/double-down")]
+    public async Task<IActionResult> DoubleDown(DateOnly? date, double? minPct, int page = 1)
+    {
+        var reportDates = await LoadAvailableReportDates();
+
+        var threshold = minPct ?? DoubleDownViewModel.DefaultMinPct;
+        if (threshold < 0)
+            threshold = 0;
+        var viewModel = new DoubleDownViewModel
+        {
+            AvailableDates = reportDates,
+            MinPctIncrease = threshold,
+            Page = Math.Max(1, page),
+        };
+        if (reportDates.Count < 2)
+            return View(viewModel);
+
+        var (selectedDate, previousDate) = ResolveSelectedAndPriorDate(date, reportDates);
+        viewModel.SelectedDate = selectedDate;
+        viewModel.PreviousDate = previousDate;
+        if (!previousDate.HasValue)
+            return View(viewModel);
+
+        var query = _holdingRepository
+            .GetDoubleDownPositions(selectedDate, previousDate.Value, threshold)
+            .OrderByDescending(p =>
+                (double)(p.CurrentShares - p.PreviousShares) / p.PreviousShares
+            );
+
+        viewModel.TotalCount = await query.CountAsync();
+        var skip = (viewModel.Page - 1) * DoubleDownViewModel.PageSize;
+        viewModel.Positions = await query
+            .Skip(skip)
+            .Take(DoubleDownViewModel.PageSize)
+            .ToListAsync();
+
+        return View(viewModel);
+    }
+
     [HttpGet("~/holdings/trends")]
     public async Task<IActionResult> Trends()
     {
