@@ -1,0 +1,128 @@
+@using Equibles.Web.ViewModels.Holdings
+@model LatestFilingsViewModel
+
+@{
+    ViewData["Title"] = "Latest 13F Filings";
+    ViewData["Description"] = "Most recently imported SEC 13F-HR filings, ordered by import timestamp. First-time filers are flagged.";
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">Latest 13F Filings</h1>
+        <p class="text-base-content/60">
+            @Model.TotalCount.ToString("N0") filings imported
+        </p>
+    </div>
+
+    <!-- Results Table -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table table-zebra table-sm" aria-label="Latest 13F filings" data-testid="latest-filings-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Filer</th>
+                        <th scope="col" class="hidden md:table-cell">CIK</th>
+                        <th scope="col" class="text-right">Positions</th>
+                        <th scope="col" class="text-right hidden md:table-cell">Value ($M)</th>
+                        <th scope="col" class="hidden lg:table-cell">Report Date</th>
+                        <th scope="col" class="hidden xl:table-cell">Filed</th>
+                        <th scope="col" class="hidden lg:table-cell">Imported</th>
+                        <th scope="col" class="w-8"><span class="sr-only">Open</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var filing in Model.Filings) {
+                        <tr class="hover cursor-pointer filing-row"
+                            data-href="@Url.Action("Institution", "Profiles", new { cik = filing.FilerCik })">
+                            <td class="max-w-xs">
+                                <div class="flex items-center gap-2">
+                                    <a asp-action="Institution" asp-controller="Profiles" asp-route-cik="@filing.FilerCik"
+                                       class="font-semibold link link-primary truncate">@filing.FilerName</a>
+                                    @if (filing.IsNewFiler) {
+                                        <span class="badge badge-info badge-xs whitespace-nowrap" title="First 13F filing for this CIK">New</span>
+                                    }
+                                    @if (filing.IsAmendment) {
+                                        <span class="badge badge-warning badge-xs" title="Amended filing (13F-HR/A)">A</span>
+                                    }
+                                </div>
+                            </td>
+                            <td class="hidden md:table-cell font-mono text-sm text-base-content/60">@filing.FilerCik</td>
+                            <td class="text-right font-mono">@filing.PositionCount.ToString("N0")</td>
+                            <td class="text-right font-mono hidden md:table-cell">@((filing.TotalValue / 1_000_000m).ToString("N1"))</td>
+                            <td class="hidden lg:table-cell text-sm text-base-content/60">@filing.ReportDate.ToString("MMM dd, yyyy")</td>
+                            <td class="hidden xl:table-cell text-sm text-base-content/60">@filing.FilingDate.ToString("MMM dd, yyyy")</td>
+                            <td class="hidden lg:table-cell text-sm text-base-content/60">@filing.ImportedAt.ToString("MMM dd, yyyy HH:mm")</td>
+                            <td class="text-base-content/30">
+                                <icon name="chevron-right" size="4" />
+                            </td>
+                        </tr>
+                    }
+                    @if (Model.Filings.Count == 0) {
+                        <tr>
+                            <td colspan="8" class="text-center py-10 text-base-content/60">
+                                No 13F filings have been imported yet. The feed populates once the worker finishes its first 13F cycle.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    @if (Model.TotalPages > 1) {
+        <nav class="flex justify-center mt-6" aria-label="Filings pagination" data-testid="filings-pager">
+            <div class="join">
+                @if (Model.Page > 1) {
+                    <a asp-action="LatestFilings" asp-route-page="@(Model.Page - 1)"
+                       class="join-item btn btn-sm" aria-label="Go to previous page">Previous</a>
+                }
+
+                @{
+                    var startPage = Math.Max(1, Model.Page - 2);
+                    var endPage = Math.Min(Model.TotalPages, Model.Page + 2);
+                }
+
+                @if (startPage > 1) {
+                    <a asp-action="LatestFilings" asp-route-page="1"
+                       class="join-item btn btn-sm" aria-label="Go to page 1">1</a>
+                    @if (startPage > 2) {
+                        <span class="join-item btn btn-sm btn-disabled" aria-hidden="true">...</span>
+                    }
+                }
+
+                @for (var i = startPage; i <= endPage; i++) {
+                    <a asp-action="LatestFilings" asp-route-page="@i"
+                       class="join-item btn btn-sm @(i == Model.Page ? "btn-active" : "")"
+                       aria-label="Go to page @i"
+                       aria-current="@(i == Model.Page ? "page" : null)">@i</a>
+                }
+
+                @if (endPage < Model.TotalPages) {
+                    @if (endPage < Model.TotalPages - 1) {
+                        <span class="join-item btn btn-sm btn-disabled" aria-hidden="true">...</span>
+                    }
+                    <a asp-action="LatestFilings" asp-route-page="@Model.TotalPages"
+                       class="join-item btn btn-sm" aria-label="Go to page @Model.TotalPages">@Model.TotalPages</a>
+                }
+
+                @if (Model.Page < Model.TotalPages) {
+                    <a asp-action="LatestFilings" asp-route-page="@(Model.Page + 1)"
+                       class="join-item btn btn-sm" aria-label="Go to next page">Next</a>
+                }
+            </div>
+        </nav>
+    }
+</div>
+
+@section Scripts {
+    <script>
+    // Row-click navigation
+    document.querySelectorAll('.filing-row').forEach(function(row) {
+        row.addEventListener('click', function(e) {
+            if (e.target.closest('a')) return;
+            window.location.href = this.dataset.href;
+        });
+    });
+    </script>
+}

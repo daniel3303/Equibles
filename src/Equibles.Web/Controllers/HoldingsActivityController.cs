@@ -93,6 +93,29 @@ public class HoldingsActivityController : BaseController
         return View(viewModel);
     }
 
+    [HttpGet("~/holdings/filings")]
+    public async Task<IActionResult> LatestFilings(int page = 1)
+    {
+        if (page < 1)
+            page = 1;
+
+        var query = _holdingRepository.GetRecentFilings().OrderByDescending(f => f.ImportedAt);
+
+        var totalCount = await query.CountAsync();
+        var skip = (page - 1) * LatestFilingsViewModel.PageSize;
+
+        var filings = await query.Skip(skip).Take(LatestFilingsViewModel.PageSize).ToListAsync();
+
+        return View(
+            new LatestFilingsViewModel
+            {
+                Filings = filings,
+                Page = page,
+                TotalCount = totalCount,
+            }
+        );
+    }
+
     [HttpGet("~/Holdings/MostHeld")]
     public async Task<IActionResult> MostHeld(DateOnly? date, string sort, int page = 1)
     {
