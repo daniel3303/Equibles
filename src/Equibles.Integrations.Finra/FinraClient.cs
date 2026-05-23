@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
@@ -68,7 +69,7 @@ public class FinraClient : IFinraClient
 
     public async Task<List<ShortVolumeRecord>> GetDailyShortVolume(DateOnly date)
     {
-        var dateStr = date.ToString("yyyy-MM-dd");
+        var dateStr = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         _logger.LogDebug("Fetching daily short volume for {Date}", dateStr);
 
         var results = new List<ShortVolumeRecord>();
@@ -123,7 +124,7 @@ public class FinraClient : IFinraClient
         IReadOnlyList<string> symbols
     )
     {
-        var dateStr = settlementDate.ToString("yyyy-MM-dd");
+        var dateStr = settlementDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         _logger.LogDebug(
             "Fetching short interest for settlement date {Date}{Filter}",
             dateStr,
@@ -187,8 +188,12 @@ public class FinraClient : IFinraClient
 
     public async Task<List<DateOnly>> GetShortInterestSettlementDatesAfter(DateOnly afterDate)
     {
-        var startDateStr = afterDate.AddDays(1).ToString("yyyy-MM-dd");
-        var endDateStr = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd");
+        var startDateStr = afterDate
+            .AddDays(1)
+            .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var endDateStr = DateOnly
+            .FromDateTime(DateTime.UtcNow)
+            .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
         _logger.LogDebug("Discovering settlement dates after {Date}", afterDate);
 
