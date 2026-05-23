@@ -1,0 +1,166 @@
+@using Equibles.Web.ViewModels.Insider
+@model InsiderDashboardViewModel
+
+@{
+    ViewData["Title"] = "Insider Trading Dashboard";
+    ViewData["Description"] = "Market-wide insider trading activity — top buys, top sells, and biggest transactions from SEC Form 4 filings.";
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">Insider Trading Dashboard</h1>
+        <p class="text-base-content/60">
+            Top insider transactions from the last 90 days (SEC Form 4 filings)
+        </p>
+    </div>
+
+    @if (Model.TopBuys.Count == 0 && Model.TopSells.Count == 0) {
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body items-center text-center py-12">
+                <div class="text-base-content/30 mb-3">
+                    <icon name="user-group" size="12" />
+                </div>
+                <h2 class="text-base-content/60 mb-2">No insider transactions yet</h2>
+                <p class="text-base-content/40 text-sm">Once Form 4 filings have been ingested, the insider dashboard appears here.</p>
+            </div>
+        </div>
+    } else {
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- Top Buys -->
+            <div class="card bg-base-100 shadow-sm" data-testid="insider-top-buys">
+                <div class="card-body p-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <h2 class="text-base font-medium m-0">Top Buys</h2>
+                        <span class="badge badge-success badge-sm">@Model.TopBuys.Count</span>
+                    </div>
+                    @if (Model.TopBuys.Count == 0) {
+                        <div class="text-xs text-base-content/50">No insider purchases in the last 90 days.</div>
+                    } else {
+                        <div class="overflow-x-auto">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Insider</th>
+                                        <th scope="col">Stock</th>
+                                        <th scope="col" class="text-right">Value</th>
+                                        <th scope="col" class="text-right hidden md:table-cell">Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var row in Model.TopBuys) {
+                                        <tr>
+                                            <td class="max-w-[150px] truncate">
+                                                <a asp-controller="Profiles" asp-action="Insider" asp-route-ownerCik="@row.OwnerCik"
+                                                   class="link link-primary text-sm">@row.OwnerName</a>
+                                            </td>
+                                            <td>
+                                                <a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@row.Ticker"
+                                                   class="font-mono link link-primary">@row.Ticker</a>
+                                            </td>
+                                            <td class="text-right font-mono text-success">$@row.Value.ToString("N0")</td>
+                                            <td class="text-right text-sm text-base-content/60 hidden md:table-cell">@row.TransactionDate.ToString("MMM dd")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Top Sells -->
+            <div class="card bg-base-100 shadow-sm" data-testid="insider-top-sells">
+                <div class="card-body p-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <h2 class="text-base font-medium m-0">Top Sells</h2>
+                        <span class="badge badge-error badge-sm">@Model.TopSells.Count</span>
+                    </div>
+                    @if (Model.TopSells.Count == 0) {
+                        <div class="text-xs text-base-content/50">No insider sales in the last 90 days.</div>
+                    } else {
+                        <div class="overflow-x-auto">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Insider</th>
+                                        <th scope="col">Stock</th>
+                                        <th scope="col" class="text-right">Value</th>
+                                        <th scope="col" class="text-right hidden md:table-cell">Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var row in Model.TopSells) {
+                                        <tr>
+                                            <td class="max-w-[150px] truncate">
+                                                <a asp-controller="Profiles" asp-action="Insider" asp-route-ownerCik="@row.OwnerCik"
+                                                   class="link link-primary text-sm">@row.OwnerName</a>
+                                            </td>
+                                            <td>
+                                                <a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@row.Ticker"
+                                                   class="font-mono link link-primary">@row.Ticker</a>
+                                            </td>
+                                            <td class="text-right font-mono text-error">$@row.Value.ToString("N0")</td>
+                                            <td class="text-right text-sm text-base-content/60 hidden md:table-cell">@row.TransactionDate.ToString("MMM dd")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Biggest Transactions -->
+        <div class="card bg-base-100 shadow-sm" data-testid="insider-biggest">
+            <div class="card-body p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <h2 class="text-base font-medium m-0">Biggest Transactions</h2>
+                    <span class="badge badge-neutral badge-sm">@Model.BiggestTransactions.Count</span>
+                </div>
+                @if (Model.BiggestTransactions.Count == 0) {
+                    <div class="text-xs text-base-content/50">No insider transactions in the last 90 days.</div>
+                } else {
+                    <div class="overflow-x-auto">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Insider</th>
+                                    <th scope="col">Stock</th>
+                                    <th scope="col">Type</th>
+                                    <th scope="col" class="text-right">Shares</th>
+                                    <th scope="col" class="text-right hidden md:table-cell">Price</th>
+                                    <th scope="col" class="text-right">Value</th>
+                                    <th scope="col" class="text-right hidden lg:table-cell">Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in Model.BiggestTransactions) {
+                                    <tr>
+                                        <td class="max-w-[150px] truncate">
+                                            <a asp-controller="Profiles" asp-action="Insider" asp-route-ownerCik="@row.OwnerCik"
+                                               class="link link-primary text-sm">@row.OwnerName</a>
+                                        </td>
+                                        <td>
+                                            <a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@row.Ticker"
+                                               class="font-mono link link-primary">@row.Ticker</a>
+                                        </td>
+                                        <td>
+                                            <span class="badge @(row.IsAcquisition ? "badge-success" : "badge-error") badge-xs">
+                                                @row.TransactionCodeLabel
+                                            </span>
+                                        </td>
+                                        <td class="text-right font-mono">@row.Shares.ToString("N0")</td>
+                                        <td class="text-right font-mono hidden md:table-cell">$@row.PricePerShare.ToString("N2")</td>
+                                        <td class="text-right font-mono font-semibold">$@row.Value.ToString("N0")</td>
+                                        <td class="text-right text-sm text-base-content/60 hidden lg:table-cell">@row.TransactionDate.ToString("MMM dd, yyyy")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
