@@ -195,6 +195,9 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
         if (!int.TryParse(part[5..], out var year))
             return null;
 
+        if (day < 1 || day > DateTime.DaysInMonth(year, monthNumber))
+            return null;
+
         return new DateOnly(year, monthNumber, day);
     }
 }
