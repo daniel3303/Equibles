@@ -68,6 +68,38 @@ public static class FundOverlapCalculator
         return result;
     }
 
+    public static PairwiseOverlapMatrix ComputePairwiseOverlap(FundOverlapResult overlap)
+    {
+        var n = overlap.Funds.Count;
+        var matrix = new int[n][];
+        for (var i = 0; i < n; i++)
+            matrix[i] = new int[n];
+
+        foreach (var row in overlap.Rows)
+        {
+            for (var i = 0; i < n; i++)
+            {
+                if (row.Slices[i].Value <= 0)
+                    continue;
+                for (var j = i; j < n; j++)
+                {
+                    if (row.Slices[j].Value <= 0)
+                        continue;
+                    matrix[i][j]++;
+                    if (i != j)
+                        matrix[j][i]++;
+                }
+            }
+        }
+
+        return new PairwiseOverlapMatrix
+        {
+            ReportDate = overlap.ReportDate,
+            Funds = overlap.Funds,
+            SharedTickerCounts = matrix,
+        };
+    }
+
     private static (FundOverlapRow Row, long MinValue, long MaxValue, bool AllHaveIt) BuildStockRow(
         Guid stockId,
         List<FundAggregate> fundAggregates
