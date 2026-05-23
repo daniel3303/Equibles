@@ -44,6 +44,7 @@
                                  are text-only, and the desktop dropdown should match. -->
                             <li><a asp-action="LatestFilings" asp-controller="HoldingsActivity">Latest 13F Filings</a></li>
                             <li><a asp-action="Trends" asp-controller="HoldingsActivity">13F Trends</a></li>
+                            <li><a asp-action="DoubleDown" asp-controller="HoldingsActivity">Double-Down Report</a></li>
                             <li><a asp-action="Index" asp-controller="EconomicData">Economic Data</a></li>
                             <li><a asp-action="Index" asp-controller="Cftc">Futures</a></li>
                             <li><a asp-action="Index" asp-controller="Market">Market</a></li>
@@ -126,6 +127,11 @@
                         <li>
                             <a asp-action="Trends" asp-controller="HoldingsActivity">
                                 <icon name="chart-bar" size="4" /> 13F Trends
+                            </a>
+                        </li>
+                        <li>
+                            <a asp-action="DoubleDown" asp-controller="HoldingsActivity">
+                                <icon name="arrow-trending-up" size="4" /> Double-Down Report
                             </a>
                         </li>
                         <li>

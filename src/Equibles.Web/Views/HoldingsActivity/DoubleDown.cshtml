@@ -1,0 +1,168 @@
+@using Equibles.Web.ViewModels.Holdings
+@model DoubleDownViewModel
+
+@{
+    ViewData["Title"] = "Double-Down Report";
+    ViewData["Description"] = "Institutional holders aggressively adding to positions — ranked by conviction (% share increase).";
+
+    var filterRoute = new Dictionary<string, string>();
+    if (Model.SelectedDate != default) {
+        filterRoute["date"] = Model.SelectedDate.ToString("yyyy-MM-dd");
+    }
+    if (Math.Abs(Model.MinPctIncrease - DoubleDownViewModel.DefaultMinPct) > 0.01) {
+        filterRoute["minPct"] = Model.MinPctIncrease.ToString("F0");
+    }
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">Double-Down Report</h1>
+        <p class="text-base-content/60">
+            Positions where an institution increased its share count by
+            @Model.MinPctIncrease.ToString("F0")%+ quarter over quarter — ranked by conviction
+        </p>
+    </div>
+
+    @if (Model.AvailableDates.Count < 2) {
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body items-center text-center py-12">
+                <div class="text-base-content/30 mb-3">
+                    <icon name="arrow-trending-up" size="12" />
+                </div>
+                <h2 class="text-base-content/60 mb-2">Not enough data</h2>
+                <p class="text-base-content/40 text-sm">The double-down report needs at least two quarters of 13F data.</p>
+            </div>
+        </div>
+    } else {
+        <!-- Controls -->
+        <form method="get" class="mb-6">
+            <div class="flex flex-wrap gap-3 items-end">
+                <label class="form-control">
+                    <span class="label-text text-sm mb-1">Report Date</span>
+                    <select name="date" class="select select-bordered" aria-label="Report date">
+                        @foreach (var d in Model.AvailableDates) {
+                            var isSelected = d == Model.SelectedDate;
+                            if (isSelected) {
+                                <option value="@d.ToString("yyyy-MM-dd")" selected>@d.ToString("MMM dd, yyyy")</option>
+                            } else {
+                                <option value="@d.ToString("yyyy-MM-dd")">@d.ToString("MMM dd, yyyy")</option>
+                            }
+                        }
+                    </select>
+                </label>
+                <label class="form-control">
+                    <span class="label-text text-sm mb-1">Min % Increase</span>
+                    <input type="number" name="minPct" value="@Model.MinPctIncrease.ToString("F0")"
+                           class="input input-bordered w-28" min="0" step="10"
+                           aria-label="Minimum percentage increase" />
+                </label>
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+            @if (Model.PreviousDate.HasValue) {
+                <div class="text-xs text-base-content/50 mt-2">
+                    Comparing @Model.SelectedDate.ToString("MMM dd, yyyy") vs prior quarter @Model.PreviousDate.Value.ToString("MMM dd, yyyy")
+                </div>
+            }
+        </form>
+
+        <!-- Results Table -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-0">
+                <div class="flex items-center justify-between px-4 pt-4 pb-2">
+                    <span class="text-sm text-base-content/60">@Model.TotalCount.ToString("N0") positions</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra table-sm" aria-label="Double-down positions" data-testid="double-down-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Institution</th>
+                                <th scope="col">Stock</th>
+                                <th scope="col" class="text-right">Prior Shares</th>
+                                <th scope="col" class="text-right">Current Shares</th>
+                                <th scope="col" class="text-right">Change</th>
+                                <th scope="col" class="text-right hidden md:table-cell">Prior Value</th>
+                                <th scope="col" class="text-right hidden md:table-cell">Current Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var pos in Model.Positions) {
+                                <tr class="hover">
+                                    <td class="max-w-[200px]">
+                                        <a asp-action="Institution" asp-controller="Profiles" asp-route-cik="@pos.FilerCik"
+                                           class="font-semibold link link-primary truncate block">@pos.FilerName</a>
+                                        <span class="text-xs text-base-content/50 font-mono">@pos.FilerCik</span>
+                                    </td>
+                                    <td>
+                                        <a asp-action="Show" asp-controller="Stocks" asp-route-ticker="@pos.Ticker"
+                                           class="link link-primary font-mono">@pos.Ticker</a>
+                                        <span class="text-xs text-base-content/50 block truncate max-w-[150px]">@pos.StockName</span>
+                                    </td>
+                                    <td class="text-right font-mono">@pos.PreviousShares.ToString("N0")</td>
+                                    <td class="text-right font-mono">@pos.CurrentShares.ToString("N0")</td>
+                                    <td class="text-right">
+                                        <span class="font-mono text-success font-semibold">+@pos.PctChange.ToString("F1")%</span>
+                                        <span class="text-xs text-base-content/50 block">+@pos.DeltaShares.ToString("N0")</span>
+                                    </td>
+                                    <td class="text-right font-mono hidden md:table-cell">$@(pos.PreviousValue / 1_000).ToString("N0")k</td>
+                                    <td class="text-right font-mono hidden md:table-cell">$@(pos.CurrentValue / 1_000).ToString("N0")k</td>
+                                </tr>
+                            }
+                            @if (Model.Positions.Count == 0 && Model.PreviousDate.HasValue) {
+                                <tr>
+                                    <td colspan="7" class="text-center py-10 text-base-content/60">
+                                        No positions match the @Model.MinPctIncrease.ToString("F0")%+ threshold for this quarter.
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        @if (Model.TotalPages > 1) {
+            <nav class="flex justify-center mt-6" aria-label="Double-down pagination" data-testid="double-down-pager">
+                <div class="join">
+                    @if (Model.Page > 1) {
+                        <a asp-action="DoubleDown" asp-all-route-data="filterRoute" asp-route-page="@(Model.Page - 1)"
+                           class="join-item btn btn-sm" aria-label="Go to previous page">Previous</a>
+                    }
+
+                    @{
+                        var startPage = Math.Max(1, Model.Page - 2);
+                        var endPage = Math.Min(Model.TotalPages, Model.Page + 2);
+                    }
+
+                    @if (startPage > 1) {
+                        <a asp-action="DoubleDown" asp-all-route-data="filterRoute" asp-route-page="1"
+                           class="join-item btn btn-sm" aria-label="Go to page 1">1</a>
+                        @if (startPage > 2) {
+                            <span class="join-item btn btn-sm btn-disabled" aria-hidden="true">...</span>
+                        }
+                    }
+
+                    @for (var i = startPage; i <= endPage; i++) {
+                        <a asp-action="DoubleDown" asp-all-route-data="filterRoute" asp-route-page="@i"
+                           class="join-item btn btn-sm @(i == Model.Page ? "btn-active" : "")"
+                           aria-label="Go to page @i"
+                           aria-current="@(i == Model.Page ? "page" : null)">@i</a>
+                    }
+
+                    @if (endPage < Model.TotalPages) {
+                        @if (endPage < Model.TotalPages - 1) {
+                            <span class="join-item btn btn-sm btn-disabled" aria-hidden="true">...</span>
+                        }
+                        <a asp-action="DoubleDown" asp-all-route-data="filterRoute" asp-route-page="@Model.TotalPages"
+                           class="join-item btn btn-sm" aria-label="Go to page @Model.TotalPages">@Model.TotalPages</a>
+                    }
+
+                    @if (Model.Page < Model.TotalPages) {
+                        <a asp-action="DoubleDown" asp-all-route-data="filterRoute" asp-route-page="@(Model.Page + 1)"
+                           class="join-item btn btn-sm" aria-label="Go to next page">Next</a>
+                    }
+                </div>
+            </nav>
+        }
+    }
+</div>
