@@ -13,3 +13,20 @@ Plan for about 5 GB to start, growing over time as scrapers backfill more histor
 ## How do I wipe the database and start over?
 
 Run `docker compose down -v` from the project root. The `-v` flag deletes the `db-data` Docker volume along with the containers, so the next `docker compose up` starts with an empty database and the scrapers backfill from scratch using whatever `Worker__MinSyncDate` and `Worker__TickersToSync` are currently set in `.env`. This is destructive — if you want to keep a copy of the current data first, take a snapshot using [Back up and restore your database](how-to-back-up-and-restore.md) before running the command.
+
+## What data sources does Equibles pull from and how often do they update?
+
+Equibles scrapes several public and free-tier data sources automatically. Each scraper runs on its own schedule inside the `worker` container:
+
+| Source | What it provides | Default sync interval |
+|--------|-----------------|----------------------|
+| **SEC EDGAR** | Company filings (10-K, 10-Q, 8-K, …), financial facts (XBRL), and Failure-to-Deliver data | ~15 seconds (continuous) |
+| **SEC EDGAR 13F** | Institutional holdings (who owns what) | Every 24 hours (daily backfill) plus a 6-hour realtime check |
+| **Yahoo Finance** | Historical stock prices (OHLCV) | Every 24 hours |
+| **FRED** | U.S. economic indicators (GDP, unemployment, CPI, …) | Every 24 hours (requires a [free API key](how-to-set-up-fred-api-key.md)) |
+| **FINRA** | Short-sale volume data | Every 24 hours (requires a [free API key](how-to-set-up-finra-api-key.md)) |
+| **U.S. Congress** | Congressional stock trades (House disclosures) | Every 12 hours |
+| **CBOE** | Options and volatility data | Every 24 hours |
+| **CFTC** | Commitments of Traders reports (futures positioning) | Every 24 hours |
+
+The SEC filing and document-processing scrapers run nearly continuously (every 15 seconds) to pick up new filings as they appear on EDGAR. All other scrapers default to a 24-hour cycle. You don't need API keys for SEC, Yahoo, Congress, CBOE, or CFTC — those work out of the box. FRED and FINRA require free API keys; without them those scrapers are simply skipped.
