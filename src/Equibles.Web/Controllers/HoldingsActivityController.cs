@@ -116,6 +116,29 @@ public class HoldingsActivityController : BaseController
         );
     }
 
+    [HttpGet("~/holdings/trends")]
+    public async Task<IActionResult> Trends()
+    {
+        var aumSnapshots = await _holdingRepository
+            .GetAumByReportDate()
+            .OrderBy(a => a.ReportDate)
+            .ToListAsync();
+
+        var sectorAllocations = await _holdingRepository
+            .GetSectorAllocationByReportDate()
+            .OrderBy(s => s.ReportDate)
+            .ThenBy(s => s.SectorName)
+            .ToListAsync();
+
+        return View(
+            new TrendChartsViewModel
+            {
+                AumSnapshots = aumSnapshots,
+                SectorAllocations = sectorAllocations,
+            }
+        );
+    }
+
     [HttpGet("~/Holdings/MostHeld")]
     public async Task<IActionResult> MostHeld(DateOnly? date, string sort, int page = 1)
     {
