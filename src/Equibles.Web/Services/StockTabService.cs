@@ -96,17 +96,37 @@ public class StockTabService
             ? await LoadHoldingsByStockWithHolder(stock, previousDate.Value)
             : [];
 
-        // Universe-wide set of filers known to have filed a 13F for the
-        // selected quarter — drives the Sold-Out bucket filter so filers who
-        // simply haven't reported yet aren't mislabelled as exiting the stock.
-        var filersWithCurrentQuarterFilings = (
-            await _institutionalHoldingRepository
-                .GetAll()
-                .Where(h => h.ReportDate == selectedDate)
-                .Select(h => h.InstitutionalHolderId)
-                .Distinct()
-                .ToListAsync()
-        ).ToHashSet();
+        // Narrow the Sold-Out filter to only holders who were in the previous
+        // quarter but are absent from the current quarter for this stock. The
+        // old query fetched ALL distinct filers market-wide for the quarter —
+        // millions of rows — just to build a HashSet. We only need to know
+        // whether each "gap" holder filed any 13F this quarter at all.
+        var currentHolderIds = allCurrent.Select(h => h.InstitutionalHolderId).ToHashSet();
+        var previousOnlyHolderIds = allPrevious
+            .Select(h => h.InstitutionalHolderId)
+            .Where(id => !currentHolderIds.Contains(id))
+            .Distinct()
+            .ToList();
+
+        HashSet<Guid> filersWithCurrentQuarterFilings;
+        if (previousOnlyHolderIds.Count == 0)
+        {
+            filersWithCurrentQuarterFilings = [];
+        }
+        else
+        {
+            filersWithCurrentQuarterFilings = (
+                await _institutionalHoldingRepository
+                    .GetAll()
+                    .Where(h =>
+                        h.ReportDate == selectedDate
+                        && previousOnlyHolderIds.Contains(h.InstitutionalHolderId)
+                    )
+                    .Select(h => h.InstitutionalHolderId)
+                    .Distinct()
+                    .ToListAsync()
+            ).ToHashSet();
+        }
 
         var grouped = HoldingsPositionGrouper.Group(
             allCurrent,
