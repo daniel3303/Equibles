@@ -116,95 +116,19 @@ public class ShortInterestImportService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            try
-            {
-                HashSet<Guid> existingStockIds;
-                using (var scope = _scopeFactory.CreateScope())
-                {
-                    var repo = scope.ServiceProvider.GetRequiredService<ShortInterestRepository>();
-                    var ids = await repo.GetStockIdsBySettlementDate(date)
-                        .ToListAsync(cancellationToken);
-                    existingStockIds = ids.ToHashSet();
-                }
+            var imported = await ImportDate(
+                date,
+                tickerMap,
+                reverseMap,
+                trackedStockIds,
+                filteredFetchThreshold,
+                cancellationToken
+            );
 
-                var missingStockIds = trackedStockIds.Except(existingStockIds).ToHashSet();
-
-                if (missingStockIds.Count == 0)
-                {
-                    datesSkipped++;
-                    continue;
-                }
-
-                List<ShortInterestRecord> records;
-                var useBulkFetch =
-                    missingStockIds.Count == trackedStockIds.Count
-                    || missingStockIds.Count > filteredFetchThreshold;
-
-                if (useBulkFetch)
-                {
-                    records = await _finraClient.GetShortInterest(date);
-                }
-                else
-                {
-                    var missingSymbols = missingStockIds
-                        .Where(id => reverseMap.ContainsKey(id))
-                        .Select(id => reverseMap[id])
-                        .ToList();
-                    records = await _finraClient.GetShortInterest(date, missingSymbols);
-                }
-
-                if (records.Count == 0)
-                {
-                    _logger.LogDebug("No short interest data from FINRA for {Date}", date);
-                    continue;
-                }
-
-                var items = records
-                    .Where(r =>
-                        !string.IsNullOrEmpty(r.Symbol)
-                        && tickerMap.TryGetValue(r.Symbol, out var stockId)
-                        && missingStockIds.Contains(stockId)
-                    )
-                    .Select(r => new ShortInterest
-                    {
-                        CommonStockId = tickerMap[r.Symbol],
-                        SettlementDate = date,
-                        CurrentShortPosition = r.CurrentShortPosition ?? 0,
-                        PreviousShortPosition = r.PreviousShortPosition ?? 0,
-                        ChangeInShortPosition = r.ChangeInShortPosition ?? 0,
-                        AverageDailyVolume = r.AverageDailyVolume,
-                        DaysToCover = r.DaysToCover,
-                    });
-
-                var inserted = await BatchPersister.Persist(
-                    items,
-                    InsertBatchSize,
-                    batch => ValidateAndPersistBatch(batch, date, cancellationToken)
-                );
-
-                totalImported += inserted;
-                _logger.LogInformation(
-                    "Imported {Count} short interest records for {Date} ({Missing} stocks were missing)",
-                    inserted,
-                    date,
-                    missingStockIds.Count
-                );
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogWarning(ex, "Failed to fetch short interest for {Date}, skipping", date);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error importing short interest for {Date}", date);
-                await _errorReporter.Report(
-                    ErrorSource.FinraScraper,
-                    "ShortInterest.ImportDate",
-                    ex.Message,
-                    ex.StackTrace,
-                    $"date: {date}"
-                );
-            }
+            if (imported < 0)
+                datesSkipped++;
+            else
+                totalImported += imported;
         }
 
         _logger.LogInformation(
@@ -212,6 +136,107 @@ public class ShortInterestImportService
             totalImported,
             datesSkipped
         );
+    }
+
+    /// <returns>Number of records imported, or -1 if the date was already complete.</returns>
+    private async Task<int> ImportDate(
+        DateOnly date,
+        Dictionary<string, Guid> tickerMap,
+        Dictionary<Guid, string> reverseMap,
+        HashSet<Guid> trackedStockIds,
+        int filteredFetchThreshold,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            HashSet<Guid> existingStockIds;
+            using (var scope = _scopeFactory.CreateScope())
+            {
+                var repo = scope.ServiceProvider.GetRequiredService<ShortInterestRepository>();
+                var ids = await repo.GetStockIdsBySettlementDate(date)
+                    .ToListAsync(cancellationToken);
+                existingStockIds = ids.ToHashSet();
+            }
+
+            var missingStockIds = trackedStockIds.Except(existingStockIds).ToHashSet();
+
+            if (missingStockIds.Count == 0)
+                return -1;
+
+            List<ShortInterestRecord> records;
+            var useBulkFetch =
+                missingStockIds.Count == trackedStockIds.Count
+                || missingStockIds.Count > filteredFetchThreshold;
+
+            if (useBulkFetch)
+            {
+                records = await _finraClient.GetShortInterest(date);
+            }
+            else
+            {
+                var missingSymbols = missingStockIds
+                    .Where(id => reverseMap.ContainsKey(id))
+                    .Select(id => reverseMap[id])
+                    .ToList();
+                records = await _finraClient.GetShortInterest(date, missingSymbols);
+            }
+
+            if (records.Count == 0)
+            {
+                _logger.LogDebug("No short interest data from FINRA for {Date}", date);
+                return 0;
+            }
+
+            var items = records
+                .Where(r =>
+                    !string.IsNullOrEmpty(r.Symbol)
+                    && tickerMap.TryGetValue(r.Symbol, out var stockId)
+                    && missingStockIds.Contains(stockId)
+                )
+                .Select(r => new ShortInterest
+                {
+                    CommonStockId = tickerMap[r.Symbol],
+                    SettlementDate = date,
+                    CurrentShortPosition = r.CurrentShortPosition ?? 0,
+                    PreviousShortPosition = r.PreviousShortPosition ?? 0,
+                    ChangeInShortPosition = r.ChangeInShortPosition ?? 0,
+                    AverageDailyVolume = r.AverageDailyVolume,
+                    DaysToCover = r.DaysToCover,
+                });
+
+            var inserted = await BatchPersister.Persist(
+                items,
+                InsertBatchSize,
+                batch => ValidateAndPersistBatch(batch, date, cancellationToken)
+            );
+
+            _logger.LogInformation(
+                "Imported {Count} short interest records for {Date} ({Missing} stocks were missing)",
+                inserted,
+                date,
+                missingStockIds.Count
+            );
+
+            return inserted;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch short interest for {Date}, skipping", date);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error importing short interest for {Date}", date);
+            await _errorReporter.Report(
+                ErrorSource.FinraScraper,
+                "ShortInterest.ImportDate",
+                ex.Message,
+                ex.StackTrace,
+                $"date: {date}"
+            );
+            return 0;
+        }
     }
 
     // tickerMap was built at the start of Import and goes stale if CompanySyncService
