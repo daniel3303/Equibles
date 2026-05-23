@@ -205,8 +205,14 @@ public static partial class DisclosureParsingHelper
     private static string GetCleanCell(List<string> cells, int index) =>
         CleanSentinel(GetCell(cells, index));
 
-    public static string Truncate(string value, int maxLength) =>
-        value?.Length > maxLength ? value[..maxLength] : value;
+    public static string Truncate(string value, int maxLength)
+    {
+        if (value == null || value.Length <= maxLength)
+            return value;
+
+        var end = char.IsHighSurrogate(value[maxLength - 1]) ? maxLength - 1 : maxLength;
+        return value[..end];
+    }
 
     public static DateOnly? ParseDate(string text)
     {
