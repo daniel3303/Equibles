@@ -17,7 +17,7 @@ public class InsiderTradingToolsGetRoleEmptyOfficerTitleTests
     // comma-joined role list (e.g. "Director, " instead of
     // "Director, Officer"). A caller would reasonably expect a non-empty
     // label for every role flag that is set.
-    [Fact(Skip = "GH-1964 — GetRole returns empty string for officer with empty OfficerTitle")]
+    [Fact]
     public void GetRole_OfficerWithEmptyTitle_FallsBackToOfficerLabel()
     {
         var owner = new InsiderOwner { IsOfficer = true, OfficerTitle = string.Empty };
