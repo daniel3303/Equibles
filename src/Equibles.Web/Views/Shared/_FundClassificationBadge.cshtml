@@ -1,0 +1,20 @@
+@using Equibles.Holdings.Data.Models
+@model FundClassification
+
+@if (Model != FundClassification.Unknown) {
+    var (label, css) = Model switch {
+        FundClassification.Bank => ("Bank", "badge-primary"),
+        FundClassification.InsuranceCompany => ("Insurance", "badge-warning"),
+        FundClassification.PensionFund => ("Pension", "badge-info"),
+        FundClassification.MutualFund => ("Mutual Fund", "badge-success"),
+        FundClassification.HedgeFund => ("Hedge Fund", "badge-error"),
+        FundClassification.PrivateEquity => ("Private Equity", "badge-secondary"),
+        FundClassification.VentureCapital => ("Venture Capital", "badge-accent"),
+        FundClassification.Endowment => ("Endowment", "badge-info"),
+        FundClassification.SovereignWealthFund => ("Sovereign Wealth", "badge-primary"),
+        FundClassification.FamilyOffice => ("Family Office", "badge-ghost"),
+        FundClassification.BrokerDealer => ("Broker-Dealer", "badge-neutral"),
+        _ => ("", ""),
+    };
+    <span class="badge @css badge-sm" data-testid="fund-classification">@label</span>
+}

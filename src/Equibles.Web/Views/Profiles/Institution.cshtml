@@ -7,7 +7,10 @@
 <div class="max-w-6xl mx-auto px-6 py-12">
     <div class="mb-8 flex flex-wrap items-start justify-between gap-3">
         <div>
-            <h1 class="text-3xl font-bold mb-2">@Model.Name</h1>
+            <h1 class="text-3xl font-bold mb-2">
+                @Model.Name
+                <partial name="_FundClassificationBadge" model="Model.Classification" />
+            </h1>
             <p class="text-base-content/60">
                 Institutional holder@(string.IsNullOrWhiteSpace(Model.Location) ? "" : " · " + Model.Location) · CIK @Model.Cik
             </p>

@@ -24,6 +24,7 @@
         <div class="card-body p-4 lg:p-6">
             <div class="flex items-baseline gap-3 mb-1">
                 <h1 class="text-2xl font-bold">@holder.Name</h1>
+                <partial name="_FundClassificationBadge" model="holder.Classification" />
             </div>
 
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-base-200">
