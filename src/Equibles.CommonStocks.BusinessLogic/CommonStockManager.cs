@@ -73,6 +73,11 @@ public class CommonStockManager
             );
         }
 
+        if (day is not null && day > DateTime.DaysInMonth(2000, month))
+        {
+            throw new DomainValidationException($"Day {day} is invalid for month {month}");
+        }
+
         if (commonStock.FiscalYearEndMonth == month && commonStock.FiscalYearEndDay == day)
         {
             return;

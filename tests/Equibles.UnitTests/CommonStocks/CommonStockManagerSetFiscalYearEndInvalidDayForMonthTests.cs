@@ -17,7 +17,7 @@ namespace Equibles.UnitTests.CommonStocks;
 /// </summary>
 public class CommonStockManagerSetFiscalYearEndInvalidDayForMonthTests
 {
-    [Fact(Skip = "GH-2002 — day validation is independent of month")]
+    [Fact]
     public async Task SetFiscalYearEnd_February31_ThrowsDomainValidation()
     {
         var db = new EquiblesDbContext(
