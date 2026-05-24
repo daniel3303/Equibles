@@ -73,13 +73,49 @@
             <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Holders:</span> <strong>@Model.HolderCount.ToString("N0")</strong></div>
             <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Value:</span> <strong>$@Model.TotalValue.ToString("N0")</strong></div>
             <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Shares:</span> <strong>@Model.TotalShares.ToString("N0")</strong></div>
-            <!-- CSV download — same ticker + selected date as the page. -->
             <a class="btn btn-outline btn-sm ml-auto"
                asp-controller="HoldingsExport" asp-action="Holders"
                asp-route-ticker="@Model.Ticker" asp-route-date="@Model.SelectedDate.ToString("yyyy-MM-dd")"
                data-testid="holdings-export-csv">
                 Download CSV
             </a>
+        </div>
+        @{
+            var dateParam = Model.SelectedDate.ToString("yyyy-MM-dd");
+            string TypesUrl(PositionChangeType toggleType)
+            {
+                var current = Model.ActiveTypes ?? new HashSet<PositionChangeType>();
+                HashSet<PositionChangeType> next;
+                if (current.Count == 0)
+                {
+                    next = new HashSet<PositionChangeType> { toggleType };
+                }
+                else if (current.Contains(toggleType))
+                {
+                    next = new HashSet<PositionChangeType>(current);
+                    next.Remove(toggleType);
+                }
+                else
+                {
+                    next = new HashSet<PositionChangeType>(current) { toggleType };
+                }
+                var typesParam = next.Count > 0 ? string.Join(",", next) : "";
+                return $"Holdings?date={dateParam}" + (typesParam.Length > 0 ? $"&types={typesParam}" : "");
+            }
+        }
+        <div class="flex flex-wrap items-center gap-2 mt-2" data-testid="holdings-type-filters">
+            <span class="text-xs text-base-content/60">Filter:</span>
+            @foreach (var bucket in Buckets) {
+                var count = Model.BucketCounts.TryGetValue(bucket.Type, out var c) ? c : 0;
+                var isActive = Model.IsTypeActive(bucket.Type);
+                var btnCss = isActive ? "btn-primary" : "btn-ghost border border-base-300";
+                <a href="@TypesUrl(bucket.Type)" class="btn btn-xs @btnCss">
+                    @bucket.Label <span class="badge @bucket.BadgeCss badge-xs ml-1">@count</span>
+                </a>
+            }
+            @if (Model.ActiveTypes != null) {
+                <a href="Holdings?date=@dateParam" class="btn btn-xs btn-ghost text-base-content/50">Clear</a>
+            }
         </div>
     </div>
 
@@ -160,6 +196,7 @@
     <!-- All Holders — flat view of every holder for the selected report date, default-collapsed.
          Lets the user scan or sort the whole list without flipping between buckets. -->
     var allHolders = Model.GroupedHolders
+        .Where(kvp => Model.IsTypeActive(kvp.Key))
         .SelectMany(kvp => kvp.Value.Select(h => new { Entry = h, Type = kvp.Key }))
         .OrderByDescending(x => x.Entry.CurrentValue)
         .ThenByDescending(x => x.Entry.PreviousValue)
@@ -222,6 +259,7 @@
 
     <!-- Position-change buckets -->
     @foreach (var bucket in Buckets) {
+        if (!Model.IsTypeActive(bucket.Type)) continue;
         var count = Model.BucketCounts.TryGetValue(bucket.Type, out var c) ? c : 0;
         var entries = Model.GroupedHolders.TryGetValue(bucket.Type, out var list) ? list : new List<HolderPositionChange>();
         var sorted = SortBucket(bucket.Type, entries).ToList();

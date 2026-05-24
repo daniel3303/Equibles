@@ -21,5 +21,10 @@ public class HoldingsTabViewModel
     public int TotalBuyerCount { get; set; }
     public int TotalSellerCount { get; set; }
 
+    public HashSet<PositionChangeType> ActiveTypes { get; set; }
+
+    public bool IsTypeActive(PositionChangeType type) =>
+        ActiveTypes == null || ActiveTypes.Contains(type);
+
     public const int TopMoversPreviewCount = 5;
 }

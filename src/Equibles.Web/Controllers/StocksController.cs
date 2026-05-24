@@ -117,11 +117,20 @@ public class StocksController : BaseController
         ShowStockTab(ticker, "price", async s => await _stockTabService.LoadPriceTab(s));
 
     [HttpGet("~/stocks/{ticker}/holdings")]
-    public Task<IActionResult> Holdings(string ticker, DateOnly? date) =>
+    public Task<IActionResult> Holdings(
+        string ticker,
+        DateOnly? date,
+        [FromQuery(Name = "types")] string types = null
+    ) =>
         ShowStockTab(
             ticker,
             "holdings",
-            async s => await _stockTabService.LoadHoldingsTab(s, date)
+            async s =>
+            {
+                var vm = await _stockTabService.LoadHoldingsTab(s, date);
+                vm.ActiveTypes = ParsePositionTypes(types);
+                return vm;
+            }
         );
 
     [HttpGet("~/stocks/{ticker}/shortvolume")]
@@ -201,7 +210,21 @@ public class StocksController : BaseController
         return View("Show", viewModel);
     }
 
-    // Private helpers
+    private static HashSet<PositionChangeType> ParsePositionTypes(string types)
+    {
+        if (string.IsNullOrWhiteSpace(types))
+            return null;
+
+        var result = new HashSet<PositionChangeType>();
+        foreach (var part in types.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (Enum.TryParse<PositionChangeType>(part.Trim(), true, out var parsed))
+                result.Add(parsed);
+        }
+
+        return result.Count > 0 ? result : null;
+    }
+
     private async Task<Equibles.CommonStocks.Data.Models.CommonStock> LoadStock(string ticker)
     {
         return await _commonStockRepository.GetByTicker(ticker.ToUpper());
