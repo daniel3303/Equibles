@@ -303,6 +303,83 @@ public class HoldingsActivityController : BaseController
         };
     }
 
+    [HttpGet("~/holdings/heatmap")]
+    public async Task<IActionResult> HeatMap(DateOnly? date)
+    {
+        var reportDates = await LoadAvailableReportDates();
+
+        var viewModel = new HoldingsHeatMapViewModel { AvailableDates = reportDates };
+        if (reportDates.Count < 2)
+            return View(viewModel);
+
+        var (selectedDate, previousDate) = ResolveSelectedAndPriorDate(date, reportDates);
+        viewModel.SelectedDate = selectedDate;
+        viewModel.PreviousDate = previousDate;
+        if (!previousDate.HasValue)
+            return View(viewModel);
+
+        var totalFilers = await _holdingRepository.GetUniqueFilerIds(selectedDate).CountAsync();
+        viewModel.TotalUniverseFilers = totalFilers;
+
+        var activity = await _holdingRepository
+            .GetQuarterlyActivity(selectedDate, previousDate.Value)
+            .Where(a => a.CurrentFilerCount >= 3)
+            .ToListAsync();
+
+        var churnLookup = (
+            await _holdingRepository
+                .GetQuarterlyNewSoldOutPositions(selectedDate, previousDate.Value)
+                .ToListAsync()
+        ).ToDictionary(c => c.CommonStockId);
+
+        var stockIds = activity.Select(a => a.CommonStockId).ToList();
+        var stocks = await LoadStockLabels(stockIds);
+
+        var points = new List<HeatMapPoint>(activity.Count);
+        foreach (var a in activity)
+        {
+            churnLookup.TryGetValue(a.CommonStockId, out var churn);
+            var newFilers = churn?.NewFilerCount ?? 0;
+            var soldOut = churn?.SoldOutFilerCount ?? 0;
+
+            var netConviction =
+                a.CurrentFilerCount > 0
+                    ? (double)(newFilers - soldOut) / a.CurrentFilerCount * 100.0
+                    : 0;
+            var retention =
+                a.PreviousFilerCount > 0
+                    ? (1.0 - (double)soldOut / a.PreviousFilerCount) * 100.0
+                    : 0;
+            var universePct =
+                totalFilers > 0 ? (double)a.CurrentFilerCount / totalFilers * 100.0 : 0;
+
+            var score = netConviction + retention + universePct;
+
+            var (ticker, name) = ResolveStockCells(stocks, a.CommonStockId);
+            points.Add(
+                new HeatMapPoint
+                {
+                    CommonStockId = a.CommonStockId,
+                    Ticker = ticker,
+                    Name = name,
+                    CurrentFilerCount = a.CurrentFilerCount,
+                    CurrentValue = a.CurrentValue,
+                    ConvictionScore = Math.Round(score, 1),
+                    NetConvictionPct = Math.Round(netConviction, 1),
+                    RetentionPct = Math.Round(retention, 1),
+                    UniversePct = Math.Round(universePct, 2),
+                }
+            );
+        }
+
+        viewModel.Points = points
+            .OrderByDescending(p => p.ConvictionScore)
+            .Take(HoldingsHeatMapViewModel.MaxPoints)
+            .ToList();
+
+        return View(viewModel);
+    }
+
     private Task<List<DateOnly>> LoadAvailableReportDates() =>
         _holdingRepository.GetAvailableReportDates().OrderByDescending(d => d).ToListAsync();
 
