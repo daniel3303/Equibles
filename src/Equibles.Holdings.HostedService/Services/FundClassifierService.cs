@@ -48,7 +48,7 @@ public static class FundClassifierService
         if (string.IsNullOrWhiteSpace(name))
             return FundClassification.Unknown;
 
-        var upper = name.ToUpperInvariant();
+        var upper = name.ToUpperInvariant() + " ";
 
         foreach (var (pattern, classification) in Rules)
         {
