@@ -12,6 +12,7 @@ using Equibles.InsiderTrading.Data;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.Data;
+using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.Repositories;
 using Equibles.Web.Controllers;
@@ -44,6 +45,7 @@ public class StocksControllerFtdTabTests : IDisposable
             new CommonStocksModuleConfiguration(),
             new MediaModuleConfiguration(),
             new SecTestModuleConfiguration(),
+            new FinancialFactsModuleConfiguration(),
             new HoldingsModuleConfiguration(),
             new FinraModuleConfiguration(),
             new InsiderTradingModuleConfiguration(),

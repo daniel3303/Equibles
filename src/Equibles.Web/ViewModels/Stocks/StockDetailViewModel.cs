@@ -10,4 +10,6 @@ public class StockDetailViewModel
     public int RecentFilingCount { get; set; }
     public int RecentFilerCount { get; set; }
     public int FilingActivityDays { get; set; }
+
+    public KeyMetricsViewModel KeyMetrics { get; set; }
 }

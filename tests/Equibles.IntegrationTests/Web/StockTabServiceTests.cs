@@ -17,6 +17,7 @@ using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.Data;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.Repositories;
 using Equibles.Web.Services;
@@ -39,6 +40,7 @@ public class StockTabServiceTests : IDisposable
             new CommonStocksModuleConfiguration(),
             new MediaModuleConfiguration(),
             new SecTestModuleConfiguration(),
+            new FinancialFactsModuleConfiguration(),
             new FinraModuleConfiguration(),
             new HoldingsModuleConfiguration(),
             new InsiderTradingModuleConfiguration(),

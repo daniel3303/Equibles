@@ -205,6 +205,7 @@ public class StocksController : BaseController
         viewModel.RecentFilingCount = filingActivity?.FilingCount ?? 0;
         viewModel.RecentFilerCount = filingActivity?.FilerCount ?? 0;
         viewModel.FilingActivityDays = FilingActivityDays;
+        viewModel.KeyMetrics = await _stockTabService.LoadKeyMetrics(stock);
 
         ViewData["TabViewModel"] = await loadTab(stock);
         return View("Show", viewModel);
