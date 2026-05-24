@@ -5,6 +5,7 @@ namespace Equibles.Holdings.Data.Models;
 
 [Index(nameof(Cik), IsUnique = true)]
 [Index(nameof(Name))]
+[Index(nameof(Classification))]
 public class InstitutionalHolder
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -26,6 +27,8 @@ public class InstitutionalHolder
 
     [MaxLength(32)]
     public string CrdNumber { get; set; }
+
+    public FundClassification Classification { get; set; }
 
     public virtual List<InstitutionalHolding> Holdings { get; set; } = [];
 
