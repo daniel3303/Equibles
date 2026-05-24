@@ -146,16 +146,8 @@ public class CompanySyncService : ICompanySyncService
 
         var secondaryCikToParent = BuildSecondaryCikToParent(allExistingStocks);
 
-        // Primary tickers are globally unique — collisions on primary mean the incoming
-        // company must replace or skip. Secondary tickers may legitimately overlap across
-        // related SEC filers (e.g. parent REIT + operating partnership sharing a
-        // preferred-share ticker), so they are tracked separately and never drive
-        // replace/skip routing decisions.
         var existingPrimaryTickers = (
             await commonStockRepository.GetAllTickers().ToListAsync()
-        ).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var existingSecondaryTickers = (
-            await commonStockRepository.GetAllSecondaryTickers().ToListAsync()
         ).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         return new StockSyncState
@@ -164,7 +156,6 @@ public class CompanySyncService : ICompanySyncService
             ExistingStocks = existingStocks,
             ExistingCiks = existingCiks,
             ExistingPrimaryTickers = existingPrimaryTickers,
-            ExistingSecondaryTickers = existingSecondaryTickers,
             PrimaryTickerToStock = primaryTickerToStock,
             SecondaryCikToParent = secondaryCikToParent,
             CommonStockRepository = commonStockRepository,
@@ -257,10 +248,6 @@ public class CompanySyncService : ICompanySyncService
                 state.ExistingPrimaryTickers.Remove(oldTicker);
                 state.ExistingPrimaryTickers.Add(primaryTicker);
             }
-            foreach (var t in oldSecondaryTickers)
-                state.ExistingSecondaryTickers.Remove(t);
-            foreach (var t in secondaryTickers)
-                state.ExistingSecondaryTickers.Add(t);
 
             _logger.LogDebug(
                 "Updated company: {OldTicker} -> {NewTicker}, {OldName} -> {NewName}",
@@ -336,7 +323,7 @@ public class CompanySyncService : ICompanySyncService
                 state
             );
 
-            AddAndTrack(newStock, secCompany.Cik, primaryTicker, secondaryTickers, state);
+            AddAndTrack(newStock, secCompany.Cik, primaryTicker, state);
 
             _logger.LogInformation(
                 "Replaced obsolete company {OldName} (CIK: {OldCik}) with {NewName} (CIK: {NewCik}) for ticker {Ticker}",
@@ -370,7 +357,7 @@ public class CompanySyncService : ICompanySyncService
         {
             newStock = await CreateCommonStock(secCompany, primaryTicker, secondaryTickers, state);
 
-            AddAndTrack(newStock, secCompany.Cik, primaryTicker, secondaryTickers, state);
+            AddAndTrack(newStock, secCompany.Cik, primaryTicker, state);
             _logger.LogDebug(
                 "Created new company: {Ticker} - {Name} (CIK: {Cik})",
                 primaryTicker,
@@ -604,14 +591,11 @@ public class CompanySyncService : ICompanySyncService
         CommonStock newStock,
         string cik,
         string primaryTicker,
-        List<string> secondaryTickers,
         StockSyncState state
     )
     {
         state.ExistingCiks.Add(cik);
         state.ExistingPrimaryTickers.Add(primaryTicker);
-        foreach (var t in secondaryTickers)
-            state.ExistingSecondaryTickers.Add(t);
         state.ExistingStocks.Add(newStock);
     }
 
@@ -622,8 +606,6 @@ public class CompanySyncService : ICompanySyncService
 
         state.ExistingCiks.Remove(stock.Cik);
         state.ExistingPrimaryTickers.Remove(stock.Ticker);
-        foreach (var t in stock.SecondaryTickers)
-            state.ExistingSecondaryTickers.Remove(t);
         state.ExistingStocks.Remove(stock);
     }
 
@@ -642,7 +624,6 @@ public class CompanySyncService : ICompanySyncService
         public List<CommonStock> ExistingStocks { get; init; }
         public HashSet<string> ExistingCiks { get; init; }
         public HashSet<string> ExistingPrimaryTickers { get; init; }
-        public HashSet<string> ExistingSecondaryTickers { get; init; }
         public Dictionary<string, CommonStock> PrimaryTickerToStock { get; init; }
         public Dictionary<string, CommonStock> SecondaryCikToParent { get; init; }
         public CommonStockRepository CommonStockRepository { get; init; }
