@@ -31,6 +31,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Use the 13F holdings screener](how-to-use-holdings-screener.md)
 - [View quarterly holdings activity across the market](how-to-view-holdings-activity.md)
 - [Check worker health and recent errors](how-to-view-status-and-errors.md)
+- [Search for stocks, filings, institutions, and more](how-to-search.md)
 
 ## FAQ
 
