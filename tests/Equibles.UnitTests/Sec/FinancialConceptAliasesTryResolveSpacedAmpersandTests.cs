@@ -9,7 +9,7 @@ public class FinancialConceptAliasesTryResolveSpacedAmpersandTests
     // spaces to hyphens, so "R & D" becomes "r-&-d" — which doesn't match the
     // synonym key "r&d". Spaced ampersand is common in financial prose and MCP
     // tool input; the normalization should not break the synonym lookup.
-    [Fact(Skip = "GH-2013 — Normalize inserts hyphens around &, breaking r&d synonym")]
+    [Fact]
     public void TryResolve_SpacedAmpersandRd_ResolvesToResearchAndDevelopment()
     {
         var resolved = FinancialConceptAliases.TryResolve("R & D", out var concepts);
