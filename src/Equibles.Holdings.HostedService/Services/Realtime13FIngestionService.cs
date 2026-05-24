@@ -68,9 +68,16 @@ public class Realtime13FIngestionService
             cancellationToken
         );
 
-        var filings = new List<Parsed13FFiling>();
-        var handedOffAccessions = new List<string>();
-        foreach (var entry in entries)
+        // Sort chronologically so originals are always imported before their
+        // amendments — HandleAmendments in the import pipeline deletes prior
+        // holdings for the same holder+period before inserting the amendment.
+        var sorted = entries
+            .OrderBy(e => e.DateFiled)
+            .ThenBy(e => e.AccessionNumber, StringComparer.Ordinal)
+            .ToList();
+
+        var totalImported = 0;
+        foreach (var entry in sorted)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -87,31 +94,28 @@ public class Realtime13FIngestionService
             if (filing == null)
                 continue;
 
-            filings.Add(filing);
-            handedOffAccessions.Add(entry.AccessionNumber);
-        }
+            _logger.LogInformation(
+                "Importing 13F-HR {Accession} (CIK {Cik}, period {Period})",
+                entry.AccessionNumber,
+                entry.Cik,
+                filing.PeriodOfReport
+            );
 
-        if (filings.Count == 0)
-        {
-            _logger.LogInformation("No new 13F-HR filings to import after filtering");
-            return 0;
+            using (var archive = _archiveBuilder.Build([filing]))
+            {
+                await _importService.ImportDataSet(archive, minReportDate, cancellationToken);
+            }
+
+            await RecordProcessed([entry.AccessionNumber], cancellationToken);
+            totalImported++;
         }
 
         _logger.LogInformation(
-            "Importing {Count} newly filed 13F-HR submissions via real-time path",
-            filings.Count
+            "13F real-time ingestion cycle complete: {Count} filings imported",
+            totalImported
         );
 
-        using (var archive = _archiveBuilder.Build(filings))
-        {
-            await _importService.ImportDataSet(archive, minReportDate, cancellationToken);
-        }
-
-        // Record the ledger only after the import succeeded: a crash mid-import
-        // must not permanently skip these accessions on the next sweep.
-        await RecordProcessed(handedOffAccessions, cancellationToken);
-
-        return filings.Count;
+        return totalImported;
     }
 
     private async Task<Parsed13FFiling> TryParseAndValidateEntry(
