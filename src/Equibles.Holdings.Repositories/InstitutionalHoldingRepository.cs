@@ -477,4 +477,16 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 FilerCount = g.Select(h => h.InstitutionalHolderId).Distinct().Count(),
             });
     }
+
+    public IQueryable<KeyValuePair<Guid, DateOnly>> GetFirstOwnedQuarters(
+        CommonStock stock,
+        IEnumerable<Guid> holderIds
+    )
+    {
+        var ids = holderIds.ToList();
+        return GetAll()
+            .Where(h => h.CommonStockId == stock.Id && ids.Contains(h.InstitutionalHolderId))
+            .GroupBy(h => h.InstitutionalHolderId)
+            .Select(g => new KeyValuePair<Guid, DateOnly>(g.Key, g.Min(h => h.ReportDate)));
+    }
 }

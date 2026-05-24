@@ -133,6 +133,18 @@ public class StockTabService
             allPrevious,
             filersWithCurrentQuarterFilings
         );
+
+        var allChanges = grouped.SelectMany(g => g.Value).ToList();
+        var holderIds = allChanges.Select(h => h.InstitutionalHolderId).Distinct().ToList();
+        var firstOwned = await _institutionalHoldingRepository
+            .GetFirstOwnedQuarters(stock, holderIds)
+            .ToDictionaryAsync(kv => kv.Key, kv => kv.Value);
+        foreach (var change in allChanges)
+        {
+            if (firstOwned.TryGetValue(change.InstitutionalHolderId, out var quarter))
+                change.QuarterFirstOwned = quarter;
+        }
+
         var bucketCounts = grouped.ToDictionary(g => g.Key, g => g.Value.Count);
         var (topBuyers, topSellers) = HoldingsTopMoversSelector.Select(
             grouped,
@@ -147,6 +159,7 @@ public class StockTabService
             TotalValue = allCurrent.Sum(h => h.Value),
             TotalShares = allCurrent.Sum(h => h.Shares),
             HolderCount = allCurrent.Select(h => h.InstitutionalHolderId).Distinct().Count(),
+            SharesOutstanding = stock.SharesOutStanding,
             GroupedHolders = grouped,
             BucketCounts = bucketCounts,
             TopBuyers = topBuyers,

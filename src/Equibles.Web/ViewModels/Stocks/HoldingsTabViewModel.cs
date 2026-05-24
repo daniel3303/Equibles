@@ -8,6 +8,7 @@ public class HoldingsTabViewModel
     public long TotalValue { get; set; }
     public long TotalShares { get; set; }
     public int HolderCount { get; set; }
+    public long SharesOutstanding { get; set; }
 
     public Dictionary<PositionChangeType, List<HolderPositionChange>> GroupedHolders { get; set; } =
     [];
