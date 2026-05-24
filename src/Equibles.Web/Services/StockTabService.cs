@@ -409,6 +409,50 @@ public class StockTabService
             _ => 0,
         };
 
+    public async Task<KeyMetricsViewModel> LoadKeyMetrics(CommonStock stock)
+    {
+        var vm = new KeyMetricsViewModel { MarketCapitalization = stock.MarketCapitalization };
+
+        var recentPrices = await _dailyStockPriceRepository
+            .GetByStock(stock)
+            .OrderByDescending(p => p.Date)
+            .Take(252)
+            .ToListAsync();
+
+        if (recentPrices.Count > 0)
+        {
+            vm.LatestClose = recentPrices[0].Close;
+            vm.High52Week = recentPrices.Max(p => p.High);
+            vm.Low52Week = recentPrices.Min(p => p.Low);
+        }
+
+        var epsConcept = await _financialConceptRepository
+            .GetMatching([FactTaxonomy.UsGaap], ["EarningsPerShareDiluted"])
+            .Select(c => c.Id)
+            .FirstOrDefaultAsync();
+
+        if (epsConcept != Guid.Empty)
+        {
+            var epsFact = await _financialFactRepository
+                .GetByStock(stock)
+                .Where(f =>
+                    f.FinancialConceptId == epsConcept && f.FiscalPeriod == SecFiscalPeriod.FullYear
+                )
+                .OrderByDescending(f => f.FiscalYear)
+                .ThenByDescending(f => f.FiledDate)
+                .FirstOrDefaultAsync();
+
+            if (epsFact != null)
+            {
+                vm.EpsDiluted = epsFact.Value;
+                if (vm.LatestClose.HasValue && epsFact.Value != 0)
+                    vm.PeRatio = Math.Round(vm.LatestClose.Value / epsFact.Value, 2);
+            }
+        }
+
+        return vm;
+    }
+
     public async Task<HolderDetailViewModel> LoadHolderDetail(
         CommonStock stock,
         InstitutionalHolder holder

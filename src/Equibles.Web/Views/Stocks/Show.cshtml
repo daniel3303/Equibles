@@ -78,6 +78,71 @@
     </div>
 
     @{
+        var km = Model.KeyMetrics;
+        bool hasAnyMetric = km != null && (km.LatestClose.HasValue || km.MarketCapitalization > 0 || km.EpsDiluted.HasValue);
+        string FormatMarketCap(double cap) => cap switch {
+            >= 1e12 => (cap / 1e12).ToString("F2") + "T",
+            >= 1e9 => (cap / 1e9).ToString("F2") + "B",
+            >= 1e6 => (cap / 1e6).ToString("F2") + "M",
+            > 0 => cap.ToString("N0"),
+            _ => null
+        };
+    }
+    @if (hasAnyMetric) {
+        <!-- Key Metrics -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+            @if (km.LatestClose.HasValue) {
+                <div class="card bg-base-100 shadow-sm">
+                    <div class="card-body p-3">
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider">Price</div>
+                        <div class="font-mono font-semibold text-lg">$@km.LatestClose.Value.ToString("N2")</div>
+                    </div>
+                </div>
+            }
+            @if (km.MarketCapitalization > 0) {
+                <div class="card bg-base-100 shadow-sm">
+                    <div class="card-body p-3">
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider">Market Cap</div>
+                        <div class="font-mono font-semibold text-lg">$@FormatMarketCap(km.MarketCapitalization)</div>
+                    </div>
+                </div>
+            }
+            @if (km.PeRatio.HasValue) {
+                <div class="card bg-base-100 shadow-sm">
+                    <div class="card-body p-3">
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider">P/E Ratio</div>
+                        <div class="font-mono font-semibold text-lg">@km.PeRatio.Value.ToString("N2")</div>
+                    </div>
+                </div>
+            }
+            @if (km.EpsDiluted.HasValue) {
+                <div class="card bg-base-100 shadow-sm">
+                    <div class="card-body p-3">
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider">EPS (Diluted)</div>
+                        <div class="font-mono font-semibold text-lg">$@km.EpsDiluted.Value.ToString("N2")</div>
+                    </div>
+                </div>
+            }
+            @if (km.High52Week.HasValue) {
+                <div class="card bg-base-100 shadow-sm">
+                    <div class="card-body p-3">
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider">52W High</div>
+                        <div class="font-mono font-semibold text-lg">$@km.High52Week.Value.ToString("N2")</div>
+                    </div>
+                </div>
+            }
+            @if (km.Low52Week.HasValue) {
+                <div class="card bg-base-100 shadow-sm">
+                    <div class="card-body p-3">
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider">52W Low</div>
+                        <div class="font-mono font-semibold text-lg">$@km.Low52Week.Value.ToString("N2")</div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @{
         // Each "tab" is a full-page navigation, not an in-page tabpanel — so
         // ARIA tab/tablist roles would mislead assistive tech (they expect
         // arrow-key panel switching). Render as a <nav> landmark with normal
