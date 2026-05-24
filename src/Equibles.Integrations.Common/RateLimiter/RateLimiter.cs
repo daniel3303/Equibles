@@ -71,7 +71,7 @@ public class RateLimiter : IRateLimiter
 
     private void CleanupOldRequests(DateTime now)
     {
-        while (_requestTimes.Count > 0 && _requestTimes.Peek() < now - _timeWindow)
+        while (_requestTimes.Count > 0 && _requestTimes.Peek() <= now - _timeWindow)
         {
             _requestTimes.Dequeue();
         }
