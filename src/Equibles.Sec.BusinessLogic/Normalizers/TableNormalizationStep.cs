@@ -132,65 +132,35 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
         }
     }
 
-    private bool IsRowEmpty(IElement row)
-    {
-        var cells = HtmlElementExtensions.DirectChildCells(row);
-
-        foreach (var cell in cells)
-        {
-            if (!IsCellEmpty(cell))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    private bool IsRowEmpty(IElement row) =>
+        HtmlElementExtensions.DirectChildCells(row).All(IsCellEmpty);
 
     private bool IsCellEmpty(IElement cell)
     {
         var cellText = cell.TextContent.Trim();
-        var cellHtml = cell.InnerHtml.Trim();
-
-        if (IsMeaningfulText(cellText) && cellText != " ")
-        {
+        if (IsMeaningfulText(cellText))
             return false;
-        }
 
+        var cellHtml = cell.InnerHtml.Trim();
+        if (string.IsNullOrWhiteSpace(cellHtml))
+            return true;
+        if (cellHtml is "&nbsp;" or "&#160;")
+            return true;
         if (
-            !string.IsNullOrWhiteSpace(cellHtml)
-            && cellHtml != "&nbsp;"
-            && cellHtml != "&#160;"
-            && !cellHtml.Contains(
+            cellHtml.Contains(
                 "white-space:pre-wrap;font-family:Arial;font-kerning:none;min-width:fit-content;\"> </span>"
             )
-            && !IsOnlyWhitespaceSpan(cellHtml)
         )
-        {
-            return false;
-        }
+            return true;
 
-        return true;
+        return IsOnlyWhitespaceSpan(cellHtml);
     }
 
     private bool IsOnlyWhitespaceSpan(string html)
     {
         var tempDoc = _parser.ParseDocument(html);
-
         var spans = tempDoc.QuerySelectorAll("span").ToList();
-        if (spans.Count == 0)
-            return false;
-
-        foreach (var span in spans)
-        {
-            var spanText = span.TextContent.Trim();
-            if (IsMeaningfulText(spanText))
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return spans.Count > 0 && spans.All(span => !IsMeaningfulText(span.TextContent.Trim()));
     }
 
     private void RemoveEmptyColumns(IElement table)
@@ -213,19 +183,12 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
         RemoveColumnsByIndex(rows, columnsToRemove);
     }
 
-    private bool IsColumnEmpty(List<IElement> rows, int colIndex)
-    {
-        foreach (var row in rows)
+    private bool IsColumnEmpty(List<IElement> rows, int colIndex) =>
+        rows.All(row =>
         {
             var cells = HtmlElementExtensions.DirectChildCells(row);
-            if (colIndex < cells.Count && !IsCellEmpty(cells[colIndex]))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+            return colIndex >= cells.Count || IsCellEmpty(cells[colIndex]);
+        });
 
     private void RemoveColumnsByIndex(List<IElement> rows, List<int> columnsToRemove)
     {
