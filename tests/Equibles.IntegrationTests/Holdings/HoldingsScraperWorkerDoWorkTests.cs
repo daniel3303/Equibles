@@ -47,7 +47,8 @@ public class HoldingsScraperWorkerDoWorkTests : ParadeDbMcpTestBase
         // to RecalculatePendingValues (whose recalculator is intentionally not
         // registered → its own catch swallows, proving the cycle is resilient).
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(ProcessedDataSetRepository), new ProcessedDataSetRepository(DbContext))
+            (typeof(ProcessedDataSetRepository), new ProcessedDataSetRepository(DbContext)),
+            (typeof(InstitutionalHolderRepository), new InstitutionalHolderRepository(DbContext))
         );
 
         var worker = new HoldingsScraperWorker(

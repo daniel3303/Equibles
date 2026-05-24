@@ -94,10 +94,12 @@ public class HoldingsExportHoldersTests
         body.Should()
             .Contain(
                 "Ticker,CompanyName,ReportDate,InstitutionalHolderName,InstitutionalHolderCik,"
-                    + "Shares,Value,OwnershipPercent,ShareType,OptionType,AccessionNumber"
+                    + "PositionChange,CurrentShares,PreviousShares,DeltaShares,ChangePercent,"
+                    + "OwnershipPercent,CurrentValue,DeltaValue,QuarterFirstOwned"
             );
         body.Should().Contain("AAPL,Apple Inc.,2024-12-31,Berkshire Hathaway,0001067983,");
-        body.Should().Contain("1500000,250000000");
+        body.Should().Contain("1500000");
+        body.Should().Contain("250000000");
     }
 
     [Fact]
