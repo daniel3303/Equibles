@@ -14,9 +14,7 @@ public class InsiderTradingToolsGetRoleWhitespaceOfficerTitleTests
     // string.IsNullOrEmpty does not catch whitespace-only strings.
     // A whitespace-only OfficerTitle should fall back to "Officer"
     // just like null and empty do — it's not a meaningful label.
-    [Fact(
-        Skip = "GH-2014 — GetRole returns whitespace for officer with whitespace-only OfficerTitle"
-    )]
+    [Fact]
     public void GetRole_OfficerWithWhitespaceTitle_FallsBackToOfficerLabel()
     {
         var owner = new InsiderOwner { IsOfficer = true, OfficerTitle = "   " };
