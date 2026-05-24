@@ -33,6 +33,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Check worker health and recent errors](how-to-view-status-and-errors.md)
 - [Search for stocks, filings, institutions, and more](how-to-search.md)
 - [View market-wide insider trading activity](how-to-view-insider-activity.md)
+- [Browse economic indicators](how-to-browse-economic-data.md)
 
 ## FAQ
 
