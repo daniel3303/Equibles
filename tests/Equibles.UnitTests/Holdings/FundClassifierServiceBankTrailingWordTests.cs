@@ -10,7 +10,7 @@ namespace Equibles.UnitTests.Holdings;
 /// </summary>
 public class FundClassifierServiceBankTrailingWordTests
 {
-    [Fact(Skip = "GH-1997 — BANK pattern requires trailing space, misses end-of-string")]
+    [Fact]
     public void Classify_BankAsLastWord_ReturnsBank()
     {
         FundClassifierService.Classify("Deutsche Bank").Should().Be(FundClassification.Bank);
