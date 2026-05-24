@@ -216,23 +216,19 @@ public class ProfilesController : BaseController
         var viewModel = new InstitutionCompareViewModel { RequestedCiks = distinctCiks };
         ViewData["Title"] = "Compare institutions";
 
-        if (distinctCiks.Count < InstitutionCompareViewModel.MinCiks)
-            return View(viewModel);
+        if (distinctCiks.Count >= InstitutionCompareViewModel.MinCiks)
+        {
+            var loaded = await TryLoadMultiFundOverlap(
+                distinctCiks,
+                viewModel.MissingCiks,
+                date,
+                InstitutionCompareViewModel.MinCiks
+            );
+            viewModel.CommonReportDates = loaded.CommonReportDates;
+            viewModel.SelectedDate = loaded.SelectedDate;
+            viewModel.Overlap = loaded.Overlap;
+        }
 
-        var holders = await LoadHoldersByCik(distinctCiks, viewModel.MissingCiks);
-        if (holders.Count < InstitutionCompareViewModel.MinCiks)
-            return View(viewModel);
-
-        var commonDates = await FindCommonReportDates(holders);
-        viewModel.CommonReportDates = commonDates;
-        if (commonDates.Count == 0)
-            return View(viewModel);
-
-        var selected = ResolveSelectedDate(date, commonDates);
-        viewModel.SelectedDate = selected;
-
-        var perFund = await LoadPerFundHoldings(holders, selected);
-        viewModel.Overlap = FundOverlapCalculator.Calculate(perFund, selected);
         return View(viewModel);
     }
 
@@ -254,24 +250,20 @@ public class ProfilesController : BaseController
         var viewModel = new InstitutionOverlapMatrixViewModel { RequestedCiks = distinctCiks };
         ViewData["Title"] = "Overlap matrix";
 
-        if (distinctCiks.Count < InstitutionOverlapMatrixViewModel.MinCiks)
-            return View(viewModel);
+        if (distinctCiks.Count >= InstitutionOverlapMatrixViewModel.MinCiks)
+        {
+            var loaded = await TryLoadMultiFundOverlap(
+                distinctCiks,
+                viewModel.MissingCiks,
+                date,
+                InstitutionOverlapMatrixViewModel.MinCiks
+            );
+            viewModel.CommonReportDates = loaded.CommonReportDates;
+            viewModel.SelectedDate = loaded.SelectedDate;
+            if (loaded.Overlap != null)
+                viewModel.Matrix = FundOverlapCalculator.ComputePairwiseOverlap(loaded.Overlap);
+        }
 
-        var holders = await LoadHoldersByCik(distinctCiks, viewModel.MissingCiks);
-        if (holders.Count < InstitutionOverlapMatrixViewModel.MinCiks)
-            return View(viewModel);
-
-        var commonDates = await FindCommonReportDates(holders);
-        viewModel.CommonReportDates = commonDates;
-        if (commonDates.Count == 0)
-            return View(viewModel);
-
-        var selected = ResolveSelectedDate(date, commonDates);
-        viewModel.SelectedDate = selected;
-
-        var perFund = await LoadPerFundHoldings(holders, selected);
-        var overlap = FundOverlapCalculator.Calculate(perFund, selected);
-        viewModel.Matrix = FundOverlapCalculator.ComputePairwiseOverlap(overlap);
         return View(viewModel);
     }
 
@@ -290,37 +282,37 @@ public class ProfilesController : BaseController
         var viewModel = new InstitutionCombinedViewModel { RequestedCiks = distinctCiks };
         ViewData["Title"] = "Combined portfolio";
 
-        if (distinctCiks.Count < InstitutionCombinedViewModel.MinCiks)
-            return View(viewModel);
-
-        var holders = await LoadHoldersByCik(distinctCiks, viewModel.MissingCiks);
-        if (holders.Count < InstitutionCombinedViewModel.MinCiks)
-            return View(viewModel);
-
-        var commonDates = await FindCommonReportDates(holders);
-        viewModel.CommonReportDates = commonDates;
-        if (commonDates.Count == 0)
-            return View(viewModel);
-
-        var selected = ResolveSelectedDate(date, commonDates);
-        viewModel.SelectedDate = selected;
-
-        var perFund = await LoadPerFundHoldings(holders, selected);
-        viewModel.Overlap = FundOverlapCalculator.Calculate(perFund, selected);
-
-        // Consensus count per stock = number of funds whose slice has Value > 0. This is
-        // the primary sort key for the combined-portfolio view; the calculator already
-        // sorts by combined value, so we apply consensus on top as a stable secondary
-        // re-sort.
-        foreach (var row in viewModel.Overlap.Rows)
+        if (distinctCiks.Count >= InstitutionCombinedViewModel.MinCiks)
         {
-            var heldBy = row.Slices.Count(s => s.Value > 0);
-            viewModel.FundsHoldingByStock[row.CommonStockId] = heldBy;
+            var loaded = await TryLoadMultiFundOverlap(
+                distinctCiks,
+                viewModel.MissingCiks,
+                date,
+                InstitutionCombinedViewModel.MinCiks
+            );
+            viewModel.CommonReportDates = loaded.CommonReportDates;
+            viewModel.SelectedDate = loaded.SelectedDate;
+            if (loaded.Overlap != null)
+            {
+                viewModel.Overlap = loaded.Overlap;
+
+                // Consensus count per stock = number of funds whose slice has Value > 0. This is
+                // the primary sort key for the combined-portfolio view; the calculator already
+                // sorts by combined value, so we apply consensus on top as a stable secondary
+                // re-sort.
+                foreach (var row in viewModel.Overlap.Rows)
+                {
+                    var heldBy = row.Slices.Count(s => s.Value > 0);
+                    viewModel.FundsHoldingByStock[row.CommonStockId] = heldBy;
+                }
+                viewModel.Overlap.Rows = viewModel
+                    .Overlap.Rows.OrderByDescending(r =>
+                        viewModel.FundsHoldingByStock[r.CommonStockId]
+                    )
+                    .ThenByDescending(r => r.CombinedValue)
+                    .ToList();
+            }
         }
-        viewModel.Overlap.Rows = viewModel
-            .Overlap.Rows.OrderByDescending(r => viewModel.FundsHoldingByStock[r.CommonStockId])
-            .ThenByDescending(r => r.CombinedValue)
-            .ToList();
 
         return View(viewModel);
     }
@@ -387,6 +379,32 @@ public class ProfilesController : BaseController
 
         ViewData["Title"] = member.Name;
         return View(new CongressProfileViewModel { Name = member.Name, Trades = trades });
+    }
+
+    private async Task<(
+        List<DateOnly> CommonReportDates,
+        DateOnly? SelectedDate,
+        FundOverlapResult Overlap
+    )> TryLoadMultiFundOverlap(
+        List<string> distinctCiks,
+        List<string> missingCikSink,
+        DateOnly? date,
+        int minCiks
+    )
+    {
+        var holders = await LoadHoldersByCik(distinctCiks, missingCikSink);
+        if (holders.Count < minCiks)
+            return ([], null, null);
+
+        var commonDates = await FindCommonReportDates(holders);
+        if (commonDates.Count == 0)
+            return (commonDates, null, null);
+
+        var selected = ResolveSelectedDate(date, commonDates);
+        var perFund = await LoadPerFundHoldings(holders, selected);
+        var overlap = FundOverlapCalculator.Calculate(perFund, selected);
+
+        return (commonDates, selected, overlap);
     }
 
     private async Task<List<InstitutionalHolder>> LoadHoldersByCik(
