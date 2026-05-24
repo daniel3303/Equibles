@@ -69,11 +69,13 @@ public class HoldingsExportController : BaseController
             "InstitutionalHolderCik",
             "Shares",
             "Value",
+            "OwnershipPercent",
             "ShareType",
             "OptionType",
             "AccessionNumber",
         ];
 
+        var sharesOut = stock.SharesOutStanding;
         var rows = holdings.Select(h =>
             new[]
             {
@@ -84,6 +86,9 @@ public class HoldingsExportController : BaseController
                 h.HolderCik,
                 CsvExportService.Format(h.Shares),
                 CsvExportService.Format(h.Value),
+                sharesOut > 0
+                    ? ((double)h.Shares / sharesOut * 100.0).ToString("F4")
+                    : string.Empty,
                 h.ShareType.ToString(),
                 h.OptionType?.ToString() ?? string.Empty,
                 h.AccessionNumber,
