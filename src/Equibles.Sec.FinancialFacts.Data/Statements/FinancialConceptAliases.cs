@@ -107,6 +107,7 @@ public static class FinancialConceptAliases
         return alias
             .Trim()
             .ToLowerInvariant()
+            .Replace(" & ", "&")
             .Replace(' ', '-')
             .Replace('_', '-')
             .Replace("/", "-");
