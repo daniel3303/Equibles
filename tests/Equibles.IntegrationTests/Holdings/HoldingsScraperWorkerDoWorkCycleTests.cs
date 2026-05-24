@@ -86,7 +86,8 @@ public class HoldingsScraperWorkerDoWorkCycleTests : ParadeDbMcpTestBase
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(ProcessedDataSetRepository), new ProcessedDataSetRepository(DbContext)),
             (typeof(HoldingsDataSetClient), ThrowingDataSetClient()),
-            (typeof(HoldingsImportService), BuildImporter())
+            (typeof(HoldingsImportService), BuildImporter()),
+            (typeof(InstitutionalHolderRepository), new InstitutionalHolderRepository(DbContext))
         );
 
         var config = Substitute.For<IConfiguration>();
