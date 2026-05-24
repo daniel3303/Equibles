@@ -207,6 +207,8 @@ public static partial class DisclosureParsingHelper
 
     public static string Truncate(string value, int maxLength)
     {
+        if (maxLength <= 0)
+            return value == null ? value : string.Empty;
         if (value == null || value.Length <= maxLength)
             return value;
 
