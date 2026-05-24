@@ -218,7 +218,9 @@ public class InsiderTradingTools
         if (owner.IsDirector)
             roles.Add("Director");
         if (owner.IsOfficer)
-            roles.Add(string.IsNullOrEmpty(owner.OfficerTitle) ? "Officer" : owner.OfficerTitle);
+            roles.Add(
+                string.IsNullOrWhiteSpace(owner.OfficerTitle) ? "Officer" : owner.OfficerTitle
+            );
         if (owner.IsTenPercentOwner)
             roles.Add("10% Owner");
         return roles.Count > 0 ? string.Join(", ", roles) : "Insider";
