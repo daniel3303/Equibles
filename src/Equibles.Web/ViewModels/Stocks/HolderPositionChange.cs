@@ -17,6 +17,14 @@ public class HolderPositionChange
 
     public PositionChangeType ChangeType { get; set; }
 
+    public DateOnly? QuarterFirstOwned { get; set; }
+
     public long DeltaShares => CurrentShares - PreviousShares;
     public long DeltaValue => CurrentValue - PreviousValue;
+
+    public double? ChangePercent =>
+        PreviousShares > 0 ? (double)DeltaShares / PreviousShares * 100.0 : null;
+
+    public double? OwnershipPercent(long sharesOutstanding) =>
+        sharesOutstanding > 0 ? (double)CurrentShares / sharesOutstanding * 100.0 : null;
 }
