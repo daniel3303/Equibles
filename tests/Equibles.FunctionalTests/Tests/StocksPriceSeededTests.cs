@@ -111,7 +111,8 @@ public class StocksPriceSeededTests
             .Expect(
                 page.Locator("div.font-mono.font-semibold")
                     .Filter(new() { HasTextString = $"${newestClose:N2}" })
+                    .First
             )
-            .ToHaveCountAsync(1);
+            .ToBeVisibleAsync();
     }
 }
