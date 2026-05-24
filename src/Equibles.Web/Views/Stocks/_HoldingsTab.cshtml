@@ -233,7 +233,12 @@
                                 var deltaValueText = (e.DeltaValue > 0 ? "+$" : e.DeltaValue < 0 ? "-$" : "$") + Math.Abs(e.DeltaValue).ToString("N0");
                                 var own = e.OwnershipPercent(Model.SharesOutstanding);
                                 <tr>
-                                    <td class="max-w-xs truncate">@(e.InstitutionalHolder?.Name ?? "Unknown")</td>
+                                    <td class="max-w-xs truncate">
+                                        @(e.InstitutionalHolder?.Name ?? "Unknown")
+                                        @if (e.InstitutionalHolder != null) {
+                                            <partial name="_FundClassificationBadge" model="e.InstitutionalHolder.Classification" />
+                                        }
+                                    </td>
                                     <td class="text-right font-mono whitespace-nowrap">@e.CurrentShares.ToString("N0")</td>
                                     <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @deltaSharesCss">@deltaSharesText</td>
                                     <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @PctCss(e.ChangePercent)">@FormatPct(e.ChangePercent)</td>
@@ -298,7 +303,12 @@
                                     var deltaValueText = (e.DeltaValue > 0 ? "+$" : e.DeltaValue < 0 ? "-$" : "$") + Math.Abs(e.DeltaValue).ToString("N0");
                                     var own = e.OwnershipPercent(Model.SharesOutstanding);
                                     <tr>
-                                        <td class="max-w-xs truncate">@(e.InstitutionalHolder?.Name ?? "Unknown")</td>
+                                        <td class="max-w-xs truncate">
+                                            @(e.InstitutionalHolder?.Name ?? "Unknown")
+                                            @if (e.InstitutionalHolder != null) {
+                                                <partial name="_FundClassificationBadge" model="e.InstitutionalHolder.Classification" />
+                                            }
+                                        </td>
                                         <td class="text-right font-mono">@e.CurrentShares.ToString("N0")</td>
                                         <td class="text-right font-mono hidden md:table-cell @deltaSharesCss">@deltaSharesText</td>
                                         <td class="text-right font-mono hidden md:table-cell @PctCss(e.ChangePercent)">@FormatPct(e.ChangePercent)</td>

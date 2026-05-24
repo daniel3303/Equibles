@@ -23,4 +23,10 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
     {
         return GetAll().Where(h => EF.Functions.ILike(h.Name, $"%{search}%"));
     }
+
+    public IQueryable<InstitutionalHolder> GetUnclassified()
+    {
+        return GetAll()
+            .Where(h => h.Classification == FundClassification.Unknown && h.Name != null);
+    }
 }

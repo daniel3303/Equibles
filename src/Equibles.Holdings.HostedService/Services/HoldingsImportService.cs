@@ -380,6 +380,7 @@ public class HoldingsImportService
                 StateOrCountry = coverPage?.StateOrCountry,
                 Form13FFileNumber = coverPage?.Form13FFileNumber,
                 CrdNumber = coverPage?.CrdNumber,
+                Classification = FundClassifierService.Classify(coverPage?.CompanyName),
             };
 
             holderRepo.Add(holder);

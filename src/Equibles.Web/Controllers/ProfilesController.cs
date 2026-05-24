@@ -84,6 +84,7 @@ public class ProfilesController : BaseController
             {
                 Name = holder.Name,
                 Cik = holder.Cik,
+                Classification = holder.Classification,
                 Location = ProfileFormatting.JoinLocation(holder.City, holder.StateOrCountry),
                 Holdings = holdings,
                 Summary = summary,
