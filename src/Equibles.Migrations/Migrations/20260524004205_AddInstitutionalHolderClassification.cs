@@ -15,12 +15,14 @@ namespace Equibles.Migrations.Migrations
                 table: "InstitutionalHolder",
                 type: "integer",
                 nullable: false,
-                defaultValue: 0);
+                defaultValue: 0
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_InstitutionalHolder_Classification",
                 table: "InstitutionalHolder",
-                column: "Classification");
+                column: "Classification"
+            );
         }
 
         /// <inheritdoc />
@@ -28,11 +30,10 @@ namespace Equibles.Migrations.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "IX_InstitutionalHolder_Classification",
-                table: "InstitutionalHolder");
+                table: "InstitutionalHolder"
+            );
 
-            migrationBuilder.DropColumn(
-                name: "Classification",
-                table: "InstitutionalHolder");
+            migrationBuilder.DropColumn(name: "Classification", table: "InstitutionalHolder");
         }
     }
 }
