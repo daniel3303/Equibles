@@ -4,6 +4,7 @@ using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.Services;
+using Equibles.Web.ViewModels.Stocks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,11 +15,13 @@ public class HoldingsExportController : BaseController
     private readonly CommonStockRepository _stockRepository;
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly InstitutionalHolderRepository _holderRepository;
+    private readonly StockTabService _stockTabService;
 
     public HoldingsExportController(
         CommonStockRepository stockRepository,
         InstitutionalHoldingRepository holdingRepository,
         InstitutionalHolderRepository holderRepository,
+        StockTabService stockTabService,
         ILogger<HoldingsExportController> logger
     )
         : base(logger)
@@ -26,6 +29,7 @@ public class HoldingsExportController : BaseController
         _stockRepository = stockRepository;
         _holdingRepository = holdingRepository;
         _holderRepository = holderRepository;
+        _stockTabService = stockTabService;
     }
 
     [HttpGet("~/holdings/export/holders")]
@@ -38,27 +42,15 @@ public class HoldingsExportController : BaseController
         if (stock == null)
             return NotFound();
 
-        var reportDates = await LoadReportDates(_holdingRepository.GetHistoryByStock(stock));
-        if (reportDates.Count == 0)
+        var tab = await _stockTabService.LoadHoldingsTab(stock, date);
+        if (tab.AvailableDates.Count == 0)
             return NotFound();
 
-        var selectedDate = ResolveSelectedDate(date, reportDates);
-
-        var holdings = await _holdingRepository
-            .GetByStock(stock, selectedDate)
-            .Include(h => h.InstitutionalHolder)
-            .OrderByDescending(h => h.Value)
-            .Select(h => new
-            {
-                HolderName = h.InstitutionalHolder.Name,
-                HolderCik = h.InstitutionalHolder.Cik,
-                h.Shares,
-                h.Value,
-                h.ShareType,
-                h.OptionType,
-                h.AccessionNumber,
-            })
-            .ToListAsync();
+        var allHolders = tab
+            .GroupedHolders.SelectMany(g => g.Value)
+            .OrderByDescending(h => h.CurrentValue)
+            .ThenByDescending(h => h.PreviousValue)
+            .ToList();
 
         string[] headers =
         [
@@ -67,36 +59,41 @@ public class HoldingsExportController : BaseController
             "ReportDate",
             "InstitutionalHolderName",
             "InstitutionalHolderCik",
-            "Shares",
-            "Value",
+            "PositionChange",
+            "CurrentShares",
+            "PreviousShares",
+            "DeltaShares",
+            "ChangePercent",
             "OwnershipPercent",
-            "ShareType",
-            "OptionType",
-            "AccessionNumber",
+            "CurrentValue",
+            "DeltaValue",
+            "QuarterFirstOwned",
         ];
 
-        var sharesOut = stock.SharesOutStanding;
-        var rows = holdings.Select(h =>
+        var rows = allHolders.Select(h =>
             new[]
             {
                 stock.Ticker,
                 stock.Name,
-                CsvExportService.Format(selectedDate),
-                h.HolderName,
-                h.HolderCik,
-                CsvExportService.Format(h.Shares),
-                CsvExportService.Format(h.Value),
-                sharesOut > 0
-                    ? ((double)h.Shares / sharesOut * 100.0).ToString("F4")
+                CsvExportService.Format(tab.SelectedDate),
+                h.InstitutionalHolder?.Name ?? string.Empty,
+                h.InstitutionalHolder?.Cik ?? string.Empty,
+                h.ChangeType.ToString(),
+                CsvExportService.Format(h.CurrentShares),
+                CsvExportService.Format(h.PreviousShares),
+                CsvExportService.Format(h.DeltaShares),
+                FormatNullablePercent(h.ChangePercent),
+                FormatNullablePercent(h.OwnershipPercent(tab.SharesOutstanding)),
+                CsvExportService.Format(h.CurrentValue),
+                CsvExportService.Format(h.DeltaValue),
+                h.QuarterFirstOwned.HasValue
+                    ? CsvExportService.Format(h.QuarterFirstOwned.Value)
                     : string.Empty,
-                h.ShareType.ToString(),
-                h.OptionType?.ToString() ?? string.Empty,
-                h.AccessionNumber,
             }
         );
 
         var csv = CsvExportService.BuildCsv(headers, rows);
-        return CsvFile(csv, $"{stock.Ticker}-13F-{selectedDate:yyyy-MM-dd}.csv");
+        return CsvFile(csv, $"{stock.Ticker}-13F-{tab.SelectedDate:yyyy-MM-dd}.csv");
     }
 
     [HttpGet("~/holdings/export/institution")]
@@ -319,6 +316,11 @@ public class HoldingsExportController : BaseController
         stocks.TryGetValue(stockId, out var stock);
         return (stock?.Ticker ?? string.Empty, stock?.Name ?? string.Empty);
     }
+
+    private static string FormatNullablePercent(double? value) =>
+        value.HasValue
+            ? value.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+            : string.Empty;
 
     private record StockLabel(Guid Id, string Ticker, string Name);
 
