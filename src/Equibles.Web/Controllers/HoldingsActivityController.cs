@@ -318,9 +318,7 @@ public class HoldingsActivityController : BaseController
         if (!previousDate.HasValue)
             return View(viewModel);
 
-        var totalFilers = await _holdingRepository
-            .GetUniqueFilerIds(selectedDate)
-            .CountAsync();
+        var totalFilers = await _holdingRepository.GetUniqueFilerIds(selectedDate).CountAsync();
         viewModel.TotalUniverseFilers = totalFilers;
 
         var activity = await _holdingRepository
@@ -344,15 +342,16 @@ public class HoldingsActivityController : BaseController
             var newFilers = churn?.NewFilerCount ?? 0;
             var soldOut = churn?.SoldOutFilerCount ?? 0;
 
-            var netConviction = a.CurrentFilerCount > 0
-                ? (double)(newFilers - soldOut) / a.CurrentFilerCount * 100.0
-                : 0;
-            var retention = a.PreviousFilerCount > 0
-                ? (1.0 - (double)soldOut / a.PreviousFilerCount) * 100.0
-                : 0;
-            var universePct = totalFilers > 0
-                ? (double)a.CurrentFilerCount / totalFilers * 100.0
-                : 0;
+            var netConviction =
+                a.CurrentFilerCount > 0
+                    ? (double)(newFilers - soldOut) / a.CurrentFilerCount * 100.0
+                    : 0;
+            var retention =
+                a.PreviousFilerCount > 0
+                    ? (1.0 - (double)soldOut / a.PreviousFilerCount) * 100.0
+                    : 0;
+            var universePct =
+                totalFilers > 0 ? (double)a.CurrentFilerCount / totalFilers * 100.0 : 0;
 
             var score = netConviction + retention + universePct;
 
