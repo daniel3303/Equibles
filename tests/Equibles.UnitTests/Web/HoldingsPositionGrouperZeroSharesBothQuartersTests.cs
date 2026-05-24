@@ -11,7 +11,7 @@ namespace Equibles.UnitTests.Web;
 /// </summary>
 public class HoldingsPositionGrouperZeroSharesBothQuartersTests
 {
-    [Fact(Skip = "GH-2000 — ClassifyChange checks previousShares==0 before equality")]
+    [Fact]
     public void Group_ZeroSharesBothQuarters_ClassifiesAsUnchangedNotNew()
     {
         var holderId = Guid.NewGuid();

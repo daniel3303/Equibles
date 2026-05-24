@@ -88,10 +88,10 @@ public static class HoldingsPositionGrouper
 
     private static PositionChangeType ClassifyChange(long currentShares, long previousShares)
     {
-        if (previousShares == 0)
-            return PositionChangeType.New;
         if (currentShares == previousShares)
             return PositionChangeType.Unchanged;
+        if (previousShares == 0)
+            return PositionChangeType.New;
         return currentShares > previousShares
             ? PositionChangeType.Increased
             : PositionChangeType.Reduced;
