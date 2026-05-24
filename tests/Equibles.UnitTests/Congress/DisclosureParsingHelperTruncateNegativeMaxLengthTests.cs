@@ -10,7 +10,7 @@ public class DisclosureParsingHelperTruncateNegativeMaxLengthTests
     // passes maxLength directly into the Range indexer (value[..end]) without
     // clamping; a negative end index is not a valid Range bound and throws
     // ArgumentOutOfRangeException at runtime.
-    [Fact(Skip = "GH-2019 — negative maxLength hits invalid Range bound")]
+    [Fact]
     public void Truncate_NegativeMaxLength_DoesNotThrow()
     {
         var act = () => DisclosureParsingHelper.Truncate("hello", -1);
