@@ -1,0 +1,202 @@
+@using Equibles.Web.ViewModels.Holdings
+@model HoldingsHeatMapViewModel
+
+@{
+    ViewData["Title"] = "13F Conviction Heat Map";
+    ViewData["Description"] = "Institutional conviction heat map — bubble chart showing 13F filer conviction scores per stock.";
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">13F Conviction Heat Map</h1>
+        <p class="text-base-content/60">
+            Each bubble is a stock. X = number of 13F filers, Y = conviction score, size = total institutional value.
+        </p>
+    </div>
+
+    @if (Model.AvailableDates.Count < 2) {
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body items-center text-center py-12">
+                <div class="text-base-content/30 mb-3">
+                    <icon name="fire" size="12" />
+                </div>
+                <h2 class="text-base-content/60 mb-2">Not enough data</h2>
+                <p class="text-base-content/40 text-sm">At least two quarters of 13F filings are required for the heat map.</p>
+            </div>
+        </div>
+    } else {
+        <div class="mb-4 text-sm">
+            <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+                <div class="flex items-center gap-2 shrink-0">
+                    <label for="heatmap-date" class="text-base-content/60 whitespace-nowrap">Report Date:</label>
+                    <select id="heatmap-date" class="select select-bordered select-sm"
+                        onchange="window.location.href='HeatMap?date=' + this.value">
+                        @foreach (var d in Model.AvailableDates) {
+                            var sel = d == Model.SelectedDate;
+                            if (sel) {
+                                <option value="@d.ToString("yyyy-MM-dd")" selected>@d.ToString("MMM dd, yyyy")</option>
+                            } else {
+                                <option value="@d.ToString("yyyy-MM-dd")">@d.ToString("MMM dd, yyyy")</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Stocks:</span> <strong>@Model.Points.Count.ToString("N0")</strong></div>
+                <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">13F Universe:</span> <strong>@Model.TotalUniverseFilers.ToString("N0") filers</strong></div>
+            </div>
+        </div>
+
+        <!-- Bubble Chart -->
+        <div class="card bg-base-100 shadow-sm mb-6">
+            <div class="card-body p-4 lg:p-6">
+                <h2 class="font-semibold text-sm mb-3">Conviction Score vs. Filer Count</h2>
+                <div class="h-[500px]">
+                    <canvas id="heatmap-chart" role="img" aria-label="13F conviction heat map bubble chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Score breakdown legend -->
+        <div class="card bg-base-100 shadow-sm mb-6">
+            <div class="card-body p-4 lg:p-6">
+                <h2 class="font-semibold text-sm mb-3">Score Components</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider mb-1">Net Conviction</div>
+                        <div class="text-base-content/70">(New Filers − Sold Out) / Current Filers × 100</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider mb-1">Retention</div>
+                        <div class="text-base-content/70">(1 − Sold Out / Prior Filers) × 100</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider mb-1">Universe Penetration</div>
+                        <div class="text-base-content/70">Current Filers / Total 13F Filers × 100</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top scorers table -->
+        @if (Model.Points.Count > 0) {
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-4 lg:p-6">
+                    <h2 class="font-semibold text-sm mb-3">Top 25 by Conviction Score</h2>
+                    <div class="overflow-x-auto">
+                        <table class="table table-zebra table-sm">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Ticker</th>
+                                    <th scope="col">Name</th>
+                                    <th scope="col" class="text-right">Score</th>
+                                    <th scope="col" class="text-right hidden md:table-cell">Net Conv.</th>
+                                    <th scope="col" class="text-right hidden md:table-cell">Retention</th>
+                                    <th scope="col" class="text-right hidden lg:table-cell">Univ. %</th>
+                                    <th scope="col" class="text-right">Filers</th>
+                                    <th scope="col" class="text-right hidden lg:table-cell">Value (USD)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var p in Model.Points.Take(25)) {
+                                    var scoreCss = p.ConvictionScore >= 150 ? "text-success" : p.ConvictionScore < 50 ? "text-error" : "";
+                                    <tr>
+                                        <td><a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@p.Ticker" class="link link-hover font-mono">@p.Ticker</a></td>
+                                        <td class="max-w-xs truncate">@p.Name</td>
+                                        <td class="text-right font-mono @scoreCss">@p.ConvictionScore.ToString("F1")</td>
+                                        <td class="text-right font-mono hidden md:table-cell @(p.NetConvictionPct > 0 ? "text-success" : p.NetConvictionPct < 0 ? "text-error" : "")">@(p.NetConvictionPct > 0 ? "+" : "")@p.NetConvictionPct.ToString("F1")%</td>
+                                        <td class="text-right font-mono hidden md:table-cell">@p.RetentionPct.ToString("F1")%</td>
+                                        <td class="text-right font-mono hidden lg:table-cell">@p.UniversePct.ToString("F2")%</td>
+                                        <td class="text-right font-mono">@p.CurrentFilerCount.ToString("N0")</td>
+                                        <td class="text-right font-mono hidden lg:table-cell">$@p.CurrentValue.ToString("N0")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@if (Model.Points.Count > 0) {
+    @section Scripts {
+        <partial name="_ChartJs" />
+        <script>
+        // Render conviction heat map bubble chart
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof Chart === 'undefined') return;
+
+            const points = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+                Model.Points.Select(p => new {
+                    x = p.CurrentFilerCount,
+                    y = p.ConvictionScore,
+                    r = Math.Max(3, Math.Min(30, Math.Sqrt((double)p.CurrentValue / 1_000_000) * 0.5)),
+                    ticker = p.Ticker,
+                    name = p.Name,
+                    value = p.CurrentValue,
+                    filers = p.CurrentFilerCount,
+                    net = p.NetConvictionPct,
+                    ret = p.RetentionPct,
+                    univ = p.UniversePct,
+                }).ToList()));
+
+            // Score-based color: green for high, yellow for mid, red for low
+            function scoreColor(score) {
+                if (score >= 150) return 'oklch(65% 0.2 145 / 0.6)';
+                if (score >= 100) return 'oklch(70% 0.15 85 / 0.6)';
+                if (score >= 50)  return 'oklch(65% 0.15 60 / 0.6)';
+                return 'oklch(60% 0.2 25 / 0.6)';
+            }
+
+            new Chart(document.getElementById('heatmap-chart'), {
+                type: 'bubble',
+                data: {
+                    datasets: [{
+                        label: 'Stocks',
+                        data: points,
+                        backgroundColor: points.map(p => scoreColor(p.y)),
+                        borderColor: points.map(p => scoreColor(p.y).replace('/ 0.6', '/ 1')),
+                        borderWidth: 1,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    const d = ctx.raw;
+                                    return [
+                                        d.ticker + ' — ' + d.name,
+                                        'Score: ' + d.y.toFixed(1),
+                                        'Filers: ' + d.filers.toLocaleString(),
+                                        'Value: $' + (d.value / 1e6).toFixed(1) + 'M',
+                                        'Net Conv: ' + (d.net > 0 ? '+' : '') + d.net.toFixed(1) + '%',
+                                        'Retention: ' + d.ret.toFixed(1) + '%',
+                                        'Universe: ' + d.univ.toFixed(2) + '%'
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Number of 13F Filers', font: { size: 11 } },
+                            ticks: { font: { size: 10 } },
+                            grid: { color: 'oklch(50% 0 0 / 0.08)' }
+                        },
+                        y: {
+                            title: { display: true, text: 'Conviction Score', font: { size: 11 } },
+                            ticks: { font: { size: 10 } },
+                            grid: { color: 'oklch(50% 0 0 / 0.08)' }
+                        }
+                    }
+                }
+            });
+        });
+        </script>
+    }
+}
