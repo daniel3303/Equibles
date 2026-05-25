@@ -52,4 +52,30 @@ public class InsiderOwnerSearchProviderTests : ParadeDbMcpTestBase
         hit.Subtitle.Should().Be("Chief Executive Officer");
         hit.RouteValues.Should().ContainKey("ownerCik").WhoseValue.Should().Be("0000320193");
     }
+
+    [Fact]
+    public async Task Search_DirectorWithoutOfficerTitle_SubtitleIsDirector()
+    {
+        DbContext.Add(
+            new InsiderOwner
+            {
+                OwnerCik = "0001111111",
+                Name = "Board Member",
+                IsDirector = true,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new InsiderOwnerSearchProvider(new InsiderOwnerRepository(verify));
+
+        var group = await sut.Search(
+            new SearchRequest { Query = "board", MaxPerProvider = 10 },
+            CancellationToken.None
+        );
+
+        var hit = group.Hits.Should().ContainSingle().Subject;
+        hit.Subtitle.Should().Be("Director");
+    }
 }
