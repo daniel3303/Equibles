@@ -6,10 +6,7 @@ public static class LikePattern
     // Use with EF.Functions.ILike(column, pattern, "\\").
     public static string Contains(string text)
     {
-        var escaped = text
-            .Replace("\\", "\\\\")
-            .Replace("%", "\\%")
-            .Replace("_", "\\_");
+        var escaped = text.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
         return $"%{escaped}%";
     }
 }
