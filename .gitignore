@@ -28,6 +28,10 @@ Thumbs.db
 *.db-shm
 *.db-wal
 
+## Build output
+src/Equibles.Web/wwwroot/dist/
+node_modules/
+
 ## Environment
 .env
 *.local
