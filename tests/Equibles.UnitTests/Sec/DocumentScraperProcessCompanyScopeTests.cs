@@ -7,12 +7,14 @@ using Equibles.Core.Configuration;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
+using Equibles.Media.Data;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Models;
 using Equibles.Sec.HostedService.Services;
+using Equibles.Sec.Repositories;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,7 +43,14 @@ public class DocumentScraperProcessCompanyScopeTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .EnableServiceProviderCaching(false)
             .Options;
-        var ctx = new EquiblesDbContext(options, [new CommonStocksModuleConfiguration()]);
+        var ctx = new EquiblesDbContext(
+            options,
+            [
+                new CommonStocksModuleConfiguration(),
+                new DocumentOnlyModuleConfiguration(),
+                new MediaModuleConfiguration(),
+            ]
+        );
         ctx.Database.EnsureCreated();
         return ctx;
     }
@@ -54,6 +63,7 @@ public class DocumentScraperProcessCompanyScopeTests
         var services = new ServiceCollection();
         services.AddSingleton(dbContext);
         services.AddScoped<CommonStockRepository>();
+        services.AddScoped<DocumentRepository>();
         // DocumentScraper resolves CommonStockManager per scope to persist the
         // SEC-sourced fiscal year-end; IPublishEndpoint is an unrelated ctor
         // dep (SetCusip outbox event) the fiscal-year path never uses.
