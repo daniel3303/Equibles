@@ -15,7 +15,8 @@ namespace Equibles.Migrations.Migrations
                 table: "InstitutionalHolder",
                 type: "boolean",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: false
+            );
         }
 
         /// <inheritdoc />
@@ -23,7 +24,8 @@ namespace Equibles.Migrations.Migrations
         {
             migrationBuilder.DropColumn(
                 name: "ConfidentialTreatmentRequested",
-                table: "InstitutionalHolder");
+                table: "InstitutionalHolder"
+            );
         }
     }
 }
