@@ -8,12 +8,14 @@ using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
+using Equibles.Media.Data;
 using Equibles.Sec.BusinessLogic;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Services;
+using Equibles.Sec.Repositories;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -428,8 +430,8 @@ public class DocumentScraperTests
     [Fact]
     public async Task ScrapeDocuments_SecReportsNoFiscalYearEnd_LeavesStockUnchanged()
     {
-        // The substitute returns null metadata by default; the stock's
-        // fiscal-year columns must stay null rather than throw or be zeroed.
+        // The substitute returns null metadata by default and no 10-K filings
+        // exist; the stock's fiscal-year columns must stay null.
         var harness = new Harness();
         await using var dbContext = harness.CreateDbContext();
         var company = SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
@@ -439,6 +441,26 @@ public class DocumentScraperTests
         var persisted = await dbContext.Set<CommonStock>().SingleAsync(c => c.Id == company.Id);
         persisted.FiscalYearEndMonth.Should().BeNull();
         persisted.FiscalYearEndDay.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ScrapeDocuments_SecReportsNoFiscalYearEnd_InfersFiscalYearEndFromTenK()
+    {
+        // When the SEC metadata API returns null fiscal year-end, the scraper
+        // falls back to the most recent 10-K filing's period-end date.
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        var company = SeedCompany(dbContext, ticker: "BY", cik: "0001712762");
+
+        SeedDocument(dbContext, company, DocumentType.TenK, new DateOnly(2024, 12, 31));
+        SeedDocument(dbContext, company, DocumentType.TenK, new DateOnly(2023, 12, 31));
+        SeedDocument(dbContext, company, DocumentType.TenQ, new DateOnly(2024, 9, 30));
+
+        await harness.BuildScraper(dbContext).ScrapeDocuments();
+
+        var persisted = await dbContext.Set<CommonStock>().SingleAsync(c => c.Id == company.Id);
+        persisted.FiscalYearEndMonth.Should().Be(12);
+        persisted.FiscalYearEndDay.Should().Be(31);
     }
 
     // ── helpers ──
@@ -469,6 +491,28 @@ public class DocumentScraperTests
         return stock;
     }
 
+    private static void SeedDocument(
+        EquiblesDbContext dbContext,
+        CommonStock company,
+        DocumentType documentType,
+        DateOnly reportingForDate
+    )
+    {
+        dbContext
+            .Set<Document>()
+            .Add(
+                new Document
+                {
+                    CommonStockId = company.Id,
+                    DocumentType = documentType,
+                    ReportingDate = reportingForDate,
+                    ReportingForDate = reportingForDate,
+                    ContentId = Guid.NewGuid(),
+                }
+            );
+        dbContext.SaveChanges();
+    }
+
     private sealed class Harness
     {
         public ICompanySyncService CompanySync { get; } = Substitute.For<ICompanySyncService>();
@@ -489,7 +533,12 @@ public class DocumentScraperTests
                 .UseInMemoryDatabase(Guid.NewGuid().ToString())
                 .EnableServiceProviderCaching(false)
                 .Options;
-            var modules = new IModuleConfiguration[] { new CommonStocksModuleConfiguration() };
+            var modules = new IModuleConfiguration[]
+            {
+                new CommonStocksModuleConfiguration(),
+                new DocumentOnlyModuleConfiguration(),
+                new MediaModuleConfiguration(),
+            };
             var dbContext = new EquiblesDbContext(options, modules);
             dbContext.Database.EnsureCreated();
             return dbContext;
@@ -511,6 +560,7 @@ public class DocumentScraperTests
             // registration would invalidate the context after the first scope.
             services.AddSingleton(dbContext);
             services.AddScoped<CommonStockRepository>();
+            services.AddScoped<DocumentRepository>();
             // DocumentScraper now resolves CommonStockManager per scope to
             // persist the SEC-sourced fiscal year-end. IPublishEndpoint is an
             // unrelated CommonStockManager ctor dep (SetCusip outbox event);

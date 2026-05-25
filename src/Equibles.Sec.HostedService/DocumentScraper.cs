@@ -14,6 +14,7 @@ using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Extensions;
 using Equibles.Sec.HostedService.Models;
 using Equibles.Sec.HostedService.Services;
+using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Polly;
@@ -132,6 +133,7 @@ public class DocumentScraper : IDocumentScraper
             scope.ServiceProvider.GetRequiredService<IDocumentPersistenceService>();
 
         var commonStockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
+        var documentRepository = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
 
         var company = await companyRepository.Get(companyUntracked.Id);
 
@@ -146,7 +148,12 @@ public class DocumentScraper : IDocumentScraper
             // Detect the fiscal year-end before fetching filings: the metadata
             // call primes the SEC client's submissions cache so the first
             // GetCompanyFilings hits the same URL and adds no extra request.
-            await UpdateFiscalYearEnd(company, secEdgarClient, commonStockManager);
+            await UpdateFiscalYearEnd(
+                company,
+                secEdgarClient,
+                commonStockManager,
+                documentRepository
+            );
 
             foreach (var documentType in _options.DocumentTypesToSync)
             {
@@ -191,28 +198,65 @@ public class DocumentScraper : IDocumentScraper
 
     /// <summary>
     /// Reads SEC EDGAR's submissions <c>fiscalYearEnd</c> for the company and
-    /// persists it when it changed. Best-effort: a metadata failure is logged
-    /// and reported but never blocks document scraping, since fiscal-year
-    /// metadata is a nice-to-have enrichment, not a prerequisite for filings.
-    /// Errors are still reported (consistent with the other per-company steps)
-    /// so a systemic SEC-schema change that breaks parsing surfaces on the
-    /// dashboard instead of silently disabling fiscal detection platform-wide.
+    /// persists it when it changed. Falls back to inferring the fiscal year-end
+    /// from the most recent 10-K filing's period-end date when the metadata API
+    /// returns null. Best-effort: a metadata failure is logged and reported but
+    /// never blocks document scraping, since fiscal-year metadata is a
+    /// nice-to-have enrichment, not a prerequisite for filings.
     /// </summary>
     private async Task UpdateFiscalYearEnd(
         CommonStock company,
         ISecEdgarClient secEdgarClient,
-        CommonStockManager commonStockManager
+        CommonStockManager commonStockManager,
+        DocumentRepository documentRepository
     )
     {
         try
         {
             var metadata = await secEdgarClient.GetCompanyMetadata(company.Cik);
-            if (metadata?.FiscalYearEndMonth is not { } month)
+            if (metadata?.FiscalYearEndMonth is { } month)
             {
+                await commonStockManager.SetFiscalYearEnd(
+                    company,
+                    month,
+                    metadata.FiscalYearEndDay
+                );
                 return;
             }
 
-            await commonStockManager.SetFiscalYearEnd(company, month, metadata.FiscalYearEndDay);
+            // SEC metadata lacks fiscal year-end — infer from most recent 10-K.
+            // A 10-K's ReportingForDate is the period end, which is the fiscal
+            // year-end by definition.
+            var latestTenK = await documentRepository
+                .GetByCompany(company)
+                .Where(d => d.DocumentType == DocumentType.TenK)
+                .OrderByDescending(d => d.ReportingForDate)
+                .Select(d => new { d.ReportingForDate })
+                .FirstOrDefaultAsync();
+
+            if (latestTenK is not null)
+            {
+                _logger.LogInformation(
+                    "SEC metadata has no fiscal year-end for {Ticker}; inferred from 10-K period ending {Date}",
+                    company.Ticker,
+                    latestTenK.ReportingForDate
+                );
+                await commonStockManager.SetFiscalYearEnd(
+                    company,
+                    latestTenK.ReportingForDate.Month,
+                    latestTenK.ReportingForDate.Day
+                );
+                return;
+            }
+
+            if (company.FiscalYearEndMonth is null)
+            {
+                _logger.LogWarning(
+                    "No fiscal year-end source for {Ticker} (CIK: {Cik}): SEC metadata returned null and no 10-K filings exist",
+                    company.Ticker,
+                    company.Cik
+                );
+            }
         }
         catch (Exception ex)
         {

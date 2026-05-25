@@ -7,10 +7,12 @@ using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
+using Equibles.Media.Data;
 using Equibles.Sec.HostedService;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Services;
+using Equibles.Sec.Repositories;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,7 +41,14 @@ public class DocumentScraperUpdateFiscalYearEndErrorIsolationTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .EnableServiceProviderCaching(false)
             .Options;
-        var dbContext = new EquiblesDbContext(options, [new CommonStocksModuleConfiguration()]);
+        var dbContext = new EquiblesDbContext(
+            options,
+            [
+                new CommonStocksModuleConfiguration(),
+                new DocumentOnlyModuleConfiguration(),
+                new MediaModuleConfiguration(),
+            ]
+        );
         dbContext.Database.EnsureCreated();
         var company = new CommonStock
         {
@@ -59,6 +68,7 @@ public class DocumentScraperUpdateFiscalYearEndErrorIsolationTests
         var services = new ServiceCollection();
         services.AddSingleton(dbContext);
         services.AddScoped<CommonStockRepository>();
+        services.AddScoped<DocumentRepository>();
         services.AddSingleton(Substitute.For<IPublishEndpoint>());
         services.AddScoped<CommonStockManager>();
         services.AddSingleton(secEdgarClient);

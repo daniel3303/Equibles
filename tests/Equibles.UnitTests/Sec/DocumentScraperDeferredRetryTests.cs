@@ -7,12 +7,14 @@ using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
+using Equibles.Media.Data;
 using Equibles.Sec.BusinessLogic;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Services;
+using Equibles.Sec.Repositories;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -40,7 +42,14 @@ public class DocumentScraperDeferredRetryTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .EnableServiceProviderCaching(false)
             .Options;
-        var ctx = new EquiblesDbContext(dbOptions, [new CommonStocksModuleConfiguration()]);
+        var ctx = new EquiblesDbContext(
+            dbOptions,
+            [
+                new CommonStocksModuleConfiguration(),
+                new DocumentOnlyModuleConfiguration(),
+                new MediaModuleConfiguration(),
+            ]
+        );
         ctx.Database.EnsureCreated();
         ctx.Set<CommonStock>()
             .Add(
@@ -93,6 +102,7 @@ public class DocumentScraperDeferredRetryTests
         var services = new ServiceCollection();
         services.AddSingleton(ctx);
         services.AddScoped<CommonStockRepository>();
+        services.AddScoped<DocumentRepository>();
         // DocumentScraper resolves CommonStockManager per scope to persist the
         // SEC-sourced fiscal year-end; IPublishEndpoint is an unrelated ctor
         // dep (SetCusip outbox event) the fiscal-year path never uses.
