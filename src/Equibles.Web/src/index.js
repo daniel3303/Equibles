@@ -24,3 +24,4 @@ import './js/search-keyboard';
 import './js/global-search-shortcut';
 import './js/search-clear';
 import './js/copy-button';
+import './js/compact-numbers';
