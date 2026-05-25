@@ -299,6 +299,7 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
                     SettlementDate = snapshotDate,
                     CurrentShortPosition = 50_000_000,
                     ChangeInShortPosition = 1_000_000,
+                    AverageDailyVolume = 5_000_000,
                     DaysToCover = 8.0m,
                 },
                 new ShortInterest
@@ -308,6 +309,7 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
                     SettlementDate = snapshotDate,
                     CurrentShortPosition = 30_000_000,
                     ChangeInShortPosition = 500_000,
+                    AverageDailyVolume = 10_000_000,
                     DaysToCover = 3.0m,
                 }
             );
@@ -335,6 +337,7 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
                     SettlementDate = new DateOnly(2026, 3, 15),
                     CurrentShortPosition = 1_000,
                     ChangeInShortPosition = 0,
+                    AverageDailyVolume = 100_000,
                     DaysToCover = 8.0m,
                 },
                 new ShortInterest
@@ -344,6 +347,7 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
                     SettlementDate = new DateOnly(2026, 3, 15),
                     CurrentShortPosition = 1_000,
                     ChangeInShortPosition = 0,
+                    AverageDailyVolume = 200_000,
                     DaysToCover = 2.0m,
                 }
             );
@@ -353,6 +357,50 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
 
         result.Should().Contain("GME");
         result.Should().NotContain("AMC");
+    }
+
+    [Fact]
+    public async Task GetShortInterestSnapshot_ExcludesZeroVolumeStocks()
+    {
+        var gme = GmeStock();
+        var pennyStock = new CommonStock
+        {
+            Ticker = "BLNC",
+            Name = "Penny Corp",
+            Cik = "0009999999",
+        };
+        DbContext.Set<CommonStock>().AddRange(gme, pennyStock);
+        var snapshotDate = new DateOnly(2026, 3, 15);
+        DbContext
+            .Set<ShortInterest>()
+            .AddRange(
+                new ShortInterest
+                {
+                    CommonStock = gme,
+                    CommonStockId = gme.Id,
+                    SettlementDate = snapshotDate,
+                    CurrentShortPosition = 50_000_000,
+                    ChangeInShortPosition = 1_000_000,
+                    AverageDailyVolume = 5_000_000,
+                    DaysToCover = 8.0m,
+                },
+                new ShortInterest
+                {
+                    CommonStock = pennyStock,
+                    CommonStockId = pennyStock.Id,
+                    SettlementDate = snapshotDate,
+                    CurrentShortPosition = 1,
+                    ChangeInShortPosition = 0,
+                    AverageDailyVolume = 0,
+                    DaysToCover = 1000.0m,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetShortInterestSnapshot();
+
+        result.Should().Contain("GME");
+        result.Should().NotContain("BLNC");
     }
 
     [Fact]
@@ -370,6 +418,7 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
                     SettlementDate = new DateOnly(2026, 2, 28),
                     CurrentShortPosition = 99_999,
                     ChangeInShortPosition = 0,
+                    AverageDailyVolume = 5_000_000,
                     DaysToCover = 7.0m,
                 },
                 new ShortInterest
@@ -379,6 +428,7 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
                     SettlementDate = new DateOnly(2026, 3, 15),
                     CurrentShortPosition = 100_000,
                     ChangeInShortPosition = 0,
+                    AverageDailyVolume = 5_000_000,
                     DaysToCover = 8.0m,
                 }
             );

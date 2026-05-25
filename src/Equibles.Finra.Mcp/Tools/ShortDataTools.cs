@@ -184,7 +184,8 @@ public class ShortDataTools
                 var query = _shortInterestRepository
                     .GetBySettlementDate(latestDate)
                     .Include(s => s.CommonStock)
-                    .Where(s => s.DaysToCover != null);
+                    .Where(s => s.DaysToCover != null)
+                    .Where(s => s.AverageDailyVolume != null && s.AverageDailyVolume > 0);
 
                 if (minDaysToCover > 0)
                 {
