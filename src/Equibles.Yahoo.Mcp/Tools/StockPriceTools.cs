@@ -18,8 +18,7 @@ public class StockPriceTools
 {
     private readonly DailyStockPriceRepository _priceRepository;
     private readonly CommonStockRepository _commonStockRepository;
-    private readonly ErrorManager _errorManager;
-    private readonly ILogger<StockPriceTools> _logger;
+    private readonly McpToolRunner _runner;
 
     public StockPriceTools(
         DailyStockPriceRepository priceRepository,
@@ -30,8 +29,11 @@ public class StockPriceTools
     {
         _priceRepository = priceRepository;
         _commonStockRepository = commonStockRepository;
-        _errorManager = errorManager;
-        _logger = logger;
+        _runner = new McpToolRunner(
+            logger,
+            (tool, msg, stack, ctx) =>
+                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
+        );
     }
 
     [McpServerTool(Name = "GetStockPrices")]
@@ -48,7 +50,7 @@ public class StockPriceTools
             int maxResults = 250
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var stock = await FindStockByTicker(ticker);
@@ -102,7 +104,7 @@ public class StockPriceTools
             string tickers
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var tickerList = tickers
@@ -183,7 +185,7 @@ public class StockPriceTools
             int maxResults = 60
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 if (kPeriod < 2 || dPeriod < 1)
@@ -249,7 +251,7 @@ public class StockPriceTools
             int maxResults = 60
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 if (period < 2)
@@ -307,7 +309,7 @@ public class StockPriceTools
             int maxResults = 60
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var (stock, records, error) = await LoadAscendingPriceWindow(
@@ -412,12 +414,4 @@ public class StockPriceTools
 
     private Task<CommonStock> FindStockByTicker(string ticker) =>
         _commonStockRepository.GetByTicker(ticker.Trim().ToUpperInvariant());
-
-    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
-        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
-
-    private Task ReportError(string toolName, string message, string stackTrace, string context)
-    {
-        return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
-    }
 }

@@ -17,8 +17,7 @@ public class CboeTools
 {
     private readonly CboePutCallRatioRepository _putCallRepository;
     private readonly CboeVixDailyRepository _vixRepository;
-    private readonly ErrorManager _errorManager;
-    private readonly ILogger<CboeTools> _logger;
+    private readonly McpToolRunner _runner;
 
     public CboeTools(
         CboePutCallRatioRepository putCallRepository,
@@ -29,8 +28,11 @@ public class CboeTools
     {
         _putCallRepository = putCallRepository;
         _vixRepository = vixRepository;
-        _errorManager = errorManager;
-        _logger = logger;
+        _runner = new McpToolRunner(
+            logger,
+            (tool, msg, stack, ctx) =>
+                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
+        );
     }
 
     [McpServerTool(Name = "GetPutCallRatios")]
@@ -48,7 +50,7 @@ public class CboeTools
             int maxResults = 60
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 if (!Enum.TryParse<CboePutCallRatioType>(type, true, out var ratioType))
@@ -109,7 +111,7 @@ public class CboeTools
             int maxResults = 60
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var start = McpToolExecutor.ParseDateOr(
@@ -148,13 +150,5 @@ public class CboeTools
             "GetVixHistory",
             $"startDate: {startDate}"
         );
-    }
-
-    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
-        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
-
-    private Task ReportError(string toolName, string message, string stackTrace, string context)
-    {
-        return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
 }

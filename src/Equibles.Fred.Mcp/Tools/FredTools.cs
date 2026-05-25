@@ -16,8 +16,7 @@ public class FredTools
 {
     private readonly FredSeriesRepository _seriesRepository;
     private readonly FredObservationRepository _observationRepository;
-    private readonly ErrorManager _errorManager;
-    private readonly ILogger<FredTools> _logger;
+    private readonly McpToolRunner _runner;
 
     public FredTools(
         FredSeriesRepository seriesRepository,
@@ -28,8 +27,11 @@ public class FredTools
     {
         _seriesRepository = seriesRepository;
         _observationRepository = observationRepository;
-        _errorManager = errorManager;
-        _logger = logger;
+        _runner = new McpToolRunner(
+            logger,
+            (tool, msg, stack, ctx) =>
+                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
+        );
     }
 
     [McpServerTool(Name = "GetEconomicIndicator")]
@@ -47,7 +49,7 @@ public class FredTools
             int maxResults = 100
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var series = await _seriesRepository
@@ -108,7 +110,7 @@ public class FredTools
             string category = null
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 IQueryable<FredSeries> seriesQuery;
@@ -182,7 +184,7 @@ public class FredTools
         [Description("Maximum number of results to return (default: 20)")] int maxResults = 20
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var series = await _seriesRepository
@@ -213,13 +215,5 @@ public class FredTools
             "SearchEconomicIndicators",
             $"query: {query}"
         );
-    }
-
-    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
-        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
-
-    private Task ReportError(string toolName, string message, string stackTrace, string context)
-    {
-        return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
 }

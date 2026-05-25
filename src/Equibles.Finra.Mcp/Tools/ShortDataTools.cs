@@ -18,8 +18,7 @@ public class ShortDataTools
     private readonly DailyShortVolumeRepository _shortVolumeRepository;
     private readonly ShortInterestRepository _shortInterestRepository;
     private readonly CommonStockRepository _commonStockRepository;
-    private readonly ErrorManager _errorManager;
-    private readonly ILogger<ShortDataTools> _logger;
+    private readonly McpToolRunner _runner;
 
     public ShortDataTools(
         DailyShortVolumeRepository shortVolumeRepository,
@@ -32,8 +31,11 @@ public class ShortDataTools
         _shortVolumeRepository = shortVolumeRepository;
         _shortInterestRepository = shortInterestRepository;
         _commonStockRepository = commonStockRepository;
-        _errorManager = errorManager;
-        _logger = logger;
+        _runner = new McpToolRunner(
+            logger,
+            (tool, msg, stack, ctx) =>
+                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
+        );
     }
 
     [McpServerTool(Name = "GetShortVolume")]
@@ -50,7 +52,7 @@ public class ShortDataTools
             int maxResults = 90
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var (stock, stockError) = await ResolveStockByTicker(ticker);
@@ -114,7 +116,7 @@ public class ShortDataTools
             int maxResults = 24
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var (stock, stockError) = await ResolveStockByTicker(ticker);
@@ -178,7 +180,7 @@ public class ShortDataTools
         [Description("Maximum number of results to return (default: 50)")] int maxResults = 50
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var latestDate = await _shortInterestRepository
@@ -232,14 +234,6 @@ public class ShortDataTools
             "GetShortInterestSnapshot",
             $"minDaysToCover: {minDaysToCover}"
         );
-    }
-
-    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
-        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
-
-    private Task ReportError(string toolName, string message, string stackTrace, string context)
-    {
-        return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
 
     private static string FormatSignedChange(long change) =>

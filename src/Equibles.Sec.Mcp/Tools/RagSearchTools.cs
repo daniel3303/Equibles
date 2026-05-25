@@ -20,8 +20,7 @@ public class RagSearchTools
 
     private readonly IRagManager _ragManager;
     private readonly ISecDocumentService _secDocumentService;
-    private readonly ErrorManager _errorManager;
-    private readonly ILogger<RagSearchTools> _logger;
+    private readonly McpToolRunner _runner;
 
     public RagSearchTools(
         IRagManager ragManager,
@@ -32,8 +31,11 @@ public class RagSearchTools
     {
         _ragManager = ragManager;
         _secDocumentService = secDocumentService;
-        _errorManager = errorManager;
-        _logger = logger;
+        _runner = new McpToolRunner(
+            logger,
+            (tool, msg, stack, ctx) =>
+                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
+        );
     }
 
     [McpServerTool(Name = "SearchDocuments")]
@@ -48,7 +50,7 @@ public class RagSearchTools
         [Description("Optional end date filter in YYYY-MM-DD format")] DateTime? endDate = null
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var parsedType = ParseDocumentType(documentType);
@@ -79,7 +81,7 @@ public class RagSearchTools
         [Description("Optional end date filter in YYYY-MM-DD format")] DateTime? endDate = null
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var parsedType = ParseDocumentType(documentType);
@@ -108,7 +110,7 @@ public class RagSearchTools
         [Description("Maximum number of results to return (default: 5)")] int maxResults = 5
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var chunks = await _ragManager.SearchRelevantChunksByDocument(
@@ -136,7 +138,7 @@ public class RagSearchTools
         [Description(DocumentTypeDescription)] string documentType = null
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var parsedType = ParseDocumentType(documentType);
@@ -183,14 +185,6 @@ public class RagSearchTools
             "ListCompanyDocuments",
             $"ticker: {ticker}"
         );
-    }
-
-    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
-        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
-
-    private Task ReportError(string toolName, string message, string stackTrace, string context)
-    {
-        return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
 
     private static DocumentType ParseDocumentType(string documentType)

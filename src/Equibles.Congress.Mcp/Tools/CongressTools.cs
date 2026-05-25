@@ -19,8 +19,7 @@ public class CongressTools
     private readonly CongressionalTradeRepository _tradeRepository;
     private readonly CongressMemberRepository _memberRepository;
     private readonly CommonStockRepository _commonStockRepository;
-    private readonly ErrorManager _errorManager;
-    private readonly ILogger<CongressTools> _logger;
+    private readonly McpToolRunner _runner;
 
     public CongressTools(
         CongressionalTradeRepository tradeRepository,
@@ -33,8 +32,11 @@ public class CongressTools
         _tradeRepository = tradeRepository;
         _memberRepository = memberRepository;
         _commonStockRepository = commonStockRepository;
-        _errorManager = errorManager;
-        _logger = logger;
+        _runner = new McpToolRunner(
+            logger,
+            (tool, msg, stack, ctx) =>
+                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
+        );
     }
 
     [McpServerTool(Name = "GetCongressionalTrades")]
@@ -53,7 +55,7 @@ public class CongressTools
             int maxResults = 50
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var stock = await _commonStockRepository.GetByTicker(
@@ -123,7 +125,7 @@ public class CongressTools
             int maxResults = 50
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var member = await _memberRepository.GetByName(memberName.Trim());
@@ -185,7 +187,7 @@ public class CongressTools
         [Description("Maximum number of results to return (default: 20)")] int maxResults = 20
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var members = await _memberRepository
@@ -213,14 +215,6 @@ public class CongressTools
             "SearchCongressMembers",
             $"query: {query}"
         );
-    }
-
-    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
-        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
-
-    private Task ReportError(string toolName, string message, string stackTrace, string context)
-    {
-        return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
 
     private static IQueryable<CongressionalTrade> ApplyTransactionTypeFilter(

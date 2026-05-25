@@ -38,8 +38,7 @@ public class InstitutionalHoldingsTools
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly InstitutionalHolderRepository _holderRepository;
     private readonly CommonStockRepository _commonStockRepository;
-    private readonly ErrorManager _errorManager;
-    private readonly ILogger<InstitutionalHoldingsTools> _logger;
+    private readonly McpToolRunner _runner;
 
     public InstitutionalHoldingsTools(
         InstitutionalHoldingRepository holdingRepository,
@@ -52,8 +51,11 @@ public class InstitutionalHoldingsTools
         _holdingRepository = holdingRepository;
         _holderRepository = holderRepository;
         _commonStockRepository = commonStockRepository;
-        _errorManager = errorManager;
-        _logger = logger;
+        _runner = new McpToolRunner(
+            logger,
+            (tool, msg, stack, ctx) =>
+                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
+        );
     }
 
     [McpServerTool(Name = "GetTopHolders")]
@@ -67,7 +69,7 @@ public class InstitutionalHoldingsTools
         [Description("Maximum number of holders to return (default: 20)")] int maxResults = 20
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var (stock, stockError) = await ResolveStockByTicker(ticker);
@@ -155,7 +157,7 @@ public class InstitutionalHoldingsTools
             int maxPeriods = 8
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var (stock, stockError) = await ResolveStockByTicker(ticker);
@@ -222,7 +224,7 @@ public class InstitutionalHoldingsTools
         [Description("Maximum number of holdings to return (default: 20)")] int maxResults = 20
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var holders = await _holderRepository.Search(institutionName).Take(5).ToListAsync();
@@ -289,7 +291,7 @@ public class InstitutionalHoldingsTools
         [Description("Maximum number of results to return (default: 10)")] int maxResults = 10
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var holders = await _holderRepository
@@ -333,7 +335,7 @@ public class InstitutionalHoldingsTools
             int maxResults = 10
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var (stock, stockError) = await ResolveStockByTicker(ticker);
@@ -511,7 +513,7 @@ public class InstitutionalHoldingsTools
         [Description("Maximum number of stocks to return (default: 20)")] int maxResults = 20
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var normalizedBucket = (bucket ?? string.Empty).Trim().ToLowerInvariant();
@@ -685,7 +687,7 @@ public class InstitutionalHoldingsTools
         [Description("Maximum number of stocks to return (default: 25)")] int maxResults = 25
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var normalizedSort = (sort ?? "filers").Trim().ToLowerInvariant();
@@ -781,7 +783,7 @@ public class InstitutionalHoldingsTools
             string reportDate = null
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var (holder, reportDates, targetDate, error) = await ResolveHolderAndTargetDate(
@@ -892,7 +894,7 @@ public class InstitutionalHoldingsTools
             string reportDate = null
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var (holder, _, targetDate, error) = await ResolveHolderAndTargetDate(
@@ -933,7 +935,7 @@ public class InstitutionalHoldingsTools
             int maxResults = 20
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var normalizedBucket = bucket?.Trim().ToLowerInvariant();
@@ -1060,7 +1062,7 @@ public class InstitutionalHoldingsTools
         [Description("Maximum number of stocks to return (default: 30)")] int maxResults = 30
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var (holder1, holder1Error) = await ResolveHolderByName(institutionName1);
@@ -1179,7 +1181,7 @@ public class InstitutionalHoldingsTools
         [Description("Maximum number of stocks to return (default: 30)")] int maxResults = 30
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var names = (institutionNames ?? string.Empty)
@@ -1272,14 +1274,6 @@ public class InstitutionalHoldingsTools
             );
         }
         return result.ToString();
-    }
-
-    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
-        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
-
-    private Task ReportError(string toolName, string message, string stackTrace, string context)
-    {
-        return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
 
     private Task<InstitutionalHolder> FindHolderByName(string name) =>
