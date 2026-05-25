@@ -55,11 +55,14 @@ public class StockPriceTools
                 if (stock == null)
                     return $"Stock '{ticker}' not found.";
 
-                var start = ParseDateOr(
+                var start = McpToolExecutor.ParseDateOr(
                     startDate,
                     DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
                 );
-                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
+                var end = McpToolExecutor.ParseDateOr(
+                    endDate,
+                    DateOnly.FromDateTime(DateTime.UtcNow)
+                );
 
                 var records = await _priceRepository
                     .GetByStock(stock, start, end)
@@ -350,8 +353,11 @@ public class StockPriceTools
         if (stock == null)
             return (null, null, $"Stock '{ticker}' not found.");
 
-        var start = ParseDateOr(startDate, DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-6)));
-        var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
+        var start = McpToolExecutor.ParseDateOr(
+            startDate,
+            DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-6))
+        );
+        var end = McpToolExecutor.ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
 
         var records = await _priceRepository
             .GetByStock(stock, start, end)
@@ -403,11 +409,6 @@ public class StockPriceTools
             records.Select(p => p.Low).ToList(),
             records.Select(p => p.Close).ToList()
         );
-
-    private static DateOnly ParseDateOr(string value, DateOnly fallback) =>
-        !string.IsNullOrEmpty(value) && DateOnly.TryParse(value, out var parsed)
-            ? parsed
-            : fallback;
 
     private Task<CommonStock> FindStockByTicker(string ticker) =>
         _commonStockRepository.GetByTicker(ticker.Trim().ToUpperInvariant());

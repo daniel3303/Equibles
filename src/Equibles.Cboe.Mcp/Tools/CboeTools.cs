@@ -54,11 +54,14 @@ public class CboeTools
                 if (!Enum.TryParse<CboePutCallRatioType>(type, true, out var ratioType))
                     return $"Invalid type '{type}'. Valid types: Total, Equity, Index, Vix, Etp";
 
-                var start = ParseDateOr(
+                var start = McpToolExecutor.ParseDateOr(
                     startDate,
                     DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
                 );
-                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
+                var end = McpToolExecutor.ParseDateOr(
+                    endDate,
+                    DateOnly.FromDateTime(DateTime.UtcNow)
+                );
 
                 var records = await _putCallRepository
                     .GetByType(ratioType, start, end)
@@ -109,11 +112,14 @@ public class CboeTools
         return Execute(
             async () =>
             {
-                var start = ParseDateOr(
+                var start = McpToolExecutor.ParseDateOr(
                     startDate,
                     DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
                 );
-                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
+                var end = McpToolExecutor.ParseDateOr(
+                    endDate,
+                    DateOnly.FromDateTime(DateTime.UtcNow)
+                );
 
                 var records = await _vixRepository
                     .GetByDateRange(start, end)
@@ -151,7 +157,4 @@ public class CboeTools
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
-
-    private static DateOnly ParseDateOr(string text, DateOnly fallback) =>
-        !string.IsNullOrEmpty(text) && DateOnly.TryParse(text, out var parsed) ? parsed : fallback;
 }

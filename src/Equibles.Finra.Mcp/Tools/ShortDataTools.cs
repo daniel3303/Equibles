@@ -59,11 +59,14 @@ public class ShortDataTools
 
                 var query = _shortVolumeRepository.GetHistoryByStock(stock);
 
-                var start = ParseDateOr(
+                var start = McpToolExecutor.ParseDateOr(
                     startDate,
                     DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
                 );
-                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
+                var end = McpToolExecutor.ParseDateOr(
+                    endDate,
+                    DateOnly.FromDateTime(DateTime.UtcNow)
+                );
 
                 query = query.Where(d => d.Date >= start && d.Date <= end);
 
@@ -120,11 +123,14 @@ public class ShortDataTools
 
                 var query = _shortInterestRepository.GetHistoryByStock(stock);
 
-                var start = ParseDateOr(
+                var start = McpToolExecutor.ParseDateOr(
                     startDate,
                     DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
                 );
-                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
+                var end = McpToolExecutor.ParseDateOr(
+                    endDate,
+                    DateOnly.FromDateTime(DateTime.UtcNow)
+                );
 
                 query = query.Where(s => s.SettlementDate >= start && s.SettlementDate <= end);
 
@@ -238,9 +244,6 @@ public class ShortDataTools
 
     private static string FormatSignedChange(long change) =>
         change >= 0 ? $"+{change:N0}" : change.ToString("N0");
-
-    private static DateOnly ParseDateOr(string text, DateOnly fallback) =>
-        !string.IsNullOrEmpty(text) && DateOnly.TryParse(text, out var parsed) ? parsed : fallback;
 
     private async Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker)
     {
