@@ -173,10 +173,12 @@ public class CompanySyncService : ICompanySyncService
     {
         var existingStock = state.ExistingStocks.First(cs => cs.Cik == secCompany.Cik);
         var normalizedName = NormalizeCompanyName(secCompany.Name);
+        var missingWebsite = existingStock.Website == null;
         var needsUpdate =
             existingStock.Ticker != primaryTicker
             || existingStock.Name != normalizedName
-            || !(existingStock.SecondaryTickers ?? []).SequenceEqual(secondaryTickers);
+            || !(existingStock.SecondaryTickers ?? []).SequenceEqual(secondaryTickers)
+            || missingWebsite;
 
         if (!needsUpdate)
             return;
@@ -235,12 +237,25 @@ public class CompanySyncService : ICompanySyncService
         var oldTicker = existingStock.Ticker;
         var oldName = existingStock.Name;
         var oldSecondaryTickers = existingStock.SecondaryTickers.ToList();
+        var oldWebsite = existingStock.Website;
 
         try
         {
+            if (missingWebsite)
+                existingStock.Website = await FetchWebsite(secCompany.Cik);
+
             existingStock.Ticker = primaryTicker;
             existingStock.Name = normalizedName;
             existingStock.SecondaryTickers = secondaryTickers;
+
+            if (
+                existingStock.Ticker == oldTicker
+                && existingStock.Name == oldName
+                && oldSecondaryTickers.SequenceEqual(existingStock.SecondaryTickers)
+                && existingStock.Website == oldWebsite
+            )
+                return;
+
             await state.CommonStockManager.Update(existingStock);
 
             if (oldTicker != primaryTicker)
@@ -263,6 +278,7 @@ public class CompanySyncService : ICompanySyncService
             existingStock.Ticker = oldTicker;
             existingStock.Name = oldName;
             existingStock.SecondaryTickers = oldSecondaryTickers;
+            existingStock.Website = oldWebsite;
             state.DbContext.Entry(existingStock).State = EntityState.Unchanged;
             _logger.LogError(
                 ex,
@@ -316,11 +332,13 @@ public class CompanySyncService : ICompanySyncService
         {
             await DeleteAndUntrack(obsoleteStock, state);
 
+            var website = await FetchWebsite(secCompany.Cik);
             var newStock = await CreateCommonStock(
                 secCompany,
                 primaryTicker,
                 secondaryTickers,
-                state
+                state,
+                website
             );
 
             AddAndTrack(newStock, secCompany.Cik, primaryTicker, state);
@@ -355,7 +373,14 @@ public class CompanySyncService : ICompanySyncService
         CommonStock newStock = null;
         try
         {
-            newStock = await CreateCommonStock(secCompany, primaryTicker, secondaryTickers, state);
+            var website = await FetchWebsite(secCompany.Cik);
+            newStock = await CreateCommonStock(
+                secCompany,
+                primaryTicker,
+                secondaryTickers,
+                state,
+                website
+            );
 
             AddAndTrack(newStock, secCompany.Cik, primaryTicker, state);
             _logger.LogDebug(
@@ -568,11 +593,26 @@ public class CompanySyncService : ICompanySyncService
         return secondaryCikToParent;
     }
 
+    private async Task<string> FetchWebsite(string cik)
+    {
+        try
+        {
+            var metadata = await _secEdgarClient.GetCompanyMetadata(cik);
+            return metadata?.Website?.Trim();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch website for CIK {Cik}, skipping", cik);
+            return null;
+        }
+    }
+
     private static Task<CommonStock> CreateCommonStock(
         CompanyInfo secCompany,
         string primaryTicker,
         List<string> secondaryTickers,
-        StockSyncState state
+        StockSyncState state,
+        string website = null
     ) =>
         state.CommonStockManager.Create(
             new CommonStock
@@ -584,6 +624,7 @@ public class CompanySyncService : ICompanySyncService
                 Description = $"Company with tickers: {string.Join(", ", secCompany.Tickers)}",
                 MarketCapitalization = 0,
                 SharesOutStanding = 0,
+                Website = website,
             }
         );
 
