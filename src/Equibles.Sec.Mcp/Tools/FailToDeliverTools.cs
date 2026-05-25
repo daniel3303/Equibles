@@ -55,11 +55,14 @@ public class FailToDeliverTools
                 if (stock == null)
                     return $"Stock '{ticker}' not found.";
 
-                var start = ParseDateOr(
+                var start = McpToolExecutor.ParseDateOr(
                     startDate,
                     DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
                 );
-                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
+                var end = McpToolExecutor.ParseDateOr(
+                    endDate,
+                    DateOnly.FromDateTime(DateTime.UtcNow)
+                );
 
                 var records = await _ftdRepository
                     .GetByStock(stock)
@@ -98,7 +101,4 @@ public class FailToDeliverTools
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
-
-    private static DateOnly ParseDateOr(string text, DateOnly fallback) =>
-        !string.IsNullOrEmpty(text) && DateOnly.TryParse(text, out var parsed) ? parsed : fallback;
 }

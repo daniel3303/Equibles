@@ -62,11 +62,14 @@ public class CongressTools
                 if (stock == null)
                     return $"Stock '{ticker}' not found.";
 
-                var start = ParseDateOr(
+                var start = McpToolExecutor.ParseDateOr(
                     startDate,
                     DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
                 );
-                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
+                var end = McpToolExecutor.ParseDateOr(
+                    endDate,
+                    DateOnly.FromDateTime(DateTime.UtcNow)
+                );
 
                 var query = _tradeRepository.GetByStock(stock, start, end);
                 query = ApplyTransactionTypeFilter(query, transactionType);
@@ -127,11 +130,14 @@ public class CongressTools
                 if (member == null)
                     return $"Member '{memberName}' not found. Use SearchCongressMembers to find the exact name.";
 
-                var start = ParseDateOr(
+                var start = McpToolExecutor.ParseDateOr(
                     startDate,
                     DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
                 );
-                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
+                var end = McpToolExecutor.ParseDateOr(
+                    endDate,
+                    DateOnly.FromDateTime(DateTime.UtcNow)
+                );
 
                 var query = _tradeRepository
                     .GetByMember(member)
@@ -231,7 +237,4 @@ public class CongressTools
         }
         return query.Where(t => t.TransactionType == parsedType);
     }
-
-    private static DateOnly ParseDateOr(string text, DateOnly fallback) =>
-        !string.IsNullOrEmpty(text) && DateOnly.TryParse(text, out var parsed) ? parsed : fallback;
 }

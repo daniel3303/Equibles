@@ -57,11 +57,14 @@ public class FredTools
                 if (series == null)
                     return $"Series '{seriesId}' not found. Use SearchEconomicIndicators to find available series.";
 
-                var start = ParseDateOr(
+                var start = McpToolExecutor.ParseDateOr(
                     startDate,
                     DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
                 );
-                var end = ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
+                var end = McpToolExecutor.ParseDateOr(
+                    endDate,
+                    DateOnly.FromDateTime(DateTime.UtcNow)
+                );
 
                 var observations = await _observationRepository
                     .GetBySeries(series, start, end)
@@ -219,7 +222,4 @@ public class FredTools
     {
         return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
-
-    private static DateOnly ParseDateOr(string text, DateOnly fallback) =>
-        !string.IsNullOrEmpty(text) && DateOnly.TryParse(text, out var parsed) ? parsed : fallback;
 }
