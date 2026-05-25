@@ -120,6 +120,28 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
         output.Should().NotContain("vs prior quarter");
     }
 
+    [Fact]
+    public async Task GetInstitutionSummary_AmbiguousName_PrefersShortestMatch()
+    {
+        // "BlackRock" matches both "BlackRock, Inc." (parent) and
+        // "BlackRock Advisors LLC" (subsidiary). The parent is the intended
+        // match — it has the shorter name and is the primary 13F filer.
+        DbContext.AddRange(
+            new InstitutionalHolder { Cik = "00080001", Name = "BlackRock Advisors LLC" },
+            new InstitutionalHolder { Cik = "00080002", Name = "BlackRock, Inc." }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = NewSut(verify);
+
+        var output = await sut.GetInstitutionSummary("BlackRock");
+
+        output.Should().Contain("BlackRock, Inc.");
+        output.Should().NotContain("BlackRock Advisors");
+    }
+
     private InstitutionalHoldingsTools NewSut(Equibles.Data.EquiblesDbContext ctx) =>
         new(
             new InstitutionalHoldingRepository(ctx),

@@ -1275,7 +1275,11 @@ public class InstitutionalHoldingsTools
     }
 
     private Task<InstitutionalHolder> FindHolderByName(string name) =>
-        _holderRepository.Search(name ?? string.Empty).OrderBy(h => h.Name).FirstOrDefaultAsync();
+        _holderRepository
+            .Search(name ?? string.Empty)
+            .OrderBy(h => h.Name.Length)
+            .ThenBy(h => h.Name)
+            .FirstOrDefaultAsync();
 
     private async Task<(InstitutionalHolder Holder, string Error)> ResolveHolderByName(string name)
     {
