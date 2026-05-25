@@ -572,7 +572,7 @@ public class CompanySyncService : ICompanySyncService
     };
 
     private static readonly Regex RomanNumeralPattern = new(
-        @"^(I{1,3}|IV|VI{0,3}|IX|XI{0,3}|XIV|XV)$",
+        @"^M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled
     );
 
@@ -589,8 +589,14 @@ public class CompanySyncService : ICompanySyncService
         var words = titleCased.Split(' ');
         for (var i = 0; i < words.Length; i++)
         {
-            var stripped = words[i].TrimEnd('.', ',', ';', ')');
-            if (UpperCaseAbbreviations.Contains(stripped) || RomanNumeralPattern.IsMatch(stripped))
+            var stripped = words[i].TrimStart('(').TrimEnd('.', ',', ';', ')');
+            if (
+                stripped.Length > 0
+                && (
+                    UpperCaseAbbreviations.Contains(stripped)
+                    || RomanNumeralPattern.IsMatch(stripped)
+                )
+            )
             {
                 words[i] = words[i].ToUpperInvariant();
             }
