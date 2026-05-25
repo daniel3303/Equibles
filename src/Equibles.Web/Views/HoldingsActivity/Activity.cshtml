@@ -88,14 +88,12 @@
                                         @foreach (var row in board.Rows) {
                                             var deltaSharesCss = row.DeltaShares > 0 ? "text-success" : row.DeltaShares < 0 ? "text-error" : "";
                                             var deltaValueCss = row.DeltaValue > 0 ? "text-success" : row.DeltaValue < 0 ? "text-error" : "";
-                                            var deltaSharesText = (row.DeltaShares > 0 ? "+" : row.DeltaShares < 0 ? "-" : "") + Math.Abs(row.DeltaShares).ToString("N0");
-                                            var deltaValueText = (row.DeltaValue > 0 ? "+$" : row.DeltaValue < 0 ? "-$" : "$") + Math.Abs(row.DeltaValue).ToString("N0");
                                             <tr>
                                                 <td class="font-mono">@row.Ticker</td>
                                                 <td class="max-w-xs truncate">@row.Name</td>
-                                                <td class="text-right font-mono @deltaSharesCss">@deltaSharesText</td>
-                                                <td class="text-right font-mono hidden md:table-cell @deltaValueCss">@deltaValueText</td>
-                                                <td class="text-right font-mono hidden lg:table-cell text-base-content/60">@row.PreviousFilerCount.ToString("N0") → @row.CurrentFilerCount.ToString("N0")</td>
+                                                <td class="text-right font-mono @deltaSharesCss"><cn value="@row.DeltaShares" sign /></td>
+                                                <td class="text-right font-mono hidden md:table-cell @deltaValueCss"><cn value="@row.DeltaValue" prefix="$" sign /></td>
+                                                <td class="text-right font-mono hidden lg:table-cell text-base-content/60"><cn value="@row.PreviousFilerCount" /> → <cn value="@row.CurrentFilerCount" /></td>
                                                 <td class="text-right">
                                                     <a asp-controller="Stocks" asp-action="Holdings"
                                                        asp-route-ticker="@row.Ticker"
@@ -144,7 +142,7 @@
                                             <tr>
                                                 <td class="font-mono">@row.Ticker</td>
                                                 <td class="max-w-xs truncate">@row.Name</td>
-                                                <td class="text-right font-mono">@board.FilerSelector(row).ToString("N0")</td>
+                                                <td class="text-right font-mono"><cn value="@board.FilerSelector(row)" /></td>
                                                 <td class="text-right">
                                                     <a asp-controller="Stocks" asp-action="Holdings"
                                                        asp-route-ticker="@row.Ticker"

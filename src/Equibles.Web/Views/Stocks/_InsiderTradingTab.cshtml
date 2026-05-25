@@ -56,10 +56,16 @@
                             <td class="max-w-xs truncate">@(t.InsiderOwner?.Name ?? "Unknown")</td>
                             <td class="hidden md:table-cell text-sm text-base-content/60">@role</td>
                             <td><span class="badge @badgeClass badge-sm tooltip tooltip-right cursor-help" data-tip="@typeTooltip">@typeLabel</span></td>
-                            <td class="text-right font-mono">@t.Shares.ToString("N0")</td>
+                            <td class="text-right font-mono"><cn value="@t.Shares" /></td>
                             <td class="text-right font-mono hidden md:table-cell">@(t.PricePerShare > 0 ? $"${t.PricePerShare:N2}" : "—")</td>
-                            <td class="text-right font-mono hidden lg:table-cell">@(t.PricePerShare > 0 ? $"${(t.Shares * t.PricePerShare):N0}" : "—")</td>
-                            <td class="text-right font-mono hidden lg:table-cell">@t.SharesOwnedAfter.ToString("N0")</td>
+                            <td class="text-right font-mono hidden lg:table-cell">
+                                @if (t.PricePerShare > 0) {
+                                    <cn value="@(t.Shares * t.PricePerShare)" prefix="$" />
+                                } else {
+                                    <text>—</text>
+                                }
+                            </td>
+                            <td class="text-right font-mono hidden lg:table-cell"><cn value="@t.SharesOwnedAfter" /></td>
                         </tr>
                     }
                 </tbody>
