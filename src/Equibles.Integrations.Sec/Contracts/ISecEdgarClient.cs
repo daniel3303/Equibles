@@ -62,4 +62,13 @@ public interface ISecEdgarClient
         string accessionNumber,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// Returns the most recent <c>reportDate</c> for a given form type from the
+    /// SEC submissions feed's <c>filings.recent</c> section. Uses the cached
+    /// submissions payload when available (zero extra SEC requests after
+    /// <see cref="GetCompanyMetadata"/>). Only examines recent filings — no
+    /// archive fetching. Returns null when no filing of the given type exists.
+    /// </summary>
+    Task<DateOnly?> GetMostRecentReportDate(string cik, DocumentTypeFilter formType);
 }

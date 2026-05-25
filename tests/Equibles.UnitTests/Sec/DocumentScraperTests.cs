@@ -463,6 +463,53 @@ public class DocumentScraperTests
         persisted.FiscalYearEndDay.Should().Be(31);
     }
 
+    [Fact]
+    public async Task ScrapeDocuments_SecReportsNoFiscalYearEnd_InfersFiscalYearEndFromTwentyF()
+    {
+        // Foreign filers have no 10-K filings — the scraper falls back to the
+        // most recent 20-F report date from the cached SEC submissions JSON.
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        var company = SeedCompany(dbContext, ticker: "BABA", cik: "0001577552");
+
+        harness
+            .SecEdgarClient.GetMostRecentReportDate("0001577552", DocumentTypeFilter.TwentyF)
+            .Returns(new DateOnly(2024, 3, 31));
+
+        await harness.BuildScraper(dbContext).ScrapeDocuments();
+
+        var persisted = await dbContext.Set<CommonStock>().SingleAsync(c => c.Id == company.Id);
+        persisted.FiscalYearEndMonth.Should().Be(3);
+        persisted.FiscalYearEndDay.Should().Be(31);
+    }
+
+    [Fact]
+    public async Task ScrapeDocuments_SecReportsNoFiscalYearEnd_InfersFiscalYearEndFromFortyF()
+    {
+        // Canadian cross-listed companies file 40-F instead of 20-F. The scraper
+        // tries 20-F first, then falls back to 40-F.
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        var company = SeedCompany(dbContext, ticker: "CNQ", cik: "0001193125");
+
+        harness
+            .SecEdgarClient.GetMostRecentReportDate("0001193125", DocumentTypeFilter.TwentyF)
+            .Returns((DateOnly?)null);
+        harness
+            .SecEdgarClient.GetMostRecentReportDate("0001193125", DocumentTypeFilter.FortyF)
+            .Returns(new DateOnly(2024, 12, 31));
+
+        await harness.BuildScraper(dbContext).ScrapeDocuments();
+
+        var persisted = await dbContext.Set<CommonStock>().SingleAsync(c => c.Id == company.Id);
+        persisted.FiscalYearEndMonth.Should().Be(12);
+        persisted.FiscalYearEndDay.Should().Be(31);
+
+        await harness
+            .SecEdgarClient.Received(1)
+            .GetMostRecentReportDate("0001193125", DocumentTypeFilter.TwentyF);
+    }
+
     // ── helpers ──
 
     private static FilingData BuildFiling(string cik, string accession, string form) =>
