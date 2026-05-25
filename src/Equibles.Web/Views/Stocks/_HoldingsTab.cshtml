@@ -74,11 +74,11 @@
             <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Value:</span> <strong>$@Model.TotalValue.ToString("N0")</strong></div>
             <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Shares:</span> <strong>@Model.TotalShares.ToString("N0")</strong></div>
             <div class="flex items-center gap-2 ml-auto">
-                <button type="button" class="btn btn-sm btn-ghost border border-base-300 btn-compact-toggle"
-                        onclick="toggleCompactNumbers()"
-                        title="Show compact numbers (1M, 1B)">
-                    1M
-                </button>
+                <label class="flex items-center gap-1.5 cursor-pointer" title="Toggle compact numbers (1M, 1B)">
+                    <span class="text-xs text-base-content/60">Compact</span>
+                    <input type="checkbox" class="toggle toggle-xs toggle-primary btn-compact-toggle"
+                           onchange="toggleCompactNumbers()" />
+                </label>
                 <a class="btn btn-outline btn-sm"
                    asp-controller="HoldingsExport" asp-action="Holders"
                    asp-route-ticker="@Model.Ticker" asp-route-date="@Model.SelectedDate.ToString("yyyy-MM-dd")"

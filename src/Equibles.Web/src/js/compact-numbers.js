@@ -30,9 +30,8 @@ function applyFormat(compact) {
         }
     });
 
-    document.querySelectorAll('.btn-compact-toggle').forEach(btn => {
-        btn.classList.toggle('btn-active', compact);
-        btn.title = compact ? 'Show full numbers' : 'Show compact numbers (1M, 1B)';
+    document.querySelectorAll('.btn-compact-toggle').forEach(el => {
+        el.checked = compact;
     });
 }
 
