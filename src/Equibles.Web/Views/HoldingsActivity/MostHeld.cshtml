@@ -84,18 +84,18 @@
                                     <td class="text-right text-base-content/60">@rowNumber.ToString("N0")</td>
                                     <td class="font-mono">@row.Ticker</td>
                                     <td class="max-w-xs truncate">@row.Name</td>
-                                    <td class="text-right font-mono"><cn value="@row.CurrentFilerCount" /></td>
+                                    <td class="text-right font-mono"><compactable-number value="@row.CurrentFilerCount" /></td>
                                     <td class="text-right font-mono @deltaFilersCss">
                                         @if (Model.PreviousDate.HasValue) {
-                                            <cn value="@row.DeltaFilerCount" sign />
+                                            <compactable-number value="@row.DeltaFilerCount" sign />
                                         } else {
                                             <span class="text-base-content/40">—</span>
                                         }
                                     </td>
-                                    <td class="text-right font-mono hidden md:table-cell"><cn value="@row.CurrentValue" prefix="$" /></td>
+                                    <td class="text-right font-mono hidden md:table-cell"><compactable-number value="@row.CurrentValue" prefix="$" /></td>
                                     <td class="text-right font-mono hidden md:table-cell @deltaValueCss">
                                         @if (Model.PreviousDate.HasValue) {
-                                            <cn value="@row.DeltaValue" prefix="$" sign />
+                                            <compactable-number value="@row.DeltaValue" prefix="$" sign />
                                         } else {
                                             <span class="text-base-content/40">—</span>
                                         }

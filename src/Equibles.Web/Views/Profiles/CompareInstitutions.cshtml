@@ -94,14 +94,14 @@
                                 @foreach (var slice in row.Slices) {
                                     <td class="text-right font-mono">
                                         @if (slice.Shares > 0) {
-                                            <cn value="@slice.Shares" />
+                                            <compactable-number value="@slice.Shares" />
                                         } else {
                                             <text>—</text>
                                         }
                                     </td>
                                     <td class="text-right font-mono text-base-content/60">@(slice.Value > 0 ? slice.PercentOfPortfolio.ToString("F1") + "%" : "—")</td>
                                 }
-                                <td class="text-right font-mono"><cn value="@row.CombinedValue" prefix="$" /></td>
+                                <td class="text-right font-mono"><compactable-number value="@row.CombinedValue" prefix="$" /></td>
                             </tr>
                         }
                     </tbody>

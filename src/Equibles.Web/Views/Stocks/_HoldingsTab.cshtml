@@ -71,8 +71,8 @@
                 </select>
             </div>
             <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Holders:</span> <strong>@Model.HolderCount.ToString("N0")</strong></div>
-            <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Value:</span> <strong><cn value="@Model.TotalValue" prefix="$" /></strong></div>
-            <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Shares:</span> <strong><cn value="@Model.TotalShares" /></strong></div>
+            <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Value:</span> <strong><compactable-number value="@Model.TotalValue" prefix="$" /></strong></div>
+            <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Shares:</span> <strong><compactable-number value="@Model.TotalShares" /></strong></div>
             <div class="flex items-center gap-2 ml-auto">
                 <label class="flex items-center gap-1.5 cursor-pointer" title="Toggle compact numbers (1M, 1B)">
                     <span class="text-xs text-base-content/60">Compact</span>
@@ -183,9 +183,9 @@
                                             var deltaValueCss = e.DeltaValue > 0 ? "text-success" : e.DeltaValue < 0 ? "text-error" : "";
                                             <tr>
                                                 <td class="max-w-xs truncate">@(e.InstitutionalHolder?.Name ?? "Unknown")</td>
-                                                <td class="text-right font-mono @deltaSharesCss"><cn value="@e.DeltaShares" sign /></td>
+                                                <td class="text-right font-mono @deltaSharesCss"><compactable-number value="@e.DeltaShares" sign /></td>
                                                 <td class="text-right font-mono hidden md:table-cell @PctCss(e.ChangePercent)">@FormatPct(e.ChangePercent)</td>
-                                                <td class="text-right font-mono hidden md:table-cell @deltaValueCss"><cn value="@e.DeltaValue" prefix="$" sign /></td>
+                                                <td class="text-right font-mono hidden md:table-cell @deltaValueCss"><compactable-number value="@e.DeltaValue" prefix="$" sign /></td>
                                             </tr>
                                         }
                                     </tbody>
@@ -242,13 +242,13 @@
                                             <partial name="_FundClassificationBadge" model="e.InstitutionalHolder.Classification" />
                                         }
                                     </td>
-                                    <td class="text-right font-mono whitespace-nowrap"><cn value="@e.CurrentShares" /></td>
-                                    <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @deltaSharesCss"><cn value="@e.DeltaShares" sign /></td>
+                                    <td class="text-right font-mono whitespace-nowrap"><compactable-number value="@e.CurrentShares" /></td>
+                                    <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @deltaSharesCss"><compactable-number value="@e.DeltaShares" sign /></td>
                                     <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @PctCss(e.ChangePercent)">@FormatPct(e.ChangePercent)</td>
                                     <td class="text-right font-mono hidden lg:table-cell whitespace-nowrap">@(own != null ? $"{own:F2}%" : "—")</td>
-                                    <td class="text-right font-mono hidden lg:table-cell whitespace-nowrap"><cn value="@e.CurrentValue" prefix="$" /></td>
+                                    <td class="text-right font-mono hidden lg:table-cell whitespace-nowrap"><compactable-number value="@e.CurrentValue" prefix="$" /></td>
                                     <td class="text-right hidden xl:table-cell whitespace-nowrap text-base-content/60">@FormatQuarter(e.QuarterFirstOwned)</td>
-                                    <td class="text-right font-mono whitespace-nowrap @deltaValueCss"><cn value="@e.DeltaValue" prefix="$" sign /></td>
+                                    <td class="text-right font-mono whitespace-nowrap @deltaValueCss"><compactable-number value="@e.DeltaValue" prefix="$" sign /></td>
                                     <td class="text-right">
                                         @if (e.InstitutionalHolder?.Cik != null) {
                                             <a asp-controller="Stocks" asp-action="ShowHolder"
@@ -310,13 +310,13 @@
                                                 <partial name="_FundClassificationBadge" model="e.InstitutionalHolder.Classification" />
                                             }
                                         </td>
-                                        <td class="text-right font-mono"><cn value="@e.CurrentShares" /></td>
-                                        <td class="text-right font-mono hidden md:table-cell @deltaSharesCss"><cn value="@e.DeltaShares" sign /></td>
+                                        <td class="text-right font-mono"><compactable-number value="@e.CurrentShares" /></td>
+                                        <td class="text-right font-mono hidden md:table-cell @deltaSharesCss"><compactable-number value="@e.DeltaShares" sign /></td>
                                         <td class="text-right font-mono hidden md:table-cell @PctCss(e.ChangePercent)">@FormatPct(e.ChangePercent)</td>
                                         <td class="text-right font-mono hidden lg:table-cell">@(own != null ? $"{own:F2}%" : "—")</td>
-                                        <td class="text-right font-mono hidden lg:table-cell"><cn value="@e.CurrentValue" prefix="$" /></td>
+                                        <td class="text-right font-mono hidden lg:table-cell"><compactable-number value="@e.CurrentValue" prefix="$" /></td>
                                         <td class="text-right hidden xl:table-cell text-base-content/60">@FormatQuarter(e.QuarterFirstOwned)</td>
-                                        <td class="text-right font-mono @deltaValueCss"><cn value="@e.DeltaValue" prefix="$" sign /></td>
+                                        <td class="text-right font-mono @deltaValueCss"><compactable-number value="@e.DeltaValue" prefix="$" sign /></td>
                                         <td class="text-right">
                                             @if (e.InstitutionalHolder?.Cik != null) {
                                                 <a asp-controller="Stocks" asp-action="ShowHolder"

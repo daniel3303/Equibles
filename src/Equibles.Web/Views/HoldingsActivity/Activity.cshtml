@@ -91,9 +91,9 @@
                                             <tr>
                                                 <td class="font-mono">@row.Ticker</td>
                                                 <td class="max-w-xs truncate">@row.Name</td>
-                                                <td class="text-right font-mono @deltaSharesCss"><cn value="@row.DeltaShares" sign /></td>
-                                                <td class="text-right font-mono hidden md:table-cell @deltaValueCss"><cn value="@row.DeltaValue" prefix="$" sign /></td>
-                                                <td class="text-right font-mono hidden lg:table-cell text-base-content/60"><cn value="@row.PreviousFilerCount" /> → <cn value="@row.CurrentFilerCount" /></td>
+                                                <td class="text-right font-mono @deltaSharesCss"><compactable-number value="@row.DeltaShares" sign /></td>
+                                                <td class="text-right font-mono hidden md:table-cell @deltaValueCss"><compactable-number value="@row.DeltaValue" prefix="$" sign /></td>
+                                                <td class="text-right font-mono hidden lg:table-cell text-base-content/60"><compactable-number value="@row.PreviousFilerCount" /> → <compactable-number value="@row.CurrentFilerCount" /></td>
                                                 <td class="text-right">
                                                     <a asp-controller="Stocks" asp-action="Holdings"
                                                        asp-route-ticker="@row.Ticker"
@@ -142,7 +142,7 @@
                                             <tr>
                                                 <td class="font-mono">@row.Ticker</td>
                                                 <td class="max-w-xs truncate">@row.Name</td>
-                                                <td class="text-right font-mono"><cn value="@board.FilerSelector(row)" /></td>
+                                                <td class="text-right font-mono"><compactable-number value="@board.FilerSelector(row)" /></td>
                                                 <td class="text-right">
                                                     <a asp-controller="Stocks" asp-action="Holdings"
                                                        asp-route-ticker="@row.Ticker"

@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Razor.TagHelpers;
 
 namespace Equibles.Web.TagHelpers;
 
-[HtmlTargetElement("cn", TagStructure = TagStructure.WithoutEndTag)]
+[HtmlTargetElement("compactable-number", TagStructure = TagStructure.WithoutEndTag)]
 public class CompactNumberTagHelper : TagHelper {
     [HtmlAttributeName("value")]
     public decimal Value { get; set; }

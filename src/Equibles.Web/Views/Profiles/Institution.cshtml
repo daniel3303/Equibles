@@ -49,11 +49,11 @@
                 <div class="stats stats-vertical lg:stats-horizontal shadow-sm bg-base-200 w-full">
                     <div class="stat">
                         <div class="stat-title">Reported AUM</div>
-                        <div class="stat-value text-2xl font-mono"><cn value="@Model.Summary.ReportedAum" prefix="$" /></div>
+                        <div class="stat-value text-2xl font-mono"><compactable-number value="@Model.Summary.ReportedAum" prefix="$" /></div>
                     </div>
                     <div class="stat">
                         <div class="stat-title"># Positions</div>
-                        <div class="stat-value text-2xl font-mono"><cn value="@Model.Summary.PositionCount" /></div>
+                        <div class="stat-value text-2xl font-mono"><compactable-number value="@Model.Summary.PositionCount" /></div>
                     </div>
                     <div class="stat">
                         <div class="stat-title">Top 10 concentration</div>
@@ -101,7 +101,7 @@
                                         }
                                     </td>
                                     <td class="text-right font-mono">@slice.PositionCount.ToString("N0")</td>
-                                    <td class="text-right font-mono"><cn value="@slice.TotalValue" prefix="$" /></td>
+                                    <td class="text-right font-mono"><compactable-number value="@slice.TotalValue" prefix="$" /></td>
                                     <td class="text-right font-mono">@slice.PercentOfPortfolio.ToString("F1")%</td>
                                 </tr>
                             }
@@ -203,10 +203,10 @@
                                                 <tr>
                                                     <td class="font-mono">@row.Ticker</td>
                                                     <td class="max-w-xs truncate">@row.Name</td>
-                                                    <td class="text-right font-mono"><cn value="@row.PreviousShares" /></td>
-                                                    <td class="text-right font-mono"><cn value="@row.CurrentShares" /></td>
-                                                    <td class="text-right font-mono @deltaSharesCss"><cn value="@row.DeltaShares" sign /></td>
-                                                    <td class="text-right font-mono @deltaValueCss"><cn value="@row.DeltaValue" prefix="$" sign /></td>
+                                                    <td class="text-right font-mono"><compactable-number value="@row.PreviousShares" /></td>
+                                                    <td class="text-right font-mono"><compactable-number value="@row.CurrentShares" /></td>
+                                                    <td class="text-right font-mono @deltaSharesCss"><compactable-number value="@row.DeltaShares" sign /></td>
+                                                    <td class="text-right font-mono @deltaValueCss"><compactable-number value="@row.DeltaValue" prefix="$" sign /></td>
                                                     <td class="text-right font-mono">@row.PercentOfPortfolio.ToString("F1")%</td>
                                                 </tr>
                                             }
@@ -253,8 +253,8 @@
                                 </td>
                                 <td class="max-w-xs truncate">@holding.Company</td>
                                 <td class="hidden lg:table-cell">@holding.ReportDate.ToString("yyyy-MM-dd")</td>
-                                <td class="text-right"><cn value="@holding.Shares" /></td>
-                                <td class="text-right"><cn value="@holding.Value" prefix="$" /></td>
+                                <td class="text-right"><compactable-number value="@holding.Shares" /></td>
+                                <td class="text-right"><compactable-number value="@holding.Value" prefix="$" /></td>
                             </tr>
                         }
                     </tbody>
