@@ -21,6 +21,14 @@ public class InsiderOwnerRepository : BaseRepository<InsiderOwner>
 
     public IQueryable<InsiderOwner> Search(string search)
     {
-        return GetAll().Where(o => EF.Functions.ILike(o.Name, $"%{search}%"));
+        var tokens = search.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var query = GetAll();
+        foreach (var token in tokens)
+        {
+            var t = token;
+            query = query.Where(o => EF.Functions.ILike(o.Name, $"%{t}%"));
+        }
+
+        return query;
     }
 }

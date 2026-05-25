@@ -38,4 +38,21 @@ public class InsiderOwnerRepositoryPostgresSearchTests : ParadeDbMcpTestBase
         results.Should().ContainSingle();
         results[0].OwnerCik.Should().Be("1");
     }
+
+    [Fact]
+    public async Task Search_ReversedNameOrder_MatchesAllTokens()
+    {
+        DbContext.Add(new InsiderOwner { OwnerCik = "1", Name = "Musk Elon" });
+        DbContext.Add(new InsiderOwner { OwnerCik = "2", Name = "Cook Timothy D" });
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new InsiderOwnerRepository(verify);
+
+        var results = await sut.Search("Elon Musk").AsNoTracking().ToListAsync();
+
+        results.Should().ContainSingle();
+        results[0].OwnerCik.Should().Be("1");
+    }
 }
