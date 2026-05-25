@@ -17,6 +17,8 @@ public class HolderPositionChange
 
     public PositionChangeType ChangeType { get; set; }
 
+    public DateOnly? LatestReportDate { get; set; }
+
     public DateOnly? QuarterFirstOwned { get; set; }
 
     public long DeltaShares => CurrentShares - PreviousShares;

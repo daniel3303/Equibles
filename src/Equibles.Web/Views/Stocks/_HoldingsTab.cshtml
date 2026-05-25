@@ -59,9 +59,14 @@
             <div class="flex items-center gap-2 shrink-0">
                 <label for="holdings-date" class="text-base-content/60 whitespace-nowrap">Report Date:</label>
                 <select id="holdings-date" class="select select-bordered select-sm"
-                    onchange="window.location.href='Holdings?date=' + this.value">
+                    onchange="var v=this.value; window.location.href = v==='combined' ? 'Holdings?combined=true' : 'Holdings?date=' + v">
+                    @if (Model.IsCombinedView) {
+                        <option value="combined" selected>Current Combined</option>
+                    } else {
+                        <option value="combined">Current Combined</option>
+                    }
                     @foreach (var date in Model.AvailableDates) {
-                        var isSelected = date == Model.SelectedDate;
+                        var isSelected = !Model.IsCombinedView && date == Model.SelectedDate;
                         if (isSelected) {
                             <option value="@date.ToString("yyyy-MM-dd")" selected>@date.ToString("MMM dd, yyyy")</option>
                         } else {
@@ -79,15 +84,17 @@
                     <input type="checkbox" class="toggle toggle-xs toggle-primary btn-compact-toggle"
                            onchange="toggleCompactNumbers()" />
                 </label>
-                <a class="btn btn-outline btn-sm"
-                   asp-controller="HoldingsExport" asp-action="Holders"
-                   asp-route-ticker="@Model.Ticker" asp-route-date="@Model.SelectedDate.ToString("yyyy-MM-dd")"
-                   data-testid="holdings-export-csv">
-                    Download CSV
-                </a>
+                @if (!Model.IsCombinedView) {
+                    <a class="btn btn-outline btn-sm"
+                       asp-controller="HoldingsExport" asp-action="Holders"
+                       asp-route-ticker="@Model.Ticker" asp-route-date="@Model.SelectedDate.ToString("yyyy-MM-dd")"
+                       data-testid="holdings-export-csv">
+                        Download CSV
+                    </a>
+                }
             </div>
         </div>
-        @{
+        @if (!Model.IsCombinedView) {
             var dateParam = Model.SelectedDate.ToString("yyyy-MM-dd");
             string TypesUrl(PositionChangeType toggleType)
             {
@@ -109,27 +116,27 @@
                 var typesParam = next.Count > 0 ? string.Join(",", next) : "";
                 return $"Holdings?date={dateParam}" + (typesParam.Length > 0 ? $"&types={typesParam}" : "");
             }
+            <div class="flex flex-wrap items-center gap-2 mt-2" data-testid="holdings-type-filters">
+                <span class="text-xs text-base-content/60">Filter:</span>
+                @foreach (var bucket in Buckets) {
+                    var count = Model.BucketCounts.TryGetValue(bucket.Type, out var c) ? c : 0;
+                    var isActive = Model.IsTypeActive(bucket.Type);
+                    var btnCss = isActive ? "btn-primary" : "btn-ghost border border-base-300";
+                    <a href="@TypesUrl(bucket.Type)" class="btn btn-xs @btnCss">
+                        @bucket.Label <span class="badge @bucket.BadgeCss badge-xs ml-1">@count</span>
+                    </a>
+                }
+                @if (Model.ActiveTypes != null) {
+                    <a href="Holdings?date=@dateParam" class="btn btn-xs btn-ghost text-base-content/50">Clear</a>
+                }
+            </div>
         }
-        <div class="flex flex-wrap items-center gap-2 mt-2" data-testid="holdings-type-filters">
-            <span class="text-xs text-base-content/60">Filter:</span>
-            @foreach (var bucket in Buckets) {
-                var count = Model.BucketCounts.TryGetValue(bucket.Type, out var c) ? c : 0;
-                var isActive = Model.IsTypeActive(bucket.Type);
-                var btnCss = isActive ? "btn-primary" : "btn-ghost border border-base-300";
-                <a href="@TypesUrl(bucket.Type)" class="btn btn-xs @btnCss">
-                    @bucket.Label <span class="badge @bucket.BadgeCss badge-xs ml-1">@count</span>
-                </a>
-            }
-            @if (Model.ActiveTypes != null) {
-                <a href="Holdings?date=@dateParam" class="btn btn-xs btn-ghost text-base-content/50">Clear</a>
-            }
-        </div>
     </div>
 
     <!-- Top movers — most actionable quarterly signal at a glance.
          Buyers = New + Increased ranked by Δ shares desc; Sellers = Reduced + Sold out, ranked by Δ shares asc.
          Each card's "View all" jumps to the corresponding bucket panel below. -->
-    @if (Model.TopBuyers.Count > 0 || Model.TopSellers.Count > 0) {
+    @if (!Model.IsCombinedView && (Model.TopBuyers.Count > 0 || Model.TopSellers.Count > 0)) {
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
             @{
                 var movers = new[]
@@ -198,8 +205,8 @@
         </div>
     }
 
-    <!-- All Holders — flat view of every holder for the selected report date, default-collapsed.
-         Lets the user scan or sort the whole list without flipping between buckets. -->
+    <!-- All Holders — flat view of every holder for the selected report date.
+         Default-collapsed in quarterly view, always-open in combined view. -->
     var allHolders = Model.GroupedHolders
         .Where(kvp => Model.IsTypeActive(kvp.Key))
         .SelectMany(kvp => kvp.Value.Select(h => new { Entry = h, Type = kvp.Key }))
@@ -208,7 +215,7 @@
         .ToList();
     if (allHolders.Count > 0) {
         <div class="collapse collapse-arrow bg-base-100 shadow-sm mb-3" id="holdings-all" data-testid="holdings-all">
-            <input type="checkbox" aria-label="Toggle All Holders section" />
+            <input type="checkbox" aria-label="Toggle All Holders section" @(Model.IsCombinedView ? "checked" : "") />
             <div class="collapse-title flex items-center gap-2 text-base font-medium">
                 <span>All Holders</span>
                 <span class="badge badge-neutral badge-sm">@allHolders.Count.ToString("N0")</span>
@@ -220,12 +227,19 @@
                             <tr>
                                 <th scope="col">Holder</th>
                                 <th scope="col" class="text-right">Current Shares</th>
-                                <th scope="col" class="text-right hidden md:table-cell">Δ Shares</th>
-                                <th scope="col" class="text-right hidden md:table-cell">Chg %</th>
+                                @if (!Model.IsCombinedView) {
+                                    <th scope="col" class="text-right hidden md:table-cell">Δ Shares</th>
+                                    <th scope="col" class="text-right hidden md:table-cell">Chg %</th>
+                                }
                                 <th scope="col" class="text-right hidden lg:table-cell">Own %</th>
                                 <th scope="col" class="text-right hidden lg:table-cell">Current Value (USD)</th>
+                                @if (Model.IsCombinedView) {
+                                    <th scope="col" class="text-right hidden md:table-cell">Report Date</th>
+                                }
                                 <th scope="col" class="text-right hidden xl:table-cell">First Owned</th>
-                                <th scope="col" class="text-right">Δ Value (USD)</th>
+                                @if (!Model.IsCombinedView) {
+                                    <th scope="col" class="text-right">Δ Value (USD)</th>
+                                }
                                 <th scope="col" class="text-right">Action</th>
                             </tr>
                         </thead>
@@ -243,12 +257,19 @@
                                         }
                                     </td>
                                     <td class="text-right font-mono whitespace-nowrap"><compactable-number value="@e.CurrentShares" /></td>
-                                    <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @deltaSharesCss"><compactable-number value="@e.DeltaShares" sign /></td>
-                                    <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @PctCss(e.ChangePercent)">@FormatPct(e.ChangePercent)</td>
+                                    @if (!Model.IsCombinedView) {
+                                        <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @deltaSharesCss"><compactable-number value="@e.DeltaShares" sign /></td>
+                                        <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @PctCss(e.ChangePercent)">@FormatPct(e.ChangePercent)</td>
+                                    }
                                     <td class="text-right font-mono hidden lg:table-cell whitespace-nowrap">@(own != null ? $"{own:F2}%" : "—")</td>
                                     <td class="text-right font-mono hidden lg:table-cell whitespace-nowrap"><compactable-number value="@e.CurrentValue" prefix="$" /></td>
+                                    @if (Model.IsCombinedView) {
+                                        <td class="text-right hidden md:table-cell whitespace-nowrap text-base-content/60">@FormatQuarter(e.LatestReportDate)</td>
+                                    }
                                     <td class="text-right hidden xl:table-cell whitespace-nowrap text-base-content/60">@FormatQuarter(e.QuarterFirstOwned)</td>
-                                    <td class="text-right font-mono whitespace-nowrap @deltaValueCss"><compactable-number value="@e.DeltaValue" prefix="$" sign /></td>
+                                    @if (!Model.IsCombinedView) {
+                                        <td class="text-right font-mono whitespace-nowrap @deltaValueCss"><compactable-number value="@e.DeltaValue" prefix="$" sign /></td>
+                                    }
                                     <td class="text-right">
                                         @if (e.InstitutionalHolder?.Cik != null) {
                                             <a asp-controller="Stocks" asp-action="ShowHolder"
@@ -265,7 +286,8 @@
         </div>
     }
 
-    <!-- Position-change buckets -->
+    <!-- Position-change buckets (hidden in combined view — deltas are not meaningful across quarters) -->
+    @if (!Model.IsCombinedView)
     @foreach (var bucket in Buckets) {
         if (!Model.IsTypeActive(bucket.Type)) continue;
         var count = Model.BucketCounts.TryGetValue(bucket.Type, out var c) ? c : 0;

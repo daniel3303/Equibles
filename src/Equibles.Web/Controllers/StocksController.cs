@@ -120,6 +120,7 @@ public class StocksController : BaseController
     public Task<IActionResult> Holdings(
         string ticker,
         DateOnly? date,
+        bool combined = false,
         [FromQuery(Name = "types")] string types = null
     ) =>
         ShowStockTab(
@@ -127,7 +128,9 @@ public class StocksController : BaseController
             "holdings",
             async s =>
             {
-                var vm = await _stockTabService.LoadHoldingsTab(s, date);
+                var vm = combined
+                    ? await _stockTabService.LoadHoldingsCombinedTab(s)
+                    : await _stockTabService.LoadHoldingsTab(s, date);
                 vm.ActiveTypes = ParsePositionTypes(types);
                 return vm;
             }
