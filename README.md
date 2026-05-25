@@ -152,10 +152,13 @@ Database migrations are applied automatically on startup. Review the [changelog]
 
 The web portal at `http://localhost:8080` provides a browser-based interface for exploring data:
 
-- **Stocks** — Browse and search all tracked companies, view price charts with technical indicators (SMA, RSI, MACD), institutional holdings, short data, SEC filings, insider trading, and congressional trades per stock
+- **Stocks** — Browse and search all tracked companies, view price charts with technical indicators (SMA, EMA, RSI, MACD), institutional holdings, short data, SEC filings, insider trading, and congressional trades per stock
+- **Institutions** — Browse institutional holders (hedge funds, asset managers), view detailed profiles with portfolio breakdowns, industry allocation, quarterly activity, backtesting, and side-by-side comparisons. Includes a holdings screener with filters (filer count, value, float %, industry) and CSV export
+- **Insider Trading** — Dashboard showing the top insider buys, sells, and biggest transactions over the last 90 days
 - **Economy** — Browse FRED economic indicators grouped by category (interest rates, inflation, employment, GDP, etc.) with charts and statistics
 - **Futures** — CFTC Commitments of Traders positioning data for 30+ futures contracts (commodities, indices, currencies) with commercial/non-commercial position charts
 - **Market** — CBOE market indicators: VIX volatility index with OHLC charts, put/call ratios (equity, index, total, VIX, ETP)
+- **Search** — Global search across stocks, institutions, insiders, and congress members with category filtering and date ranges
 - **Status** — System health, worker status, data counts, and error log
 
 ## MCP Server
@@ -169,7 +172,7 @@ The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, 
 - **Financial Statements** — XBRL fact time series per ticker, cross-ticker fact comparison, full income statement / balance sheet / cash flow per fiscal period
 - **Short Data** — Daily short volume, bi-monthly short interest, and the latest short-interest snapshot across tickers
 - **Economic Indicators** — FRED data lookup, latest macro snapshot, indicator search across categories
-- **Stock Prices** — Daily OHLCV history with adjusted close, latest close across one or more tickers, and on-demand technical indicators (Stochastic Oscillator, Average True Range, On-Balance Volume)
+- **Stock Prices** — Daily OHLCV history with adjusted close, latest close across one or more tickers, and on-demand technical indicators (EMA, Stochastic Oscillator, Average True Range, On-Balance Volume)
 - **Futures Positioning** — COT positioning data, latest snapshot across all contracts, contract search
 - **Market Indicators** — VIX historical data, put/call ratios by type (equity, index, total, VIX, ETP)
 
