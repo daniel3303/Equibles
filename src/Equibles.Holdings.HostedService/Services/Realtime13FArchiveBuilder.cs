@@ -25,7 +25,8 @@ public class Realtime13FArchiveBuilder
         );
         var coverPage = new StringBuilder(
             "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\t"
-                + "FILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\n"
+                + "FILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\t"
+                + "CONFIDENTIALTREATMENT\n"
         );
         var infoTable = new StringBuilder(
             "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMTTYPE\tPUTCALL\tSSHPRNAMT\tVOTING_AUTH_SOLE\t"
@@ -54,7 +55,8 @@ public class Realtime13FArchiveBuilder
                 Clean(filing.City),
                 Clean(filing.StateOrCountry),
                 Clean(filing.Form13FFileNumber),
-                Clean(filing.CrdNumber)
+                Clean(filing.CrdNumber),
+                filing.ConfidentialTreatmentRequested ? "Y" : "N"
             );
 
             foreach (var (seq, name) in filing.OtherManagers)

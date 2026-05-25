@@ -36,7 +36,7 @@ public class Realtime13FArchiveBuilderCleanSanitizationTests
         var dataRow = dataLines.Length > 1 ? dataLines[1] : "";
         var fields = dataRow.Split('\t');
 
-        fields.Should().HaveCount(7, "a clean row has exactly 7 TSV columns");
+        fields.Should().HaveCount(8, "a clean row has exactly 8 TSV columns");
         fields[2].Should().Be("ACME Fund Management LLC");
         fields[3].Should().Be("NEW YORK");
     }

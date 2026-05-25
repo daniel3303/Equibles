@@ -9,6 +9,7 @@ public class InstitutionProfileViewModel
     public string Cik { get; set; }
     public string Location { get; set; }
     public FundClassification Classification { get; set; }
+    public bool ConfidentialTreatmentRequested { get; set; }
     public List<HoldingRowViewModel> Holdings { get; set; } = [];
     public InstitutionPortfolioSummary Summary { get; set; } = new();
     public List<IndustryAllocationSlice> IndustryAllocation { get; set; } = [];

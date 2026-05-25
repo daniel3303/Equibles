@@ -20,6 +20,7 @@ public class Parsed13FFiling
     public string StateOrCountry { get; set; }
     public string Form13FFileNumber { get; set; }
     public string CrdNumber { get; set; }
+    public bool ConfidentialTreatmentRequested { get; set; }
 
     /// <summary>Other-manager table: sequence number → manager name.</summary>
     public Dictionary<int, string> OtherManagers { get; set; } = [];

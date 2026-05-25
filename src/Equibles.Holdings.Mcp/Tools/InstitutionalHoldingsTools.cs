@@ -843,6 +843,14 @@ public class InstitutionalHoldingsTools
             "_QoQ turnover = (Σ |Δ shares × current price proxy|) / (2 × AUM), where the per-share price proxy is the current quarter's Value / Shares._"
         );
 
+        if (holder.ConfidentialTreatmentRequested)
+        {
+            result.AppendLine();
+            result.AppendLine(
+                "⚠️ **Confidential Treatment** — This manager has requested confidential treatment for one or more investments in the most recent 13F filing. The portfolio shown may be incomplete."
+            );
+        }
+
         return result.ToString();
     }
 

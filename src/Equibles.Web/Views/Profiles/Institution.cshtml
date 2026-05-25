@@ -35,6 +35,16 @@
         }
     </div>
 
+    @if (Model.ConfidentialTreatmentRequested) {
+        <div role="alert" class="alert alert-warning mb-8" data-testid="confidential-treatment-alert">
+            <icon name="exclamation-triangle" size="5" />
+            <span>
+                <strong>Confidential Treatment</strong> — This manager has requested confidential treatment
+                for one or more investments in the most recent 13F filing. The portfolio shown may be incomplete.
+            </span>
+        </div>
+    }
+
     @if (Model.Summary.LatestReportDate.HasValue) {
         <!-- Portfolio summary header — derived from the latest report date for this holder. -->
         <div class="card bg-base-100 shadow-sm mb-8" data-testid="institution-summary">

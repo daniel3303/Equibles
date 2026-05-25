@@ -30,6 +30,8 @@ public class InstitutionalHolder
 
     public FundClassification Classification { get; set; }
 
+    public bool ConfidentialTreatmentRequested { get; set; }
+
     public virtual List<InstitutionalHolding> Holdings { get; set; } = [];
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;

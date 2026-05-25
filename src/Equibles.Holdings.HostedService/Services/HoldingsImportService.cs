@@ -230,6 +230,7 @@ public class HoldingsImportService
             StateOrCountry = Get("FILINGMANAGER_STATEORCOUNTRY"),
             Form13FFileNumber = Get("FORM13FFILENUMBER"),
             CrdNumber = Get("CRDNUMBER"),
+            ConfidentialTreatment = Get("CONFIDENTIALTREATMENT"),
         };
         return true;
     }
@@ -361,6 +362,18 @@ public class HoldingsImportService
             cikToHolderId[holder.Cik] = holder.Id;
         }
 
+        foreach (var holder in existingHolders)
+        {
+            var submission = context.Submissions.Values.FirstOrDefault(s =>
+                string.Equals(s.Cik, holder.Cik, StringComparison.OrdinalIgnoreCase)
+            );
+            if (submission == null)
+                continue;
+            context.CoverPages.TryGetValue(submission.AccessionNumber, out var cp);
+            if (cp != null)
+                holder.ConfidentialTreatmentRequested = IsYes(cp.ConfidentialTreatment);
+        }
+
         var existingCiks = existingHolders
             .Select(h => h.Cik)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -381,6 +394,7 @@ public class HoldingsImportService
                 Form13FFileNumber = coverPage?.Form13FFileNumber,
                 CrdNumber = coverPage?.CrdNumber,
                 Classification = FundClassifierService.Classify(coverPage?.CompanyName),
+                ConfidentialTreatmentRequested = IsYes(coverPage?.ConfidentialTreatment),
             };
 
             holderRepo.Add(holder);
@@ -791,5 +805,14 @@ public class HoldingsImportService
             h.ReportDate,
             h.ShareType,
             h.OptionType
+        );
+
+    private static bool IsYes(string raw) =>
+        !string.IsNullOrEmpty(raw)
+        && (
+            raw.Equals("Y", StringComparison.OrdinalIgnoreCase)
+            || raw.Equals("yes", StringComparison.OrdinalIgnoreCase)
+            || raw.Equals("true", StringComparison.OrdinalIgnoreCase)
+            || raw == "1"
         );
 }
