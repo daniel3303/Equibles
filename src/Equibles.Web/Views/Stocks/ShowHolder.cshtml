@@ -110,8 +110,8 @@
                                 : (double?)null;
                             <tr>
                                 <td>@h.ReportDate.ToString("yyyy-MM-dd")</td>
-                                <td class="text-right font-mono"><cn value="@h.Value" prefix="$" /></td>
-                                <td class="text-right font-mono"><cn value="@h.Shares" /></td>
+                                <td class="text-right font-mono"><compactable-number value="@h.Value" prefix="$" /></td>
+                                <td class="text-right font-mono"><compactable-number value="@h.Shares" /></td>
                                 <td class="text-right font-mono hidden md:table-cell">
                                     @if (changePercent.HasValue) {
                                         var css = changePercent.Value > 0 ? "text-success" : changePercent.Value < 0 ? "text-error" : "";

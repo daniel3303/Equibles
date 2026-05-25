@@ -57,7 +57,7 @@
                                                 <a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@row.Ticker"
                                                    class="font-mono link link-primary">@row.Ticker</a>
                                             </td>
-                                            <td class="text-right font-mono text-success"><cn value="@row.Value" prefix="$" /></td>
+                                            <td class="text-right font-mono text-success"><compactable-number value="@row.Value" prefix="$" /></td>
                                             <td class="text-right text-sm text-base-content/60 hidden md:table-cell">@row.TransactionDate.ToString("MMM dd")</td>
                                         </tr>
                                     }
@@ -99,7 +99,7 @@
                                                 <a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@row.Ticker"
                                                    class="font-mono link link-primary">@row.Ticker</a>
                                             </td>
-                                            <td class="text-right font-mono text-error"><cn value="@row.Value" prefix="$" /></td>
+                                            <td class="text-right font-mono text-error"><compactable-number value="@row.Value" prefix="$" /></td>
                                             <td class="text-right text-sm text-base-content/60 hidden md:table-cell">@row.TransactionDate.ToString("MMM dd")</td>
                                         </tr>
                                     }
@@ -150,9 +150,9 @@
                                                 @row.TransactionCodeLabel
                                             </span>
                                         </td>
-                                        <td class="text-right font-mono"><cn value="@row.Shares" /></td>
+                                        <td class="text-right font-mono"><compactable-number value="@row.Shares" /></td>
                                         <td class="text-right font-mono hidden md:table-cell">$@row.PricePerShare.ToString("N2")</td>
-                                        <td class="text-right font-mono font-semibold"><cn value="@row.Value" prefix="$" /></td>
+                                        <td class="text-right font-mono font-semibold"><compactable-number value="@row.Value" prefix="$" /></td>
                                         <td class="text-right text-sm text-base-content/60 hidden lg:table-cell">@row.TransactionDate.ToString("MMM dd, yyyy")</td>
                                     </tr>
                                 }

@@ -39,9 +39,9 @@
                         var shortPct = sv.TotalVolume > 0 ? (double)sv.ShortVolume / sv.TotalVolume * 100 : 0;
                         <tr>
                             <td>@sv.Date.ToString("yyyy-MM-dd")</td>
-                            <td class="text-right font-mono"><cn value="@sv.ShortVolume" /></td>
-                            <td class="text-right font-mono"><cn value="@sv.ShortExemptVolume" /></td>
-                            <td class="text-right font-mono"><cn value="@sv.TotalVolume" /></td>
+                            <td class="text-right font-mono"><compactable-number value="@sv.ShortVolume" /></td>
+                            <td class="text-right font-mono"><compactable-number value="@sv.ShortExemptVolume" /></td>
+                            <td class="text-right font-mono"><compactable-number value="@sv.TotalVolume" /></td>
                             <td class="text-right font-mono">@shortPct.ToString("F1")%</td>
                         </tr>
                     }

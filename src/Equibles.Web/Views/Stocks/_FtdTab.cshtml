@@ -37,9 +37,9 @@
                     @foreach (var ftd in Model.FailsToDeliver.OrderByDescending(f => f.SettlementDate)) {
                         <tr>
                             <td>@ftd.SettlementDate.ToString("yyyy-MM-dd")</td>
-                            <td class="text-right font-mono"><cn value="@ftd.Quantity" /></td>
+                            <td class="text-right font-mono"><compactable-number value="@ftd.Quantity" /></td>
                             <td class="text-right font-mono">$@ftd.Price.ToString("F2")</td>
-                            <td class="text-right font-mono"><cn value="@(ftd.Quantity * ftd.Price)" prefix="$" /></td>
+                            <td class="text-right font-mono"><compactable-number value="@(ftd.Quantity * ftd.Price)" prefix="$" /></td>
                         </tr>
                     }
                 </tbody>

@@ -39,14 +39,14 @@
                     @foreach (var si in Model.ShortInterests.OrderByDescending(s => s.SettlementDate)) {
                         <tr>
                             <td>@si.SettlementDate.ToString("yyyy-MM-dd")</td>
-                            <td class="text-right font-mono"><cn value="@si.CurrentShortPosition" /></td>
-                            <td class="text-right font-mono"><cn value="@si.PreviousShortPosition" /></td>
+                            <td class="text-right font-mono"><compactable-number value="@si.CurrentShortPosition" /></td>
+                            <td class="text-right font-mono"><compactable-number value="@si.PreviousShortPosition" /></td>
                             <td class="text-right font-mono @(si.ChangeInShortPosition > 0 ? "text-error" : si.ChangeInShortPosition < 0 ? "text-success" : "")">
-                                <cn value="@si.ChangeInShortPosition" sign />
+                                <compactable-number value="@si.ChangeInShortPosition" sign />
                             </td>
                             <td class="text-right font-mono hidden md:table-cell">
                                 @if (si.AverageDailyVolume != null) {
-                                    <cn value="@((decimal)si.AverageDailyVolume)" />
+                                    <compactable-number value="@((decimal)si.AverageDailyVolume)" />
                                 } else {
                                     <text>—</text>
                                 }

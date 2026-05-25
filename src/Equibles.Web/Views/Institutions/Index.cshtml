@@ -83,8 +83,8 @@
                             </td>
                             <td class="hidden md:table-cell font-mono text-sm text-base-content/60">@inst.Cik</td>
                             <td class="hidden lg:table-cell text-sm text-base-content/60">@(string.IsNullOrEmpty(location) ? "—" : location)</td>
-                            <td class="text-right font-mono"><cn value="@inst.PositionCount" /></td>
-                            <td class="text-right font-mono hidden md:table-cell"><cn value="@inst.TotalValue" prefix="$" /></td>
+                            <td class="text-right font-mono"><compactable-number value="@inst.PositionCount" /></td>
+                            <td class="text-right font-mono hidden md:table-cell"><compactable-number value="@inst.TotalValue" prefix="$" /></td>
                             <td class="text-right font-mono text-sm text-base-content/60 hidden xl:table-cell">@(inst.LatestReportDate?.ToString("yyyy-MM-dd") ?? "—")</td>
                             <td class="text-base-content/30">
                                 <icon name="chevron-right" size="4" />

@@ -131,17 +131,17 @@
                                     <td class="font-mono text-sm">@record.Date.ToString("yyyy-MM-dd")</td>
                                     <td class="text-right tabular-nums">
                                         @if (record.CallVolume != null) {
-                                            <cn value="@((decimal)record.CallVolume)" />
+                                            <compactable-number value="@((decimal)record.CallVolume)" />
                                         }
                                     </td>
                                     <td class="text-right tabular-nums">
                                         @if (record.PutVolume != null) {
-                                            <cn value="@((decimal)record.PutVolume)" />
+                                            <compactable-number value="@((decimal)record.PutVolume)" />
                                         }
                                     </td>
                                     <td class="text-right tabular-nums hidden sm:table-cell">
                                         @if (record.TotalVolume != null) {
-                                            <cn value="@((decimal)record.TotalVolume)" />
+                                            <compactable-number value="@((decimal)record.TotalVolume)" />
                                         }
                                     </td>
                                     <td class="text-right font-semibold tabular-nums">@record.PutCallRatio?.ToString("N2")</td>
