@@ -9,4 +9,5 @@ public class CoverPageRow
     public string StateOrCountry { get; set; }
     public string Form13FFileNumber { get; set; }
     public string CrdNumber { get; set; }
+    public string ConfidentialTreatment { get; set; }
 }

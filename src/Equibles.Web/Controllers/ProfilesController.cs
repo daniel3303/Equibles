@@ -85,6 +85,7 @@ public class ProfilesController : BaseController
                 Name = holder.Name,
                 Cik = holder.Cik,
                 Classification = holder.Classification,
+                ConfidentialTreatmentRequested = holder.ConfidentialTreatmentRequested,
                 Location = ProfileFormatting.JoinLocation(holder.City, holder.StateOrCountry),
                 Holdings = holdings,
                 Summary = summary,
