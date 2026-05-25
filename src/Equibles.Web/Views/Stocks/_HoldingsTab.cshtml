@@ -73,12 +73,19 @@
             <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Holders:</span> <strong>@Model.HolderCount.ToString("N0")</strong></div>
             <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Value:</span> <strong>$@Model.TotalValue.ToString("N0")</strong></div>
             <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Shares:</span> <strong>@Model.TotalShares.ToString("N0")</strong></div>
-            <a class="btn btn-outline btn-sm ml-auto"
-               asp-controller="HoldingsExport" asp-action="Holders"
-               asp-route-ticker="@Model.Ticker" asp-route-date="@Model.SelectedDate.ToString("yyyy-MM-dd")"
-               data-testid="holdings-export-csv">
-                Download CSV
-            </a>
+            <div class="flex items-center gap-2 ml-auto">
+                <button type="button" class="btn btn-sm btn-ghost border border-base-300 btn-compact-toggle"
+                        onclick="toggleCompactNumbers()"
+                        title="Show compact numbers (1M, 1B)">
+                    1M
+                </button>
+                <a class="btn btn-outline btn-sm"
+                   asp-controller="HoldingsExport" asp-action="Holders"
+                   asp-route-ticker="@Model.Ticker" asp-route-date="@Model.SelectedDate.ToString("yyyy-MM-dd")"
+                   data-testid="holdings-export-csv">
+                    Download CSV
+                </a>
+            </div>
         </div>
         @{
             var dateParam = Model.SelectedDate.ToString("yyyy-MM-dd");
@@ -178,9 +185,9 @@
                                             var deltaValueText = (e.DeltaValue > 0 ? "+$" : e.DeltaValue < 0 ? "-$" : "$") + Math.Abs(e.DeltaValue).ToString("N0");
                                             <tr>
                                                 <td class="max-w-xs truncate">@(e.InstitutionalHolder?.Name ?? "Unknown")</td>
-                                                <td class="text-right font-mono @deltaSharesCss">@deltaSharesText</td>
+                                                <td class="text-right font-mono @deltaSharesCss" data-compact-number="@e.DeltaShares" data-compact-prefix="@(e.DeltaShares > 0 ? "+" : e.DeltaShares < 0 ? "-" : "")">@deltaSharesText</td>
                                                 <td class="text-right font-mono hidden md:table-cell @PctCss(e.ChangePercent)">@FormatPct(e.ChangePercent)</td>
-                                                <td class="text-right font-mono hidden md:table-cell @deltaValueCss">@deltaValueText</td>
+                                                <td class="text-right font-mono hidden md:table-cell @deltaValueCss" data-compact-number="@Math.Abs(e.DeltaValue)" data-compact-prefix="@(e.DeltaValue > 0 ? "+$" : e.DeltaValue < 0 ? "-$" : "$")">@deltaValueText</td>
                                             </tr>
                                         }
                                     </tbody>
@@ -239,13 +246,13 @@
                                             <partial name="_FundClassificationBadge" model="e.InstitutionalHolder.Classification" />
                                         }
                                     </td>
-                                    <td class="text-right font-mono whitespace-nowrap">@e.CurrentShares.ToString("N0")</td>
-                                    <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @deltaSharesCss">@deltaSharesText</td>
+                                    <td class="text-right font-mono whitespace-nowrap" data-compact-number="@e.CurrentShares">@e.CurrentShares.ToString("N0")</td>
+                                    <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @deltaSharesCss" data-compact-number="@e.DeltaShares" data-compact-prefix="@(e.DeltaShares > 0 ? "+" : e.DeltaShares < 0 ? "-" : "")">@deltaSharesText</td>
                                     <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @PctCss(e.ChangePercent)">@FormatPct(e.ChangePercent)</td>
                                     <td class="text-right font-mono hidden lg:table-cell whitespace-nowrap">@(own != null ? $"{own:F2}%" : "—")</td>
-                                    <td class="text-right font-mono hidden lg:table-cell whitespace-nowrap">$@e.CurrentValue.ToString("N0")</td>
+                                    <td class="text-right font-mono hidden lg:table-cell whitespace-nowrap" data-compact-number="@e.CurrentValue" data-compact-prefix="$">$@e.CurrentValue.ToString("N0")</td>
                                     <td class="text-right hidden xl:table-cell whitespace-nowrap text-base-content/60">@FormatQuarter(e.QuarterFirstOwned)</td>
-                                    <td class="text-right font-mono whitespace-nowrap @deltaValueCss">@deltaValueText</td>
+                                    <td class="text-right font-mono whitespace-nowrap @deltaValueCss" data-compact-number="@Math.Abs(e.DeltaValue)" data-compact-prefix="@(e.DeltaValue > 0 ? "+$" : e.DeltaValue < 0 ? "-$" : "$")">@deltaValueText</td>
                                     <td class="text-right">
                                         @if (e.InstitutionalHolder?.Cik != null) {
                                             <a asp-controller="Stocks" asp-action="ShowHolder"
@@ -309,13 +316,13 @@
                                                 <partial name="_FundClassificationBadge" model="e.InstitutionalHolder.Classification" />
                                             }
                                         </td>
-                                        <td class="text-right font-mono">@e.CurrentShares.ToString("N0")</td>
-                                        <td class="text-right font-mono hidden md:table-cell @deltaSharesCss">@deltaSharesText</td>
+                                        <td class="text-right font-mono" data-compact-number="@e.CurrentShares">@e.CurrentShares.ToString("N0")</td>
+                                        <td class="text-right font-mono hidden md:table-cell @deltaSharesCss" data-compact-number="@e.DeltaShares" data-compact-prefix="@(e.DeltaShares > 0 ? "+" : e.DeltaShares < 0 ? "-" : "")">@deltaSharesText</td>
                                         <td class="text-right font-mono hidden md:table-cell @PctCss(e.ChangePercent)">@FormatPct(e.ChangePercent)</td>
                                         <td class="text-right font-mono hidden lg:table-cell">@(own != null ? $"{own:F2}%" : "—")</td>
-                                        <td class="text-right font-mono hidden lg:table-cell">$@e.CurrentValue.ToString("N0")</td>
+                                        <td class="text-right font-mono hidden lg:table-cell" data-compact-number="@e.CurrentValue" data-compact-prefix="$">$@e.CurrentValue.ToString("N0")</td>
                                         <td class="text-right hidden xl:table-cell text-base-content/60">@FormatQuarter(e.QuarterFirstOwned)</td>
-                                        <td class="text-right font-mono @deltaValueCss">@deltaValueText</td>
+                                        <td class="text-right font-mono @deltaValueCss" data-compact-number="@Math.Abs(e.DeltaValue)" data-compact-prefix="@(e.DeltaValue > 0 ? "+$" : e.DeltaValue < 0 ? "-$" : "$")">@deltaValueText</td>
                                         <td class="text-right">
                                             @if (e.InstitutionalHolder?.Cik != null) {
                                                 <a asp-controller="Stocks" asp-action="ShowHolder"
