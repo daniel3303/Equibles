@@ -50,7 +50,6 @@ public class CompanySyncServiceResolveTickerCollisionTests
         Set("ExistingStocks", new List<CommonStock>());
         Set("ExistingCiks", new HashSet<string>());
         Set("ExistingPrimaryTickers", new HashSet<string>());
-        Set("ExistingSecondaryTickers", new HashSet<string>());
         Set("PrimaryTickerToStock", new Dictionary<string, CommonStock>());
         Set("SecondaryCikToParent", new Dictionary<string, CommonStock>());
         return state;

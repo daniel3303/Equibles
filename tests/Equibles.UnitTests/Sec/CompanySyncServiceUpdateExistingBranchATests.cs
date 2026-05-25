@@ -67,7 +67,6 @@ public class CompanySyncServiceUpdateExistingBranchATests
         Set("ExistingStocks", new List<CommonStock> { existingStock });
         Set("ExistingCiks", new HashSet<string> { existingStock.Cik });
         Set("ExistingPrimaryTickers", new HashSet<string> { existingStock.Ticker, primaryTicker });
-        Set("ExistingSecondaryTickers", new HashSet<string>());
         Set(
             "PrimaryTickerToStock",
             new Dictionary<string, CommonStock> { [primaryTicker] = tickerHolder }
