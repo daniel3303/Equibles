@@ -9,15 +9,79 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Confidential treatment flag — 13F cover pages' `confidentialTreatmentRequestedFlag`
+  is now parsed and stored on `InstitutionalHolder`. The institution profile page
+  shows a warning banner when the flag is set, and `GetInstitutionSummary` MCP tool
+  appends a note. Helps users understand that a fund's 13F may be incomplete.
+- Fund classification — rules-based classifier labels each 13F filer (Bank, Insurance,
+  Hedge Fund, Pension, etc.) from the filing manager name. Classification badge shown
+  on institution profiles and filterable in the institutions index.
+- 13F conviction heat map visualization at `/Holdings/HeatMap`.
+- 13F aggregate stats dashboard at `/Holdings/Stats`.
+- 13F trend charts (AUM, filer count, sector allocation) at `/Holdings/Trends`.
+- Double-down report at `/Holdings/DoubleDown` with threshold filter.
+- Institution overlap matrix at `/Institutions/Overlap`.
+- Latest 13F filings page at `/Holdings/LatestFilings` with new-filer and amendment badges.
+- Insider trading dashboard at `/InsiderActivity/Dashboard` with market-wide
+  recent transactions.
+- Daily filing activity badge on stock detail page.
+- Position-type filter toggles on stock Holdings tab.
+- Enriched holders table with ownership %, change %, and quarter first owned.
+- Enriched holders CSV export with ownership %, change %, and position type.
+- Stock detail page inline key metrics (market cap, P/E, EPS, etc.).
+- Compact number toggle for large values in holdings tables.
+- Many new end-user guide pages (`docs/guide/`): tutorials, how-tos, and FAQ entries.
+
 ### Changed
 
-### Deprecated
-
-### Removed
+- Institution name matching prefers the shortest match to avoid subsidiary
+  collisions (e.g. "BlackRock" now resolves to "BlackRock, Inc." instead of
+  "BlackRock Advisors LLC").
+- Insider search tokenizes queries so "First Last" order matches "Last First"
+  names in the database.
+- `GetShortInterestSnapshot` excludes stocks with zero average daily volume
+  (previously dominated results with capped days-to-cover of 1000).
+- 13F holdings import runs incrementally instead of batching.
+- `<cn>` tag helper renamed to `<compactable-number>` for clarity.
+- Duplicated MCP date-parsing logic extracted into `McpToolExecutor.ParseDateOr`.
+- LIKE metacharacter escaping extracted into shared `LikePattern` helper.
+- Vite bundles wrapped in IIFE to prevent global scope collision; `bundle.js`
+  loaded as ES module.
+- Chart.js split into a separate bundle loaded only on chart pages.
+- Response compression (Brotli + Gzip) enabled.
+- Cache-Control headers added for static assets.
+- Unused Inter font weight 300 dropped.
 
 ### Fixed
 
-### Security
+- `FiscalPeriodResolver.Resolve` guarded against year-underflow on `AddYears(-1)`.
+- `FiscalPeriodResolver.CreateSafe` guarded against year overflow past 9999.
+- `FiscalCalendar.GetPeriod` guarded against fiscal year overflow past 9999.
+- `FiscalCalendar.GetQuarterEndDate` guarded against calendar year underflow.
+- `SyncDateResolver.Resolve` clamped to `DateOnly.MaxValue` on overflow.
+- `ParseDataSetEndDate` validates year range before `DaysInMonth` call.
+- `TryParseDatePart` validates day-of-month before `DateOnly` construction.
+- `HoldingsBacktestCalculator` clamps backtest horizon to `DateOnly.MaxValue`.
+- `HoldingsBacktestCalculator` rebalance date overflow past `DateOnly.MaxValue` clamped.
+- `Truncate` guards against `IndexOutOfRangeException` when `maxLength` is 0 or negative.
+- `Truncate` no longer splits surrogate pairs.
+- `ErrorManager.Truncate` uses surrogate-pair-safe boundary handling.
+- Holdings position grouper classifies 0-shares-both-quarters as Unchanged, not New.
+- Bank fund classifier matches `BANK` as the last word (not just mid-string).
+- `InsiderTradingTools.GetRole` handles empty and whitespace-only `OfficerTitle`.
+- `FinancialConceptAliases.Normalize` collapses spaced ampersands (`&amp;` → `&`).
+- VIX put/call CSV column mapping corrected.
+- FINRA API date formatting uses `InvariantCulture`.
+- SEC `GetDailyIndex` URL date formatting uses `InvariantCulture`.
+- `Realtime13FArchiveBuilder` date formatting uses `InvariantCulture`.
+- `HoldingsDataSetClient.FormatDatePart` uses `InvariantCulture` for year.
+- CIK leading zeros normalized in the 13F TSV import path.
+- Realtime 13F lookback computed dynamically from last quarterly data set.
+- `ProcessedDataSetRepository` registered in `DoWork` integration test.
+- Holdings integration test CIKs aligned with `TrimStart('0')` normalization.
+- Congress `Truncate` handles negative `maxLength`.
+- Empty-state message added when no economic indicators are imported.
+- Filer-universe query narrowed to only gap holders.
 
 ## [1.1.1] — 2026-05-22
 
