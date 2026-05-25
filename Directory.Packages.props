@@ -7,7 +7,7 @@
     <PackageVersion Include="Equibles.Core.AutoWiring" Version="1.0.1" />
     <!-- Browser Automation -->
     <PackageVersion Include="MathNet.Numerics" Version="5.0.0" />
-    <PackageVersion Include="Microsoft.Playwright" Version="1.59.0" />
+    <PackageVersion Include="Microsoft.Playwright" Version="1.60.0" />
     <!-- HTML / Markdown -->
     <PackageVersion Include="AngleSharp" Version="1.4.0" />
     <PackageVersion Include="FlexLabs.EntityFrameworkCore.Upsert" Version="10.0.0" />
@@ -88,8 +88,8 @@
     <PackageVersion Include="FluentAssertions" Version="8.10.0" />
     <PackageVersion Include="NSubstitute" Version="5.3.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.8" />
-    <PackageVersion Include="Testcontainers" Version="4.11.0" />
-    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.11.0" />
+    <PackageVersion Include="Testcontainers" Version="4.12.0" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.12.0" />
     <PackageVersion Include="Respawn" Version="7.0.0" />
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
   </ItemGroup>
