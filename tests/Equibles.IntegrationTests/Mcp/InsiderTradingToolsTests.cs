@@ -501,4 +501,29 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("Anonymous Officer");
         result.Should().Contain("Officer");
     }
+
+    [Fact]
+    public async Task SearchInsiders_NoRoleFlags_ShowsInsiderFallback()
+    {
+        // Some SEC filings create an InsiderOwner with all role flags false and
+        // no officer title (e.g., a reporting person whose role wasn't classified).
+        // The role column must still show a label — "Insider" — not an empty cell.
+        DbContext
+            .Set<InsiderOwner>()
+            .Add(
+                CreateOwner(
+                    name: "Unclassified Person",
+                    isDirector: false,
+                    isOfficer: false,
+                    officerTitle: null,
+                    isTenPercentOwner: false
+                )
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().SearchInsiders("Unclassified");
+
+        result.Should().Contain("Unclassified Person");
+        result.Should().Contain("Insider");
+    }
 }
