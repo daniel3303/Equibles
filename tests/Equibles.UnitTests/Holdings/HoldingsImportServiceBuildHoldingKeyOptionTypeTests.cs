@@ -35,7 +35,14 @@ public class HoldingsImportServiceBuildHoldingKeyOptionTypeTests
         var method = typeof(HoldingsImportService).GetMethod(
             "BuildHoldingKey",
             BindingFlags.NonPublic | BindingFlags.Static,
-            [typeof(Guid), typeof(Guid), typeof(DateOnly), typeof(ShareType), typeof(OptionType?)]
+            [
+                typeof(Guid),
+                typeof(Guid),
+                typeof(DateOnly),
+                typeof(ShareType),
+                typeof(OptionType?),
+                typeof(FilingType),
+            ]
         );
 
         var stockId = Guid.NewGuid();
@@ -45,14 +52,76 @@ public class HoldingsImportServiceBuildHoldingKeyOptionTypeTests
         var callKey = (string)
             method.Invoke(
                 null,
-                [stockId, holderId, reportDate, ShareType.Shares, (OptionType?)OptionType.Call]
+                [
+                    stockId,
+                    holderId,
+                    reportDate,
+                    ShareType.Shares,
+                    (OptionType?)OptionType.Call,
+                    FilingType.Form13F,
+                ]
             );
         var putKey = (string)
             method.Invoke(
                 null,
-                [stockId, holderId, reportDate, ShareType.Shares, (OptionType?)OptionType.Put]
+                [
+                    stockId,
+                    holderId,
+                    reportDate,
+                    ShareType.Shares,
+                    (OptionType?)OptionType.Put,
+                    FilingType.Form13F,
+                ]
             );
 
         callKey.Should().NotBe(putKey);
+    }
+
+    [Fact]
+    public void BuildHoldingKey_DiffersByFilingTypeWhenAllOtherFieldsMatch_Keeps13FAnd13DSeparate()
+    {
+        var method = typeof(HoldingsImportService).GetMethod(
+            "BuildHoldingKey",
+            BindingFlags.NonPublic | BindingFlags.Static,
+            [
+                typeof(Guid),
+                typeof(Guid),
+                typeof(DateOnly),
+                typeof(ShareType),
+                typeof(OptionType?),
+                typeof(FilingType),
+            ]
+        );
+
+        var stockId = Guid.NewGuid();
+        var holderId = Guid.NewGuid();
+        var reportDate = new DateOnly(2024, 12, 31);
+
+        var key13F = (string)
+            method.Invoke(
+                null,
+                [
+                    stockId,
+                    holderId,
+                    reportDate,
+                    ShareType.Shares,
+                    (OptionType?)null,
+                    FilingType.Form13F,
+                ]
+            );
+        var key13D = (string)
+            method.Invoke(
+                null,
+                [
+                    stockId,
+                    holderId,
+                    reportDate,
+                    ShareType.Shares,
+                    (OptionType?)null,
+                    FilingType.Schedule13D,
+                ]
+            );
+
+        key13F.Should().NotBe(key13D);
     }
 }

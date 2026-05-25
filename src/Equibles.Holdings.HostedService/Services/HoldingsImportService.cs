@@ -709,6 +709,7 @@ public class HoldingsImportService
             ShareType = shareType,
             OptionType = optionType,
             InvestmentDiscretion = discretion,
+            FilingType = FilingType.Form13F,
             VotingAuthSole = votingAuthSole,
             VotingAuthShared = votingAuthShared,
             VotingAuthNone = votingAuthNone,
@@ -747,6 +748,7 @@ public class HoldingsImportService
                 h.ReportDate,
                 h.ShareType,
                 h.OptionType,
+                h.FilingType,
             })
             .WhenMatched(
                 (existing, incoming) =>
@@ -794,9 +796,10 @@ public class HoldingsImportService
         Guid institutionalHolderId,
         DateOnly reportDate,
         ShareType shareType,
-        OptionType? optionType
+        OptionType? optionType,
+        FilingType filingType
     ) =>
-        $"{commonStockId}|{institutionalHolderId}|{reportDate}|{(int)shareType}|{optionType?.ToString() ?? ""}";
+        $"{commonStockId}|{institutionalHolderId}|{reportDate}|{(int)shareType}|{optionType?.ToString() ?? ""}|{(int)filingType}";
 
     private static string BuildHoldingKey(InstitutionalHolding h) =>
         BuildHoldingKey(
@@ -804,7 +807,8 @@ public class HoldingsImportService
             h.InstitutionalHolderId,
             h.ReportDate,
             h.ShareType,
-            h.OptionType
+            h.OptionType,
+            h.FilingType
         );
 
     private static bool IsYes(string raw) =>
