@@ -46,16 +46,36 @@ public class CompanySyncServiceNormalizeCompanyNameTests
     }
 
     [Theory]
+    [InlineData("SOME COMPANY (LLC)", "Some Company (LLC)")]
+    [InlineData("TRUST (LP)", "Trust (LP)")]
+    [InlineData("HOLDING (PLC)", "Holding (PLC)")]
+    public void ParenthesizedAbbreviations_StayUpperCase(string input, string expected)
+    {
+        Normalize(input).Should().Be(expected);
+    }
+
+    [Theory]
     [InlineData("HENRY SCHEIN III", "Henry Schein III")]
     [InlineData("FORD MOTOR IV", "Ford Motor IV")]
     [InlineData("SOME FUND II", "Some Fund II")]
     [InlineData("CAPITAL GROUP IX", "Capital Group IX")]
     [InlineData("VENTURE FUND XV", "Venture Fund XV")]
     [InlineData("SERIES I", "Series I")]
+    [InlineData("FUND V", "Fund V")]
     [InlineData("FUND VI", "Fund VI")]
     [InlineData("TRUST VII", "Trust VII")]
+    [InlineData("VENTURE PARTNERS VIII", "Venture Partners VIII")]
     [InlineData("PARTNERS XIV", "Partners XIV")]
     public void RomanNumerals_StayUpperCase(string input, string expected)
+    {
+        Normalize(input).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("APOLLO INVESTMENT FUND XVI LP", "Apollo Investment Fund XVI LP")]
+    [InlineData("WARBURG PINCUS PRIVATE EQUITY XX LP", "Warburg Pincus Private Equity XX LP")]
+    [InlineData("FUND XXV LLC", "Fund XXV LLC")]
+    public void HighRomanNumerals_StayUpperCase(string input, string expected)
     {
         Normalize(input).Should().Be(expected);
     }
