@@ -225,6 +225,7 @@ public class HoldingsImportService
         {
             AccessionNumber = accession,
             IsAmendment = Get("ISAMENDMENT"),
+            AmendmentType = Get("AMENDMENTTYPE"),
             CompanyName = Get("FILINGMANAGER_NAME"),
             City = Get("FILINGMANAGER_CITY"),
             StateOrCountry = Get("FILINGMANAGER_STATEORCOUNTRY"),
@@ -500,6 +501,18 @@ public class HoldingsImportService
             )
                 continue;
 
+            // "NEW HOLDINGS" amendments add positions to the existing portfolio;
+            // only "RESTATEMENT" amendments (and legacy filings without the field)
+            // replace the entire set.
+            if (IsNewHoldingsAmendment(accession, context))
+            {
+                _logger.LogInformation(
+                    "Amendment {Accession} is NEW HOLDINGS — merging without deleting existing positions",
+                    accession
+                );
+                continue;
+            }
+
             var existingHoldings = await holdingRepo
                 .GetAll()
                 .Where(h => h.InstitutionalHolderId == holderId && h.ReportDate == reportDate)
@@ -509,7 +522,7 @@ public class HoldingsImportService
             {
                 holdingRepo.Delete(existingHoldings);
                 _logger.LogInformation(
-                    "Deleted {Count} holdings for amendment {Accession}",
+                    "Deleted {Count} holdings for RESTATEMENT amendment {Accession}",
                     existingHoldings.Count,
                     accession
                 );
@@ -517,6 +530,16 @@ public class HoldingsImportService
         }
 
         await holdingRepo.SaveChanges();
+    }
+
+    private static bool IsNewHoldingsAmendment(string accession, ImportContext context)
+    {
+        return context.CoverPages.TryGetValue(accession, out var coverPage)
+            && string.Equals(
+                coverPage.AmendmentType,
+                "NEW HOLDINGS",
+                StringComparison.OrdinalIgnoreCase
+            );
     }
 
     private static bool TryResolveAmendmentTarget(

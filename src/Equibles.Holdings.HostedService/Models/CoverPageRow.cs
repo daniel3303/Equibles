@@ -4,6 +4,7 @@ public class CoverPageRow
 {
     public string AccessionNumber { get; set; }
     public string IsAmendment { get; set; }
+    public string AmendmentType { get; set; }
     public string CompanyName { get; set; }
     public string City { get; set; }
     public string StateOrCountry { get; set; }

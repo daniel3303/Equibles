@@ -24,7 +24,7 @@ public class Realtime13FArchiveBuilder
             "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
         );
         var coverPage = new StringBuilder(
-            "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\t"
+            "ACCESSION_NUMBER\tISAMENDMENT\tAMENDMENTTYPE\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\t"
                 + "FILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\t"
                 + "CONFIDENTIALTREATMENT\n"
         );
@@ -51,6 +51,7 @@ public class Realtime13FArchiveBuilder
                 coverPage,
                 Clean(filing.AccessionNumber),
                 filing.IsAmendment ? "Y" : "N",
+                Clean(filing.AmendmentType),
                 Clean(filing.FilingManagerName),
                 Clean(filing.City),
                 Clean(filing.StateOrCountry),

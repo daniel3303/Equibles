@@ -220,8 +220,8 @@ public class Realtime13FArchiveBuilderTests
         var dataLine = content.Split('\n')[1];
         var fields = dataLine.Split('\t');
 
-        // Manager name is field index 2; tabs must be replaced with spaces
-        fields[2].Should().Be("ACME Fund Management");
+        // Manager name is field index 3 (after ACCESSION_NUMBER, ISAMENDMENT, AMENDMENTTYPE)
+        fields[3].Should().Be("ACME Fund Management");
     }
 
     [Fact]
@@ -235,7 +235,7 @@ public class Realtime13FArchiveBuilderTests
         var dataLine = content.Split('\n')[1];
         var fields = dataLine.Split('\t');
 
-        fields[2].Should().Be("ACME Fund Management");
+        fields[3].Should().Be("ACME Fund Management");
     }
 
     [Fact]
