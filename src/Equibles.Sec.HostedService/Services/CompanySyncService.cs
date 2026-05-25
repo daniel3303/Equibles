@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -548,11 +549,33 @@ public class CompanySyncService : ICompanySyncService
         return long.TryParse(cik, out var n) ? n : long.MaxValue;
     }
 
-    // SEC EDGAR returns some names in ALL CAPS (e.g. "AMAZON COM INC",
-    // "MICROSOFT CORP") and others in branded mixed case (e.g. "Apple Inc.",
-    // "Meta Platforms, Inc."). When a name is uniformly upper-cased we treat it
-    // as legacy formatting and convert it to Title Case; mixed-case names are
-    // trusted as-is.
+    private static readonly HashSet<string> UpperCaseAbbreviations = new(
+        StringComparer.OrdinalIgnoreCase
+    )
+    {
+        "LLC",
+        "LLP",
+        "LP",
+        "PLC",
+        "NV",
+        "SA",
+        "AG",
+        "SE",
+        "AB",
+        "ASA",
+        "ETF",
+        "ADR",
+        "REIT",
+        "USA",
+        "US",
+        "UK",
+    };
+
+    private static readonly Regex RomanNumeralPattern = new(
+        @"^(I{1,3}|IV|VI{0,3}|IX|XI{0,3}|XIV|XV)$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled
+    );
+
     private static string NormalizeCompanyName(string name)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -561,7 +584,19 @@ public class CompanySyncService : ICompanySyncService
         if (name.Any(char.IsLower))
             return name;
 
-        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(name.ToLowerInvariant());
+        var titleCased = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(name.ToLowerInvariant());
+
+        var words = titleCased.Split(' ');
+        for (var i = 0; i < words.Length; i++)
+        {
+            var stripped = words[i].TrimEnd('.', ',', ';', ')');
+            if (UpperCaseAbbreviations.Contains(stripped) || RomanNumeralPattern.IsMatch(stripped))
+            {
+                words[i] = words[i].ToUpperInvariant();
+            }
+        }
+
+        return string.Join(' ', words);
     }
 
     // Subsidiaries we already decided about: each entry maps a subsidiary CIK to
