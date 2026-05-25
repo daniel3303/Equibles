@@ -55,4 +55,22 @@ public class InsiderOwnerRepositoryPostgresSearchTests : ParadeDbMcpTestBase
         results.Should().ContainSingle();
         results[0].OwnerCik.Should().Be("1");
     }
+
+    [Fact]
+    public async Task Search_CrossTokensFromDifferentNames_ReturnsEmpty()
+    {
+        // "Elon" lives in "Musk Elon", "Cook" lives in "Cook Timothy D" — but no
+        // single record contains both tokens, so AND semantics must yield zero rows.
+        DbContext.Add(new InsiderOwner { OwnerCik = "1", Name = "Musk Elon" });
+        DbContext.Add(new InsiderOwner { OwnerCik = "2", Name = "Cook Timothy D" });
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new InsiderOwnerRepository(verify);
+
+        var results = await sut.Search("Elon Cook").AsNoTracking().ToListAsync();
+
+        results.Should().BeEmpty();
+    }
 }
