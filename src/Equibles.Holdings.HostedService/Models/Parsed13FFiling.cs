@@ -14,6 +14,7 @@ public class Parsed13FFiling
     public DateOnly FilingDate { get; set; }
     public DateOnly PeriodOfReport { get; set; }
     public bool IsAmendment { get; set; }
+    public string AmendmentType { get; set; }
 
     public string FilingManagerName { get; set; }
     public string City { get; set; }
