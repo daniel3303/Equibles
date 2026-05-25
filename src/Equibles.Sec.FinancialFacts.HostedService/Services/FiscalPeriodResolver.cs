@@ -91,6 +91,8 @@ internal static class FiscalPeriodResolver
         if (endingFye.DayNumber - periodEnd.DayNumber > AnnualMaxDays)
             return null;
 
+        if (endingFye.Year < 2)
+            return null;
         var priorFye = endingFye.AddYears(-1);
         var fiscalYearStart = priorFye.AddDays(1);
         var monthsElapsed =
