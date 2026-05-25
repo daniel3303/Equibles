@@ -49,11 +49,11 @@
                 <div class="stats stats-vertical lg:stats-horizontal shadow-sm bg-base-200 w-full">
                     <div class="stat">
                         <div class="stat-title">Reported AUM</div>
-                        <div class="stat-value text-2xl font-mono">$@Model.Summary.ReportedAum.ToString("N0")</div>
+                        <div class="stat-value text-2xl font-mono"><cn value="@Model.Summary.ReportedAum" prefix="$" /></div>
                     </div>
                     <div class="stat">
                         <div class="stat-title"># Positions</div>
-                        <div class="stat-value text-2xl font-mono">@Model.Summary.PositionCount.ToString("N0")</div>
+                        <div class="stat-value text-2xl font-mono"><cn value="@Model.Summary.PositionCount" /></div>
                     </div>
                     <div class="stat">
                         <div class="stat-title">Top 10 concentration</div>
@@ -101,7 +101,7 @@
                                         }
                                     </td>
                                     <td class="text-right font-mono">@slice.PositionCount.ToString("N0")</td>
-                                    <td class="text-right font-mono">$@slice.TotalValue.ToString("N0")</td>
+                                    <td class="text-right font-mono"><cn value="@slice.TotalValue" prefix="$" /></td>
                                     <td class="text-right font-mono">@slice.PercentOfPortfolio.ToString("F1")%</td>
                                 </tr>
                             }
@@ -203,10 +203,10 @@
                                                 <tr>
                                                     <td class="font-mono">@row.Ticker</td>
                                                     <td class="max-w-xs truncate">@row.Name</td>
-                                                    <td class="text-right font-mono">@row.PreviousShares.ToString("N0")</td>
-                                                    <td class="text-right font-mono">@row.CurrentShares.ToString("N0")</td>
-                                                    <td class="text-right font-mono @deltaSharesCss">@((row.DeltaShares > 0 ? "+" : row.DeltaShares < 0 ? "-" : "") + Math.Abs(row.DeltaShares).ToString("N0"))</td>
-                                                    <td class="text-right font-mono @deltaValueCss">@((row.DeltaValue > 0 ? "+$" : row.DeltaValue < 0 ? "-$" : "$") + Math.Abs(row.DeltaValue).ToString("N0"))</td>
+                                                    <td class="text-right font-mono"><cn value="@row.PreviousShares" /></td>
+                                                    <td class="text-right font-mono"><cn value="@row.CurrentShares" /></td>
+                                                    <td class="text-right font-mono @deltaSharesCss"><cn value="@row.DeltaShares" sign /></td>
+                                                    <td class="text-right font-mono @deltaValueCss"><cn value="@row.DeltaValue" prefix="$" sign /></td>
                                                     <td class="text-right font-mono">@row.PercentOfPortfolio.ToString("F1")%</td>
                                                 </tr>
                                             }
@@ -221,7 +221,14 @@
         </div>
     }
 
-    <h2 class="text-xl font-semibold mb-3">Recent holdings</h2>
+    <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xl font-semibold m-0">Recent holdings</h2>
+        <label class="flex items-center gap-1.5 cursor-pointer" title="Toggle compact numbers (1M, 1B)">
+            <span class="text-xs text-base-content/60">Compact</span>
+            <input type="checkbox" class="toggle toggle-xs toggle-primary btn-compact-toggle"
+                   onchange="toggleCompactNumbers()" />
+        </label>
+    </div>
     @if (Model.Holdings.Count == 0) {
         <div class="text-base-content/60 py-8">No reported holdings.</div>
     } else {
@@ -246,8 +253,8 @@
                                 </td>
                                 <td class="max-w-xs truncate">@holding.Company</td>
                                 <td class="hidden lg:table-cell">@holding.ReportDate.ToString("yyyy-MM-dd")</td>
-                                <td class="text-right">@holding.Shares.ToString("N0")</td>
-                                <td class="text-right">@holding.Value.ToString("N0")</td>
+                                <td class="text-right"><cn value="@holding.Shares" /></td>
+                                <td class="text-right"><cn value="@holding.Value" prefix="$" /></td>
                             </tr>
                         }
                     </tbody>

@@ -67,7 +67,7 @@
                         <th scope="col" class="hidden md:table-cell">CIK</th>
                         <th scope="col" class="hidden lg:table-cell">Location</th>
                         <th scope="col" class="text-right"># Positions</th>
-                        <th scope="col" class="text-right hidden md:table-cell">Total $ Value ($M)</th>
+                        <th scope="col" class="text-right hidden md:table-cell">Total $ Value</th>
                         <th scope="col" class="text-right hidden xl:table-cell">Last filed</th>
                         <th scope="col" class="w-8"><span class="sr-only">Open</span></th>
                     </tr>
@@ -83,8 +83,8 @@
                             </td>
                             <td class="hidden md:table-cell font-mono text-sm text-base-content/60">@inst.Cik</td>
                             <td class="hidden lg:table-cell text-sm text-base-content/60">@(string.IsNullOrEmpty(location) ? "—" : location)</td>
-                            <td class="text-right font-mono">@inst.PositionCount.ToString("N0")</td>
-                            <td class="text-right font-mono hidden md:table-cell">@((inst.TotalValue / 1_000_000m).ToString("N1"))</td>
+                            <td class="text-right font-mono"><cn value="@inst.PositionCount" /></td>
+                            <td class="text-right font-mono hidden md:table-cell"><cn value="@inst.TotalValue" prefix="$" /></td>
                             <td class="text-right font-mono text-sm text-base-content/60 hidden xl:table-cell">@(inst.LatestReportDate?.ToString("yyyy-MM-dd") ?? "—")</td>
                             <td class="text-base-content/30">
                                 <icon name="chevron-right" size="4" />
