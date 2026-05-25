@@ -17,8 +17,7 @@ public class CftcTools
 {
     private readonly CftcContractRepository _contractRepository;
     private readonly CftcPositionReportRepository _reportRepository;
-    private readonly ErrorManager _errorManager;
-    private readonly ILogger<CftcTools> _logger;
+    private readonly McpToolRunner _runner;
 
     public CftcTools(
         CftcContractRepository contractRepository,
@@ -29,8 +28,11 @@ public class CftcTools
     {
         _contractRepository = contractRepository;
         _reportRepository = reportRepository;
-        _errorManager = errorManager;
-        _logger = logger;
+        _runner = new McpToolRunner(
+            logger,
+            (tool, msg, stack, ctx) =>
+                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
+        );
     }
 
     [McpServerTool(Name = "GetCftcPositioning")]
@@ -50,7 +52,7 @@ public class CftcTools
             int maxResults = 52
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var contract = await _contractRepository
@@ -115,7 +117,7 @@ public class CftcTools
             string category = null
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 IQueryable<CftcContract> contractQuery;
@@ -195,7 +197,7 @@ public class CftcTools
         [Description("Maximum number of results to return (default: 20)")] int maxResults = 20
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 var contracts = await _contractRepository
@@ -226,13 +228,5 @@ public class CftcTools
             "SearchCftcMarkets",
             $"query: {query}"
         );
-    }
-
-    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
-        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
-
-    private Task ReportError(string toolName, string message, string stackTrace, string context)
-    {
-        return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
 }

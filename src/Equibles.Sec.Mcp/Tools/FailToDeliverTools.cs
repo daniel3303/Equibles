@@ -16,8 +16,7 @@ public class FailToDeliverTools
 {
     private readonly FailToDeliverRepository _ftdRepository;
     private readonly CommonStockRepository _commonStockRepository;
-    private readonly ErrorManager _errorManager;
-    private readonly ILogger<FailToDeliverTools> _logger;
+    private readonly McpToolRunner _runner;
 
     public FailToDeliverTools(
         FailToDeliverRepository ftdRepository,
@@ -28,8 +27,11 @@ public class FailToDeliverTools
     {
         _ftdRepository = ftdRepository;
         _commonStockRepository = commonStockRepository;
-        _errorManager = errorManager;
-        _logger = logger;
+        _runner = new McpToolRunner(
+            logger,
+            (tool, msg, stack, ctx) =>
+                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
+        );
     }
 
     [McpServerTool(Name = "GetFailsToDeliver")]
@@ -46,7 +48,7 @@ public class FailToDeliverTools
             int maxResults = 90
     )
     {
-        return McpToolExecutor.Execute(
+        return _runner.Execute(
             async () =>
             {
                 var stock = await _commonStockRepository.GetByTicker(
@@ -90,15 +92,8 @@ public class FailToDeliverTools
 
                 return result.ToString();
             },
-            _logger,
             "GetFailsToDeliver",
-            $"ticker: {ticker}",
-            ReportError
+            $"ticker: {ticker}"
         );
-    }
-
-    private Task ReportError(string toolName, string message, string stackTrace, string context)
-    {
-        return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
 }

@@ -28,8 +28,7 @@ public class FinancialFactsTools
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
     private readonly CommonStockRepository _commonStockRepository;
-    private readonly ErrorManager _errorManager;
-    private readonly ILogger<FinancialFactsTools> _logger;
+    private readonly McpToolRunner _runner;
 
     public FinancialFactsTools(
         FinancialFactRepository financialFactRepository,
@@ -42,8 +41,11 @@ public class FinancialFactsTools
         _financialFactRepository = financialFactRepository;
         _financialConceptRepository = financialConceptRepository;
         _commonStockRepository = commonStockRepository;
-        _errorManager = errorManager;
-        _logger = logger;
+        _runner = new McpToolRunner(
+            logger,
+            (tool, msg, stack, ctx) =>
+                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
+        );
     }
 
     [McpServerTool(Name = "GetFinancialFact")]
@@ -72,7 +74,7 @@ public class FinancialFactsTools
             bool asOriginallyReported = false
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 if (string.IsNullOrWhiteSpace(ticker))
@@ -166,7 +168,7 @@ public class FinancialFactsTools
         [Description("Fiscal period: 'FY' (default) or 'Q1'..'Q4'")] string fiscalPeriod = "FY"
     )
     {
-        return Execute(
+        return _runner.Execute(
             async () =>
             {
                 if (string.IsNullOrWhiteSpace(concept))
@@ -415,13 +417,5 @@ public class FinancialFactsTools
         return "Supported: "
             + $"{string.Join(", ", FinancialConceptAliases.SupportedAliases)} "
             + "(common synonyms like 'sales', 'r&d', 'ocf' also work).";
-    }
-
-    private Task<string> Execute(Func<Task<string>> work, string toolName, string context) =>
-        McpToolExecutor.Execute(work, _logger, toolName, context, ReportError);
-
-    private Task ReportError(string toolName, string message, string stackTrace, string context)
-    {
-        return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
     }
 }

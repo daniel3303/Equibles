@@ -23,8 +23,7 @@ public class FinancialStatementTools
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
     private readonly CommonStockRepository _commonStockRepository;
-    private readonly ErrorManager _errorManager;
-    private readonly ILogger<FinancialStatementTools> _logger;
+    private readonly McpToolRunner _runner;
 
     public FinancialStatementTools(
         FinancialFactRepository financialFactRepository,
@@ -37,8 +36,11 @@ public class FinancialStatementTools
         _financialFactRepository = financialFactRepository;
         _financialConceptRepository = financialConceptRepository;
         _commonStockRepository = commonStockRepository;
-        _errorManager = errorManager;
-        _logger = logger;
+        _runner = new McpToolRunner(
+            logger,
+            (tool, msg, stack, ctx) =>
+                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
+        );
     }
 
     [McpServerTool(Name = "GetFinancialStatement")]
@@ -64,7 +66,7 @@ public class FinancialStatementTools
             string period = null
     )
     {
-        return McpToolExecutor.Execute(
+        return _runner.Execute(
             async () =>
             {
                 if (string.IsNullOrWhiteSpace(ticker))
@@ -139,11 +141,9 @@ public class FinancialStatementTools
                     latestByConcept
                 );
             },
-            _logger,
             "GetFinancialStatement",
             $"ticker: {FactMarkdown.Clean(ticker)}, statement: {FactMarkdown.Clean(statement)}, "
-                + $"year: {year}, period: {FactMarkdown.Clean(period)}",
-            ReportError
+                + $"year: {year}, period: {FactMarkdown.Clean(period)}"
         );
     }
 
@@ -286,9 +286,4 @@ public class FinancialStatementTools
             SecFiscalPeriod.FullYear => 5,
             _ => 0,
         };
-
-    private Task ReportError(string toolName, string message, string stackTrace, string context)
-    {
-        return _errorManager.Create(ErrorSource.McpTool, toolName, message, stackTrace, context);
-    }
 }
