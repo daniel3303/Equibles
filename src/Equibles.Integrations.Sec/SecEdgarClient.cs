@@ -232,6 +232,52 @@ public class SecEdgarClient : ISecEdgarClient
         }
     }
 
+    public async Task<DateOnly?> GetMostRecentReportDate(string cik, DocumentTypeFilter formType)
+    {
+        try
+        {
+            var formattedCik = FormatCik(cik);
+            var url = BuildUrl($"/submissions/CIK{formattedCik}.json");
+
+            string content;
+            if (_cachedContent != null && _cachedContent.Url == url)
+            {
+                content = _cachedContent.Content;
+            }
+            else
+            {
+                using var response = await SendWithRetryAsync(url);
+                response.EnsureSuccessStatusCode();
+                content = await response.Content.ReadAsStringAsync();
+                _cachedContent = new CachedResponse(url, content);
+            }
+
+            var apiResponse = JsonConvert.DeserializeObject<SecApiResponse>(content);
+            var recentFilings = MapToFilingData(apiResponse?.Filings?.Recent, cik);
+
+            var formName = formType.GetFormName();
+            return recentFilings
+                .Where(f => f.Form == formName && f.ReportDate != DateOnly.MinValue)
+                .OrderByDescending(f => f.ReportDate)
+                .Select(f => (DateOnly?)f.ReportDate)
+                .FirstOrDefault();
+        }
+        catch (HttpRequestException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not retrieve most recent {FormType} report date for CIK {Cik}",
+                formType,
+                cik
+            );
+            return null;
+        }
+    }
+
     private async Task<List<FilingData>> GetArchiveFilings(
         FilingsContainer filings,
         string cik,
