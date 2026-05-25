@@ -23,6 +23,8 @@ public class HoldingsTabViewModel
 
     public HashSet<PositionChangeType> ActiveTypes { get; set; }
 
+    public bool IsCombinedView { get; set; }
+
     public bool IsTypeActive(PositionChangeType type) =>
         ActiveTypes == null || ActiveTypes.Contains(type);
 

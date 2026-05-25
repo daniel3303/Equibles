@@ -169,6 +169,81 @@ public class StockTabService
         };
     }
 
+    public async Task<HoldingsTabViewModel> LoadHoldingsCombinedTab(CommonStock stock)
+    {
+        var reportDates = await _institutionalHoldingRepository
+            .GetHistoryByStock(stock)
+            .Select(h => h.ReportDate)
+            .Distinct()
+            .OrderByDescending(d => d)
+            .ToListAsync();
+
+        if (reportDates.Count == 0)
+        {
+            return new HoldingsTabViewModel
+            {
+                AvailableDates = reportDates,
+                Ticker = stock.Ticker,
+                IsCombinedView = true,
+            };
+        }
+
+        var allCombined = await _institutionalHoldingRepository
+            .GetLatestByStock(stock)
+            .Include(h => h.InstitutionalHolder)
+            .ToListAsync();
+
+        var holders = allCombined
+            .GroupBy(h => h.InstitutionalHolderId)
+            .Select(g =>
+            {
+                var latestDate = g.Max(h => h.ReportDate);
+                return new HolderPositionChange
+                {
+                    InstitutionalHolderId = g.Key,
+                    InstitutionalHolder = g.First().InstitutionalHolder,
+                    CurrentHolding = g.OrderByDescending(h => h.FilingDate).First(),
+                    CurrentShares = g.Sum(h => h.Shares),
+                    CurrentValue = g.Sum(h => h.Value),
+                    ChangeType = PositionChangeType.Unchanged,
+                    LatestReportDate = latestDate,
+                };
+            })
+            .ToList();
+
+        var holderIds = holders.Select(h => h.InstitutionalHolderId).Distinct().ToList();
+        var firstOwned = await _institutionalHoldingRepository
+            .GetFirstOwnedQuarters(stock, holderIds)
+            .ToDictionaryAsync(kv => kv.Key, kv => kv.Value);
+        foreach (var holder in holders)
+        {
+            if (firstOwned.TryGetValue(holder.InstitutionalHolderId, out var quarter))
+                holder.QuarterFirstOwned = quarter;
+        }
+
+        var grouped = new Dictionary<PositionChangeType, List<HolderPositionChange>>
+        {
+            [PositionChangeType.Unchanged] = holders,
+            [PositionChangeType.New] = [],
+            [PositionChangeType.Increased] = [],
+            [PositionChangeType.Reduced] = [],
+            [PositionChangeType.SoldOut] = [],
+        };
+
+        return new HoldingsTabViewModel
+        {
+            AvailableDates = reportDates,
+            Ticker = stock.Ticker,
+            TotalValue = allCombined.Sum(h => h.Value),
+            TotalShares = allCombined.Sum(h => h.Shares),
+            HolderCount = holders.Count,
+            SharesOutstanding = stock.SharesOutStanding,
+            GroupedHolders = grouped,
+            BucketCounts = grouped.ToDictionary(g => g.Key, g => g.Value.Count),
+            IsCombinedView = true,
+        };
+    }
+
     public async Task<ShortVolumeTabViewModel> LoadShortVolumeTab(CommonStock stock)
     {
         var shortVolumes = await _dailyShortVolumeRepository

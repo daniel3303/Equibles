@@ -25,6 +25,24 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .Where(h => h.InstitutionalHolderId == holder.Id && h.ReportDate == reportDate);
     }
 
+    public IQueryable<InstitutionalHolding> GetLatestByStock(CommonStock stock)
+    {
+        var latestDates = GetAll()
+            .Where(h => h.CommonStockId == stock.Id)
+            .GroupBy(h => h.InstitutionalHolderId)
+            .Select(g => new { HolderId = g.Key, LatestDate = g.Max(h => h.ReportDate) });
+
+        return from h in GetAll()
+            join ld in latestDates
+                on new { HolderId = h.InstitutionalHolderId, Date = h.ReportDate } equals new
+                {
+                    HolderId = ld.HolderId,
+                    Date = ld.LatestDate,
+                }
+            where h.CommonStockId == stock.Id
+            select h;
+    }
+
     public IQueryable<InstitutionalHolding> GetHistoryByStock(CommonStock stock)
     {
         return GetAll().Where(h => h.CommonStockId == stock.Id);
