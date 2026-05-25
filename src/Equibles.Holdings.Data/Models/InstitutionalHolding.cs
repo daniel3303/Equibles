@@ -16,6 +16,7 @@ namespace Equibles.Holdings.Data.Models;
 // /Stocks/{ticker}/Holdings run as an index-only scan.
 [Index(nameof(FilingDate))]
 [Index(nameof(ReportDate))]
+[Index(nameof(FilingType))]
 public class InstitutionalHolding
 {
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
@@ -35,6 +36,7 @@ public class InstitutionalHolding
     public ShareType ShareType { get; set; }
     public OptionType? OptionType { get; set; }
     public InvestmentDiscretion InvestmentDiscretion { get; set; }
+    public FilingType FilingType { get; set; }
 
     public long VotingAuthSole { get; set; }
     public long VotingAuthShared { get; set; }

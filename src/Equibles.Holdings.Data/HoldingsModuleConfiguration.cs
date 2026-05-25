@@ -7,7 +7,7 @@ public class HoldingsModuleConfiguration : Equibles.Data.IModuleConfiguration
 {
     public void ConfigureEntities(ModelBuilder builder)
     {
-        // Holdings unique index: include OptionType with NULLS NOT DISTINCT (cannot be expressed via attributes)
+        // Holdings unique index: include OptionType and FilingType with NULLS NOT DISTINCT (cannot be expressed via attributes)
         builder
             .Entity<InstitutionalHolding>()
             .HasIndex(h => new
@@ -17,6 +17,7 @@ public class HoldingsModuleConfiguration : Equibles.Data.IModuleConfiguration
                 h.ReportDate,
                 h.ShareType,
                 h.OptionType,
+                h.FilingType,
             })
             .IsUnique()
             .AreNullsDistinct(false);
