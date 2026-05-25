@@ -14,6 +14,8 @@ public class CompanyMetadata
     /// </summary>
     public string FiscalYearEnd { get; set; }
 
+    public string Website { get; set; }
+
     /// <summary>
     /// Month (1-12) parsed from <see cref="FiscalYearEnd"/>, or null when the
     /// value is missing or not a valid calendar MMDD date.

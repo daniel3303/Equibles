@@ -24,6 +24,9 @@ internal class SecApiResponse
     [JsonProperty("fiscalYearEnd")]
     public string FiscalYearEnd { get; set; }
 
+    [JsonProperty("website")]
+    public string Website { get; set; }
+
     [JsonProperty("filings")]
     public FilingsContainer Filings { get; set; } = new();
 }

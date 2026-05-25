@@ -123,6 +123,7 @@ public class SecEdgarClient : ISecEdgarClient
                 EntityType = apiResponse.EntityType,
                 Exchanges = apiResponse.Exchanges ?? [],
                 FiscalYearEnd = apiResponse.FiscalYearEnd,
+                Website = apiResponse.Website,
             };
         }
         catch (HttpRequestException ex)
