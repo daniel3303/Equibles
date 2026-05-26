@@ -124,6 +124,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   out as 39M shares instead of 1.43B). The import now flushes at the
   accession boundary, which SEC guarantees is contiguous in both the
   bulk INFOTABLE and the realtime archive.
+- `StocksController.ParsePositionTypes` gates parsed values with
+  `Enum.IsDefined` so numeric query input with no matching
+  `PositionChangeType` member (e.g. `?types=999`) is rejected the same
+  as an unrecognised name, preventing a polluted filter set from
+  round-tripping into rendered toggle URLs on the holdings tab.
 
 ## [1.1.1] — 2026-05-22
 
