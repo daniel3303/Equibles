@@ -9,6 +9,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [1.2.0] — 2026-05-26
+
+### Added
+
 - Confidential treatment flag — 13F cover pages' `confidentialTreatmentRequestedFlag`
   is now parsed and stored on `InstitutionalHolder`. The institution profile page
   shows a warning banner when the flag is set, and `GetInstitutionSummary` MCP tool
@@ -503,7 +511,8 @@ First tagged release.
 - Background worker — scrapers and document processor.
 - Docker Compose stack (ParadeDB + web + MCP + worker), with an optional vector-embedding profile.
 
-[Unreleased]: https://github.com/daniel3303/Equibles/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/daniel3303/Equibles/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/daniel3303/Equibles/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/daniel3303/Equibles/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/daniel3303/Equibles/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/daniel3303/Equibles/releases/tag/v1.0.0
