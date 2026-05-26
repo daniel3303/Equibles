@@ -20,17 +20,17 @@ using Xunit;
 namespace Equibles.IntegrationTests.Holdings;
 
 /// <summary>
-/// GH-2110 — when a single 13F-HR carries multiple INFOTABLE rows for the same
-/// (holder, stock, period, share-type, option-type) tuple (typical for large
-/// filers that split a position across <c>otherManager</c> codes) and those
-/// rows are scattered far enough apart in the file to span the in-memory flush
-/// boundary (<c>StreamAndInsertHoldings</c>'s <c>InsertBatchSize = 1000</c>
-/// unique keys), only the LAST batch's slice survives.
-///
-/// In-batch aggregation in <c>holdingsMap</c> is correct, but the
-/// <c>FlushBatch</c> upsert's <c>WhenMatched</c> clause overwrites the
-/// persisted row rather than accumulating, so a key that already flushed in an
-/// earlier batch gets its prior sum silently replaced.
+/// Regression for GH-2110. A single 13F-HR can carry many INFOTABLE rows for
+/// the same (holder, stock, period, share-type, option-type) tuple — large
+/// filers split a position across <c>otherManager</c> codes and the matching
+/// rows end up scattered hundreds apart in the filing. Previously
+/// <c>StreamAndInsertHoldings</c> flushed every 1000 keys then reset the
+/// in-memory aggregator, and <c>FlushBatch</c>'s <c>WhenMatched</c> clause
+/// REPLACED the persisted row, so only the last flush's slice survived. The
+/// fix flushes at the accession boundary instead, keeping every row of one
+/// filing in the same aggregator before any UPSERT runs. This test pins that
+/// behaviour by interleaving the two same-key rows with enough other tracked
+/// rows that any return to row-count batching would re-trigger the bug.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class HoldingsImportServiceBatchFlushAggregationTests : IAsyncLifetime
@@ -125,15 +125,14 @@ public class HoldingsImportServiceBatchFlushAggregationTests : IAsyncLifetime
         return provider;
     }
 
-    [Fact(
-        Skip = "GH-2110 — cross-batch entries for the same upsert key get replaced instead of accumulated"
-    )]
+    [Fact]
     public async Task ImportDataSet_SameKeyAcrossBatchBoundary_AccumulatesSharesNotReplaces()
     {
-        // The flush triggers at 1000 unique keys in holdingsMap. To force the
-        // two AAPL rows into different batches: row 1 = AAPL (key #1), rows
-        // 2..1000 = 999 unique padding CUSIPs (keys #2..#1000) which trips the
-        // flush after row 1000, row 1001 = AAPL again — now in a fresh batch.
+        // Spacing the two AAPL rows with 999 unique padding CUSIPs reproduces
+        // the original failure: under the old InsertBatchSize=1000 logic the
+        // second AAPL row landed in a fresh batch and the upsert replaced the
+        // first batch's 100 shares. The accession-boundary flush keeps both
+        // rows aggregated regardless of how far apart they sit.
         const int paddingCount = 999;
 
         var apple = new CommonStock
@@ -174,13 +173,13 @@ public class HoldingsImportServiceBatchFlushAggregationTests : IAsyncLifetime
             "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMT\tSSHPRNAMTTYPE\tPUTCALL\tINVESTMENTDISCRETION\tVOTING_AUTH_SOLE\tVOTING_AUTH_SHARED\tVOTING_AUTH_NONE\tTITLEOFCLASS\tOTHERMANAGER\n";
 
         var info = new StringBuilder(infoHeader);
-        // AAPL #1 — under otherManager 1, 100 shares.
+        // AAPL under otherManager 1, 100 shares.
         info.Append("ACC-MULTI\t037833100\t100\tSH\t\tDEFINED\t0\t0\t100\tCOM\t1\n");
-        // 999 unique padding rows to fill out batch 1.
+        // 999 unique padding rows separating the two AAPL rows.
         foreach (var p in padding)
             info.Append($"ACC-MULTI\t{p.Cusip}\t10\tSH\t\tSOLE\t10\t0\t0\tCOM\t\n");
-        // AAPL #2 — under otherManager 2, 200 shares. Same upsert key as AAPL
-        // #1, but lands in batch 2 after the boundary flush + map clear.
+        // AAPL under otherManager 2, 200 shares. Same upsert key as the
+        // first AAPL row but rows apart from it in the INFOTABLE stream.
         info.Append("ACC-MULTI\t037833100\t200\tSH\t\tDEFINED\t0\t0\t200\tCOM\t2\n");
 
         using var archive = BuildArchive(
@@ -207,7 +206,8 @@ public class HoldingsImportServiceBatchFlushAggregationTests : IAsyncLifetime
 
         // Both AAPL rows share one upsert key — exactly one persisted row.
         appleHoldings.Should().ContainSingle();
-        // Bug: only batch 2's 200 shares survives. Expected: 100 + 200 = 300.
+        // 100 + 200 across both otherManager codes. Pre-fix the persisted
+        // row was 200 because the second row's batch replaced the first's.
         appleHoldings[0].Shares.Should().Be(300L);
         appleHoldings[0].Value.Should().Be(75_000L);
         appleHoldings[0].VotingAuthNone.Should().Be(300L);
