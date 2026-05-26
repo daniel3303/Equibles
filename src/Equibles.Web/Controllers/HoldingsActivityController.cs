@@ -32,22 +32,11 @@ public class HoldingsActivityController : BaseController
         if (reportDates.Count == 0)
             return View(viewModel);
 
-        var isCombinedAvailable =
-            reportDates.Count >= 2 && CombinedQuarterHelper.IsFilingWindowOpen(reportDates[0]);
-        viewModel.IsCombinedAvailable = isCombinedAvailable;
-
-        if (combined && isCombinedAvailable)
-        {
-            viewModel.IsCombinedSelected = true;
-            viewModel.SelectedDate = reportDates[0];
-            viewModel.PreviousDate = reportDates[1];
-        }
-        else
-        {
-            var (sel, prev) = ResolveSelectedAndPriorDate(date, reportDates);
-            viewModel.SelectedDate = sel;
-            viewModel.PreviousDate = prev;
-        }
+        var dateSelection = ResolveCombinedDateSelection(date, combined, reportDates);
+        viewModel.IsCombinedAvailable = dateSelection.IsCombinedAvailable;
+        viewModel.IsCombinedSelected = dateSelection.IsCombinedSelected;
+        viewModel.SelectedDate = dateSelection.SelectedDate;
+        viewModel.PreviousDate = dateSelection.PreviousDate;
 
         if (!viewModel.PreviousDate.HasValue)
             return View(viewModel);
@@ -161,21 +150,11 @@ public class HoldingsActivityController : BaseController
         if (reportDates.Count < 2)
             return View(viewModel);
 
-        var isCombinedAvailable = CombinedQuarterHelper.IsFilingWindowOpen(reportDates[0]);
-        viewModel.IsCombinedAvailable = isCombinedAvailable;
-
-        if (combined && isCombinedAvailable)
-        {
-            viewModel.IsCombinedSelected = true;
-            viewModel.SelectedDate = reportDates[0];
-            viewModel.PreviousDate = reportDates[1];
-        }
-        else
-        {
-            var (sel, prev) = ResolveSelectedAndPriorDate(date, reportDates);
-            viewModel.SelectedDate = sel;
-            viewModel.PreviousDate = prev;
-        }
+        var dateSelection = ResolveCombinedDateSelection(date, combined, reportDates);
+        viewModel.IsCombinedAvailable = dateSelection.IsCombinedAvailable;
+        viewModel.IsCombinedSelected = dateSelection.IsCombinedSelected;
+        viewModel.SelectedDate = dateSelection.SelectedDate;
+        viewModel.PreviousDate = dateSelection.PreviousDate;
 
         if (!viewModel.PreviousDate.HasValue)
             return View(viewModel);
@@ -251,22 +230,11 @@ public class HoldingsActivityController : BaseController
         if (reportDates.Count == 0)
             return View(viewModel);
 
-        var isCombinedAvailable =
-            reportDates.Count >= 2 && CombinedQuarterHelper.IsFilingWindowOpen(reportDates[0]);
-        viewModel.IsCombinedAvailable = isCombinedAvailable;
-
-        if (combined && isCombinedAvailable)
-        {
-            viewModel.IsCombinedSelected = true;
-            viewModel.SelectedDate = reportDates[0];
-            viewModel.PreviousDate = reportDates[1];
-        }
-        else
-        {
-            var (sel, prev) = ResolveSelectedAndPriorDate(date, reportDates);
-            viewModel.SelectedDate = sel;
-            viewModel.PreviousDate = prev;
-        }
+        var dateSelection = ResolveCombinedDateSelection(date, combined, reportDates);
+        viewModel.IsCombinedAvailable = dateSelection.IsCombinedAvailable;
+        viewModel.IsCombinedSelected = dateSelection.IsCombinedSelected;
+        viewModel.SelectedDate = dateSelection.SelectedDate;
+        viewModel.PreviousDate = dateSelection.PreviousDate;
 
         var selectedDate = viewModel.SelectedDate;
         var priorForRepo = viewModel.PreviousDate ?? selectedDate;
@@ -370,21 +338,11 @@ public class HoldingsActivityController : BaseController
         if (reportDates.Count < 2)
             return View(viewModel);
 
-        var isCombinedAvailable = CombinedQuarterHelper.IsFilingWindowOpen(reportDates[0]);
-        viewModel.IsCombinedAvailable = isCombinedAvailable;
-
-        if (combined && isCombinedAvailable)
-        {
-            viewModel.IsCombinedSelected = true;
-            viewModel.SelectedDate = reportDates[0];
-            viewModel.PreviousDate = reportDates[1];
-        }
-        else
-        {
-            var (sel, prev) = ResolveSelectedAndPriorDate(date, reportDates);
-            viewModel.SelectedDate = sel;
-            viewModel.PreviousDate = prev;
-        }
+        var dateSelection = ResolveCombinedDateSelection(date, combined, reportDates);
+        viewModel.IsCombinedAvailable = dateSelection.IsCombinedAvailable;
+        viewModel.IsCombinedSelected = dateSelection.IsCombinedSelected;
+        viewModel.SelectedDate = dateSelection.SelectedDate;
+        viewModel.PreviousDate = dateSelection.PreviousDate;
 
         if (!viewModel.PreviousDate.HasValue)
             return View(viewModel);
@@ -480,6 +438,23 @@ public class HoldingsActivityController : BaseController
                 Name = s.Name,
             })
             .ToDictionaryAsync(s => s.Id);
+
+    private static (
+        bool IsCombinedAvailable,
+        bool IsCombinedSelected,
+        DateOnly SelectedDate,
+        DateOnly? PreviousDate
+    ) ResolveCombinedDateSelection(DateOnly? date, bool combined, List<DateOnly> reportDates)
+    {
+        var isCombinedAvailable =
+            reportDates.Count >= 2 && CombinedQuarterHelper.IsFilingWindowOpen(reportDates[0]);
+
+        if (combined && isCombinedAvailable)
+            return (true, true, reportDates[0], reportDates[1]);
+
+        var (sel, prev) = ResolveSelectedAndPriorDate(date, reportDates);
+        return (isCombinedAvailable, false, sel, prev);
+    }
 
     private static (DateOnly Selected, DateOnly? Previous) ResolveSelectedAndPriorDate(
         DateOnly? requested,
