@@ -576,6 +576,26 @@ public class CompanySyncService : ICompanySyncService
         RegexOptions.IgnoreCase | RegexOptions.Compiled
     );
 
+    // Short tokens that match the regex but use L/C/D/M are almost always English
+    // words (MIX=1009, DIV=504, LIV=54, MIL=1051, CIV=104) — exclude them by
+    // requiring tokens shorter than 4 characters to use only I/V/X.
+    private static bool IsRomanNumeral(string token)
+    {
+        if (!RomanNumeralPattern.IsMatch(token))
+            return false;
+
+        if (token.Length >= 4)
+            return true;
+
+        foreach (var c in token)
+        {
+            var u = char.ToUpperInvariant(c);
+            if (u != 'I' && u != 'V' && u != 'X')
+                return false;
+        }
+        return true;
+    }
+
     private static string NormalizeCompanyName(string name)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -592,10 +612,7 @@ public class CompanySyncService : ICompanySyncService
             var stripped = words[i].TrimStart('(').TrimEnd('.', ',', ';', ')');
             if (
                 stripped.Length > 0
-                && (
-                    UpperCaseAbbreviations.Contains(stripped)
-                    || RomanNumeralPattern.IsMatch(stripped)
-                )
+                && (UpperCaseAbbreviations.Contains(stripped) || IsRomanNumeral(stripped))
             )
             {
                 words[i] = words[i].ToUpperInvariant();

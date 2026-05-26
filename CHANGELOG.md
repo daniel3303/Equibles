@@ -124,6 +124,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   out as 39M shares instead of 1.43B). The import now flushes at the
   accession boundary, which SEC guarantees is contiguous in both the
   bulk INFOTABLE and the realtime archive.
+- `CompanySyncService.NormalizeCompanyName` no longer treats short English
+  words like MIX, DIV, LIV, MIL, and CIV as Roman numerals. The regex still
+  matches them (MIX = 1009, DIV = 504, LIV = 54), but tokens shorter than
+  four characters must now consist only of I/V/X to be kept uppercase, so
+  "QUICK MIX CORP" titles to "Quick Mix Corp" while "FUND III" and
+  "FUND XVI LP" stay as-is.
 
 ## [1.1.1] — 2026-05-22
 
