@@ -435,26 +435,38 @@ public class SecEdgarClient : ISecEdgarClient
         var url =
             $"{FilesBaseUrl}/Archives/edgar/daily-index/{date.Year}/QTR{quarter}/master.{date.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture)}.idx";
 
-        using var response = await SendWithRetryAsync(url, cancellationToken);
-
-        // No index file for that day → nothing to ingest, skip it rather than
-        // failing the whole real-time sweep. Weekends/holidays can 404, and SEC
-        // returns 403 (Forbidden) for not-yet-published index files (today or a
-        // future date, before SEC posts it). Both mean "no index for this date".
-        //
-        // A 403 on a PAST date is different: that index always exists, so a
-        // Forbidden there is SEC's rate-limit throttle page surviving
-        // SendWithRetryAsync's retries — NOT a missing index. Swallowing it as
-        // empty silently drops that day's filings (this is exactly how large
-        // filers went missing during a long catch-up sweep). Let
-        // EnsureSuccessStatusCode surface it instead.
+        // A 403 on a PAST date is never a missing index (those always exist) —
+        // it's SEC throttling, so retry it as transient. For today/future dates a
+        // 403 means the index isn't published yet, so don't retry those.
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var isPastDate = date < today;
+        using var response = await SendWithRetryAsync(
+            url,
+            HttpCompletionOption.ResponseContentRead,
+            cancellationToken,
+            retryForbidden: isPastDate
+        );
+
+        // Weekend/holiday 404, or a 403 for a not-yet-published index (today or a
+        // future date), both mean "no index for this date" — skip it.
         if (
             response.StatusCode == HttpStatusCode.NotFound
-            || (response.StatusCode == HttpStatusCode.Forbidden && date >= today)
+            || (response.StatusCode == HttpStatusCode.Forbidden && !isPastDate)
         )
         {
             _logger.LogInformation("No daily index published for {Date:yyyy-MM-dd}", date);
+            return [];
+        }
+
+        // A past-date 403 that survived the retries is SEC still throttling.
+        // Skip this one day with a visible warning rather than failing the whole
+        // sweep or silently dropping its filings — the next cycle re-sweeps it.
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            _logger.LogWarning(
+                "SEC throttling persisted for the {Date:yyyy-MM-dd} daily index; skipping this day, will retry next cycle",
+                date
+            );
             return [];
         }
 
@@ -567,7 +579,8 @@ public class SecEdgarClient : ISecEdgarClient
     private async Task<HttpResponseMessage> SendWithRetryAsync(
         string url,
         HttpCompletionOption completionOption,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        bool retryForbidden = false
     )
     {
         for (var attempt = 0; attempt <= MaxRetries; attempt++)
@@ -633,13 +646,15 @@ public class SecEdgarClient : ISecEdgarClient
             // a 403 (not a 429), so a burst that trips the rolling-window limit
             // arrives as a Forbidden carrying that HTML body. Back off and retry
             // it like a 429 — otherwise callers that read 403 as "no resource"
-            // (e.g. GetDailyIndex) silently discard real data. A genuine 403 (a
-            // not-yet-published index, an access-restricted path) has a different
-            // body and falls through to the caller unchanged.
+            // silently discard real data. Callers that know a 403 can only mean
+            // throttling (retryForbidden: e.g. a past-dated daily index, which
+            // always exists) retry every Forbidden; otherwise we retry only when
+            // the body is the recognizable throttle page, leaving a genuine 403
+            // (not-yet-published index, access-restricted path) to fall through.
             if (response.StatusCode == HttpStatusCode.Forbidden && attempt < MaxRetries)
             {
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                if (IsRateLimitThresholdPage(body))
+                if (retryForbidden || IsRateLimitThresholdPage(body))
                 {
                     var delay = GetRetryDelay(response, attempt);
 
