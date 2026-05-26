@@ -20,7 +20,7 @@ public class CompanySyncServiceNormalizeCompanyNameRomanNumeralFalsePositiveTest
 
     private static string Normalize(string name) => (string)NormalizeMethod.Invoke(null, [name]);
 
-    [Fact(Skip = "GH-2104 — Roman numeral regex matches English words like MIX (1009)")]
+    [Fact]
     public void AllCapsName_MixIsEnglishWord_NotRomanNumeral1009()
     {
         var result = Normalize("QUICK MIX CORP");
