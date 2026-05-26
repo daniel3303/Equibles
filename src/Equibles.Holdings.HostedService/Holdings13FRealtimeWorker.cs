@@ -94,7 +94,7 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
     {
         var allFileNames = HoldingsDataSetClient.GetDataSetFileNames(startDate);
         if (allFileNames.Count == 0)
-            return MinLookbackDays;
+            return EffectiveMinLookback(today, MinLookbackDays);
 
         await using var scope = ScopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
@@ -123,11 +123,39 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
         }
 
         if (!latestEndDate.HasValue)
-            return MinLookbackDays;
+            return EffectiveMinLookback(today, MinLookbackDays);
 
         // Sweep from the day after the last bulk data set's coverage ends
         var gap = today.DayNumber - latestEndDate.Value.DayNumber;
-        return Math.Max(gap, MinLookbackDays);
+        return Math.Max(gap, EffectiveMinLookback(today, MinLookbackDays));
+    }
+
+    /// <summary>
+    /// The lookback floor. When no processed bulk data set is available to
+    /// measure from (fresh deploy, reset volume, or the startup race against
+    /// <see cref="HoldingsScraperWorker"/>'s backfill), a flat 7-day window
+    /// would skip a whole filing season's worth of submissions: 13F filers
+    /// have 45 days after a quarter end to submit, so a window narrower than
+    /// the gap to the latest completed quarter end misses on-time filings.
+    /// Flooring at that gap keeps the current season covered regardless of
+    /// tracking state, and makes the backfill race harmless.
+    /// </summary>
+    internal static int EffectiveMinLookback(DateOnly today, int minLookbackDays) =>
+        Math.Max(minLookbackDays, today.DayNumber - LatestQuarterEnd(today).DayNumber);
+
+    /// <summary>
+    /// The end of the calendar quarter immediately preceding the one that
+    /// contains <paramref name="today"/> — the latest 13F reporting period
+    /// whose 45-day filing window is open (filings only appear after a period
+    /// ends). Dates in Jan–Mar return the previous year's 31 Dec.
+    /// </summary>
+    internal static DateOnly LatestQuarterEnd(DateOnly today)
+    {
+        const int monthsPerQuarter = 3;
+        var endMonth = (today.Month - 1) / monthsPerQuarter * monthsPerQuarter; // 0, 3, 6, 9
+        return endMonth == 0
+            ? new DateOnly(today.Year - 1, 12, 31)
+            : new DateOnly(today.Year, endMonth, DateTime.DaysInMonth(today.Year, endMonth));
     }
 
     /// <summary>
