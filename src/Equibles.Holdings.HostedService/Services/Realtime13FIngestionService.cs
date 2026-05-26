@@ -180,7 +180,25 @@ public class Realtime13FIngestionService
             cancellationToken.ThrowIfCancellationRequested();
 
             var date = today.AddDays(-offset);
-            var indexEntries = await _edgarClient.GetDailyIndex(date, cancellationToken);
+
+            // One day's fetch failing (a transient error, or SEC throttling that
+            // outlasts the client's retries) must not abort the whole sweep and
+            // lose every other day. Log it and move on — the next cycle re-sweeps
+            // this date.
+            List<EdgarDailyIndexEntry> indexEntries;
+            try
+            {
+                indexEntries = await _edgarClient.GetDailyIndex(date, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to fetch the {Date:yyyy-MM-dd} daily index; skipping this day",
+                    date
+                );
+                continue;
+            }
 
             // The client already filters to 13F-HR / 13F-HR/A; only guard
             // against a malformed row with no accession number here.
