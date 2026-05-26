@@ -116,6 +116,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - House PTR PDF parser joins multi-line transaction entries so the asset
   name, ticker/dates, and amount land on a single transaction instead of
   three partial rows.
+- 13F-HR import aggregates same-key rows across the whole filing instead
+  of flushing every 1000 unique keys. When a filer split a position
+  across `otherManager` codes the matching rows could fall in different
+  batches; the upsert's `WhenMatched` clause REPLACED the persisted row,
+  so only the last batch's slice survived (Vanguard's Q4 2025 AAPL came
+  out as 39M shares instead of 1.43B). The import now flushes at the
+  accession boundary, which SEC guarantees is contiguous in both the
+  bulk INFOTABLE and the realtime archive.
 
 ## [1.1.1] — 2026-05-22
 
