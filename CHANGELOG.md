@@ -30,6 +30,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Enriched holders CSV export with ownership %, change %, and position type.
 - Stock detail page inline key metrics (market cap, P/E, EPS, etc.).
 - Compact number toggle for large values in holdings tables.
+- Company website URL scraped from SEC EDGAR submissions and persisted on
+  `CommonStock`.
+- "Current + Combined" date selector in the Holdings tab, showing a merged
+  view of the latest quarterly data set and any realtime filings since.
+- 13F filing type (`COVER PAGE`, `HOLDINGS`, `AMENDMENT`) parsed and stored
+  on `InstitutionalHolding`.
 - Many new end-user guide pages (`docs/guide/`): tutorials, how-tos, and FAQ entries.
 
 ### Changed
@@ -43,6 +49,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   (previously dominated results with capped days-to-cover of 1000).
 - 13F holdings import runs incrementally instead of batching.
 - `<cn>` tag helper renamed to `<compactable-number>` for clarity.
+- Company name normalization handles common abbreviations (Inc → Inc.,
+  Corp → Corp., Ltd → Ltd., etc.), higher roman numerals (IV–X), and
+  parenthesized abbreviations.
 - Duplicated MCP date-parsing logic extracted into `McpToolExecutor.ParseDateOr`.
 - LIKE metacharacter escaping extracted into shared `LikePattern` helper.
 - Vite bundles wrapped in IIFE to prevent global scope collision; `bundle.js`
@@ -81,6 +90,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Holdings integration test CIKs aligned with `TrimStart('0')` normalization.
 - Congress `Truncate` handles negative `maxLength`.
 - Empty-state message added when no economic indicators are imported.
+- 13F import respects `NEW HOLDINGS` amendment type (was silently treated
+  as a regular filing).
+- `FiscalYearEndMonth` inferred from 10-K filing date when SEC EDGAR
+  metadata is null.
+- `FiscalYearEndMonth` inferred from 20-F / 40-F for foreign filers
+  (previously only 10-K was checked).
+- Fiscal year-end day validated against its month (e.g., day 31 rejected
+  for months with fewer days).
 - Filer-universe query narrowed to only gap holders.
 
 ## [1.1.1] — 2026-05-22
