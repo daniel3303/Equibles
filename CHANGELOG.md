@@ -53,7 +53,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Corp → Corp., Ltd → Ltd., etc.), higher roman numerals (IV–X), and
   parenthesized abbreviations.
 - Duplicated MCP date-parsing logic extracted into `McpToolExecutor.ParseDateOr`.
+- Repeated "stock not found" MCP responses extracted into
+  `McpToolExecutor.StockNotFound`.
+- SEC MCP `DocumentTextTools` migrated to `McpToolRunner`, matching the
+  Execute / ReportError pattern used by the other MCP tool groups.
 - LIKE metacharacter escaping extracted into shared `LikePattern` helper.
+- Repeated empty-table-row markup extracted into a shared
+  `EmptyTableRowTagHelper`.
+- Screener CSV export migrated to the shared `CsvExportService` instead of
+  hand-rolling its own writer.
 - Vite bundles wrapped in IIFE to prevent global scope collision; `bundle.js`
   loaded as ES module.
 - Chart.js split into a separate bundle loaded only on chart pages.
@@ -99,6 +107,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Fiscal year-end day validated against its month (e.g., day 31 rejected
   for months with fewer days).
 - Filer-universe query narrowed to only gap holders.
+- `ParseTransactionCode` trims input so whitespace-padded SEC transaction
+  codes resolve to the correct `TransactionCode` enum value.
+- `ParseBool` trims input so whitespace-padded SEC boolean strings
+  ("true ", " false") are interpreted correctly.
+- `SafeRound` guards against the `decimal.MaxValue` boundary instead of
+  throwing on rounding overflow.
+- House PTR PDF parser joins multi-line transaction entries so the asset
+  name, ticker/dates, and amount land on a single transaction instead of
+  three partial rows.
 
 ## [1.1.1] — 2026-05-22
 
