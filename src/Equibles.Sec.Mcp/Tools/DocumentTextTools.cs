@@ -3,6 +3,7 @@ using System.Text;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.Mcp;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
 using Microsoft.Extensions.Logging;
@@ -14,8 +15,7 @@ namespace Equibles.Sec.Mcp.Tools;
 public class DocumentTextTools
 {
     private readonly DocumentRepository _documentRepository;
-    private readonly ErrorManager _errorManager;
-    private readonly ILogger<DocumentTextTools> _logger;
+    private readonly McpToolRunner _runner;
 
     public DocumentTextTools(
         DocumentRepository documentRepository,
@@ -24,8 +24,11 @@ public class DocumentTextTools
     )
     {
         _documentRepository = documentRepository;
-        _errorManager = errorManager;
-        _logger = logger;
+        _runner = new McpToolRunner(
+            logger,
+            (tool, msg, stack, ctx) =>
+                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
+        );
     }
 
     [McpServerTool(Name = "SearchDocumentKeyword")]
@@ -38,7 +41,7 @@ public class DocumentTextTools
         [Description("Maximum number of matches to return (default: 20)")] int maxResults = 20
     )
     {
-        return RunSafe(
+        return _runner.Execute(
             async () =>
             {
                 var (document, lines, error) = await LoadDocumentLines(documentId);
@@ -89,7 +92,6 @@ public class DocumentTextTools
                 return result.ToString();
             },
             "SearchDocumentKeyword",
-            documentId,
             $"documentId: {documentId}, keyword: {keyword}",
             "An error occurred while searching the document. Please try again."
         );
@@ -105,7 +107,7 @@ public class DocumentTextTools
         [Description("Last line to read (1-based, inclusive)")] int endLine
     )
     {
-        return RunSafe(
+        return _runner.Execute(
             async () =>
             {
                 var (document, lines, error) = await LoadDocumentLines(documentId);
@@ -136,45 +138,9 @@ public class DocumentTextTools
                 return result.ToString();
             },
             "ReadDocumentLines",
-            documentId,
             $"documentId: {documentId}, lines: {startLine}-{endLine}",
             "An error occurred while reading document lines. Please try again."
         );
-    }
-
-    private async Task<string> RunSafe(
-        Func<Task<string>> action,
-        string toolName,
-        Guid documentId,
-        string context,
-        string failureMessage
-    )
-    {
-        try
-        {
-            return await action();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "{ToolName} failed for document {DocumentId}",
-                toolName,
-                documentId
-            );
-            try
-            {
-                await _errorManager.Create(
-                    ErrorSource.McpTool,
-                    toolName,
-                    ex.Message,
-                    ex.StackTrace,
-                    context
-                );
-            }
-            catch { }
-            return failureMessage;
-        }
     }
 
     private async Task<(Document Document, string[] Lines, string Error)> LoadDocumentLines(
