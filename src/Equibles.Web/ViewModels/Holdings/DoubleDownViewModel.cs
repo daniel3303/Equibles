@@ -10,6 +10,8 @@ public class DoubleDownViewModel
     public List<DateOnly> AvailableDates { get; set; } = [];
     public DateOnly SelectedDate { get; set; }
     public DateOnly? PreviousDate { get; set; }
+    public bool IsCombinedAvailable { get; set; }
+    public bool IsCombinedSelected { get; set; }
     public double MinPctIncrease { get; set; } = DefaultMinPct;
 
     public List<DoubleDownPosition> Positions { get; set; } = [];

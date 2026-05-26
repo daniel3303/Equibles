@@ -69,6 +69,9 @@ public class StockTabService
             .OrderByDescending(d => d)
             .ToListAsync();
 
+        var isCombinedAvailable =
+            reportDates.Count >= 2 && CombinedQuarterHelper.IsFilingWindowOpen(reportDates[0]);
+
         var selectedDate = date ?? reportDates.FirstOrDefault();
 
         if (selectedDate == default)
@@ -78,6 +81,7 @@ public class StockTabService
                 AvailableDates = reportDates,
                 SelectedDate = selectedDate,
                 Ticker = stock.Ticker,
+                IsCombinedAvailable = isCombinedAvailable,
             };
         }
 
@@ -166,6 +170,7 @@ public class StockTabService
             TopSellers = topSellers,
             TotalBuyerCount = HoldingsTopMoversSelector.CountBuyers(grouped),
             TotalSellerCount = HoldingsTopMoversSelector.CountSellers(grouped),
+            IsCombinedAvailable = isCombinedAvailable,
         };
     }
 
@@ -178,18 +183,23 @@ public class StockTabService
             .OrderByDescending(d => d)
             .ToListAsync();
 
-        if (reportDates.Count == 0)
+        if (reportDates.Count < 2)
         {
             return new HoldingsTabViewModel
             {
                 AvailableDates = reportDates,
                 Ticker = stock.Ticker,
                 IsCombinedView = true,
+                IsCombinedAvailable = false,
             };
         }
 
+        var current = reportDates[0];
+        var previous = reportDates[1];
+
         var allCombined = await _institutionalHoldingRepository
-            .GetLatestByStock(stock)
+            .GetCombinedQuarter(current, previous)
+            .Where(h => h.CommonStockId == stock.Id)
             .Include(h => h.InstitutionalHolder)
             .ToListAsync();
 
@@ -233,6 +243,7 @@ public class StockTabService
         return new HoldingsTabViewModel
         {
             AvailableDates = reportDates,
+            SelectedDate = current,
             Ticker = stock.Ticker,
             TotalValue = allCombined.Sum(h => h.Value),
             TotalShares = allCombined.Sum(h => h.Shares),
@@ -241,6 +252,7 @@ public class StockTabService
             GroupedHolders = grouped,
             BucketCounts = grouped.ToDictionary(g => g.Key, g => g.Value.Count),
             IsCombinedView = true,
+            IsCombinedAvailable = true,
         };
     }
 

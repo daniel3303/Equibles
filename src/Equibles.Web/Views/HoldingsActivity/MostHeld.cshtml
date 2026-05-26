@@ -26,10 +26,22 @@
         <div class="flex flex-wrap items-center gap-x-5 gap-y-2 mb-1">
             <div class="flex items-center gap-2 shrink-0">
                 <label for="most-held-date" class="text-base-content/60 whitespace-nowrap">Report Date:</label>
+                @{
+                    var mostHeldDateParam = Model.IsCombinedSelected
+                        ? "combined=true"
+                        : "date=" + Model.SelectedDate.ToString("yyyy-MM-dd");
+                }
                 <select id="most-held-date" class="select select-bordered select-sm"
-                    onchange="window.location.href='MostHeld?date=' + this.value + '&sort=@Model.Sort'">
+                    onchange="var v=this.value; window.location.href = v==='combined' ? 'MostHeld?combined=true&sort=@Model.Sort' : 'MostHeld?date=' + v + '&sort=@Model.Sort'">
+                    @if (Model.IsCombinedAvailable) {
+                        if (Model.IsCombinedSelected) {
+                            <option value="combined" selected>Current Combined</option>
+                        } else {
+                            <option value="combined">Current Combined</option>
+                        }
+                    }
                     @foreach (var date in Model.AvailableDates) {
-                        var isSelected = date == Model.SelectedDate;
+                        var isSelected = !Model.IsCombinedSelected && date == Model.SelectedDate;
                         if (isSelected) {
                             <option value="@date.ToString("yyyy-MM-dd")" selected>@date.ToString("MMM dd, yyyy")</option>
                         } else {
@@ -41,7 +53,7 @@
             <div class="flex items-center gap-2 shrink-0">
                 <label for="most-held-sort" class="text-base-content/60 whitespace-nowrap">Sort by:</label>
                 <select id="most-held-sort" class="select select-bordered select-sm"
-                    onchange="window.location.href='MostHeld?date=@Model.SelectedDate.ToString("yyyy-MM-dd")&sort=' + this.value">
+                    onchange="window.location.href='MostHeld?@(mostHeldDateParam)&sort=' + this.value">
                     <option value="@HoldingsMostHeldViewModel.SortFilers" selected="@(Model.Sort == HoldingsMostHeldViewModel.SortFilers)"># Filers</option>
                     <option value="@HoldingsMostHeldViewModel.SortFilersDelta" selected="@(Model.Sort == HoldingsMostHeldViewModel.SortFilersDelta)">Δ Filers (QoQ)</option>
                     <option value="@HoldingsMostHeldViewModel.SortValue" selected="@(Model.Sort == HoldingsMostHeldViewModel.SortValue)">Total $ Value</option>

@@ -24,7 +24,7 @@ public class HoldingsActivityController : BaseController
     }
 
     [HttpGet("~/holdings/activity")]
-    public async Task<IActionResult> Activity(DateOnly? date)
+    public async Task<IActionResult> Activity(DateOnly? date, bool combined = false)
     {
         var reportDates = await LoadAvailableReportDates();
 
@@ -32,18 +32,34 @@ public class HoldingsActivityController : BaseController
         if (reportDates.Count == 0)
             return View(viewModel);
 
-        var (selectedDate, previousDate) = ResolveSelectedAndPriorDate(date, reportDates);
-        viewModel.SelectedDate = selectedDate;
-        viewModel.PreviousDate = previousDate;
-        if (!previousDate.HasValue)
+        var isCombinedAvailable =
+            reportDates.Count >= 2 && CombinedQuarterHelper.IsFilingWindowOpen(reportDates[0]);
+        viewModel.IsCombinedAvailable = isCombinedAvailable;
+
+        if (combined && isCombinedAvailable)
+        {
+            viewModel.IsCombinedSelected = true;
+            viewModel.SelectedDate = reportDates[0];
+            viewModel.PreviousDate = reportDates[1];
+        }
+        else
+        {
+            var (sel, prev) = ResolveSelectedAndPriorDate(date, reportDates);
+            viewModel.SelectedDate = sel;
+            viewModel.PreviousDate = prev;
+        }
+
+        if (!viewModel.PreviousDate.HasValue)
             return View(viewModel);
 
-        // Pull the top N stocks by absolute Δ value in each direction. The cap is
-        // applied server-side so the controller never materializes the full per-stock
-        // aggregation for the whole universe.
-        var movers = _holdingRepository
-            .GetQuarterlyActivity(selectedDate, previousDate.Value)
-            .Where(a => a.CurrentShares != a.PreviousShares);
+        var selectedDate = viewModel.SelectedDate;
+        var previousDate = viewModel.PreviousDate.Value;
+
+        var movers = (
+            viewModel.IsCombinedSelected
+                ? _holdingRepository.GetQuarterlyActivityCombined(selectedDate, previousDate)
+                : _holdingRepository.GetQuarterlyActivity(selectedDate, previousDate)
+        ).Where(a => a.CurrentShares != a.PreviousShares);
 
         var topBuysAgg = await movers
             .Where(a => a.CurrentShares > a.PreviousShares)
@@ -56,13 +72,9 @@ public class HoldingsActivityController : BaseController
             .Take(HoldingsActivityViewModel.RowCap)
             .ToListAsync();
 
-        // New / Sold-out per-stock churn — runs as a separate aggregation because the
-        // set-difference of (stock, holder) pairs across quarters can't live inside the
-        // same GROUP BY as the share/value totals.
-        var churn = _holdingRepository.GetQuarterlyNewSoldOutPositions(
-            selectedDate,
-            previousDate.Value
-        );
+        var churn = viewModel.IsCombinedSelected
+            ? _holdingRepository.GetQuarterlyNewSoldOutPositionsCombined(selectedDate, previousDate)
+            : _holdingRepository.GetQuarterlyNewSoldOutPositions(selectedDate, previousDate);
         var newPositionsAgg = await churn
             .Where(c => c.NewFilerCount > 0)
             .OrderByDescending(c => c.NewFilerCount)
@@ -128,7 +140,12 @@ public class HoldingsActivityController : BaseController
     }
 
     [HttpGet("~/holdings/double-down")]
-    public async Task<IActionResult> DoubleDown(DateOnly? date, double? minPct, int page = 1)
+    public async Task<IActionResult> DoubleDown(
+        DateOnly? date,
+        double? minPct,
+        int page = 1,
+        bool combined = false
+    )
     {
         var reportDates = await LoadAvailableReportDates();
 
@@ -144,17 +161,37 @@ public class HoldingsActivityController : BaseController
         if (reportDates.Count < 2)
             return View(viewModel);
 
-        var (selectedDate, previousDate) = ResolveSelectedAndPriorDate(date, reportDates);
-        viewModel.SelectedDate = selectedDate;
-        viewModel.PreviousDate = previousDate;
-        if (!previousDate.HasValue)
+        var isCombinedAvailable = CombinedQuarterHelper.IsFilingWindowOpen(reportDates[0]);
+        viewModel.IsCombinedAvailable = isCombinedAvailable;
+
+        if (combined && isCombinedAvailable)
+        {
+            viewModel.IsCombinedSelected = true;
+            viewModel.SelectedDate = reportDates[0];
+            viewModel.PreviousDate = reportDates[1];
+        }
+        else
+        {
+            var (sel, prev) = ResolveSelectedAndPriorDate(date, reportDates);
+            viewModel.SelectedDate = sel;
+            viewModel.PreviousDate = prev;
+        }
+
+        if (!viewModel.PreviousDate.HasValue)
             return View(viewModel);
 
-        var query = _holdingRepository
-            .GetDoubleDownPositions(selectedDate, previousDate.Value, threshold)
-            .OrderByDescending(p =>
-                (double)(p.CurrentShares - p.PreviousShares) / p.PreviousShares
-            );
+        var selectedDate = viewModel.SelectedDate;
+        var previousDate = viewModel.PreviousDate.Value;
+
+        var query = (
+            viewModel.IsCombinedSelected
+                ? _holdingRepository.GetDoubleDownPositionsCombined(
+                    selectedDate,
+                    previousDate,
+                    threshold
+                )
+                : _holdingRepository.GetDoubleDownPositions(selectedDate, previousDate, threshold)
+        ).OrderByDescending(p => (double)(p.CurrentShares - p.PreviousShares) / p.PreviousShares);
 
         viewModel.TotalCount = await query.CountAsync();
         var skip = (viewModel.Page - 1) * DoubleDownViewModel.PageSize;
@@ -190,7 +227,12 @@ public class HoldingsActivityController : BaseController
     }
 
     [HttpGet("~/Holdings/MostHeld")]
-    public async Task<IActionResult> MostHeld(DateOnly? date, string sort, int page = 1)
+    public async Task<IActionResult> MostHeld(
+        DateOnly? date,
+        string sort,
+        int page = 1,
+        bool combined = false
+    )
     {
         var reportDates = await LoadAvailableReportDates();
 
@@ -209,20 +251,36 @@ public class HoldingsActivityController : BaseController
         if (reportDates.Count == 0)
             return View(viewModel);
 
-        var (selectedDate, previousDate) = ResolveSelectedAndPriorDate(date, reportDates);
-        viewModel.SelectedDate = selectedDate;
-        viewModel.PreviousDate = previousDate;
+        var isCombinedAvailable =
+            reportDates.Count >= 2 && CombinedQuarterHelper.IsFilingWindowOpen(reportDates[0]);
+        viewModel.IsCombinedAvailable = isCombinedAvailable;
 
-        // GetMostHeld needs both args; when no prior quarter exists we pass the
-        // same date — the previous-side columns end up mirroring current, and the
-        // view renders delta cells as "—" because PreviousDate is null.
-        var priorForRepo = previousDate ?? selectedDate;
-        var rankingQuery = _holdingRepository.GetMostHeld(selectedDate, priorForRepo);
+        if (combined && isCombinedAvailable)
+        {
+            viewModel.IsCombinedSelected = true;
+            viewModel.SelectedDate = reportDates[0];
+            viewModel.PreviousDate = reportDates[1];
+        }
+        else
+        {
+            var (sel, prev) = ResolveSelectedAndPriorDate(date, reportDates);
+            viewModel.SelectedDate = sel;
+            viewModel.PreviousDate = prev;
+        }
+
+        var selectedDate = viewModel.SelectedDate;
+        var priorForRepo = viewModel.PreviousDate ?? selectedDate;
+
+        var rankingQuery = viewModel.IsCombinedSelected
+            ? _holdingRepository.GetMostHeldCombined(selectedDate, priorForRepo)
+            : _holdingRepository.GetMostHeld(selectedDate, priorForRepo);
 
         viewModel.TotalRows = await rankingQuery.CountAsync();
-        viewModel.TotalUniverseFilers = await _holdingRepository
-            .GetUniqueFilerIds(selectedDate)
-            .CountAsync();
+        viewModel.TotalUniverseFilers = viewModel.IsCombinedSelected
+            ? await _holdingRepository
+                .GetUniqueFilerIdsCombined(selectedDate, priorForRepo)
+                .CountAsync()
+            : await _holdingRepository.GetUniqueFilerIds(selectedDate).CountAsync();
         var skip = (viewModel.Page - 1) * HoldingsMostHeldViewModel.PageSize;
 
         var orderedQuery = normalizedSort switch
@@ -304,7 +362,7 @@ public class HoldingsActivityController : BaseController
     }
 
     [HttpGet("~/holdings/heatmap")]
-    public async Task<IActionResult> HeatMap(DateOnly? date)
+    public async Task<IActionResult> HeatMap(DateOnly? date, bool combined = false)
     {
         var reportDates = await LoadAvailableReportDates();
 
@@ -312,24 +370,52 @@ public class HoldingsActivityController : BaseController
         if (reportDates.Count < 2)
             return View(viewModel);
 
-        var (selectedDate, previousDate) = ResolveSelectedAndPriorDate(date, reportDates);
-        viewModel.SelectedDate = selectedDate;
-        viewModel.PreviousDate = previousDate;
-        if (!previousDate.HasValue)
+        var isCombinedAvailable = CombinedQuarterHelper.IsFilingWindowOpen(reportDates[0]);
+        viewModel.IsCombinedAvailable = isCombinedAvailable;
+
+        if (combined && isCombinedAvailable)
+        {
+            viewModel.IsCombinedSelected = true;
+            viewModel.SelectedDate = reportDates[0];
+            viewModel.PreviousDate = reportDates[1];
+        }
+        else
+        {
+            var (sel, prev) = ResolveSelectedAndPriorDate(date, reportDates);
+            viewModel.SelectedDate = sel;
+            viewModel.PreviousDate = prev;
+        }
+
+        if (!viewModel.PreviousDate.HasValue)
             return View(viewModel);
 
-        var totalFilers = await _holdingRepository.GetUniqueFilerIds(selectedDate).CountAsync();
+        var selectedDate = viewModel.SelectedDate;
+        var previousDate = viewModel.PreviousDate.Value;
+
+        var totalFilers = viewModel.IsCombinedSelected
+            ? await _holdingRepository
+                .GetUniqueFilerIdsCombined(selectedDate, previousDate)
+                .CountAsync()
+            : await _holdingRepository.GetUniqueFilerIds(selectedDate).CountAsync();
         viewModel.TotalUniverseFilers = totalFilers;
 
-        var activity = await _holdingRepository
-            .GetQuarterlyActivity(selectedDate, previousDate.Value)
+        var activity = await (
+            viewModel.IsCombinedSelected
+                ? _holdingRepository.GetQuarterlyActivityCombined(selectedDate, previousDate)
+                : _holdingRepository.GetQuarterlyActivity(selectedDate, previousDate)
+        )
             .Where(a => a.CurrentFilerCount >= 3)
             .ToListAsync();
 
         var churnLookup = (
-            await _holdingRepository
-                .GetQuarterlyNewSoldOutPositions(selectedDate, previousDate.Value)
-                .ToListAsync()
+            await (
+                viewModel.IsCombinedSelected
+                    ? _holdingRepository.GetQuarterlyNewSoldOutPositionsCombined(
+                        selectedDate,
+                        previousDate
+                    )
+                    : _holdingRepository.GetQuarterlyNewSoldOutPositions(selectedDate, previousDate)
+            ).ToListAsync()
         ).ToDictionary(c => c.CommonStockId);
 
         var stockIds = activity.Select(a => a.CommonStockId).ToList();

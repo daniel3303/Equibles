@@ -24,9 +24,16 @@
             <div class="flex items-center gap-2 shrink-0">
                 <label for="activity-date" class="text-base-content/60 whitespace-nowrap">Report Date:</label>
                 <select id="activity-date" class="select select-bordered select-sm"
-                    onchange="window.location.href='Activity?date=' + this.value">
+                    onchange="var v=this.value; window.location.href = v==='combined' ? 'Activity?combined=true' : 'Activity?date=' + v">
+                    @if (Model.IsCombinedAvailable) {
+                        if (Model.IsCombinedSelected) {
+                            <option value="combined" selected>Current Combined</option>
+                        } else {
+                            <option value="combined">Current Combined</option>
+                        }
+                    }
                     @foreach (var date in Model.AvailableDates) {
-                        var isSelected = date == Model.SelectedDate;
+                        var isSelected = !Model.IsCombinedSelected && date == Model.SelectedDate;
                         if (isSelected) {
                             <option value="@date.ToString("yyyy-MM-dd")" selected>@date.ToString("MMM dd, yyyy")</option>
                         } else {

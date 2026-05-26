@@ -5,6 +5,8 @@ public class HoldingsActivityViewModel
     public List<DateOnly> AvailableDates { get; set; } = [];
     public DateOnly SelectedDate { get; set; }
     public DateOnly? PreviousDate { get; set; }
+    public bool IsCombinedAvailable { get; set; }
+    public bool IsCombinedSelected { get; set; }
 
     public List<HoldingsActivityRow> TopBuys { get; set; } = [];
     public List<HoldingsActivityRow> TopSells { get; set; } = [];
