@@ -507,4 +507,243 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .GroupBy(h => h.InstitutionalHolderId)
             .Select(g => new KeyValuePair<Guid, DateOnly>(g.Key, g.Min(h => h.ReportDate)));
     }
+
+    // "Current combined" quarter: best-available holdings per holder. Uses current-
+    // quarter data for holders who already filed, falls back to the previous quarter
+    // for holders who haven't. The NOT EXISTS subquery identifies non-filers.
+    public IQueryable<InstitutionalHolding> GetCombinedQuarter(DateOnly current, DateOnly previous)
+    {
+        return GetAll()
+            .Where(h =>
+                h.ReportDate == current
+                || (
+                    h.ReportDate == previous
+                    && !DbContext
+                        .Set<InstitutionalHolding>()
+                        .Any(c =>
+                            c.ReportDate == current
+                            && c.InstitutionalHolderId == h.InstitutionalHolderId
+                        )
+                )
+            );
+    }
+
+    // Combined-quarter variant of GetQuarterlyActivity. The "current" side aggregates
+    // the combined view (current filers + previous-quarter fallback for non-filers).
+    // The "previous" side uses the actual previous quarter for delta comparison. For
+    // non-filers the combined shares equal their previous shares, so the delta is zero.
+    public IQueryable<MarketWideStockActivity> GetQuarterlyActivityCombined(
+        DateOnly current,
+        DateOnly previous
+    )
+    {
+        return GetAll()
+            .Where(h => h.ReportDate == current || h.ReportDate == previous)
+            .GroupBy(h => h.CommonStockId)
+            .Select(g => new MarketWideStockActivity
+            {
+                CommonStockId = g.Key,
+                CurrentShares =
+                    g.Where(h =>
+                            h.ReportDate == current
+                            || (
+                                h.ReportDate == previous
+                                && !DbContext
+                                    .Set<InstitutionalHolding>()
+                                    .Any(c =>
+                                        c.ReportDate == current
+                                        && c.InstitutionalHolderId == h.InstitutionalHolderId
+                                    )
+                            )
+                        )
+                        .Sum(h => (long?)h.Shares)
+                    ?? 0L,
+                PreviousShares = g.Sum(h => h.ReportDate == previous ? h.Shares : 0L),
+                CurrentValue =
+                    g.Where(h =>
+                            h.ReportDate == current
+                            || (
+                                h.ReportDate == previous
+                                && !DbContext
+                                    .Set<InstitutionalHolding>()
+                                    .Any(c =>
+                                        c.ReportDate == current
+                                        && c.InstitutionalHolderId == h.InstitutionalHolderId
+                                    )
+                            )
+                        )
+                        .Sum(h => (long?)h.Value)
+                    ?? 0L,
+                PreviousValue = g.Sum(h => h.ReportDate == previous ? h.Value : 0L),
+                CurrentFilerCount = g.Where(h =>
+                        h.ReportDate == current
+                        || (
+                            h.ReportDate == previous
+                            && !DbContext
+                                .Set<InstitutionalHolding>()
+                                .Any(c =>
+                                    c.ReportDate == current
+                                    && c.InstitutionalHolderId == h.InstitutionalHolderId
+                                )
+                        )
+                    )
+                    .Select(h => h.InstitutionalHolderId)
+                    .Distinct()
+                    .Count(),
+                PreviousFilerCount = g.Where(h => h.ReportDate == previous)
+                    .Select(h => h.InstitutionalHolderId)
+                    .Distinct()
+                    .Count(),
+            });
+    }
+
+    public IQueryable<MarketWideStockActivity> GetMostHeldCombined(
+        DateOnly current,
+        DateOnly previous
+    ) => GetQuarterlyActivityCombined(current, previous).Where(a => a.CurrentFilerCount > 0);
+
+    public IQueryable<Guid> GetUniqueFilerIdsCombined(DateOnly current, DateOnly previous)
+    {
+        return GetCombinedQuarter(current, previous)
+            .Select(h => h.InstitutionalHolderId)
+            .Distinct();
+    }
+
+    // Combined-quarter variant of churn detection. "New" = holder appears in the
+    // combined view but not in the previous quarter. "Sold-out" = holder appears in
+    // the previous quarter but not in the combined view.
+    public IQueryable<MarketWideStockChurn> GetQuarterlyNewSoldOutPositionsCombined(
+        DateOnly current,
+        DateOnly previous
+    )
+    {
+        return GetAll()
+            .Where(h => h.ReportDate == current || h.ReportDate == previous)
+            .GroupBy(h => h.CommonStockId)
+            .Select(g => new MarketWideStockChurn
+            {
+                CommonStockId = g.Key,
+                // New: in current quarter and not in previous (only actual current-quarter filers
+                // can introduce genuinely new positions).
+                NewFilerCount = g.Where(h =>
+                        h.ReportDate == current
+                        && !DbContext
+                            .Set<InstitutionalHolding>()
+                            .Any(p =>
+                                p.ReportDate == previous
+                                && p.CommonStockId == h.CommonStockId
+                                && p.InstitutionalHolderId == h.InstitutionalHolderId
+                            )
+                    )
+                    .Select(h => h.InstitutionalHolderId)
+                    .Distinct()
+                    .Count(),
+                // Sold-out: in previous and not in the combined view. A holder counts as
+                // sold-out only if they filed the current quarter (proving they dropped
+                // the position). Non-filers are assumed to still hold.
+                SoldOutFilerCount = g.Where(h =>
+                        h.ReportDate == previous
+                        && DbContext
+                            .Set<InstitutionalHolding>()
+                            .Any(c =>
+                                c.ReportDate == current
+                                && c.InstitutionalHolderId == h.InstitutionalHolderId
+                            )
+                        && !DbContext
+                            .Set<InstitutionalHolding>()
+                            .Any(c =>
+                                c.ReportDate == current
+                                && c.CommonStockId == h.CommonStockId
+                                && c.InstitutionalHolderId == h.InstitutionalHolderId
+                            )
+                    )
+                    .Select(h => h.InstitutionalHolderId)
+                    .Distinct()
+                    .Count(),
+            });
+    }
+
+    public IQueryable<DoubleDownPosition> GetDoubleDownPositionsCombined(
+        DateOnly current,
+        DateOnly previous,
+        double minPctIncrease
+    )
+    {
+        var aggregated = GetAll()
+            .Where(h => h.ReportDate == current || h.ReportDate == previous)
+            .GroupBy(h => new { h.InstitutionalHolderId, h.CommonStockId })
+            .Select(g => new
+            {
+                g.Key.InstitutionalHolderId,
+                g.Key.CommonStockId,
+                CurrentShares = g.Where(h =>
+                        h.ReportDate == current
+                        || (
+                            h.ReportDate == previous
+                            && !DbContext
+                                .Set<InstitutionalHolding>()
+                                .Any(c =>
+                                    c.ReportDate == current
+                                    && c.InstitutionalHolderId == h.InstitutionalHolderId
+                                )
+                        )
+                    )
+                    .Sum(h => (long?)h.Shares)
+                    ?? 0L,
+                PreviousShares = g.Sum(h => h.ReportDate == previous ? h.Shares : 0L),
+                CurrentValue = g.Where(h =>
+                        h.ReportDate == current
+                        || (
+                            h.ReportDate == previous
+                            && !DbContext
+                                .Set<InstitutionalHolding>()
+                                .Any(c =>
+                                    c.ReportDate == current
+                                    && c.InstitutionalHolderId == h.InstitutionalHolderId
+                                )
+                        )
+                    )
+                    .Sum(h => (long?)h.Value)
+                    ?? 0L,
+                PreviousValue = g.Sum(h => h.ReportDate == previous ? h.Value : 0L),
+            })
+            .Where(a => a.PreviousShares > 0 && a.CurrentShares > a.PreviousShares)
+            .Where(a =>
+                (double)(a.CurrentShares - a.PreviousShares) / a.PreviousShares * 100.0
+                >= minPctIncrease
+            );
+
+        return aggregated
+            .Join(
+                DbContext.Set<InstitutionalHolder>(),
+                a => a.InstitutionalHolderId,
+                h => h.Id,
+                (a, h) =>
+                    new
+                    {
+                        a,
+                        FilerName = h.Name,
+                        FilerCik = h.Cik,
+                    }
+            )
+            .Join(
+                DbContext.Set<CommonStock>(),
+                x => x.a.CommonStockId,
+                s => s.Id,
+                (x, s) =>
+                    new DoubleDownPosition
+                    {
+                        InstitutionalHolderId = x.a.InstitutionalHolderId,
+                        FilerName = x.FilerName,
+                        FilerCik = x.FilerCik,
+                        CommonStockId = x.a.CommonStockId,
+                        Ticker = s.Ticker,
+                        StockName = s.Name,
+                        CurrentShares = x.a.CurrentShares,
+                        PreviousShares = x.a.PreviousShares,
+                        CurrentValue = x.a.CurrentValue,
+                        PreviousValue = x.a.PreviousValue,
+                    }
+            );
+    }
 }

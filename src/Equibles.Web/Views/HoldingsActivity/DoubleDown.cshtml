@@ -6,7 +6,9 @@
     ViewData["Description"] = "Institutional holders aggressively adding to positions — ranked by conviction (% share increase).";
 
     var filterRoute = new Dictionary<string, string>();
-    if (Model.SelectedDate != default) {
+    if (Model.IsCombinedSelected) {
+        filterRoute["combined"] = "true";
+    } else if (Model.SelectedDate != default) {
         filterRoute["date"] = Model.SelectedDate.ToString("yyyy-MM-dd");
     }
     if (Math.Abs(Model.MinPctIncrease - DoubleDownViewModel.DefaultMinPct) > 0.01) {
@@ -36,12 +38,21 @@
     } else {
         <!-- Controls -->
         <form method="get" class="mb-6">
+            <input type="hidden" name="combined" id="dd-combined-flag" value="@(Model.IsCombinedSelected ? "true" : "")" />
             <div class="flex flex-wrap gap-3 items-end">
                 <label class="form-control">
                     <span class="label-text text-sm mb-1">Report Date</span>
-                    <select name="date" class="select select-bordered" aria-label="Report date">
+                    <select name="date" id="dd-date-select" class="select select-bordered" aria-label="Report date"
+                        onchange="document.getElementById('dd-combined-flag').value = this.value==='combined' ? 'true' : ''; if(this.value==='combined') this.name=''; else this.name='date';">
+                        @if (Model.IsCombinedAvailable) {
+                            if (Model.IsCombinedSelected) {
+                                <option value="combined" selected>Current Combined</option>
+                            } else {
+                                <option value="combined">Current Combined</option>
+                            }
+                        }
                         @foreach (var d in Model.AvailableDates) {
-                            var isSelected = d == Model.SelectedDate;
+                            var isSelected = !Model.IsCombinedSelected && d == Model.SelectedDate;
                             if (isSelected) {
                                 <option value="@d.ToString("yyyy-MM-dd")" selected>@d.ToString("MMM dd, yyyy")</option>
                             } else {

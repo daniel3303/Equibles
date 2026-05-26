@@ -10,9 +10,9 @@ public class HoldingsMostHeldViewModel
     public List<DateOnly> AvailableDates { get; set; } = [];
     public DateOnly SelectedDate { get; set; }
     public DateOnly? PreviousDate { get; set; }
+    public bool IsCombinedAvailable { get; set; }
+    public bool IsCombinedSelected { get; set; }
 
-    // Distinct filer count for SelectedDate — denominator for each row's
-    // PercentOfUniverse. Zero when no quarter is selected.
     public int TotalUniverseFilers { get; set; }
 
     // One of SortFilers / SortFilersDelta / SortValue. Normalised by the
