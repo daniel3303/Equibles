@@ -12,8 +12,8 @@ public static class StatisticsExtensions
     {
         if (
             !double.IsFinite(value)
-            || value > (double)decimal.MaxValue
-            || value < (double)decimal.MinValue
+            || value >= (double)decimal.MaxValue
+            || value <= (double)decimal.MinValue
         )
             return null;
         return (decimal?)Math.Round(value, digits);
