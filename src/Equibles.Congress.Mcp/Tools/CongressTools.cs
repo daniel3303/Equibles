@@ -62,7 +62,7 @@ public class CongressTools
                     ticker.Trim().ToUpperInvariant()
                 );
                 if (stock == null)
-                    return $"Stock '{ticker}' not found.";
+                    return McpToolExecutor.StockNotFound(ticker);
 
                 var start = McpToolExecutor.ParseDateOr(
                     startDate,

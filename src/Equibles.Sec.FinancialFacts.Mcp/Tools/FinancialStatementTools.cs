@@ -76,7 +76,7 @@ public class FinancialStatementTools
                     ticker.Trim().ToUpperInvariant()
                 );
                 if (stock == null)
-                    return $"Stock '{ticker}' not found.";
+                    return McpToolExecutor.StockNotFound(ticker);
 
                 if (!TryParseStatement(statement, out var statementType))
                     return $"Unknown statement '{statement}'. Use 'income', 'balance', or 'cashflow'.";

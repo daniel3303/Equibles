@@ -1291,7 +1291,7 @@ public class InstitutionalHoldingsTools
     {
         var stock = await _commonStockRepository.GetByTicker(ticker);
         if (stock == null)
-            return (null, $"Stock '{ticker}' not found.");
+            return (null, McpToolExecutor.StockNotFound(ticker));
         return (stock, null);
     }
 

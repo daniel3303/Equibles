@@ -243,7 +243,7 @@ public class ShortDataTools
     {
         var stock = await _commonStockRepository.GetByTicker(ticker.Trim().ToUpperInvariant());
         if (stock == null)
-            return (null, $"Stock '{ticker}' not found.");
+            return (null, McpToolExecutor.StockNotFound(ticker));
         return (stock, null);
     }
 }
