@@ -10,7 +10,7 @@ namespace Equibles.UnitTests.Web;
 /// </summary>
 public class StatisticsExtensionsSafeRoundDecimalMaxValueBoundaryTests
 {
-    [Fact(Skip = "GH-2108 — strict > guard misses (double)decimal.MaxValue boundary")]
+    [Fact]
     public void SafeRound_DoubleDecimalMaxValue_ReturnsNullInsteadOfThrowing()
     {
         var value = (double)decimal.MaxValue;
