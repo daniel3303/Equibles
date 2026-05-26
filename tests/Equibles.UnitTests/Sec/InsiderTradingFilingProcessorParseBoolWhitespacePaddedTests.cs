@@ -21,7 +21,7 @@ public class InsiderTradingFilingProcessorParseBoolWhitespacePaddedTests
 
     private static bool ParseBool(string value) => (bool)ParseBoolMethod.Invoke(null, [value]);
 
-    [Fact(Skip = "GH-2106 — ParseBool exact-match drops whitespace-padded truthy values")]
+    [Fact]
     public void ParseBool_WhitespacePaddedOne_ReturnsTrue()
     {
         var result = ParseBool(" 1 ");
