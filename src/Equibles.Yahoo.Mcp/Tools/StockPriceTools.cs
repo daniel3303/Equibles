@@ -55,7 +55,7 @@ public class StockPriceTools
             {
                 var stock = await FindStockByTicker(ticker);
                 if (stock == null)
-                    return $"Stock '{ticker}' not found.";
+                    return McpToolExecutor.StockNotFound(ticker);
 
                 var start = McpToolExecutor.ParseDateOr(
                     startDate,
@@ -353,7 +353,7 @@ public class StockPriceTools
     {
         var stock = await FindStockByTicker(ticker);
         if (stock == null)
-            return (null, null, $"Stock '{ticker}' not found.");
+            return (null, null, McpToolExecutor.StockNotFound(ticker));
 
         var start = McpToolExecutor.ParseDateOr(
             startDate,

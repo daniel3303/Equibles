@@ -87,7 +87,7 @@ public class FinancialFactsTools
                     ticker.Trim().ToUpperInvariant()
                 );
                 if (stock == null)
-                    return $"Stock '{ticker}' not found.";
+                    return McpToolExecutor.StockNotFound(ticker);
 
                 if (!FinancialConceptAliases.TryResolve(concept, out var conceptRefs))
                     return $"Unknown concept '{concept}'. {SupportedAliasesNote()}";

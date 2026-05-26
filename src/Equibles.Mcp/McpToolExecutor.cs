@@ -7,6 +7,8 @@ public static class McpToolExecutor
     public static DateOnly ParseDateOr(string text, DateOnly fallback) =>
         !string.IsNullOrEmpty(text) && DateOnly.TryParse(text, out var parsed) ? parsed : fallback;
 
+    public static string StockNotFound(string ticker) => $"Stock '{ticker}' not found.";
+
     public static async Task<string> Execute(
         Func<Task<string>> action,
         ILogger logger,
