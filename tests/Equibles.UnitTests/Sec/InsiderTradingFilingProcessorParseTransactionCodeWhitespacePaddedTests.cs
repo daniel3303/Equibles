@@ -32,9 +32,7 @@ public class InsiderTradingFilingProcessorParseTransactionCodeWhitespacePaddedTe
     private static TransactionCode ParseTransactionCode(string code) =>
         (TransactionCode)ParseTransactionCodeMethod.Invoke(null, [code]);
 
-    [Fact(
-        Skip = "GH-2120 — ParseTransactionCode exact-match misclassifies whitespace-padded codes as Other"
-    )]
+    [Fact]
     public void ParseTransactionCode_WhitespacePaddedCode_ResolvesToCorrespondingCode()
     {
         var result = ParseTransactionCode(" P ");
