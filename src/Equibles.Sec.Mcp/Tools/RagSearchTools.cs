@@ -16,7 +16,7 @@ namespace Equibles.Sec.Mcp.Tools;
 public class RagSearchTools
 {
     private const string DocumentTypeDescription =
-        "Document type filter. Allowed values: 'TenK', 'TenQ', 'EightK', 'TenKa', 'TenQa', 'EightKa', 'TwentyF', 'SixK', 'FortyF', 'EarningsCallTranscript'";
+        "Document type filter. Allowed values: 'TenK', 'TenQ', 'EightK', 'TenKa', 'TenQa', 'EightKa', 'TwentyF', 'SixK', 'FortyF'";
 
     private readonly IRagManager _ragManager;
     private readonly ISecDocumentService _secDocumentService;
