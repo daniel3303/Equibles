@@ -222,15 +222,45 @@ public partial class HouseDisclosureClient
 
     private List<DisclosureTransaction> ParseTransactionLines(string[] lines, HouseFiling filing)
     {
+        var joined = JoinMultiLineEntries(lines);
         var transactions = new List<DisclosureTransaction>();
 
-        foreach (var line in lines)
+        foreach (var line in joined)
         {
             if (TryParseTransactionLine(line, filing, out var transaction))
                 transactions.Add(transaction);
         }
 
         return transactions;
+    }
+
+    // House PTR PDFs often split a single transaction across multiple text
+    // lines (e.g. asset name on line 1, ticker + dates on line 2, amount on
+    // line 3). Each real entry starts with an owner code (SP/JT/DC/Self);
+    // subsequent lines that lack an owner code are continuations.
+    internal static List<string> JoinMultiLineEntries(string[] lines)
+    {
+        var result = new List<string>();
+        string current = null;
+
+        foreach (var line in lines)
+        {
+            if (OwnerCodeRegex().IsMatch(line))
+            {
+                if (current != null)
+                    result.Add(current);
+                current = line;
+            }
+            else if (current != null)
+            {
+                current = current + " " + line;
+            }
+        }
+
+        if (current != null)
+            result.Add(current);
+
+        return result;
     }
 
     private bool TryParseTransactionLine(
