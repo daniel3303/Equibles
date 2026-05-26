@@ -100,18 +100,10 @@ public class ShortVolumeImportService
 
             var aggregated = AggregateVolumesByStock(records, tickerMap, date);
 
-            var totalInserted = await BatchPersister.Persist(
-                aggregated.Values,
-                InsertBatchSize,
-                async batch =>
-                {
-                    using var scope = _scopeFactory.CreateScope();
-                    var repo =
-                        scope.ServiceProvider.GetRequiredService<DailyShortVolumeRepository>();
-                    repo.AddRange(batch);
-                    await repo.SaveChanges();
-                }
-            );
+            var totalInserted = await BatchPersister.Persist<
+                DailyShortVolume,
+                DailyShortVolumeRepository
+            >(aggregated.Values, InsertBatchSize, _scopeFactory);
 
             _logger.LogInformation(
                 "Imported {Count} short volume records for {Date}",

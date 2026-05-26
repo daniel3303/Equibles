@@ -1,7 +1,6 @@
 using Equibles.Cboe.Data.Models;
 using Equibles.Cboe.Repositories;
 using Equibles.Core.AutoWiring;
-using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Cboe.Contracts;
@@ -118,7 +117,10 @@ public class CboeImportService
             return;
         }
 
-        var totalInserted = await BatchPersister.Persist(
+        var totalInserted = await BatchPersister.Persist<
+            CboePutCallRatio,
+            CboePutCallRatioRepository
+        >(
             newRecords.Select(r => new CboePutCallRatio
             {
                 RatioType = ratioType,
@@ -129,7 +131,7 @@ public class CboeImportService
                 PutCallRatio = r.PutCallRatio,
             }),
             InsertBatchSize,
-            FlushBatch<CboePutCallRatio, CboePutCallRatioRepository>
+            _scopeFactory
         );
 
         _logger.LogInformation(
@@ -168,7 +170,7 @@ public class CboeImportService
                 return;
             }
 
-            var totalInserted = await BatchPersister.Persist(
+            var totalInserted = await BatchPersister.Persist<CboeVixDaily, CboeVixDailyRepository>(
                 newRecords.Select(r => new CboeVixDaily
                 {
                     Date = r.Date,
@@ -178,7 +180,7 @@ public class CboeImportService
                     Close = r.Close,
                 }),
                 InsertBatchSize,
-                FlushBatch<CboeVixDaily, CboeVixDailyRepository>
+                _scopeFactory
             );
 
             _logger.LogInformation("CBOE VIX: imported {Count} new daily records", totalInserted);
@@ -197,15 +199,5 @@ public class CboeImportService
                 ex.StackTrace
             );
         }
-    }
-
-    private async Task FlushBatch<TEntity, TRepository>(List<TEntity> items)
-        where TEntity : class
-        where TRepository : BaseRepository<TEntity>
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<TRepository>();
-        repo.AddRange(items);
-        await repo.SaveChanges();
     }
 }

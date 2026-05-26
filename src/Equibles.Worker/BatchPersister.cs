@@ -1,3 +1,6 @@
+using Equibles.Data;
+using Microsoft.Extensions.DependencyInjection;
+
 namespace Equibles.Worker;
 
 public static class BatchPersister
@@ -30,5 +33,26 @@ public static class BatchPersister
         }
 
         return totalInserted;
+    }
+
+    public static Task<int> Persist<TEntity, TRepository>(
+        IEnumerable<TEntity> items,
+        int batchSize,
+        IServiceScopeFactory scopeFactory
+    )
+        where TEntity : class
+        where TRepository : BaseRepository<TEntity>
+    {
+        return Persist(
+            items,
+            batchSize,
+            async batch =>
+            {
+                using var scope = scopeFactory.CreateScope();
+                var repo = scope.ServiceProvider.GetRequiredService<TRepository>();
+                repo.AddRange(batch);
+                await repo.SaveChanges();
+            }
+        );
     }
 }
