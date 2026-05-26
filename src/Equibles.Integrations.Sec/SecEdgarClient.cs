@@ -439,10 +439,20 @@ public class SecEdgarClient : ISecEdgarClient
 
         // No index file for that day → nothing to ingest, skip it rather than
         // failing the whole real-time sweep. Weekends/holidays can 404, and SEC
-        // returns 403 (Forbidden) for not-yet-published / future-dated index
-        // files (e.g. "today" before the daily index is posted). Both mean the
-        // same thing here: there is no daily index for this date.
-        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden)
+        // returns 403 (Forbidden) for not-yet-published index files (today or a
+        // future date, before SEC posts it). Both mean "no index for this date".
+        //
+        // A 403 on a PAST date is different: that index always exists, so a
+        // Forbidden there is SEC's rate-limit throttle page surviving
+        // SendWithRetryAsync's retries — NOT a missing index. Swallowing it as
+        // empty silently drops that day's filings (this is exactly how large
+        // filers went missing during a long catch-up sweep). Let
+        // EnsureSuccessStatusCode surface it instead.
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (
+            response.StatusCode == HttpStatusCode.NotFound
+            || (response.StatusCode == HttpStatusCode.Forbidden && date >= today)
+        )
         {
             _logger.LogInformation("No daily index published for {Date:yyyy-MM-dd}", date);
             return [];
@@ -619,6 +629,35 @@ public class SecEdgarClient : ISecEdgarClient
                 }
             }
 
+            // SEC serves its "Request Rate Threshold Exceeded" throttle page with
+            // a 403 (not a 429), so a burst that trips the rolling-window limit
+            // arrives as a Forbidden carrying that HTML body. Back off and retry
+            // it like a 429 — otherwise callers that read 403 as "no resource"
+            // (e.g. GetDailyIndex) silently discard real data. A genuine 403 (a
+            // not-yet-published index, an access-restricted path) has a different
+            // body and falls through to the caller unchanged.
+            if (response.StatusCode == HttpStatusCode.Forbidden && attempt < MaxRetries)
+            {
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                if (IsRateLimitThresholdPage(body))
+                {
+                    var delay = GetRetryDelay(response, attempt);
+
+                    _logger.LogWarning(
+                        "SEC EDGAR throttled (403 threshold page) for {Url}, pausing for {Delay}s (attempt {Attempt}/{Max})",
+                        url,
+                        delay.TotalSeconds,
+                        attempt + 1,
+                        MaxRetries
+                    );
+
+                    RateLimiter.PauseFor(delay);
+                    response.Dispose();
+                    await Task.Delay(delay, cancellationToken);
+                    continue;
+                }
+            }
+
             if ((int)response.StatusCode >= 500 && attempt < MaxRetries)
             {
                 var delay = GetRetryDelay(response, attempt);
@@ -675,6 +714,13 @@ public class SecEdgarClient : ISecEdgarClient
     // not defects — they are retried, never recorded as dashboard errors.
     private static bool IsTransientNetworkError(HttpRequestException exception) =>
         exception.InnerException is SocketException or IOException or AuthenticationException;
+
+    // SEC's rate-limit response is an HTML page titled "Request Rate Threshold
+    // Exceeded" served with a 403 (not a 429). Detect it by body so throttling
+    // can be backed off and retried rather than mistaken for a missing resource.
+    private static bool IsRateLimitThresholdPage(string body) =>
+        !string.IsNullOrEmpty(body)
+        && body.Contains("Request Rate Threshold Exceeded", StringComparison.OrdinalIgnoreCase);
 
     private static List<CompanyInfo> ParseCompaniesFromResponse(CompanyTickersResponse response)
     {
