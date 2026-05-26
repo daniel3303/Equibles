@@ -464,7 +464,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
 
     internal static TransactionCode ParseTransactionCode(string code)
     {
-        return code?.ToUpperInvariant() switch
+        return code?.Trim().ToUpperInvariant() switch
         {
             "P" => TransactionCode.Purchase,
             "S" => TransactionCode.Sale,
