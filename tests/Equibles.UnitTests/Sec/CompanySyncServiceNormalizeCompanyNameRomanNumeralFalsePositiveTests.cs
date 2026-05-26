@@ -27,4 +27,15 @@ public class CompanySyncServiceNormalizeCompanyNameRomanNumeralFalsePositiveTest
 
         result.Should().Be("Quick Mix Corp");
     }
+
+    // LIV decomposes as L (50) + IV (4) = 54, so the Roman regex matches it
+    // even though it is a common English name/word. Covers the L/X regex group
+    // — distinct from MIX, which exercises the leading-M group.
+    [Fact]
+    public void AllCapsName_LivIsEnglishWord_NotRomanNumeral54()
+    {
+        var result = Normalize("LIV INDUSTRIES CORP");
+
+        result.Should().Be("Liv Industries Corp");
+    }
 }
