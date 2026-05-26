@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Contributor License Agreement (`CLA.md`) based on Project Harmony HA-CLA-I-ANY 1.0. Contributors must sign via CLA Assistant before pull requests can be merged. Enables Equibles to remain AGPL-3.0 while sharing code with the commercial offering.
+
 ### Changed
 
 ### Fixed
