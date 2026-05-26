@@ -158,13 +158,26 @@ public partial class Program
         // socket while the TCP listener is still down, which can release us
         // a few seconds before Postgres is reachable. Retry transient
         // connection failures; non-connection errors fail fast.
-        const int maxAttempts = 30;
-        var delay = TimeSpan.FromSeconds(2);
+        await RetryOnTransientConnectionFailure(
+            () => dbContext.Database.MigrateAsync(),
+            logger,
+            maxAttempts: 30,
+            delay: TimeSpan.FromSeconds(2)
+        );
+    }
+
+    public static async Task RetryOnTransientConnectionFailure(
+        Func<Task> operation,
+        Microsoft.Extensions.Logging.ILogger logger,
+        int maxAttempts,
+        TimeSpan delay
+    )
+    {
         for (var attempt = 1; ; attempt++)
         {
             try
             {
-                await dbContext.Database.MigrateAsync();
+                await operation();
                 return;
             }
             catch (Exception ex) when (attempt < maxAttempts && IsTransientConnectionFailure(ex))
@@ -181,7 +194,7 @@ public partial class Program
         }
     }
 
-    private static bool IsTransientConnectionFailure(Exception ex) =>
+    public static bool IsTransientConnectionFailure(Exception ex) =>
         ex switch
         {
             // TCP refused / unreachable while ParadeDB is restarting.
