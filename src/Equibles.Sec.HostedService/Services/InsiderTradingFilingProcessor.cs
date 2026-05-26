@@ -482,7 +482,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
 
     internal static bool ParseBool(string value)
     {
-        return value is "1" or "true" or "True" or "TRUE";
+        return value?.Trim() is "1" or "true" or "True" or "TRUE";
     }
 
     internal static long ParseLong(string value)
