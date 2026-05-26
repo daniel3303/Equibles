@@ -425,7 +425,7 @@ public class HoldingsActivityController : BaseController
     }
 
     private Task<List<DateOnly>> LoadAvailableReportDates() =>
-        _holdingRepository.GetAvailableReportDates().OrderByDescending(d => d).ToListAsync();
+        _holdingRepository.GetAvailableReportDates().ToListAsync();
 
     private Task<Dictionary<Guid, StockLabel>> LoadStockLabels(List<Guid> stockIds) =>
         _commonStockRepository

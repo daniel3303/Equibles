@@ -53,9 +53,10 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return GetAll().Where(h => h.InstitutionalHolderId == holder.Id);
     }
 
+    // Latest dates first — callers consistently treat index 0 as the newest filing window.
     public IQueryable<DateOnly> GetAvailableReportDates()
     {
-        return GetAll().Select(h => h.ReportDate).Distinct();
+        return GetAll().Select(h => h.ReportDate).Distinct().OrderByDescending(d => d);
     }
 
     public IQueryable<InstitutionalHolding> GetByAccessionNumber(string accessionNumber)
