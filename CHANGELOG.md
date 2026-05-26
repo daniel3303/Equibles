@@ -129,12 +129,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `PositionChangeType` member (e.g. `?types=999`) is rejected the same
   as an unrecognised name, preventing a polluted filter set from
   round-tripping into rendered toggle URLs on the holdings tab.
-- `CompanySyncService.NormalizeCompanyName` no longer treats short English
-  words like MIX, DIV, LIV, MIL, and CIV as Roman numerals. The regex still
-  matches them (MIX = 1009, DIV = 504, LIV = 54), but tokens shorter than
-  four characters must now consist only of I/V/X to be kept uppercase, so
-  "QUICK MIX CORP" titles to "Quick Mix Corp" while "FUND III" and
-  "FUND XVI LP" stay as-is.
+- `CompanySyncService.NormalizeCompanyName` no longer treats the short English
+  words MIX, DIV, LIV, and CIV as Roman numerals — they decompose as 1009,
+  504, 54, and 104 respectively but aren't numerals in a company-name context.
+  An explicit deny-list rejects exactly those four tokens, so other short
+  numerals that use L/C/D/M (XL=40, XC=90, CD=400, CM=900, XLI=41, XLV=45,
+  MII=1002) keep working alongside the pure-I/V/X cases.
 
 ## [1.1.1] — 2026-05-22
 

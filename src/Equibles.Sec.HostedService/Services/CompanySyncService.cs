@@ -576,25 +576,22 @@ public class CompanySyncService : ICompanySyncService
         RegexOptions.IgnoreCase | RegexOptions.Compiled
     );
 
-    // Short tokens that match the regex but use L/C/D/M are almost always English
-    // words (MIX=1009, DIV=504, LIV=54, MIL=1051, CIV=104) — exclude them by
-    // requiring tokens shorter than 4 characters to use only I/V/X.
-    private static bool IsRomanNumeral(string token)
+    // Three-letter English words that happen to satisfy the Roman regex
+    // (MIX=1009, DIV=504, LIV=54, CIV=104). Listing them explicitly keeps
+    // legitimate short numerals like XL (40), XC (90), CD (400), CM (900),
+    // and combos (XLI, XLV, MII) working.
+    private static readonly HashSet<string> RomanNumeralFalsePositives = new(
+        StringComparer.OrdinalIgnoreCase
+    )
     {
-        if (!RomanNumeralPattern.IsMatch(token))
-            return false;
+        "MIX",
+        "DIV",
+        "LIV",
+        "CIV",
+    };
 
-        if (token.Length >= 4)
-            return true;
-
-        foreach (var c in token)
-        {
-            var u = char.ToUpperInvariant(c);
-            if (u != 'I' && u != 'V' && u != 'X')
-                return false;
-        }
-        return true;
-    }
+    private static bool IsRomanNumeral(string token) =>
+        RomanNumeralPattern.IsMatch(token) && !RomanNumeralFalsePositives.Contains(token);
 
     private static string NormalizeCompanyName(string name)
     {
