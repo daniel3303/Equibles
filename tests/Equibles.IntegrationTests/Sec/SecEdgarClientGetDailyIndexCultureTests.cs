@@ -15,9 +15,7 @@ namespace Equibles.IntegrationTests.Sec;
 /// </summary>
 public class SecEdgarClientGetDailyIndexCultureTests
 {
-    [Fact(
-        Skip = "GH-1901 — GetDailyIndex builds URL with Hijri date on non-Gregorian culture threads"
-    )]
+    [Fact]
     public async Task GetDailyIndex_HijriCultureThread_RequestsGregorianDateInUrl()
     {
         var prev = CultureInfo.CurrentCulture;
