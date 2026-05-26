@@ -88,11 +88,9 @@
                         </tr>
                     }
                     @if (Model.Stocks.Count == 0) {
-                        <tr>
-                            <td colspan="4" class="text-center py-10 text-base-content/60">
-                                No stocks match these filters.
-                            </td>
-                        </tr>
+                        <empty-row colspan="4">
+                            No stocks match these filters.
+                        </empty-row>
                     }
                 </tbody>
             </table>
