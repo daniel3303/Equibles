@@ -176,10 +176,7 @@ public class HoldingsScreenerController : BaseController
         DateOnly? Comparison
     )> ResolveScreenerDates(DateOnly? date, DateOnly? compareDate)
     {
-        var reportDates = await _holdingRepository
-            .GetAvailableReportDates()
-            .OrderByDescending(d => d)
-            .ToListAsync();
+        var reportDates = await _holdingRepository.GetAvailableReportDates().ToListAsync();
         if (reportDates.Count < 2)
             return (reportDates, null, null);
         var selected =

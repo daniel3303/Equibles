@@ -566,11 +566,7 @@ public class InstitutionalHoldingsTools
         string Error
     )> ResolveMarketActivityDates(string reportDate)
     {
-        var reportDates = await _holdingRepository
-            .GetAvailableReportDates()
-            .Distinct()
-            .OrderByDescending(d => d)
-            .ToListAsync();
+        var reportDates = await _holdingRepository.GetAvailableReportDates().ToListAsync();
         if (reportDates.Count == 0)
             return (default, default, "No 13F holdings data available.");
 
