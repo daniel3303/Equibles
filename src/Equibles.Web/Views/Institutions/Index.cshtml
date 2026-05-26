@@ -92,15 +92,13 @@
                         </tr>
                     }
                     @if (Model.Institutions.Count == 0) {
-                        <tr>
-                            <td colspan="7" class="text-center py-10 text-base-content/60">
-                                @if (Model.LatestReportDate.HasValue) {
-                                    <span>No institutions match these filters.</span>
-                                } else {
-                                    <span>No 13F filers have been ingested yet. The Most-Held and per-institution pages light up once the worker finishes its first 13F cycle.</span>
-                                }
-                            </td>
-                        </tr>
+                        <empty-row colspan="7">
+                            @if (Model.LatestReportDate.HasValue) {
+                                <span>No institutions match these filters.</span>
+                            } else {
+                                <span>No 13F filers have been ingested yet. The Most-Held and per-institution pages light up once the worker finishes its first 13F cycle.</span>
+                            }
+                        </empty-row>
                     }
                 </tbody>
             </table>

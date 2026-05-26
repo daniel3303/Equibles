@@ -119,11 +119,9 @@
                                 </tr>
                             }
                             @if (Model.Positions.Count == 0 && Model.PreviousDate.HasValue) {
-                                <tr>
-                                    <td colspan="7" class="text-center py-10 text-base-content/60">
-                                        No positions match the @Model.MinPctIncrease.ToString("F0")%+ threshold for this quarter.
-                                    </td>
-                                </tr>
+                                <empty-row colspan="7">
+                                    No positions match the @Model.MinPctIncrease.ToString("F0")%+ threshold for this quarter.
+                                </empty-row>
                             }
                         </tbody>
                     </table>
