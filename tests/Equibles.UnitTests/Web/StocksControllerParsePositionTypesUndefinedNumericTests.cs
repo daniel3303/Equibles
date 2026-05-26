@@ -6,9 +6,7 @@ namespace Equibles.UnitTests.Web;
 
 public class StocksControllerParsePositionTypesUndefinedNumericTests
 {
-    [Fact(
-        Skip = "GH-2123 — ParsePositionTypes accepts numeric input with no matching PositionChangeType member"
-    )]
+    [Fact]
     public void ParsePositionTypes_NumericValueWithNoMatchingEnumMember_RejectsToPreventPollutedFilter()
     {
         // ParsePositionTypes binds the ?types=… query string for /stocks/{ticker}/holdings.
