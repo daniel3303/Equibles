@@ -128,38 +128,43 @@ public class HoldingsScreenerController : BaseController
 
     internal static string BuildCsv(IReadOnlyList<ScreenerRow> rows)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine(
-            "Ticker,Name,Industry,CurrentFilerCount,PreviousFilerCount,DeltaFilerCount,"
-                + "CurrentValue,PreviousValue,DeltaValue,NewFilerCount,SoldOutFilerCount,PercentOfFloat"
-        );
+        string[] headers =
+        [
+            "Ticker",
+            "Name",
+            "Industry",
+            "CurrentFilerCount",
+            "PreviousFilerCount",
+            "DeltaFilerCount",
+            "CurrentValue",
+            "PreviousValue",
+            "DeltaValue",
+            "NewFilerCount",
+            "SoldOutFilerCount",
+            "PercentOfFloat",
+        ];
 
-        void AppendString(string value) =>
-            sb.Append(CsvExportService.EscapeField(value)).Append(',');
-        void AppendNumber(long value) =>
-            sb.Append(value.ToString(CultureInfo.InvariantCulture)).Append(',');
-
-        foreach (var r in rows)
-        {
-            AppendString(r.Ticker);
-            AppendString(r.Name);
-            AppendString(r.IndustryName);
-            AppendNumber(r.CurrentFilerCount);
-            AppendNumber(r.PreviousFilerCount);
-            AppendNumber(r.DeltaFilerCount);
-            AppendNumber(r.CurrentValue);
-            AppendNumber(r.PreviousValue);
-            AppendNumber(r.DeltaValue);
-            AppendNumber(r.NewFilerCount);
-            AppendNumber(r.SoldOutFilerCount);
-            sb.Append(
+        var csvRows = rows.Select(r =>
+            new[]
+            {
+                r.Ticker,
+                r.Name,
+                r.IndustryName,
+                CsvExportService.Format(r.CurrentFilerCount),
+                CsvExportService.Format(r.PreviousFilerCount),
+                CsvExportService.Format(r.DeltaFilerCount),
+                CsvExportService.Format(r.CurrentValue),
+                CsvExportService.Format(r.PreviousValue),
+                CsvExportService.Format(r.DeltaValue),
+                CsvExportService.Format(r.NewFilerCount),
+                CsvExportService.Format(r.SoldOutFilerCount),
                 r.PercentOfFloat.HasValue
                     ? r.PercentOfFloat.Value.ToString("F4", CultureInfo.InvariantCulture)
-                    : string.Empty
-            );
-            sb.AppendLine();
-        }
-        return sb.ToString();
+                    : string.Empty,
+            }
+        );
+
+        return CsvExportService.BuildCsv(headers, csvRows);
     }
 
     // Loads available report dates desc and resolves the selected/comparison dates from
