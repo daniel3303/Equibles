@@ -10,10 +10,15 @@ services:
     volumes:
       - db-data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      # -h localhost forces a TCP probe. Without it, pg_isready hits the Unix
+      # socket and reports healthy during ParadeDB's init phase — before the
+      # init script shuts Postgres down and restarts it on TCP. Apps connect
+      # over TCP, so this matches reality.
+      test: ["CMD-SHELL", "pg_isready -h localhost -U postgres -d equibles"]
       interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
   mcp:
     build:

@@ -71,6 +71,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Cold-start race on a fresh DB volume — the compose healthcheck now forces a
+  TCP probe instead of a Unix-socket probe, so it only flips healthy after
+  ParadeDB's init phase finishes and the real TCP listener is up. The web
+  host also retries `Database.MigrateAsync` on transient connection failures.
 - `FiscalPeriodResolver.Resolve` guarded against year-underflow on `AddYears(-1)`.
 - `FiscalPeriodResolver.CreateSafe` guarded against year overflow past 9999.
 - `FiscalCalendar.GetPeriod` guarded against fiscal year overflow past 9999.

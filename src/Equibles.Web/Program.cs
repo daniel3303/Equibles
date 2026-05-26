@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Net.Sockets;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Data.Extensions;
@@ -11,6 +12,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Serilog;
 using Serilog.Events;
 
@@ -149,9 +151,45 @@ public partial class Program
         // Extended timeout for index rebuilds.
         using var scope = app.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         dbContext.Database.SetCommandTimeout(TimeSpan.FromHours(1));
-        await dbContext.Database.MigrateAsync();
+
+        // ParadeDB's init script briefly accepts connections on the Unix
+        // socket while the TCP listener is still down, which can release us
+        // a few seconds before Postgres is reachable. Retry transient
+        // connection failures; non-connection errors fail fast.
+        const int maxAttempts = 30;
+        var delay = TimeSpan.FromSeconds(2);
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await dbContext.Database.MigrateAsync();
+                return;
+            }
+            catch (Exception ex) when (attempt < maxAttempts && IsTransientConnectionFailure(ex))
+            {
+                logger.LogWarning(
+                    ex,
+                    "Database not reachable yet (attempt {Attempt}/{MaxAttempts}); retrying in {Delay}s.",
+                    attempt,
+                    maxAttempts,
+                    delay.TotalSeconds
+                );
+                await Task.Delay(delay);
+            }
+        }
     }
+
+    private static bool IsTransientConnectionFailure(Exception ex) =>
+        ex switch
+        {
+            // TCP refused / unreachable while ParadeDB is restarting.
+            NpgsqlException { InnerException: SocketException } => true,
+            // "cannot_connect_now" — server is in startup.
+            PostgresException { SqlState: "57P03" } => true,
+            _ => false,
+        };
 
     public static void ConfigurePipeline(WebApplication app)
     {
