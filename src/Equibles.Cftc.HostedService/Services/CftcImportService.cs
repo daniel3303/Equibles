@@ -214,11 +214,10 @@ public class CftcImportService
                 .ToHashSet();
         }
 
-        var totalInserted = await BatchPersister.Persist(
-            MapNewReports(),
-            InsertBatchSize,
-            FlushBatch
-        );
+        var totalInserted = await BatchPersister.Persist<
+            CftcPositionReport,
+            CftcPositionReportRepository
+        >(MapNewReports(), InsertBatchSize, _scopeFactory);
 
         if (totalInserted > 0)
         {
@@ -278,14 +277,6 @@ public class CftcImportService
         }
 
         await contractRepo.SaveChanges();
-    }
-
-    private async Task FlushBatch(List<CftcPositionReport> items)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<CftcPositionReportRepository>();
-        repo.AddRange(items);
-        await repo.SaveChanges();
     }
 
     private static CftcPositionReport BuildPositionReport(
