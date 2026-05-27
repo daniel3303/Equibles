@@ -5,7 +5,7 @@ namespace Equibles.Cftc.Repositories;
 
 public class CftcPositionReportRepository : BaseRepository<CftcPositionReport>
 {
-    public CftcPositionReportRepository(EquiblesDbContext dbContext)
+    public CftcPositionReportRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public IQueryable<CftcPositionReport> GetByContract(CftcContract contract)

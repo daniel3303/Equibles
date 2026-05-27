@@ -28,7 +28,7 @@ namespace Equibles.IntegrationTests.Cftc;
 public class CftcImportServiceFullPipelineTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
-    private readonly List<EquiblesDbContext> _contexts = [];
+    private readonly List<EquiblesFinancialDbContext> _contexts = [];
 
     public CftcImportServiceFullPipelineTests(ParadeDbFixture fixture)
     {
@@ -47,7 +47,7 @@ public class CftcImportServiceFullPipelineTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    private EquiblesDbContext FreshContext()
+    private EquiblesFinancialDbContext FreshContext()
     {
         var ctx = _fixture.CreateDbContext();
         _contexts.Add(ctx);
@@ -56,7 +56,7 @@ public class CftcImportServiceFullPipelineTests : IAsyncLifetime
 
     /// <summary>
     /// Builds an <see cref="IServiceScopeFactory"/> whose every <c>CreateScope()</c> call
-    /// yields a fresh <see cref="EquiblesDbContext"/> bound to the same ParadeDB instance
+    /// yields a fresh <see cref="EquiblesFinancialDbContext"/> bound to the same ParadeDB instance
     /// — mirroring production DI's scoped-DbContext lifetime. Each repository the
     /// importer pulls out of a scope therefore gets its own context, so saves don't
     /// fight for the same change-tracker.

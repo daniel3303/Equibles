@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.InsiderTrading.Data;
 
-public class InsiderTradingModuleConfiguration : Equibles.Data.IModuleConfiguration
+public class InsiderTradingModuleConfiguration : Equibles.Data.IFinancialModule
 {
     public void ConfigureEntities(ModelBuilder builder)
     {

@@ -60,7 +60,7 @@ public class McpServerAppFixture : IAsyncLifetime
 
     /// <summary>
     /// Application root services. Use a scope (<c>Services.CreateScope()</c>) before resolving
-    /// scoped dependencies like <see cref="EquiblesDbContext"/>; never resolve them directly
+    /// scoped dependencies like <see cref="EquiblesFinancialDbContext"/>; never resolve them directly
     /// from this provider.
     /// </summary>
     public IServiceProvider Services => _app.Services;
@@ -76,7 +76,7 @@ public class McpServerAppFixture : IAsyncLifetime
 
         await _db.StartAsync();
 
-        // The MCP server's AddEquiblesDbContext doesn't configure a MigrationsAssembly —
+        // The MCP server's AddEquiblesFinancialDbContext doesn't configure a MigrationsAssembly —
         // production assumes another service (the Web app) has already migrated the shared
         // database. For the test fixture, apply migrations explicitly via a separate
         // DbContext that knows about Equibles.Migrations.DesignTimeDbContextFactory's
@@ -142,14 +142,14 @@ public class McpServerAppFixture : IAsyncLifetime
 
     /// <summary>
     /// Truncates every user table in <c>public</c> via Respawn, then runs <paramref name="seed"/>
-    /// against a fresh <see cref="EquiblesDbContext"/> scope. The seed delegate receives an
+    /// against a fresh <see cref="EquiblesFinancialDbContext"/> scope. The seed delegate receives an
     /// attached DbContext — add entities and the method will call <c>SaveChangesAsync</c> for
     /// you. Pass <c>null</c> (or omit) to reset without seeding.
     ///
     /// Call this from a test's <c>InitializeAsync</c> so each test starts from a known state.
     /// xUnit creates a fresh test class instance per test, so per-test isolation is automatic.
     /// </summary>
-    public async Task ResetAndSeedAsync(Func<EquiblesDbContext, Task> seed = null)
+    public async Task ResetAndSeedAsync(Func<EquiblesFinancialDbContext, Task> seed = null)
     {
         await using (var resetConnection = new NpgsqlConnection(_db.GetConnectionString()))
         {
@@ -161,7 +161,7 @@ public class McpServerAppFixture : IAsyncLifetime
             return;
 
         using var scope = _app.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
         await seed(dbContext);
         await dbContext.SaveChangesAsync();
     }
@@ -176,9 +176,9 @@ public class McpServerAppFixture : IAsyncLifetime
         await _db.DisposeAsync();
     }
 
-    private static EquiblesDbContext BuildMigrationContext(string connectionString)
+    private static EquiblesFinancialDbContext BuildMigrationContext(string connectionString)
     {
-        var optionsBuilder = new DbContextOptionsBuilder<EquiblesDbContext>();
+        var optionsBuilder = new DbContextOptionsBuilder<EquiblesFinancialDbContext>();
         optionsBuilder.UseNpgsql(
             connectionString,
             npgsql =>
@@ -208,10 +208,9 @@ public class McpServerAppFixture : IAsyncLifetime
             new FinancialFactsModuleConfiguration(),
             new MediaModuleConfiguration(),
             new ErrorsModuleConfiguration(),
-            new MessagingModuleConfiguration(),
         ];
 
-        return new EquiblesDbContext(optionsBuilder.Options, modules);
+        return new EquiblesFinancialDbContext(optionsBuilder.Options, modules);
     }
 
     private static string ResolveMcpServerContentRoot()

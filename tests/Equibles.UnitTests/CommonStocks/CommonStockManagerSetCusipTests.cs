@@ -15,12 +15,15 @@ namespace Equibles.UnitTests.CommonStocks;
 // StockCusipChanged. A no-op change publishes nothing."
 public class CommonStockManagerSetCusipTests
 {
-    private static EquiblesDbContext NewDb()
+    private static EquiblesFinancialDbContext NewDb()
     {
-        var options = new DbContextOptionsBuilder<EquiblesDbContext>()
+        var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
-        return new EquiblesDbContext(options, [new CommonStocksModuleConfiguration()]);
+        return new EquiblesFinancialDbContext(
+            options,
+            new IModuleConfiguration[] { new CommonStocksModuleConfiguration() }
+        );
     }
 
     [Fact]

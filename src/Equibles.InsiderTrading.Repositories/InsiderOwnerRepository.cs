@@ -6,7 +6,7 @@ namespace Equibles.InsiderTrading.Repositories;
 
 public class InsiderOwnerRepository : BaseRepository<InsiderOwner>
 {
-    public InsiderOwnerRepository(EquiblesDbContext dbContext)
+    public InsiderOwnerRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public async Task<InsiderOwner> GetByOwnerCik(string ownerCik)

@@ -29,7 +29,7 @@ namespace Equibles.UnitTests.Sec;
 /// End-to-end tests for <see cref="DocumentScraper"/>. The class is heavily DI-coupled
 /// (8 ctor deps + per-call scoped resolves), so each test wires a real
 /// <c>IServiceCollection</c> with substituted clients/normalizers/converters/persistence
-/// and a real <c>EquiblesDbContext</c> on the EF Core in-memory provider for the
+/// and a real <c>EquiblesFinancialDbContext</c> on the EF Core in-memory provider for the
 /// <c>CommonStockRepository</c>. <see cref="IPdfTextExtractor"/> was extracted from the
 /// concrete <c>PdfTextExtractor</c> specifically to make this scaffolding mockable.
 /// </summary>
@@ -524,7 +524,11 @@ public class DocumentScraperTests
             DocumentUrl = $"https://sec.gov/{accession}.htm",
         };
 
-    private static CommonStock SeedCompany(EquiblesDbContext dbContext, string ticker, string cik)
+    private static CommonStock SeedCompany(
+        EquiblesFinancialDbContext dbContext,
+        string ticker,
+        string cik
+    )
     {
         var stock = new CommonStock
         {
@@ -539,7 +543,7 @@ public class DocumentScraperTests
     }
 
     private static void SeedDocument(
-        EquiblesDbContext dbContext,
+        EquiblesFinancialDbContext dbContext,
         CommonStock company,
         DocumentType documentType,
         DateOnly reportingForDate
@@ -574,9 +578,9 @@ public class DocumentScraperTests
         public IServiceScopeFactory ScopeFactory { get; private set; }
         public List<IFilingProcessor> FilingProcessors { get; set; } = [];
 
-        public EquiblesDbContext CreateDbContext()
+        public EquiblesFinancialDbContext CreateDbContext()
         {
-            var options = new DbContextOptionsBuilder<EquiblesDbContext>()
+            var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
                 .UseInMemoryDatabase(Guid.NewGuid().ToString())
                 .EnableServiceProviderCaching(false)
                 .Options;
@@ -586,13 +590,13 @@ public class DocumentScraperTests
                 new DocumentOnlyModuleConfiguration(),
                 new MediaModuleConfiguration(),
             };
-            var dbContext = new EquiblesDbContext(options, modules);
+            var dbContext = new EquiblesFinancialDbContext(options, modules);
             dbContext.Database.EnsureCreated();
             return dbContext;
         }
 
         public DocumentScraper BuildScraper(
-            EquiblesDbContext dbContext,
+            EquiblesFinancialDbContext dbContext,
             DocumentScraperOptions options = null,
             WorkerOptions workerOptions = null
         )

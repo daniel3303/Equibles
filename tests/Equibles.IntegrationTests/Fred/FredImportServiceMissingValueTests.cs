@@ -24,7 +24,7 @@ namespace Equibles.IntegrationTests.Fred;
 /// </summary>
 public class FredImportServiceMissingValueTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
 
     public FredImportServiceMissingValueTests()
     {

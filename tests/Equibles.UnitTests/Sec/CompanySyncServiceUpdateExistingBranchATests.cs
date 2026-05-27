@@ -29,13 +29,16 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class CompanySyncServiceUpdateExistingBranchATests
 {
-    private static EquiblesDbContext NewDb()
+    private static EquiblesFinancialDbContext NewDb()
     {
-        var options = new DbContextOptionsBuilder<EquiblesDbContext>()
+        var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .EnableServiceProviderCaching(false)
             .Options;
-        var ctx = new EquiblesDbContext(options, [new CommonStocksModuleConfiguration()]);
+        var ctx = new EquiblesFinancialDbContext(
+            options,
+            new IModuleConfiguration[] { new CommonStocksModuleConfiguration() }
+        );
         ctx.Database.EnsureCreated();
         return ctx;
     }
@@ -53,7 +56,7 @@ public class CompanySyncServiceUpdateExistingBranchATests
         );
 
     private static object BuildState(
-        EquiblesDbContext db,
+        EquiblesFinancialDbContext db,
         CommonStock existingStock,
         CommonStock tickerHolder,
         string primaryTicker

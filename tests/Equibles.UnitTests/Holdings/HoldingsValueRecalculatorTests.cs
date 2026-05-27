@@ -199,7 +199,7 @@ public class HoldingsValueRecalculatorTests
     }
 
     private static void SeedHolding(
-        EquiblesDbContext db,
+        EquiblesFinancialDbContext db,
         bool valuePending,
         long shares,
         long value,
@@ -240,9 +240,9 @@ public class HoldingsValueRecalculatorTests
         public IStockPriceProvider PriceProvider { get; } = Substitute.For<IStockPriceProvider>();
         public IServiceScopeFactory ScopeFactory { get; private set; }
 
-        public EquiblesDbContext CreateDbContext()
+        public EquiblesFinancialDbContext CreateDbContext()
         {
-            var options = new DbContextOptionsBuilder<EquiblesDbContext>()
+            var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
                 .UseInMemoryDatabase(Guid.NewGuid().ToString())
                 .EnableServiceProviderCaching(false)
                 .Options;
@@ -251,12 +251,12 @@ public class HoldingsValueRecalculatorTests
                 new CommonStocksModuleConfiguration(),
                 new HoldingsModuleConfiguration(),
             };
-            var db = new EquiblesDbContext(options, modules);
+            var db = new EquiblesFinancialDbContext(options, modules);
             db.Database.EnsureCreated();
             return db;
         }
 
-        public HoldingsValueRecalculator BuildRecalculator(EquiblesDbContext db)
+        public HoldingsValueRecalculator BuildRecalculator(EquiblesFinancialDbContext db)
         {
             // Register the in-memory context as a singleton INSTANCE so MS.DI doesn't
             // dispose it across the many short-lived scopes Recalculate creates inside

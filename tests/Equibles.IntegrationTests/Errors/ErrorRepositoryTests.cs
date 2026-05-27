@@ -10,15 +10,12 @@ namespace Equibles.IntegrationTests.Errors;
 
 public class ErrorRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly ErrorRepository _repository;
 
     public ErrorRepositoryTests()
     {
-        _dbContext = TestDbContextFactory.Create(
-            new ErrorsModuleConfiguration(),
-            new MessagingModuleConfiguration()
-        );
+        _dbContext = TestDbContextFactory.Create(new ErrorsModuleConfiguration());
         _repository = new ErrorRepository(_dbContext);
     }
 

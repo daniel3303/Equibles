@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Finra.Data;
 
-public class FinraModuleConfiguration : Equibles.Data.IModuleConfiguration
+public class FinraModuleConfiguration : Equibles.Data.IFinancialModule
 {
     public void ConfigureEntities(ModelBuilder builder)
     {

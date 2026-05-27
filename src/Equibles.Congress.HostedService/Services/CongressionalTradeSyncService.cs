@@ -124,7 +124,7 @@ public class CongressionalTradeSyncService
     )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
         var memberRepository = scope.ServiceProvider.GetRequiredService<CongressMemberRepository>();
         var commonStockRepository =
             scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
@@ -158,7 +158,7 @@ public class CongressionalTradeSyncService
 
     private async Task<Dictionary<string, CongressMember>> UpsertCongressMembers(
         List<DisclosureTransaction> matched,
-        EquiblesDbContext dbContext,
+        EquiblesFinancialDbContext dbContext,
         CongressMemberRepository memberRepository,
         CancellationToken ct
     )
@@ -224,7 +224,7 @@ public class CongressionalTradeSyncService
 
     private async Task PersistTrades(
         List<CongressionalTrade> trades,
-        EquiblesDbContext dbContext,
+        EquiblesFinancialDbContext dbContext,
         CancellationToken ct
     )
     {

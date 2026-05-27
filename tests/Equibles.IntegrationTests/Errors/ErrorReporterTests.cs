@@ -16,10 +16,7 @@ public class ErrorReporterTests
     [Fact]
     public async Task Report_DelegatesToErrorManager_ErrorPersisted()
     {
-        var context = TestDbContextFactory.Create(
-            new ErrorsModuleConfiguration(),
-            new MessagingModuleConfiguration()
-        );
+        var context = TestDbContextFactory.Create(new ErrorsModuleConfiguration());
         var repository = new ErrorRepository(context);
         var errorManager = new ErrorManager(repository);
         var scopeFactory = ServiceScopeSubstitute.Create((typeof(ErrorManager), errorManager));

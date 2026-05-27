@@ -154,9 +154,9 @@ public class HoldingsImportServiceTests
         new HoldingsModuleConfiguration(),
     ];
 
-    private static EquiblesDbContext CreateDb() => TestDbContextFactory.Create(Modules);
+    private static EquiblesFinancialDbContext CreateDb() => TestDbContextFactory.Create(Modules);
 
-    private static IServiceScopeFactory ScopeFactoryFor(EquiblesDbContext db)
+    private static IServiceScopeFactory ScopeFactoryFor(EquiblesFinancialDbContext db)
     {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory
@@ -169,7 +169,7 @@ public class HoldingsImportServiceTests
                     .Returns(new InstitutionalHolderRepository(db));
                 sp.GetService(typeof(InstitutionalHoldingRepository))
                     .Returns(new InstitutionalHoldingRepository(db));
-                sp.GetService(typeof(EquiblesDbContext)).Returns(db);
+                sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(db);
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
                 return scope;
@@ -177,7 +177,7 @@ public class HoldingsImportServiceTests
         return scopeFactory;
     }
 
-    private static HoldingsImportService CreateImporter(EquiblesDbContext db)
+    private static HoldingsImportService CreateImporter(EquiblesFinancialDbContext db)
     {
         return new HoldingsImportService(
             ScopeFactoryFor(db),

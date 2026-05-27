@@ -215,7 +215,7 @@ public class FtdImportService
     private async Task FlushBatch(List<FailToDeliver> items)
     {
         using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
 
         // Guards GH-1591: CompanySync can delete a CommonStock between

@@ -12,7 +12,7 @@ namespace Equibles.IntegrationTests.Yahoo;
 
 public class DailyStockPriceRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly DailyStockPriceRepository _repository;
     private readonly CommonStock _apple;
     private readonly CommonStock _microsoft;
@@ -269,7 +269,7 @@ public class DailyStockPriceRepositoryTests : IDisposable
 
 public class YahooStockPriceProviderTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly YahooStockPriceProvider _provider;
     private readonly CommonStock _apple;
     private readonly CommonStock _microsoft;

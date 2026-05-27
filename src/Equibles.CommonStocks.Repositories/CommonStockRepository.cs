@@ -6,7 +6,7 @@ namespace Equibles.CommonStocks.Repositories;
 
 public class CommonStockRepository : BaseRepository<CommonStock>
 {
-    public CommonStockRepository(EquiblesDbContext dbContext)
+    public CommonStockRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public IQueryable<CommonStock> Search(string search)

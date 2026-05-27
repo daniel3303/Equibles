@@ -50,7 +50,7 @@ namespace Equibles.IntegrationTests.Web;
 /// </summary>
 public class StatusControllerMarkAsSeenHappyTests : IDisposable
 {
-    private readonly Equibles.Data.EquiblesDbContext _dbContext;
+    private readonly Equibles.Data.EquiblesFinancialDbContext _dbContext;
 
     public StatusControllerMarkAsSeenHappyTests()
     {
@@ -65,7 +65,6 @@ public class StatusControllerMarkAsSeenHappyTests : IDisposable
             new FredModuleConfiguration(),
             new YahooModuleConfiguration(),
             new ErrorsModuleConfiguration(),
-            new MessagingModuleConfiguration(),
             new CftcModuleConfiguration(),
             new CboeModuleConfiguration()
         );

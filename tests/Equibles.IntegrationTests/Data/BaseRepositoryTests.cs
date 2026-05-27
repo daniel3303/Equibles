@@ -10,15 +10,15 @@ public class BaseRepositoryTests : IDisposable
 {
     private sealed class TestRepository : BaseRepository<CommonStock>
     {
-        public TestRepository(EquiblesDbContext dbContext)
+        public TestRepository(EquiblesFinancialDbContext dbContext)
             : base(dbContext) { }
 
         public DbSet<CommonStock> ExposeGetDbSet() => GetDbSet();
 
-        public EquiblesDbContext ExposeGetDbContext() => GetDbContext();
+        public EquiblesFinancialDbContext ExposeGetDbContext() => GetDbContext();
     }
 
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly TestRepository _repository;
 
     public BaseRepositoryTests()

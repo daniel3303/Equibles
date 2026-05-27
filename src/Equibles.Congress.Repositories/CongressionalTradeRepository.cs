@@ -6,7 +6,7 @@ namespace Equibles.Congress.Repositories;
 
 public class CongressionalTradeRepository : BaseRepository<CongressionalTrade>
 {
-    public CongressionalTradeRepository(EquiblesDbContext dbContext)
+    public CongressionalTradeRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public IQueryable<CongressionalTrade> GetByStock(CommonStock stock)

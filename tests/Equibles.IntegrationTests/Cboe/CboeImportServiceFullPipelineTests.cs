@@ -21,7 +21,7 @@ namespace Equibles.IntegrationTests.Cboe;
 /// importer without one. The DB-touching phases — <c>GetLatestDate</c> on both
 /// <see cref="CboePutCallRatioRepository"/> and <see cref="CboeVixDailyRepository"/>,
 /// the "filter records newer than stored" branch, and the batched <c>FlushPutCallBatch</c>
-/// / <c>FlushVixBatch</c> saves through per-scope <see cref="EquiblesDbContext"/> instances
+/// / <c>FlushVixBatch</c> saves through per-scope <see cref="EquiblesFinancialDbContext"/> instances
 /// — are not reachable from the sibling <c>Equibles.UnitTests.Cboe.CboeImportServiceTests</c>
 /// file. A regression in any of them would silently drop CBOE data on every worker tick.
 /// </summary>
@@ -29,7 +29,7 @@ namespace Equibles.IntegrationTests.Cboe;
 public class CboeImportServiceFullPipelineTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
-    private readonly List<EquiblesDbContext> _contexts = [];
+    private readonly List<EquiblesFinancialDbContext> _contexts = [];
 
     public CboeImportServiceFullPipelineTests(ParadeDbFixture fixture)
     {
@@ -48,7 +48,7 @@ public class CboeImportServiceFullPipelineTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    private EquiblesDbContext FreshContext()
+    private EquiblesFinancialDbContext FreshContext()
     {
         var ctx = _fixture.CreateDbContext();
         _contexts.Add(ctx);

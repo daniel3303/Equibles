@@ -9,7 +9,6 @@ using Equibles.Fred.Data;
 using Equibles.Holdings.Data;
 using Equibles.InsiderTrading.Data;
 using Equibles.Media.Data;
-using Equibles.Messaging;
 using Equibles.ParadeDB.EntityFrameworkCore;
 using Equibles.Sec.Data;
 using Equibles.Sec.FinancialFacts.Data;
@@ -20,9 +19,9 @@ using Microsoft.Extensions.Configuration;
 
 namespace Equibles.Migrations;
 
-public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<EquiblesDbContext>
+public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<EquiblesFinancialDbContext>
 {
-    public EquiblesDbContext CreateDbContext(string[] args)
+    public EquiblesFinancialDbContext CreateDbContext(string[] args)
     {
         var configuration = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
@@ -30,7 +29,7 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<EquiblesDb
             .AddJsonFile("designsettings.Development.json", optional: true)
             .Build();
 
-        var optionsBuilder = new DbContextOptionsBuilder<EquiblesDbContext>();
+        var optionsBuilder = new DbContextOptionsBuilder<EquiblesFinancialDbContext>();
         var connectionString = configuration.GetConnectionString("DefaultConnection");
 
         optionsBuilder.UseNpgsql(
@@ -62,9 +61,11 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<EquiblesDb
             new FinancialFactsModuleConfiguration(),
             new MediaModuleConfiguration(),
             new ErrorsModuleConfiguration(),
-            new MessagingModuleConfiguration(),
         ];
 
-        return new EquiblesDbContext(optionsBuilder.Options, modules);
+        return new EquiblesFinancialDbContext(
+            optionsBuilder.Options,
+            new ModuleConfigurationSet<EquiblesFinancialDbContext>(modules)
+        );
     }
 }

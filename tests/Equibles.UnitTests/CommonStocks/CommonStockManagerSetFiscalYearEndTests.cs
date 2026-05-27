@@ -19,12 +19,15 @@ namespace Equibles.UnitTests.CommonStocks;
 /// </summary>
 public class CommonStockManagerSetFiscalYearEndTests
 {
-    private static EquiblesDbContext NewDb()
+    private static EquiblesFinancialDbContext NewDb()
     {
-        var options = new DbContextOptionsBuilder<EquiblesDbContext>()
+        var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
-        return new EquiblesDbContext(options, [new CommonStocksModuleConfiguration()]);
+        return new EquiblesFinancialDbContext(
+            options,
+            new IModuleConfiguration[] { new CommonStocksModuleConfiguration() }
+        );
     }
 
     private static CommonStockManager NewManager(CommonStockRepository repository) =>

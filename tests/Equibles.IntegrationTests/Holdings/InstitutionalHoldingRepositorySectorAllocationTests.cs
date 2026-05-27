@@ -17,7 +17,7 @@ namespace Equibles.IntegrationTests.Holdings;
 public class InstitutionalHoldingRepositorySectorAllocationTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
-    private readonly List<Equibles.Data.EquiblesDbContext> _contexts = [];
+    private readonly List<Equibles.Data.EquiblesFinancialDbContext> _contexts = [];
 
     public InstitutionalHoldingRepositorySectorAllocationTests(ParadeDbFixture fixture) =>
         _fixture = fixture;
@@ -31,7 +31,7 @@ public class InstitutionalHoldingRepositorySectorAllocationTests : IAsyncLifetim
         return Task.CompletedTask;
     }
 
-    private Equibles.Data.EquiblesDbContext FreshContext()
+    private Equibles.Data.EquiblesFinancialDbContext FreshContext()
     {
         var ctx = _fixture.CreateDbContext();
         _contexts.Add(ctx);

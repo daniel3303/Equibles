@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Equibles.Sec.FinancialFacts.Data;
 
-public class FinancialFactsModuleConfiguration : Equibles.Data.IModuleConfiguration
+public class FinancialFactsModuleConfiguration : Equibles.Data.IFinancialModule
 {
     public void ConfigureEntities(ModelBuilder builder)
     {

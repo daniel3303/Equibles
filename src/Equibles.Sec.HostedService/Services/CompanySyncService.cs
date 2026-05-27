@@ -128,7 +128,7 @@ public class CompanySyncService : ICompanySyncService
         var commonStockRepository =
             scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var commonStockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
         var secCiks = secCompanies.Select(c => c.Cik).ToHashSet();
 

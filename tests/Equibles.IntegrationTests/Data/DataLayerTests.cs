@@ -48,13 +48,15 @@ public class ServiceCollectionExtensionsTests
     {
         var services = new ServiceCollection();
 
-        services.AddEquiblesDbContext(
+        services.AddEquiblesFinancialDbContext(
             "Host=localhost;Database=test",
             modules => modules.AddCommonStocks()
         );
 
         var provider = services.BuildServiceProvider();
-        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(EquiblesDbContext));
+        var descriptor = services.FirstOrDefault(d =>
+            d.ServiceType == typeof(EquiblesFinancialDbContext)
+        );
 
         descriptor.Should().NotBeNull();
         descriptor!.Lifetime.Should().Be(ServiceLifetime.Scoped);
@@ -65,7 +67,7 @@ public class ServiceCollectionExtensionsTests
     {
         var services = new ServiceCollection();
 
-        services.AddEquiblesDbContext(
+        services.AddEquiblesFinancialDbContext(
             "Host=localhost;Database=test",
             modules =>
             {
@@ -88,7 +90,7 @@ public class ServiceCollectionExtensionsTests
     {
         var services = new ServiceCollection();
 
-        services.AddEquiblesDbContext(
+        services.AddEquiblesFinancialDbContext(
             "Host=localhost;Database=test",
             modules =>
             {
@@ -122,7 +124,7 @@ public class ServiceCollectionExtensionsTests
     {
         var services = new ServiceCollection();
 
-        var result = services.AddEquiblesDbContext(
+        var result = services.AddEquiblesFinancialDbContext(
             "Host=localhost;Database=test",
             modules => modules.AddCommonStocks()
         );
@@ -324,14 +326,14 @@ public class ModuleBuilderExtensionTests
 /// </summary>
 public class ModuleConfigurationTests : IDisposable
 {
-    private EquiblesDbContext _dbContext;
+    private EquiblesFinancialDbContext _dbContext;
 
     public void Dispose()
     {
         _dbContext?.Dispose();
     }
 
-    private EquiblesDbContext CreateContext(params IModuleConfiguration[] modules)
+    private EquiblesFinancialDbContext CreateContext(params IModuleConfiguration[] modules)
     {
         _dbContext = TestDbContextFactory.Create(modules);
         return _dbContext;
@@ -573,7 +575,6 @@ public class ModuleConfigurationTests : IDisposable
                 new SecTestModuleConfiguration(),
                 new MediaModuleConfiguration(),
                 new ErrorsModuleConfiguration(),
-                new MessagingModuleConfiguration(),
                 new FredModuleConfiguration(),
                 new FinraModuleConfiguration(),
                 new YahooModuleConfiguration(),

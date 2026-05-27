@@ -46,8 +46,8 @@ public class RagManagerTests
     private static RagManager CreateSut()
     {
         return new RagManager(
-            Substitute.For<ChunkRepository>((Equibles.Data.EquiblesDbContext)null),
-            Substitute.For<CommonStockRepository>((Equibles.Data.EquiblesDbContext)null),
+            Substitute.For<ChunkRepository>((Equibles.Data.EquiblesFinancialDbContext)null),
+            Substitute.For<CommonStockRepository>((Equibles.Data.EquiblesFinancialDbContext)null),
             Substitute.For<ILogger<RagManager>>()
         );
     }

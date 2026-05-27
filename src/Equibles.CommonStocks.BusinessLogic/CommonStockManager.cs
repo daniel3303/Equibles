@@ -24,10 +24,12 @@ public class CommonStockManager
 
     /// <summary>
     /// Sets a stock's CUSIP. When the value actually changes, publishes
-    /// <see cref="StockCusipChanged"/> (before SaveChanges, so the EF outbox
-    /// captures it in the same transaction) so the Holdings module can
+    /// <see cref="StockCusipChanged"/> after SaveChanges so the Holdings module can
     /// backfill quarterly 13F data sets that were processed while this stock
-    /// was still unresolvable. A no-op change publishes nothing.
+    /// was still unresolvable. A no-op change publishes nothing. OSS has no
+    /// transactional outbox, so the event is published only once the write has
+    /// committed (the consumer is idempotent, so an undelivered event after a
+    /// crash is recovered on the next resolve).
     /// </summary>
     public async Task SetCusip(CommonStock commonStock, string cusip)
     {
@@ -41,11 +43,12 @@ public class CommonStockManager
         var previousCusip = commonStock.Cusip;
         commonStock.Cusip = cusip;
 
-        // Publish before SaveChanges (outbox pattern).
+        await _commonStockRepository.SaveChanges();
+
+        // Publish after SaveChanges (no outbox in OSS — consumer is idempotent).
         await _publishEndpoint.Publish(
             new StockCusipChanged(commonStock.Id, commonStock.Ticker, previousCusip, cusip)
         );
-        await _commonStockRepository.SaveChanges();
     }
 
     /// <summary>

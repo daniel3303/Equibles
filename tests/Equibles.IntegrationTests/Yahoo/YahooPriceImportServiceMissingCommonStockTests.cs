@@ -29,7 +29,7 @@ namespace Equibles.IntegrationTests.Yahoo;
 /// </summary>
 public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly DailyStockPriceRepository _priceRepo;
     private readonly CommonStockRepository _stockRepo;
     private readonly IYahooFinanceClient _yahooClient;

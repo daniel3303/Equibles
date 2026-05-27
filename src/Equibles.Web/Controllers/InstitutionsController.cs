@@ -11,11 +11,11 @@ namespace Equibles.Web.Controllers;
 public class InstitutionsController : BaseController
 {
     private readonly InstitutionalHolderRepository _holderRepository;
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
 
     public InstitutionsController(
         InstitutionalHolderRepository holderRepository,
-        EquiblesDbContext dbContext,
+        EquiblesFinancialDbContext dbContext,
         ILogger<InstitutionsController> logger
     )
         : base(logger)

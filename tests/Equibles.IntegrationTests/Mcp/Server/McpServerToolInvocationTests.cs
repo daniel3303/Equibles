@@ -11,7 +11,7 @@ namespace Equibles.IntegrationTests.Mcp.Server;
 /// <see cref="McpServerEndpointTests"/> only exercises <c>tools/list</c>; the MCP framework's
 /// dispatch path for <c>tools/call</c> — parameter binding from JSON-RPC arguments to a
 /// <c>[McpServerTool]</c>-decorated method, the production DI resolving the tool's
-/// repositories against the live <see cref="EquiblesDbContext"/>, and the wrapping of the
+/// repositories against the live <see cref="EquiblesFinancialDbContext"/>, and the wrapping of the
 /// tool's <see cref="string"/> return into a <see cref="TextContentBlock"/> — is the part
 /// that can silently break when the SDK is upgraded or a module registration is shuffled.
 ///

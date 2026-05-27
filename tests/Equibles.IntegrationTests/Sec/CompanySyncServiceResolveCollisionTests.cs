@@ -109,7 +109,7 @@ public class CompanySyncServiceResolveCollisionTests : ParadeDbMcpTestBase
                     Substitute.For<IPublishEndpoint>()
                 )
             ),
-            (typeof(EquiblesDbContext), DbContext)
+            (typeof(EquiblesFinancialDbContext), DbContext)
         );
 
         var sut = new CompanySyncService(

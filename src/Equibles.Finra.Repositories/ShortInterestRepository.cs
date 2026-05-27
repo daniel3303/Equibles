@@ -6,7 +6,7 @@ namespace Equibles.Finra.Repositories;
 
 public class ShortInterestRepository : BaseRepository<ShortInterest>
 {
-    public ShortInterestRepository(EquiblesDbContext dbContext)
+    public ShortInterestRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public IQueryable<ShortInterest> GetByStock(CommonStock stock, DateOnly settlementDate)

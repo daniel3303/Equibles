@@ -33,7 +33,7 @@ namespace Equibles.IntegrationTests.Sec;
 public class FtdImportServiceSeedCusipsPublishesEventTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
-    private readonly List<EquiblesDbContext> _contexts = [];
+    private readonly List<EquiblesFinancialDbContext> _contexts = [];
 
     public FtdImportServiceSeedCusipsPublishesEventTests(ParadeDbFixture fixture) =>
         _fixture = fixture;
@@ -47,7 +47,7 @@ public class FtdImportServiceSeedCusipsPublishesEventTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    private EquiblesDbContext FreshContext()
+    private EquiblesFinancialDbContext FreshContext()
     {
         var ctx = _fixture.CreateDbContext();
         _contexts.Add(ctx);

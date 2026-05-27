@@ -9,7 +9,7 @@ namespace Equibles.IntegrationTests.Fred;
 
 public class FredSeriesRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly FredSeriesRepository _repository;
 
     public FredSeriesRepositoryTests()
@@ -251,7 +251,7 @@ public class FredSeriesRepositoryTests : IDisposable
 
 public class FredObservationRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly FredObservationRepository _repository;
 
     public FredObservationRepositoryTests()

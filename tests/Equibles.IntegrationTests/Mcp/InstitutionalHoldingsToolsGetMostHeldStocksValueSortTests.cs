@@ -75,7 +75,7 @@ public class InstitutionalHoldingsToolsGetMostHeldStocksValueSortTests : ParadeD
             .BeLessThan(output.IndexOf("MSFT", StringComparison.Ordinal));
     }
 
-    private InstitutionalHoldingsTools NewSut(Equibles.Data.EquiblesDbContext ctx) =>
+    private InstitutionalHoldingsTools NewSut(Equibles.Data.EquiblesFinancialDbContext ctx) =>
         new(
             new InstitutionalHoldingRepository(ctx),
             new InstitutionalHolderRepository(ctx),

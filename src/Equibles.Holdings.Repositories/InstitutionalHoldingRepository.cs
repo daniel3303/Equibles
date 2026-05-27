@@ -8,7 +8,7 @@ namespace Equibles.Holdings.Repositories;
 
 public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHolding>
 {
-    public InstitutionalHoldingRepository(EquiblesDbContext dbContext)
+    public InstitutionalHoldingRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public IQueryable<InstitutionalHolding> GetByStock(CommonStock stock, DateOnly reportDate)

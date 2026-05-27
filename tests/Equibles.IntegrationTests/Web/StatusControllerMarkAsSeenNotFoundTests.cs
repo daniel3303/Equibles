@@ -48,7 +48,7 @@ namespace Equibles.IntegrationTests.Web;
 /// </summary>
 public class StatusControllerMarkAsSeenNotFoundTests : IDisposable
 {
-    private readonly Equibles.Data.EquiblesDbContext _dbContext;
+    private readonly Equibles.Data.EquiblesFinancialDbContext _dbContext;
 
     public StatusControllerMarkAsSeenNotFoundTests()
     {
@@ -63,7 +63,6 @@ public class StatusControllerMarkAsSeenNotFoundTests : IDisposable
             new FredModuleConfiguration(),
             new YahooModuleConfiguration(),
             new ErrorsModuleConfiguration(),
-            new MessagingModuleConfiguration(),
             new CftcModuleConfiguration(),
             new CboeModuleConfiguration()
         );

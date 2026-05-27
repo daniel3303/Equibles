@@ -38,7 +38,7 @@ namespace Equibles.IntegrationTests.Sec;
 public class FtdImportServiceFullPipelineTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
-    private readonly List<EquiblesDbContext> _contexts = [];
+    private readonly List<EquiblesFinancialDbContext> _contexts = [];
 
     public FtdImportServiceFullPipelineTests(ParadeDbFixture fixture)
     {
@@ -57,7 +57,7 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    private EquiblesDbContext FreshContext()
+    private EquiblesFinancialDbContext FreshContext()
     {
         var ctx = _fixture.CreateDbContext();
         _contexts.Add(ctx);
@@ -79,7 +79,7 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(EquiblesDbContext)).Returns(ctx);
+                sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
                 sp.GetService(typeof(CommonStockRepository))
                     .Returns(new CommonStockRepository(ctx));
                 sp.GetService(typeof(CommonStockManager))

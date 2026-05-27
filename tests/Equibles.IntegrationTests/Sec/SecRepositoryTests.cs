@@ -13,7 +13,7 @@ namespace Equibles.IntegrationTests.Sec;
 
 public class SecRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly DocumentRepository _documentRepo;
     private readonly FailToDeliverRepository _ftdRepo;
 
