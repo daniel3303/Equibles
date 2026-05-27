@@ -66,4 +66,38 @@ public class BaseScraperWorkerFormatIntervalCultureInvarianceTests
             CultureInfo.CurrentCulture = original;
         }
     }
+
+    // The minutes branch has its own ToString site
+    // (`interval.TotalMinutes.ToString("0.#", ...)`), so the
+    // culture-invariance contract needs a separate pin from the hours
+    // branch. 90 seconds renders via the minutes arm (TotalHours < 1,
+    // TotalMinutes = 1.5) — same fractional-decimal risk surface.
+    // Contract: fractional minutes render culture-invariantly as
+    // "1.5m" under every culture, never "1,5m".
+    [Fact]
+    public void FormatInterval_FractionalMinutesUnderNonInvariantCulture_RendersWithInvariantDecimalPoint()
+    {
+        var method = typeof(BaseScraperWorker).GetMethod(
+            "FormatInterval",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+            var result = (string)method!.Invoke(null, [TimeSpan.FromSeconds(90)]);
+
+            result
+                .Should()
+                .Be(
+                    "1.5m",
+                    "the minutes branch of FormatInterval must render culture-invariantly for the same reason as the hours branch (GH-2426); a non-invariant decimal separator forks operator log output by host locale"
+                );
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
+    }
 }
