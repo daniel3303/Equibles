@@ -168,7 +168,7 @@ public class HoldingsRealtimeIngestionZeroHoldingsSkipTests : IAsyncLifetime
             CancellationToken.None
         );
 
-        count.Should().Be(0);
+        count.FilingsImported.Should().Be(0);
 
         using var verify = FreshContext();
         (await verify.Set<InstitutionalHolding>().AnyAsync()).Should().BeFalse();
