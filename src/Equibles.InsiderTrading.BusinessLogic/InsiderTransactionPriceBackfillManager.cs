@@ -69,14 +69,21 @@ public class InsiderTransactionPriceBackfillManager
 
         _dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
 
-        // Skip/Take pagination is safe here because IsPriceValid is the only
-        // mutated column — row ordering by Id is stable across batches.
-        while (result.Processed < result.Total)
+        // Keyset (cursor) pagination on Id. Postgres OFFSET scans and
+        // discards N rows before returning the M for that batch, so a
+        // Skip(N).Take(M) loop is O(N²) — the last batch in a 3M-row table
+        // is thousands of times slower than the first. Filtering by
+        // `Id > lastSeenId` instead lets the index seek straight to the
+        // next page, keeping every batch roughly the same speed and the
+        // whole pass O(N). Npgsql translates `Guid > Guid` to PostgreSQL's
+        // native `uuid > uuid` comparison.
+        var lastSeenId = Guid.Empty;
+        while (true)
         {
             var batch = await _transactionRepository
                 .GetAll()
+                .Where(t => t.Id > lastSeenId)
                 .OrderBy(t => t.Id)
-                .Skip(result.Processed)
                 .Take(BatchSize)
                 .ToListAsync();
 
@@ -109,6 +116,7 @@ public class InsiderTransactionPriceBackfillManager
 
             await _transactionRepository.SaveChanges();
             result.Processed += batch.Count;
+            lastSeenId = batch[^1].Id;
 
             _logger.LogInformation(
                 "Insider price backfill: processed {Processed}/{Total}, invalid={Invalid}",
