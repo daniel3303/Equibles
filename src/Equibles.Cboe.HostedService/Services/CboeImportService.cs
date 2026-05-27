@@ -75,8 +75,7 @@ public class CboeImportService
         // Drive the catch-up cursor from the LEAST advanced type so a type that
         // briefly stopped reporting (or a fresh DB) gets backfilled too.
         var earliestKnown = latestPerType.Values.Min();
-        var start =
-            earliestKnown == default ? DailyPageMinDate : earliestKnown.AddDays(1);
+        var start = earliestKnown == default ? DailyPageMinDate : earliestKnown.AddDays(1);
         var today = _today();
         if (start > today)
         {
