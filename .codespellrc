@@ -1,5 +1,5 @@
 [codespell]
-skip = .git,bin,obj,.idea,.vs,node_modules,*.lock,*.svg,*.min.js,*.min.css,Migrations,coverage,functional-results,worktrees,LICENSE
+skip = .git,bin,obj,.idea,.vs,node_modules,*.lock,*.svg,*.min.js,*.min.css,Migrations,coverage,functional-results,worktrees,LICENSE,*/Fixtures/*
 ignore-words = .codespellignore
 check-filenames =
 check-hidden =

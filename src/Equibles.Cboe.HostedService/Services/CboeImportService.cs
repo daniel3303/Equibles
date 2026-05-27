@@ -17,10 +17,15 @@ public class CboeImportService
 {
     private const int InsertBatchSize = 1000;
 
+    // CBOE's daily market-statistics page exposes data from 2019-10-07 onwards.
+    // Earlier dates cannot be backfilled from the free feed.
+    private static readonly DateOnly DailyPageMinDate = new(2019, 10, 7);
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<CboeImportService> _logger;
     private readonly ICboeClient _cboeClient;
     private readonly ErrorReporter _errorReporter;
+    private readonly Func<DateOnly> _today;
 
     public CboeImportService(
         IServiceScopeFactory scopeFactory,
@@ -28,11 +33,23 @@ public class CboeImportService
         ICboeClient cboeClient,
         ErrorReporter errorReporter
     )
+        : this(scopeFactory, logger, cboeClient, errorReporter, null) { }
+
+    // Seam for tests: lets a fixture pin "today" so date iteration stays
+    // deterministic without freezing the process clock.
+    internal CboeImportService(
+        IServiceScopeFactory scopeFactory,
+        ILogger<CboeImportService> logger,
+        ICboeClient cboeClient,
+        ErrorReporter errorReporter,
+        Func<DateOnly> today
+    )
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _cboeClient = cboeClient;
         _errorReporter = errorReporter;
+        _today = today ?? (() => DateOnly.FromDateTime(DateTime.UtcNow));
     }
 
     public async Task Import(CancellationToken cancellationToken)
@@ -43,103 +60,130 @@ public class CboeImportService
 
     private async Task ImportAllPutCallRatios(CancellationToken cancellationToken)
     {
-        var typeMapping = new Dictionary<CboePutCallCsvType, CboePutCallRatioType>
+        Dictionary<CboePutCallRatioType, DateOnly> latestPerType;
+        using (var scope = _scopeFactory.CreateScope())
         {
-            [CboePutCallCsvType.Total] = CboePutCallRatioType.Total,
-            [CboePutCallCsvType.Equity] = CboePutCallRatioType.Equity,
-            [CboePutCallCsvType.Index] = CboePutCallRatioType.Index,
-            [CboePutCallCsvType.Vix] = CboePutCallRatioType.Vix,
-            [CboePutCallCsvType.Etp] = CboePutCallRatioType.Etp,
-        };
+            var repo = scope.ServiceProvider.GetRequiredService<CboePutCallRatioRepository>();
+            latestPerType = new Dictionary<CboePutCallRatioType, DateOnly>();
+            foreach (var ratioType in Enum.GetValues<CboePutCallRatioType>())
+            {
+                latestPerType[ratioType] = await repo.GetLatestDate(ratioType)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+        }
 
-        foreach (var (csvType, ratioType) in typeMapping)
+        // Drive the catch-up cursor from the LEAST advanced type so a type that
+        // briefly stopped reporting (or a fresh DB) gets backfilled too.
+        var earliestKnown = latestPerType.Values.Min();
+        var start =
+            earliestKnown == default ? DailyPageMinDate : earliestKnown.AddDays(1);
+        var today = _today();
+        if (start > today)
+        {
+            _logger.LogDebug("CBOE put/call ratios are up to date");
+            return;
+        }
+
+        var pending = new List<CboePutCallRatio>();
+        var perTypeInserts = new Dictionary<CboePutCallRatioType, int>();
+
+        for (var date = start; date <= today; date = date.AddDays(1))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            // Skip weekends locally — CBOE returns the page skeleton for them
+            // but with no optionsData; avoids ~30% of useless requests.
+            if (date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday)
+                continue;
+
+            Dictionary<CboePutCallProductType, CboePutCallRecord> dailyRecords;
             try
             {
-                await ImportPutCallRatio(csvType, ratioType, cancellationToken);
+                dailyRecords = await _cboeClient.DownloadDailyPutCallRatios(date);
             }
             catch (HttpRequestException ex)
             {
                 _logger.LogWarning(
                     ex,
-                    "Failed to download CBOE {Type} put/call ratio CSV, skipping",
-                    csvType
+                    "Failed to download CBOE put/call page for {Date}, skipping",
+                    date
                 );
+                continue;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error importing CBOE {Type} put/call ratios", csvType);
+                // Non-HTTP failure (e.g., page-shape change broke the parser).
+                // Stop the loop instead of burning the rate-limit budget on
+                // every subsequent date that would fail the same way.
+                _logger.LogError(
+                    ex,
+                    "Error parsing CBOE put/call page for {Date}, aborting cycle",
+                    date
+                );
                 await _errorReporter.Report(
                     ErrorSource.CboeScraper,
                     "CboeImport.ImportPutCallRatio",
                     ex.Message,
                     ex.StackTrace,
-                    $"type: {csvType}"
+                    $"date: {date}"
                 );
+                break;
+            }
+
+            foreach (var (productType, record) in dailyRecords)
+            {
+                var ratioType = MapProduct(productType);
+                if (record.Date <= latestPerType[ratioType])
+                    continue;
+
+                pending.Add(
+                    new CboePutCallRatio
+                    {
+                        RatioType = ratioType,
+                        Date = record.Date,
+                        CallVolume = record.CallVolume,
+                        PutVolume = record.PutVolume,
+                        TotalVolume = record.TotalVolume,
+                        PutCallRatio = record.PutCallRatio,
+                    }
+                );
+                perTypeInserts.TryGetValue(ratioType, out var n);
+                perTypeInserts[ratioType] = n + 1;
             }
         }
-    }
 
-    private async Task ImportPutCallRatio(
-        CboePutCallCsvType csvType,
-        CboePutCallRatioType ratioType,
-        CancellationToken cancellationToken
-    )
-    {
-        var records = await _cboeClient.DownloadPutCallRatios(csvType);
-        _logger.LogDebug(
-            "CBOE {Type} put/call: downloaded {Count} records",
-            csvType,
-            records.Count
-        );
-
-        if (records.Count == 0)
-            return;
-
-        DateOnly latestStoredDate;
-        using (var scope = _scopeFactory.CreateScope())
+        if (pending.Count == 0)
         {
-            var repo = scope.ServiceProvider.GetRequiredService<CboePutCallRatioRepository>();
-            latestStoredDate = await repo.GetLatestDate(ratioType)
-                .FirstOrDefaultAsync(cancellationToken);
-        }
-
-        var newRecords =
-            latestStoredDate != default
-                ? records.Where(r => r.Date > latestStoredDate).ToList()
-                : records;
-
-        if (newRecords.Count == 0)
-        {
-            _logger.LogDebug("CBOE {Type} put/call ratios are up to date", csvType);
+            _logger.LogDebug("CBOE put/call ratios are up to date");
             return;
         }
 
-        var totalInserted = await BatchPersister.Persist<
-            CboePutCallRatio,
-            CboePutCallRatioRepository
-        >(
-            newRecords.Select(r => new CboePutCallRatio
-            {
-                RatioType = ratioType,
-                Date = r.Date,
-                CallVolume = r.CallVolume,
-                PutVolume = r.PutVolume,
-                TotalVolume = r.TotalVolume,
-                PutCallRatio = r.PutCallRatio,
-            }),
+        await BatchPersister.Persist<CboePutCallRatio, CboePutCallRatioRepository>(
+            pending,
             InsertBatchSize,
             _scopeFactory
         );
 
-        _logger.LogInformation(
-            "CBOE {Type} put/call: imported {Count} new records",
-            csvType,
-            totalInserted
-        );
+        foreach (var (ratioType, count) in perTypeInserts)
+        {
+            _logger.LogInformation(
+                "CBOE {Type} put/call: imported {Count} new records",
+                ratioType,
+                count
+            );
+        }
     }
+
+    private static CboePutCallRatioType MapProduct(CboePutCallProductType product) =>
+        product switch
+        {
+            CboePutCallProductType.Total => CboePutCallRatioType.Total,
+            CboePutCallProductType.Equity => CboePutCallRatioType.Equity,
+            CboePutCallProductType.Index => CboePutCallRatioType.Index,
+            CboePutCallProductType.Vix => CboePutCallRatioType.Vix,
+            CboePutCallProductType.Etp => CboePutCallRatioType.Etp,
+            _ => throw new ArgumentOutOfRangeException(nameof(product), product, null),
+        };
 
     private async Task ImportVixHistory(CancellationToken cancellationToken)
     {

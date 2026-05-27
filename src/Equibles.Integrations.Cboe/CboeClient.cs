@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Net;
+using System.Text;
+using System.Text.Json;
 using Equibles.Integrations.Cboe.Contracts;
 using Equibles.Integrations.Cboe.Models;
 using Equibles.Integrations.Common.RateLimiter;
@@ -9,20 +11,33 @@ namespace Equibles.Integrations.Cboe;
 
 public class CboeClient : ICboeClient
 {
-    private const string PutCallBaseUrl =
-        "https://cdn.cboe.com/resources/options/volume_and_call_put_ratios";
+    // CBOE retired the historical put/call CSV feed in October 2019 (the CDN files
+    // freeze at 2019-10-04). The daily market-statistics page is the only freely
+    // available source going forward — server-rendered HTML with the day's data
+    // embedded as JSON in the React Server Component payload.
+    private const string DailyStatsUrl =
+        "https://www.cboe.com/markets/us/options/market-statistics/daily/";
     private const string VixUrl =
         "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv";
     private const int MaxRetries = 3;
 
-    private static readonly Dictionary<CboePutCallCsvType, string> CsvFileNames = new()
-    {
-        [CboePutCallCsvType.Total] = "totalpc.csv",
-        [CboePutCallCsvType.Equity] = "equitypc.csv",
-        [CboePutCallCsvType.Index] = "indexpc.csv",
-        [CboePutCallCsvType.Vix] = "vixpc.csv",
-        [CboePutCallCsvType.Etp] = "etppc.csv",
-    };
+    private static readonly (CboePutCallProductType Product, string RatioKey, string VolumeKey)[]
+        ProductMappings =
+        [
+            (CboePutCallProductType.Total, "TOTAL PUT/CALL RATIO", "SUM OF ALL PRODUCTS"),
+            (CboePutCallProductType.Equity, "EQUITY PUT/CALL RATIO", "EQUITY OPTIONS"),
+            (CboePutCallProductType.Index, "INDEX PUT/CALL RATIO", "INDEX OPTIONS"),
+            (
+                CboePutCallProductType.Vix,
+                "CBOE VOLATILITY INDEX (VIX) PUT/CALL RATIO",
+                "CBOE VOLATILITY INDEX (VIX)"
+            ),
+            (
+                CboePutCallProductType.Etp,
+                "EXCHANGE TRADED PRODUCTS PUT/CALL RATIO",
+                "EXCHANGE TRADED PRODUCTS"
+            ),
+        ];
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<CboeClient> _logger;
@@ -35,14 +50,15 @@ public class CboeClient : ICboeClient
         _rateLimiter = rateLimiter;
     }
 
-    public async Task<List<CboePutCallRecord>> DownloadPutCallRatios(CboePutCallCsvType csvType)
+    public async Task<Dictionary<CboePutCallProductType, CboePutCallRecord>> DownloadDailyPutCallRatios(
+        DateOnly date
+    )
     {
-        var fileName = CsvFileNames[csvType];
-        var url = $"{PutCallBaseUrl}/{fileName}";
-        _logger.LogDebug("Downloading CBOE put/call ratios from {Url}", url);
+        var url = $"{DailyStatsUrl}?dt={date:yyyy-MM-dd}";
+        _logger.LogDebug("Downloading CBOE daily put/call ratios for {Date}", date);
 
-        var content = await DownloadWithRetry(url);
-        return ParsePutCallCsv(content, csvType);
+        var html = await DownloadWithRetry(url);
+        return ParseDailyPutCallPage(html, date);
     }
 
     public async Task<List<CboeVixRecord>> DownloadVixHistory()
@@ -99,41 +115,211 @@ public class CboeClient : ICboeClient
     private static TimeSpan ExponentialBackoff(int attempt) =>
         TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
 
-    // The VIX CSV ships columns in a different order than all other put/call
-    // CSVs: Date,Ratio,PutVol,CallVol,TotalVol vs Date,CallVol,PutVol,TotalVol,Ratio.
-    private static List<CboePutCallRecord> ParsePutCallCsv(
-        string content,
-        CboePutCallCsvType csvType
+    private static Dictionary<CboePutCallProductType, CboePutCallRecord> ParseDailyPutCallPage(
+        string html,
+        DateOnly date
     )
     {
-        var isVix = csvType == CboePutCallCsvType.Vix;
-        var records = new List<CboePutCallRecord>();
-        foreach (var fields in EnumerateCsvRows(content, minFields: 5))
+        // Non-trading days (weekends, holidays, future dates) render the page
+        // skeleton without the optionsData block — return an empty dictionary
+        // so the import service can no-op for that date.
+        var optionsJson = ExtractOptionsDataJson(html);
+        if (optionsJson is null)
+            return new();
+
+        using var doc = JsonDocument.Parse(optionsJson);
+        var root = doc.RootElement;
+        var ratios = ParseRatios(root);
+
+        var result = new Dictionary<CboePutCallProductType, CboePutCallRecord>();
+        foreach (var (product, ratioKey, volumeKey) in ProductMappings)
         {
-            if (
-                !DateOnly.TryParseExact(
-                    fields[0].Trim(),
-                    "MM/dd/yyyy",
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.None,
-                    out var date
-                )
-            )
+            var volume = TryGetVolume(root, volumeKey);
+            ratios.TryGetValue(ratioKey, out var ratio);
+            if (volume is null && ratio is null)
                 continue;
 
-            records.Add(
-                new CboePutCallRecord
-                {
-                    Date = date,
-                    CallVolume = ParseLong(fields[isVix ? 3 : 1]),
-                    PutVolume = ParseLong(fields[2]),
-                    TotalVolume = ParseLong(fields[isVix ? 4 : 3]),
-                    PutCallRatio = ParseDecimal(fields[isVix ? 1 : 4]),
-                }
-            );
+            result[product] = new CboePutCallRecord
+            {
+                Date = date,
+                CallVolume = volume?.Call,
+                PutVolume = volume?.Put,
+                TotalVolume = volume?.Total,
+                PutCallRatio = ratio,
+            };
         }
-        return records;
+        return result;
     }
+
+    // The daily-stats page is rendered by Next.js App Router; the day's data
+    // sits inside the React Server Component payload as a JSON string, so each
+    // `"` is escaped to `\"`. We locate the `"optionsData\":` marker, walk
+    // balanced braces (escape-aware), then JSON-unescape the captured slice
+    // so it can be parsed as normal JSON.
+    private static string ExtractOptionsDataJson(string html)
+    {
+        const string marker = "\"optionsData\\\":";
+        var markerIndex = html.IndexOf(marker, StringComparison.Ordinal);
+        if (markerIndex < 0)
+            return null;
+        var start = markerIndex + marker.Length;
+        if (start >= html.Length || html[start] != '{')
+            return null;
+
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+        var end = -1;
+        for (var i = start; i < html.Length; i++)
+        {
+            var c = html[i];
+            if (escaped)
+            {
+                escaped = false;
+                continue;
+            }
+            if (c == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+            if (c == '"')
+            {
+                inString = !inString;
+                continue;
+            }
+            if (inString)
+                continue;
+            if (c == '{')
+                depth++;
+            else if (c == '}')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    end = i + 1;
+                    break;
+                }
+            }
+        }
+        if (end < 0)
+            return null;
+
+        return JsonStringUnescape(html.AsSpan(start, end - start));
+    }
+
+    private static string JsonStringUnescape(ReadOnlySpan<char> input)
+    {
+        var sb = new StringBuilder(input.Length);
+        for (var i = 0; i < input.Length; i++)
+        {
+            if (input[i] != '\\' || i + 1 >= input.Length)
+            {
+                sb.Append(input[i]);
+                continue;
+            }
+            var next = input[++i];
+            switch (next)
+            {
+                case '"':
+                case '\\':
+                case '/':
+                    sb.Append(next);
+                    break;
+                case 'n':
+                    sb.Append('\n');
+                    break;
+                case 't':
+                    sb.Append('\t');
+                    break;
+                case 'r':
+                    sb.Append('\r');
+                    break;
+                case 'b':
+                    sb.Append('\b');
+                    break;
+                case 'f':
+                    sb.Append('\f');
+                    break;
+                case 'u' when i + 4 < input.Length:
+                    var hex = input.Slice(i + 1, 4);
+                    if (
+                        ushort.TryParse(
+                            hex,
+                            NumberStyles.HexNumber,
+                            CultureInfo.InvariantCulture,
+                            out var code
+                        )
+                    )
+                    {
+                        sb.Append((char)code);
+                        i += 4;
+                    }
+                    else
+                    {
+                        sb.Append('\\').Append(next);
+                    }
+                    break;
+                default:
+                    sb.Append('\\').Append(next);
+                    break;
+            }
+        }
+        return sb.ToString();
+    }
+
+    private static Dictionary<string, decimal?> ParseRatios(JsonElement root)
+    {
+        var result = new Dictionary<string, decimal?>(StringComparer.Ordinal);
+        if (
+            !root.TryGetProperty("ratios", out var ratios)
+            || ratios.ValueKind != JsonValueKind.Array
+        )
+            return result;
+
+        foreach (var entry in ratios.EnumerateArray())
+        {
+            if (
+                !entry.TryGetProperty("name", out var nameElement)
+                || !entry.TryGetProperty("value", out var valueElement)
+            )
+                continue;
+            var name = nameElement.GetString();
+            if (string.IsNullOrEmpty(name))
+                continue;
+            result[name] = ParseDecimal(valueElement.GetString());
+        }
+        return result;
+    }
+
+    private static (long? Call, long? Put, long? Total)? TryGetVolume(
+        JsonElement root,
+        string categoryKey
+    )
+    {
+        if (
+            !root.TryGetProperty(categoryKey, out var category)
+            || category.ValueKind != JsonValueKind.Array
+        )
+            return null;
+
+        foreach (var entry in category.EnumerateArray())
+        {
+            if (
+                !entry.TryGetProperty("name", out var nameElement)
+                || nameElement.GetString() != "VOLUME"
+            )
+                continue;
+            entry.TryGetProperty("call", out var callEl);
+            entry.TryGetProperty("put", out var putEl);
+            entry.TryGetProperty("total", out var totalEl);
+            return (TryGetLong(callEl), TryGetLong(putEl), TryGetLong(totalEl));
+        }
+        return null;
+    }
+
+    private static long? TryGetLong(JsonElement element) =>
+        element.ValueKind == JsonValueKind.Number && element.TryGetInt64(out var v) ? v : null;
 
     private static List<CboeVixRecord> ParseVixCsv(string content)
     {
@@ -194,16 +380,6 @@ public class CboeClient : ICboeClient
 
             yield return fields;
         }
-    }
-
-    private static long? ParseLong(string value)
-    {
-        value = value?.Trim();
-        if (string.IsNullOrEmpty(value))
-            return null;
-        return long.TryParse(value.Replace(",", ""), CultureInfo.InvariantCulture, out var result)
-            ? result
-            : null;
     }
 
     private static decimal? ParseDecimal(string value)

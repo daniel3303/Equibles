@@ -1,6 +1,6 @@
 namespace Equibles.Integrations.Cboe.Models;
 
-public enum CboePutCallCsvType
+public enum CboePutCallProductType
 {
     Total,
     Equity,

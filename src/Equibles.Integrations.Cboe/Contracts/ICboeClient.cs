@@ -4,6 +4,8 @@ namespace Equibles.Integrations.Cboe.Contracts;
 
 public interface ICboeClient
 {
-    Task<List<CboePutCallRecord>> DownloadPutCallRatios(CboePutCallCsvType csvType);
+    Task<Dictionary<CboePutCallProductType, CboePutCallRecord>> DownloadDailyPutCallRatios(
+        DateOnly date
+    );
     Task<List<CboeVixRecord>> DownloadVixHistory();
 }
