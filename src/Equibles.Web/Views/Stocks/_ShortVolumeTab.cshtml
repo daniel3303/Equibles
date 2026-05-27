@@ -60,24 +60,33 @@
         const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ShortVolumes.Select(v => v.Date.ToString("yyyy-MM-dd")).ToList()));
         const shortVol = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ShortVolumes.Select(v => v.ShortVolume).ToList()));
         const totalVol = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ShortVolumes.Select(v => v.TotalVolume).ToList()));
+        // Short volume as a percentage of total volume, per day
+        const shortPct = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ShortVolumes.Select(v => v.TotalVolume > 0 ? Math.Round((double)v.ShortVolume / v.TotalVolume * 100, 2) : 0).ToList()));
 
         new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: labels,
                 datasets: [
-                    { label: 'Short Volume', data: shortVol, backgroundColor: 'oklch(50% 0.2 145 / 0.7)', borderRadius: 2 },
-                    { label: 'Total Volume', data: totalVol, backgroundColor: 'oklch(0.929 0.013 255.508)', borderRadius: 2 }
+                    { label: 'Short Volume', data: shortVol, backgroundColor: 'oklch(50% 0.2 145 / 0.7)', borderRadius: 2, yAxisID: 'y', order: 2 },
+                    { label: 'Total Volume', data: totalVol, backgroundColor: 'oklch(0.929 0.013 255.508)', borderRadius: 2, yAxisID: 'y', order: 3 },
+                    // Percentage line plotted against the right-hand axis (0-100%)
+                    { type: 'line', label: 'Short % of Total', data: shortPct, borderColor: 'oklch(60% 0.22 25)', backgroundColor: 'oklch(60% 0.22 25)', yAxisID: 'y1', tension: 0.3, pointRadius: 0, borderWidth: 2, order: 1 }
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
                 scales: {
                     x: { ticks: { maxTicksLimit: 12, font: { size: 10 } } },
-                    y: { ticks: { callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v } }
+                    y: { position: 'left', ticks: { callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v } },
+                    y1: { position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false }, ticks: { callback: v => v + '%', font: { size: 10 } } }
                 },
-                plugins: { legend: { position: 'top', labels: { boxWidth: 12 } } }
+                plugins: {
+                    legend: { position: 'top', labels: { boxWidth: 12 } },
+                    tooltip: { callbacks: { label: c => c.dataset.yAxisID === 'y1' ? c.dataset.label + ': ' + c.parsed.y.toFixed(2) + '%' : c.dataset.label + ': ' + c.parsed.y.toLocaleString() } }
+                }
             }
         });
     });
