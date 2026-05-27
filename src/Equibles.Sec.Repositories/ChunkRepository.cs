@@ -29,18 +29,37 @@ public class ChunkRepository : BaseRepository<Chunk>
         CancellationToken cancellationToken = default
     )
     {
-        var query = DbContext
-            .Set<Chunk>()
-            .Where(c => EF.Functions.Parse(c.Id, searchText, lenient: true, conjunctionMode: true));
+        // Compose the text match and the ticker/document/type filters into one BM25
+        // boolean query so ParadeDB resolves the filters INSIDE the index (with_index).
+        // Layering them as SQL .Where(...) predicates instead made Postgres score every
+        // text match first and post-filter the result on the heap (heap_filter) — for a
+        // high-coverage ticker that scored set is enormous and blew the 5s budget (#2157).
+        var clauses = new List<ParadeDbJsonQuery>
+        {
+            ParadeDbJsonQuery.Parse(searchText, lenient: true, conjunctionMode: true),
+        };
 
+        // Ticker (raw tokenizer) and DocumentType (single-token enum values) are stored
+        // lowercased; Term is an exact, untokenized match, so the filter value must be
+        // lowercased to line up with the indexed token. DocumentId is a UUID and matches
+        // as-is.
         if (ticker != null)
-            query = query.Where(c => c.Ticker == ticker);
+            clauses.Add(ParadeDbJsonQuery.Term(nameof(Chunk.Ticker), ticker.ToLowerInvariant()));
 
         if (documentId.HasValue)
-            query = query.Where(c => c.DocumentId == documentId.Value);
+            clauses.Add(ParadeDbJsonQuery.Term(nameof(Chunk.DocumentId), documentId.Value));
 
         if (documentType != null)
-            query = query.Where(c => c.DocumentType == documentType);
+            clauses.Add(
+                ParadeDbJsonQuery.Term(
+                    nameof(Chunk.DocumentType),
+                    documentType.Value.ToLowerInvariant()
+                )
+            );
+
+        var searchQuery = ParadeDbJsonQuery.Boolean(b => b.Must(clauses.ToArray())).ToJson();
+
+        var query = DbContext.Set<Chunk>().Where(c => EF.Functions.JsonSearch(c.Id, searchQuery));
 
         if (startDate.HasValue)
         {
