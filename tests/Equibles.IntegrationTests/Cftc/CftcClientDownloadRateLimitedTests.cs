@@ -22,8 +22,8 @@ public class CftcClientDownloadRateLimitedTests
     {
         var csv = string.Join(
             "\n",
-            "\"Market_and_Exchange_Names\",\"Report_Date_as_YYYY-MM-DD\","
-                + "\"CFTC_Contract_Market_Code\",\"Open_Interest_All\"",
+            "\"Market and Exchange Names\",\"As of Date in Form YYYY-MM-DD\","
+                + "\"CFTC Contract Market Code\",\"Open Interest (All)\"",
             "\"SILVER - COMMODITY EXCHANGE INC.\",\"2024-12-24\",\"084691\",\"250,000\""
         );
         var zipBytes = BuildZipWith("annual.txt", csv);
