@@ -1,3 +1,4 @@
+using System.Globalization;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Messaging.Contracts.Activity;
@@ -177,10 +178,10 @@ public abstract class BaseScraperWorker : BackgroundService
     private static string FormatInterval(TimeSpan interval)
     {
         if (interval.TotalHours >= 1)
-            return $"{interval.TotalHours:0.#}h";
+            return $"{interval.TotalHours.ToString("0.#", CultureInfo.InvariantCulture)}h";
         if (interval.TotalMinutes >= 1)
-            return $"{interval.TotalMinutes:0.#}m";
-        return $"{interval.TotalSeconds:0}s";
+            return $"{interval.TotalMinutes.ToString("0.#", CultureInfo.InvariantCulture)}m";
+        return $"{interval.TotalSeconds.ToString("0", CultureInfo.InvariantCulture)}s";
     }
 
     /// <summary>

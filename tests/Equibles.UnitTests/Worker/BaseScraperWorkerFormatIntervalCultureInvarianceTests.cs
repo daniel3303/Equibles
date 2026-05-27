@@ -40,9 +40,7 @@ public class BaseScraperWorkerFormatIntervalCultureInvarianceTests
     // culture used across the repo's other culture pins (FormBindingFixture
     // names this explicitly). The result MUST be "1.5h" with a literal
     // dot - never "1,5h".
-    [Fact(
-        Skip = "GH-2426 — FormatInterval renders fractional intervals with locale-dependent decimal separator"
-    )]
+    [Fact]
     public void FormatInterval_FractionalHoursUnderNonInvariantCulture_RendersWithInvariantDecimalPoint()
     {
         var method = typeof(BaseScraperWorker).GetMethod(
