@@ -211,7 +211,9 @@ public class HoldingsRealtimeIngestionWindowDedupTests : IAsyncLifetime
             CancellationToken.None
         );
 
-        imported.Should().Be(1, "the re-listed accession must be collapsed to one filing");
+        imported
+            .FilingsImported.Should()
+            .Be(1, "the re-listed accession must be collapsed to one filing");
 
         // Parsed once, not once per window day.
         await edgar

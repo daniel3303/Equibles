@@ -101,6 +101,8 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
                 sp.GetService(typeof(ProcessedDataSetRepository))
                     .Returns(new ProcessedDataSetRepository(ctx));
+                sp.GetService(typeof(RealtimeSweepStateRepository))
+                    .Returns(new RealtimeSweepStateRepository(ctx));
                 var importService = new HoldingsImportService(
                     scopeFactory,
                     Substitute.For<ILogger<HoldingsImportService>>(),

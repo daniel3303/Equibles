@@ -230,7 +230,7 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
             CancellationToken.None
         );
 
-        imported.Should().Be(1);
+        imported.FilingsImported.Should().Be(1);
 
         using var verify = FreshContext();
         var holdings = await verify
