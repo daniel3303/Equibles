@@ -60,4 +60,40 @@ public class ShortDataToolsFormatSignedChangeCultureInvarianceTests
             CultureInfo.CurrentCulture = original;
         }
     }
+
+    // The negative branch of the ternary takes its own ToString path
+    // (`change.ToString("N0", ...)` rather than the `$"+{...}"`
+    // interpolation), so the culture-invariance contract has to be
+    // pinned on its own. Under de-DE without an explicit
+    // IFormatProvider, N0 renders -1,234,567 as "-1.234.567" — same
+    // bug class GH-2444 fixed on the positive branch. Contract:
+    // negative values render culture-invariantly with US-style
+    // comma thousands and a leading minus sign, regardless of
+    // thread CurrentCulture.
+    [Fact]
+    public void FormatSignedChange_NegativeValueUnderNonInvariantCulture_RendersWithInvariantCommaThousandSeparator()
+    {
+        var method = typeof(ShortDataTools).GetMethod(
+            "FormatSignedChange",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+            var result = (string)method!.Invoke(null, [-1_234_567L]);
+
+            result
+                .Should()
+                .Be(
+                    "-1,234,567",
+                    "the negative branch of FormatSignedChange must render culture-invariantly for the same reason as the positive branch (GH-2444); a host-locale-dependent thousand separator forks MCP output by deploy locale"
+                );
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
+    }
 }
