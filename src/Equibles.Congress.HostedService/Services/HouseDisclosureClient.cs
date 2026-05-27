@@ -7,6 +7,7 @@ using Equibles.Congress.HostedService.Models;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Common.RateLimiter;
 using UglyToad.PdfPig;
+using UglyToad.PdfPig.Content;
 using static Equibles.Congress.HostedService.Services.DisclosureParsingHelper;
 
 namespace Equibles.Congress.HostedService.Services;
@@ -19,6 +20,10 @@ public partial class HouseDisclosureClient
         timeWindow: TimeSpan.FromSeconds(1)
     );
     private const int MaxRetries = 3;
+
+    // Words whose baselines fall within this many PDF points belong to the
+    // same visual line when reconstructing the PTR table from page geometry.
+    private const double LineClusterTolerance = 3.0;
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<HouseDisclosureClient> _logger;
@@ -188,24 +193,9 @@ public partial class HouseDisclosureClient
 
     private List<DisclosureTransaction> ParsePtrPdf(byte[] pdfBytes, HouseFiling filing)
     {
-        var transactions = new List<DisclosureTransaction>();
-
         try
         {
-            using var document = PdfDocument.Open(pdfBytes);
-
-            foreach (var page in document.GetPages())
-            {
-                var text = page.Text;
-                if (string.IsNullOrWhiteSpace(text))
-                    continue;
-
-                var lines = text.Split(
-                    '\n',
-                    StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries
-                );
-                transactions.AddRange(ParseTransactionLines(lines, filing));
-            }
+            return ParsePtrPdf(pdfBytes, filing.MemberName, filing.FilingDate);
         }
         catch (Exception ex)
         {
@@ -215,124 +205,183 @@ public partial class HouseDisclosureClient
                 filing.MemberName,
                 filing.DocId
             );
+            return [];
         }
-
-        return transactions;
     }
 
-    private List<DisclosureTransaction> ParseTransactionLines(string[] lines, HouseFiling filing)
+    // PdfPig's page.Text concatenates glyphs with no line breaks, so the PTR
+    // transaction table collapses into one string that a split-on-'\n' parser
+    // can never segment. Rebuild the visual lines from word positions first,
+    // then parse those.
+    internal static List<DisclosureTransaction> ParsePtrPdf(
+        byte[] pdfBytes,
+        string memberName,
+        DateOnly filingDate
+    )
     {
-        var joined = JoinMultiLineEntries(lines);
+        using var document = PdfDocument.Open(pdfBytes);
+        var lines = new List<string>();
+        foreach (var page in document.GetPages())
+            lines.AddRange(ExtractLines(page));
+        return ParseTransactionLines(lines, memberName, filingDate);
+    }
+
+    // Cluster words by their vertical position into visual lines, then order
+    // each line left-to-right. PdfPig separates table columns with real word
+    // gaps, so this recovers the "Owner Asset … Type Date NotificationDate
+    // Amount" row layout that page.Text destroys.
+    internal static List<string> ExtractLines(Page page)
+    {
+        var words = page.GetWords()
+            .Where(w => !string.IsNullOrWhiteSpace(w.Text))
+            .OrderByDescending(w => w.BoundingBox.Bottom)
+            .ToList();
+
+        var lines = new List<string>();
+        var current = new List<Word>();
+        var currentY = double.NaN;
+
+        foreach (var word in words)
+        {
+            var y = word.BoundingBox.Bottom;
+            if (current.Count == 0 || Math.Abs(y - currentY) <= LineClusterTolerance)
+            {
+                if (current.Count == 0)
+                    currentY = y;
+                current.Add(word);
+            }
+            else
+            {
+                lines.Add(JoinWords(current));
+                current = [word];
+                currentY = y;
+            }
+        }
+
+        if (current.Count > 0)
+            lines.Add(JoinWords(current));
+
+        return lines;
+    }
+
+    private static string JoinWords(List<Word> words) =>
+        string.Join(" ", words.OrderBy(w => w.BoundingBox.Left).Select(w => w.Text.Trim()));
+
+    // A transaction row carries its transaction-type marker and dates on the
+    // line that starts it; the asset name (and sometimes the upper amount
+    // bound) wrap onto following lines. The owner code, when present, is the
+    // first token of the asset text — member-owned holdings leave it blank,
+    // which the original owner-code-anchored parser silently dropped.
+    internal static List<DisclosureTransaction> ParseTransactionLines(
+        IReadOnlyList<string> lines,
+        string memberName,
+        DateOnly filingDate
+    )
+    {
         var transactions = new List<DisclosureTransaction>();
 
-        foreach (var line in joined)
+        for (var i = 0; i < lines.Count; i++)
         {
-            if (TryParseTransactionLine(line, filing, out var transaction))
+            // Field-label lines ("Filing Status:", "Description:") and the
+            // table header carry a colon; real transaction rows never do.
+            if (lines[i].Contains(':'))
+                continue;
+
+            var anchor = TransactionAnchorRegex().Match(lines[i]);
+            if (!anchor.Success)
+                continue;
+
+            var assetText = lines[i][..anchor.Index];
+            var amountText = lines[i][anchor.Index..];
+
+            for (var j = i + 1; j < lines.Count && IsContinuationLine(lines[j]); j++)
+            {
+                var (assetPart, amountPart) = SplitContinuation(lines[j]);
+                if (!string.IsNullOrEmpty(assetPart))
+                    assetText += " " + assetPart;
+                if (!string.IsNullOrEmpty(amountPart))
+                    amountText += " " + amountPart;
+            }
+
+            var transaction = BuildTransaction(
+                assetText,
+                amountText,
+                anchor,
+                memberName,
+                filingDate
+            );
+            if (transaction != null)
                 transactions.Add(transaction);
         }
 
         return transactions;
     }
 
-    // House PTR PDFs often split a single transaction across multiple text
-    // lines (e.g. asset name on line 1, ticker + dates on line 2, amount on
-    // line 3). Each real entry starts with an owner code (SP/JT/DC/Self);
-    // subsequent lines that lack an owner code are continuations.
-    internal static List<string> JoinMultiLineEntries(string[] lines)
+    // Lines that continue the current row's asset name or amount: not the next
+    // transaction, not a field-label line, not the footer note.
+    private static bool IsContinuationLine(string line)
     {
-        var result = new List<string>();
-        string current = null;
-
-        foreach (var line in lines)
-        {
-            if (OwnerCodeRegex().IsMatch(line))
-            {
-                if (current != null)
-                    result.Add(current);
-                current = line;
-            }
-            else if (current != null)
-            {
-                current = current + " " + line;
-            }
-        }
-
-        if (current != null)
-            result.Add(current);
-
-        return result;
+        if (string.IsNullOrWhiteSpace(line) || line.Contains(':') || line.StartsWith('*'))
+            return false;
+        return !TransactionAnchorRegex().IsMatch(line);
     }
 
-    private bool TryParseTransactionLine(
-        string line,
-        HouseFiling filing,
-        out DisclosureTransaction transaction
+    // A continuation line holds asset text, a wrapped amount ("$5,000,000"), or
+    // both; the amount is always the trailing "$…" run.
+    private static (string asset, string amount) SplitContinuation(string line)
+    {
+        var dollar = line.IndexOf('$');
+        return dollar < 0 ? (line.Trim(), null) : (line[..dollar].Trim(), line[dollar..].Trim());
+    }
+
+    private static DisclosureTransaction BuildTransaction(
+        string assetText,
+        string amountText,
+        Match anchor,
+        string memberName,
+        DateOnly filingDate
     )
     {
-        transaction = null;
-
-        var ownerMatch = OwnerCodeRegex().Match(line);
-        if (!ownerMatch.Success)
-            return false;
-
-        var owner = ownerMatch.Groups[1].Value;
-        var remainder = line[ownerMatch.Length..].Trim();
-        var ticker = ExtractTickerFromAssetName(remainder);
-
-        // House PTR format: Owner Asset Type Date NotificationDate Amount
-        var dateMatch = DatePatternRegex().Match(remainder);
-        if (!dateMatch.Success)
-            return false;
-
-        var txDate = ParseDate(dateMatch.Groups[0].Value);
-        if (txDate == null)
-            return false;
-
-        var assetName = remainder[..dateMatch.Index].Trim();
-
-        // Transaction type appears right before the date: "P 01/14/2025" or "S (partial) 12/31/2024"
-        var txType = ExtractTransactionType(assetName);
+        var txType = ParseTransactionType(anchor.Groups[1].Value);
         if (txType == null)
-            return false;
+            return null;
 
-        assetName = RemoveTrailingTransactionType(assetName).Trim();
-        if (string.IsNullOrEmpty(assetName) && string.IsNullOrEmpty(ticker))
-            return false;
+        var txDate = ParseDate(anchor.Groups[2].Value);
+        if (txDate == null)
+            return null;
 
-        var afterDates = remainder[dateMatch.Index..];
-        var (amountFrom, amountTo) = ParseAmountRange(afterDates);
-
-        transaction = new DisclosureTransaction
+        assetText = assetText.Trim();
+        string owner = null;
+        var ownerMatch = OwnerCodeRegex().Match(assetText);
+        if (ownerMatch.Success)
         {
-            MemberName = filing.MemberName,
+            owner = ownerMatch.Groups[1].Value.ToUpperInvariant();
+            assetText = assetText[ownerMatch.Length..].Trim();
+        }
+
+        // Drop the bracketed asset-type code ("[ST]", "[OP]", …) so it can't be
+        // mistaken for a ticker when the asset has no parenthesised symbol.
+        assetText = AssetTypeCodeRegex().Replace(assetText, " ").Trim();
+
+        var ticker = ExtractTickerFromAssetName(assetText);
+        if (string.IsNullOrEmpty(assetText) && string.IsNullOrEmpty(ticker))
+            return null;
+
+        var (amountFrom, amountTo) = ParseAmountRange(amountText);
+
+        return new DisclosureTransaction
+        {
+            MemberName = memberName,
             Position = CongressPosition.Representative,
-            Ticker = ticker?.ToUpperInvariant(),
-            AssetName = Truncate(assetName, 256),
+            Ticker = ticker,
+            AssetName = Truncate(assetText, 256),
             TransactionDate = txDate.Value,
-            FilingDate = filing.FilingDate,
+            FilingDate = filingDate,
             TransactionType = txType.Value,
             OwnerType = owner,
             AmountFrom = amountFrom,
             AmountTo = amountTo,
         };
-        return true;
-    }
-
-    private static CongressTransactionType? ExtractTransactionType(string text)
-    {
-        // House uses: P (Purchase), S (Sale), S (partial), S (full)
-        if (SaleTypeRegex().IsMatch(text))
-            return CongressTransactionType.Sale;
-        if (PurchaseTypeRegex().IsMatch(text))
-            return CongressTransactionType.Purchase;
-        return null;
-    }
-
-    private static string RemoveTrailingTransactionType(string text)
-    {
-        text = SaleTypeRegex().Replace(text, "");
-        text = PurchaseTypeRegex().Replace(text, "");
-        return text.TrimEnd();
     }
 
     private async Task<HttpResponseMessage> SendWithRetryAsync(string url, CancellationToken ct)
@@ -379,23 +428,20 @@ public partial class HouseDisclosureClient
     private static TimeSpan ExponentialBackoff(int attempt) =>
         TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
 
-    // Owner codes: SP (Spouse), JT (Joint), DC (Dependent Child), or at line start
-    [GeneratedRegex(@"^(SP|JT|DC|Self)\b", RegexOptions.IgnoreCase)]
+    // Owner codes that prefix the asset text: SP (Spouse), JT (Joint), DC
+    // (Dependent Child). Member-owned holdings leave the column blank.
+    [GeneratedRegex(@"^(SP|JT|DC)\b", RegexOptions.IgnoreCase)]
     private static partial Regex OwnerCodeRegex();
 
-    // Date pattern: MM/DD/YYYY
-    [GeneratedRegex(@"\b(\d{2}/\d{2}/\d{4})\b")]
-    private static partial Regex DatePatternRegex();
+    // The transaction-type marker (P, S, S (partial), S (full)) immediately
+    // followed by its transaction date — the anchor identifying the line that
+    // starts a transaction row. Group 1 = type, group 2 = MM/DD/YYYY date.
+    [GeneratedRegex(@"(?<=\s|^)(S \(partial\)|S \(full\)|S|P)\s+(\d{2}/\d{2}/\d{4})")]
+    private static partial Regex TransactionAnchorRegex();
 
-    // House sale types at end of text (before date)
-    [GeneratedRegex(@"\bS\s*(\((?:partial|full)\))?\s*$", RegexOptions.IgnoreCase)]
-    private static partial Regex SaleTypeRegex();
-
-    // House purchase type at end of text (before date). IgnoreCase mirrors
-    // SaleTypeRegex; without it, a lowercase 'p' marker falls through both
-    // ExtractTransactionType and RemoveTrailingTransactionType.
-    [GeneratedRegex(@"\bP\s*$", RegexOptions.IgnoreCase)]
-    private static partial Regex PurchaseTypeRegex();
+    // Bracketed asset-type code such as [ST], [OP], [OI].
+    [GeneratedRegex(@"\s*\[[A-Za-z]{1,3}\]\s*")]
+    private static partial Regex AssetTypeCodeRegex();
 
     private record HouseFiling(
         string MemberName,
