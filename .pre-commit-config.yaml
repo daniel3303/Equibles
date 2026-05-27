@@ -11,9 +11,9 @@ repos:
       - id: mixed-line-ending
         args: ["--fix=lf"]
       - id: end-of-file-fixer
-        exclude: '\.(svg|min\.js|min\.css)$'
+        exclude: '\.(svg|min\.js|min\.css)$|/Fixtures/'
       - id: trailing-whitespace
-        exclude: '\.(svg|min\.js|min\.css|md)$'
+        exclude: '\.(svg|min\.js|min\.css|md)$|/Fixtures/'
       - id: check-added-large-files
         args: ["--maxkb=500"]
       - id: check-merge-conflict

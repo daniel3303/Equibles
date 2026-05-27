@@ -16,14 +16,11 @@ using Xunit;
 namespace Equibles.IntegrationTests.Cboe;
 
 /// <summary>
-/// Cftc and Holdings each have a <c>*ImportServiceFullPipelineTests</c> against the shared
-/// ParadeDB fixture; <see cref="CboeImportService"/> is the only remaining HostedService
-/// importer without one. The DB-touching phases — <c>GetLatestDate</c> on both
-/// <see cref="CboePutCallRatioRepository"/> and <see cref="CboeVixDailyRepository"/>,
-/// the "filter records newer than stored" branch, and the batched <c>FlushPutCallBatch</c>
-/// / <c>FlushVixBatch</c> saves through per-scope <see cref="EquiblesFinancialDbContext"/> instances
-/// — are not reachable from the sibling <c>Equibles.UnitTests.Cboe.CboeImportServiceTests</c>
-/// file. A regression in any of them would silently drop CBOE data on every worker tick.
+/// The DB-touching phases — per-type <c>GetLatestDate</c> probes, the
+/// "filter records newer than stored" branch, and the batched persistence
+/// through per-scope <see cref="EquiblesFinancialDbContext"/> instances —
+/// are not reachable from sibling unit tests. A regression in any of them
+/// would silently drop CBOE data on every worker tick.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class CboeImportServiceFullPipelineTests : IAsyncLifetime
@@ -80,100 +77,136 @@ public class CboeImportServiceFullPipelineTests : IAsyncLifetime
         return scopeFactory;
     }
 
+    private static CboeImportService CreateSut(
+        IServiceScopeFactory scopeFactory,
+        ICboeClient client,
+        DateOnly today,
+        ErrorReporter errorReporter = null
+    ) =>
+        new(
+            scopeFactory,
+            Substitute.For<ILogger<CboeImportService>>(),
+            client,
+            errorReporter
+                ?? new ErrorReporter(
+                    Substitute.For<IServiceScopeFactory>(),
+                    Substitute.For<ILogger<ErrorReporter>>()
+                ),
+            () => today
+        );
+
+    private static ICboeClient EmptyClient()
+    {
+        var client = Substitute.For<ICboeClient>();
+        client
+            .DownloadDailyPutCallRatios(Arg.Any<DateOnly>())
+            .Returns(new Dictionary<CboePutCallProductType, CboePutCallRecord>());
+        client.DownloadVixHistory().Returns(new List<CboeVixRecord>());
+        return client;
+    }
+
+    private static CboePutCallRatio Seed(CboePutCallRatioType type, DateOnly date) =>
+        new()
+        {
+            RatioType = type,
+            Date = date,
+            CallVolume = 1,
+            PutVolume = 1,
+            TotalVolume = 2,
+            PutCallRatio = 1m,
+        };
+
+    private async Task SeedAllTypesAt(DateOnly date)
+    {
+        using var seed = FreshContext();
+        foreach (var t in Enum.GetValues<CboePutCallRatioType>())
+            seed.Set<CboePutCallRatio>().Add(Seed(t, date));
+        await seed.SaveChangesAsync();
+    }
+
     [Fact]
     public async Task Import_DownloadsAndPersistsBothPutCallRatiosAndVixHistoryToRealPostgres()
     {
+        // A single-day catch-up from a seeded baseline. Verifies the full
+        // pipeline: per-type GetLatestDate → daily-page fetch → per-product
+        // filter → batched persistence — all touching real ParadeDB.
+        await SeedAllTypesAt(new DateOnly(2026, 3, 31));
+
+        var today = new DateOnly(2026, 4, 1); // Wednesday
         var client = Substitute.For<ICboeClient>();
-        // Equity carries the put/call assertion; other csv types return empty so the
-        // loop over the type-mapping exercises both the "no data" early-exit and the
-        // happy persistence path without bloating the test.
         client
-            .DownloadPutCallRatios(CboePutCallCsvType.Equity)
-            .Returns([
-                new CboePutCallRecord
+            .DownloadDailyPutCallRatios(today)
+            .Returns(
+                new Dictionary<CboePutCallProductType, CboePutCallRecord>
                 {
-                    Date = new DateOnly(2026, 4, 1),
-                    CallVolume = 1_200_000,
-                    PutVolume = 800_000,
-                    TotalVolume = 2_000_000,
-                    PutCallRatio = 0.67m,
-                },
-                new CboePutCallRecord
-                {
-                    Date = new DateOnly(2026, 4, 2),
-                    CallVolume = 1_500_000,
-                    PutVolume = 1_100_000,
-                    TotalVolume = 2_600_000,
-                    PutCallRatio = 0.73m,
-                },
-            ]);
-        client.DownloadPutCallRatios(CboePutCallCsvType.Total).Returns([]);
-        client.DownloadPutCallRatios(CboePutCallCsvType.Index).Returns([]);
-        client.DownloadPutCallRatios(CboePutCallCsvType.Vix).Returns([]);
-        client.DownloadPutCallRatios(CboePutCallCsvType.Etp).Returns([]);
+                    [CboePutCallProductType.Equity] = new()
+                    {
+                        Date = today,
+                        CallVolume = 1_200_000,
+                        PutVolume = 800_000,
+                        TotalVolume = 2_000_000,
+                        PutCallRatio = 0.67m,
+                    },
+                    [CboePutCallProductType.Total] = new()
+                    {
+                        Date = today,
+                        CallVolume = 3_000_000,
+                        PutVolume = 2_500_000,
+                        TotalVolume = 5_500_000,
+                        PutCallRatio = 0.83m,
+                    },
+                }
+            );
         client
             .DownloadVixHistory()
-            .Returns([
-                new CboeVixRecord
-                {
-                    Date = new DateOnly(2026, 4, 1),
-                    Open = 14.20m,
-                    High = 15.30m,
-                    Low = 13.80m,
-                    Close = 14.95m,
-                },
-            ]);
+            .Returns(
+                [
+                    new CboeVixRecord
+                    {
+                        Date = today,
+                        Open = 14.20m,
+                        High = 15.30m,
+                        Low = 13.80m,
+                        Close = 14.95m,
+                    },
+                ]
+            );
 
-        var sut = new CboeImportService(
-            CreateScopeFactory(),
-            Substitute.For<ILogger<CboeImportService>>(),
-            client,
-            // ErrorReporter is a real class but its Report() only runs on the catch
-            // path; happy-path Import never invokes it, so a substituted scope factory
-            // is enough here.
-            new ErrorReporter(
-                Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()
-            )
-        );
+        var sut = CreateSut(CreateScopeFactory(), client, today);
 
         await sut.Import(CancellationToken.None);
 
         await using var verify = _fixture.CreateDbContext();
 
-        var persistedEquity = await verify
+        var equityRows = await verify
             .Set<CboePutCallRatio>()
             .Where(r => r.RatioType == CboePutCallRatioType.Equity)
             .OrderBy(r => r.Date)
             .ToListAsync();
-        persistedEquity
+        equityRows
             .Should()
-            .HaveCount(2, "both Equity records should round-trip through FlushPutCallBatch");
-        persistedEquity[0].Date.Should().Be(new DateOnly(2026, 4, 1));
-        persistedEquity[0].PutCallRatio.Should().Be(0.67m);
-        persistedEquity[1].PutCallRatio.Should().Be(0.73m);
+            .HaveCount(2, "the seeded row and the one new daily-page row both persist");
+        equityRows[1].Date.Should().Be(today);
+        equityRows[1].PutCallRatio.Should().Be(0.67m);
 
-        // Types with empty downloads must NOT produce rows — the early-exit branch is
-        // what stops the importer from inserting phantom defaults on every tick.
-        var otherTypeCount = await verify
+        var totalRows = await verify
             .Set<CboePutCallRatio>()
-            .Where(r => r.RatioType != CboePutCallRatioType.Equity)
+            .Where(r => r.RatioType == CboePutCallRatioType.Total)
+            .OrderBy(r => r.Date)
+            .ToListAsync();
+        totalRows.Should().HaveCount(2);
+        totalRows[1].PutCallRatio.Should().Be(0.83m);
+
+        // Types absent from the day's response must not gain phantom rows.
+        var indexCount = await verify
+            .Set<CboePutCallRatio>()
+            .Where(r => r.RatioType == CboePutCallRatioType.Index)
             .CountAsync();
-        otherTypeCount.Should().Be(0);
+        indexCount.Should().Be(1, "only the seeded row remains for Index");
 
         var persistedVix = await verify.Set<CboeVixDaily>().ToListAsync();
         persistedVix.Should().ContainSingle();
         persistedVix[0].Close.Should().Be(14.95m);
-    }
-
-    // ── Idempotency + per-source resilience (zero-hit branches) ─────────
-
-    private static ICboeClient NoPutCallClient()
-    {
-        var client = Substitute.For<ICboeClient>();
-        foreach (var t in Enum.GetValues<CboePutCallCsvType>())
-            client.DownloadPutCallRatios(t).Returns([]);
-        return client;
     }
 
     [Fact]
@@ -195,29 +228,23 @@ public class CboeImportServiceFullPipelineTests : IAsyncLifetime
             await seed.SaveChangesAsync();
         }
 
-        var client = NoPutCallClient();
+        var client = EmptyClient();
         client
             .DownloadVixHistory()
-            .Returns([
-                new CboeVixRecord
-                {
-                    Date = new DateOnly(2026, 4, 1), // older than stored → filtered out
-                    Open = 1m,
-                    High = 1m,
-                    Low = 1m,
-                    Close = 1m,
-                },
-            ]);
+            .Returns(
+                [
+                    new CboeVixRecord
+                    {
+                        Date = new DateOnly(2026, 4, 1), // older than stored → filtered out
+                        Open = 1m,
+                        High = 1m,
+                        Low = 1m,
+                        Close = 1m,
+                    },
+                ]
+            );
 
-        var sut = new CboeImportService(
-            CreateScopeFactory(),
-            Substitute.For<ILogger<CboeImportService>>(),
-            client,
-            new ErrorReporter(
-                Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()
-            )
-        );
+        var sut = CreateSut(CreateScopeFactory(), client, new DateOnly(2026, 4, 10));
 
         await sut.Import(CancellationToken.None);
 
@@ -230,20 +257,12 @@ public class CboeImportServiceFullPipelineTests : IAsyncLifetime
     [Fact]
     public async Task Import_VixDownloadThrowsHttp_SwallowsAndPersistsNothing()
     {
-        var client = NoPutCallClient();
+        var client = EmptyClient();
         client
             .DownloadVixHistory()
             .Returns<Task<List<CboeVixRecord>>>(_ => throw new HttpRequestException("CBOE 503"));
 
-        var sut = new CboeImportService(
-            CreateScopeFactory(),
-            Substitute.For<ILogger<CboeImportService>>(),
-            client,
-            new ErrorReporter(
-                Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()
-            )
-        );
+        var sut = CreateSut(CreateScopeFactory(), client, new DateOnly(2026, 4, 10));
 
         await sut.Import(CancellationToken.None);
 
@@ -254,7 +273,7 @@ public class CboeImportServiceFullPipelineTests : IAsyncLifetime
     [Fact]
     public async Task Import_VixDownloadThrowsGeneric_ReportsToErrorReporter()
     {
-        var client = NoPutCallClient();
+        var client = EmptyClient();
         client
             .DownloadVixHistory()
             .Returns<Task<List<CboeVixRecord>>>(_ => throw new InvalidOperationException("boom"));
@@ -264,10 +283,10 @@ public class CboeImportServiceFullPipelineTests : IAsyncLifetime
             Substitute.For<ILogger<ErrorReporter>>()
         );
 
-        var sut = new CboeImportService(
+        var sut = CreateSut(
             CreateScopeFactory(),
-            Substitute.For<ILogger<CboeImportService>>(),
             client,
+            new DateOnly(2026, 4, 10),
             errorReporter
         );
 
@@ -284,57 +303,140 @@ public class CboeImportServiceFullPipelineTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Import_PutCallRatioAlreadyUpToDate_InsertsNothingForThatType()
+    public async Task Import_PutCallRatioAlreadyUpToDate_DoesNotCallCboeClient()
     {
-        using (var seed = FreshContext())
-        {
-            seed.Set<CboePutCallRatio>()
-                .Add(
-                    new CboePutCallRatio
+        // Seed every type at today's date — earliestKnown equals today, so
+        // start > today and the date loop never iterates.
+        var today = new DateOnly(2026, 4, 10);
+        await SeedAllTypesAt(today);
+
+        var client = EmptyClient();
+
+        var sut = CreateSut(CreateScopeFactory(), client, today);
+
+        await sut.Import(CancellationToken.None);
+
+        await client.DidNotReceive().DownloadDailyPutCallRatios(Arg.Any<DateOnly>());
+    }
+
+    [Fact]
+    public async Task Import_SkipsWeekendsLocally()
+    {
+        // Local weekend skip avoids burning the rate-limit budget on a feed
+        // CBOE doesn't publish Sat/Sun. With seed = Thu 2026-04-09 and
+        // today = Mon 2026-04-13, the loop covers Fri-Mon but only Fri/Mon
+        // hit the CDN.
+        await SeedAllTypesAt(new DateOnly(2026, 4, 9));
+
+        var client = EmptyClient();
+        var sut = CreateSut(CreateScopeFactory(), client, new DateOnly(2026, 4, 13));
+
+        await sut.Import(CancellationToken.None);
+
+        await client.Received().DownloadDailyPutCallRatios(new DateOnly(2026, 4, 10));
+        await client.Received().DownloadDailyPutCallRatios(new DateOnly(2026, 4, 13));
+        await client.DidNotReceive().DownloadDailyPutCallRatios(new DateOnly(2026, 4, 11));
+        await client.DidNotReceive().DownloadDailyPutCallRatios(new DateOnly(2026, 4, 12));
+    }
+
+    [Fact]
+    public async Task Import_PutCallDownloadThrowsHttp_LogsAndContinuesToNextDay()
+    {
+        // A single-day download blip must not abort the catch-up window.
+        // The next day's data is still worth fetching, and the error must
+        // NOT escalate to ErrorReporter (HttpRequestException is the
+        // transient-blip signal).
+        var today = new DateOnly(2026, 4, 13); // Monday
+        await SeedAllTypesAt(new DateOnly(2026, 4, 9));
+
+        var failingDate = new DateOnly(2026, 4, 10);
+        var client = Substitute.For<ICboeClient>();
+        client
+            .DownloadDailyPutCallRatios(failingDate)
+            .Returns<Task<Dictionary<CboePutCallProductType, CboePutCallRecord>>>(_ =>
+                throw new HttpRequestException("CBOE 503")
+            );
+        client
+            .DownloadDailyPutCallRatios(today)
+            .Returns(
+                new Dictionary<CboePutCallProductType, CboePutCallRecord>
+                {
+                    [CboePutCallProductType.Total] = new()
                     {
-                        RatioType = CboePutCallRatioType.Equity,
-                        Date = new DateOnly(2026, 4, 10),
+                        Date = today,
                         CallVolume = 1,
                         PutVolume = 1,
                         TotalVolume = 2,
-                        PutCallRatio = 1m,
-                    }
-                );
-            await seed.SaveChangesAsync();
-        }
+                        PutCallRatio = 1.5m,
+                    },
+                }
+            );
+        client.DownloadVixHistory().Returns(new List<CboeVixRecord>());
 
-        var client = NoPutCallClient();
-        client
-            .DownloadPutCallRatios(CboePutCallCsvType.Equity)
-            .Returns([
-                new CboePutCallRecord
-                {
-                    Date = new DateOnly(2026, 4, 1), // older than stored → filtered out
-                    CallVolume = 5,
-                    PutVolume = 5,
-                    TotalVolume = 10,
-                    PutCallRatio = 1m,
-                },
-            ]);
-        client.DownloadVixHistory().Returns([]);
-
-        var sut = new CboeImportService(
-            CreateScopeFactory(),
-            Substitute.For<ILogger<CboeImportService>>(),
-            client,
-            new ErrorReporter(
-                Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()
-            )
+        var errorReporter = Substitute.For<ErrorReporter>(
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ILogger<ErrorReporter>>()
         );
+
+        var sut = CreateSut(CreateScopeFactory(), client, today, errorReporter);
 
         await sut.Import(CancellationToken.None);
 
         using var verify = FreshContext();
-        var rows = await verify
+        var totalRows = await verify
             .Set<CboePutCallRatio>()
-            .Where(r => r.RatioType == CboePutCallRatioType.Equity)
+            .Where(r => r.RatioType == CboePutCallRatioType.Total)
+            .OrderBy(r => r.Date)
             .ToListAsync();
-        rows.Should().ContainSingle("the stored Equity row is current — no newer record inserted");
+        totalRows.Should().HaveCount(2, "the failing Friday is skipped but Monday still persists");
+        totalRows[1].Date.Should().Be(today);
+
+        await errorReporter
+            .DidNotReceive()
+            .Report(
+                ErrorSource.CboeScraper,
+                "CboeImport.ImportPutCallRatio",
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>()
+            );
+    }
+
+    [Fact]
+    public async Task Import_PutCallDownloadThrowsGeneric_ReportsAndAbortsCycle()
+    {
+        // A non-HTTP exception signals the page shape changed or a parser
+        // bug — continuing the loop would burn the rate-limit budget on
+        // identical failures. The contract: report once, then bail.
+        var today = new DateOnly(2026, 4, 14); // Tuesday
+        await SeedAllTypesAt(new DateOnly(2026, 4, 9));
+
+        var client = Substitute.For<ICboeClient>();
+        client
+            .DownloadDailyPutCallRatios(Arg.Any<DateOnly>())
+            .Returns<Task<Dictionary<CboePutCallProductType, CboePutCallRecord>>>(_ =>
+                throw new InvalidOperationException("page shape changed")
+            );
+        client.DownloadVixHistory().Returns(new List<CboeVixRecord>());
+
+        var errorReporter = Substitute.For<ErrorReporter>(
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ILogger<ErrorReporter>>()
+        );
+
+        var sut = CreateSut(CreateScopeFactory(), client, today, errorReporter);
+
+        await sut.Import(CancellationToken.None);
+
+        await client.Received(1).DownloadDailyPutCallRatios(Arg.Any<DateOnly>());
+        await errorReporter
+            .Received()
+            .Report(
+                ErrorSource.CboeScraper,
+                "CboeImport.ImportPutCallRatio",
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>()
+            );
     }
 }
