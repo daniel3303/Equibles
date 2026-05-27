@@ -77,7 +77,9 @@ public class InstitutionsOverlapMatrixSeededTests
         });
 
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
-        var response = await page.GotoAsync($"/institutions/overlap-matrix?ciks={fundACik},{fundBCik}");
+        var response = await page.GotoAsync(
+            $"/institutions/overlap-matrix?ciks={fundACik},{fundBCik}"
+        );
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);
