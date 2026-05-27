@@ -52,6 +52,16 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         // via Fluent API to keep the entity declaration attribute-only.
         builder.Entity<AumQuarterlySnapshot>().HasKey(s => s.ReportDate);
 
+        // Partial index on DirtyAt — in steady state ~99% of rows have
+        // DirtyAt = NULL, so a full btree wastes space and slows the drain
+        // worker's "WHERE DirtyAt IS NOT NULL AND DirtyAt < cutoff" scan.
+        // The [Index] attribute cannot express the HasFilter predicate, so
+        // this overrides the attribute-declared index in AumQuarterlySnapshot.
+        builder
+            .Entity<AumQuarterlySnapshot>()
+            .HasIndex(s => s.DirtyAt)
+            .HasFilter("\"DirtyAt\" IS NOT NULL");
+
         // SectorQuarterlySnapshot uses a composite (ReportDate, SectorId) key,
         // which the [Key] attribute cannot express. Reads on /holdings/trends
         // scan the whole table ordered by ReportDate, then SectorName — the

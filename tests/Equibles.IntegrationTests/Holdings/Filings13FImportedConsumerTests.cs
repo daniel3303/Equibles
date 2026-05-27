@@ -1,9 +1,5 @@
-using Equibles.CommonStocks.Data.Models;
-using Equibles.CommonStocks.Data.Models.Taxonomies;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Consumers;
-using Equibles.Holdings.HostedService.Services;
-using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Messaging.Contracts.Holdings;
 using MassTransit;
@@ -15,8 +11,10 @@ using NSubstitute;
 namespace Equibles.IntegrationTests.Holdings;
 
 /// <summary>
-/// Contract: consuming a <see cref="Filings13FImported"/> event rebuilds the
-/// per-quarter AUM snapshot row for the message's <c>ReportDate</c>.
+/// Contract for <see cref="Filings13FImportedConsumer"/>: marks the AUM
+/// snapshot for the affected quarter dirty in a single atomic upsert. Brand-new
+/// quarters land as a stub row with <c>DirtyAt</c> set; the drain worker fills
+/// in the aggregates on its next cooldown-expired tick.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class Filings13FImportedConsumerTests : IAsyncLifetime
@@ -44,14 +42,11 @@ public class Filings13FImportedConsumerTests : IAsyncLifetime
 
     private static readonly DateOnly Q4 = new(2024, 12, 31);
 
-    private HoldingsAggregateRefreshService BuildRefreshService()
+    private IServiceScopeFactory BuildScopeFactory()
     {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory.CreateScope().Returns(_ => CreateScopeFromFixture());
-        return new HoldingsAggregateRefreshService(
-            scopeFactory,
-            NullLogger<HoldingsAggregateRefreshService>.Instance
-        );
+        return scopeFactory;
     }
 
     private IServiceScope CreateScopeFromFixture()
@@ -60,15 +55,12 @@ public class Filings13FImportedConsumerTests : IAsyncLifetime
         var scope = Substitute.For<IServiceScope>();
         var provider = Substitute.For<IServiceProvider>();
         provider.GetService(typeof(Equibles.Data.EquiblesFinancialDbContext)).Returns(ctx);
-        provider
-            .GetService(typeof(AumQuarterlySnapshotRepository))
-            .Returns(_ => new AumQuarterlySnapshotRepository(ctx));
-        provider
-            .GetService(typeof(SectorQuarterlySnapshotRepository))
-            .Returns(_ => new SectorQuarterlySnapshotRepository(ctx));
         scope.ServiceProvider.Returns(provider);
         return scope;
     }
+
+    private Filings13FImportedConsumer BuildConsumer() =>
+        new(BuildScopeFactory(), NullLogger<Filings13FImportedConsumer>.Instance);
 
     private static ConsumeContext<Filings13FImported> Context(Filings13FImported message)
     {
@@ -79,78 +71,80 @@ public class Filings13FImportedConsumerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Consume_PublishedQuarter_WritesSnapshotRowForThatQuarter()
+    public async Task Consume_NoSnapshotRowYet_InsertsDirtyStubRow()
     {
-        // Seed two holdings in Q4 — one filer, two stocks, one accession.
+        var before = DateTime.UtcNow;
+        await BuildConsumer().Consume(Context(new Filings13FImported(Q4, FilingCount: 1)));
+        var after = DateTime.UtcNow;
+
+        await using var read = FreshContext();
+        var aum = await read.Set<AumQuarterlySnapshot>().SingleAsync(s => s.ReportDate == Q4);
+        aum.DirtyAt.Should().NotBeNull();
+        aum.DirtyAt!.Value.Should().BeOnOrAfter(before).And.BeOnOrBefore(after);
+        aum.TotalValue.Should().Be(0L, "brand-new quarter is a stub until the drain rebuilds");
+        aum.FilerCount.Should().Be(0);
+        aum.PositionCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Consume_ExistingRowNotDirty_MarksDirtyAtWithoutTouchingAggregates()
+    {
+        var preComputedAt = DateTime.UtcNow.AddHours(-3);
         await using (var seed = FreshContext())
         {
-            var tech = new Sector { Name = "Technology" };
-            seed.Add(tech);
-            await seed.SaveChangesAsync();
-            var industry = new Industry { Name = "Software", SectorId = tech.Id };
-            seed.Add(industry);
-            await seed.SaveChangesAsync();
-            var aapl = new CommonStock
-            {
-                Ticker = "AAPL",
-                Name = "Apple",
-                Cik = "C0000320193",
-                IndustryId = industry.Id,
-            };
-            var msft = new CommonStock
-            {
-                Ticker = "MSFT",
-                Name = "Microsoft",
-                Cik = "C0000789019",
-                IndustryId = industry.Id,
-            };
-            seed.AddRange(aapl, msft);
-            var holder = new InstitutionalHolder { Cik = "H001", Name = "Holder H001" };
-            seed.Add(holder);
-            await seed.SaveChangesAsync();
-            seed.AddRange(
-                MakeHolding(aapl, holder, Q4, 100_000, "acc-q4"),
-                MakeHolding(msft, holder, Q4, 200_000, "acc-q4")
+            seed.Add(
+                new AumQuarterlySnapshot
+                {
+                    ReportDate = Q4,
+                    TotalValue = 1_000_000L,
+                    FilerCount = 42,
+                    PositionCount = 100,
+                    StockCount = 10,
+                    FilingCount = 5,
+                    ComputedAt = preComputedAt,
+                }
             );
             await seed.SaveChangesAsync();
         }
 
-        var sut = new Filings13FImportedConsumer(
-            BuildRefreshService(),
-            NullLogger<Filings13FImportedConsumer>.Instance
-        );
-
-        await sut.Consume(Context(new Filings13FImported(Q4, FilingCount: 1)));
+        var before = DateTime.UtcNow;
+        await BuildConsumer().Consume(Context(new Filings13FImported(Q4, FilingCount: 1)));
+        var after = DateTime.UtcNow;
 
         await using var read = FreshContext();
         var aum = await read.Set<AumQuarterlySnapshot>().SingleAsync(s => s.ReportDate == Q4);
-        aum.TotalValue.Should().Be(300_000);
-        aum.FilerCount.Should().Be(1);
-        aum.PositionCount.Should().Be(2);
-        aum.FilingCount.Should().Be(1);
+        aum.DirtyAt.Should().NotBeNull();
+        aum.DirtyAt!.Value.Should().BeOnOrAfter(before).And.BeOnOrBefore(after);
+        aum.ComputedAt.Should()
+            .BeCloseTo(preComputedAt, TimeSpan.FromSeconds(1), "aggregate path untouched");
+        aum.TotalValue.Should().Be(1_000_000L, "no rebuild — aggregate values are preserved");
+        aum.FilerCount.Should().Be(42);
     }
 
-    private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
-        InstitutionalHolder holder,
-        DateOnly reportDate,
-        long value,
-        string accession
-    ) =>
-        new()
+    [Fact]
+    public async Task Consume_AlreadyDirty_PreservesOriginalDirtyAt()
+    {
+        var firstEventAt = DateTime.UtcNow.AddMinutes(-30);
+        await using (var seed = FreshContext())
         {
-            CommonStockId = stock.Id,
-            InstitutionalHolderId = holder.Id,
-            FilingDate = reportDate.AddDays(45),
-            ReportDate = reportDate,
-            Shares = value / 100,
-            Value = value,
-            ShareType = ShareType.Shares,
-            InvestmentDiscretion = InvestmentDiscretion.Sole,
-            AccessionNumber = accession,
-            Cusip =
-                $"{stock.Ticker[..Math.Min(4, stock.Ticker.Length)]}{stock.Id.GetHashCode():X8}"[
-                    ..9
-                ],
-        };
+            seed.Add(
+                new AumQuarterlySnapshot
+                {
+                    ReportDate = Q4,
+                    TotalValue = 1L,
+                    DirtyAt = firstEventAt,
+                }
+            );
+            await seed.SaveChangesAsync();
+        }
+
+        // Second event in the same wave — DirtyAt should not be reset to a
+        // newer timestamp, so the cooldown is measured from the first event.
+        await BuildConsumer().Consume(Context(new Filings13FImported(Q4, FilingCount: 1)));
+
+        await using var read = FreshContext();
+        var aum = await read.Set<AumQuarterlySnapshot>().SingleAsync(s => s.ReportDate == Q4);
+        aum.DirtyAt.Should().NotBeNull();
+        aum.DirtyAt!.Value.Should().BeCloseTo(firstEventAt, TimeSpan.FromSeconds(1));
+    }
 }

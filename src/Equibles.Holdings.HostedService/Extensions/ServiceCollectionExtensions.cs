@@ -12,6 +12,7 @@ public static class ServiceCollectionExtensions
 
         services.AddHostedService<HoldingsScraperWorker>();
         services.AddHostedService<Holdings13FRealtimeWorker>();
+        services.AddHostedService<AumSnapshotDrainWorker>();
         services.AddHostedService<AumSnapshotRebuildWorker>();
 
         return services;

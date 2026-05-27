@@ -18,16 +18,18 @@ namespace Equibles.Holdings.HostedService.Services;
 /// first, so the existing <c>[Index(ReportDate)]</c> btree narrows the scan
 /// to one quarter's slice and the multi-distinct only ever sees that slice.
 ///
-/// Two entry points:
+/// Entry points:
 /// <list type="bullet">
 ///   <item><c>RebuildQuarterAsync</c> — single quarter, bounded work; called
-///     by the event-driven path on each 13F import.</item>
-///   <item><c>RebuildAllAsync</c> — enumerates distinct ReportDate values and
-///     rebuilds each in its own DbContext scope; called by the daily
-///     safety-net job and the one-time first-boot backfill. Each quarter is
-///     wrapped in its own try/catch so a single bad quarter (e.g. a unique-
-///     key collision from a parallel consumer rebuild) doesn't abort the
-///     whole pass.</item>
+///     by the drain worker for each quarter whose <c>DirtyAt</c> cooldown has
+///     elapsed.</item>
+///   <item><c>RebuildRecentAsync</c> — top-N most recent quarters; called by
+///     the daily safety-net worker. Bounded cost regardless of how many
+///     historical quarters the table holds.</item>
+///   <item><c>RebuildAllAsync</c> — enumerates every distinct ReportDate;
+///     called by the one-time first-boot backfill. Each quarter is wrapped in
+///     its own try/catch so a single bad quarter (e.g. a unique-key collision
+///     from a parallel consumer rebuild) doesn't abort the whole pass.</item>
 /// </list>
 ///
 /// Writes go through FlexLabs <c>UpsertRange</c> (single <c>INSERT … ON
@@ -50,10 +52,12 @@ public class HoldingsAggregateRefreshService
         _logger = logger;
     }
 
-    public Task RebuildQuarterAsync(DateOnly reportDate, CancellationToken cancellationToken) =>
-        RebuildQuarterAsync(reportDate, commandTimeout: null, cancellationToken);
+    public virtual Task RebuildQuarterAsync(
+        DateOnly reportDate,
+        CancellationToken cancellationToken
+    ) => RebuildQuarterAsync(reportDate, commandTimeout: null, cancellationToken);
 
-    public async Task RebuildQuarterAsync(
+    public virtual async Task RebuildQuarterAsync(
         DateOnly reportDate,
         TimeSpan? commandTimeout,
         CancellationToken cancellationToken
@@ -73,22 +77,68 @@ public class HoldingsAggregateRefreshService
 
     public async Task RebuildAllAsync(TimeSpan? commandTimeout, CancellationToken cancellationToken)
     {
-        List<DateOnly> reportDates;
-        await using (var scope = _scopeFactory.CreateAsyncScope())
+        var reportDates = await LoadReportDates(
+            query => query.OrderBy(d => d),
+            commandTimeout,
+            cancellationToken
+        );
+        await RebuildReportDates(reportDates, commandTimeout, cancellationToken);
+    }
+
+    public Task RebuildRecentAsync(int quarters, CancellationToken cancellationToken) =>
+        RebuildRecentAsync(quarters, commandTimeout: null, cancellationToken);
+
+    public async Task RebuildRecentAsync(
+        int quarters,
+        TimeSpan? commandTimeout,
+        CancellationToken cancellationToken
+    )
+    {
+        if (quarters <= 0)
         {
-            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
-            if (commandTimeout is not null)
-            {
-                dbContext.Database.SetCommandTimeout(commandTimeout.Value);
-            }
-            reportDates = await dbContext
-                .Set<InstitutionalHolding>()
-                .Select(h => h.ReportDate)
-                .Distinct()
-                .OrderBy(d => d)
-                .ToListAsync(cancellationToken);
+            throw new ArgumentOutOfRangeException(
+                nameof(quarters),
+                "Must rebuild at least one quarter."
+            );
         }
 
+        // Take the N most recent ReportDate values. Bounded cost regardless of
+        // how many historical quarters exist — historical snapshots only refresh
+        // when the consumer marks them dirty (or via the first-boot backfill).
+        var reportDates = await LoadReportDates(
+            query => query.OrderByDescending(d => d).Take(quarters),
+            commandTimeout,
+            cancellationToken
+        );
+        await RebuildReportDates(reportDates, commandTimeout, cancellationToken);
+    }
+
+    private async Task<List<DateOnly>> LoadReportDates(
+        Func<IQueryable<DateOnly>, IQueryable<DateOnly>> orderAndLimit,
+        TimeSpan? commandTimeout,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        if (commandTimeout is not null)
+        {
+            dbContext.Database.SetCommandTimeout(commandTimeout.Value);
+        }
+
+        var distinctDates = dbContext
+            .Set<InstitutionalHolding>()
+            .Select(h => h.ReportDate)
+            .Distinct();
+        return await orderAndLimit(distinctDates).ToListAsync(cancellationToken);
+    }
+
+    private async Task RebuildReportDates(
+        List<DateOnly> reportDates,
+        TimeSpan? commandTimeout,
+        CancellationToken cancellationToken
+    )
+    {
         _logger.LogInformation(
             "Rebuilding holdings aggregate snapshots for {Count} quarter(s)",
             reportDates.Count

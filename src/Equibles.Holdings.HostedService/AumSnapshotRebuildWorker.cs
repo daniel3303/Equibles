@@ -9,17 +9,21 @@ namespace Equibles.Holdings.HostedService;
 /// Daily safety-net for the per-quarter AUM and sector-allocation snapshots
 /// that power /holdings/stats and /holdings/trends.
 ///
-/// The event-driven path (<see cref="Consumers.Filings13FImportedConsumer"/>)
-/// keeps snapshots current on every 13F import. This worker is the second
-/// line of defence — it rebuilds every quarter once a day so a message lost
-/// to a transient bus failure, or a snapshot row missed during a bulk
-/// historical replay, gets reconciled within 24h.
+/// The hot path is the consumer/drain pair
+/// (<see cref="Consumers.Filings13FImportedConsumer"/> marks dirty,
+/// <see cref="AumSnapshotDrainWorker"/> rebuilds after cooldown). This
+/// worker rebuilds the <see cref="RecentQuartersToRebuild"/> most recent
+/// quarters unconditionally once a day — a belt-and-suspenders pass that
+/// reconciles snapshots even if a bus message was lost AND the dirty flag
+/// was never set. Older quarters are effectively frozen: 13F amendments
+/// after a few quarters are rare and trigger their own consumer event
+/// anyway.
 ///
-/// On boot, the worker runs a one-off backfill with an extended
-/// <c>CommandTimeout</c> whenever the snapshot tables don't yet cover every
-/// quarter present in the holdings table. The naive "snapshot tables empty"
-/// gate this replaced lost the backfill whenever the realtime consumer beat
-/// the worker to inserting the first row.
+/// On boot, the worker runs a one-off backfill of every quarter with an
+/// extended <c>CommandTimeout</c> whenever the snapshot tables don't yet
+/// cover every quarter present in the holdings table. The naive "snapshot
+/// tables empty" gate this replaced lost the backfill whenever the
+/// consumer beat the worker to inserting the first row.
 /// </summary>
 public class AumSnapshotRebuildWorker : BackgroundService
 {
@@ -32,6 +36,7 @@ public class AumSnapshotRebuildWorker : BackgroundService
     protected virtual TimeSpan StartupDelay => TimeSpan.FromMinutes(5);
     protected virtual TimeSpan SleepInterval => TimeSpan.FromHours(24);
     protected virtual TimeSpan BackfillCommandTimeout => TimeSpan.FromMinutes(30);
+    protected virtual int RecentQuartersToRebuild => 4;
 
     public AumSnapshotRebuildWorker(
         IServiceScopeFactory scopeFactory,
@@ -74,7 +79,7 @@ public class AumSnapshotRebuildWorker : BackgroundService
         {
             _logger.LogError(
                 ex,
-                "AUM snapshot first-boot backfill failed; daily safety-net will retry full rebuild on each cycle"
+                "AUM snapshot first-boot backfill failed; daily safety-net will reconcile recent quarters on each cycle"
             );
         }
 
@@ -82,8 +87,11 @@ public class AumSnapshotRebuildWorker : BackgroundService
         {
             try
             {
-                _logger.LogInformation("Running daily AUM snapshot safety-net rebuild");
-                await _refreshService.RebuildAllAsync(stoppingToken);
+                _logger.LogInformation(
+                    "Running daily AUM snapshot safety-net rebuild for last {Quarters} quarter(s)",
+                    RecentQuartersToRebuild
+                );
+                await _refreshService.RebuildRecentAsync(RecentQuartersToRebuild, stoppingToken);
             }
             catch (OperationCanceledException)
             {
