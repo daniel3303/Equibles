@@ -22,7 +22,7 @@ public class InsiderTradingFilingProcessorParseTransactionCodeIDiscretionaryTest
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-    [Fact(Skip = "GH-2239 — SEC Form 4 codes I and W are swapped in ParseTransactionCode mapping")]
+    [Fact]
     public void ParseTransactionCode_CodeI_ReturnsDiscretionary()
     {
         var result = (TransactionCode)ParseTransactionCodeMethod.Invoke(null, ["I"]);

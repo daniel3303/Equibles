@@ -571,55 +571,6 @@ public class InsiderTradingFilingProcessorTests
     }
 
     [Fact]
-    public void ParseTransactionCode_DiscretionaryCodeW_ReturnsDiscretionary()
-    {
-        // Ninth pin in the ParseTransactionCode family. Existing pins cover
-        // P/Purchase, S/Sale, A/Award, _/Other, M/Conversion, X/Exercise,
-        // F/TaxPayment, and G/Gift. This pin covers
-        // `W => TransactionCode.Discretionary` — acquisitions or
-        // dispositions made via a 10b5-1 trading plan or other pre-
-        // authorized discretionary mechanism that doesn't fit the
-        // open-market / award / gift / tax-withholding categories.
-        //
-        // W is the LAST single-letter §16 code that's semantically
-        // distinct AND used in production filings (E for Expiration and
-        // I for Inheritance round out the table but are statistically
-        // rarer). It's the most semantically subtle of the codes: a
-        // "Discretionary" transaction is one the insider authorized in
-        // advance through a plan but executed mechanically — the
-        // signal-value tier sits between the genuinely informative
-        // open-market P/S (high signal) and the mechanical F/TaxPayment
-        // (no signal). Misclassifying W in either direction silently
-        // miscalibrates the insider-trading signal.
-        //
-        // The risk uniquely caught by this pin: a refactor that swapped
-        // the W arm with an adjacent letter's mapping (W appears LAST
-        // in the switch source — the natural "tail" position is the
-        // most likely to be lost in a "consolidate the tail arms"
-        // refactor that merges W/I/E into the default catch-all on the
-        // assumption that "rare codes can fall through to Other").
-        // Such a refactor would compile, pass every other ParseTransactionCode
-        // pin (P/S/A/M/X/F/G/Other), and silently demote 10b5-1 trades
-        // — the regulator-blessed mechanism executives use to time sales
-        // around earnings windows — into the uncategorized Other bucket.
-        // Downstream analytics that filter on Discretionary specifically
-        // (e.g. "did the CEO sell via plan or via discretion this quarter?")
-        // would silently return zero results.
-        //
-        // The complementary risk: a swap with G/Gift (also in the
-        // "non-open-market" semantic cluster) would silently merge two
-        // distinct disclosure categories, corrupting both the gift
-        // donation aggregate (used in charitable-giving analytics) AND
-        // the 10b5-1 plan-execution aggregate (used in insider-trading
-        // pattern detection). Pin uppercase "W" with assertion on the
-        // exact enum value Discretionary so any of these regressions
-        // surface here.
-        var result = (TransactionCode)ParseTransactionCodeMethod.Invoke(null, ["W"]);
-
-        result.Should().Be(TransactionCode.Discretionary);
-    }
-
-    [Fact]
     public void ParseTransactionCode_ExpirationCodeE_ReturnsExpiration()
     {
         // Tenth pin in the ParseTransactionCode family. Existing pins cover
@@ -669,64 +620,6 @@ public class InsiderTradingFilingProcessorTests
         var result = (TransactionCode)ParseTransactionCodeMethod.Invoke(null, ["E"]);
 
         result.Should().Be(TransactionCode.Expiration);
-    }
-
-    [Fact]
-    public void ParseTransactionCode_InheritanceCodeI_ReturnsInheritance()
-    {
-        // Eleventh pin in the ParseTransactionCode family, completing every
-        // letter-arm of the switch. Existing pins cover P/Purchase, S/Sale,
-        // A/Award, _/Other, M/Conversion, X/Exercise, F/TaxPayment, G/Gift,
-        // W/Discretionary, and E/Expiration. This pin covers
-        // `I => TransactionCode.Inheritance` — the codebase's mapping for
-        // securities acquired via the death of a prior holder (transfer by
-        // will, intestacy, or beneficiary designation).
-        //
-        // I sits in the "non-economic acquisition" semantic cluster alongside
-        // G/Gift — both represent securities entering the insider's holdings
-        // WITHOUT a market transaction or insider decision. Downstream
-        // analytics distinguish them:
-        //   • Gift (G) — donor was alive at the time of transfer. Donor
-        //     identity is reportable; the gift is a deliberate act with
-        //     tax-planning implications.
-        //   • Inheritance (I) — prior holder is deceased. The acquisition is
-        //     a passive legal event; no donor relationship exists.
-        // Misclassifying I as G (or vice versa) would corrupt both the
-        // charitable-giving analytics (Gift aggregate) AND the estate-
-        // transfer analytics (Inheritance aggregate) — two distinct
-        // disclosure categories the dashboard surfaces separately.
-        //
-        // The risk this pin uniquely catches is asymmetric and unreachable
-        // from the G/Gift sibling: a refactor that collapsed I into G (under
-        // the mistaken assumption that "both are non-purchase acquisitions,
-        // same bucket") would compile cleanly, pass every existing
-        // ParseTransactionCode pin (G still maps to Gift, all 10 others are
-        // untouched), and silently re-tag every inheritance event as a
-        // discretionary Gift. The volume signal is small but meaningful —
-        // founder/executive deaths produce concentrated Inheritance reports
-        // that estate-planning analytics filter on specifically; merging
-        // them into Gift would erase the signal entirely.
-        //
-        // The complementary risk: a swap with the default arm (I falls
-        // through to Other) would lose every inheritance event from the
-        // typed enum entirely, breaking any filter that targets Inheritance
-        // specifically. Both regressions surface as a wrong enum value on
-        // this pin's assertion.
-        //
-        // With this pin, all 10 letter arms (P, S, A, M, X, F, E, G, I, W)
-        // plus the default arm are individually pinned. The only path NOT
-        // exercised by a sibling pin is the `code?.ToUpperInvariant()` null
-        // propagation — null input bypasses the switch entirely and falls
-        // through to `_ => Other` by way of `null switch { ... _ => Other }`.
-        // That path's behavior is established transitively by the existing
-        // default-arm pin (which uses "Q", an unknown letter) — the same
-        // default-arm code emits Other regardless of which way it was
-        // reached. Pin uppercase "I" with assertion on the exact enum value
-        // Inheritance so the swap-with-Gift and swap-with-default
-        // regressions surface here.
-        var result = (TransactionCode)ParseTransactionCodeMethod.Invoke(null, ["I"]);
-
-        result.Should().Be(TransactionCode.Inheritance);
     }
 
     [Fact]
