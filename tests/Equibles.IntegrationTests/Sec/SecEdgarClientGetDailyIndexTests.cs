@@ -67,6 +67,9 @@ public class SecEdgarClientGetDailyIndexTests
     // daily-index files (e.g. "today" before the index is posted, weekends).
     // GetDailyIndex must treat that as "no index for this day" and return empty
     // — a throw here kills the entire near-real-time 13F sweep every cycle.
+    // The date must be today (or future) for the Forbidden arm: a *past-date*
+    // 403 is treated as SEC throttling and retried up to MaxRetries, so the
+    // stubbed-always-Forbidden handler would hang the retry budget (~18m).
     [Theory]
     [InlineData(HttpStatusCode.Forbidden)]
     [InlineData(HttpStatusCode.NotFound)]
@@ -85,7 +88,7 @@ public class SecEdgarClientGetDailyIndexTests
             config
         );
 
-        var entries = await sut.GetDailyIndex(new DateOnly(2026, 5, 17));
+        var entries = await sut.GetDailyIndex(DateOnly.FromDateTime(DateTime.UtcNow));
 
         entries.Should().BeEmpty();
     }
