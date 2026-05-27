@@ -34,6 +34,10 @@ public class HoldingsScraperWorker : BaseScraperWorker
     protected override TimeSpan SleepInterval => TimeSpan.FromHours(24);
     protected override ErrorSource ErrorSource => ErrorSource.HoldingsScraper;
 
+    // Staggered so the SEC scrapers don't drain the shared EDGAR request budget at
+    // deploy time before the time-sensitive 13F real-time sweep (delay 0) runs.
+    protected override TimeSpan StartupDelay => TimeSpan.FromMinutes(4);
+
     public HoldingsScraperWorker(
         ILogger<HoldingsScraperWorker> logger,
         IServiceScopeFactory scopeFactory,

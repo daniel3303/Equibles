@@ -18,6 +18,10 @@ public class FtdScraperWorker : BaseScraperWorker
     protected override TimeSpan SleepInterval { get; }
     protected override ErrorSource ErrorSource => ErrorSource.FtdScraper;
 
+    // Staggered so the SEC scrapers don't drain the shared EDGAR request budget at
+    // deploy time before the time-sensitive 13F real-time sweep (delay 0) runs.
+    protected override TimeSpan StartupDelay => TimeSpan.FromMinutes(6);
+
     public FtdScraperWorker(
         ILogger<FtdScraperWorker> logger,
         IServiceScopeFactory scopeFactory,

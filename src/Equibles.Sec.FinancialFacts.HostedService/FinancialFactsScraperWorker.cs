@@ -23,6 +23,10 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
     protected override TimeSpan SleepInterval { get; }
     protected override ErrorSource ErrorSource => ErrorSource.FinancialFactsScraper;
 
+    // Heaviest SEC walker (one request per tracked company) — staggered last so it
+    // doesn't drain the shared EDGAR budget before the 13F real-time sweep runs.
+    protected override TimeSpan StartupDelay => TimeSpan.FromMinutes(8);
+
     public FinancialFactsScraperWorker(
         ILogger<FinancialFactsScraperWorker> logger,
         IServiceScopeFactory scopeFactory,
