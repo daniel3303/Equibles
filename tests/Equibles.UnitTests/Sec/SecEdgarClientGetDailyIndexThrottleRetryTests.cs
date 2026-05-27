@@ -49,16 +49,18 @@ public class SecEdgarClientGetDailyIndexThrottleRetryTests
     }
 
     [Fact]
-    public async Task GetDailyIndex_PastDateThrottlePersists_ReturnsEmptyWithoutThrowing()
+    public async Task GetDailyIndex_PastDateThrottlePersists_ThrowsAfterRetries()
     {
-        // Every attempt is throttled. The day must be skipped (empty), never
-        // surfaced as the unhandled 403 that aborted the whole realtime sweep.
+        // Every attempt is throttled. A past-date index always exists, so a
+        // persistent 403 is a real fetch failure, not "no filings": it must be
+        // retried and then surfaced (the caller catches it per day and holds the
+        // sweep watermark back), never silently returned as empty.
         var handler = new SequencedHandler(() => Forbidden(body: ""));
         var sut = BuildClient(handler);
 
-        var result = await sut.GetDailyIndex(new DateOnly(2020, 1, 2));
+        var act = async () => await sut.GetDailyIndex(new DateOnly(2020, 1, 2));
 
-        result.Should().BeEmpty();
+        await act.Should().ThrowAsync<HttpRequestException>();
         handler.CallCount.Should().BeGreaterThan(1); // retried before giving up
     }
 

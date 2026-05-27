@@ -43,5 +43,6 @@ public class HoldingsModuleConfiguration : Equibles.Data.IModuleConfiguration
 
         builder.Entity<ProcessedDataSet>();
         builder.Entity<ProcessedFiling>();
+        builder.Entity<RealtimeSweepState>();
     }
 }

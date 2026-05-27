@@ -458,18 +458,11 @@ public class SecEdgarClient : ISecEdgarClient
             return [];
         }
 
-        // A past-date 403 that survived the retries is SEC still throttling.
-        // Skip this one day with a visible warning rather than failing the whole
-        // sweep or silently dropping its filings — the next cycle re-sweeps it.
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            _logger.LogWarning(
-                "SEC throttling persisted for the {Date:yyyy-MM-dd} daily index; skipping this day, will retry next cycle",
-                date
-            );
-            return [];
-        }
-
+        // A past-date 403 that survived the retries is SEC still throttling: that
+        // index always exists, so this is a real failure to fetch, not "no
+        // filings". Let it throw — the caller (DiscoverEntries) catches it per
+        // day and holds the sweep watermark back so the day is re-swept next
+        // cycle, rather than being silently skipped past.
         response.EnsureSuccessStatusCode();
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
 
