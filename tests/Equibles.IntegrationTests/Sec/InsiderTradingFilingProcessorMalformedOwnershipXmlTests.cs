@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data;
 using Equibles.Errors.Repositories;
+using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Integrations.Sec.Contracts;
@@ -11,6 +12,8 @@ using Equibles.IntegrationTests.Helpers;
 using Equibles.Messaging;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
+using Equibles.Yahoo.Data;
+using Equibles.Yahoo.Repositories;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -35,7 +38,8 @@ public class InsiderTradingFilingProcessorMalformedOwnershipXmlTests
         var dbContext = TestDbContextFactory.Create(
             new InsiderTradingModuleConfiguration(),
             new CommonStocksModuleConfiguration(),
-            new ErrorsModuleConfiguration()
+            new ErrorsModuleConfiguration(),
+            new YahooModuleConfiguration()
         );
 
         var errorRepo = new ErrorRepository(dbContext);
@@ -44,7 +48,9 @@ public class InsiderTradingFilingProcessorMalformedOwnershipXmlTests
             (typeof(ISecEdgarClient), secClient),
             (typeof(InsiderOwnerRepository), new InsiderOwnerRepository(dbContext)),
             (typeof(InsiderTransactionRepository), new InsiderTransactionRepository(dbContext)),
-            (typeof(ErrorManager), new ErrorManager(new ErrorRepository(dbContext)))
+            (typeof(ErrorManager), new ErrorManager(new ErrorRepository(dbContext))),
+            (typeof(DailyStockPriceRepository), new DailyStockPriceRepository(dbContext)),
+            (typeof(InsiderTransactionPriceValidator), new InsiderTransactionPriceValidator())
         );
         var processor = new InsiderTradingFilingProcessor(
             scopeFactory,
