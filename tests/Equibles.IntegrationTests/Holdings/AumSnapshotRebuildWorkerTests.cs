@@ -95,19 +95,14 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
         var worker = new InstantTickWorker(scopeFactory, refreshService);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        // Run one cycle: the backfill, then one safety-net pass. Cancel after
-        // a brief delay so the loop exits.
-        var run = worker.StartAsync(cts.Token);
+        // Run one cycle: the backfill, then one safety-net pass.
+        // StopAsync signals the worker's internal stopping token (cancelling
+        // cts here doesn't reach it — it only governs the startup phase) and
+        // awaits ExecuteAsync, so contexts created by the loop are guaranteed
+        // to be idle by the time DisposeAsync disposes them.
+        await worker.StartAsync(cts.Token);
         await Task.Delay(TimeSpan.FromMilliseconds(500), cts.Token);
-        await cts.CancelAsync();
-        try
-        {
-            await run;
-        }
-        catch (OperationCanceledException)
-        {
-            // Expected — the loop exited via the stoppingToken.
-        }
+        await worker.StopAsync(CancellationToken.None);
 
         await using var read = FreshContext();
         var snapshots = await read.Set<AumQuarterlySnapshot>()
@@ -154,14 +149,9 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
         var worker = new InstantTickWorker(scopeFactory, refreshService);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var run = worker.StartAsync(cts.Token);
+        await worker.StartAsync(cts.Token);
         await Task.Delay(TimeSpan.FromMilliseconds(500), cts.Token);
-        await cts.CancelAsync();
-        try
-        {
-            await run;
-        }
-        catch (OperationCanceledException) { }
+        await worker.StopAsync(CancellationToken.None);
 
         await using var read = FreshContext();
         var snapshots = await read.Set<AumQuarterlySnapshot>()
@@ -189,14 +179,9 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
         var worker = new InstantTickWorker(scopeFactory, refreshService);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var run = worker.StartAsync(cts.Token);
+        await worker.StartAsync(cts.Token);
         await Task.Delay(TimeSpan.FromMilliseconds(300), cts.Token);
-        await cts.CancelAsync();
-        try
-        {
-            await run;
-        }
-        catch (OperationCanceledException) { }
+        await worker.StopAsync(CancellationToken.None);
 
         await using var read = FreshContext();
         (await read.Set<AumQuarterlySnapshot>().AnyAsync()).Should().BeFalse();
