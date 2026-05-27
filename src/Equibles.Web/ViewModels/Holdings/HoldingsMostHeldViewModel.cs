@@ -1,17 +1,11 @@
 namespace Equibles.Web.ViewModels.Holdings;
 
-public class HoldingsMostHeldViewModel
+public class HoldingsMostHeldViewModel : QuarterlySelectionViewModel
 {
     public const int PageSize = 100;
     public const string SortFilers = "filers";
     public const string SortFilersDelta = "filersDelta";
     public const string SortValue = "value";
-
-    public List<DateOnly> AvailableDates { get; set; } = [];
-    public DateOnly SelectedDate { get; set; }
-    public DateOnly? PreviousDate { get; set; }
-    public bool IsCombinedAvailable { get; set; }
-    public bool IsCombinedSelected { get; set; }
 
     public int TotalUniverseFilers { get; set; }
 
