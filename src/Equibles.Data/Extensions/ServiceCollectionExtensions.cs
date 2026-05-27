@@ -23,7 +23,8 @@ public static class ServiceCollectionExtensions
         Action<NpgsqlDbContextOptionsBuilder> configureNpgsql = null,
         Assembly migrationsAssembly = null,
         string migrationsAssemblyName = null,
-        TimeSpan? commandTimeout = null
+        TimeSpan? commandTimeout = null,
+        Action<DbContextOptionsBuilder> configureOptions = null
     )
         where TContext : EquiblesDbContextBase
     {
@@ -56,6 +57,9 @@ public static class ServiceCollectionExtensions
                     }
                 );
                 options.UseLazyLoadingProxies();
+                // Last, so a host can adjust context-level options (e.g. suppress a
+                // warning) on top of the standard configuration.
+                configureOptions?.Invoke(options);
             }
         );
 
@@ -73,7 +77,8 @@ public static class ServiceCollectionExtensions
         Action<EquiblesModuleBuilder> configureModules,
         Assembly migrationsAssembly = null,
         string migrationsAssemblyName = null,
-        TimeSpan? commandTimeout = null
+        TimeSpan? commandTimeout = null,
+        Action<DbContextOptionsBuilder> configureOptions = null
     )
     {
         return services.AddEquiblesDbContext<EquiblesFinancialDbContext>(
@@ -82,7 +87,8 @@ public static class ServiceCollectionExtensions
             npgsql => npgsql.UseVector().UseParadeDb(),
             migrationsAssembly,
             migrationsAssemblyName,
-            commandTimeout
+            commandTimeout,
+            configureOptions
         );
     }
 
