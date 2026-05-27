@@ -25,3 +25,4 @@ import './js/global-search-shortcut';
 import './js/search-clear';
 import './js/copy-button';
 import './js/compact-numbers';
+import './js/institution-picker';
