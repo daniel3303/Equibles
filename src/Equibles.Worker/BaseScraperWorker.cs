@@ -100,6 +100,26 @@ public abstract class BaseScraperWorker : BackgroundService
         if (!ValidateConfiguration())
             return;
 
+        // One-off stagger before the first cycle. Workers sharing a rate-limited
+        // upstream (SEC EDGAR) use this so they don't all fire at deploy time and
+        // exhaust the shared request budget — see the SEC scrapers' StartupDelay.
+        if (StartupDelay > TimeSpan.Zero)
+        {
+            Logger.LogInformation(
+                "{Worker} staggering startup by {Delay}",
+                WorkerName,
+                FormatInterval(StartupDelay)
+            );
+        }
+        try
+        {
+            await DelayStartup(stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return;
+        }
+
         while (!stoppingToken.IsCancellationRequested)
         {
             Logger.LogInformation("{Worker} running at: {Time}", WorkerName, DateTimeOffset.Now);
@@ -170,6 +190,18 @@ public abstract class BaseScraperWorker : BackgroundService
     /// </summary>
     protected virtual Task WaitForNextCycle(TimeSpan interval, CancellationToken stoppingToken) =>
         Task.Delay(interval, stoppingToken);
+
+    /// <summary>
+    /// One-off delay before the first cycle (default none). Lets workers that
+    /// share a rate-limited upstream be staggered at startup so they don't all
+    /// fire at once — the SEC scrapers set this so the lighter, time-sensitive
+    /// 13F real-time sweep gets the SEC request budget first after a deploy.
+    /// </summary>
+    protected virtual TimeSpan StartupDelay => TimeSpan.Zero;
+
+    /// <summary>Awaits <see cref="StartupDelay"/>; overridable so tests can gate it deterministically.</summary>
+    protected virtual Task DelayStartup(CancellationToken stoppingToken) =>
+        StartupDelay > TimeSpan.Zero ? Task.Delay(StartupDelay, stoppingToken) : Task.CompletedTask;
 
     protected virtual bool ValidateConfiguration() => true;
 
