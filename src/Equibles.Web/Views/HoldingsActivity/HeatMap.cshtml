@@ -54,14 +54,7 @@
         </div>
 
         <!-- Bubble Chart -->
-        <div class="card bg-base-100 shadow-sm mb-6">
-            <div class="card-body p-4 lg:p-6">
-                <h2 class="font-semibold text-sm mb-3">Conviction Score vs. Filer Count</h2>
-                <div class="h-[500px]">
-                    <canvas id="heatmap-chart" role="img" aria-label="13F conviction heat map bubble chart"></canvas>
-                </div>
-            </div>
-        </div>
+        <partial name="_ChartCard" model='("Conviction Score vs. Filer Count", "heatmap-chart", "13F conviction heat map bubble chart", "h-[500px]")' />
 
         <!-- Score breakdown legend -->
         <div class="card bg-base-100 shadow-sm mb-6">
