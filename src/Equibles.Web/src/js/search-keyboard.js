@@ -1,5 +1,5 @@
 // Search keyboard navigation — makes the search usable without the mouse:
-//   "/"            focus the search box from anywhere on the page
+//   Cmd/Ctrl+K     focus the search box from anywhere on the page
 //   ArrowDown/Up   move a highlight through the rendered result links
 //   Enter          open the highlighted result (falls back to normal submit)
 //   Escape         clear the query
@@ -47,12 +47,12 @@
         if (el.id) input.setAttribute('aria-activedescendant', el.id);
     }
 
-    // "/" focuses search — unless the user is already typing in a field.
+    // Cmd+K (macOS) / Ctrl+K (other) focuses search from anywhere — including
+    // from inside another input. The modifier keeps the binding unambiguous.
     document.addEventListener('keydown', (e) => {
-        if (e.key !== '/') return;
-        const tag = document.activeElement?.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
-            || document.activeElement?.isContentEditable) return;
+        if (e.key.toLowerCase() !== 'k') return;
+        if (!(e.metaKey || e.ctrlKey)) return;
+        if (e.shiftKey || e.altKey) return;
         e.preventDefault();
         input.focus();
         input.select();
