@@ -11,16 +11,22 @@ public class HoldingsActivityController : BaseController
 {
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly CommonStockRepository _commonStockRepository;
+    private readonly AumQuarterlySnapshotRepository _aumSnapshotRepository;
+    private readonly SectorQuarterlySnapshotRepository _sectorSnapshotRepository;
 
     public HoldingsActivityController(
         InstitutionalHoldingRepository holdingRepository,
         CommonStockRepository commonStockRepository,
+        AumQuarterlySnapshotRepository aumSnapshotRepository,
+        SectorQuarterlySnapshotRepository sectorSnapshotRepository,
         ILogger<HoldingsActivityController> logger
     )
         : base(logger)
     {
         _holdingRepository = holdingRepository;
         _commonStockRepository = commonStockRepository;
+        _aumSnapshotRepository = aumSnapshotRepository;
+        _sectorSnapshotRepository = sectorSnapshotRepository;
     }
 
     [HttpGet("~/holdings/activity")]
@@ -120,8 +126,12 @@ public class HoldingsActivityController : BaseController
     [HttpGet("~/holdings/stats")]
     public async Task<IActionResult> Stats()
     {
-        var snapshots = await _holdingRepository
-            .GetAumByReportDate()
+        // Reads the per-quarter snapshot table that the worker rebuilds on
+        // every 13F import (with a daily safety-net pass). The legacy live
+        // multi-distinct GROUP BY on InstitutionalHoldings could not finish
+        // inside the 30s Npgsql command timeout at production scale.
+        var snapshots = await _aumSnapshotRepository
+            .GetAll()
             .OrderByDescending(a => a.ReportDate)
             .ToListAsync();
 
@@ -185,13 +195,15 @@ public class HoldingsActivityController : BaseController
     [HttpGet("~/holdings/trends")]
     public async Task<IActionResult> Trends()
     {
-        var aumSnapshots = await _holdingRepository
-            .GetAumByReportDate()
+        // Same snapshot-table reads as /holdings/stats; the legacy live
+        // aggregates timed out at production scale.
+        var aumSnapshots = await _aumSnapshotRepository
+            .GetAll()
             .OrderBy(a => a.ReportDate)
             .ToListAsync();
 
-        var sectorAllocations = await _holdingRepository
-            .GetSectorAllocationByReportDate()
+        var sectorAllocations = await _sectorSnapshotRepository
+            .GetAll()
             .OrderBy(s => s.ReportDate)
             .ThenBy(s => s.SectorName)
             .ToListAsync();
