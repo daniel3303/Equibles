@@ -23,7 +23,7 @@ public class HoldingsLatestFilingsSeededTests
     [Fact]
     public async Task LatestFilings_WithNewAndReturningFilers_RendersCorrectBadges()
     {
-        // Contract: /holdings/filings shows filings ordered by ImportedAt descending.
+        // Contract: /holdings/latest-13f-filings shows filings ordered by ImportedAt descending.
         // A filer with no holdings in a prior quarter gets a "New" badge. Amendment
         // filings get an "A" badge. Position count and total value aggregate multiple
         // holdings per filing.
@@ -132,7 +132,7 @@ public class HoldingsLatestFilingsSeededTests
         });
 
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
-        var response = await page.GotoAsync("/holdings/filings");
+        var response = await page.GotoAsync("/holdings/latest-13f-filings");
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);

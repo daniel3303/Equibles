@@ -5,7 +5,7 @@ namespace Equibles.IntegrationTests.Web;
 
 /// <summary>
 /// Sibling to HoldingsActivityControllerDoubleDownTests (which pins the no-data
-/// path on /holdings/double-down). The HeatMap action has the same cold-start
+/// path on /holdings/double-down-report). The HeatMap action has the same cold-start
 /// shape — `if (reportDates.Count < 2) return View(viewModel)` — but with its
 /// own controller, route, view, and view model. A refactor that flipped the
 /// guard's `< 2` to `<= 2` (or dropped it entirely) would crash on the
@@ -25,7 +25,7 @@ public class HoldingsActivityControllerHeatMapNoDatesTests
     {
         await _fixture.ResetAndSeedAsync(_ => Task.CompletedTask);
 
-        var response = await _fixture.Client.GetAsync("/holdings/heatmap");
+        var response = await _fixture.Client.GetAsync("/holdings/conviction-heat-map");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }

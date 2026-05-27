@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.AspNetCore.Rewrite;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Serilog;
@@ -228,6 +229,7 @@ public partial class Program
                 },
             }
         );
+        app.UseRewriter(BuildLegacyUrlRedirects());
         app.UseRouting();
         app.UseSession();
         app.UseAuthentication();
@@ -235,5 +237,61 @@ public partial class Program
 
         app.MapHealthChecks("/healthz").AllowAnonymous();
         app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
+    }
+
+    // 301 redirects from the old stock/holdings/institution URLs to the new
+    // lowercase kebab-case slugs. Patterns are case-insensitive ((?i)) so both
+    // the old PascalCase and old no-separator variants redirect; the rewriter
+    // preserves the query string and prepends the leading slash automatically.
+    private static RewriteOptions BuildLegacyUrlRedirects()
+    {
+        const int movedPermanently = StatusCodes.Status301MovedPermanently;
+        return new RewriteOptions()
+            // Stock detail tabs (ticker captured in $1)
+            .AddRedirect(
+                "(?i)^stocks/([^/]+)/shortvolume/?$",
+                "stocks/$1/short-volume",
+                movedPermanently
+            )
+            .AddRedirect(
+                "(?i)^stocks/([^/]+)/shortinterest/?$",
+                "stocks/$1/short-interest",
+                movedPermanently
+            )
+            .AddRedirect(
+                "(?i)^stocks/([^/]+)/insidertrading/?$",
+                "stocks/$1/insider-trading",
+                movedPermanently
+            )
+            .AddRedirect(
+                "(?i)^stocks/([^/]+)/congressionaltrades/?$",
+                "stocks/$1/congressional-trades",
+                movedPermanently
+            )
+            // 13F / Holdings activity
+            .AddRedirect("(?i)^holdings/stats/?$", "holdings/13f-statistics", movedPermanently)
+            .AddRedirect(
+                "(?i)^holdings/filings/?$",
+                "holdings/latest-13f-filings",
+                movedPermanently
+            )
+            .AddRedirect("(?i)^holdings/trends/?$", "holdings/13f-trends", movedPermanently)
+            .AddRedirect(
+                "(?i)^holdings/double-down/?$",
+                "holdings/double-down-report",
+                movedPermanently
+            )
+            .AddRedirect(
+                "(?i)^holdings/heatmap/?$",
+                "holdings/conviction-heat-map",
+                movedPermanently
+            )
+            .AddRedirect("(?i)^holdings/mostheld/?$", "holdings/most-held", movedPermanently)
+            // Institution profiles
+            .AddRedirect(
+                "(?i)^institutions/overlap/?$",
+                "institutions/overlap-matrix",
+                movedPermanently
+            );
     }
 }

@@ -4,7 +4,7 @@ using Equibles.IntegrationTests.Helpers;
 namespace Equibles.IntegrationTests.Web;
 
 /// <summary>
-/// Coverage: exercises the /holdings/filings route with no seeded data and
+/// Coverage: exercises the /holdings/latest-13f-filings route with no seeded data and
 /// a negative page parameter, verifying the page-clamp guard and empty-state
 /// rendering both work without error.
 /// </summary>
@@ -23,7 +23,7 @@ public class HoldingsActivityControllerLatestFilingsTests
         // not throw or return a 500 from a negative Skip value.
         await _fixture.ResetAndSeedAsync(_ => Task.CompletedTask);
 
-        var response = await _fixture.Client.GetAsync("/holdings/filings?page=-1");
+        var response = await _fixture.Client.GetAsync("/holdings/latest-13f-filings?page=-1");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }

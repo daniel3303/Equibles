@@ -84,7 +84,7 @@ public class HoldingsMostHeldSeededTests
         });
 
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
-        var response = await page.GotoAsync("/Holdings/MostHeld");
+        var response = await page.GotoAsync("/holdings/most-held");
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);

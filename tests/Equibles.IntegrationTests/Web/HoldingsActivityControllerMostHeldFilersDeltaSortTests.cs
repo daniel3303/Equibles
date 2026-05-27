@@ -70,7 +70,7 @@ public class HoldingsActivityControllerMostHeldFilersDeltaSortTests
             await Task.CompletedTask;
         });
 
-        var response = await _fixture.Client.GetAsync("/Holdings/MostHeld?sort=filersDelta");
+        var response = await _fixture.Client.GetAsync("/holdings/most-held?sort=filersDelta");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var html = await response.Content.ReadAsStringAsync();

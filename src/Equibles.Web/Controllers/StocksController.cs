@@ -136,7 +136,7 @@ public class StocksController : BaseController
             }
         );
 
-    [HttpGet("~/stocks/{ticker}/shortvolume")]
+    [HttpGet("~/stocks/{ticker}/short-volume")]
     public Task<IActionResult> ShortVolume(string ticker) =>
         ShowStockTab(
             ticker,
@@ -144,7 +144,7 @@ public class StocksController : BaseController
             async s => await _stockTabService.LoadShortVolumeTab(s)
         );
 
-    [HttpGet("~/stocks/{ticker}/shortinterest")]
+    [HttpGet("~/stocks/{ticker}/short-interest")]
     public Task<IActionResult> ShortInterest(string ticker) =>
         ShowStockTab(
             ticker,
@@ -173,7 +173,7 @@ public class StocksController : BaseController
     public Task<IActionResult> Documents(string ticker) =>
         ShowStockTab(ticker, "documents", async s => await _stockTabService.LoadDocumentsTab(s));
 
-    [HttpGet("~/stocks/{ticker}/insidertrading")]
+    [HttpGet("~/stocks/{ticker}/insider-trading")]
     public Task<IActionResult> InsiderTrading(string ticker) =>
         ShowStockTab(
             ticker,
@@ -181,7 +181,7 @@ public class StocksController : BaseController
             async s => await _stockTabService.LoadInsiderTradingTab(s)
         );
 
-    [HttpGet("~/stocks/{ticker}/congressionaltrades")]
+    [HttpGet("~/stocks/{ticker}/congressional-trades")]
     public Task<IActionResult> CongressionalTrades(string ticker) =>
         ShowStockTab(
             ticker,

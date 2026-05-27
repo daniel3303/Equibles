@@ -4,7 +4,7 @@ using Equibles.IntegrationTests.Helpers;
 namespace Equibles.IntegrationTests.Web;
 
 /// <summary>
-/// Coverage: exercises the /holdings/trends route end-to-end with no seeded
+/// Coverage: exercises the /holdings/13f-trends route end-to-end with no seeded
 /// data, verifying the view renders without error when both AUM and sector
 /// allocation queries return empty results.
 /// </summary>
@@ -20,7 +20,7 @@ public class HoldingsActivityControllerTrendsTests
     {
         await _fixture.ResetAndSeedAsync(_ => Task.CompletedTask);
 
-        var response = await _fixture.Client.GetAsync("/holdings/trends");
+        var response = await _fixture.Client.GetAsync("/holdings/13f-trends");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }

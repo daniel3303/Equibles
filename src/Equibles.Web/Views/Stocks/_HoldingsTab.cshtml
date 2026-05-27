@@ -59,7 +59,7 @@
             <div class="flex items-center gap-2 shrink-0">
                 <label for="holdings-date" class="text-base-content/60 whitespace-nowrap">Report Date:</label>
                 <select id="holdings-date" class="select select-bordered select-sm"
-                    onchange="var v=this.value; window.location.href = v==='combined' ? 'Holdings?combined=true' : 'Holdings?date=' + v">
+                    onchange="var v=this.value; window.location.href = v==='combined' ? 'holdings?combined=true' : 'holdings?date=' + v">
                     @if (Model.IsCombinedAvailable || Model.IsCombinedView) {
                         if (Model.IsCombinedView) {
                             <option value="combined" selected>Current Combined</option>

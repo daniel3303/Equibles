@@ -69,7 +69,7 @@ public class HoldingsActivityControllerMostHeldValueSortTests
             await Task.CompletedTask;
         });
 
-        var response = await _fixture.Client.GetAsync("/Holdings/MostHeld?sort=value");
+        var response = await _fixture.Client.GetAsync("/holdings/most-held?sort=value");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var html = await response.Content.ReadAsStringAsync();

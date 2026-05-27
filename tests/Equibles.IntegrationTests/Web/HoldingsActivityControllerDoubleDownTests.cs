@@ -19,7 +19,7 @@ public class HoldingsActivityControllerDoubleDownTests
     {
         await _fixture.ResetAndSeedAsync(_ => Task.CompletedTask);
 
-        var response = await _fixture.Client.GetAsync("/holdings/double-down");
+        var response = await _fixture.Client.GetAsync("/holdings/double-down-report");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }

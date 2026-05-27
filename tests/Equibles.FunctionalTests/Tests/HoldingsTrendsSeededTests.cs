@@ -22,7 +22,7 @@ public class HoldingsTrendsSeededTests
     [Fact]
     public async Task Trends_WithTwoQuarters_RendersChartCardsAndCreatesChartInstances()
     {
-        // Contract: /holdings/trends reads the per-quarter snapshot rows that
+        // Contract: /holdings/13f-trends reads the per-quarter snapshot rows that
         // HoldingsAggregateRefreshService writes after each 13F import, then
         // renders Chart.js trend charts when the snapshot list is non-empty.
         // The view serializes data inline and Chart.js creates instances on
@@ -63,7 +63,7 @@ public class HoldingsTrendsSeededTests
         });
 
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
-        var response = await page.GotoAsync("/holdings/trends");
+        var response = await page.GotoAsync("/holdings/13f-trends");
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);

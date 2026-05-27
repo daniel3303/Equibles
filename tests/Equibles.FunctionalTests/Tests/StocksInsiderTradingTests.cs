@@ -22,7 +22,7 @@ public class StocksInsiderTradingTests
     [Fact]
     public async Task InsiderTrading_GetForSeededStockWithNoTransactions_RendersNoInsiderTradingDataEmptyState()
     {
-        // /stocks/{ticker}/insidertrading goes through LoadStock + StockTabService.LoadInsiderTradingTab,
+        // /stocks/{ticker}/insider-trading goes through LoadStock + StockTabService.LoadInsiderTradingTab,
         // which queries InsiderTransactionRepository.GetByStock and Includes InsiderOwner. With no
         // transactions seeded, Transactions.Count == 0 and the view takes the empty-state branch.
         // Pins the empty-state h3 copy ("No Insider Trading Data") so a refactor that drops the
@@ -41,7 +41,7 @@ public class StocksInsiderTradingTests
         });
 
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
-        var response = await page.GotoAsync("/stocks/aapl/insidertrading");
+        var response = await page.GotoAsync("/stocks/aapl/insider-trading");
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);
