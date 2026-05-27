@@ -30,7 +30,7 @@ public class CommonStockManagerCreateNegativeSharesTests
         // must never be negative — the validator should reject it before persist.
         var db = NewDb();
         var repo = Substitute.For<CommonStockRepository>(db);
-        var sut = new CommonStockManager(repo, Substitute.For<IPublishEndpoint>());
+        var sut = new CommonStockManager(repo, Substitute.For<IBus>());
         var stock = new CommonStock
         {
             Ticker = "TEST",

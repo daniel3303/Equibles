@@ -75,7 +75,7 @@ public class FtdImportServiceMissingCommonStockTests : IAsyncLifetime
                     .Returns(
                         new CommonStockManager(
                             new CommonStockRepository(ctx),
-                            Substitute.For<IPublishEndpoint>()
+                            Substitute.For<IBus>()
                         )
                     );
                 sp.GetService(typeof(FailToDeliverRepository))

@@ -16,10 +16,7 @@ public class CommonStockManagerCreateWhitespaceTickerTests
     public CommonStockManagerCreateWhitespaceTickerTests()
     {
         var context = TestDbContextFactory.Create(new CommonStocksModuleConfiguration());
-        _sut = new CommonStockManager(
-            new CommonStockRepository(context),
-            Substitute.For<IPublishEndpoint>()
-        );
+        _sut = new CommonStockManager(new CommonStockRepository(context), Substitute.For<IBus>());
     }
 
     // Contract: "Ticker is required". Ticker is also the globally-unique key

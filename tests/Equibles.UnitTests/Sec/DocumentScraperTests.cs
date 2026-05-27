@@ -613,10 +613,10 @@ public class DocumentScraperTests
             services.AddScoped<CommonStockRepository>();
             services.AddScoped<DocumentRepository>();
             // DocumentScraper now resolves CommonStockManager per scope to
-            // persist the SEC-sourced fiscal year-end. IPublishEndpoint is an
+            // persist the SEC-sourced fiscal year-end. IBus is an
             // unrelated CommonStockManager ctor dep (SetCusip outbox event);
             // substituted because fiscal-year detection never publishes.
-            services.AddSingleton(Substitute.For<IPublishEndpoint>());
+            services.AddSingleton(Substitute.For<IBus>());
             services.AddScoped<CommonStockManager>();
             services.AddSingleton(SecEdgarClient);
             services.AddSingleton(Normalizer);

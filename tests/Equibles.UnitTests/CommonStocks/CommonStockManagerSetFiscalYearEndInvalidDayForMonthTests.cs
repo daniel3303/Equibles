@@ -27,7 +27,7 @@ public class CommonStockManagerSetFiscalYearEndInvalidDayForMonthTests
             new IModuleConfiguration[] { new CommonStocksModuleConfiguration() }
         );
         var repository = Substitute.For<CommonStockRepository>(db);
-        var sut = new CommonStockManager(repository, Substitute.For<IPublishEndpoint>());
+        var sut = new CommonStockManager(repository, Substitute.For<IBus>());
         var stock = new CommonStock();
 
         var act = () => sut.SetFiscalYearEnd(stock, 2, 31);

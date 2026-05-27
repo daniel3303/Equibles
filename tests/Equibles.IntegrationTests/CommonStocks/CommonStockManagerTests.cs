@@ -18,7 +18,7 @@ public class CommonStockManagerTests
     {
         var context = TestDbContextFactory.Create(new CommonStocksModuleConfiguration());
         _repository = new CommonStockRepository(context);
-        _sut = new CommonStockManager(_repository, Substitute.For<IPublishEndpoint>());
+        _sut = new CommonStockManager(_repository, Substitute.For<IBus>());
     }
 
     private static CommonStock MakeStock(
