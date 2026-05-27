@@ -102,7 +102,7 @@ public class CftcClientTests
         // returned record's ReportDate must equal the legacy raw string "250115" —
         // ParseLine reads the value verbatim and leaves date-string format
         // interpretation to the downstream ParseDate helper.
-        var headerLine = "CFTC_Contract_Market_Code,As_of_Date_In_Form_YYMMDD";
+        var headerLine = "CFTC Contract Market Code,As of Date in Form YYMMDD";
         var columnIndex =
             (Dictionary<string, int>)BuildColumnIndexMethod.Invoke(null, [headerLine]);
         var line = "001602,250115";
@@ -187,7 +187,7 @@ public class CftcClientTests
         // for either column. Assertion compares against the modern wire-format
         // string verbatim, which can ONLY hold for `modern ?? legacy` order.
         var headerLine =
-            "CFTC_Contract_Market_Code,Report_Date_as_YYYY-MM-DD,As_of_Date_In_Form_YYMMDD";
+            "CFTC Contract Market Code,As of Date in Form YYYY-MM-DD,As of Date in Form YYMMDD";
         var columnIndex =
             (Dictionary<string, int>)BuildColumnIndexMethod.Invoke(null, [headerLine]);
         var line = "001602,2025-01-15,250115";
@@ -326,7 +326,7 @@ public class CftcClientTests
         // returned value must be null (so `??` would fall through), NOT empty string,
         // NOT whitespace.
         var headerLine =
-            "CFTC_Contract_Market_Code,Report_Date_as_YYYY-MM-DD,As_of_Date_In_Form_YYMMDD";
+            "CFTC Contract Market Code,As of Date in Form YYYY-MM-DD,As of Date in Form YYMMDD";
         var columnIndex =
             (Dictionary<string, int>)BuildColumnIndexMethod.Invoke(null, [headerLine]);
         var fieldsWithBlankModernDate = new[] { "001602", "   ", "250115" };

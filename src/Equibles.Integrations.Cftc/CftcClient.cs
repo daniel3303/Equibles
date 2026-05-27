@@ -137,7 +137,7 @@ public class CftcClient : ICftcClient
 
         for (var i = 0; i < headers.Length; i++)
         {
-            var header = headers[i].Trim().Trim('"');
+            var header = headers[i].Trim().Trim('"').Trim();
             index[header] = i;
         }
 
@@ -151,33 +151,33 @@ public class CftcClient : ICftcClient
 
         return new CftcReportRecord
         {
-            MarketAndExchangeName = Get("Market_and_Exchange_Names"),
-            ReportDate = Get("Report_Date_as_YYYY-MM-DD") ?? Get("As_of_Date_In_Form_YYMMDD"),
-            ContractMarketCode = Get("CFTC_Contract_Market_Code"),
-            OpenInterest = ParseLong(Get("Open_Interest_All")),
-            NonCommLong = ParseLong(Get("NonComm_Positions_Long_All")),
-            NonCommShort = ParseLong(Get("NonComm_Positions_Short_All")),
-            NonCommSpreads = ParseLong(Get("NonComm_Positions_Spread_All")),
-            CommLong = ParseLong(Get("Comm_Positions_Long_All")),
-            CommShort = ParseLong(Get("Comm_Positions_Short_All")),
-            TotalRptLong = ParseLong(Get("Tot_Rpt_Positions_Long_All")),
-            TotalRptShort = ParseLong(Get("Tot_Rpt_Positions_Short_All")),
-            NonRptLong = ParseLong(Get("NonRpt_Positions_Long_All")),
-            NonRptShort = ParseLong(Get("NonRpt_Positions_Short_All")),
-            ChangeOpenInterest = ParseLong(Get("Change_in_Open_Interest_All")),
-            ChangeNonCommLong = ParseLong(Get("Change_in_NonComm_Long_All")),
-            ChangeNonCommShort = ParseLong(Get("Change_in_NonComm_Short_All")),
-            ChangeCommLong = ParseLong(Get("Change_in_Comm_Long_All")),
-            ChangeCommShort = ParseLong(Get("Change_in_Comm_Short_All")),
-            PctNonCommLong = ParseDecimal(Get("Pct_of_OI_NonComm_Long_All")),
-            PctNonCommShort = ParseDecimal(Get("Pct_of_OI_NonComm_Short_All")),
-            PctCommLong = ParseDecimal(Get("Pct_of_OI_Comm_Long_All")),
-            PctCommShort = ParseDecimal(Get("Pct_of_OI_Comm_Short_All")),
-            TradersTotal = ParseInt(Get("Traders_Tot_All")),
-            TradersNonCommLong = ParseInt(Get("Traders_NonComm_Long_All")),
-            TradersNonCommShort = ParseInt(Get("Traders_NonComm_Short_All")),
-            TradersCommLong = ParseInt(Get("Traders_Comm_Long_All")),
-            TradersCommShort = ParseInt(Get("Traders_Comm_Short_All")),
+            MarketAndExchangeName = Get("Market and Exchange Names"),
+            ReportDate = Get("As of Date in Form YYYY-MM-DD") ?? Get("As of Date in Form YYMMDD"),
+            ContractMarketCode = Get("CFTC Contract Market Code"),
+            OpenInterest = ParseLong(Get("Open Interest (All)")),
+            NonCommLong = ParseLong(Get("Noncommercial Positions-Long (All)")),
+            NonCommShort = ParseLong(Get("Noncommercial Positions-Short (All)")),
+            NonCommSpreads = ParseLong(Get("Noncommercial Positions-Spreading (All)")),
+            CommLong = ParseLong(Get("Commercial Positions-Long (All)")),
+            CommShort = ParseLong(Get("Commercial Positions-Short (All)")),
+            TotalRptLong = ParseLong(Get("Total Reportable Positions-Long (All)")),
+            TotalRptShort = ParseLong(Get("Total Reportable Positions-Short (All)")),
+            NonRptLong = ParseLong(Get("Nonreportable Positions-Long (All)")),
+            NonRptShort = ParseLong(Get("Nonreportable Positions-Short (All)")),
+            ChangeOpenInterest = ParseLong(Get("Change in Open Interest (All)")),
+            ChangeNonCommLong = ParseLong(Get("Change in Noncommercial-Long (All)")),
+            ChangeNonCommShort = ParseLong(Get("Change in Noncommercial-Short (All)")),
+            ChangeCommLong = ParseLong(Get("Change in Commercial-Long (All)")),
+            ChangeCommShort = ParseLong(Get("Change in Commercial-Short (All)")),
+            PctNonCommLong = ParseDecimal(Get("% of OI-Noncommercial-Long (All)")),
+            PctNonCommShort = ParseDecimal(Get("% of OI-Noncommercial-Short (All)")),
+            PctCommLong = ParseDecimal(Get("% of OI-Commercial-Long (All)")),
+            PctCommShort = ParseDecimal(Get("% of OI-Commercial-Short (All)")),
+            TradersTotal = ParseInt(Get("Traders-Total (All)")),
+            TradersNonCommLong = ParseInt(Get("Traders-Noncommercial-Long (All)")),
+            TradersNonCommShort = ParseInt(Get("Traders-Noncommercial-Short (All)")),
+            TradersCommLong = ParseInt(Get("Traders-Commercial-Long (All)")),
+            TradersCommShort = ParseInt(Get("Traders-Commercial-Short (All)")),
         };
     }
 

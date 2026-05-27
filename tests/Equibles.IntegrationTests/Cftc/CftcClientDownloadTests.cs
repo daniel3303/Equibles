@@ -23,8 +23,8 @@ public class CftcClientDownloadTests
         // them would silently null out that column for every row.
         var csv = string.Join(
             "\n",
-            "\"Market_and_Exchange_Names\",\"Report_Date_as_YYYY-MM-DD\","
-                + "\"CFTC_Contract_Market_Code\",\"Open_Interest_All\"",
+            "\"Market and Exchange Names\",\"As of Date in Form YYYY-MM-DD\","
+                + "\"CFTC Contract Market Code\",\"Open Interest (All)\"",
             "\"E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE\",\"2024-12-24\",\"13874+\",\"2,500,000\""
         );
 
