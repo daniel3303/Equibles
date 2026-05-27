@@ -92,15 +92,16 @@
         // Each "tab" is a full-page navigation, not an in-page tabpanel — so
         // ARIA tab/tablist roles would mislead assistive tech (they expect
         // arrow-key panel switching). Render as a <nav> landmark with normal
-        // links and mark the active one via aria-current="page". Items sit
-        // flush in a bordered, segmented bar.
+        // links and mark the active one via aria-current="page". Items are
+        // gapped pills that wrap cleanly onto a second row on narrow viewports
+        // instead of fracturing a single segmented bar.
         string TabBtnClass(string id) =>
-            "btn btn-ghost rounded-none border-y-0 border-r-0 border-l border-base-300 first:border-l-0 font-medium "
-            + (activeTab == id ? "btn-neutral" : "");
+            "btn rounded-full font-medium "
+            + (activeTab == id ? "btn-neutral" : "btn-ghost bg-base-100 border border-base-300");
         string TabAriaCurrent(string id) => activeTab == id ? "page" : null;
     }
     <!-- Section navbar -->
-    <nav class="flex flex-wrap rounded-lg border border-base-300 bg-base-100 shadow-sm overflow-hidden mb-6" aria-label="@(stock.Ticker) sections">
+    <nav class="flex flex-wrap gap-2 mb-6" aria-label="@(stock.Ticker) sections">
         <a class="@TabBtnClass("price")" aria-current="@TabAriaCurrent("price")" asp-action="Price" asp-route-ticker="@stock.Ticker">Technicals</a>
         <a class="@TabBtnClass("holdings")" aria-current="@TabAriaCurrent("holdings")" asp-action="Holdings" asp-route-ticker="@stock.Ticker">Institutional Holders</a>
         <a class="@TabBtnClass("short-volume")" aria-current="@TabAriaCurrent("short-volume")" asp-action="ShortVolume" asp-route-ticker="@stock.Ticker">Short Volume</a>
