@@ -88,8 +88,32 @@
             _ => null
         };
     }
-    @if (hasAnyMetric) {
-        <!-- Key Metrics -->
+    @{
+        // Each "tab" is a full-page navigation, not an in-page tabpanel — so
+        // ARIA tab/tablist roles would mislead assistive tech (they expect
+        // arrow-key panel switching). Render as a <nav> landmark with normal
+        // links and mark the active one via aria-current="page". Items sit
+        // flush in a bordered, segmented bar.
+        string TabBtnClass(string id) =>
+            "btn btn-ghost rounded-none border-y-0 border-r-0 border-l border-base-300 first:border-l-0 font-medium "
+            + (activeTab == id ? "btn-neutral" : "");
+        string TabAriaCurrent(string id) => activeTab == id ? "page" : null;
+    }
+    <!-- Section navbar -->
+    <nav class="flex flex-wrap rounded-lg border border-base-300 bg-base-100 shadow-sm overflow-hidden mb-6" aria-label="@(stock.Ticker) sections">
+        <a class="@TabBtnClass("price")" aria-current="@TabAriaCurrent("price")" asp-action="Price" asp-route-ticker="@stock.Ticker">Technicals</a>
+        <a class="@TabBtnClass("holdings")" aria-current="@TabAriaCurrent("holdings")" asp-action="Holdings" asp-route-ticker="@stock.Ticker">Institutional Holders</a>
+        <a class="@TabBtnClass("short-volume")" aria-current="@TabAriaCurrent("short-volume")" asp-action="ShortVolume" asp-route-ticker="@stock.Ticker">Short Volume</a>
+        <a class="@TabBtnClass("short-interest")" aria-current="@TabAriaCurrent("short-interest")" asp-action="ShortInterest" asp-route-ticker="@stock.Ticker">Short Interest</a>
+        <a class="@TabBtnClass("ftd")" aria-current="@TabAriaCurrent("ftd")" asp-action="Ftd" asp-route-ticker="@stock.Ticker">Fails to Deliver</a>
+        <a class="@TabBtnClass("financials")" aria-current="@TabAriaCurrent("financials")" asp-action="Financials" asp-route-ticker="@stock.Ticker">Financials</a>
+        <a class="@TabBtnClass("documents")" aria-current="@TabAriaCurrent("documents")" asp-action="Documents" asp-route-ticker="@stock.Ticker">SEC Filings</a>
+        <a class="@TabBtnClass("insider-trading")" aria-current="@TabAriaCurrent("insider-trading")" asp-action="InsiderTrading" asp-route-ticker="@stock.Ticker">Insider Trades</a>
+        <a class="@TabBtnClass("congressional-trades")" aria-current="@TabAriaCurrent("congressional-trades")" asp-action="CongressionalTrades" asp-route-ticker="@stock.Ticker">Congressional Trades</a>
+    </nav>
+
+    @if (activeTab == "price" && hasAnyMetric) {
+        <!-- Key Metrics (Technicals tab only) -->
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
             @if (km.LatestClose.HasValue) {
                 <div class="card bg-base-100 shadow-sm">
@@ -141,28 +165,6 @@
             }
         </div>
     }
-
-    @{
-        // Each "tab" is a full-page navigation, not an in-page tabpanel — so
-        // ARIA tab/tablist roles would mislead assistive tech (they expect
-        // arrow-key panel switching). Render as a <nav> landmark with normal
-        // links and mark the active one via aria-current="page".
-        string TabBtnClass(string id) =>
-            "btn btn-sm " + (activeTab == id ? "btn-primary" : "btn-ghost border border-base-300");
-        string TabAriaCurrent(string id) => activeTab == id ? "page" : null;
-    }
-    <!-- Tabs -->
-    <nav class="flex flex-wrap gap-2 mb-6" aria-label="@(stock.Ticker) sections">
-        <a class="@TabBtnClass("price")" aria-current="@TabAriaCurrent("price")" asp-action="Price" asp-route-ticker="@stock.Ticker">Price History</a>
-        <a class="@TabBtnClass("holdings")" aria-current="@TabAriaCurrent("holdings")" asp-action="Holdings" asp-route-ticker="@stock.Ticker">Institutional Holders</a>
-        <a class="@TabBtnClass("short-volume")" aria-current="@TabAriaCurrent("short-volume")" asp-action="ShortVolume" asp-route-ticker="@stock.Ticker">Short Volume</a>
-        <a class="@TabBtnClass("short-interest")" aria-current="@TabAriaCurrent("short-interest")" asp-action="ShortInterest" asp-route-ticker="@stock.Ticker">Short Interest</a>
-        <a class="@TabBtnClass("ftd")" aria-current="@TabAriaCurrent("ftd")" asp-action="Ftd" asp-route-ticker="@stock.Ticker">Fails to Deliver</a>
-        <a class="@TabBtnClass("financials")" aria-current="@TabAriaCurrent("financials")" asp-action="Financials" asp-route-ticker="@stock.Ticker">Financials</a>
-        <a class="@TabBtnClass("documents")" aria-current="@TabAriaCurrent("documents")" asp-action="Documents" asp-route-ticker="@stock.Ticker">SEC Filings</a>
-        <a class="@TabBtnClass("insider-trading")" aria-current="@TabAriaCurrent("insider-trading")" asp-action="InsiderTrading" asp-route-ticker="@stock.Ticker">Insider Trades</a>
-        <a class="@TabBtnClass("congressional-trades")" aria-current="@TabAriaCurrent("congressional-trades")" asp-action="CongressionalTrades" asp-route-ticker="@stock.Ticker">Congressional Trades</a>
-    </nav>
 
     <!-- Tab Content (server-rendered) -->
     <div>
