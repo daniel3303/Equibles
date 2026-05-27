@@ -104,6 +104,7 @@ builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager
 builder.Services.AutoWireServicesFrom<Equibles.CommonStocks.BusinessLogic.CommonStockManager>();
 builder.Services.AutoWireServicesFrom<Equibles.Media.BusinessLogic.FileManager>();
 builder.Services.AutoWireServicesFrom<Equibles.Sec.BusinessLogic.SecDocumentHtmlNormalizer>();
+builder.Services.AutoWireServicesFrom<Equibles.InsiderTrading.BusinessLogic.InsiderTransactionPriceValidator>();
 
 // Register worker services and all scrapers
 builder.Services.AddWorkerServices();

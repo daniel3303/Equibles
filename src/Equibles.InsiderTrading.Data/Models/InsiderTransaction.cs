@@ -9,6 +9,7 @@ namespace Equibles.InsiderTrading.Data.Models;
 [Index(nameof(AccessionNumber), nameof(TransactionOrder), IsUnique = true)]
 [Index(nameof(FilingDate))]
 [Index(nameof(TransactionDate))]
+[Index(nameof(IsPriceValid), nameof(TransactionDate))]
 public class InsiderTransaction
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -43,6 +44,16 @@ public class InsiderTransaction
     public int TransactionOrder { get; set; }
 
     public bool IsAmendment { get; set; }
+
+    /// <summary>
+    /// False when the filer typed a bogus value into transactionPricePerShare —
+    /// most commonly the total transaction value instead of the per-share price.
+    /// Detected by cross-checking against the Yahoo unadjusted close on
+    /// TransactionDate. Dashboards filter on this so a single fat-fingered Form 4
+    /// doesn't drown out every other row when sorted by Shares × PricePerShare.
+    /// Default true — only rows we positively reject are flipped to false.
+    /// </summary>
+    public bool IsPriceValid { get; set; } = true;
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }

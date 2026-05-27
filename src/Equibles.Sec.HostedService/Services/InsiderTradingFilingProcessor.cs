@@ -4,12 +4,14 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Contracts;
+using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Sec.HostedService.Services;
@@ -51,6 +53,10 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         var ownerRepository = scope.ServiceProvider.GetRequiredService<InsiderOwnerRepository>();
         var transactionRepository =
             scope.ServiceProvider.GetRequiredService<InsiderTransactionRepository>();
+        var dailyStockPriceRepository =
+            scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+        var priceValidator =
+            scope.ServiceProvider.GetRequiredService<InsiderTransactionPriceValidator>();
 
         var existing = await transactionRepository
             .GetByAccessionNumber(filing.AccessionNumber)
@@ -93,6 +99,13 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             );
             return true;
         }
+
+        await ApplyPriceValidity(
+            transactions,
+            companyId,
+            dailyStockPriceRepository,
+            priceValidator
+        );
 
         // No in-memory dedup needed: every parsed row got a unique TransactionOrder from its
         // XML position, so the (AccessionNumber, TransactionOrder) unique index can't collide
@@ -329,6 +342,49 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             }
         );
         await transactionRepository.SaveChanges();
+    }
+
+    // Filer-reported transactionPricePerShare is unvalidated by EDGAR — some
+    // filings dump the total transaction value (or a placeholder like the
+    // share count) into that field, which then explodes the dashboard's
+    // Shares × Price sort. Cross-check against Yahoo's unadjusted close on
+    // the TransactionDate (most recent prior trading day for weekends/
+    // holidays) and flip the flag accordingly. If the Yahoo feed hasn't
+    // caught up yet for a freshly-filed transaction date, leave the default
+    // (true) — the backoffice backfill button re-evaluates everything once
+    // the close is available.
+    private static async Task ApplyPriceValidity(
+        List<InsiderTransaction> transactions,
+        Guid companyId,
+        DailyStockPriceRepository dailyStockPriceRepository,
+        InsiderTransactionPriceValidator priceValidator
+    )
+    {
+        if (transactions.Count == 0)
+            return;
+
+        var minDate = transactions.Min(t => t.TransactionDate).AddDays(-10);
+        var maxDate = transactions.Max(t => t.TransactionDate);
+
+        var prices = await dailyStockPriceRepository
+            .GetAll()
+            .Where(p => p.CommonStockId == companyId && p.Date >= minDate && p.Date <= maxDate)
+            .Select(p => new { p.Date, p.Close })
+            .OrderByDescending(p => p.Date)
+            .ToListAsync();
+
+        foreach (var transaction in transactions)
+        {
+            var close = prices
+                .Where(p => p.Date <= transaction.TransactionDate)
+                .Select(p => (decimal?)p.Close)
+                .FirstOrDefault();
+            transaction.IsPriceValid = priceValidator.IsPlausible(
+                transaction.PricePerShare,
+                transaction.SecurityTitle,
+                close
+            );
+        }
     }
 
     private InsiderTransaction ParseTransaction(
