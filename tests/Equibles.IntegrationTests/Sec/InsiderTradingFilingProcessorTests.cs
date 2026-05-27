@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data;
 using Equibles.Errors.Repositories;
+using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Repositories;
@@ -12,6 +13,8 @@ using Equibles.IntegrationTests.Helpers;
 using Equibles.Messaging;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
+using Equibles.Yahoo.Data;
+using Equibles.Yahoo.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -89,8 +92,8 @@ public class InsiderTradingFilingProcessorTests
     [InlineData("F", TransactionCode.TaxPayment)]
     [InlineData("E", TransactionCode.Expiration)]
     [InlineData("G", TransactionCode.Gift)]
-    [InlineData("I", TransactionCode.Inheritance)]
-    [InlineData("W", TransactionCode.Discretionary)]
+    [InlineData("I", TransactionCode.Discretionary)]
+    [InlineData("W", TransactionCode.Inheritance)]
     public void ParseTransactionCode_ValidCode_ReturnsCorrectEnum(
         string code,
         TransactionCode expected
@@ -301,20 +304,25 @@ public class InsiderTradingFilingProcessorTests
         var dbContext = TestDbContextFactory.Create(
             new InsiderTradingModuleConfiguration(),
             new CommonStocksModuleConfiguration(),
-            new ErrorsModuleConfiguration()
+            new ErrorsModuleConfiguration(),
+            new YahooModuleConfiguration()
         );
 
         var ownerRepo = new InsiderOwnerRepository(dbContext);
         var txRepo = new InsiderTransactionRepository(dbContext);
         var errorRepo = new ErrorRepository(dbContext);
         var errorManager = new ErrorManager(errorRepo);
+        var dailyStockPriceRepo = new DailyStockPriceRepository(dbContext);
+        var priceValidator = new InsiderTransactionPriceValidator();
         var secClient = Substitute.For<ISecEdgarClient>();
 
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(ISecEdgarClient), secClient),
             (typeof(InsiderOwnerRepository), ownerRepo),
             (typeof(InsiderTransactionRepository), txRepo),
-            (typeof(ErrorManager), errorManager)
+            (typeof(ErrorManager), errorManager),
+            (typeof(DailyStockPriceRepository), dailyStockPriceRepo),
+            (typeof(InsiderTransactionPriceValidator), priceValidator)
         );
 
         var errorReporter = new ErrorReporter(

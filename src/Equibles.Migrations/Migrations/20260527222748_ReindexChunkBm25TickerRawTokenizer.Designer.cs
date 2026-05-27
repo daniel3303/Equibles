@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Equibles.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    partial class EquiblesDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260527222748_ReindexChunkBm25TickerRawTokenizer")]
+    partial class ReindexChunkBm25TickerRawTokenizer
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -621,9 +624,6 @@ namespace Equibles.Migrations.Migrations
                     b.Property<DateTime>("ComputedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("DirtyAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<int>("FilerCount")
                         .HasColumnType("integer");
 
@@ -640,9 +640,6 @@ namespace Equibles.Migrations.Migrations
                         .HasColumnType("bigint");
 
                     b.HasKey("ReportDate");
-
-                    b.HasIndex("DirtyAt")
-                        .HasFilter("\"DirtyAt\" IS NOT NULL");
 
                     b.ToTable("AumQuarterlySnapshot");
                 });

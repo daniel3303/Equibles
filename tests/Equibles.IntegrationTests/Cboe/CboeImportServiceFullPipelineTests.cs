@@ -159,18 +159,16 @@ public class CboeImportServiceFullPipelineTests : IAsyncLifetime
             );
         client
             .DownloadVixHistory()
-            .Returns(
-                [
-                    new CboeVixRecord
-                    {
-                        Date = today,
-                        Open = 14.20m,
-                        High = 15.30m,
-                        Low = 13.80m,
-                        Close = 14.95m,
-                    },
-                ]
-            );
+            .Returns([
+                new CboeVixRecord
+                {
+                    Date = today,
+                    Open = 14.20m,
+                    High = 15.30m,
+                    Low = 13.80m,
+                    Close = 14.95m,
+                },
+            ]);
 
         var sut = CreateSut(CreateScopeFactory(), client, today);
 
@@ -231,18 +229,16 @@ public class CboeImportServiceFullPipelineTests : IAsyncLifetime
         var client = EmptyClient();
         client
             .DownloadVixHistory()
-            .Returns(
-                [
-                    new CboeVixRecord
-                    {
-                        Date = new DateOnly(2026, 4, 1), // older than stored → filtered out
-                        Open = 1m,
-                        High = 1m,
-                        Low = 1m,
-                        Close = 1m,
-                    },
-                ]
-            );
+            .Returns([
+                new CboeVixRecord
+                {
+                    Date = new DateOnly(2026, 4, 1), // older than stored → filtered out
+                    Open = 1m,
+                    High = 1m,
+                    Low = 1m,
+                    Close = 1m,
+                },
+            ]);
 
         var sut = CreateSut(CreateScopeFactory(), client, new DateOnly(2026, 4, 10));
 
@@ -283,12 +279,7 @@ public class CboeImportServiceFullPipelineTests : IAsyncLifetime
             Substitute.For<ILogger<ErrorReporter>>()
         );
 
-        var sut = CreateSut(
-            CreateScopeFactory(),
-            client,
-            new DateOnly(2026, 4, 10),
-            errorReporter
-        );
+        var sut = CreateSut(CreateScopeFactory(), client, new DateOnly(2026, 4, 10), errorReporter);
 
         await sut.Import(CancellationToken.None);
 

@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Repositories;
 using Equibles.Search;
 using Equibles.Search.Abstractions;
 using Equibles.Web.Controllers.Abstract;
@@ -16,11 +17,17 @@ public class SearchController : BaseController
     private const int MaxPerProviderFocused = 50;
 
     private readonly SearchAggregator _searchAggregator;
+    private readonly CommonStockRepository _commonStockRepository;
 
-    public SearchController(SearchAggregator searchAggregator, ILogger<SearchController> logger)
+    public SearchController(
+        SearchAggregator searchAggregator,
+        CommonStockRepository commonStockRepository,
+        ILogger<SearchController> logger
+    )
         : base(logger)
     {
         _searchAggregator = searchAggregator;
+        _commonStockRepository = commonStockRepository;
     }
 
     [HttpGet]
@@ -32,8 +39,28 @@ public class SearchController : BaseController
         DateOnly? dateTo
     )
     {
+        // When the user submits a query that is an exact ticker, skip the results page and go
+        // straight to that stock. Only on the unfiltered overview — a category-filtered search
+        // (e.g. "Filings") is an explicit request to stay on the results page.
+        if (string.IsNullOrWhiteSpace(category))
+        {
+            var stock = await ResolveExactTicker(q);
+            if (stock != null)
+                return RedirectToAction("Show", "Stocks", new { ticker = stock.Ticker });
+        }
+
         ViewData["Title"] = "Search";
         return View(await BuildViewModel(q, category, sort, dateFrom, dateTo));
+    }
+
+    // Resolves a query to a stock only on an exact (case-insensitive) ticker match — primary or
+    // secondary. Returns null for company-name or partial queries so they fall through to search.
+    private async Task<Equibles.CommonStocks.Data.Models.CommonStock> ResolveExactTicker(string q)
+    {
+        if (string.IsNullOrWhiteSpace(q))
+            return null;
+
+        return await _commonStockRepository.GetByTicker(q.Trim().ToUpperInvariant());
     }
 
     // Results-only fragment for instant (as-you-type) search. instant-search.js fetches this
