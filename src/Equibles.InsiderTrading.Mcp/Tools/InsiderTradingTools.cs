@@ -222,7 +222,7 @@ public class InsiderTradingTools
 
     private async Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker)
     {
-        var stock = await _commonStockRepository.GetByTicker(ticker);
+        var stock = await _commonStockRepository.GetByTicker(McpToolExecutor.NormalizeTicker(ticker));
         if (stock == null)
             return (null, McpToolExecutor.StockNotFound(ticker));
         return (stock, null);
