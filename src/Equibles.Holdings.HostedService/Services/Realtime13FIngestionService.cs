@@ -49,18 +49,22 @@ public class Realtime13FIngestionService
     /// <paramref name="minReportDate"/>. Returns the number of filings handed
     /// to the import pipeline.
     /// </summary>
-    public async Task<int> IngestRecentFilings(
+    public async Task<RealtimeIngestionResult> IngestRecentFilings(
         DateOnly today,
         int lookbackDays,
         DateOnly minReportDate,
         CancellationToken cancellationToken
     )
     {
-        var entries = await DiscoverEntries(today, lookbackDays, cancellationToken);
+        var (entries, earliestFailedDate) = await DiscoverEntries(
+            today,
+            lookbackDays,
+            cancellationToken
+        );
         if (entries.Count == 0)
         {
             _logger.LogInformation("No 13F-HR submissions found in daily index window");
-            return 0;
+            return new RealtimeIngestionResult(0, earliestFailedDate);
         }
 
         var alreadyProcessed = await LoadProcessedAccessions(
@@ -115,7 +119,7 @@ public class Realtime13FIngestionService
             totalImported
         );
 
-        return totalImported;
+        return new RealtimeIngestionResult(totalImported, earliestFailedDate);
     }
 
     private async Task<Parsed13FFiling> TryParseAndValidateEntry(
@@ -162,11 +166,10 @@ public class Realtime13FIngestionService
         }
     }
 
-    private async Task<List<EdgarDailyIndexEntry>> DiscoverEntries(
-        DateOnly today,
-        int lookbackDays,
-        CancellationToken cancellationToken
-    )
+    private async Task<(
+        List<EdgarDailyIndexEntry> Entries,
+        DateOnly? EarliestFailedDate
+    )> DiscoverEntries(DateOnly today, int lookbackDays, CancellationToken cancellationToken)
     {
         // Deduplicate by accession across the window: an amendment carries a
         // distinct accession number, so this only collapses the same filing
@@ -174,6 +177,11 @@ public class Realtime13FIngestionService
         var byAccession = new Dictionary<string, EdgarDailyIndexEntry>(
             StringComparer.OrdinalIgnoreCase
         );
+
+        // The oldest day this cycle failed to fetch. Offsets increase (dates run
+        // backwards), so the last failure seen is the earliest date — the worker
+        // holds the sweep watermark back to before it so it is re-swept next time.
+        DateOnly? earliestFailed = null;
 
         for (var offset = 0; offset < lookbackDays; offset++)
         {
@@ -183,8 +191,7 @@ public class Realtime13FIngestionService
 
             // One day's fetch failing (a transient error, or SEC throttling that
             // outlasts the client's retries) must not abort the whole sweep and
-            // lose every other day. Log it and move on — the next cycle re-sweeps
-            // this date.
+            // lose every other day. Log it, remember it, and move on.
             List<EdgarDailyIndexEntry> indexEntries;
             try
             {
@@ -197,6 +204,7 @@ public class Realtime13FIngestionService
                     "Failed to fetch the {Date:yyyy-MM-dd} daily index; skipping this day",
                     date
                 );
+                earliestFailed = date;
                 continue;
             }
 
@@ -209,7 +217,7 @@ public class Realtime13FIngestionService
             }
         }
 
-        return byAccession.Values.ToList();
+        return (byAccession.Values.ToList(), earliestFailed);
     }
 
     private async Task<HashSet<string>> LoadProcessedAccessions(
