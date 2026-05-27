@@ -32,9 +32,7 @@ public class CboeClientRealPageCassetteTests
 
         var result = await sut.DownloadDailyPutCallRatios(date);
 
-        result
-            .Should()
-            .HaveCount(5, "the captured page covers all five product types");
+        result.Should().HaveCount(5, "the captured page covers all five product types");
 
         // The cassette is for 2020-06-15. Ratios are the values rendered on
         // the live page at capture time; if CBOE retroactively edits a day's

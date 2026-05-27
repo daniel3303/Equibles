@@ -21,23 +21,26 @@ public class CboeClient : ICboeClient
         "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv";
     private const int MaxRetries = 3;
 
-    private static readonly (CboePutCallProductType Product, string RatioKey, string VolumeKey)[]
-        ProductMappings =
-        [
-            (CboePutCallProductType.Total, "TOTAL PUT/CALL RATIO", "SUM OF ALL PRODUCTS"),
-            (CboePutCallProductType.Equity, "EQUITY PUT/CALL RATIO", "EQUITY OPTIONS"),
-            (CboePutCallProductType.Index, "INDEX PUT/CALL RATIO", "INDEX OPTIONS"),
-            (
-                CboePutCallProductType.Vix,
-                "CBOE VOLATILITY INDEX (VIX) PUT/CALL RATIO",
-                "CBOE VOLATILITY INDEX (VIX)"
-            ),
-            (
-                CboePutCallProductType.Etp,
-                "EXCHANGE TRADED PRODUCTS PUT/CALL RATIO",
-                "EXCHANGE TRADED PRODUCTS"
-            ),
-        ];
+    private static readonly (
+        CboePutCallProductType Product,
+        string RatioKey,
+        string VolumeKey
+    )[] ProductMappings =
+    [
+        (CboePutCallProductType.Total, "TOTAL PUT/CALL RATIO", "SUM OF ALL PRODUCTS"),
+        (CboePutCallProductType.Equity, "EQUITY PUT/CALL RATIO", "EQUITY OPTIONS"),
+        (CboePutCallProductType.Index, "INDEX PUT/CALL RATIO", "INDEX OPTIONS"),
+        (
+            CboePutCallProductType.Vix,
+            "CBOE VOLATILITY INDEX (VIX) PUT/CALL RATIO",
+            "CBOE VOLATILITY INDEX (VIX)"
+        ),
+        (
+            CboePutCallProductType.Etp,
+            "EXCHANGE TRADED PRODUCTS PUT/CALL RATIO",
+            "EXCHANGE TRADED PRODUCTS"
+        ),
+    ];
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<CboeClient> _logger;
@@ -50,9 +53,9 @@ public class CboeClient : ICboeClient
         _rateLimiter = rateLimiter;
     }
 
-    public async Task<Dictionary<CboePutCallProductType, CboePutCallRecord>> DownloadDailyPutCallRatios(
-        DateOnly date
-    )
+    public async Task<
+        Dictionary<CboePutCallProductType, CboePutCallRecord>
+    > DownloadDailyPutCallRatios(DateOnly date)
     {
         var url = $"{DailyStatsUrl}?dt={date:yyyy-MM-dd}";
         _logger.LogDebug("Downloading CBOE daily put/call ratios for {Date}", date);
