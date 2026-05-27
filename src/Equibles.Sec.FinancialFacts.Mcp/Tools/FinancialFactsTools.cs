@@ -84,7 +84,7 @@ public class FinancialFactsTools
                     return $"A concept is required. {SupportedAliasesNote()}";
 
                 var stock = await _commonStockRepository.GetByTicker(
-                    ticker.Trim().ToUpperInvariant()
+                    McpToolExecutor.NormalizeTicker(ticker)
                 );
                 if (stock == null)
                     return McpToolExecutor.StockNotFound(ticker);
