@@ -20,11 +20,11 @@ public class CommonStockManagerSetFiscalYearEndInvalidDayForMonthTests
     [Fact]
     public async Task SetFiscalYearEnd_February31_ThrowsDomainValidation()
     {
-        var db = new EquiblesDbContext(
-            new DbContextOptionsBuilder<EquiblesDbContext>()
+        var db = new EquiblesFinancialDbContext(
+            new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
                 .UseInMemoryDatabase(Guid.NewGuid().ToString())
                 .Options,
-            [new CommonStocksModuleConfiguration()]
+            new IModuleConfiguration[] { new CommonStocksModuleConfiguration() }
         );
         var repository = Substitute.For<CommonStockRepository>(db);
         var sut = new CommonStockManager(repository, Substitute.For<IPublishEndpoint>());

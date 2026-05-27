@@ -14,7 +14,7 @@ public class FileManagerSaveFileMissingExtensionTests
     [Fact]
     public async Task SaveFile_FilenameWithoutExtension_ThrowsArgumentException()
     {
-        var repository = Substitute.For<FileRepository>((EquiblesDbContext)null);
+        var repository = Substitute.For<FileRepository>((EquiblesFinancialDbContext)null);
         var sut = new FileManager(repository);
 
         var act = () => sut.SaveFile("content"u8.ToArray(), "README");

@@ -5,7 +5,7 @@ namespace Equibles.Holdings.Repositories;
 
 public class RealtimeSweepStateRepository : BaseRepository<RealtimeSweepState>
 {
-    public RealtimeSweepStateRepository(EquiblesDbContext dbContext)
+    public RealtimeSweepStateRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public IQueryable<RealtimeSweepState> GetByWorker(string workerName)

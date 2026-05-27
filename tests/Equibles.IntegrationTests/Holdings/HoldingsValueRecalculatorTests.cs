@@ -26,7 +26,7 @@ public class HoldingsValueRecalculatorTests : IDisposable
     private readonly ILogger<HoldingsValueRecalculator> _logger = Substitute.For<
         ILogger<HoldingsValueRecalculator>
     >();
-    private readonly List<EquiblesDbContext> _contexts = [];
+    private readonly List<EquiblesFinancialDbContext> _contexts = [];
 
     public void Dispose()
     {
@@ -37,16 +37,16 @@ public class HoldingsValueRecalculatorTests : IDisposable
     }
 
     /// <summary>
-    /// Creates a new <see cref="EquiblesDbContext"/> backed by the same in-memory database,
+    /// Creates a new <see cref="EquiblesFinancialDbContext"/> backed by the same in-memory database,
     /// so every scope-resolved context shares the same data store.
     /// </summary>
-    private EquiblesDbContext CreateSharedContext()
+    private EquiblesFinancialDbContext CreateSharedContext()
     {
-        var options = new DbContextOptionsBuilder<EquiblesDbContext>()
+        var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseInMemoryDatabase(_dbName)
             .Options;
 
-        var ctx = new EquiblesDbContext(options, Modules);
+        var ctx = new EquiblesFinancialDbContext(options, Modules);
         ctx.Database.EnsureCreated();
         _contexts.Add(ctx);
         return ctx;
@@ -54,7 +54,7 @@ public class HoldingsValueRecalculatorTests : IDisposable
 
     /// <summary>
     /// Builds an <see cref="IServiceScopeFactory"/> whose scopes resolve
-    /// <see cref="EquiblesDbContext"/> from the shared in-memory database.
+    /// <see cref="EquiblesFinancialDbContext"/> from the shared in-memory database.
     /// Each call to <c>CreateScope()</c> returns a fresh context instance
     /// (mirroring real DI behaviour) that still shares the same backing store.
     /// </summary>
@@ -69,7 +69,7 @@ public class HoldingsValueRecalculatorTests : IDisposable
                 var ctx = CreateSharedContext();
 
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(EquiblesDbContext)).Returns(ctx);
+                sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
 
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);

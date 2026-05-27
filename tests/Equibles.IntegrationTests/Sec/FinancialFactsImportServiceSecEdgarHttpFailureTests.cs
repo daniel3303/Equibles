@@ -30,7 +30,7 @@ namespace Equibles.IntegrationTests.Sec;
 public class FinancialFactsImportServiceSecEdgarHttpFailureTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
-    private readonly List<EquiblesDbContext> _contexts = [];
+    private readonly List<EquiblesFinancialDbContext> _contexts = [];
 
     public FinancialFactsImportServiceSecEdgarHttpFailureTests(ParadeDbFixture fixture) =>
         _fixture = fixture;
@@ -44,7 +44,7 @@ public class FinancialFactsImportServiceSecEdgarHttpFailureTests : IAsyncLifetim
         return Task.CompletedTask;
     }
 
-    private EquiblesDbContext FreshContext()
+    private EquiblesFinancialDbContext FreshContext()
     {
         var ctx = _fixture.CreateDbContext();
         _contexts.Add(ctx);
@@ -60,7 +60,7 @@ public class FinancialFactsImportServiceSecEdgarHttpFailureTests : IAsyncLifetim
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(EquiblesDbContext)).Returns(ctx);
+                sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
                 sp.GetService(typeof(CommonStockRepository))
                     .Returns(new CommonStockRepository(ctx));
                 sp.GetService(typeof(FinancialConceptRepository))

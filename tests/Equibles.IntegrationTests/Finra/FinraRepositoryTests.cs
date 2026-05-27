@@ -11,7 +11,7 @@ namespace Equibles.IntegrationTests.Finra;
 
 public class DailyShortVolumeRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly DailyShortVolumeRepository _repository;
 
     public DailyShortVolumeRepositoryTests()
@@ -247,7 +247,7 @@ public class DailyShortVolumeRepositoryTests : IDisposable
 
 public class ShortInterestRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly ShortInterestRepository _repository;
 
     public ShortInterestRepositoryTests()

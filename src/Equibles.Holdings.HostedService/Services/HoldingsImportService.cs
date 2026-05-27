@@ -743,7 +743,7 @@ public class HoldingsImportService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
         var entriesByKey = new Dictionary<string, List<HoldingManagerEntry>>();
         foreach (var h in holdings)

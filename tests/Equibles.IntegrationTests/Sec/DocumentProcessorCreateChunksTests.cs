@@ -57,11 +57,11 @@ public class DocumentProcessorCreateChunksTests
         };
 
         var chunkRepository = Substitute.For<ChunkRepository>(
-            (Equibles.Data.EquiblesDbContext)null
+            (Equibles.Data.EquiblesFinancialDbContext)null
         );
         var sut = new DocumentProcessor(
             chunkRepository,
-            Substitute.For<EmbeddingRepository>((Equibles.Data.EquiblesDbContext)null),
+            Substitute.For<EmbeddingRepository>((Equibles.Data.EquiblesFinancialDbContext)null),
             Substitute.For<IEmbeddingClient>(),
             new ChunkingStrategy(new TokenCounter()),
             Options.Create(new EmbeddingConfig { ModelName = "test-model" }),

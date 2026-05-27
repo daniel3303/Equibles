@@ -65,7 +65,7 @@ public class HoldingsScraperWorkerMarkProcessedFailTests : ParadeDbMcpTestBase
             .Returns(_ =>
             {
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(Equibles.Data.EquiblesDbContext)).Returns(DbContext);
+                sp.GetService(typeof(Equibles.Data.EquiblesFinancialDbContext)).Returns(DbContext);
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
                 return scope;

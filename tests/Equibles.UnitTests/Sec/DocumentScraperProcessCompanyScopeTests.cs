@@ -37,26 +37,27 @@ public class DocumentScraperProcessCompanyScopeTests
     private readonly IDocumentPersistenceService _persistence =
         Substitute.For<IDocumentPersistenceService>();
 
-    private static EquiblesDbContext NewDbContext()
+    private static EquiblesFinancialDbContext NewDbContext()
     {
-        var options = new DbContextOptionsBuilder<EquiblesDbContext>()
+        var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .EnableServiceProviderCaching(false)
             .Options;
-        var ctx = new EquiblesDbContext(
+        var ctx = new EquiblesFinancialDbContext(
             options,
-            [
+            new IModuleConfiguration[]
+            {
                 new CommonStocksModuleConfiguration(),
                 new DocumentOnlyModuleConfiguration(),
                 new MediaModuleConfiguration(),
-            ]
+            }
         );
         ctx.Database.EnsureCreated();
         return ctx;
     }
 
     private DocumentScraper BuildScraper(
-        EquiblesDbContext dbContext,
+        EquiblesFinancialDbContext dbContext,
         DocumentScraperOptions options
     )
     {
@@ -85,7 +86,7 @@ public class DocumentScraperProcessCompanyScopeTests
         );
     }
 
-    private static CommonStock SeedCompany(EquiblesDbContext db)
+    private static CommonStock SeedCompany(EquiblesFinancialDbContext db)
     {
         var stock = new CommonStock
         {

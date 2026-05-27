@@ -5,6 +5,6 @@ namespace Equibles.CommonStocks.Repositories;
 
 public class SectorRepository : BaseRepository<Sector>
 {
-    public SectorRepository(EquiblesDbContext dbContext)
+    public SectorRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 }

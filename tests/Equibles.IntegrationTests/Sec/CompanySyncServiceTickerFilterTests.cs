@@ -67,7 +67,7 @@ public class CompanySyncServiceTickerFilterTests : ParadeDbMcpTestBase
                     Substitute.For<IPublishEndpoint>()
                 )
             ),
-            (typeof(EquiblesDbContext), DbContext)
+            (typeof(EquiblesFinancialDbContext), DbContext)
         );
 
         var sut = new CompanySyncService(

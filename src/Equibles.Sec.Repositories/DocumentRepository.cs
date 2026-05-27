@@ -7,7 +7,7 @@ namespace Equibles.Sec.Repositories;
 
 public class DocumentRepository : BaseRepository<Document>
 {
-    public DocumentRepository(EquiblesDbContext dbContext)
+    public DocumentRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public async Task<bool> Exists(

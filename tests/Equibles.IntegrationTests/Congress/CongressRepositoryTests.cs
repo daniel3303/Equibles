@@ -11,7 +11,7 @@ namespace Equibles.IntegrationTests.Congress;
 
 public class CongressMemberRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly CongressMemberRepository _repository;
 
     public CongressMemberRepositoryTests()
@@ -166,7 +166,7 @@ public class CongressMemberRepositoryTests : IDisposable
 
 public class CongressionalTradeRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly CongressionalTradeRepository _repository;
 
     public CongressionalTradeRepositoryTests()

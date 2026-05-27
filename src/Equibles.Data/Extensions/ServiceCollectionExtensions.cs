@@ -2,39 +2,45 @@ using System.Reflection;
 using Equibles.ParadeDB.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure;
 
 namespace Equibles.Data.Extensions;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddEquiblesDbContext(
+    /// <summary>
+    /// Registers an Equibles DB context of type <typeparamref name="TContext"/>
+    /// with its own module set. The module list is captured per context (via
+    /// <see cref="ModuleConfigurationSet{TContext}"/>) so multiple contexts in the
+    /// same host never share a configuration set. Postgres extensions are NOT
+    /// applied here — pass <paramref name="configureNpgsql"/> to opt a context
+    /// into pgvector / ParadeDB (see <see cref="AddEquiblesFinancialDbContext"/>).
+    /// </summary>
+    public static IServiceCollection AddEquiblesDbContext<TContext>(
         this IServiceCollection services,
         string connectionString,
         Action<EquiblesModuleBuilder> configureModules,
+        Action<NpgsqlDbContextOptionsBuilder> configureNpgsql = null,
         Assembly migrationsAssembly = null,
         string migrationsAssemblyName = null,
         TimeSpan? commandTimeout = null
     )
+        where TContext : EquiblesDbContextBase
     {
         var moduleBuilder = new EquiblesModuleBuilder();
         configureModules(moduleBuilder);
 
-        foreach (var module in moduleBuilder.Modules)
-        {
-            services.AddSingleton<IModuleConfiguration>(module);
-        }
+        services.AddSingleton(new ModuleConfigurationSet<TContext>(moduleBuilder.Modules));
 
-        services.AddDbContext<EquiblesDbContext>(
+        services.AddDbContext<TContext>(
             (sp, options) =>
             {
                 options.UseNpgsql(
                     connectionString,
                     npgsql =>
                     {
-                        npgsql
-                            .UseVector()
-                            .UseParadeDb()
-                            .UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+                        npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+                        configureNpgsql?.Invoke(npgsql);
                         if (migrationsAssembly != null)
                         {
                             npgsql.MigrationsAssembly(migrationsAssembly);
@@ -54,6 +60,30 @@ public static class ServiceCollectionExtensions
         );
 
         return services;
+    }
+
+    /// <summary>
+    /// Registers the <see cref="EquiblesFinancialDbContext"/> with pgvector +
+    /// ParadeDB enabled. Convenience wrapper over
+    /// <see cref="AddEquiblesDbContext{TContext}"/> for the public financial database.
+    /// </summary>
+    public static IServiceCollection AddEquiblesFinancialDbContext(
+        this IServiceCollection services,
+        string connectionString,
+        Action<EquiblesModuleBuilder> configureModules,
+        Assembly migrationsAssembly = null,
+        string migrationsAssemblyName = null,
+        TimeSpan? commandTimeout = null
+    )
+    {
+        return services.AddEquiblesDbContext<EquiblesFinancialDbContext>(
+            connectionString,
+            configureModules,
+            npgsql => npgsql.UseVector().UseParadeDb(),
+            migrationsAssembly,
+            migrationsAssemblyName,
+            commandTimeout
+        );
     }
 
     public static IServiceCollection AddAllRepositories(this IServiceCollection services)
@@ -76,7 +106,10 @@ public static class ServiceCollectionExtensions
         {
             var repositories = assembly.DefinedTypes.Where(t =>
                 t is { IsClass: true, IsAbstract: false, IsInterface: false }
-                && IsSubClassOfGenericType(t, typeof(BaseRepository<>))
+                && (
+                    IsSubClassOfGenericType(t, typeof(BaseRepository<>))
+                    || IsSubClassOfGenericType(t, typeof(BaseRepository<,>))
+                )
             );
 
             foreach (var repository in repositories)

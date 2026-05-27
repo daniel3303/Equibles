@@ -50,7 +50,7 @@ public class CompanySyncServiceUpdateExistingCollisionTests : ParadeDbMcpTestBas
                     Substitute.For<IPublishEndpoint>()
                 )
             ),
-            (typeof(EquiblesDbContext), DbContext)
+            (typeof(EquiblesFinancialDbContext), DbContext)
         );
 
         return new CompanySyncService(

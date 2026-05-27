@@ -25,7 +25,7 @@ namespace Equibles.IntegrationTests.Helpers;
 /// <summary>
 /// Boots a ParadeDB (PostgreSQL + pgvector + pg_search) container once per xUnit collection,
 /// applies the production EF Core migrations against it, and exposes helpers for tests to
-/// pull a fresh <see cref="EquiblesDbContext"/> and truncate user data between tests via
+/// pull a fresh <see cref="EquiblesFinancialDbContext"/> and truncate user data between tests via
 /// Respawn.
 ///
 /// MCP integration tests share a single container — boot cost (~30s on a cold pull,
@@ -82,25 +82,25 @@ public class ParadeDbFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// Returns a fresh, attached <see cref="EquiblesDbContext"/>. The caller owns disposal.
+    /// Returns a fresh, attached <see cref="EquiblesFinancialDbContext"/>. The caller owns disposal.
     /// Configurations mirror production: pgvector, ParadeDB, query splitting, lazy loading,
     /// and the migrations assembly so any future <c>MigrateAsync</c> call (e.g., reset)
     /// uses the same migration set.
     /// </summary>
-    public EquiblesDbContext CreateDbContext() => CreateDbContext(configure: null);
+    public EquiblesFinancialDbContext CreateDbContext() => CreateDbContext(configure: null);
 
     /// <summary>
-    /// Returns a fresh <see cref="EquiblesDbContext"/> after applying the
+    /// Returns a fresh <see cref="EquiblesFinancialDbContext"/> after applying the
     /// caller-supplied <paramref name="configure"/> delegate to the
     /// <see cref="DbContextOptionsBuilder{TContext}"/> — used by tests that
     /// need to attach EF Core interceptors or otherwise tweak the context
     /// without duplicating the full production-mirror setup.
     /// </summary>
-    public EquiblesDbContext CreateDbContext(
-        Action<DbContextOptionsBuilder<EquiblesDbContext>> configure
+    public EquiblesFinancialDbContext CreateDbContext(
+        Action<DbContextOptionsBuilder<EquiblesFinancialDbContext>> configure
     )
     {
-        var optionsBuilder = new DbContextOptionsBuilder<EquiblesDbContext>();
+        var optionsBuilder = new DbContextOptionsBuilder<EquiblesFinancialDbContext>();
         optionsBuilder.UseNpgsql(
             ConnectionString,
             npgsql =>
@@ -131,10 +131,9 @@ public class ParadeDbFixture : IAsyncLifetime
             new FinancialFactsModuleConfiguration(),
             new MediaModuleConfiguration(),
             new ErrorsModuleConfiguration(),
-            new MessagingModuleConfiguration(),
         ];
 
-        return new EquiblesDbContext(optionsBuilder.Options, modules);
+        return new EquiblesFinancialDbContext(optionsBuilder.Options, modules);
     }
 
     /// <summary>

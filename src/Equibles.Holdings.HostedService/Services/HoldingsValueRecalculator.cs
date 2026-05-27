@@ -42,7 +42,8 @@ public class HoldingsValueRecalculator
     public async Task Recalculate(CancellationToken cancellationToken)
     {
         using var lookupScope = _scopeFactory.CreateScope();
-        var lookupContext = lookupScope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var lookupContext =
+            lookupScope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
         var pendingPairs = await lookupContext
             .Set<InstitutionalHolding>()
@@ -105,7 +106,7 @@ public class HoldingsValueRecalculator
             cancellationToken.ThrowIfCancellationRequested();
 
             using var scope = _scopeFactory.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
             var holdings = await dbContext
                 .Set<InstitutionalHolding>()
@@ -157,7 +158,7 @@ public class HoldingsValueRecalculator
             cancellationToken.ThrowIfCancellationRequested();
 
             using var scope = _scopeFactory.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
             var pendingHoldings = await dbContext
                 .Set<InstitutionalHolding>()

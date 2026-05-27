@@ -8,7 +8,7 @@ namespace Equibles.Sec.Repositories;
 
 public class EmbeddingRepository : BaseRepository<Embedding>
 {
-    public EmbeddingRepository(EquiblesDbContext dbContext)
+    public EmbeddingRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public async Task<Embedding> GetByChunk(Chunk chunk)

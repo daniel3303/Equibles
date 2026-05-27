@@ -33,7 +33,7 @@ namespace Equibles.IntegrationTests.Web;
 
 public class DataCountServiceTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly DataCountService _service;
 
     public DataCountServiceTests()

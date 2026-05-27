@@ -135,7 +135,7 @@ public class InstitutionalHoldingsToolsGetFundOverlapTests : ParadeDbMcpTestBase
         output.Should().Contain("as of 2024-09-30");
     }
 
-    private InstitutionalHoldingsTools NewSut(Equibles.Data.EquiblesDbContext ctx) =>
+    private InstitutionalHoldingsTools NewSut(Equibles.Data.EquiblesFinancialDbContext ctx) =>
         new(
             new InstitutionalHoldingRepository(ctx),
             new InstitutionalHolderRepository(ctx),

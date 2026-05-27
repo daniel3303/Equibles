@@ -86,7 +86,7 @@ public class WebHostFixture : IAsyncLifetime
         // PendingModelChangesWarning (thrown by default). Re-register the context
         // ignoring only that warning so the schema still applies and views render.
         // (Flagged for maintainers — the deployed Web host hits the same path.)
-        builder.Services.AddDbContext<EquiblesDbContext>(
+        builder.Services.AddDbContext<EquiblesFinancialDbContext>(
             (sp, options) =>
             {
                 options.UseNpgsql(
@@ -148,11 +148,11 @@ public class WebHostFixture : IAsyncLifetime
 
     /// <summary>
     /// Truncates all user tables in <c>public</c>, then runs <paramref name="seed"/>
-    /// against a fresh attached <see cref="EquiblesDbContext"/>. Call from the test
+    /// against a fresh attached <see cref="EquiblesFinancialDbContext"/>. Call from the test
     /// class constructor — xUnit instantiates the class once per test, so seeded
     /// state never leaks across tests in the same class.
     /// </summary>
-    public async Task ResetAndSeedAsync(Func<EquiblesDbContext, Task> seed = null)
+    public async Task ResetAndSeedAsync(Func<EquiblesFinancialDbContext, Task> seed = null)
     {
         await using (var resetConnection = new NpgsqlConnection(_db.GetConnectionString()))
         {
@@ -164,7 +164,7 @@ public class WebHostFixture : IAsyncLifetime
             return;
 
         using var scope = _app.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
         await seed(dbContext);
         await dbContext.SaveChangesAsync();
     }

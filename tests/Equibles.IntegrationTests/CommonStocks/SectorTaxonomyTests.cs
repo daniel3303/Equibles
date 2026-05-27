@@ -14,7 +14,7 @@ namespace Equibles.IntegrationTests.CommonStocks;
 public class SectorTaxonomyTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
-    private readonly List<Equibles.Data.EquiblesDbContext> _contexts = [];
+    private readonly List<Equibles.Data.EquiblesFinancialDbContext> _contexts = [];
 
     public SectorTaxonomyTests(ParadeDbFixture fixture) => _fixture = fixture;
 
@@ -27,7 +27,7 @@ public class SectorTaxonomyTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    private Equibles.Data.EquiblesDbContext FreshContext()
+    private Equibles.Data.EquiblesFinancialDbContext FreshContext()
     {
         var ctx = _fixture.CreateDbContext();
         _contexts.Add(ctx);

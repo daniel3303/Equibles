@@ -44,7 +44,7 @@ public class WebAppFixture : IAsyncLifetime
 
     /// <summary>
     /// Application root services. Use a scope (<c>Services.CreateScope()</c>) before resolving
-    /// scoped dependencies like <see cref="EquiblesDbContext"/>; never resolve them directly
+    /// scoped dependencies like <see cref="EquiblesFinancialDbContext"/>; never resolve them directly
     /// from this provider.
     /// </summary>
     public IServiceProvider Services => _app.Services;
@@ -132,7 +132,7 @@ public class WebAppFixture : IAsyncLifetime
 
     /// <summary>
     /// Truncates all user tables in <c>public</c> via Respawn, then runs <paramref name="seed"/>
-    /// against a fresh <see cref="EquiblesDbContext"/> scope. The seed delegate receives an
+    /// against a fresh <see cref="EquiblesFinancialDbContext"/> scope. The seed delegate receives an
     /// attached DbContext — add entities and the method will call <c>SaveChangesAsync</c> for
     /// you. Pass <c>null</c> (or omit) to reset without seeding.
     ///
@@ -140,7 +140,7 @@ public class WebAppFixture : IAsyncLifetime
     /// instantiates the class once per test, so seeding does not leak across tests in the same
     /// class.
     /// </summary>
-    public async Task ResetAndSeedAsync(Func<EquiblesDbContext, Task> seed = null)
+    public async Task ResetAndSeedAsync(Func<EquiblesFinancialDbContext, Task> seed = null)
     {
         // Same Postgres caveat as fixture init — Respawn's string overload defaults to SqlClient.
         await using (var resetConnection = new NpgsqlConnection(_db.GetConnectionString()))
@@ -153,7 +153,7 @@ public class WebAppFixture : IAsyncLifetime
             return;
 
         using var scope = _app.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
         await seed(dbContext);
         await dbContext.SaveChangesAsync();
     }

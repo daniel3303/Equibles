@@ -4,12 +4,19 @@ using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Equibles.Data;
 
-public abstract class BaseRepository<TEntity>
+/// <summary>
+/// Generic repository base bound to a specific context type. Customer-domain
+/// repositories inherit <c>BaseRepository&lt;TEntity, EquiblesCustomerDbContext&gt;</c>;
+/// financial repositories use the one-arg <see cref="BaseRepository{TEntity}"/>
+/// shim, which binds to <see cref="EquiblesFinancialDbContext"/>.
+/// </summary>
+public abstract class BaseRepository<TEntity, TContext>
     where TEntity : class
+    where TContext : EquiblesDbContextBase
 {
-    protected readonly EquiblesDbContext DbContext;
+    protected readonly TContext DbContext;
 
-    protected BaseRepository(EquiblesDbContext dbContext)
+    protected BaseRepository(TContext dbContext)
     {
         DbContext = dbContext;
     }
@@ -58,7 +65,7 @@ public abstract class BaseRepository<TEntity>
         return DbContext.Set<TEntity>();
     }
 
-    protected EquiblesDbContext GetDbContext()
+    protected TContext GetDbContext()
     {
         return DbContext;
     }
@@ -95,4 +102,16 @@ public abstract class BaseRepository<TEntity>
     {
         return DbContext.Database.CurrentTransaction != null;
     }
+}
+
+/// <summary>
+/// Back-compat shim for financial-domain repositories: binds to
+/// <see cref="EquiblesFinancialDbContext"/> so existing one-type-argument
+/// repositories keep working unchanged.
+/// </summary>
+public abstract class BaseRepository<TEntity> : BaseRepository<TEntity, EquiblesFinancialDbContext>
+    where TEntity : class
+{
+    protected BaseRepository(EquiblesFinancialDbContext dbContext)
+        : base(dbContext) { }
 }

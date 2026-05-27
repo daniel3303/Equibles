@@ -31,7 +31,7 @@ namespace Equibles.IntegrationTests.Web;
 
 public class StockTabServiceTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly StockTabService _service;
 
     public StockTabServiceTests()

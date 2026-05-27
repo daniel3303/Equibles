@@ -20,7 +20,7 @@ public class StatusController : BaseController
     private readonly ErrorManager _errorManager;
     private readonly IFlashMessage _flashMessage;
     private readonly IConfiguration _configuration;
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly DataCountService _dataCountService;
     private readonly ActivityFeedBroadcaster _activityFeed;
 
@@ -29,7 +29,7 @@ public class StatusController : BaseController
         ErrorManager errorManager,
         IFlashMessage flashMessage,
         IConfiguration configuration,
-        EquiblesDbContext dbContext,
+        EquiblesFinancialDbContext dbContext,
         DataCountService dataCountService,
         ActivityFeedBroadcaster activityFeed,
         ILogger<StatusController> logger

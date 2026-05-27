@@ -5,7 +5,7 @@ namespace Equibles.Cboe.Repositories;
 
 public class CboePutCallRatioRepository : BaseRepository<CboePutCallRatio>
 {
-    public CboePutCallRatioRepository(EquiblesDbContext dbContext)
+    public CboePutCallRatioRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public IQueryable<CboePutCallRatio> GetByType(CboePutCallRatioType type)

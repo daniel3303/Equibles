@@ -6,7 +6,7 @@ namespace Equibles.Holdings.Repositories;
 
 public class ProcessedFilingRepository : BaseRepository<ProcessedFiling>
 {
-    public ProcessedFilingRepository(EquiblesDbContext dbContext)
+    public ProcessedFilingRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public async Task<bool> Exists(string accessionNumber)

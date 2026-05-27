@@ -35,7 +35,7 @@ public class HoldingsRealtimeIngestionWindowDedupTests : IAsyncLifetime
     private const string Cusip = "037833100";
 
     private readonly ParadeDbFixture _fixture;
-    private readonly List<EquiblesDbContext> _contexts = [];
+    private readonly List<EquiblesFinancialDbContext> _contexts = [];
     private readonly CultureInfo _previousCulture;
 
     public HoldingsRealtimeIngestionWindowDedupTests(ParadeDbFixture fixture)
@@ -55,7 +55,7 @@ public class HoldingsRealtimeIngestionWindowDedupTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    private EquiblesDbContext FreshContext()
+    private EquiblesFinancialDbContext FreshContext()
     {
         var ctx = _fixture.CreateDbContext();
         _contexts.Add(ctx);
@@ -71,7 +71,7 @@ public class HoldingsRealtimeIngestionWindowDedupTests : IAsyncLifetime
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(EquiblesDbContext)).Returns(ctx);
+                sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
                 sp.GetService(typeof(CommonStockRepository))
                     .Returns(new CommonStockRepository(ctx));
                 sp.GetService(typeof(InstitutionalHolderRepository))

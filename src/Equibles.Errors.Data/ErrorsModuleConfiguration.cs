@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Errors.Data;
 
-public class ErrorsModuleConfiguration : Equibles.Data.IModuleConfiguration
+public class ErrorsModuleConfiguration : Equibles.Data.IFinancialModule
 {
     public void ConfigureEntities(ModelBuilder builder)
     {

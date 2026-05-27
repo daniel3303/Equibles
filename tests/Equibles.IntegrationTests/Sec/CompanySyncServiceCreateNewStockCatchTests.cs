@@ -60,7 +60,7 @@ public class CompanySyncServiceCreateNewStockCatchTests : ParadeDbMcpTestBase
                     Substitute.For<IPublishEndpoint>()
                 )
             ),
-            (typeof(EquiblesDbContext), DbContext)
+            (typeof(EquiblesFinancialDbContext), DbContext)
         );
 
         var errorScopeFactory = Substitute.For<IServiceScopeFactory>();

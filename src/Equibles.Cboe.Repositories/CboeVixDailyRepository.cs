@@ -5,7 +5,7 @@ namespace Equibles.Cboe.Repositories;
 
 public class CboeVixDailyRepository : BaseRepository<CboeVixDaily>
 {
-    public CboeVixDailyRepository(EquiblesDbContext dbContext)
+    public CboeVixDailyRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public IQueryable<CboeVixDaily> GetByDateRange(DateOnly startDate, DateOnly endDate)

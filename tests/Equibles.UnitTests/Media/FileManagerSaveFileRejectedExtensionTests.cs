@@ -13,7 +13,7 @@ public class FileManagerSaveFileRejectedExtensionTests
     [Fact]
     public async Task SaveFile_DisallowedExtension_ThrowsArgumentException()
     {
-        var repository = Substitute.For<FileRepository>((EquiblesDbContext)null);
+        var repository = Substitute.For<FileRepository>((EquiblesFinancialDbContext)null);
         var sut = new FileManager(repository);
 
         var act = () => sut.SaveFile("malicious"u8.ToArray(), "payload.exe");

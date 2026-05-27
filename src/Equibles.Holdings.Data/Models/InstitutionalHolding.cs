@@ -8,7 +8,7 @@ namespace Equibles.Holdings.Data.Models;
 [Index(nameof(CommonStockId), nameof(ReportDate))]
 [Index(nameof(InstitutionalHolderId), nameof(ReportDate))]
 [Index(nameof(AccessionNumber))]
-// Unique index configured via Fluent API in EquiblesDbContext with NULLS NOT DISTINCT.
+// Unique index configured via Fluent API in EquiblesFinancialDbContext with NULLS NOT DISTINCT.
 // A second covering index on (CommonStockId, ReportDate) INCLUDE
 // (InstitutionalHolderId, Value, Shares) is configured there too — Postgres-only
 // `INCLUDE` clauses aren't expressible via the [Index] attribute, so the Fluent

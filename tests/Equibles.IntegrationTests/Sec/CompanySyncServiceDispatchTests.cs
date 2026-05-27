@@ -43,7 +43,7 @@ public class CompanySyncServiceDispatchTests : ParadeDbMcpTestBase
                     Substitute.For<IPublishEndpoint>()
                 )
             ),
-            (typeof(EquiblesDbContext), DbContext)
+            (typeof(EquiblesFinancialDbContext), DbContext)
         );
         return new CompanySyncService(
             scopeFactory,

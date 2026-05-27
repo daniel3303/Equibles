@@ -6,7 +6,7 @@ namespace Equibles.Sec.FinancialFacts.Repositories;
 
 public class FinancialFactRepository : BaseRepository<FinancialFact>
 {
-    public FinancialFactRepository(EquiblesDbContext dbContext)
+    public FinancialFactRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public IQueryable<FinancialFact> GetByStock(CommonStock stock)

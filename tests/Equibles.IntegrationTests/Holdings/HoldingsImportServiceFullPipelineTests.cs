@@ -32,7 +32,7 @@ namespace Equibles.IntegrationTests.Holdings;
 public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
-    private readonly List<EquiblesDbContext> _contexts = [];
+    private readonly List<EquiblesFinancialDbContext> _contexts = [];
     private readonly CultureInfo _previousCulture;
 
     public HoldingsImportServiceFullPipelineTests(ParadeDbFixture fixture)
@@ -55,7 +55,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    private EquiblesDbContext FreshContext()
+    private EquiblesFinancialDbContext FreshContext()
     {
         var ctx = _fixture.CreateDbContext();
         _contexts.Add(ctx);
@@ -64,7 +64,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
 
     /// <summary>
     /// Builds an <see cref="IServiceScopeFactory"/> whose every <c>CreateScope()</c> call
-    /// yields a fresh <see cref="EquiblesDbContext"/> bound to the same ParadeDB instance
+    /// yields a fresh <see cref="EquiblesFinancialDbContext"/> bound to the same ParadeDB instance
     /// — mirroring production DI's scoped-DbContext lifetime. Each repository the
     /// importer pulls out of a scope therefore gets its own context, so saves don't
     /// fight for the same change-tracker.
@@ -78,7 +78,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(EquiblesDbContext)).Returns(ctx);
+                sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
                 sp.GetService(typeof(CommonStockRepository))
                     .Returns(new CommonStockRepository(ctx));
                 sp.GetService(typeof(InstitutionalHolderRepository))

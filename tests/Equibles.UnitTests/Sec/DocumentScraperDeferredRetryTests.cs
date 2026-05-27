@@ -38,17 +38,18 @@ public class DocumentScraperDeferredRetryTests
     [Fact]
     public async Task ScrapeDocuments_FilingDeferredThenRetryFails_LogsAndCountsSkipped()
     {
-        var dbOptions = new DbContextOptionsBuilder<EquiblesDbContext>()
+        var dbOptions = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .EnableServiceProviderCaching(false)
             .Options;
-        var ctx = new EquiblesDbContext(
+        var ctx = new EquiblesFinancialDbContext(
             dbOptions,
-            [
+            new IModuleConfiguration[]
+            {
                 new CommonStocksModuleConfiguration(),
                 new DocumentOnlyModuleConfiguration(),
                 new MediaModuleConfiguration(),
-            ]
+            }
         );
         ctx.Database.EnsureCreated();
         ctx.Set<CommonStock>()

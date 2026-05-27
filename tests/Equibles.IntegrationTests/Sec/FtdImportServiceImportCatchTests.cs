@@ -27,7 +27,10 @@ namespace Equibles.IntegrationTests.Sec;
 /// </summary>
 public class FtdImportServiceImportCatchTests
 {
-    private static (IServiceScopeFactory scopeFactory, EquiblesDbContext dbContext) BuildScope()
+    private static (
+        IServiceScopeFactory scopeFactory,
+        EquiblesFinancialDbContext dbContext
+    ) BuildScope()
     {
         var dbContext = TestDbContextFactory.Create(
             new CommonStocksModuleConfiguration(),

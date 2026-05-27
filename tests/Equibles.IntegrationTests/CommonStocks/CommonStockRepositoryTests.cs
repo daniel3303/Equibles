@@ -10,7 +10,7 @@ namespace Equibles.IntegrationTests.CommonStocks;
 
 public class CommonStockRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly CommonStockRepository _repository;
 
     public CommonStockRepositoryTests()

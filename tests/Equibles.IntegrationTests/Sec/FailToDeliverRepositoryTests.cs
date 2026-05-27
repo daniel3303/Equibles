@@ -10,7 +10,7 @@ namespace Equibles.IntegrationTests.Sec;
 
 public class FailToDeliverRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly FailToDeliverRepository _repository;
 
     public FailToDeliverRepositoryTests()

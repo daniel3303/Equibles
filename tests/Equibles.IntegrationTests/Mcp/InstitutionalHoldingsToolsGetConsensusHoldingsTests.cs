@@ -145,7 +145,7 @@ public class InstitutionalHoldingsToolsGetConsensusHoldingsTests : ParadeDbMcpTe
         output.Should().Contain("share no common report dates");
     }
 
-    private InstitutionalHoldingsTools NewSut(Equibles.Data.EquiblesDbContext ctx) =>
+    private InstitutionalHoldingsTools NewSut(Equibles.Data.EquiblesFinancialDbContext ctx) =>
         new(
             new InstitutionalHoldingRepository(ctx),
             new InstitutionalHolderRepository(ctx),

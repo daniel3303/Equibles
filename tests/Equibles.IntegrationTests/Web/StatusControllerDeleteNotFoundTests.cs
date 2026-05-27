@@ -47,7 +47,7 @@ namespace Equibles.IntegrationTests.Web;
 /// </summary>
 public class StatusControllerDeleteNotFoundTests : IDisposable
 {
-    private readonly Equibles.Data.EquiblesDbContext _dbContext;
+    private readonly Equibles.Data.EquiblesFinancialDbContext _dbContext;
 
     public StatusControllerDeleteNotFoundTests()
     {
@@ -62,7 +62,6 @@ public class StatusControllerDeleteNotFoundTests : IDisposable
             new FredModuleConfiguration(),
             new YahooModuleConfiguration(),
             new ErrorsModuleConfiguration(),
-            new MessagingModuleConfiguration(),
             new CftcModuleConfiguration(),
             new CboeModuleConfiguration()
         );

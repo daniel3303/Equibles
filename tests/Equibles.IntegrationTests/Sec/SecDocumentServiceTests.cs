@@ -15,7 +15,7 @@ public class SecDocumentServiceTests
 {
     private readonly SecDocumentService _sut;
     private readonly DocumentRepository _documentRepository;
-    private readonly Equibles.Data.EquiblesDbContext _context;
+    private readonly Equibles.Data.EquiblesFinancialDbContext _context;
 
     public SecDocumentServiceTests()
     {

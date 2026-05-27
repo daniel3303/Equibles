@@ -23,7 +23,7 @@ namespace Equibles.IntegrationTests.Yahoo;
 public class YahooPriceScraperWorkerDoWorkTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
-    private readonly List<EquiblesDbContext> _contexts = [];
+    private readonly List<EquiblesFinancialDbContext> _contexts = [];
 
     public YahooPriceScraperWorkerDoWorkTests(ParadeDbFixture fixture) => _fixture = fixture;
 

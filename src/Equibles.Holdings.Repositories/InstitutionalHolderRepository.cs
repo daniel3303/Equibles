@@ -6,7 +6,7 @@ namespace Equibles.Holdings.Repositories;
 
 public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
 {
-    public InstitutionalHolderRepository(EquiblesDbContext dbContext)
+    public InstitutionalHolderRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public async Task<InstitutionalHolder> GetByCik(string cik)

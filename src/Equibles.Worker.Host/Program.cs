@@ -47,12 +47,14 @@ builder.Services.AddSerilog(config =>
 Equibles.Plugins.PluginLoader.LoadAll();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddEquiblesDbContext(connectionString, modules => modules.AddAllModules());
+builder.Services.AddEquiblesFinancialDbContext(
+    connectionString,
+    modules => modules.AddAllModules()
+);
 builder.Services.AddAllRepositories();
 
-// MassTransit (Postgres SQL transport + EF outbox in EquiblesDbContext).
-// AddAllModules() auto-discovers MessagingModuleConfiguration via reflection
-// since this host references Equibles.Messaging.
+// MassTransit (Postgres SQL transport, no outbox in OSS — consumers publish
+// directly and must be idempotent).
 builder.Services.AddMessaging(builder.Configuration);
 
 // Worker-specific configuration
