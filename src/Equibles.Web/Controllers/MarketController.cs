@@ -170,23 +170,6 @@ public class MarketController : BaseController
         return View(viewModel);
     }
 
-    private static StatsSummary ComputeStats(double[] values, int decimals)
-    {
-        var stats = new DescriptiveStatistics(values);
-        return new StatsSummary(
-            Mean: stats.Mean.SafeRound(decimals),
-            Median: values.Median().SafeRound(decimals),
-            Min: stats.Minimum.SafeRound(decimals),
-            Max: stats.Maximum.SafeRound(decimals),
-            StdDev: stats.StandardDeviation.SafeRound(decimals)
-        );
-    }
-
-    private readonly record struct StatsSummary(
-        decimal? Mean,
-        decimal? Median,
-        decimal? Min,
-        decimal? Max,
-        decimal? StdDev
-    );
+    private static StatsSummary ComputeStats(double[] values, int decimals) =>
+        values.ComputeStats(decimals);
 }
