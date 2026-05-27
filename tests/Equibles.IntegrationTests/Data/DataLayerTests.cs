@@ -63,7 +63,7 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddEquiblesDbContext_RegistersModuleConfigurationsAsSingletons()
+    public void AddEquiblesDbContext_RegistersModuleConfigurationSet_AsSingletonWithAllModules()
     {
         var services = new ServiceCollection();
 
@@ -77,12 +77,16 @@ public class ServiceCollectionExtensionsTests
             }
         );
 
-        var moduleDescriptors = services
-            .Where(d => d.ServiceType == typeof(IModuleConfiguration))
-            .ToList();
+        var descriptor = services.FirstOrDefault(d =>
+            d.ServiceType == typeof(ModuleConfigurationSet<EquiblesFinancialDbContext>)
+        );
 
-        moduleDescriptors.Should().HaveCount(3);
-        moduleDescriptors.Should().OnlyContain(d => d.Lifetime == ServiceLifetime.Singleton);
+        descriptor.Should().NotBeNull();
+        descriptor!.Lifetime.Should().Be(ServiceLifetime.Singleton);
+
+        var set =
+            (ModuleConfigurationSet<EquiblesFinancialDbContext>)descriptor.ImplementationInstance!;
+        set.Modules.Should().HaveCount(3);
     }
 
     [Fact]
@@ -102,13 +106,12 @@ public class ServiceCollectionExtensionsTests
             }
         );
 
-        var moduleDescriptors = services
-            .Where(d => d.ServiceType == typeof(IModuleConfiguration))
-            .ToList();
-
-        var moduleTypes = moduleDescriptors
-            .Select(d => d.ImplementationInstance!.GetType())
-            .ToList();
+        var descriptor = services.Single(d =>
+            d.ServiceType == typeof(ModuleConfigurationSet<EquiblesFinancialDbContext>)
+        );
+        var set =
+            (ModuleConfigurationSet<EquiblesFinancialDbContext>)descriptor.ImplementationInstance!;
+        var moduleTypes = set.Modules.Select(m => m.GetType()).ToList();
 
         moduleTypes.Should().Contain(typeof(CommonStocksModuleConfiguration));
         moduleTypes.Should().Contain(typeof(HoldingsModuleConfiguration));
