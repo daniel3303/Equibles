@@ -15,12 +15,14 @@ namespace Equibles.Migrations.Migrations
                 table: "InsiderTransaction",
                 type: "boolean",
                 nullable: false,
-                defaultValue: true);
+                defaultValue: true
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_InsiderTransaction_IsPriceValid_TransactionDate",
                 table: "InsiderTransaction",
-                columns: new[] { "IsPriceValid", "TransactionDate" });
+                columns: new[] { "IsPriceValid", "TransactionDate" }
+            );
         }
 
         /// <inheritdoc />
@@ -28,11 +30,10 @@ namespace Equibles.Migrations.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "IX_InsiderTransaction_IsPriceValid_TransactionDate",
-                table: "InsiderTransaction");
+                table: "InsiderTransaction"
+            );
 
-            migrationBuilder.DropColumn(
-                name: "IsPriceValid",
-                table: "InsiderTransaction");
+            migrationBuilder.DropColumn(name: "IsPriceValid", table: "InsiderTransaction");
         }
     }
 }
