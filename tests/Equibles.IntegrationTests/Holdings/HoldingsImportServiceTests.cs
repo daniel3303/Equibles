@@ -183,7 +183,8 @@ public class HoldingsImportServiceTests
             ScopeFactoryFor(db),
             Substitute.For<ILogger<HoldingsImportService>>(),
             Options.Create(new WorkerOptions()),
-            Substitute.For<IStockPriceProvider>()
+            Substitute.For<IStockPriceProvider>(),
+            Substitute.For<MassTransit.IBus>()
         );
     }
 

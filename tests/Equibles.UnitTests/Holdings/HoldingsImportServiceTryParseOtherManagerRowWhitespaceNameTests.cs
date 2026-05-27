@@ -27,7 +27,8 @@ public class HoldingsImportServiceTryParseOtherManagerRowWhitespaceNameTests
             Substitute.For<IServiceScopeFactory>(),
             NullLogger<HoldingsImportService>.Instance,
             Options.Create(new WorkerOptions()),
-            Substitute.For<IStockPriceProvider>()
+            Substitute.For<IStockPriceProvider>(),
+            Substitute.For<MassTransit.IBus>()
         );
         var accession = "0000950123-24-006477";
         var submissions = new Dictionary<string, SubmissionRow>

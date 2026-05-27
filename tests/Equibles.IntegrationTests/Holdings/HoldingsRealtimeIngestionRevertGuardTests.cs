@@ -197,7 +197,8 @@ public class HoldingsRealtimeIngestionRevertGuardTests : IAsyncLifetime
             scopeFactory,
             Substitute.For<ILogger<HoldingsImportService>>(),
             Options.Create(new WorkerOptions()),
-            prices
+            prices,
+            Substitute.For<MassTransit.IBus>()
         );
         var ingestion = new Realtime13FIngestionService(
             edgar,

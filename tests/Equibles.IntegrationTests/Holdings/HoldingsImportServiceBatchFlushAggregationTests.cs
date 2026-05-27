@@ -91,7 +91,8 @@ public class HoldingsImportServiceBatchFlushAggregationTests : IAsyncLifetime
             CreateScopeFactory(),
             Substitute.For<ILogger<HoldingsImportService>>(),
             Options.Create(new WorkerOptions()),
-            priceProvider
+            priceProvider,
+            Substitute.For<MassTransit.IBus>()
         );
 
     private static ZipArchive BuildArchive(params (string Name, string Body)[] entries)

@@ -98,7 +98,8 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
             CreateScopeFactory(),
             Substitute.For<ILogger<HoldingsImportService>>(),
             Options.Create(new WorkerOptions()),
-            priceProvider
+            priceProvider,
+            Substitute.For<MassTransit.IBus>()
         );
     }
 
