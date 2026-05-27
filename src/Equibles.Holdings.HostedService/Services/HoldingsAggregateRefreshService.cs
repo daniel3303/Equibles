@@ -42,18 +42,37 @@ public class HoldingsAggregateRefreshService
         _logger = logger;
     }
 
-    public async Task RebuildQuarterAsync(DateOnly reportDate, CancellationToken cancellationToken)
+    public Task RebuildQuarterAsync(DateOnly reportDate, CancellationToken cancellationToken) =>
+        RebuildQuarterAsync(reportDate, commandTimeout: null, cancellationToken);
+
+    public async Task RebuildQuarterAsync(
+        DateOnly reportDate,
+        TimeSpan? commandTimeout,
+        CancellationToken cancellationToken
+    )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
-        await RebuildQuarterInScope(scope.ServiceProvider, reportDate, cancellationToken);
+        await RebuildQuarterInScope(
+            scope.ServiceProvider,
+            reportDate,
+            commandTimeout,
+            cancellationToken
+        );
     }
 
-    public async Task RebuildAllAsync(CancellationToken cancellationToken)
+    public Task RebuildAllAsync(CancellationToken cancellationToken) =>
+        RebuildAllAsync(commandTimeout: null, cancellationToken);
+
+    public async Task RebuildAllAsync(TimeSpan? commandTimeout, CancellationToken cancellationToken)
     {
         List<DateOnly> reportDates;
         await using (var scope = _scopeFactory.CreateAsyncScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+            if (commandTimeout is not null)
+            {
+                dbContext.Database.SetCommandTimeout(commandTimeout.Value);
+            }
             reportDates = await dbContext
                 .Set<InstitutionalHolding>()
                 .Select(h => h.ReportDate)
@@ -71,17 +90,27 @@ public class HoldingsAggregateRefreshService
         {
             cancellationToken.ThrowIfCancellationRequested();
             await using var scope = _scopeFactory.CreateAsyncScope();
-            await RebuildQuarterInScope(scope.ServiceProvider, reportDate, cancellationToken);
+            await RebuildQuarterInScope(
+                scope.ServiceProvider,
+                reportDate,
+                commandTimeout,
+                cancellationToken
+            );
         }
     }
 
     private async Task RebuildQuarterInScope(
         IServiceProvider services,
         DateOnly reportDate,
+        TimeSpan? commandTimeout,
         CancellationToken cancellationToken
     )
     {
         var dbContext = services.GetRequiredService<EquiblesFinancialDbContext>();
+        if (commandTimeout is not null)
+        {
+            dbContext.Database.SetCommandTimeout(commandTimeout.Value);
+        }
         var aumRepo = services.GetRequiredService<AumQuarterlySnapshotRepository>();
         var sectorRepo = services.GetRequiredService<SectorQuarterlySnapshotRepository>();
 
