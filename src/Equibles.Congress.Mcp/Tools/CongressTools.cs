@@ -5,6 +5,7 @@ using Equibles.Congress.Data.Models;
 using Equibles.Congress.Repositories;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Microsoft.EntityFrameworkCore;
@@ -32,11 +33,7 @@ public class CongressTools
         _tradeRepository = tradeRepository;
         _memberRepository = memberRepository;
         _commonStockRepository = commonStockRepository;
-        _runner = new McpToolRunner(
-            logger,
-            (tool, msg, stack, ctx) =>
-                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
-        );
+        _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
     [McpServerTool(Name = "GetCongressionalTrades")]

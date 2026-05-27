@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Fred.Data.Models;
 using Equibles.Fred.Repositories;
@@ -27,11 +28,7 @@ public class FredTools
     {
         _seriesRepository = seriesRepository;
         _observationRepository = observationRepository;
-        _runner = new McpToolRunner(
-            logger,
-            (tool, msg, stack, ctx) =>
-                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
-        );
+        _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
     [McpServerTool(Name = "GetEconomicIndicator")]

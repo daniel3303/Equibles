@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Sec.BusinessLogic.Search;
@@ -31,11 +32,7 @@ public class RagSearchTools
     {
         _ragManager = ragManager;
         _secDocumentService = secDocumentService;
-        _runner = new McpToolRunner(
-            logger,
-            (tool, msg, stack, ctx) =>
-                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
-        );
+        _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
     [McpServerTool(Name = "SearchDocuments")]

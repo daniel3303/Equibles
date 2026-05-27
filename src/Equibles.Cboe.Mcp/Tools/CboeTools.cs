@@ -4,6 +4,7 @@ using Equibles.Cboe.Data.Models;
 using Equibles.Cboe.Repositories;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Microsoft.EntityFrameworkCore;
@@ -28,11 +29,7 @@ public class CboeTools
     {
         _putCallRepository = putCallRepository;
         _vixRepository = vixRepository;
-        _runner = new McpToolRunner(
-            logger,
-            (tool, msg, stack, ctx) =>
-                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
-        );
+        _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
     [McpServerTool(Name = "GetPutCallRatios")]
