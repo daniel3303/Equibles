@@ -70,7 +70,7 @@ public class DocumentScraperUpdateFiscalYearEndErrorIsolationTests
         services.AddSingleton(dbContext);
         services.AddScoped<CommonStockRepository>();
         services.AddScoped<DocumentRepository>();
-        services.AddSingleton(Substitute.For<IPublishEndpoint>());
+        services.AddSingleton(Substitute.For<IBus>());
         services.AddScoped<CommonStockManager>();
         services.AddSingleton(secEdgarClient);
         services.AddSingleton(Substitute.For<IDocumentPersistenceService>());

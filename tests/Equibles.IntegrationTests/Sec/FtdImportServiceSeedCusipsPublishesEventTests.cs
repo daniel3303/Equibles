@@ -70,7 +70,7 @@ public class FtdImportServiceSeedCusipsPublishesEventTests : IAsyncLifetime
             await seed.SaveChangesAsync();
         }
 
-        var publishEndpoint = Substitute.For<IPublishEndpoint>();
+        var publishEndpoint = Substitute.For<IBus>();
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory
             .CreateScope()

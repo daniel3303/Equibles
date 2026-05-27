@@ -33,7 +33,7 @@ public class CommonStockManagerSetCusipNoopTests
     {
         var db = NewDb();
         var repo = Substitute.For<CommonStockRepository>(db);
-        var publishEndpoint = Substitute.For<IPublishEndpoint>();
+        var publishEndpoint = Substitute.For<IBus>();
         var sut = new CommonStockManager(repo, publishEndpoint);
         var stock = new CommonStock
         {

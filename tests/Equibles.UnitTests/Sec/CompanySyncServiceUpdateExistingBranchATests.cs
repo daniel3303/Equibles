@@ -78,10 +78,7 @@ public class CompanySyncServiceUpdateExistingBranchATests
         Set("CommonStockRepository", new CommonStockRepository(db));
         Set(
             "CommonStockManager",
-            new CommonStockManager(
-                new CommonStockRepository(db),
-                Substitute.For<IPublishEndpoint>()
-            )
+            new CommonStockManager(new CommonStockRepository(db), Substitute.For<IBus>())
         );
         Set("DbContext", db);
         return s;

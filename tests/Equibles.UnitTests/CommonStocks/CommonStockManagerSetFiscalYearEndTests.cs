@@ -31,7 +31,7 @@ public class CommonStockManagerSetFiscalYearEndTests
     }
 
     private static CommonStockManager NewManager(CommonStockRepository repository) =>
-        new(repository, Substitute.For<IPublishEndpoint>());
+        new(repository, Substitute.For<IBus>());
 
     [Fact]
     public async Task SetFiscalYearEnd_PreviouslyUndetected_PersistsMonthAndDay()
