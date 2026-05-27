@@ -9,6 +9,8 @@ public static class McpToolExecutor
 
     public static string StockNotFound(string ticker) => $"Stock '{ticker}' not found.";
 
+    public static string NormalizeTicker(string ticker) => ticker.Trim().ToUpperInvariant();
+
     public static async Task<string> Execute(
         Func<Task<string>> action,
         ILogger logger,

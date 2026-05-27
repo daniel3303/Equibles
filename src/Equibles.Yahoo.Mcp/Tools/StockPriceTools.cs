@@ -413,5 +413,5 @@ public class StockPriceTools
         );
 
     private Task<CommonStock> FindStockByTicker(string ticker) =>
-        _commonStockRepository.GetByTicker(ticker.Trim().ToUpperInvariant());
+        _commonStockRepository.GetByTicker(McpToolExecutor.NormalizeTicker(ticker));
 }
