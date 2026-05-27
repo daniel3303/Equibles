@@ -23,7 +23,7 @@ public class HoldingsStatsSeededTests
     [Fact]
     public async Task Stats_WithTwoQuartersOfSnapshots_RendersAggregatesAndFilerDelta()
     {
-        // Contract: /holdings/stats reads the per-quarter snapshot rows that
+        // Contract: /holdings/13f-statistics reads the per-quarter snapshot rows that
         // HoldingsAggregateRefreshService writes after each 13F import. The
         // summary cards show the latest quarter and the history table shows
         // QoQ filer deltas. Aggregate-correctness (distinct filer / stock /
@@ -65,7 +65,7 @@ public class HoldingsStatsSeededTests
         });
 
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
-        var response = await page.GotoAsync("/holdings/stats");
+        var response = await page.GotoAsync("/holdings/13f-statistics");
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);

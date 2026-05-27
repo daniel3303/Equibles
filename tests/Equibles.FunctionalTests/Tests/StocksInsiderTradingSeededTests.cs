@@ -88,7 +88,7 @@ public class StocksInsiderTradingSeededTests
         });
 
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
-        var response = await page.GotoAsync("/stocks/aapl/insidertrading");
+        var response = await page.GotoAsync("/stocks/aapl/insider-trading");
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);

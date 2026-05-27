@@ -24,7 +24,7 @@ public class HoldingsDoubleDownSeededTests
     [Fact]
     public async Task DoubleDown_WithMixedIncreasesAndThreshold_FiltersAndRanksByConviction()
     {
-        // Contract: /holdings/double-down shows positions where share-count increase ≥
+        // Contract: /holdings/double-down-report shows positions where share-count increase ≥
         // threshold% (default 50%) QoQ, ranked by % increase descending. Positions
         // with no prior shares or below-threshold increase are excluded.
         //
@@ -92,7 +92,7 @@ public class HoldingsDoubleDownSeededTests
         });
 
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
-        var response = await page.GotoAsync("/holdings/double-down");
+        var response = await page.GotoAsync("/holdings/double-down-report");
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);

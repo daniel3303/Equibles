@@ -39,7 +39,7 @@ public class HoldingsActivityControllerStatsTests
             await Task.CompletedTask;
         });
 
-        var response = await _fixture.Client.GetAsync("/holdings/stats");
+        var response = await _fixture.Client.GetAsync("/holdings/13f-statistics");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var html = await response.Content.ReadAsStringAsync();

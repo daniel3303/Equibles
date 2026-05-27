@@ -234,7 +234,7 @@ public class ProfilesController : BaseController
         return View(viewModel);
     }
 
-    [HttpGet("~/institutions/overlap")]
+    [HttpGet("~/institutions/overlap-matrix")]
     public async Task<IActionResult> OverlapMatrix(
         [FromQuery(Name = "ciks")] string[] ciks = null,
         [FromQuery(Name = "date")] DateOnly? date = null

@@ -23,7 +23,7 @@ public class HoldingsHeatMapSeededTests
     [Fact]
     public async Task HeatMap_WithThreeFilersAcrossTwoQuarters_RendersChartAndTable()
     {
-        // Pins the /holdings/heatmap route — requires ≥2 quarters of data and
+        // Pins the /holdings/conviction-heat-map route — requires ≥2 quarters of data and
         // ≥3 filers per stock to surface in the conviction heat map. Verifies
         // heading, bubble chart canvas, score components legend, and the top
         // scorers table with the seeded ticker.
@@ -58,7 +58,7 @@ public class HoldingsHeatMapSeededTests
         });
 
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
-        var response = await page.GotoAsync("/holdings/heatmap");
+        var response = await page.GotoAsync("/holdings/conviction-heat-map");
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);

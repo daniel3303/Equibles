@@ -67,7 +67,7 @@ public class StocksShortVolumeTests
         });
 
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
-        var response = await page.GotoAsync("/stocks/aapl/shortvolume");
+        var response = await page.GotoAsync("/stocks/aapl/short-volume");
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);
@@ -90,7 +90,7 @@ public class StocksShortVolumeTests
     [Fact]
     public async Task ShortVolume_GetForSeededStockWithNoShortVolume_RendersNoShortVolumeDataEmptyState()
     {
-        // /stocks/{ticker}/shortvolume runs StockTabService.LoadShortVolumeTab against the
+        // /stocks/{ticker}/short-volume runs StockTabService.LoadShortVolumeTab against the
         // seeded stock. With no DailyShortVolume rows, the view takes the explicit empty-state
         // branch ("No Short Volume Data"). Pins both the route + LoadStock lookup AND the
         // empty-state copy — the other test in this file only covers the populated branch.
@@ -108,7 +108,7 @@ public class StocksShortVolumeTests
         });
 
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
-        var response = await page.GotoAsync("/stocks/aapl/shortvolume");
+        var response = await page.GotoAsync("/stocks/aapl/short-volume");
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);

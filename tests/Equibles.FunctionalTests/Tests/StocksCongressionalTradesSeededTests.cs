@@ -97,7 +97,7 @@ public class StocksCongressionalTradesSeededTests
         });
 
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
-        var response = await page.GotoAsync("/stocks/aapl/congressionaltrades");
+        var response = await page.GotoAsync("/stocks/aapl/congressional-trades");
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);

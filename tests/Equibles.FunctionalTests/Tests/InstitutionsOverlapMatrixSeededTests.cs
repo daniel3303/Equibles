@@ -24,7 +24,7 @@ public class InstitutionsOverlapMatrixSeededTests
     [Fact]
     public async Task OverlapMatrix_TwoFilers_RendersMatrixTableAndFundSummary()
     {
-        // Pins the /institutions/overlap route — seeds two funds with partially
+        // Pins the /institutions/overlap-matrix route — seeds two funds with partially
         // overlapping holdings, verifies the pairwise matrix table renders with
         // shared ticker counts and the fund summary table shows position counts.
         var aaplId = Guid.NewGuid();
@@ -77,7 +77,9 @@ public class InstitutionsOverlapMatrixSeededTests
         });
 
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
-        var response = await page.GotoAsync($"/institutions/overlap?ciks={fundACik},{fundBCik}");
+        var response = await page.GotoAsync(
+            $"/institutions/overlap-matrix?ciks={fundACik},{fundBCik}"
+        );
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);

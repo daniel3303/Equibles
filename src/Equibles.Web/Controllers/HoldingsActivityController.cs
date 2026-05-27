@@ -100,7 +100,7 @@ public class HoldingsActivityController : BaseController
         return View(viewModel);
     }
 
-    [HttpGet("~/holdings/filings")]
+    [HttpGet("~/holdings/latest-13f-filings")]
     public async Task<IActionResult> LatestFilings(int page = 1)
     {
         if (page < 1)
@@ -123,7 +123,7 @@ public class HoldingsActivityController : BaseController
         );
     }
 
-    [HttpGet("~/holdings/stats")]
+    [HttpGet("~/holdings/13f-statistics")]
     public async Task<IActionResult> Stats()
     {
         // Reads the per-quarter snapshot table that the worker rebuilds on
@@ -138,7 +138,7 @@ public class HoldingsActivityController : BaseController
         return View(new StatsDashboardViewModel { Snapshots = snapshots });
     }
 
-    [HttpGet("~/holdings/double-down")]
+    [HttpGet("~/holdings/double-down-report")]
     public async Task<IActionResult> DoubleDown(
         DateOnly? date,
         double? minPct,
@@ -192,7 +192,7 @@ public class HoldingsActivityController : BaseController
         return View(viewModel);
     }
 
-    [HttpGet("~/holdings/trends")]
+    [HttpGet("~/holdings/13f-trends")]
     public async Task<IActionResult> Trends()
     {
         // Same snapshot-table reads as /holdings/stats; the legacy live
@@ -217,7 +217,7 @@ public class HoldingsActivityController : BaseController
         );
     }
 
-    [HttpGet("~/Holdings/MostHeld")]
+    [HttpGet("~/holdings/most-held")]
     public async Task<IActionResult> MostHeld(
         DateOnly? date,
         string sort,
@@ -341,7 +341,7 @@ public class HoldingsActivityController : BaseController
         };
     }
 
-    [HttpGet("~/holdings/heatmap")]
+    [HttpGet("~/holdings/conviction-heat-map")]
     public async Task<IActionResult> HeatMap(DateOnly? date, bool combined = false)
     {
         var reportDates = await LoadAvailableReportDates();

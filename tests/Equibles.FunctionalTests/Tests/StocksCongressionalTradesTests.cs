@@ -22,7 +22,7 @@ public class StocksCongressionalTradesTests
     [Fact]
     public async Task CongressionalTrades_GetForSeededStockWithNoTrades_RendersNoCongressionalTradesEmptyState()
     {
-        // /stocks/{ticker}/congressionaltrades goes through LoadStock +
+        // /stocks/{ticker}/congressional-trades goes through LoadStock +
         // StockTabService.LoadCongressionalTradesTab, which queries
         // CongressionalTradeRepository.GetByStock and Includes CongressMember. With no
         // CongressionalTrade rows the view takes the empty-state branch. Pins the explicit
@@ -42,7 +42,7 @@ public class StocksCongressionalTradesTests
         });
 
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
-        var response = await page.GotoAsync("/stocks/aapl/congressionaltrades");
+        var response = await page.GotoAsync("/stocks/aapl/congressional-trades");
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);

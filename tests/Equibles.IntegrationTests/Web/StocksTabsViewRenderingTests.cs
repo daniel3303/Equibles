@@ -121,7 +121,7 @@ public class StocksTabsViewRenderingTests
             await Task.CompletedTask;
         });
 
-        var response = await _fixture.Client.GetAsync($"/Stocks/{Ticker}/InsiderTrading");
+        var response = await _fixture.Client.GetAsync($"/stocks/{Ticker}/insider-trading");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var html = await response.Content.ReadAsStringAsync();

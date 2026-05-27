@@ -68,7 +68,7 @@ public class StocksShortInterestTests
         });
 
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
-        var response = await page.GotoAsync("/stocks/aapl/shortinterest");
+        var response = await page.GotoAsync("/stocks/aapl/short-interest");
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);
@@ -91,7 +91,7 @@ public class StocksShortInterestTests
     [Fact]
     public async Task ShortInterest_GetForSeededStockWithNoShortInterest_RendersNoShortInterestDataEmptyState()
     {
-        // /stocks/{ticker}/shortinterest runs StockTabService.LoadShortInterestTab against the
+        // /stocks/{ticker}/short-interest runs StockTabService.LoadShortInterestTab against the
         // seeded stock. With no ShortInterest rows, the view takes the explicit empty-state
         // branch ("No Short Interest Data"). Pins both the route + LoadStock lookup AND the
         // empty-state copy — the other test in this file only covers the populated branch.
@@ -109,7 +109,7 @@ public class StocksShortInterestTests
         });
 
         var page = await _playwright.NewPageAsync(_web.BaseUrl);
-        var response = await page.GotoAsync("/stocks/aapl/shortinterest");
+        var response = await page.GotoAsync("/stocks/aapl/short-interest");
 
         response.Should().NotBeNull();
         response!.Status.Should().Be(200);

@@ -24,7 +24,7 @@ public class HoldingsActivityControllerMostHeldTests
     {
         await _fixture.ResetAndSeedAsync(_ => Task.CompletedTask);
 
-        var response = await _fixture.Client.GetAsync("/Holdings/MostHeld");
+        var response = await _fixture.Client.GetAsync("/holdings/most-held");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var html = await response.Content.ReadAsStringAsync();
@@ -62,7 +62,7 @@ public class HoldingsActivityControllerMostHeldTests
             await Task.CompletedTask;
         });
 
-        var response = await _fixture.Client.GetAsync("/Holdings/MostHeld");
+        var response = await _fixture.Client.GetAsync("/holdings/most-held");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var html = await response.Content.ReadAsStringAsync();
@@ -124,7 +124,7 @@ public class HoldingsActivityControllerMostHeldTests
             await Task.CompletedTask;
         });
 
-        var response = await _fixture.Client.GetAsync("/Holdings/MostHeld");
+        var response = await _fixture.Client.GetAsync("/holdings/most-held");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var html = await response.Content.ReadAsStringAsync();

@@ -761,7 +761,7 @@ public class InsiderTradingFilingProcessorTests
         // All three share (insider, security, date, code P, accession, ownership Direct);
         // they differ only in Shares, PricePerShare, and the running SharesOwnedAfter.
         // A dedup key that collapses on the narrow tuple silently drops the 2nd and 3rd
-        // tranches — the user-visible bug on https://equibles.com/stocks/are/insidertrading.
+        // tranches — the user-visible bug on https://equibles.com/stocks/are/insider-trading.
         var multiPurchaseXml = """
             <ownershipDocument>
                 <reportingOwner>
