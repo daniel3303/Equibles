@@ -38,11 +38,7 @@ public class HoldingsActivityController : BaseController
         if (reportDates.Count == 0)
             return View(viewModel);
 
-        var dateSelection = ResolveCombinedDateSelection(date, combined, reportDates);
-        viewModel.IsCombinedAvailable = dateSelection.IsCombinedAvailable;
-        viewModel.IsCombinedSelected = dateSelection.IsCombinedSelected;
-        viewModel.SelectedDate = dateSelection.SelectedDate;
-        viewModel.PreviousDate = dateSelection.PreviousDate;
+        ApplyDateSelection(viewModel, date, combined);
 
         if (!viewModel.PreviousDate.HasValue)
             return View(viewModel);
@@ -160,11 +156,7 @@ public class HoldingsActivityController : BaseController
         if (reportDates.Count < 2)
             return View(viewModel);
 
-        var dateSelection = ResolveCombinedDateSelection(date, combined, reportDates);
-        viewModel.IsCombinedAvailable = dateSelection.IsCombinedAvailable;
-        viewModel.IsCombinedSelected = dateSelection.IsCombinedSelected;
-        viewModel.SelectedDate = dateSelection.SelectedDate;
-        viewModel.PreviousDate = dateSelection.PreviousDate;
+        ApplyDateSelection(viewModel, date, combined);
 
         if (!viewModel.PreviousDate.HasValue)
             return View(viewModel);
@@ -242,11 +234,7 @@ public class HoldingsActivityController : BaseController
         if (reportDates.Count == 0)
             return View(viewModel);
 
-        var dateSelection = ResolveCombinedDateSelection(date, combined, reportDates);
-        viewModel.IsCombinedAvailable = dateSelection.IsCombinedAvailable;
-        viewModel.IsCombinedSelected = dateSelection.IsCombinedSelected;
-        viewModel.SelectedDate = dateSelection.SelectedDate;
-        viewModel.PreviousDate = dateSelection.PreviousDate;
+        ApplyDateSelection(viewModel, date, combined);
 
         var selectedDate = viewModel.SelectedDate;
         var priorForRepo = viewModel.PreviousDate ?? selectedDate;
@@ -350,11 +338,7 @@ public class HoldingsActivityController : BaseController
         if (reportDates.Count < 2)
             return View(viewModel);
 
-        var dateSelection = ResolveCombinedDateSelection(date, combined, reportDates);
-        viewModel.IsCombinedAvailable = dateSelection.IsCombinedAvailable;
-        viewModel.IsCombinedSelected = dateSelection.IsCombinedSelected;
-        viewModel.SelectedDate = dateSelection.SelectedDate;
-        viewModel.PreviousDate = dateSelection.PreviousDate;
+        ApplyDateSelection(viewModel, date, combined);
 
         if (!viewModel.PreviousDate.HasValue)
             return View(viewModel);
@@ -450,6 +434,19 @@ public class HoldingsActivityController : BaseController
                 Name = s.Name,
             })
             .ToDictionaryAsync(s => s.Id);
+
+    private static void ApplyDateSelection(
+        QuarterlySelectionViewModel viewModel,
+        DateOnly? date,
+        bool combined
+    )
+    {
+        var selection = ResolveCombinedDateSelection(date, combined, viewModel.AvailableDates);
+        viewModel.IsCombinedAvailable = selection.IsCombinedAvailable;
+        viewModel.IsCombinedSelected = selection.IsCombinedSelected;
+        viewModel.SelectedDate = selection.SelectedDate;
+        viewModel.PreviousDate = selection.PreviousDate;
+    }
 
     private static (
         bool IsCombinedAvailable,
