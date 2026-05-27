@@ -3,6 +3,7 @@ using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Repositories;
@@ -32,11 +33,7 @@ public class InsiderTradingTools
         _transactionRepository = transactionRepository;
         _ownerRepository = ownerRepository;
         _commonStockRepository = commonStockRepository;
-        _runner = new McpToolRunner(
-            logger,
-            (tool, msg, stack, ctx) =>
-                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
-        );
+        _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
     [McpServerTool(Name = "GetInsiderTransactions")]
@@ -222,9 +219,11 @@ public class InsiderTradingTools
 
     private async Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker)
     {
-        var stock = await _commonStockRepository.GetByTicker(ticker);
+        var stock = await _commonStockRepository.GetByTicker(
+            McpToolExecutor.NormalizeTicker(ticker)
+        );
         if (stock == null)
-            return (null, $"Stock '{ticker}' not found.");
+            return (null, McpToolExecutor.StockNotFound(ticker));
         return (stock, null);
     }
 }

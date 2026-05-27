@@ -18,6 +18,21 @@ public class EquiblesModuleBuilder
 
     public EquiblesModuleBuilder AddAllModules()
     {
+        return AddAllModulesOfType<IModuleConfiguration>();
+    }
+
+    /// <summary>
+    /// Adds every loaded module implementing <typeparamref name="TMarker"/>
+    /// (e.g. <see cref="IFinancialModule"/> or <see cref="ICustomerModule"/>), so
+    /// each context registers only the modules for its own domain.
+    /// Like <see cref="AddAllModules"/>, this only sees assemblies already loaded
+    /// into the AppDomain — it does not force-load module DLLs. Hosts that must
+    /// guarantee a module is present should register it explicitly via its
+    /// <c>Add{Module}()</c> extension.
+    /// </summary>
+    public EquiblesModuleBuilder AddAllModulesOfType<TMarker>()
+        where TMarker : IModuleConfiguration
+    {
         var moduleTypes = AppDomain
             .CurrentDomain.GetAssemblies()
             .SelectMany(a =>
@@ -33,7 +48,7 @@ public class EquiblesModuleBuilder
             })
             .Where(t =>
                 t is { IsClass: true, IsAbstract: false }
-                && typeof(IModuleConfiguration).IsAssignableFrom(t)
+                && typeof(TMarker).IsAssignableFrom(t)
                 && t.GetConstructor(Type.EmptyTypes) != null
             )
             .ToList();

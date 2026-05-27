@@ -13,7 +13,7 @@ namespace Equibles.IntegrationTests.Helpers;
 /// each test (xUnit constructs a new class instance per test, and <see cref="InitializeAsync"/>
 /// runs before the test body), pins invariant culture so number/date formatting is
 /// deterministic on every dev machine and CI runner, and exposes a fresh
-/// <see cref="EquiblesDbContext"/> + helper <see cref="ErrorManager"/> wired to that same
+/// <see cref="EquiblesFinancialDbContext"/> + helper <see cref="ErrorManager"/> wired to that same
 /// context.
 ///
 /// MCP tools format output with <c>:N0</c> / <c>:F2</c> which honour <c>CurrentCulture</c>;
@@ -28,7 +28,7 @@ public abstract class ParadeDbMcpTestBase : IAsyncLifetime
 {
     private readonly CultureInfo _previousCulture;
     protected ParadeDbFixture Fixture { get; }
-    protected EquiblesDbContext DbContext { get; private set; }
+    protected EquiblesFinancialDbContext DbContext { get; private set; }
     protected ErrorManager ErrorManager { get; private set; }
 
     protected ParadeDbMcpTestBase(ParadeDbFixture fixture)

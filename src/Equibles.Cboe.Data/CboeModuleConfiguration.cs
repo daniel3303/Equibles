@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Cboe.Data;
 
-public class CboeModuleConfiguration : Equibles.Data.IModuleConfiguration
+public class CboeModuleConfiguration : Equibles.Data.IFinancialModule
 {
     public void ConfigureEntities(ModelBuilder builder)
     {

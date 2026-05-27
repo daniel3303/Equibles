@@ -165,7 +165,7 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivityTests : Pa
         output.Should().Contain("exited");
     }
 
-    private InstitutionalHoldingsTools NewSut(Equibles.Data.EquiblesDbContext ctx) =>
+    private InstitutionalHoldingsTools NewSut(Equibles.Data.EquiblesFinancialDbContext ctx) =>
         new(
             new InstitutionalHoldingRepository(ctx),
             new InstitutionalHolderRepository(ctx),

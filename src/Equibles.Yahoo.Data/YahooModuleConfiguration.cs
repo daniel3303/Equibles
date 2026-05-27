@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Yahoo.Data;
 
-public class YahooModuleConfiguration : IModuleConfiguration
+public class YahooModuleConfiguration : IFinancialModule
 {
     public void ConfigureEntities(ModelBuilder builder)
     {

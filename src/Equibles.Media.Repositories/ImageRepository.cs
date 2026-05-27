@@ -5,6 +5,6 @@ namespace Equibles.Media.Repositories;
 
 public class ImageRepository : BaseRepository<Image>
 {
-    public ImageRepository(EquiblesDbContext dbContext)
+    public ImageRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 }

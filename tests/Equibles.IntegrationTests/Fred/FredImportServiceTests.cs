@@ -17,7 +17,7 @@ namespace Equibles.IntegrationTests.Fred;
 
 public class FredImportServiceTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly FredSeriesRepository _seriesRepo;
     private readonly FredObservationRepository _obsRepo;
     private readonly IFredClient _fredClient;

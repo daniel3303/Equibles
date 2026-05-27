@@ -16,7 +16,7 @@ namespace Equibles.IntegrationTests.Holdings;
 public class InstitutionalHoldingRepositoryFilingActivityTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
-    private readonly List<Equibles.Data.EquiblesDbContext> _contexts = [];
+    private readonly List<Equibles.Data.EquiblesFinancialDbContext> _contexts = [];
 
     public InstitutionalHoldingRepositoryFilingActivityTests(ParadeDbFixture fixture) =>
         _fixture = fixture;
@@ -30,7 +30,7 @@ public class InstitutionalHoldingRepositoryFilingActivityTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    private Equibles.Data.EquiblesDbContext FreshContext()
+    private Equibles.Data.EquiblesFinancialDbContext FreshContext()
     {
         var ctx = _fixture.CreateDbContext();
         _contexts.Add(ctx);

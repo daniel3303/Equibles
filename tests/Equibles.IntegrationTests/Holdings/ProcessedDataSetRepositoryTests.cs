@@ -8,7 +8,7 @@ namespace Equibles.IntegrationTests.Holdings;
 
 public class ProcessedDataSetRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly ProcessedDataSetRepository _repository;
 
     public ProcessedDataSetRepositoryTests()

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Fred.Data.Models;
 using Equibles.Fred.Repositories;
@@ -27,11 +28,7 @@ public class FredTools
     {
         _seriesRepository = seriesRepository;
         _observationRepository = observationRepository;
-        _runner = new McpToolRunner(
-            logger,
-            (tool, msg, stack, ctx) =>
-                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
-        );
+        _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
     [McpServerTool(Name = "GetEconomicIndicator")]
@@ -59,13 +56,10 @@ public class FredTools
                 if (series == null)
                     return $"Series '{seriesId}' not found. Use SearchEconomicIndicators to find available series.";
 
-                var start = McpToolExecutor.ParseDateOr(
+                var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
-                );
-                var end = McpToolExecutor.ParseDateOr(
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow)
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
                 );
 
                 var observations = await _observationRepository

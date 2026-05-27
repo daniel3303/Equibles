@@ -18,7 +18,7 @@ namespace Equibles.IntegrationTests.Sec;
 
 public class DocumentPersistenceServiceTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
 
     public DocumentPersistenceServiceTests()
     {
@@ -30,13 +30,13 @@ public class DocumentPersistenceServiceTests : IDisposable
         // locally (i.e. NOT in the shared TestDbContextFactory — that would silently
         // hide transaction misuse from every other test that happens not to take this
         // code path today).
-        var options = new DbContextOptionsBuilder<EquiblesDbContext>()
+        var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .EnableServiceProviderCaching(false)
             .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
 
-        _dbContext = new EquiblesDbContext(
+        _dbContext = new EquiblesFinancialDbContext(
             options,
             new IModuleConfiguration[]
             {

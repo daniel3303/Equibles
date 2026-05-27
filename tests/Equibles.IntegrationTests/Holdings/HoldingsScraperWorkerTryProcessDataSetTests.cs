@@ -98,7 +98,7 @@ public class HoldingsScraperWorkerTryProcessDataSetTests : ParadeDbMcpTestBase
                     .Returns(new InstitutionalHolderRepository(DbContext));
                 sp.GetService(typeof(InstitutionalHoldingRepository))
                     .Returns(new InstitutionalHoldingRepository(DbContext));
-                sp.GetService(typeof(EquiblesDbContext)).Returns(DbContext);
+                sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(DbContext);
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
                 return scope;
@@ -108,7 +108,8 @@ public class HoldingsScraperWorkerTryProcessDataSetTests : ParadeDbMcpTestBase
             scopeFactory,
             Substitute.For<ILogger<HoldingsImportService>>(),
             Options.Create(new WorkerOptions()),
-            Substitute.For<IStockPriceProvider>()
+            Substitute.For<IStockPriceProvider>(),
+            Substitute.For<MassTransit.IBus>()
         );
     }
 

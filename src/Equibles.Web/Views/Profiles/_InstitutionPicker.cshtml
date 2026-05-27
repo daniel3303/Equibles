@@ -1,0 +1,84 @@
+@model Equibles.Web.ViewModels.Profiles.InstitutionPickerViewModel
+
+@*
+    Institution picker block — shared between /institutions/overlap, /institutions/compare
+    and /institutions/combined. Renders the chip strip + visible search input as a single
+    GET form posting back to the current URL. Each chip emits one <input name="ciks">,
+    so the form submits ?ciks=A&ciks=B which ASP.NET's string[] model binding accepts
+    directly. JS picker (src/js/institution-picker.js) hooks into the [data-institution-picker]
+    container for typeahead behaviour; without JS the chips still render and the form
+    still submits.
+*@
+
+<form method="get" class="mb-6" data-institution-picker-form>
+    <div class="flex flex-wrap gap-3 items-end">
+        <div class="form-control flex-1 min-w-[300px]"
+             data-institution-picker
+             data-search-url="@Url.Action("Search", "Institutions")"
+             data-min-picks="@Model.MinPicks"
+             data-max-picks="@Model.MaxPicks">
+            <span class="label-text text-sm mb-1">
+                Institutions (@Model.MinPicks–@Model.MaxPicks)
+            </span>
+
+            <div class="input input-bordered h-auto min-h-[3rem] py-2 flex flex-wrap gap-2 items-center cursor-text"
+                 data-institution-picker-box>
+                <div class="flex flex-wrap gap-1.5 items-center" data-institution-picker-chips>
+                    @foreach (var pick in Model.Picks) {
+                        var isMissing = string.IsNullOrEmpty(pick.Name);
+                        <span class="badge badge-lg gap-1 @(isMissing ? "badge-warning" : "badge-primary") badge-soft"
+                              data-institution-chip
+                              data-cik="@pick.Cik">
+                            <input type="hidden" name="ciks" value="@pick.Cik" />
+                            <span class="font-medium">
+                                @(isMissing ? "(name unknown)" : pick.Name)
+                            </span>
+                            <span class="text-xs opacity-70 font-mono">@pick.Cik</span>
+                            <button type="button"
+                                    class="btn btn-ghost btn-xs btn-circle"
+                                    aria-label="Remove @(isMissing ? pick.Cik : pick.Name)"
+                                    data-institution-chip-remove>
+                                <icon name="x-mark" size="3" />
+                            </button>
+                        </span>
+                    }
+                </div>
+                <input type="text"
+                       class="flex-1 min-w-[140px] bg-transparent border-0 focus:outline-none focus:ring-0 p-0"
+                       placeholder="@(Model.Picks.Count == 0 ? "Type an institution name or CIK..." : "Add another...")"
+                       aria-label="Search institutions to add"
+                       autocomplete="off"
+                       data-institution-picker-search />
+            </div>
+
+            <div class="relative">
+                <ul class="menu bg-base-100 rounded-box shadow-lg border border-base-300 absolute left-0 right-0 top-1 z-30 max-h-72 overflow-y-auto hidden"
+                    role="listbox"
+                    aria-label="Institution suggestions"
+                    data-institution-picker-results></ul>
+            </div>
+
+            <span class="label-text-alt text-xs text-base-content/50 mt-1"
+                  data-institution-picker-hint>
+                Type at least 2 characters. Pick @Model.MinPicks–@Model.MaxPicks institutions.
+            </span>
+        </div>
+
+        @if (Model.CommonReportDates.Count > 0) {
+            <label class="form-control">
+                <span class="label-text text-sm mb-1">Report date</span>
+                <select name="date" class="select select-bordered" aria-label="Report date">
+                    @foreach (var d in Model.CommonReportDates) {
+                        var isSelected = Model.SelectedDate.HasValue && d == Model.SelectedDate.Value;
+                        if (isSelected) {
+                            <option value="@d.ToString("yyyy-MM-dd")" selected>@d.ToString("MMM dd, yyyy")</option>
+                        } else {
+                            <option value="@d.ToString("yyyy-MM-dd")">@d.ToString("MMM dd, yyyy")</option>
+                        }
+                    }
+                </select>
+            </label>
+        }
+        <button type="submit" class="btn btn-primary">@Model.SubmitLabel</button>
+    </div>
+</form>

@@ -11,11 +11,11 @@ namespace Equibles.Web.Controllers;
 public class InstitutionsController : BaseController
 {
     private readonly InstitutionalHolderRepository _holderRepository;
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
 
     public InstitutionsController(
         InstitutionalHolderRepository holderRepository,
-        EquiblesDbContext dbContext,
+        EquiblesFinancialDbContext dbContext,
         ILogger<InstitutionsController> logger
     )
         : base(logger)
@@ -78,7 +78,7 @@ public class InstitutionsController : BaseController
             aggByHolder,
             h => h.Id,
             a => a.HolderId,
-            (h, ags) => new { h, agg = ags.FirstOrDefault() }
+            (h, aggs) => new { h, agg = aggs.FirstOrDefault() }
         );
 
         var ordered = sort switch
@@ -124,5 +124,38 @@ public class InstitutionsController : BaseController
         };
 
         return View(viewModel);
+    }
+
+    // JSON typeahead endpoint backing the institution picker (overlap/compare/combined
+    // pages). Returns a small top-N projection — no aggregates, just enough to render
+    // a chip with name + city/state hint.
+    [HttpGet("~/institutions/search")]
+    public async Task<IActionResult> Search(string q, int limit = 20)
+    {
+        if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
+        {
+            return Json(Array.Empty<object>());
+        }
+        if (limit < 1)
+            limit = 1;
+        if (limit > 50)
+            limit = 50;
+
+        // Lowercase property names pin the wire contract — the JS picker reads
+        // row.cik/row.name/etc. without depending on the host's JSON casing policy.
+        var rows = await _holderRepository
+            .SearchNameOrCik(q.Trim())
+            .OrderBy(h => h.Name)
+            .Take(limit)
+            .Select(h => new
+            {
+                cik = h.Cik,
+                name = h.Name,
+                city = h.City,
+                stateOrCountry = h.StateOrCountry,
+            })
+            .ToListAsync();
+
+        return Json(rows);
     }
 }

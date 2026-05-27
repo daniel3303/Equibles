@@ -15,46 +15,17 @@
     </div>
 
     @if (Model.AumSnapshots.Count == 0) {
-        <div class="card bg-base-100 shadow-sm">
-            <div class="card-body items-center text-center py-12">
-                <div class="text-base-content/30 mb-3">
-                    <icon name="chart-bar" size="12" />
-                </div>
-                <h2 class="text-base-content/60 mb-2">No 13F data yet</h2>
-                <p class="text-base-content/40 text-sm">Once at least one quarter of 13F filings has been ingested, the trend charts appear here.</p>
-            </div>
-        </div>
+        <partial name="_No13FDataYet" model='(IconName: "chart-bar", Message: "Once at least one quarter of 13F filings has been ingested, the trend charts appear here.")' />
     } else {
         <!-- AUM Over Time -->
-        <div class="card bg-base-100 shadow-sm mb-6">
-            <div class="card-body p-4 lg:p-6">
-                <h2 class="font-semibold text-sm mb-3">Total Assets Under Management</h2>
-                <div class="h-[320px]">
-                    <canvas id="aum-chart" role="img" aria-label="Total AUM trend chart"></canvas>
-                </div>
-            </div>
-        </div>
+        <partial name="_ChartCard" model='("Total Assets Under Management", "aum-chart", "Total AUM trend chart", "h-[320px]")' />
 
         <!-- Filer & Position Count Over Time -->
-        <div class="card bg-base-100 shadow-sm mb-6">
-            <div class="card-body p-4 lg:p-6">
-                <h2 class="font-semibold text-sm mb-3">Filers and Positions</h2>
-                <div class="h-[320px]">
-                    <canvas id="filer-chart" role="img" aria-label="Filer and position count trend chart"></canvas>
-                </div>
-            </div>
-        </div>
+        <partial name="_ChartCard" model='("Filers and Positions", "filer-chart", "Filer and position count trend chart", "h-[320px]")' />
 
         <!-- Sector Allocation Over Time -->
         @if (Model.SectorAllocations.Count > 0) {
-            <div class="card bg-base-100 shadow-sm mb-6">
-                <div class="card-body p-4 lg:p-6">
-                    <h2 class="font-semibold text-sm mb-3">Sector Allocation</h2>
-                    <div class="h-[400px]">
-                        <canvas id="sector-chart" role="img" aria-label="Sector allocation trend chart"></canvas>
-                    </div>
-                </div>
-            </div>
+            <partial name="_ChartCard" model='("Sector Allocation", "sector-chart", "Sector allocation trend chart", "h-[400px]")' />
         }
     }
 </div>

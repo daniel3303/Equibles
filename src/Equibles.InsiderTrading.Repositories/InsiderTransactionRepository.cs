@@ -7,7 +7,7 @@ namespace Equibles.InsiderTrading.Repositories;
 
 public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
 {
-    public InsiderTransactionRepository(EquiblesDbContext dbContext)
+    public InsiderTransactionRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public IQueryable<InsiderTransaction> GetByStock(CommonStock stock)

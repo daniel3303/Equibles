@@ -19,8 +19,8 @@ public class DocumentProcessorTests
     )
     {
         return new DocumentProcessor(
-            Substitute.For<ChunkRepository>((Equibles.Data.EquiblesDbContext)null),
-            Substitute.For<EmbeddingRepository>((Equibles.Data.EquiblesDbContext)null),
+            Substitute.For<ChunkRepository>((Equibles.Data.EquiblesFinancialDbContext)null),
+            Substitute.For<EmbeddingRepository>((Equibles.Data.EquiblesFinancialDbContext)null),
             embeddingClient,
             new ChunkingStrategy(new TokenCounter()),
             Options.Create(new EmbeddingConfig { ModelName = "test-model" }),
@@ -111,10 +111,10 @@ public class DocumentProcessorTests
     )
     {
         var embeddingRepository = Substitute.For<EmbeddingRepository>(
-            (Equibles.Data.EquiblesDbContext)null
+            (Equibles.Data.EquiblesFinancialDbContext)null
         );
         var sut = new DocumentProcessor(
-            Substitute.For<ChunkRepository>((Equibles.Data.EquiblesDbContext)null),
+            Substitute.For<ChunkRepository>((Equibles.Data.EquiblesFinancialDbContext)null),
             embeddingRepository,
             embeddingClient,
             new ChunkingStrategy(new TokenCounter()),

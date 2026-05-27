@@ -1,25 +1,38 @@
-@model Equibles.Web.ViewModels.Profiles.InstitutionCompareViewModel
+@using Equibles.Web.ViewModels.Profiles
+@model InstitutionCompareViewModel
 
 @{
     ViewData["Title"] = "Compare institutions";
+
+    var pickerVm = new InstitutionPickerViewModel
+    {
+        Picks = Model.InitialPicks,
+        MinPicks = InstitutionCompareViewModel.MinCiks,
+        MaxPicks = InstitutionCompareViewModel.MaxCiks,
+        CommonReportDates = Model.CommonReportDates,
+        SelectedDate = Model.SelectedDate,
+        SubmitLabel = "Compare",
+    };
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
     <div class="mb-8">
         <h1 class="text-3xl font-bold mb-2">Compare institutions</h1>
         <p class="text-base-content/60">
-            Side-by-side 13F portfolio overlap. Pass 2–4 CIKs via <code>?ciks=…&amp;ciks=…</code>.
+            Side-by-side 13F portfolio overlap of @InstitutionCompareViewModel.MinCiks–@InstitutionCompareViewModel.MaxCiks selected funds.
         </p>
     </div>
 
-    @if (Model.RequestedCiks.Count < Equibles.Web.ViewModels.Profiles.InstitutionCompareViewModel.MinCiks) {
+    <partial name="_InstitutionPicker" model="pickerVm" />
+
+    @if (Model.RequestedCiks.Count < InstitutionCompareViewModel.MinCiks) {
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body items-center text-center py-12">
                 <div class="text-base-content/30 mb-3">
                     <icon name="user-group" size="12" />
                 </div>
-                <h2 class="text-base-content/60 mb-2">Pass at least two CIKs to compare</h2>
-                <p class="text-base-content/40 text-sm">Example: <code>/Institutions/Compare?ciks=0001067983&amp;ciks=0001603466</code></p>
+                <h2 class="text-base-content/60 mb-2">Pick at least @InstitutionCompareViewModel.MinCiks institutions</h2>
+                <p class="text-base-content/40 text-sm">Search by name or CIK above to see a side-by-side 13F overlap.</p>
             </div>
         </div>
     } else if (Model.MissingCiks.Count > 0 && Model.Overlap == null) {

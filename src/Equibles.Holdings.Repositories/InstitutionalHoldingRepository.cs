@@ -8,7 +8,7 @@ namespace Equibles.Holdings.Repositories;
 
 public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHolding>
 {
-    public InstitutionalHoldingRepository(EquiblesDbContext dbContext)
+    public InstitutionalHoldingRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public IQueryable<InstitutionalHolding> GetByStock(CommonStock stock, DateOnly reportDate)
@@ -53,9 +53,10 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return GetAll().Where(h => h.InstitutionalHolderId == holder.Id);
     }
 
+    // Latest dates first — callers consistently treat index 0 as the newest filing window.
     public IQueryable<DateOnly> GetAvailableReportDates()
     {
-        return GetAll().Select(h => h.ReportDate).Distinct();
+        return GetAll().Select(h => h.ReportDate).Distinct().OrderByDescending(d => d);
     }
 
     public IQueryable<InstitutionalHolding> GetByAccessionNumber(string accessionNumber)
@@ -219,72 +220,6 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                         PreviousValue = x.a.PreviousValue,
                     }
             );
-    }
-
-    public IQueryable<AumSnapshot> GetAumByReportDate()
-    {
-        return GetAll()
-            .GroupBy(h => h.ReportDate)
-            .Select(g => new AumSnapshot
-            {
-                ReportDate = g.Key,
-                TotalValue = g.Sum(h => h.Value),
-                FilerCount = g.Select(h => h.InstitutionalHolderId).Distinct().Count(),
-                PositionCount = g.Count(),
-                StockCount = g.Select(h => h.CommonStockId).Distinct().Count(),
-                FilingCount = g.Select(h => h.AccessionNumber).Distinct().Count(),
-            });
-    }
-
-    public IQueryable<SectorAllocationSnapshot> GetSectorAllocationByReportDate()
-    {
-        var aggregated = GetAll()
-            .Join(
-                DbContext.Set<CommonStock>(),
-                h => h.CommonStockId,
-                s => s.Id,
-                (h, s) =>
-                    new
-                    {
-                        h.ReportDate,
-                        h.Value,
-                        s.IndustryId,
-                    }
-            )
-            .Join(
-                DbContext.Set<CommonStocks.Data.Models.Taxonomies.Industry>(),
-                x => x.IndustryId,
-                i => i.Id,
-                (x, i) =>
-                    new
-                    {
-                        x.ReportDate,
-                        x.Value,
-                        i.SectorId,
-                    }
-            )
-            .Where(x => x.SectorId != null)
-            .GroupBy(x => new { x.ReportDate, SectorId = (Guid)x.SectorId })
-            .Select(g => new
-            {
-                g.Key.ReportDate,
-                g.Key.SectorId,
-                TotalValue = g.Sum(x => x.Value),
-            });
-
-        return aggregated.Join(
-            DbContext.Set<CommonStocks.Data.Models.Taxonomies.Sector>(),
-            a => a.SectorId,
-            s => s.Id,
-            (a, s) =>
-                new SectorAllocationSnapshot
-                {
-                    ReportDate = a.ReportDate,
-                    SectorId = a.SectorId,
-                    SectorName = s.Name,
-                    TotalValue = a.TotalValue,
-                }
-        );
     }
 
     // Recent filings feed: groups holdings by accession number to produce one row

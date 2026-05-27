@@ -13,7 +13,7 @@ using Pgvector;
 
 namespace Equibles.Migrations.Migrations
 {
-    [DbContext(typeof(EquiblesDbContext))]
+    [DbContext(typeof(EquiblesFinancialDbContext))]
     [Migration("20260525154444_AddConfidentialTreatmentToInstitutionalHolder")]
     partial class AddConfidentialTreatmentToInstitutionalHolder
     {

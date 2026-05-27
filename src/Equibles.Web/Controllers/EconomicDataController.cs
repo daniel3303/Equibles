@@ -115,8 +115,8 @@ public class EconomicDataController : BaseController
             if (observations.Count > 1)
                 viewModel.PreviousValue = observations[1].Value;
 
-            viewModel.Sma20 = ComputeSma(chronological, 20);
-            viewModel.Sma50 = ComputeSma(chronological, 50);
+            viewModel.Sma20 = chronological.ComputeSma(20, 4);
+            viewModel.Sma50 = chronological.ComputeSma(50, 4);
         }
 
         ViewData["Title"] = $"{series.SeriesId} — {series.Title}";
@@ -125,32 +125,8 @@ public class EconomicDataController : BaseController
         return View(viewModel);
     }
 
-    private static List<decimal?> ComputeSma(double[] values, int period)
-    {
-        var sma = values.MovingAverage(period);
-        return sma.Select((v, i) => i < period - 1 ? (decimal?)null : (decimal?)Math.Round(v, 4))
-            .ToList();
-    }
-
-    private static StatsSummary ComputeStats(double[] values, int decimals)
-    {
-        var stats = new DescriptiveStatistics(values);
-        return new StatsSummary(
-            Mean: stats.Mean.SafeRound(decimals),
-            Median: values.Median().SafeRound(decimals),
-            Min: stats.Minimum.SafeRound(decimals),
-            Max: stats.Maximum.SafeRound(decimals),
-            StdDev: stats.StandardDeviation.SafeRound(decimals)
-        );
-    }
-
-    private readonly record struct StatsSummary(
-        decimal? Mean,
-        decimal? Median,
-        decimal? Min,
-        decimal? Max,
-        decimal? StdDev
-    );
+    private static StatsSummary ComputeStats(double[] values, int decimals) =>
+        values.ComputeStats(decimals);
 
     private static string ExpandFrequency(string frequency) =>
         frequency?.Trim().ToUpperInvariant() switch

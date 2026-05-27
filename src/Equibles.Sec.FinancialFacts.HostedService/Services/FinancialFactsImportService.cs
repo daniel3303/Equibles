@@ -262,7 +262,7 @@ public class FinancialFactsImportService
         var (pairs, concepts) = BuildConceptsForUpsert(parsed);
 
         using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
         // Compound write (insert-or-update) — kept out of the repository by
         // design; only update Label when the incoming one is non-empty so a
@@ -380,7 +380,7 @@ public class FinancialFactsImportService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
         return await dbContext
             .Set<CommonStock>()
             .AsNoTracking()
@@ -390,7 +390,7 @@ public class FinancialFactsImportService
     private async Task FlushFacts(List<FinancialFact> items)
     {
         using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
         await dbContext
             .Set<FinancialFact>()
@@ -435,7 +435,7 @@ public class FinancialFactsImportService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
         var status = new FinancialFactsSyncStatus
         {

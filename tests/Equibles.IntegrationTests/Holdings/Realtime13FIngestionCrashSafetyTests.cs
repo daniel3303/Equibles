@@ -35,7 +35,7 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
     private const string Cusip = "037833100";
 
     private readonly ParadeDbFixture _fixture;
-    private readonly List<EquiblesDbContext> _contexts = [];
+    private readonly List<EquiblesFinancialDbContext> _contexts = [];
     private readonly CultureInfo _previousCulture;
 
     public Realtime13FIngestionCrashSafetyTests(ParadeDbFixture fixture)
@@ -55,7 +55,7 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    private EquiblesDbContext FreshContext()
+    private EquiblesFinancialDbContext FreshContext()
     {
         var ctx = _fixture.CreateDbContext();
         _contexts.Add(ctx);
@@ -71,7 +71,7 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(EquiblesDbContext)).Returns(ctx);
+                sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
                 sp.GetService(typeof(CommonStockRepository))
                     .Returns(new CommonStockRepository(ctx));
                 sp.GetService(typeof(InstitutionalHolderRepository))
@@ -195,7 +195,8 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
             scopeFactory,
             Substitute.For<ILogger<HoldingsImportService>>(),
             Options.Create(new WorkerOptions()),
-            prices
+            prices,
+            Substitute.For<MassTransit.IBus>()
         );
         var ingestion = new Realtime13FIngestionService(
             edgar,
@@ -230,7 +231,7 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
             CancellationToken.None
         );
 
-        imported.Should().Be(1);
+        imported.FilingsImported.Should().Be(1);
 
         using var verify = FreshContext();
         var holdings = await verify

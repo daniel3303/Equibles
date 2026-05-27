@@ -9,9 +9,9 @@ public class YahooStockPriceProvider : IStockPriceProvider
 {
     private const int LookbackDays = 7;
 
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
 
-    public YahooStockPriceProvider(EquiblesDbContext dbContext)
+    public YahooStockPriceProvider(EquiblesFinancialDbContext dbContext)
     {
         _dbContext = dbContext;
     }

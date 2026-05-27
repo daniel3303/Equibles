@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Sec.BusinessLogic.Search;
@@ -16,7 +17,7 @@ namespace Equibles.Sec.Mcp.Tools;
 public class RagSearchTools
 {
     private const string DocumentTypeDescription =
-        "Document type filter. Allowed values: 'TenK', 'TenQ', 'EightK', 'TenKa', 'TenQa', 'EightKa', 'TwentyF', 'SixK', 'FortyF', 'EarningsCallTranscript'";
+        "Document type filter. Allowed values: 'TenK', 'TenQ', 'EightK', 'TenKa', 'TenQa', 'EightKa', 'TwentyF', 'SixK', 'FortyF'";
 
     private readonly IRagManager _ragManager;
     private readonly ISecDocumentService _secDocumentService;
@@ -31,11 +32,7 @@ public class RagSearchTools
     {
         _ragManager = ragManager;
         _secDocumentService = secDocumentService;
-        _runner = new McpToolRunner(
-            logger,
-            (tool, msg, stack, ctx) =>
-                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
-        );
+        _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
     [McpServerTool(Name = "SearchDocuments")]

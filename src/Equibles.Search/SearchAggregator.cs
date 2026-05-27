@@ -7,7 +7,7 @@ namespace Equibles.Search;
 /// <summary>
 /// Fans a query out to every registered <see cref="ISearchProvider"/> and returns the non-empty
 /// groups ordered for display. Each provider runs in its own DI scope so providers execute in
-/// parallel safely — the request-scoped <c>EquiblesDbContext</c> is not concurrency-safe, so they
+/// parallel safely — the request-scoped <c>EquiblesFinancialDbContext</c> is not concurrency-safe, so they
 /// cannot share one. A provider that throws or exceeds <see cref="ProviderTimeout"/> is logged and
 /// dropped; one slow or broken module never breaks the results page.
 /// </summary>

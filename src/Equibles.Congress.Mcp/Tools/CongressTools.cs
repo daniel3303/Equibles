@@ -5,6 +5,7 @@ using Equibles.Congress.Data.Models;
 using Equibles.Congress.Repositories;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Microsoft.EntityFrameworkCore;
@@ -32,11 +33,7 @@ public class CongressTools
         _tradeRepository = tradeRepository;
         _memberRepository = memberRepository;
         _commonStockRepository = commonStockRepository;
-        _runner = new McpToolRunner(
-            logger,
-            (tool, msg, stack, ctx) =>
-                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
-        );
+        _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
     [McpServerTool(Name = "GetCongressionalTrades")]
@@ -59,18 +56,15 @@ public class CongressTools
             async () =>
             {
                 var stock = await _commonStockRepository.GetByTicker(
-                    ticker.Trim().ToUpperInvariant()
+                    McpToolExecutor.NormalizeTicker(ticker)
                 );
                 if (stock == null)
-                    return $"Stock '{ticker}' not found.";
+                    return McpToolExecutor.StockNotFound(ticker);
 
-                var start = McpToolExecutor.ParseDateOr(
+                var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
-                );
-                var end = McpToolExecutor.ParseDateOr(
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow)
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
                 );
 
                 var query = _tradeRepository.GetByStock(stock, start, end);
@@ -132,13 +126,10 @@ public class CongressTools
                 if (member == null)
                     return $"Member '{memberName}' not found. Use SearchCongressMembers to find the exact name.";
 
-                var start = McpToolExecutor.ParseDateOr(
+                var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
-                );
-                var end = McpToolExecutor.ParseDateOr(
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow)
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
                 );
 
                 var query = _tradeRepository

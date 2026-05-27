@@ -9,7 +9,9 @@ using Equibles.Errors.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.Repositories;
+using Equibles.Messaging.Contracts.Holdings;
 using FlexLabs.EntityFrameworkCore.Upsert;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using static Equibles.Holdings.HostedService.Services.HoldingsParsingHelper;
@@ -19,25 +21,25 @@ namespace Equibles.Holdings.HostedService.Services;
 [Service]
 public class HoldingsImportService
 {
-    private const int InsertBatchSize = 1000;
-    private const int MaxConsecutiveEmptyBatches = 5;
-
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<HoldingsImportService> _logger;
     private readonly WorkerOptions _workerOptions;
     private readonly IStockPriceProvider _stockPriceProvider;
+    private readonly IBus _bus;
 
     public HoldingsImportService(
         IServiceScopeFactory scopeFactory,
         ILogger<HoldingsImportService> logger,
         IOptions<WorkerOptions> workerOptions,
-        IStockPriceProvider stockPriceProvider
+        IStockPriceProvider stockPriceProvider,
+        IBus bus
     )
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _workerOptions = workerOptions.Value;
         _stockPriceProvider = stockPriceProvider;
+        _bus = bus;
     }
 
     public async Task<ImportResult> ImportDataSet(
@@ -77,7 +79,43 @@ public class HoldingsImportService
         await UpsertInstitutionalHolders(context, cancellationToken);
         await HandleAmendments(context, cancellationToken);
         await StreamAndInsertHoldings(context, cancellationToken);
+        await PublishAffectedQuartersAsync(context, cancellationToken);
         return new ImportResult(submissionCount, IsComplete: true);
+    }
+
+    // Bulk data sets routinely import many quarters at once, so group submissions
+    // by ReportDate and publish one Filings13FImported per distinct quarter. The
+    // consumer rebuilds the per-quarter AUM + sector snapshots; the work is
+    // bounded per event, and deduplicating here keeps the import path from
+    // stampeding the consumer with one event per filing.
+    private async Task PublishAffectedQuartersAsync(
+        ImportContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        var byQuarter = new Dictionary<DateOnly, int>();
+        foreach (var submission in context.Submissions.Values)
+        {
+            if (TryParseDateOnly(submission.PeriodOfReport, out var reportDate))
+            {
+                byQuarter[reportDate] = byQuarter.GetValueOrDefault(reportDate) + 1;
+            }
+        }
+
+        if (byQuarter.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var (reportDate, count) in byQuarter)
+        {
+            await _bus.Publish(new Filings13FImported(reportDate, count), cancellationToken);
+        }
+
+        _logger.LogInformation(
+            "Published Filings13FImported for {Quarters} distinct quarter(s)",
+            byQuarter.Count
+        );
     }
 
     /// <summary>
@@ -578,13 +616,32 @@ public class HoldingsImportService
         var totalSkipped = 0;
         var totalDuplicates = 0;
         var totalPending = 0;
-        var consecutiveEmptyBatches = 0;
+        string currentAccession = null;
 
         await foreach (var row in context.TsvParser.ParseEntry(infoTableEntry))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             var accession = GetValue(row, "ACCESSION_NUMBER");
+
+            // Flush at the accession boundary, not at a fixed row count. Every
+            // row sharing an upsert key inside one filing lives in that filing's
+            // INFOTABLE section (a holder splits a position across otherManager
+            // codes so the same security can appear several times with rows
+            // scattered hundreds apart). FlushBatch's WhenMatched clause
+            // REPLACES — so if a key's rows fall in different flushes, only
+            // the last one's sum survives. SEC orders the bulk INFOTABLE by
+            // INFOTABLE_SK and the realtime archive by XML element order, so
+            // a single accession's rows are always contiguous; flushing only
+            // when the accession changes guarantees in-memory aggregation
+            // finishes before any UPSERT for that key runs.
+            if (currentAccession != null && accession != currentAccession && holdingsMap.Count > 0)
+            {
+                totalInserted += await FlushBatch(holdingsMap.Values.ToList(), cancellationToken);
+                holdingsMap.Clear();
+            }
+            currentAccession = accession;
+
             if (!context.Submissions.TryGetValue(accession, out var submission))
                 continue;
 
@@ -631,36 +688,11 @@ public class HoldingsImportService
                 holding.ManagerEntries.Add(managerEntry);
                 holdingsMap[uniqueKey] = holding;
             }
-
-            if (holdingsMap.Count >= InsertBatchSize)
-            {
-                var inserted = await FlushBatch(holdingsMap.Values.ToList(), cancellationToken);
-                totalInserted += inserted;
-                holdingsMap.Clear();
-
-                if (inserted == 0)
-                {
-                    consecutiveEmptyBatches++;
-                    if (consecutiveEmptyBatches >= MaxConsecutiveEmptyBatches)
-                    {
-                        _logger.LogInformation(
-                            "Stopping early: {Count} consecutive batches had no new holdings — data set appears fully imported",
-                            consecutiveEmptyBatches
-                        );
-                        break;
-                    }
-                }
-                else
-                {
-                    consecutiveEmptyBatches = 0;
-                }
-            }
         }
 
         if (holdingsMap.Count > 0)
         {
-            var inserted = await FlushBatch(holdingsMap.Values.ToList(), cancellationToken);
-            totalInserted += inserted;
+            totalInserted += await FlushBatch(holdingsMap.Values.ToList(), cancellationToken);
             holdingsMap.Clear();
         }
 
@@ -752,7 +784,7 @@ public class HoldingsImportService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
         var entriesByKey = new Dictionary<string, List<HoldingManagerEntry>>();
         foreach (var h in holdings)

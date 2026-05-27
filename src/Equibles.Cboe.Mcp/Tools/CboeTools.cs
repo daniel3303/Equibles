@@ -4,6 +4,7 @@ using Equibles.Cboe.Data.Models;
 using Equibles.Cboe.Repositories;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Microsoft.EntityFrameworkCore;
@@ -28,11 +29,7 @@ public class CboeTools
     {
         _putCallRepository = putCallRepository;
         _vixRepository = vixRepository;
-        _runner = new McpToolRunner(
-            logger,
-            (tool, msg, stack, ctx) =>
-                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
-        );
+        _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
     [McpServerTool(Name = "GetPutCallRatios")]
@@ -56,13 +53,10 @@ public class CboeTools
                 if (!Enum.TryParse<CboePutCallRatioType>(type, true, out var ratioType))
                     return $"Invalid type '{type}'. Valid types: Total, Equity, Index, Vix, Etp";
 
-                var start = McpToolExecutor.ParseDateOr(
+                var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
-                );
-                var end = McpToolExecutor.ParseDateOr(
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow)
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
                 );
 
                 var records = await _putCallRepository
@@ -114,13 +108,10 @@ public class CboeTools
         return _runner.Execute(
             async () =>
             {
-                var start = McpToolExecutor.ParseDateOr(
+                var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
-                );
-                var end = McpToolExecutor.ParseDateOr(
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow)
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
                 );
 
                 var records = await _vixRepository

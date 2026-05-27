@@ -194,6 +194,12 @@ Create additional projects only when needed:
 
 Domain-specific enums like `DocumentType` and `ErrorSource` use a smart enum pattern. They can be extended by calling their `Register()` method — no need to modify the core packages.
 
+## Contributor License Agreement
+
+In order for Us to accept patches and other contributions from you, you need to sign our [Contributor License Agreement](CLA.md) (the "**CLA**"). The CLA grants Us the rights needed to maintain Equibles as an open-source project under AGPL-3.0 while also distributing it under separate terms in our commercial offering. You retain ownership of your contributions.
+
+Equibles uses [CLA Assistant](https://cla-assistant.io) to track contributor CLA status. When you open a pull request, CLA Assistant will post a comment indicating whether you have signed the CLA. If you have not, you must sign before we can merge your contribution. Signing is a one-time process, valid for all future contributions, and takes under a minute via your GitHub account.
+
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [AGPL-3.0](LICENSE) license.
+Equibles is released under the [AGPL-3.0](LICENSE) license. By signing the [CLA](CLA.md), you grant Us the rights described in the agreement; you continue to own the copyright in your contributions.

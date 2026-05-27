@@ -1,5 +1,4 @@
 using System.Reflection;
-using Equibles.Data;
 using Equibles.Messaging.Attributes;
 using MassTransit;
 using Microsoft.Extensions.Configuration;
@@ -19,10 +18,17 @@ public static class MessagingServiceCollectionExtensions
     /// (the web host scans just its own assembly so it doesn't try to
     /// instantiate worker-only consumers whose dependencies it never wires).
     /// </summary>
+    /// <param name="configureBus">
+    /// Optional hook to extend the MassTransit registration — e.g. a commercial
+    /// host adds its transactional outbox here
+    /// (<c>x.AddEntityFrameworkOutbox&lt;EquiblesCustomerDbContext&gt;(...)</c>).
+    /// OSS ships no outbox: events publish directly and consumers must be idempotent.
+    /// </param>
     public static void AddMessaging(
         this IServiceCollection services,
         IConfiguration configuration,
-        IEnumerable<Assembly> consumerAssemblies = null
+        IEnumerable<Assembly> consumerAssemblies = null,
+        Action<IBusRegistrationConfigurator> configureBus = null
     )
     {
         // Only the host that owns the DB should create the transport schema /
@@ -39,16 +45,11 @@ public static class MessagingServiceCollectionExtensions
 
         services.AddMassTransit(x =>
         {
-            // Transactional outbox in the shared EquiblesDbContext: events are
-            // captured in the same transaction as the domain write and only
-            // delivered after SaveChanges commits.
-            x.AddEntityFrameworkOutbox<EquiblesDbContext>(o =>
-            {
-                o.UsePostgres();
-                o.UseBusOutbox();
-                o.DuplicateDetectionWindow = TimeSpan.FromMinutes(1);
-                o.QueryDelay = TimeSpan.FromSeconds(1);
-            });
+            // OSS ships no transactional outbox: events publish directly via
+            // IPublishEndpoint (after SaveChanges) and consumers are idempotent.
+            // A commercial host opts its customer context into the outbox through
+            // configureBus (one DbContext per bus — MassTransit's hard limit).
+            configureBus?.Invoke(x);
 
             var mainAssemblyName =
                 Assembly.GetEntryAssembly()?.GetName().Name?.ToLowerInvariant()

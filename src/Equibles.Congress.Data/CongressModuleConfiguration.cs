@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Congress.Data;
 
-public class CongressModuleConfiguration : Equibles.Data.IModuleConfiguration
+public class CongressModuleConfiguration : Equibles.Data.IFinancialModule
 {
     public void ConfigureEntities(ModelBuilder builder)
     {

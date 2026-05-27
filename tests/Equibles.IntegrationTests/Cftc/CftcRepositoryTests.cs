@@ -9,7 +9,7 @@ namespace Equibles.IntegrationTests.Cftc;
 
 public class CftcContractRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly CftcContractRepository _repository;
 
     public CftcContractRepositoryTests()
@@ -237,7 +237,7 @@ public class CftcContractRepositoryTests : IDisposable
 
 public class CftcPositionReportRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly CftcPositionReportRepository _repository;
 
     public CftcPositionReportRepositoryTests()

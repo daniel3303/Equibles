@@ -27,7 +27,7 @@ public class ProfilesCombinedInstitutionsTests
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var html = await response.Content.ReadAsStringAsync();
-        html.Should().Contain("Pass at least two CIKs");
+        html.Should().Contain("Pick at least 2 institutions");
     }
 
     [Fact]

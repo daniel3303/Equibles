@@ -13,7 +13,7 @@ using Pgvector;
 
 namespace Equibles.Migrations.Migrations
 {
-    [DbContext(typeof(EquiblesDbContext))]
+    [DbContext(typeof(EquiblesFinancialDbContext))]
     [Migration("20260517123732_AddProcessedFiling")]
     partial class AddProcessedFiling
     {

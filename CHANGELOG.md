@@ -9,6 +9,22 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Contributor License Agreement (`CLA.md`) based on Project Harmony HA-CLA-I-ANY 1.0. Contributors must sign via CLA Assistant before pull requests can be merged. Enables Equibles to remain AGPL-3.0 while sharing code with the commercial offering.
+- Optional `configureOptions` callback on `AddEquiblesDbContext<TContext>` (applied after the standard Npgsql + lazy-loading setup) so a host can adjust context-level `DbContextOptions` — e.g. suppress a specific warning — without replacing the registration helper. Default behavior unchanged. PR #2279.
+
+### Changed
+
+- **Multi-context module system.** Split `EquiblesDbContext` into an abstract `EquiblesDbContextBase` (module iteration, no Postgres extensions) plus a concrete `EquiblesFinancialDbContext` (enables pgvector; ParadeDB stays in the Npgsql options). Renamed `EquiblesDbContext` → `EquiblesFinancialDbContext`. Added `IFinancialModule` / `ICustomerModule` markers so a host can scan for either domain; every OSS module implements `IFinancialModule`. `BaseRepository` is now generic over the context (`BaseRepository<TEntity, TContext>`) with a one-arg shim binding to the financial context, so existing repositories are unchanged. `AddEquiblesDbContext` is generic over the context with a per-context `ModuleConfigurationSet<TContext>` (no shared module list); added the `AddEquiblesFinancialDbContext` convenience overload. Unlocks deployments running a second context (e.g. a customer database) over the same module system. PR #2258.
+- **No transactional outbox in OSS standalone.** `AddMessaging` no longer registers the EF outbox and gains a `configureBus` hook so a host can opt a context into one. OSS consumers must therefore be idempotent (no inbox/dedup ships). `CommonStockManager.SetCusip` now publishes **after** `SaveChanges` to avoid phantom events on rollback. PR #2258.
+
+### Fixed
+
+- `CommonStockManager.SetCusip` publishes `StockCusipChanged` via the root `IBus` instead of the scoped `IPublishEndpoint`. A commercial host that enables a bus outbox on a different DbContext (the customer database) would otherwise capture this publish into that context and never deliver it — the flow only saves the financial context. Tests updated to substitute `IBus`. PR #2271.
+
+## [1.2.0] — 2026-05-26
+
+### Added
+
 - Confidential treatment flag — 13F cover pages' `confidentialTreatmentRequestedFlag`
   is now parsed and stored on `InstitutionalHolder`. The institution profile page
   shows a warning banner when the flag is set, and `GetInstitutionSummary` MCP tool
@@ -53,7 +69,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Corp → Corp., Ltd → Ltd., etc.), higher roman numerals (IV–X), and
   parenthesized abbreviations.
 - Duplicated MCP date-parsing logic extracted into `McpToolExecutor.ParseDateOr`.
+- Repeated "stock not found" MCP responses extracted into
+  `McpToolExecutor.StockNotFound`.
+- SEC MCP `DocumentTextTools` migrated to `McpToolRunner`, matching the
+  Execute / ReportError pattern used by the other MCP tool groups.
 - LIKE metacharacter escaping extracted into shared `LikePattern` helper.
+- Repeated empty-table-row markup extracted into a shared
+  `EmptyTableRowTagHelper`.
+- Screener CSV export migrated to the shared `CsvExportService` instead of
+  hand-rolling its own writer.
 - Vite bundles wrapped in IIFE to prevent global scope collision; `bundle.js`
   loaded as ES module.
 - Chart.js split into a separate bundle loaded only on chart pages.
@@ -63,6 +87,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Cold-start race on a fresh DB volume — the compose healthcheck now forces a
+  TCP probe instead of a Unix-socket probe, so it only flips healthy after
+  ParadeDB's init phase finishes and the real TCP listener is up. The web
+  host also retries `Database.MigrateAsync` on transient connection failures.
 - `FiscalPeriodResolver.Resolve` guarded against year-underflow on `AddYears(-1)`.
 - `FiscalPeriodResolver.CreateSafe` guarded against year overflow past 9999.
 - `FiscalCalendar.GetPeriod` guarded against fiscal year overflow past 9999.
@@ -99,6 +127,34 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Fiscal year-end day validated against its month (e.g., day 31 rejected
   for months with fewer days).
 - Filer-universe query narrowed to only gap holders.
+- `ParseTransactionCode` trims input so whitespace-padded SEC transaction
+  codes resolve to the correct `TransactionCode` enum value.
+- `ParseBool` trims input so whitespace-padded SEC boolean strings
+  ("true ", " false") are interpreted correctly.
+- `SafeRound` guards against the `decimal.MaxValue` boundary instead of
+  throwing on rounding overflow.
+- House PTR PDF parser joins multi-line transaction entries so the asset
+  name, ticker/dates, and amount land on a single transaction instead of
+  three partial rows.
+- 13F-HR import aggregates same-key rows across the whole filing instead
+  of flushing every 1000 unique keys. When a filer split a position
+  across `otherManager` codes the matching rows could fall in different
+  batches; the upsert's `WhenMatched` clause REPLACED the persisted row,
+  so only the last batch's slice survived (Vanguard's Q4 2025 AAPL came
+  out as 39M shares instead of 1.43B). The import now flushes at the
+  accession boundary, which SEC guarantees is contiguous in both the
+  bulk INFOTABLE and the realtime archive.
+- `StocksController.ParsePositionTypes` gates parsed values with
+  `Enum.IsDefined` so numeric query input with no matching
+  `PositionChangeType` member (e.g. `?types=999`) is rejected the same
+  as an unrecognised name, preventing a polluted filter set from
+  round-tripping into rendered toggle URLs on the holdings tab.
+- `CompanySyncService.NormalizeCompanyName` no longer treats the short English
+  words MIX, DIV, LIV, and CIV as Roman numerals — they decompose as 1009,
+  504, 54, and 104 respectively but aren't numerals in a company-name context.
+  An explicit deny-list rejects exactly those four tokens, so other short
+  numerals that use L/C/D/M (XL=40, XC=90, CD=400, CM=900, XLI=41, XLV=45,
+  MII=1002) keep working alongside the pure-I/V/X cases.
 
 ## [1.1.1] — 2026-05-22
 
@@ -463,7 +519,8 @@ First tagged release.
 - Background worker — scrapers and document processor.
 - Docker Compose stack (ParadeDB + web + MCP + worker), with an optional vector-embedding profile.
 
-[Unreleased]: https://github.com/daniel3303/Equibles/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/daniel3303/Equibles/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/daniel3303/Equibles/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/daniel3303/Equibles/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/daniel3303/Equibles/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/daniel3303/Equibles/releases/tag/v1.0.0

@@ -3,6 +3,7 @@ using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Yahoo.Data.Models;
@@ -29,11 +30,7 @@ public class StockPriceTools
     {
         _priceRepository = priceRepository;
         _commonStockRepository = commonStockRepository;
-        _runner = new McpToolRunner(
-            logger,
-            (tool, msg, stack, ctx) =>
-                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
-        );
+        _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
     [McpServerTool(Name = "GetStockPrices")]
@@ -55,15 +52,12 @@ public class StockPriceTools
             {
                 var stock = await FindStockByTicker(ticker);
                 if (stock == null)
-                    return $"Stock '{ticker}' not found.";
+                    return McpToolExecutor.StockNotFound(ticker);
 
-                var start = McpToolExecutor.ParseDateOr(
+                var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
-                );
-                var end = McpToolExecutor.ParseDateOr(
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow)
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
                 );
 
                 var records = await _priceRepository
@@ -353,13 +347,13 @@ public class StockPriceTools
     {
         var stock = await FindStockByTicker(ticker);
         if (stock == null)
-            return (null, null, $"Stock '{ticker}' not found.");
+            return (null, null, McpToolExecutor.StockNotFound(ticker));
 
-        var start = McpToolExecutor.ParseDateOr(
+        var (start, end) = McpToolExecutor.ParseDateRange(
             startDate,
+            endDate,
             DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-6))
         );
-        var end = McpToolExecutor.ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
 
         var records = await _priceRepository
             .GetByStock(stock, start, end)
@@ -413,5 +407,5 @@ public class StockPriceTools
         );
 
     private Task<CommonStock> FindStockByTicker(string ticker) =>
-        _commonStockRepository.GetByTicker(ticker.Trim().ToUpperInvariant());
+        _commonStockRepository.GetByTicker(McpToolExecutor.NormalizeTicker(ticker));
 }

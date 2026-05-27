@@ -15,7 +15,7 @@ namespace Equibles.IntegrationTests.Holdings;
 public class InstitutionalHoldingRepositoryRecentFilingsTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
-    private readonly List<Equibles.Data.EquiblesDbContext> _contexts = [];
+    private readonly List<Equibles.Data.EquiblesFinancialDbContext> _contexts = [];
 
     public InstitutionalHoldingRepositoryRecentFilingsTests(ParadeDbFixture fixture)
     {
@@ -31,7 +31,7 @@ public class InstitutionalHoldingRepositoryRecentFilingsTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    private Equibles.Data.EquiblesDbContext FreshContext()
+    private Equibles.Data.EquiblesFinancialDbContext FreshContext()
     {
         var ctx = _fixture.CreateDbContext();
         _contexts.Add(ctx);
@@ -73,7 +73,7 @@ public class InstitutionalHoldingRepositoryRecentFilingsTests : IAsyncLifetime
     }
 
     private static async Task<CommonStock> SeedStock(
-        Equibles.Data.EquiblesDbContext ctx,
+        Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker
     )
     {
@@ -89,7 +89,7 @@ public class InstitutionalHoldingRepositoryRecentFilingsTests : IAsyncLifetime
     }
 
     private static async Task<InstitutionalHolder> SeedHolder(
-        Equibles.Data.EquiblesDbContext ctx,
+        Equibles.Data.EquiblesFinancialDbContext ctx,
         string cik
     )
     {

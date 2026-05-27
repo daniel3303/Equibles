@@ -230,6 +230,7 @@ public class ProfilesController : BaseController
             viewModel.Overlap = loaded.Overlap;
         }
 
+        viewModel.InitialPicks = await ResolvePicks(distinctCiks);
         return View(viewModel);
     }
 
@@ -239,6 +240,10 @@ public class ProfilesController : BaseController
         [FromQuery(Name = "date")] DateOnly? date = null
     )
     {
+        // The picker submits one ?ciks=A&ciks=B per chip — the default ASP.NET
+        // string[] binding shape. The Split is kept for the legacy comma/space
+        // shape (?ciks=A,B) that bookmarks and InstitutionsOverlapMatrixSeededTests
+        // still use.
         var splitCiks = (ciks ?? [])
             .SelectMany(c => c.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries))
             .ToArray();
@@ -265,6 +270,7 @@ public class ProfilesController : BaseController
                 viewModel.Matrix = FundOverlapCalculator.ComputePairwiseOverlap(loaded.Overlap);
         }
 
+        viewModel.InitialPicks = await ResolvePicks(distinctCiks);
         return View(viewModel);
     }
 
@@ -315,6 +321,7 @@ public class ProfilesController : BaseController
             }
         }
 
+        viewModel.InitialPicks = await ResolvePicks(distinctCiks);
         return View(viewModel);
     }
 
@@ -485,4 +492,29 @@ public class ProfilesController : BaseController
             .Select(c => c.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+    // Resolves the picker chips for first render — preserves the order the user
+    // submitted CIKs in, and leaves Name == null for CIKs that aren't in the DB so
+    // the view can flag them as missing. Case-insensitive comparer matches
+    // NormalizeCiks above; otherwise a lowercase `?ciks=cik123` in the URL would
+    // miss the row stored as "CIK123" and render as "(name unknown)".
+    private async Task<List<InstitutionPick>> ResolvePicks(List<string> ciks)
+    {
+        if (ciks.Count == 0)
+            return [];
+
+        var byCik = (
+            await _institutionalHolderRepository
+                .GetByCiks(ciks)
+                .Select(h => new { h.Cik, h.Name })
+                .ToListAsync()
+        ).ToDictionary(x => x.Cik, x => x.Name, StringComparer.OrdinalIgnoreCase);
+
+        return ciks.Select(cik => new InstitutionPick
+            {
+                Cik = cik,
+                Name = byCik.GetValueOrDefault(cik),
+            })
+            .ToList();
+    }
 }

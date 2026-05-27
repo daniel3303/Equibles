@@ -142,7 +142,7 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
         output.Should().NotContain("BlackRock Advisors");
     }
 
-    private InstitutionalHoldingsTools NewSut(Equibles.Data.EquiblesDbContext ctx) =>
+    private InstitutionalHoldingsTools NewSut(Equibles.Data.EquiblesFinancialDbContext ctx) =>
         new(
             new InstitutionalHoldingRepository(ctx),
             new InstitutionalHolderRepository(ctx),

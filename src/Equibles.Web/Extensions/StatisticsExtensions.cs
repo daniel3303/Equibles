@@ -12,8 +12,8 @@ public static class StatisticsExtensions
     {
         if (
             !double.IsFinite(value)
-            || value > (double)decimal.MaxValue
-            || value < (double)decimal.MinValue
+            || value >= (double)decimal.MaxValue
+            || value <= (double)decimal.MinValue
         )
             return null;
         return (decimal?)Math.Round(value, digits);
@@ -28,5 +28,17 @@ public static class StatisticsExtensions
                 (v, i) => i < period - 1 ? (decimal?)null : (decimal?)Math.Round(v, digits)
             )
             .ToList();
+    }
+
+    public static StatsSummary ComputeStats(this double[] values, int decimals)
+    {
+        var stats = new DescriptiveStatistics(values);
+        return new StatsSummary(
+            Mean: stats.Mean.SafeRound(decimals),
+            Median: values.Median().SafeRound(decimals),
+            Min: stats.Minimum.SafeRound(decimals),
+            Max: stats.Maximum.SafeRound(decimals),
+            StdDev: stats.StandardDeviation.SafeRound(decimals)
+        );
     }
 }

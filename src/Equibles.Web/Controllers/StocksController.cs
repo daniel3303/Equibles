@@ -222,7 +222,10 @@ public class StocksController : BaseController
         var result = new HashSet<PositionChangeType>();
         foreach (var part in types.Split(',', StringSplitOptions.RemoveEmptyEntries))
         {
-            if (Enum.TryParse<PositionChangeType>(part.Trim(), true, out var parsed))
+            if (
+                Enum.TryParse<PositionChangeType>(part.Trim(), true, out var parsed)
+                && Enum.IsDefined(parsed)
+            )
                 result.Add(parsed);
         }
 

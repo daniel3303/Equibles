@@ -10,7 +10,7 @@ namespace Equibles.IntegrationTests.Media;
 
 public class MediaRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly ImageRepository _imageRepo;
     private readonly FileRepository _fileRepo;
 

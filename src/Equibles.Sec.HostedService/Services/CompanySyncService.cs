@@ -128,7 +128,7 @@ public class CompanySyncService : ICompanySyncService
         var commonStockRepository =
             scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var commonStockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
         var secCiks = secCompanies.Select(c => c.Cik).ToHashSet();
 
@@ -576,6 +576,23 @@ public class CompanySyncService : ICompanySyncService
         RegexOptions.IgnoreCase | RegexOptions.Compiled
     );
 
+    // Three-letter English words that happen to satisfy the Roman regex
+    // (MIX=1009, DIV=504, LIV=54, CIV=104). Listing them explicitly keeps
+    // legitimate short numerals like XL (40), XC (90), CD (400), CM (900),
+    // and combos (XLI, XLV, MII) working.
+    private static readonly HashSet<string> RomanNumeralFalsePositives = new(
+        StringComparer.OrdinalIgnoreCase
+    )
+    {
+        "MIX",
+        "DIV",
+        "LIV",
+        "CIV",
+    };
+
+    private static bool IsRomanNumeral(string token) =>
+        RomanNumeralPattern.IsMatch(token) && !RomanNumeralFalsePositives.Contains(token);
+
     private static string NormalizeCompanyName(string name)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -592,10 +609,7 @@ public class CompanySyncService : ICompanySyncService
             var stripped = words[i].TrimStart('(').TrimEnd('.', ',', ';', ')');
             if (
                 stripped.Length > 0
-                && (
-                    UpperCaseAbbreviations.Contains(stripped)
-                    || RomanNumeralPattern.IsMatch(stripped)
-                )
+                && (UpperCaseAbbreviations.Contains(stripped) || IsRomanNumeral(stripped))
             )
             {
                 words[i] = words[i].ToUpperInvariant();

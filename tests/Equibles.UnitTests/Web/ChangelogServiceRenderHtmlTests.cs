@@ -13,6 +13,7 @@ namespace Equibles.UnitTests.Web;
 /// the no-raw-HTML contract: a CHANGELOG containing a script tag must come back
 /// escaped, never as a live element.
 /// </summary>
+[Collection(ChangelogFileCollection.Name)]
 public class ChangelogServiceRenderHtmlTests
 {
     [Fact]

@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.Data;
 
-public class HoldingsModuleConfiguration : Equibles.Data.IModuleConfiguration
+public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
 {
     public void ConfigureEntities(ModelBuilder builder)
     {
@@ -43,5 +43,22 @@ public class HoldingsModuleConfiguration : Equibles.Data.IModuleConfiguration
 
         builder.Entity<ProcessedDataSet>();
         builder.Entity<ProcessedFiling>();
+        builder.Entity<RealtimeSweepState>();
+
+        // AumQuarterlySnapshot uses ReportDate as the primary key. The [Key]
+        // attribute can't be paired with [DatabaseGenerated(None)] without EF
+        // also treating it as identity-by-convention on integral types, but the
+        // intent is identical here — DateOnly key, caller-supplied. Configured
+        // via Fluent API to keep the entity declaration attribute-only.
+        builder.Entity<AumQuarterlySnapshot>().HasKey(s => s.ReportDate);
+
+        // SectorQuarterlySnapshot uses a composite (ReportDate, SectorId) key,
+        // which the [Key] attribute cannot express. Reads on /holdings/trends
+        // scan the whole table ordered by ReportDate, then SectorName — the
+        // composite key already covers the ordering by date, so no further
+        // index is needed.
+        builder
+            .Entity<SectorQuarterlySnapshot>()
+            .HasKey(s => new { s.ReportDate, s.SectorId });
     }
 }

@@ -38,17 +38,18 @@ public class DocumentScraperDeferredRetryTests
     [Fact]
     public async Task ScrapeDocuments_FilingDeferredThenRetryFails_LogsAndCountsSkipped()
     {
-        var dbOptions = new DbContextOptionsBuilder<EquiblesDbContext>()
+        var dbOptions = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .EnableServiceProviderCaching(false)
             .Options;
-        var ctx = new EquiblesDbContext(
+        var ctx = new EquiblesFinancialDbContext(
             dbOptions,
-            [
+            new IModuleConfiguration[]
+            {
                 new CommonStocksModuleConfiguration(),
                 new DocumentOnlyModuleConfiguration(),
                 new MediaModuleConfiguration(),
-            ]
+            }
         );
         ctx.Database.EnsureCreated();
         ctx.Set<CommonStock>()
@@ -104,9 +105,9 @@ public class DocumentScraperDeferredRetryTests
         services.AddScoped<CommonStockRepository>();
         services.AddScoped<DocumentRepository>();
         // DocumentScraper resolves CommonStockManager per scope to persist the
-        // SEC-sourced fiscal year-end; IPublishEndpoint is an unrelated ctor
+        // SEC-sourced fiscal year-end; IBus is an unrelated ctor
         // dep (SetCusip outbox event) the fiscal-year path never uses.
-        services.AddSingleton(Substitute.For<IPublishEndpoint>());
+        services.AddSingleton(Substitute.For<IBus>());
         services.AddScoped<CommonStockManager>();
         services.AddSingleton(secEdgar);
         services.AddSingleton(persistence);

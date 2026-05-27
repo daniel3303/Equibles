@@ -1,8 +1,10 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Finra.Repositories;
 using Equibles.Mcp;
@@ -31,11 +33,7 @@ public class ShortDataTools
         _shortVolumeRepository = shortVolumeRepository;
         _shortInterestRepository = shortInterestRepository;
         _commonStockRepository = commonStockRepository;
-        _runner = new McpToolRunner(
-            logger,
-            (tool, msg, stack, ctx) =>
-                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
-        );
+        _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
     [McpServerTool(Name = "GetShortVolume")]
@@ -61,13 +59,10 @@ public class ShortDataTools
 
                 var query = _shortVolumeRepository.GetHistoryByStock(stock);
 
-                var start = McpToolExecutor.ParseDateOr(
+                var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
-                );
-                var end = McpToolExecutor.ParseDateOr(
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow)
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
                 );
 
                 query = query.Where(d => d.Date >= start && d.Date <= end);
@@ -125,13 +120,10 @@ public class ShortDataTools
 
                 var query = _shortInterestRepository.GetHistoryByStock(stock);
 
-                var start = McpToolExecutor.ParseDateOr(
+                var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
-                );
-                var end = McpToolExecutor.ParseDateOr(
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow)
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
                 );
 
                 query = query.Where(s => s.SettlementDate >= start && s.SettlementDate <= end);
@@ -237,13 +229,17 @@ public class ShortDataTools
     }
 
     private static string FormatSignedChange(long change) =>
-        change >= 0 ? $"+{change:N0}" : change.ToString("N0");
+        change >= 0
+            ? $"+{change.ToString("N0", CultureInfo.InvariantCulture)}"
+            : change.ToString("N0", CultureInfo.InvariantCulture);
 
     private async Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker)
     {
-        var stock = await _commonStockRepository.GetByTicker(ticker.Trim().ToUpperInvariant());
+        var stock = await _commonStockRepository.GetByTicker(
+            McpToolExecutor.NormalizeTicker(ticker)
+        );
         if (stock == null)
-            return (null, $"Stock '{ticker}' not found.");
+            return (null, McpToolExecutor.StockNotFound(ticker));
         return (stock, null);
     }
 }

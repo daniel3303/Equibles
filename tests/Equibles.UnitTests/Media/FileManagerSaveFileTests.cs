@@ -15,7 +15,7 @@ public class FileManagerSaveFileTests
 
     public FileManagerSaveFileTests()
     {
-        _repository = Substitute.For<FileRepository>((EquiblesDbContext)null);
+        _repository = Substitute.For<FileRepository>((EquiblesFinancialDbContext)null);
         _sut = new FileManager(_repository);
     }
 

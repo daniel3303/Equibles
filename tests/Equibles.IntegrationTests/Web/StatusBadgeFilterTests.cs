@@ -21,10 +21,7 @@ public class StatusBadgeFilterTests
 
     public StatusBadgeFilterTests()
     {
-        var context = TestDbContextFactory.Create(
-            new ErrorsModuleConfiguration(),
-            new MessagingModuleConfiguration()
-        );
+        var context = TestDbContextFactory.Create(new ErrorsModuleConfiguration());
         _errorRepository = new ErrorRepository(context);
         _configBuilder = new ConfigurationBuilder();
     }

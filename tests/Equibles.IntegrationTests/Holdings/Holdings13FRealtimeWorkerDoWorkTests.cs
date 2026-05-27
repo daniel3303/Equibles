@@ -29,7 +29,7 @@ namespace Equibles.IntegrationTests.Holdings;
 public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
-    private readonly List<EquiblesDbContext> _contexts = [];
+    private readonly List<EquiblesFinancialDbContext> _contexts = [];
 
     public Holdings13FRealtimeWorkerDoWorkTests(ParadeDbFixture fixture) => _fixture = fixture;
 
@@ -98,14 +98,17 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
                 var ctx = _fixture.CreateDbContext();
                 _contexts.Add(ctx);
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(EquiblesDbContext)).Returns(ctx);
+                sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
                 sp.GetService(typeof(ProcessedDataSetRepository))
                     .Returns(new ProcessedDataSetRepository(ctx));
+                sp.GetService(typeof(RealtimeSweepStateRepository))
+                    .Returns(new RealtimeSweepStateRepository(ctx));
                 var importService = new HoldingsImportService(
                     scopeFactory,
                     Substitute.For<ILogger<HoldingsImportService>>(),
                     Options.Create(new WorkerOptions()),
-                    Substitute.For<IStockPriceProvider>()
+                    Substitute.For<IStockPriceProvider>(),
+                    Substitute.For<MassTransit.IBus>()
                 );
                 var ingestion = new Realtime13FIngestionService(
                     edgarClient,

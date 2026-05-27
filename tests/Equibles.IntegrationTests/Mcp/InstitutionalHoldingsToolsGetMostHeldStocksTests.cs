@@ -177,7 +177,7 @@ public class InstitutionalHoldingsToolsGetMostHeldStocksTests : ParadeDbMcpTestB
         DbContext.ChangeTracker.Clear();
     }
 
-    private InstitutionalHoldingsTools NewSut(Equibles.Data.EquiblesDbContext ctx) =>
+    private InstitutionalHoldingsTools NewSut(Equibles.Data.EquiblesFinancialDbContext ctx) =>
         new(
             new InstitutionalHoldingRepository(ctx),
             new InstitutionalHolderRepository(ctx),

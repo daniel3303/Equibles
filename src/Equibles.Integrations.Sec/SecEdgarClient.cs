@@ -435,19 +435,34 @@ public class SecEdgarClient : ISecEdgarClient
         var url =
             $"{FilesBaseUrl}/Archives/edgar/daily-index/{date.Year}/QTR{quarter}/master.{date.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture)}.idx";
 
-        using var response = await SendWithRetryAsync(url, cancellationToken);
+        // A 403 on a PAST date is never a missing index (those always exist) —
+        // it's SEC throttling, so retry it as transient. For today/future dates a
+        // 403 means the index isn't published yet, so don't retry those.
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var isPastDate = date < today;
+        using var response = await SendWithRetryAsync(
+            url,
+            HttpCompletionOption.ResponseContentRead,
+            cancellationToken,
+            retryForbidden: isPastDate
+        );
 
-        // No index file for that day → nothing to ingest, skip it rather than
-        // failing the whole real-time sweep. Weekends/holidays can 404, and SEC
-        // returns 403 (Forbidden) for not-yet-published / future-dated index
-        // files (e.g. "today" before the daily index is posted). Both mean the
-        // same thing here: there is no daily index for this date.
-        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden)
+        // Weekend/holiday 404, or a 403 for a not-yet-published index (today or a
+        // future date), both mean "no index for this date" — skip it.
+        if (
+            response.StatusCode == HttpStatusCode.NotFound
+            || (response.StatusCode == HttpStatusCode.Forbidden && !isPastDate)
+        )
         {
             _logger.LogInformation("No daily index published for {Date:yyyy-MM-dd}", date);
             return [];
         }
 
+        // A past-date 403 that survived the retries is SEC still throttling: that
+        // index always exists, so this is a real failure to fetch, not "no
+        // filings". Let it throw — the caller (DiscoverEntries) catches it per
+        // day and holds the sweep watermark back so the day is re-swept next
+        // cycle, rather than being silently skipped past.
         response.EnsureSuccessStatusCode();
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
 
@@ -557,7 +572,8 @@ public class SecEdgarClient : ISecEdgarClient
     private async Task<HttpResponseMessage> SendWithRetryAsync(
         string url,
         HttpCompletionOption completionOption,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        bool retryForbidden = false
     )
     {
         for (var attempt = 0; attempt <= MaxRetries; attempt++)
@@ -613,6 +629,37 @@ public class SecEdgarClient : ISecEdgarClient
 
                 if (attempt < MaxRetries)
                 {
+                    response.Dispose();
+                    await Task.Delay(delay, cancellationToken);
+                    continue;
+                }
+            }
+
+            // SEC serves its "Request Rate Threshold Exceeded" throttle page with
+            // a 403 (not a 429), so a burst that trips the rolling-window limit
+            // arrives as a Forbidden carrying that HTML body. Back off and retry
+            // it like a 429 — otherwise callers that read 403 as "no resource"
+            // silently discard real data. Callers that know a 403 can only mean
+            // throttling (retryForbidden: e.g. a past-dated daily index, which
+            // always exists) retry every Forbidden; otherwise we retry only when
+            // the body is the recognizable throttle page, leaving a genuine 403
+            // (not-yet-published index, access-restricted path) to fall through.
+            if (response.StatusCode == HttpStatusCode.Forbidden && attempt < MaxRetries)
+            {
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                if (retryForbidden || IsRateLimitThresholdPage(body))
+                {
+                    var delay = GetRetryDelay(response, attempt);
+
+                    _logger.LogWarning(
+                        "SEC EDGAR throttled (403 threshold page) for {Url}, pausing for {Delay}s (attempt {Attempt}/{Max})",
+                        url,
+                        delay.TotalSeconds,
+                        attempt + 1,
+                        MaxRetries
+                    );
+
+                    RateLimiter.PauseFor(delay);
                     response.Dispose();
                     await Task.Delay(delay, cancellationToken);
                     continue;
@@ -675,6 +722,13 @@ public class SecEdgarClient : ISecEdgarClient
     // not defects — they are retried, never recorded as dashboard errors.
     private static bool IsTransientNetworkError(HttpRequestException exception) =>
         exception.InnerException is SocketException or IOException or AuthenticationException;
+
+    // SEC's rate-limit response is an HTML page titled "Request Rate Threshold
+    // Exceeded" served with a 403 (not a 429). Detect it by body so throttling
+    // can be backed off and retried rather than mistaken for a missing resource.
+    private static bool IsRateLimitThresholdPage(string body) =>
+        !string.IsNullOrEmpty(body)
+        && body.Contains("Request Rate Threshold Exceeded", StringComparison.OrdinalIgnoreCase);
 
     private static List<CompanyInfo> ParseCompaniesFromResponse(CompanyTickersResponse response)
     {

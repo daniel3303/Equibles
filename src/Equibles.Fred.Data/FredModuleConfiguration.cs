@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Fred.Data;
 
-public class FredModuleConfiguration : Equibles.Data.IModuleConfiguration
+public class FredModuleConfiguration : Equibles.Data.IFinancialModule
 {
     public void ConfigureEntities(ModelBuilder builder)
     {

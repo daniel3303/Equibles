@@ -3,6 +3,7 @@ using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
@@ -51,11 +52,7 @@ public class InstitutionalHoldingsTools
         _holdingRepository = holdingRepository;
         _holderRepository = holderRepository;
         _commonStockRepository = commonStockRepository;
-        _runner = new McpToolRunner(
-            logger,
-            (tool, msg, stack, ctx) =>
-                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
-        );
+        _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
     [McpServerTool(Name = "GetTopHolders")]
@@ -566,11 +563,7 @@ public class InstitutionalHoldingsTools
         string Error
     )> ResolveMarketActivityDates(string reportDate)
     {
-        var reportDates = await _holdingRepository
-            .GetAvailableReportDates()
-            .Distinct()
-            .OrderByDescending(d => d)
-            .ToListAsync();
+        var reportDates = await _holdingRepository.GetAvailableReportDates().ToListAsync();
         if (reportDates.Count == 0)
             return (default, default, "No 13F holdings data available.");
 
@@ -1293,9 +1286,11 @@ public class InstitutionalHoldingsTools
 
     private async Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker)
     {
-        var stock = await _commonStockRepository.GetByTicker(ticker);
+        var stock = await _commonStockRepository.GetByTicker(
+            McpToolExecutor.NormalizeTicker(ticker)
+        );
         if (stock == null)
-            return (null, $"Stock '{ticker}' not found.");
+            return (null, McpToolExecutor.StockNotFound(ticker));
         return (stock, null);
     }
 

@@ -9,7 +9,7 @@ namespace Equibles.IntegrationTests.Cboe;
 
 public class CboePutCallRatioRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly CboePutCallRatioRepository _repository;
 
     public CboePutCallRatioRepositoryTests()
@@ -375,7 +375,7 @@ public class CboePutCallRatioRepositoryTests : IDisposable
 
 public class CboeVixDailyRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly CboeVixDailyRepository _repository;
 
     public CboeVixDailyRepositoryTests()

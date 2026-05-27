@@ -262,7 +262,7 @@ Without the embedding profile, BM25 full-text search via ParadeDB still works ou
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, project architecture, and how to extend the platform.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, project architecture, and how to extend the platform. Contributors must sign the [Contributor License Agreement](CLA.md) — this is handled automatically by a bot when you open a pull request.
 
 ## License
 

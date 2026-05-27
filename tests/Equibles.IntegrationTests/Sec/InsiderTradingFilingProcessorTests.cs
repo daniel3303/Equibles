@@ -301,8 +301,7 @@ public class InsiderTradingFilingProcessorTests
         var dbContext = TestDbContextFactory.Create(
             new InsiderTradingModuleConfiguration(),
             new CommonStocksModuleConfiguration(),
-            new ErrorsModuleConfiguration(),
-            new MessagingModuleConfiguration()
+            new ErrorsModuleConfiguration()
         );
 
         var ownerRepo = new InsiderOwnerRepository(dbContext);

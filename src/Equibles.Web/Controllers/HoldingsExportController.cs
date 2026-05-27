@@ -165,10 +165,7 @@ public class HoldingsExportController : BaseController
     [HttpGet("~/holdings/export/activity")]
     public async Task<IActionResult> Activity(DateOnly? date)
     {
-        var reportDates = await _holdingRepository
-            .GetAvailableReportDates()
-            .OrderByDescending(d => d)
-            .ToListAsync();
+        var reportDates = await _holdingRepository.GetAvailableReportDates().ToListAsync();
         if (reportDates.Count < 2)
             return NotFound();
 

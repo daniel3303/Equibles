@@ -6,7 +6,7 @@ namespace Equibles.Errors.Repositories;
 
 public class ErrorRepository : BaseRepository<Error>
 {
-    public ErrorRepository(EquiblesDbContext dbContext)
+    public ErrorRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public IQueryable<Error> GetUnseen()

@@ -4,6 +4,7 @@ using Equibles.Cftc.Data.Models;
 using Equibles.Cftc.Repositories;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Microsoft.EntityFrameworkCore;
@@ -28,11 +29,7 @@ public class CftcTools
     {
         _contractRepository = contractRepository;
         _reportRepository = reportRepository;
-        _runner = new McpToolRunner(
-            logger,
-            (tool, msg, stack, ctx) =>
-                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
-        );
+        _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
     [McpServerTool(Name = "GetCftcPositioning")]
@@ -62,13 +59,10 @@ public class CftcTools
                 if (contract == null)
                     return $"Contract '{marketCode}' not found. Use SearchCftcMarkets to find available contracts.";
 
-                var start = McpToolExecutor.ParseDateOr(
+                var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
-                );
-                var end = McpToolExecutor.ParseDateOr(
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow)
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
                 );
 
                 var reports = await _reportRepository

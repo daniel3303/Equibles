@@ -13,7 +13,7 @@ using Pgvector;
 
 namespace Equibles.Migrations.Migrations
 {
-    [DbContext(typeof(EquiblesDbContext))]
+    [DbContext(typeof(EquiblesFinancialDbContext))]
     [Migration("20260513110630_AddTransactionOrderToInsiderTransaction")]
     partial class AddTransactionOrderToInsiderTransaction
     {

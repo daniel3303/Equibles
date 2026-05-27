@@ -11,7 +11,7 @@ namespace Equibles.IntegrationTests.Holdings;
 
 public class InstitutionalHolderRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly InstitutionalHolderRepository _repository;
 
     public InstitutionalHolderRepositoryTests()
@@ -178,7 +178,7 @@ public class InstitutionalHolderRepositoryTests : IDisposable
 
 public class InstitutionalHoldingRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly InstitutionalHoldingRepository _repository;
 
     public InstitutionalHoldingRepositoryTests()

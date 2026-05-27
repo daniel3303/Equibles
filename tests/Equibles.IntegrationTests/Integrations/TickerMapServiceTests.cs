@@ -9,7 +9,7 @@ namespace Equibles.IntegrationTests.Integrations;
 
 public class TickerMapServiceTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly CommonStockRepository _stockRepo;
     private readonly TickerMapService _service;
     private readonly TickerMapService _clientEvalService;
@@ -291,7 +291,7 @@ public class TickerMapServiceTests : IDisposable
     /// </summary>
     private sealed class ClientEvalStockRepository : CommonStockRepository
     {
-        public ClientEvalStockRepository(EquiblesDbContext dbContext)
+        public ClientEvalStockRepository(EquiblesFinancialDbContext dbContext)
             : base(dbContext) { }
 
         public override IQueryable<CommonStock> GetAll()

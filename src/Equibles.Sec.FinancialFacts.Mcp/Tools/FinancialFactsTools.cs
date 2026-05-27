@@ -5,6 +5,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Sec.Data.Models;
@@ -41,11 +42,7 @@ public class FinancialFactsTools
         _financialFactRepository = financialFactRepository;
         _financialConceptRepository = financialConceptRepository;
         _commonStockRepository = commonStockRepository;
-        _runner = new McpToolRunner(
-            logger,
-            (tool, msg, stack, ctx) =>
-                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
-        );
+        _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
     [McpServerTool(Name = "GetFinancialFact")]
@@ -84,10 +81,10 @@ public class FinancialFactsTools
                     return $"A concept is required. {SupportedAliasesNote()}";
 
                 var stock = await _commonStockRepository.GetByTicker(
-                    ticker.Trim().ToUpperInvariant()
+                    McpToolExecutor.NormalizeTicker(ticker)
                 );
                 if (stock == null)
-                    return $"Stock '{ticker}' not found.";
+                    return McpToolExecutor.StockNotFound(ticker);
 
                 if (!FinancialConceptAliases.TryResolve(concept, out var conceptRefs))
                     return $"Unknown concept '{concept}'. {SupportedAliasesNote()}";

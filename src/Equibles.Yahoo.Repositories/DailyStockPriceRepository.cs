@@ -6,7 +6,7 @@ namespace Equibles.Yahoo.Repositories;
 
 public class DailyStockPriceRepository : BaseRepository<DailyStockPrice>
 {
-    public DailyStockPriceRepository(EquiblesDbContext dbContext)
+    public DailyStockPriceRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public IQueryable<DailyStockPrice> GetByStock(CommonStock stock)

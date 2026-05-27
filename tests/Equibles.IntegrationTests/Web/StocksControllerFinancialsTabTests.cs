@@ -42,7 +42,7 @@ namespace Equibles.IntegrationTests.Web;
 /// </summary>
 public class StocksControllerFinancialsTabTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
 
     public StocksControllerFinancialsTabTests()
     {

@@ -17,12 +17,15 @@ namespace Equibles.UnitTests.CommonStocks;
 // normalises CUSIPs to uppercase, but some historical data has lowercase).
 public class CommonStockManagerSetCusipNoopTests
 {
-    private static EquiblesDbContext NewDb()
+    private static EquiblesFinancialDbContext NewDb()
     {
-        var options = new DbContextOptionsBuilder<EquiblesDbContext>()
+        var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
-        return new EquiblesDbContext(options, [new CommonStocksModuleConfiguration()]);
+        return new EquiblesFinancialDbContext(
+            options,
+            new IModuleConfiguration[] { new CommonStocksModuleConfiguration() }
+        );
     }
 
     [Fact]
@@ -30,7 +33,7 @@ public class CommonStockManagerSetCusipNoopTests
     {
         var db = NewDb();
         var repo = Substitute.For<CommonStockRepository>(db);
-        var publishEndpoint = Substitute.For<IPublishEndpoint>();
+        var publishEndpoint = Substitute.For<IBus>();
         var sut = new CommonStockManager(repo, publishEndpoint);
         var stock = new CommonStock
         {

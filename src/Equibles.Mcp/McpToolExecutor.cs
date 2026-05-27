@@ -7,6 +7,20 @@ public static class McpToolExecutor
     public static DateOnly ParseDateOr(string text, DateOnly fallback) =>
         !string.IsNullOrEmpty(text) && DateOnly.TryParse(text, out var parsed) ? parsed : fallback;
 
+    public static (DateOnly Start, DateOnly End) ParseDateRange(
+        string startText,
+        string endText,
+        DateOnly defaultStart
+    ) =>
+        (
+            ParseDateOr(startText, defaultStart),
+            ParseDateOr(endText, DateOnly.FromDateTime(DateTime.UtcNow))
+        );
+
+    public static string StockNotFound(string ticker) => $"Stock '{ticker}' not found.";
+
+    public static string NormalizeTicker(string ticker) => ticker.Trim().ToUpperInvariant();
+
     public static async Task<string> Execute(
         Func<Task<string>> action,
         ILogger logger,

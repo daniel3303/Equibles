@@ -13,6 +13,9 @@
     <Content Include="TestAssets\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <None Update="Cboe/Fixtures/*.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
@@ -51,6 +54,7 @@
     <ProjectReference Include="..\..\src\Equibles.Media.BusinessLogic\Equibles.Media.BusinessLogic.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Congress.HostedService\Equibles.Congress.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.InsiderTrading.Repositories\Equibles.InsiderTrading.Repositories.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.InsiderTrading.BusinessLogic\Equibles.InsiderTrading.BusinessLogic.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Sec.Repositories\Equibles.Sec.Repositories.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Fred.HostedService\Equibles.Fred.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Fred.Repositories\Equibles.Fred.Repositories.csproj" />

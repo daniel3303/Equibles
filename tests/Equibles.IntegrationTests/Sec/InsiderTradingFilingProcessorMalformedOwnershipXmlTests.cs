@@ -35,8 +35,7 @@ public class InsiderTradingFilingProcessorMalformedOwnershipXmlTests
         var dbContext = TestDbContextFactory.Create(
             new InsiderTradingModuleConfiguration(),
             new CommonStocksModuleConfiguration(),
-            new ErrorsModuleConfiguration(),
-            new MessagingModuleConfiguration()
+            new ErrorsModuleConfiguration()
         );
 
         var errorRepo = new ErrorRepository(dbContext);

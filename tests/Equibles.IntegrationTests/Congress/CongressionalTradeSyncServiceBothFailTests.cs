@@ -51,7 +51,7 @@ public class CongressionalTradeSyncServiceBothFailTests
         // No way to assert the absence of ProcessTransactions directly without
         // service-resolution side effects — but the test reaching here without
         // throw is itself the proof: ProcessTransactions calls
-        // GetRequiredService<EquiblesDbContext> on the same empty scope factory,
+        // GetRequiredService<EquiblesFinancialDbContext> on the same empty scope factory,
         // which would also throw if reached, and there is no outer catch to swallow it.
         true.Should().BeTrue();
     }

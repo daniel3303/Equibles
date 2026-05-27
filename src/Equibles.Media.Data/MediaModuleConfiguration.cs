@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Media.Data;
 
-public class MediaModuleConfiguration : Equibles.Data.IModuleConfiguration
+public class MediaModuleConfiguration : Equibles.Data.IFinancialModule
 {
     public void ConfigureEntities(ModelBuilder builder)
     {

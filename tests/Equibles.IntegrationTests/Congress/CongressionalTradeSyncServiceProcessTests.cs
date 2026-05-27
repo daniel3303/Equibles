@@ -41,7 +41,7 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     private CongressionalTradeSyncService BuildSut()
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(EquiblesDbContext), DbContext),
+            (typeof(EquiblesFinancialDbContext), DbContext),
             (typeof(CongressMemberRepository), new CongressMemberRepository(DbContext)),
             (typeof(CommonStockRepository), new CommonStockRepository(DbContext))
         );

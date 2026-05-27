@@ -6,7 +6,7 @@ namespace Equibles.Sec.Repositories;
 
 public class FailToDeliverRepository : BaseRepository<FailToDeliver>
 {
-    public FailToDeliverRepository(EquiblesDbContext dbContext)
+    public FailToDeliverRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public IQueryable<FailToDeliver> GetByStock(CommonStock stock)

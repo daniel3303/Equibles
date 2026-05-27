@@ -6,7 +6,7 @@ namespace Equibles.Holdings.Repositories;
 
 public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
 {
-    public InstitutionalHolderRepository(EquiblesDbContext dbContext)
+    public InstitutionalHolderRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public async Task<InstitutionalHolder> GetByCik(string cik)
@@ -23,6 +23,25 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
     {
         return GetAll().Where(h => EF.Functions.ILike(h.Name, $"%{search}%"));
     }
+
+    // Typeahead variant: matches a CIK prefix as well as a name substring so the
+    // picker can resolve either "berk" or "0001067" to the same row. The user's
+    // input is escaped first so '%' / '_' / '\\' in the query don't behave as LIKE
+    // wildcards (e.g. "50%" would otherwise match every name).
+    public IQueryable<InstitutionalHolder> SearchNameOrCik(string search)
+    {
+        var escaped = EscapeLikePattern(search);
+        var namePattern = $"%{escaped}%";
+        var cikPrefix = $"{escaped}%";
+        return GetAll()
+            .Where(h =>
+                EF.Functions.ILike(h.Name, namePattern, "\\")
+                || EF.Functions.ILike(h.Cik, cikPrefix, "\\")
+            );
+    }
+
+    private static string EscapeLikePattern(string input) =>
+        input.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
     public IQueryable<InstitutionalHolder> GetUnclassified()
     {

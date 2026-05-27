@@ -4,6 +4,16 @@
 @{
     ViewData["Title"] = "Overlap Matrix";
     ViewData["Description"] = "Pairwise overlap of institutional 13F holdings — count of shared tickers between each pair.";
+
+    var pickerVm = new InstitutionPickerViewModel
+    {
+        Picks = Model.InitialPicks,
+        MinPicks = InstitutionOverlapMatrixViewModel.MinCiks,
+        MaxPicks = InstitutionOverlapMatrixViewModel.MaxCiks,
+        CommonReportDates = Model.CommonReportDates,
+        SelectedDate = Model.SelectedDate,
+        SubmitLabel = "Compare",
+    };
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
@@ -14,34 +24,7 @@
         </p>
     </div>
 
-    <!-- CIK Input Form -->
-    <form method="get" class="mb-6">
-        <div class="flex flex-wrap gap-3 items-end">
-            <label class="form-control flex-1 min-w-[300px]">
-                <span class="label-text text-sm mb-1">CIKs (comma or space-separated, @InstitutionOverlapMatrixViewModel.MinCiks–@InstitutionOverlapMatrixViewModel.MaxCiks)</span>
-                <input type="text" name="ciks" value="@string.Join(", ", Model.RequestedCiks)"
-                       class="input input-bordered w-full"
-                       placeholder="e.g. 0001067983, 0001603466, 0001350694"
-                       aria-label="Institutional holder CIKs" />
-            </label>
-            @if (Model.CommonReportDates.Count > 0) {
-                <label class="form-control">
-                    <span class="label-text text-sm mb-1">Report Date</span>
-                    <select name="date" class="select select-bordered" aria-label="Report date">
-                        @foreach (var d in Model.CommonReportDates) {
-                            var isSelected = Model.SelectedDate.HasValue && d == Model.SelectedDate.Value;
-                            if (isSelected) {
-                                <option value="@d.ToString("yyyy-MM-dd")" selected>@d.ToString("MMM dd, yyyy")</option>
-                            } else {
-                                <option value="@d.ToString("yyyy-MM-dd")">@d.ToString("MMM dd, yyyy")</option>
-                            }
-                        }
-                    </select>
-                </label>
-            }
-            <button type="submit" class="btn btn-primary">Compare</button>
-        </div>
-    </form>
+    <partial name="_InstitutionPicker" model="pickerVm" />
 
     @if (Model.MissingCiks.Count > 0) {
         <div class="alert alert-warning mb-4">
@@ -56,8 +39,8 @@
                 <div class="text-base-content/30 mb-3">
                     <icon name="table-cells" size="12" />
                 </div>
-                <h2 class="text-base-content/60 mb-2">Enter at least @InstitutionOverlapMatrixViewModel.MinCiks CIKs</h2>
-                <p class="text-base-content/40 text-sm">Paste institutional holder CIKs above to see how their 13F portfolios overlap.</p>
+                <h2 class="text-base-content/60 mb-2">Pick at least @InstitutionOverlapMatrixViewModel.MinCiks institutions</h2>
+                <p class="text-base-content/40 text-sm">Search by name or CIK above to see how their 13F portfolios overlap.</p>
             </div>
         </div>
     } else if (Model.CommonReportDates.Count == 0 && Model.MissingCiks.Count < Model.RequestedCiks.Count) {

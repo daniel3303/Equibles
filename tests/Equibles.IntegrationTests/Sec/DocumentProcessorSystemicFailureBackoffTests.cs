@@ -40,10 +40,10 @@ public class DocumentProcessorSystemicFailureBackoffTests
             .Returns(ci => new List<float[]>(new float[][] { null }));
 
         var embeddingRepository = Substitute.For<EmbeddingRepository>(
-            (Equibles.Data.EquiblesDbContext)null
+            (Equibles.Data.EquiblesFinancialDbContext)null
         );
         var sut = new DocumentProcessor(
-            Substitute.For<ChunkRepository>((Equibles.Data.EquiblesDbContext)null),
+            Substitute.For<ChunkRepository>((Equibles.Data.EquiblesFinancialDbContext)null),
             embeddingRepository,
             embeddingClient,
             new ChunkingStrategy(new TokenCounter()),

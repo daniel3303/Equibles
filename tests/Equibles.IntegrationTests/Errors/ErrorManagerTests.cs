@@ -14,10 +14,7 @@ public class ErrorManagerTests
 
     public ErrorManagerTests()
     {
-        var context = TestDbContextFactory.Create(
-            new ErrorsModuleConfiguration(),
-            new MessagingModuleConfiguration()
-        );
+        var context = TestDbContextFactory.Create(new ErrorsModuleConfiguration());
         _repository = new ErrorRepository(context);
         _sut = new ErrorManager(_repository);
     }

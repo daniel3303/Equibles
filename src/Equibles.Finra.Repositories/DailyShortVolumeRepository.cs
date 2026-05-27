@@ -6,7 +6,7 @@ namespace Equibles.Finra.Repositories;
 
 public class DailyShortVolumeRepository : BaseRepository<DailyShortVolume>
 {
-    public DailyShortVolumeRepository(EquiblesDbContext dbContext)
+    public DailyShortVolumeRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public IQueryable<DailyShortVolume> GetByStock(CommonStock stock, DateOnly date)

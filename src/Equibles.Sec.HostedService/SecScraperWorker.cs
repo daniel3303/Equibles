@@ -14,6 +14,10 @@ public class SecScraperWorker : BaseScraperWorker
     protected override TimeSpan SleepInterval => TimeSpan.FromSeconds(15);
     protected override ErrorSource ErrorSource => ErrorSource.DocumentScraper;
 
+    // Staggered so the SEC scrapers don't drain the shared EDGAR request budget at
+    // deploy time before the time-sensitive 13F real-time sweep (delay 0) runs.
+    protected override TimeSpan StartupDelay => TimeSpan.FromMinutes(5);
+
     public SecScraperWorker(
         ILogger<SecScraperWorker> logger,
         IServiceScopeFactory scopeFactory,

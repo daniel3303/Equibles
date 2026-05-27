@@ -62,12 +62,9 @@ public partial class Program
         Equibles.Plugins.PluginLoader.LoadAll();
 
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-        // .AddMessaging() explicitly so the MassTransit outbox entities (in the
-        // shared migration snapshot) are always in this host's model too —
-        // AddAllModules' reflection only sees already-loaded assemblies.
-        builder.Services.AddEquiblesDbContext(
+        builder.Services.AddEquiblesFinancialDbContext(
             connectionString,
-            modules => modules.AddAllModules().AddMessaging()
+            modules => modules.AddAllModules()
         );
         builder.Services.AddAllRepositories();
 

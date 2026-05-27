@@ -11,23 +11,28 @@ namespace Equibles.CommonStocks.BusinessLogic;
 public class CommonStockManager
 {
     private readonly CommonStockRepository _commonStockRepository;
-    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly IBus _bus;
 
-    public CommonStockManager(
-        CommonStockRepository commonStockRepository,
-        IPublishEndpoint publishEndpoint
-    )
+    public CommonStockManager(CommonStockRepository commonStockRepository, IBus bus)
     {
         _commonStockRepository = commonStockRepository;
-        _publishEndpoint = publishEndpoint;
+        _bus = bus;
     }
 
     /// <summary>
     /// Sets a stock's CUSIP. When the value actually changes, publishes
-    /// <see cref="StockCusipChanged"/> (before SaveChanges, so the EF outbox
-    /// captures it in the same transaction) so the Holdings module can
+    /// <see cref="StockCusipChanged"/> after SaveChanges so the Holdings module can
     /// backfill quarterly 13F data sets that were processed while this stock
     /// was still unresolvable. A no-op change publishes nothing.
+    /// <para>
+    /// This is a financial-domain event, so it publishes via the root
+    /// <see cref="IBus"/> rather than the scoped <c>IPublishEndpoint</c>. A host
+    /// that enables a bus outbox on a different context (e.g. the commercial
+    /// customer database) would otherwise capture this publish into that context
+    /// and never deliver it, since this flow only saves the financial context.
+    /// Delivery is at-least-once; the consumer is idempotent, so a publish lost to
+    /// a crash is recovered on the next resolve.
+    /// </para>
     /// </summary>
     public async Task SetCusip(CommonStock commonStock, string cusip)
     {
@@ -41,11 +46,12 @@ public class CommonStockManager
         var previousCusip = commonStock.Cusip;
         commonStock.Cusip = cusip;
 
-        // Publish before SaveChanges (outbox pattern).
-        await _publishEndpoint.Publish(
+        await _commonStockRepository.SaveChanges();
+
+        // Publish via the root bus (bypasses any bus outbox) after the write commits.
+        await _bus.Publish(
             new StockCusipChanged(commonStock.Id, commonStock.Ticker, previousCusip, cusip)
         );
-        await _commonStockRepository.SaveChanges();
     }
 
     /// <summary>

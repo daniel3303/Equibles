@@ -37,17 +37,18 @@ public class DocumentScraperUpdateFiscalYearEndErrorIsolationTests
     [Fact]
     public async Task ScrapeDocuments_GetCompanyMetadataThrows_IsolatedAndDoesNotCountAsError()
     {
-        var options = new DbContextOptionsBuilder<EquiblesDbContext>()
+        var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .EnableServiceProviderCaching(false)
             .Options;
-        var dbContext = new EquiblesDbContext(
+        var dbContext = new EquiblesFinancialDbContext(
             options,
-            [
+            new IModuleConfiguration[]
+            {
                 new CommonStocksModuleConfiguration(),
                 new DocumentOnlyModuleConfiguration(),
                 new MediaModuleConfiguration(),
-            ]
+            }
         );
         dbContext.Database.EnsureCreated();
         var company = new CommonStock
@@ -69,7 +70,7 @@ public class DocumentScraperUpdateFiscalYearEndErrorIsolationTests
         services.AddSingleton(dbContext);
         services.AddScoped<CommonStockRepository>();
         services.AddScoped<DocumentRepository>();
-        services.AddSingleton(Substitute.For<IPublishEndpoint>());
+        services.AddSingleton(Substitute.For<IBus>());
         services.AddScoped<CommonStockManager>();
         services.AddSingleton(secEdgarClient);
         services.AddSingleton(Substitute.For<IDocumentPersistenceService>());

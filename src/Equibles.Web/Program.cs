@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Net.Sockets;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Data.Extensions;
@@ -11,6 +12,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Serilog;
 using Serilog.Events;
 
@@ -46,14 +48,9 @@ public partial class Program
         Equibles.Plugins.PluginLoader.LoadAll();
 
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-        builder.Services.AddEquiblesDbContext(
+        builder.Services.AddEquiblesFinancialDbContext(
             connectionString,
-            // .AddMessaging() explicitly: the MassTransit outbox entities are in
-            // the shared migration snapshot, so every host that runs/validates
-            // migrations must include them or EF throws PendingModelChanges.
-            // AddAllModules' reflection only sees already-loaded assemblies, so
-            // the explicit call guarantees it deterministically.
-            modules => modules.AddAllModules().AddMessaging(),
+            modules => modules.AddAllModules(),
             migrationsAssembly: typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly
         );
         builder.Services.AddAllRepositories();
@@ -61,7 +58,7 @@ public partial class Program
         // AddAllRepositories) so new modules join global search with no host change.
         builder.Services.AddEquiblesSearch();
 
-        // MassTransit (Postgres SQL transport + EF outbox in EquiblesDbContext).
+        // MassTransit (Postgres SQL transport, no outbox in OSS — direct publish).
         // Web subscribes to events published by other hosts — e.g. the live
         // ScraperActivity feed from the worker. The consumer scan is restricted
         // to Equibles.Web's own assembly: worker-only consumers (e.g. the
@@ -148,10 +145,59 @@ public partial class Program
     {
         // Extended timeout for index rebuilds.
         using var scope = app.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         dbContext.Database.SetCommandTimeout(TimeSpan.FromHours(1));
-        await dbContext.Database.MigrateAsync();
+
+        // ParadeDB's init script briefly accepts connections on the Unix
+        // socket while the TCP listener is still down, which can release us
+        // a few seconds before Postgres is reachable. Retry transient
+        // connection failures; non-connection errors fail fast.
+        await RetryOnTransientConnectionFailure(
+            () => dbContext.Database.MigrateAsync(),
+            logger,
+            maxAttempts: 30,
+            delay: TimeSpan.FromSeconds(2)
+        );
     }
+
+    public static async Task RetryOnTransientConnectionFailure(
+        Func<Task> operation,
+        Microsoft.Extensions.Logging.ILogger logger,
+        int maxAttempts,
+        TimeSpan delay
+    )
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await operation();
+                return;
+            }
+            catch (Exception ex) when (attempt < maxAttempts && IsTransientConnectionFailure(ex))
+            {
+                logger.LogWarning(
+                    ex,
+                    "Database not reachable yet (attempt {Attempt}/{MaxAttempts}); retrying in {Delay}s.",
+                    attempt,
+                    maxAttempts,
+                    delay.TotalSeconds
+                );
+                await Task.Delay(delay);
+            }
+        }
+    }
+
+    public static bool IsTransientConnectionFailure(Exception ex) =>
+        ex switch
+        {
+            // TCP refused / unreachable while ParadeDB is restarting.
+            NpgsqlException { InnerException: SocketException } => true,
+            // "cannot_connect_now" — server is in startup.
+            PostgresException { SqlState: "57P03" } => true,
+            _ => false,
+        };
 
     public static void ConfigurePipeline(WebApplication app)
     {

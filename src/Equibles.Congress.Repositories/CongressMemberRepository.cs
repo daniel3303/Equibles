@@ -6,7 +6,7 @@ namespace Equibles.Congress.Repositories;
 
 public class CongressMemberRepository : BaseRepository<CongressMember>
 {
-    public CongressMemberRepository(EquiblesDbContext dbContext)
+    public CongressMemberRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public async Task<CongressMember> GetByName(string name)

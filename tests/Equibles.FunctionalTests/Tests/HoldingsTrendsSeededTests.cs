@@ -1,4 +1,3 @@
-using Equibles.CommonStocks.Data.Models;
 using Equibles.FunctionalTests.Fixtures;
 using Equibles.Holdings.Data.Models;
 using FluentAssertions;
@@ -23,36 +22,43 @@ public class HoldingsTrendsSeededTests
     [Fact]
     public async Task Trends_WithTwoQuarters_RendersChartCardsAndCreatesChartInstances()
     {
-        // Contract: /holdings/trends renders Chart.js trend charts when AumSnapshots
-        // is non-empty. The view serializes data inline and Chart.js creates instances
-        // on each <canvas> during DOMContentLoaded. Seeding two quarters in reverse
-        // insertion order verifies the controller's OrderBy(ReportDate) produces
-        // chronological labels for the charts.
-        var aaplId = Guid.NewGuid();
+        // Contract: /holdings/trends reads the per-quarter snapshot rows that
+        // HoldingsAggregateRefreshService writes after each 13F import, then
+        // renders Chart.js trend charts when the snapshot list is non-empty.
+        // The view serializes data inline and Chart.js creates instances on
+        // each <canvas> during DOMContentLoaded. Seeding two quarters in
+        // reverse insertion order verifies the controller's OrderBy(ReportDate)
+        // produces chronological labels for the charts. Aggregate-correctness
+        // is covered by HoldingsAggregateRefreshServiceTests at the integration
+        // tier; this test pins the rendered chart given already-aggregated rows.
         var q1 = new DateOnly(2024, 9, 30);
         var q2 = new DateOnly(2024, 12, 31);
 
         await _web.ResetAndSeedAsync(async db =>
         {
+            // Seed Q2 first (reverse chronological insertion) to verify OrderBy works
             db.Add(
-                new CommonStock
+                new AumQuarterlySnapshot
                 {
-                    Id = aaplId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
+                    ReportDate = q2,
+                    TotalValue = 5_000_000_000,
+                    FilerCount = 2,
+                    PositionCount = 2,
+                    StockCount = 1,
+                    FilingCount = 2,
                 }
             );
-
-            var filerA = new InstitutionalHolder { Cik = "F0000001", Name = "Filer A" };
-            var filerB = new InstitutionalHolder { Cik = "F0000002", Name = "Filer B" };
-            db.AddRange(filerA, filerB);
-
-            // Seed Q2 first (reverse chronological insertion) to verify OrderBy works
-            db.Add(MakeHolding(aaplId, filerA.Id, q2, 200, 2_000_000_000));
-            db.Add(MakeHolding(aaplId, filerB.Id, q2, 300, 3_000_000_000));
-            db.Add(MakeHolding(aaplId, filerA.Id, q1, 100, 1_000_000_000));
-
+            db.Add(
+                new AumQuarterlySnapshot
+                {
+                    ReportDate = q1,
+                    TotalValue = 1_000_000_000,
+                    FilerCount = 1,
+                    PositionCount = 1,
+                    StockCount = 1,
+                    FilingCount = 1,
+                }
+            );
             await Task.CompletedTask;
         });
 
@@ -106,23 +112,4 @@ public class HoldingsTrendsSeededTests
         labels![0].Should().Be("2024-09-30");
         labels[1].Should().Be("2024-12-31");
     }
-
-    private static InstitutionalHolding MakeHolding(
-        Guid stockId,
-        Guid holderId,
-        DateOnly reportDate,
-        long shares,
-        long value
-    ) =>
-        new()
-        {
-            CommonStockId = stockId,
-            InstitutionalHolderId = holderId,
-            ReportDate = reportDate,
-            FilingDate = reportDate.AddDays(45),
-            Value = value,
-            Shares = shares,
-            ShareType = ShareType.Shares,
-            InvestmentDiscretion = InvestmentDiscretion.Sole,
-        };
 }

@@ -4,6 +4,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Sec.FinancialFacts.Data.Enums;
@@ -36,11 +37,7 @@ public class FinancialStatementTools
         _financialFactRepository = financialFactRepository;
         _financialConceptRepository = financialConceptRepository;
         _commonStockRepository = commonStockRepository;
-        _runner = new McpToolRunner(
-            logger,
-            (tool, msg, stack, ctx) =>
-                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
-        );
+        _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
     [McpServerTool(Name = "GetFinancialStatement")]
@@ -73,10 +70,10 @@ public class FinancialStatementTools
                     return "A ticker symbol is required.";
 
                 var stock = await _commonStockRepository.GetByTicker(
-                    ticker.Trim().ToUpperInvariant()
+                    McpToolExecutor.NormalizeTicker(ticker)
                 );
                 if (stock == null)
-                    return $"Stock '{ticker}' not found.";
+                    return McpToolExecutor.StockNotFound(ticker);
 
                 if (!TryParseStatement(statement, out var statementType))
                     return $"Unknown statement '{statement}'. Use 'income', 'balance', or 'cashflow'.";

@@ -1,5 +1,4 @@
 using System.Net;
-using Equibles.CommonStocks.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Xunit;
@@ -13,49 +12,28 @@ public class HoldingsActivityControllerStatsTests
 
     public HoldingsActivityControllerStatsTests(WebHostFixture fixture) => _fixture = fixture;
 
-    // The stats dashboard (#1927) has zero integration coverage. This test
-    // pins that the route resolves, the view renders the quarterly history
-    // table with seeded data, and the summary cards display when at least
-    // one quarter of data exists — exercising routing → controller →
-    // GetAumByReportDate aggregate query → Razor view.
+    // The stats dashboard reads from the per-quarter snapshot table that the
+    // worker rebuilds on each 13F import (with a daily safety-net pass). This
+    // test pins that the route resolves, the controller reads the snapshot
+    // row, and the view renders the quarterly history table + summary cards.
+    // Aggregate-correctness (distinct filer/stock/filing counts) is covered
+    // by HoldingsAggregateRefreshServiceTests at the integration tier.
     [Fact]
-    public async Task Stats_WithSeededHoldings_RendersStatsTableAndSummaryCards()
+    public async Task Stats_WithSeededSnapshot_RendersStatsTableAndSummaryCards()
     {
-        var stockId = Guid.NewGuid();
-        var holderId = Guid.NewGuid();
         var reportDate = new DateOnly(2024, 12, 31);
 
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
+                new AumQuarterlySnapshot
                 {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
-            );
-            db.Add(
-                new InstitutionalHolder
-                {
-                    Id = holderId,
-                    Cik = "0004000001",
-                    Name = "Stats Test Fund LP",
-                }
-            );
-            db.Add(
-                new InstitutionalHolding
-                {
-                    CommonStockId = stockId,
-                    InstitutionalHolderId = holderId,
                     ReportDate = reportDate,
-                    FilingDate = reportDate.AddDays(45),
-                    Shares = 10_000,
-                    Value = 2_000_000,
-                    ShareType = ShareType.Shares,
-                    InvestmentDiscretion = InvestmentDiscretion.Sole,
-                    AccessionNumber = "acc-stats-test1",
+                    TotalValue = 2_000_000,
+                    FilerCount = 1,
+                    PositionCount = 1,
+                    StockCount = 1,
+                    FilingCount = 1,
                 }
             );
             await Task.CompletedTask;

@@ -104,12 +104,9 @@ public class CompanySyncServiceResolveCollisionTests : ParadeDbMcpTestBase
             (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
             (
                 typeof(CommonStockManager),
-                new CommonStockManager(
-                    new CommonStockRepository(DbContext),
-                    Substitute.For<IPublishEndpoint>()
-                )
+                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
             ),
-            (typeof(EquiblesDbContext), DbContext)
+            (typeof(EquiblesFinancialDbContext), DbContext)
         );
 
         var sut = new CompanySyncService(

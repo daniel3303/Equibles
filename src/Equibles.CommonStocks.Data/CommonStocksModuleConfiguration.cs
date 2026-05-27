@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.Data;
 
-public class CommonStocksModuleConfiguration : Equibles.Data.IModuleConfiguration
+public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
 {
     public void ConfigureEntities(ModelBuilder builder)
     {

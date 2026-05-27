@@ -272,7 +272,7 @@ public class HomeControllerTests
 
 public class StocksControllerTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly CommonStockRepository _commonStockRepository;
     private readonly InstitutionalHolderRepository _institutionalHolderRepository;
     private readonly InstitutionalHoldingRepository _institutionalHoldingRepository;
@@ -590,7 +590,7 @@ public class StocksControllerTests : IDisposable
 
 public class EconomicDataControllerTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly FredSeriesRepository _seriesRepository;
     private readonly FredObservationRepository _observationRepository;
     private readonly ILogger<EconomicDataController> _logger = Substitute.For<
@@ -867,7 +867,7 @@ public class EconomicDataControllerTests : IDisposable
 
 public class StatusControllerTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly ErrorRepository _errorRepository;
     private readonly ErrorManager _errorManager;
     private readonly IFlashMessage _flashMessage = Substitute.For<IFlashMessage>();
@@ -891,7 +891,6 @@ public class StatusControllerTests : IDisposable
             new FredModuleConfiguration(),
             new YahooModuleConfiguration(),
             new ErrorsModuleConfiguration(),
-            new MessagingModuleConfiguration(),
             new CftcModuleConfiguration(),
             new CboeModuleConfiguration()
         );

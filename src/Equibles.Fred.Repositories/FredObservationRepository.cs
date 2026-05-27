@@ -5,7 +5,7 @@ namespace Equibles.Fred.Repositories;
 
 public class FredObservationRepository : BaseRepository<FredObservation>
 {
-    public FredObservationRepository(EquiblesDbContext dbContext)
+    public FredObservationRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public IQueryable<FredObservation> GetBySeries(FredSeries series)

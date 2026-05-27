@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Sec.Repositories;
@@ -27,11 +28,7 @@ public class FailToDeliverTools
     {
         _ftdRepository = ftdRepository;
         _commonStockRepository = commonStockRepository;
-        _runner = new McpToolRunner(
-            logger,
-            (tool, msg, stack, ctx) =>
-                errorManager.Create(ErrorSource.McpTool, tool, msg, stack, ctx)
-        );
+        _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
     [McpServerTool(Name = "GetFailsToDeliver")]
@@ -52,18 +49,15 @@ public class FailToDeliverTools
             async () =>
             {
                 var stock = await _commonStockRepository.GetByTicker(
-                    ticker.Trim().ToUpperInvariant()
+                    McpToolExecutor.NormalizeTicker(ticker)
                 );
                 if (stock == null)
-                    return $"Stock '{ticker}' not found.";
+                    return McpToolExecutor.StockNotFound(ticker);
 
-                var start = McpToolExecutor.ParseDateOr(
+                var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
-                );
-                var end = McpToolExecutor.ParseDateOr(
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow)
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
                 );
 
                 var records = await _ftdRepository

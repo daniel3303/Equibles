@@ -11,7 +11,7 @@ namespace Equibles.IntegrationTests.InsiderTrading;
 
 public class InsiderOwnerRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly InsiderOwnerRepository _repository;
 
     public InsiderOwnerRepositoryTests()
@@ -166,7 +166,7 @@ public class InsiderOwnerRepositoryTests : IDisposable
 
 public class InsiderTransactionRepositoryTests : IDisposable
 {
-    private readonly EquiblesDbContext _dbContext;
+    private readonly EquiblesFinancialDbContext _dbContext;
     private readonly InsiderTransactionRepository _repository;
 
     public InsiderTransactionRepositoryTests()

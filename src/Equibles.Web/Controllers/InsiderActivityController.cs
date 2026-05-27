@@ -27,6 +27,7 @@ public class InsiderActivityController : BaseController
 
         var topBuys = await _transactionRepository
             .GetRecentByType(TransactionCode.Purchase, since)
+            .Where(t => t.IsPriceValid)
             .OrderByDescending(t => t.Shares * t.PricePerShare)
             .Take(InsiderDashboardViewModel.RowCap)
             .Select(t => new InsiderDashboardRow
@@ -45,6 +46,7 @@ public class InsiderActivityController : BaseController
 
         var topSells = await _transactionRepository
             .GetRecentByType(TransactionCode.Sale, since)
+            .Where(t => t.IsPriceValid)
             .OrderByDescending(t => t.Shares * t.PricePerShare)
             .Take(InsiderDashboardViewModel.RowCap)
             .Select(t => new InsiderDashboardRow
@@ -63,6 +65,7 @@ public class InsiderActivityController : BaseController
 
         var biggest = await _transactionRepository
             .GetRecent(since)
+            .Where(t => t.IsPriceValid)
             .OrderByDescending(t => t.Shares * t.PricePerShare)
             .Take(InsiderDashboardViewModel.RowCap)
             .Select(t => new InsiderDashboardRow

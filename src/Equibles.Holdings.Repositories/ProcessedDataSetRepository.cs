@@ -6,7 +6,7 @@ namespace Equibles.Holdings.Repositories;
 
 public class ProcessedDataSetRepository : BaseRepository<ProcessedDataSet>
 {
-    public ProcessedDataSetRepository(EquiblesDbContext dbContext)
+    public ProcessedDataSetRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public async Task<bool> Exists(string fileName)

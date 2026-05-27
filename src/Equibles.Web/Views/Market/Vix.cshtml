@@ -58,44 +58,19 @@
             </div>
         }
         @if (Model.Mean.HasValue) {
-            <div class="card bg-base-100 shadow-sm">
-                <div class="card-body p-3">
-                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Mean</div>
-                    <div class="text-lg font-bold tabular-nums">@Model.Mean.Value.ToString("N2")</div>
-                </div>
-            </div>
+            <partial name="_MetricCard" model='(Label: "Mean", Value: Model.Mean.Value.ToString("N2"))' />
         }
         @if (Model.Median.HasValue) {
-            <div class="card bg-base-100 shadow-sm">
-                <div class="card-body p-3">
-                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Median</div>
-                    <div class="text-lg font-bold tabular-nums">@Model.Median.Value.ToString("N2")</div>
-                </div>
-            </div>
+            <partial name="_MetricCard" model='(Label: "Median", Value: Model.Median.Value.ToString("N2"))' />
         }
         @if (Model.Min.HasValue) {
-            <div class="card bg-base-100 shadow-sm">
-                <div class="card-body p-3">
-                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Min</div>
-                    <div class="text-lg font-bold tabular-nums">@Model.Min.Value.ToString("N2")</div>
-                </div>
-            </div>
+            <partial name="_MetricCard" model='(Label: "Min", Value: Model.Min.Value.ToString("N2"))' />
         }
         @if (Model.Max.HasValue) {
-            <div class="card bg-base-100 shadow-sm">
-                <div class="card-body p-3">
-                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Max</div>
-                    <div class="text-lg font-bold tabular-nums">@Model.Max.Value.ToString("N2")</div>
-                </div>
-            </div>
+            <partial name="_MetricCard" model='(Label: "Max", Value: Model.Max.Value.ToString("N2"))' />
         }
         @if (Model.StdDev.HasValue) {
-            <div class="card bg-base-100 shadow-sm">
-                <div class="card-body p-3">
-                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Std Dev</div>
-                    <div class="text-lg font-bold tabular-nums">@Model.StdDev.Value.ToString("N2")</div>
-                </div>
-            </div>
+            <partial name="_MetricCard" model='(Label: "Std Dev", Value: Model.StdDev.Value.ToString("N2"))' />
         }
     </div>
 

@@ -1,6 +1,7 @@
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.Holdings.Repositories;
 using Equibles.Worker;
@@ -22,6 +23,14 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
     // Minimum lookback so the worker always re-sweeps recent days even when
     // the quarterly data set is up to date (catches late/amended filings).
     protected virtual int MinLookbackDays => 7;
+
+    // Once a watermark exists, every cycle still re-sweeps this many recent days
+    // so late/amended filings (which carry a fresh accession) are picked up even
+    // after the watermark has advanced past their report period.
+    private const int TrailingReSweepDays = 14;
+
+    // Identifies this worker's row in RealtimeSweepState.
+    private const string WorkerStateName = "Holdings13FRealtime";
 
     private readonly WorkerOptions _workerOptions;
     private readonly IConfiguration _configuration;
@@ -61,28 +70,102 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
         var minReportDate = DateOnly.FromDateTime(startDate);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        var lookbackDays = await ComputeLookbackDays(startDate, today);
-
-        Logger.LogInformation(
-            "13F real-time ingestion sweeping {LookbackDays} days of EDGAR daily index",
-            lookbackDays
-        );
-
         await using var scope = ScopeFactory.CreateAsyncScope();
+        var stateRepo = scope.ServiceProvider.GetRequiredService<RealtimeSweepStateRepository>();
         var ingestionService =
             scope.ServiceProvider.GetRequiredService<Realtime13FIngestionService>();
 
-        var count = await ingestionService.IngestRecentFilings(
+        var state = await stateRepo.GetByWorker(WorkerStateName).FirstOrDefaultAsync(stoppingToken);
+
+        // Cold start (no watermark) backfills the season via the quarter-floor
+        // lookback; once a watermark exists we only resume from it plus the
+        // trailing re-sweep, so steady-state cycles fetch ~14 days, not ~90.
+        var firstRunLookbackDays = state == null ? await ComputeLookbackDays(startDate, today) : 0;
+        var windowStart = ComputeWindowStart(
+            today,
+            state?.SweptThrough,
+            TrailingReSweepDays,
+            firstRunLookbackDays
+        );
+        var lookbackDays = today.DayNumber - windowStart.DayNumber + 1;
+
+        Logger.LogInformation(
+            "13F real-time ingestion sweeping {LookbackDays} days of EDGAR daily index (from {Start:yyyy-MM-dd})",
+            lookbackDays,
+            windowStart
+        );
+
+        var result = await ingestionService.IngestRecentFilings(
             today,
             lookbackDays,
             minReportDate,
             stoppingToken
         );
 
+        // Advance the watermark only past days that swept cleanly: a throttled or
+        // failed day holds it back so the gap is re-swept next cycle.
+        var newWatermark = ComputeNextWatermark(today, result.EarliestFailedDate);
+        await SaveWatermark(stateRepo, state, newWatermark);
+
         Logger.LogInformation(
-            "13F real-time ingestion cycle complete: {Count} filings processed",
-            count
+            "13F real-time ingestion cycle complete: {Count} filings processed, swept through {Watermark:yyyy-MM-dd}",
+            result.FilingsImported,
+            newWatermark
         );
+    }
+
+    /// <summary>
+    /// The first daily-index date to sweep. With no watermark (cold start) it
+    /// goes back <paramref name="firstRunLookbackDays"/> days. With a watermark
+    /// it resumes from it, but never covers fewer than the trailing re-sweep
+    /// window so recent late/amended filings are always re-checked.
+    /// </summary>
+    internal static DateOnly ComputeWindowStart(
+        DateOnly today,
+        DateOnly? watermark,
+        int trailingDays,
+        int firstRunLookbackDays
+    )
+    {
+        if (!watermark.HasValue)
+            return today.AddDays(-(Math.Max(firstRunLookbackDays, 1) - 1));
+
+        var trailingStart = today.AddDays(-trailingDays);
+        return watermark.Value < trailingStart ? watermark.Value : trailingStart;
+    }
+
+    /// <summary>
+    /// The watermark to persist after a cycle: today when every day swept
+    /// cleanly, otherwise the day before the earliest failed day so it (and
+    /// everything older that was skipped) is re-swept next cycle.
+    /// </summary>
+    internal static DateOnly ComputeNextWatermark(DateOnly today, DateOnly? earliestFailedDate) =>
+        earliestFailedDate.HasValue ? earliestFailedDate.Value.AddDays(-1) : today;
+
+    private static async Task SaveWatermark(
+        RealtimeSweepStateRepository repo,
+        RealtimeSweepState existing,
+        DateOnly sweptThrough
+    )
+    {
+        if (existing == null)
+        {
+            repo.Add(
+                new RealtimeSweepState
+                {
+                    WorkerName = WorkerStateName,
+                    SweptThrough = sweptThrough,
+                    UpdatedAt = DateTime.UtcNow,
+                }
+            );
+        }
+        else
+        {
+            existing.SweptThrough = sweptThrough;
+            existing.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await repo.SaveChanges();
     }
 
     /// <summary>
@@ -94,7 +177,7 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
     {
         var allFileNames = HoldingsDataSetClient.GetDataSetFileNames(startDate);
         if (allFileNames.Count == 0)
-            return MinLookbackDays;
+            return EffectiveMinLookback(today, MinLookbackDays);
 
         await using var scope = ScopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
@@ -123,11 +206,39 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
         }
 
         if (!latestEndDate.HasValue)
-            return MinLookbackDays;
+            return EffectiveMinLookback(today, MinLookbackDays);
 
         // Sweep from the day after the last bulk data set's coverage ends
         var gap = today.DayNumber - latestEndDate.Value.DayNumber;
-        return Math.Max(gap, MinLookbackDays);
+        return Math.Max(gap, EffectiveMinLookback(today, MinLookbackDays));
+    }
+
+    /// <summary>
+    /// The lookback floor. When no processed bulk data set is available to
+    /// measure from (fresh deploy, reset volume, or the startup race against
+    /// <see cref="HoldingsScraperWorker"/>'s backfill), a flat 7-day window
+    /// would skip a whole filing season's worth of submissions: 13F filers
+    /// have 45 days after a quarter end to submit, so a window narrower than
+    /// the gap to the latest completed quarter end misses on-time filings.
+    /// Flooring at that gap keeps the current season covered regardless of
+    /// tracking state, and makes the backfill race harmless.
+    /// </summary>
+    internal static int EffectiveMinLookback(DateOnly today, int minLookbackDays) =>
+        Math.Max(minLookbackDays, today.DayNumber - LatestQuarterEnd(today).DayNumber);
+
+    /// <summary>
+    /// The end of the calendar quarter immediately preceding the one that
+    /// contains <paramref name="today"/> — the latest 13F reporting period
+    /// whose 45-day filing window is open (filings only appear after a period
+    /// ends). Dates in Jan–Mar return the previous year's 31 Dec.
+    /// </summary>
+    internal static DateOnly LatestQuarterEnd(DateOnly today)
+    {
+        const int monthsPerQuarter = 3;
+        var endMonth = (today.Month - 1) / monthsPerQuarter * monthsPerQuarter; // 0, 3, 6, 9
+        return endMonth == 0
+            ? new DateOnly(today.Year - 1, 12, 31)
+            : new DateOnly(today.Year, endMonth, DateTime.DaysInMonth(today.Year, endMonth));
     }
 
     /// <summary>

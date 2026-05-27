@@ -19,7 +19,7 @@ namespace Equibles.IntegrationTests.CommonStocks;
 public class CommonStockManagerSetCusipCaseInsensitiveTests
 {
     private readonly CommonStockManager _sut;
-    private readonly IPublishEndpoint _publishEndpoint = Substitute.For<IPublishEndpoint>();
+    private readonly IBus _publishEndpoint = Substitute.For<IBus>();
     private readonly CommonStockRepository _repository;
 
     public CommonStockManagerSetCusipCaseInsensitiveTests()

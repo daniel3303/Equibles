@@ -15,7 +15,7 @@ public class ChunkRepository : BaseRepository<Chunk>
     // already returned Empty, pinning the Npgsql connection (issue #1026).
     private const int HybridSearchCommandTimeoutSeconds = 5;
 
-    public ChunkRepository(EquiblesDbContext dbContext)
+    public ChunkRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     public async Task<List<Chunk>> HybridSearch(

@@ -6,7 +6,7 @@ namespace Equibles.Sec.FinancialFacts.Repositories;
 
 public class FinancialConceptRepository : BaseRepository<FinancialConcept>
 {
-    public FinancialConceptRepository(EquiblesDbContext dbContext)
+    public FinancialConceptRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
     /// <summary>

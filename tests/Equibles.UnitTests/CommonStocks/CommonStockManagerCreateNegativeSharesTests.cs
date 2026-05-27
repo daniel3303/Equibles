@@ -12,12 +12,15 @@ namespace Equibles.UnitTests.CommonStocks;
 
 public class CommonStockManagerCreateNegativeSharesTests
 {
-    private static EquiblesDbContext NewDb()
+    private static EquiblesFinancialDbContext NewDb()
     {
-        var options = new DbContextOptionsBuilder<EquiblesDbContext>()
+        var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
-        return new EquiblesDbContext(options, [new CommonStocksModuleConfiguration()]);
+        return new EquiblesFinancialDbContext(
+            options,
+            new IModuleConfiguration[] { new CommonStocksModuleConfiguration() }
+        );
     }
 
     [Fact]
@@ -27,7 +30,7 @@ public class CommonStockManagerCreateNegativeSharesTests
         // must never be negative — the validator should reject it before persist.
         var db = NewDb();
         var repo = Substitute.For<CommonStockRepository>(db);
-        var sut = new CommonStockManager(repo, Substitute.For<IPublishEndpoint>());
+        var sut = new CommonStockManager(repo, Substitute.For<IBus>());
         var stock = new CommonStock
         {
             Ticker = "TEST",

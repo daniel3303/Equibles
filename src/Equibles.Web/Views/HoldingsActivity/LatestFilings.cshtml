@@ -58,11 +58,9 @@
                         </tr>
                     }
                     @if (Model.Filings.Count == 0) {
-                        <tr>
-                            <td colspan="8" class="text-center py-10 text-base-content/60">
-                                No 13F filings have been imported yet. The feed populates once the worker finishes its first 13F cycle.
-                            </td>
-                        </tr>
+                        <empty-row colspan="8">
+                            No 13F filings have been imported yet. The feed populates once the worker finishes its first 13F cycle.
+                        </empty-row>
                     }
                 </tbody>
             </table>

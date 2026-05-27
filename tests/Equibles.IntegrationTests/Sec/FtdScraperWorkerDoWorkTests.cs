@@ -25,7 +25,7 @@ namespace Equibles.IntegrationTests.Sec;
 public class FtdScraperWorkerDoWorkTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
-    private readonly List<EquiblesDbContext> _contexts = [];
+    private readonly List<EquiblesFinancialDbContext> _contexts = [];
 
     public FtdScraperWorkerDoWorkTests(ParadeDbFixture fixture) => _fixture = fixture;
 
