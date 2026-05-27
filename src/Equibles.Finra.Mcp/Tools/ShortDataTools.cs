@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -237,7 +238,9 @@ public class ShortDataTools
     }
 
     private static string FormatSignedChange(long change) =>
-        change >= 0 ? $"+{change:N0}" : change.ToString("N0");
+        change >= 0
+            ? $"+{change.ToString("N0", CultureInfo.InvariantCulture)}"
+            : change.ToString("N0", CultureInfo.InvariantCulture);
 
     private async Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker)
     {

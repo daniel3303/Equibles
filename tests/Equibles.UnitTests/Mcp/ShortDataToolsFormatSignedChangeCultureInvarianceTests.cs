@@ -34,9 +34,7 @@ public class ShortDataToolsFormatSignedChangeCultureInvarianceTests
     // static, restore in finally. Expected: "+1,234,567" with
     // ASCII commas. Failure manifests as the comma-vs-dot
     // separator mismatch.
-    [Fact(
-        Skip = "GH-2444 — FormatSignedChange renders N0 thousand separator with host CurrentCulture instead of invariant"
-    )]
+    [Fact]
     public void FormatSignedChange_PositiveValueUnderNonInvariantCulture_RendersWithInvariantCommaThousandSeparator()
     {
         var method = typeof(ShortDataTools).GetMethod(
