@@ -1,4 +1,5 @@
 using System.Net;
+using System.Reflection;
 using System.Text;
 using Equibles.Web.Models;
 using Equibles.Web.Services;
@@ -119,7 +120,10 @@ public class VersionCheckServiceTests
 
         Assert.True(result.UpdateAvailable);
         Assert.Equal("99.0.0", result.LatestVersion);
-        Assert.Equal("1.1.1", result.CurrentVersion);
+        // Read the live assembly version the same way the production code does,
+        // so this stays correct across version bumps. Hardcoded "1.1.1" broke
+        // when the web project rolled to 1.2.0.
+        Assert.Equal(ExpectedCurrentVersion(), result.CurrentVersion);
         Assert.Equal(
             "https://github.com/daniel3303/Equibles/releases/tag/v99.0.0",
             result.ReleaseUrl
@@ -160,5 +164,28 @@ public class VersionCheckServiceTests
         var result = sut.Get();
 
         Assert.False(result.UpdateAvailable);
+    }
+
+    // Mirrors VersionCheckService.GetCurrentVersion: prefer the assembly's
+    // InformationalVersion (stripped of a leading "v" + pre-release/build
+    // metadata), fall back to AssemblyName.Version. The SUT and the assertion
+    // must read from the same source so a project Version bump can't desync them.
+    private static string ExpectedCurrentVersion()
+    {
+        var assembly = typeof(VersionCheckService).Assembly;
+        var informational = assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion;
+        if (!string.IsNullOrEmpty(informational))
+        {
+            var v = informational.Trim();
+            if (v.StartsWith('v') || v.StartsWith('V'))
+            {
+                v = v[1..];
+            }
+            var cut = v.IndexOfAny(['-', '+']);
+            return cut >= 0 ? v[..cut] : v;
+        }
+        return assembly.GetName().Version?.ToString();
     }
 }
