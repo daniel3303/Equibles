@@ -50,7 +50,15 @@ public class Chunk
     /// Denormalized from <see cref="Document"/>.<see cref="Documents.Document.CommonStock"/>.<see cref="CommonStocks.CommonStock.Ticker"/>.
     /// Stored on the chunk so Tantivy can filter by ticker without SQL joins.
     /// </summary>
+    /// <remarks>
+    /// Indexed with the <c>raw</c> tokenizer so the whole symbol is a single token.
+    /// The default tokenizer splits on dash/slash, which would shatter class-share
+    /// tickers (e.g. <c>BRK-B</c> → <c>brk</c>/<c>b</c>) and make an exact term filter
+    /// impossible. <c>Fast = true</c> stores it columnar so the filter can be pushed
+    /// into the BM25 index instead of post-filtering scored chunks on the heap (#2157).
+    /// </remarks>
     [MaxLength(20)]
+    [Bm25Text(Tokenizer = Bm25Tokenizer.Raw, Fast = true)]
     public string Ticker { get; set; }
 
     /// <summary>
