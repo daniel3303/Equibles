@@ -15,15 +15,7 @@
     </div>
 
     @if (Model.Latest == null) {
-        <div class="card bg-base-100 shadow-sm">
-            <div class="card-body items-center text-center py-12">
-                <div class="text-base-content/30 mb-3">
-                    <icon name="chart-bar" size="12" />
-                </div>
-                <h2 class="text-base-content/60 mb-2">No 13F data yet</h2>
-                <p class="text-base-content/40 text-sm">Once at least one quarter of 13F filings has been ingested, the statistics appear here.</p>
-            </div>
-        </div>
+        <partial name="_No13FDataYet" model='(IconName: "chart-bar", Message: "Once at least one quarter of 13F filings has been ingested, the statistics appear here.")' />
     } else {
         <!-- Latest Quarter Summary Cards -->
         <div class="flex items-baseline gap-2 mb-3">

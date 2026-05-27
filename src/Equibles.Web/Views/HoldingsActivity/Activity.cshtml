@@ -8,15 +8,7 @@
 <h1 class="text-2xl font-bold mb-4">13F Quarterly Activity</h1>
 
 @if (Model.AvailableDates.Count == 0) {
-    <div class="card bg-base-100 shadow-sm">
-        <div class="card-body items-center text-center py-12">
-            <div class="text-base-content/30 mb-3">
-                <icon name="building-office" size="12" />
-            </div>
-            <h2 class="text-base-content/60 mb-2">No 13F data yet</h2>
-            <p class="text-base-content/40 text-sm">Once at least one quarter of 13F filings has been ingested, the market-wide activity boards appear here.</p>
-        </div>
-    </div>
+    <partial name="_No13FDataYet" model='(IconName: "building-office", Message: "Once at least one quarter of 13F filings has been ingested, the market-wide activity boards appear here.")' />
 } else {
     <!-- ReportDate selector + comparison subtitle -->
     <div class="mb-4 text-sm">
