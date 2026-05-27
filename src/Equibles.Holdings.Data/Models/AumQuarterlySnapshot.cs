@@ -24,4 +24,7 @@ public class AumQuarterlySnapshot
     public int FilingCount { get; set; }
 
     public DateTime ComputedAt { get; set; } = DateTime.UtcNow;
+
+    [NotMapped]
+    public double AvgPositionsPerFiler => FilerCount > 0 ? (double)PositionCount / FilerCount : 0;
 }

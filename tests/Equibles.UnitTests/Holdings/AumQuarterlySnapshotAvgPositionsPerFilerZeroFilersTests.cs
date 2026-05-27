@@ -1,4 +1,4 @@
-using Equibles.Holdings.Repositories.Models;
+using Equibles.Holdings.Data.Models;
 
 namespace Equibles.UnitTests.Holdings;
 
@@ -10,12 +10,12 @@ namespace Equibles.UnitTests.Holdings;
 /// (double)PositionCount / FilerCount — would crash every page that reads
 /// the AUM trend data for an empty quarter.
 /// </summary>
-public class AumSnapshotAvgPositionsPerFilerZeroFilersTests
+public class AumQuarterlySnapshotAvgPositionsPerFilerZeroFilersTests
 {
     [Fact]
     public void AvgPositionsPerFiler_ZeroFilerCount_ReturnsZero()
     {
-        var snapshot = new AumSnapshot
+        var snapshot = new AumQuarterlySnapshot
         {
             ReportDate = new DateOnly(2024, 12, 31),
             TotalValue = 0,
