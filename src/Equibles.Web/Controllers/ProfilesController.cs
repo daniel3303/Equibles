@@ -230,6 +230,7 @@ public class ProfilesController : BaseController
             viewModel.Overlap = loaded.Overlap;
         }
 
+        viewModel.InitialPicks = await ResolvePicks(distinctCiks);
         return View(viewModel);
     }
 
@@ -320,6 +321,7 @@ public class ProfilesController : BaseController
             }
         }
 
+        viewModel.InitialPicks = await ResolvePicks(distinctCiks);
         return View(viewModel);
     }
 
@@ -508,8 +510,7 @@ public class ProfilesController : BaseController
                 .ToListAsync()
         ).ToDictionary(x => x.Cik, x => x.Name, StringComparer.OrdinalIgnoreCase);
 
-        return ciks
-            .Select(cik => new InstitutionPick
+        return ciks.Select(cik => new InstitutionPick
             {
                 Cik = cik,
                 Name = byCik.GetValueOrDefault(cik),
