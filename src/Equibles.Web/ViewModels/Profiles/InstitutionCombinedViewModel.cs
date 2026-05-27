@@ -10,6 +10,10 @@ public class InstitutionCombinedViewModel
     public DateOnly? SelectedDate { get; set; }
     public FundOverlapResult Overlap { get; set; }
 
+    // Resolved name + CIK pairs for chip rendering on first paint; see
+    // [InstitutionOverlapMatrixViewModel.InitialPicks] for the same contract.
+    public List<InstitutionPick> InitialPicks { get; set; } = [];
+
     // Pre-computed per-row consensus count (number of funds with Value > 0 in the row's
     // slices). Ranking sort key — populated alongside Overlap by the controller.
     public Dictionary<Guid, int> FundsHoldingByStock { get; set; } = [];

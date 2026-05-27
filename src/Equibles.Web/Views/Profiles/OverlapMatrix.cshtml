@@ -4,6 +4,16 @@
 @{
     ViewData["Title"] = "Overlap Matrix";
     ViewData["Description"] = "Pairwise overlap of institutional 13F holdings — count of shared tickers between each pair.";
+
+    var pickerVm = new InstitutionPickerViewModel
+    {
+        Picks = Model.InitialPicks,
+        MinPicks = InstitutionOverlapMatrixViewModel.MinCiks,
+        MaxPicks = InstitutionOverlapMatrixViewModel.MaxCiks,
+        CommonReportDates = Model.CommonReportDates,
+        SelectedDate = Model.SelectedDate,
+        SubmitLabel = "Compare",
+    };
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
@@ -14,91 +24,7 @@
         </p>
     </div>
 
-    <!-- Institution picker — typeahead chips replace the raw CIK textbox. The hidden
-         `ciks` input is what posts to the controller; the visible search input drives
-         the autocomplete dropdown. If JS is disabled, the picker still renders the
-         chips read-only and the user can edit the hidden field via the fallback
-         textarea below. -->
-    <form method="get" class="mb-6" data-institution-picker-form>
-        <div class="flex flex-col gap-3">
-            <div class="flex flex-wrap gap-3 items-end">
-                <div class="form-control flex-1 min-w-[300px]"
-                     data-institution-picker
-                     data-search-url="@Url.Action("Search", "Institutions")"
-                     data-min-picks="@InstitutionOverlapMatrixViewModel.MinCiks"
-                     data-max-picks="@InstitutionOverlapMatrixViewModel.MaxCiks">
-                    <span class="label-text text-sm mb-1">
-                        Institutions (@InstitutionOverlapMatrixViewModel.MinCiks–@InstitutionOverlapMatrixViewModel.MaxCiks)
-                    </span>
-
-                    <!-- Chip container + visible text input. The whole row looks like a
-                         single DaisyUI .input so it blends with the rest of the form.
-                         Each chip carries its own <input name="ciks"> so the form submits
-                         repeated keys (?ciks=A&ciks=B&ciks=C), which is what ASP.NET's
-                         default string[] model binding expects. -->
-                    <div class="input input-bordered h-auto min-h-[3rem] py-2 flex flex-wrap gap-2 items-center cursor-text"
-                         data-institution-picker-box>
-                        <div class="flex flex-wrap gap-1.5 items-center" data-institution-picker-chips>
-                            @foreach (var pick in Model.InitialPicks) {
-                                var isMissing = string.IsNullOrEmpty(pick.Name);
-                                <span class="badge badge-lg gap-1 @(isMissing ? "badge-warning" : "badge-primary") badge-soft"
-                                      data-institution-chip
-                                      data-cik="@pick.Cik">
-                                    <input type="hidden" name="ciks" value="@pick.Cik" />
-                                    <span class="font-medium">
-                                        @(isMissing ? "(name unknown)" : pick.Name)
-                                    </span>
-                                    <span class="text-xs opacity-70 font-mono">@pick.Cik</span>
-                                    <button type="button"
-                                            class="btn btn-ghost btn-xs btn-circle"
-                                            aria-label="Remove @(isMissing ? pick.Cik : pick.Name)"
-                                            data-institution-chip-remove>
-                                        <icon name="x-mark" size="3" />
-                                    </button>
-                                </span>
-                            }
-                        </div>
-                        <input type="text"
-                               class="flex-1 min-w-[140px] bg-transparent border-0 focus:outline-none focus:ring-0 p-0"
-                               placeholder="@(Model.InitialPicks.Count == 0 ? "Type an institution name or CIK..." : "Add another...")"
-                               aria-label="Search institutions to add"
-                               autocomplete="off"
-                               data-institution-picker-search />
-                    </div>
-
-                    <!-- Autocomplete results dropdown, positioned absolutely by the JS. -->
-                    <div class="relative">
-                        <ul class="menu bg-base-100 rounded-box shadow-lg border border-base-300 absolute left-0 right-0 top-1 z-30 max-h-72 overflow-y-auto hidden"
-                            role="listbox"
-                            aria-label="Institution suggestions"
-                            data-institution-picker-results></ul>
-                    </div>
-
-                    <span class="label-text-alt text-xs text-base-content/50 mt-1"
-                          data-institution-picker-hint>
-                        Type at least 2 characters. Pick @InstitutionOverlapMatrixViewModel.MinCiks–@InstitutionOverlapMatrixViewModel.MaxCiks institutions.
-                    </span>
-                </div>
-
-                @if (Model.CommonReportDates.Count > 0) {
-                    <label class="form-control">
-                        <span class="label-text text-sm mb-1">Report Date</span>
-                        <select name="date" class="select select-bordered" aria-label="Report date">
-                            @foreach (var d in Model.CommonReportDates) {
-                                var isSelected = Model.SelectedDate.HasValue && d == Model.SelectedDate.Value;
-                                if (isSelected) {
-                                    <option value="@d.ToString("yyyy-MM-dd")" selected>@d.ToString("MMM dd, yyyy")</option>
-                                } else {
-                                    <option value="@d.ToString("yyyy-MM-dd")">@d.ToString("MMM dd, yyyy")</option>
-                                }
-                            }
-                        </select>
-                    </label>
-                }
-                <button type="submit" class="btn btn-primary">Compare</button>
-            </div>
-        </div>
-    </form>
+    <partial name="_InstitutionPicker" model="pickerVm" />
 
     @if (Model.MissingCiks.Count > 0) {
         <div class="alert alert-warning mb-4">
