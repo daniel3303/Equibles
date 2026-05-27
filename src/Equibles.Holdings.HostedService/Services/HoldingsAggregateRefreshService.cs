@@ -3,7 +3,7 @@ using Equibles.CommonStocks.Data.Models.Taxonomies;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
-using Equibles.Holdings.Repositories;
+using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.HostedService.Services;
@@ -24,8 +24,16 @@ namespace Equibles.Holdings.HostedService.Services;
 ///     by the event-driven path on each 13F import.</item>
 ///   <item><c>RebuildAllAsync</c> — enumerates distinct ReportDate values and
 ///     rebuilds each in its own DbContext scope; called by the daily
-///     safety-net job and the one-time first-boot backfill.</item>
+///     safety-net job and the one-time first-boot backfill. Each quarter is
+///     wrapped in its own try/catch so a single bad quarter (e.g. a unique-
+///     key collision from a parallel consumer rebuild) doesn't abort the
+///     whole pass.</item>
 /// </list>
+///
+/// Writes go through FlexLabs <c>UpsertRange</c> (single <c>INSERT … ON
+/// CONFLICT</c>) and <c>ExecuteDeleteAsync</c> (single <c>DELETE</c>) so the
+/// consumer and the safety-net worker can rebuild the same ReportDate
+/// concurrently without a TOCTOU race between "load existing → mutate → save".
 /// </summary>
 [Service]
 public class HoldingsAggregateRefreshService
@@ -86,15 +94,45 @@ public class HoldingsAggregateRefreshService
             reportDates.Count
         );
 
+        var failed = 0;
         foreach (var reportDate in reportDates)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            await RebuildQuarterInScope(
-                scope.ServiceProvider,
-                reportDate,
-                commandTimeout,
-                cancellationToken
+            try
+            {
+                await using var scope = _scopeFactory.CreateAsyncScope();
+                await RebuildQuarterInScope(
+                    scope.ServiceProvider,
+                    reportDate,
+                    commandTimeout,
+                    cancellationToken
+                );
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Defence in depth on top of the race-free upsert path. If one
+                // quarter throws (transient DB failure, schema drift, etc.),
+                // log and keep going — the rest of the snapshot table is still
+                // worth refreshing this cycle.
+                failed++;
+                _logger.LogError(
+                    ex,
+                    "Failed to rebuild holdings aggregate snapshot for {ReportDate}; continuing with remaining quarters",
+                    reportDate
+                );
+            }
+        }
+
+        if (failed > 0)
+        {
+            _logger.LogWarning(
+                "Holdings aggregate snapshot rebuild finished with {Failed}/{Total} quarter(s) failed",
+                failed,
+                reportDates.Count
             );
         }
     }
@@ -111,16 +149,13 @@ public class HoldingsAggregateRefreshService
         {
             dbContext.Database.SetCommandTimeout(commandTimeout.Value);
         }
-        var aumRepo = services.GetRequiredService<AumQuarterlySnapshotRepository>();
-        var sectorRepo = services.GetRequiredService<SectorQuarterlySnapshotRepository>();
 
-        await UpsertAumSnapshot(dbContext, aumRepo, reportDate, cancellationToken);
-        await UpsertSectorSnapshots(dbContext, sectorRepo, reportDate, cancellationToken);
+        await UpsertAumSnapshot(dbContext, reportDate, cancellationToken);
+        await UpsertSectorSnapshots(dbContext, reportDate, cancellationToken);
     }
 
-    private async Task UpsertAumSnapshot(
+    private static async Task UpsertAumSnapshot(
         EquiblesFinancialDbContext dbContext,
-        AumQuarterlySnapshotRepository aumRepo,
         DateOnly reportDate,
         CancellationToken cancellationToken
     )
@@ -143,54 +178,52 @@ public class HoldingsAggregateRefreshService
             })
             .FirstOrDefaultAsync(cancellationToken);
 
-        var existing = await aumRepo
-            .GetAll()
-            .FirstOrDefaultAsync(s => s.ReportDate == reportDate, cancellationToken);
-
         if (aggregate is null)
         {
             // Quarter exists only in the snapshot table now (e.g. all holdings
             // for it were deleted). Drop the stale row so /stats and /trends
             // don't keep reporting phantom AUM for a now-empty quarter.
-            if (existing is not null)
-            {
-                aumRepo.Delete(existing);
-                await aumRepo.SaveChanges();
-            }
+            await dbContext
+                .Set<AumQuarterlySnapshot>()
+                .Where(s => s.ReportDate == reportDate)
+                .ExecuteDeleteAsync(cancellationToken);
             return;
         }
 
-        if (existing is null)
+        var snapshot = new AumQuarterlySnapshot
         {
-            aumRepo.Add(
-                new AumQuarterlySnapshot
-                {
-                    ReportDate = reportDate,
-                    TotalValue = aggregate.TotalValue,
-                    FilerCount = aggregate.FilerCount,
-                    PositionCount = aggregate.PositionCount,
-                    StockCount = aggregate.StockCount,
-                    FilingCount = aggregate.FilingCount,
-                    ComputedAt = DateTime.UtcNow,
-                }
-            );
-        }
-        else
-        {
-            existing.TotalValue = aggregate.TotalValue;
-            existing.FilerCount = aggregate.FilerCount;
-            existing.PositionCount = aggregate.PositionCount;
-            existing.StockCount = aggregate.StockCount;
-            existing.FilingCount = aggregate.FilingCount;
-            existing.ComputedAt = DateTime.UtcNow;
-        }
+            ReportDate = reportDate,
+            TotalValue = aggregate.TotalValue,
+            FilerCount = aggregate.FilerCount,
+            PositionCount = aggregate.PositionCount,
+            StockCount = aggregate.StockCount,
+            FilingCount = aggregate.FilingCount,
+            ComputedAt = DateTime.UtcNow,
+        };
 
-        await aumRepo.SaveChanges();
+        // Single INSERT … ON CONFLICT (ReportDate) DO UPDATE …
+        // Race-free against a parallel rebuild for the same quarter.
+        await dbContext
+            .Set<AumQuarterlySnapshot>()
+            .UpsertRange(snapshot)
+            .On(s => s.ReportDate)
+            .WhenMatched(
+                (_, incoming) =>
+                    new AumQuarterlySnapshot
+                    {
+                        TotalValue = incoming.TotalValue,
+                        FilerCount = incoming.FilerCount,
+                        PositionCount = incoming.PositionCount,
+                        StockCount = incoming.StockCount,
+                        FilingCount = incoming.FilingCount,
+                        ComputedAt = incoming.ComputedAt,
+                    }
+            )
+            .RunAsync(cancellationToken);
     }
 
-    private async Task UpsertSectorSnapshots(
+    private static async Task UpsertSectorSnapshots(
         EquiblesFinancialDbContext dbContext,
-        SectorQuarterlySnapshotRepository sectorRepo,
         DateOnly reportDate,
         CancellationToken cancellationToken
     )
@@ -230,45 +263,47 @@ public class HoldingsAggregateRefreshService
             )
             .ToListAsync(cancellationToken);
 
-        var existing = await sectorRepo
-            .GetAll()
-            .Where(s => s.ReportDate == reportDate)
-            .ToListAsync(cancellationToken);
+        var computedAt = DateTime.UtcNow;
+        var snapshots = rows.Select(r => new SectorQuarterlySnapshot
+            {
+                ReportDate = reportDate,
+                SectorId = r.SectorId,
+                SectorName = r.SectorName,
+                TotalValue = r.TotalValue,
+                ComputedAt = computedAt,
+            })
+            .ToList();
 
-        var existingBySector = existing.ToDictionary(s => s.SectorId);
-        var seen = new HashSet<Guid>();
-
-        foreach (var row in rows)
+        if (snapshots.Count > 0)
         {
-            seen.Add(row.SectorId);
-            if (existingBySector.TryGetValue(row.SectorId, out var current))
-            {
-                current.SectorName = row.SectorName;
-                current.TotalValue = row.TotalValue;
-                current.ComputedAt = DateTime.UtcNow;
-            }
-            else
-            {
-                sectorRepo.Add(
-                    new SectorQuarterlySnapshot
-                    {
-                        ReportDate = reportDate,
-                        SectorId = row.SectorId,
-                        SectorName = row.SectorName,
-                        TotalValue = row.TotalValue,
-                        ComputedAt = DateTime.UtcNow,
-                    }
-                );
-            }
+            // Single INSERT … ON CONFLICT (ReportDate, SectorId) DO UPDATE …
+            // for the whole batch. Race-free against a parallel rebuild.
+            await dbContext
+                .Set<SectorQuarterlySnapshot>()
+                .UpsertRange(snapshots)
+                .On(s => new { s.ReportDate, s.SectorId })
+                .WhenMatched(
+                    (_, incoming) =>
+                        new SectorQuarterlySnapshot
+                        {
+                            SectorName = incoming.SectorName,
+                            TotalValue = incoming.TotalValue,
+                            ComputedAt = incoming.ComputedAt,
+                        }
+                )
+                .RunAsync(cancellationToken);
         }
 
         // Sectors that no longer have positions for this quarter — drop them
-        // so /trends doesn't render a chart line for an empty allocation.
-        foreach (var stale in existing.Where(s => !seen.Contains(s.SectorId)))
-        {
-            sectorRepo.Delete(stale);
-        }
-
-        await sectorRepo.SaveChanges();
+        // so /trends doesn't render a chart line for an empty allocation. A
+        // single DELETE … WHERE … NOT IN (…) removes the race window that the
+        // previous load-then-delete had. When `snapshots` is empty (the
+        // quarter has no remaining sector exposure), this collapses to
+        // "delete every sector row for this quarter".
+        var currentSectorIds = snapshots.Select(s => s.SectorId).ToList();
+        await dbContext
+            .Set<SectorQuarterlySnapshot>()
+            .Where(s => s.ReportDate == reportDate && !currentSectorIds.Contains(s.SectorId))
+            .ExecuteDeleteAsync(cancellationToken);
     }
 }
