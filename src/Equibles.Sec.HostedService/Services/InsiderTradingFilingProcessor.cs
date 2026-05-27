@@ -474,8 +474,8 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             "F" => TransactionCode.TaxPayment,
             "E" => TransactionCode.Expiration,
             "G" => TransactionCode.Gift,
-            "I" => TransactionCode.Inheritance,
-            "W" => TransactionCode.Discretionary,
+            "I" => TransactionCode.Discretionary,
+            "W" => TransactionCode.Inheritance,
             _ => TransactionCode.Other,
         };
     }
