@@ -122,6 +122,62 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ExecuteAsync_PartialSnapshotCoverage_BackfillsMissingQuarters()
+    {
+        // The realtime consumer can beat the worker to inserting a snapshot
+        // row for the current quarter. The naive "snapshot table empty" gate
+        // would skip the historical backfill in that case. With the coverage
+        // check, the worker sees one snapshot covering two holding quarters
+        // and runs the backfill anyway, picking up the missing quarter.
+        await SeedTwoQuarters();
+        await using (var seed = FreshContext())
+        {
+            seed.Add(
+                new AumQuarterlySnapshot
+                {
+                    ReportDate = Q4,
+                    TotalValue = 999_999_999, // sentinel — must get overwritten
+                    FilerCount = 99,
+                    PositionCount = 99,
+                    StockCount = 99,
+                    FilingCount = 99,
+                }
+            );
+            await seed.SaveChangesAsync();
+        }
+
+        var scopeFactory = ScopeFactory();
+        var refreshService = new HoldingsAggregateRefreshService(
+            scopeFactory,
+            NullLogger<HoldingsAggregateRefreshService>.Instance
+        );
+        var worker = new InstantTickWorker(scopeFactory, refreshService);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var run = worker.StartAsync(cts.Token);
+        await Task.Delay(TimeSpan.FromMilliseconds(500), cts.Token);
+        await cts.CancelAsync();
+        try
+        {
+            await run;
+        }
+        catch (OperationCanceledException) { }
+
+        await using var read = FreshContext();
+        var snapshots = await read.Set<AumQuarterlySnapshot>()
+            .OrderBy(s => s.ReportDate)
+            .ToListAsync();
+
+        snapshots.Should().HaveCount(2);
+        snapshots[0].ReportDate.Should().Be(Q3);
+        snapshots[0].TotalValue.Should().Be(100_000);
+        snapshots[1].ReportDate.Should().Be(Q4);
+        snapshots[1]
+            .TotalValue.Should()
+            .Be(200_000, "the sentinel row must be overwritten by the rebuild");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_NoHoldings_DoesNotCreatePhantomSnapshotRows()
     {
         // No holdings seeded — the worker should not invent rows out of nothing.

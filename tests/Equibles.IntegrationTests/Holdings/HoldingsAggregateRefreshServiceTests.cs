@@ -189,6 +189,37 @@ public class HoldingsAggregateRefreshServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RebuildQuarterAsync_ConcurrentRebuildsForSameQuarter_BothSucceed()
+    {
+        // The consumer (event-driven path) and the safety-net worker can race
+        // to rebuild the same ReportDate. The write path must be race-free —
+        // load-then-mutate would let both observe "row missing", both insert,
+        // and the second SaveChanges would hit the PK / composite-PK
+        // violation. UpsertRange + ExecuteDelete are single statements so
+        // both calls land cleanly and the final state is consistent.
+        await using var seed = FreshContext();
+        var tech = await SeedSector(seed, "Technology");
+        var industry = await SeedIndustry(seed, "Software", tech.Id);
+        var aapl = await SeedStock(seed, "AAPL", industry.Id);
+        var holder = await SeedHolder(seed, "H001");
+        seed.AddRange(MakeHolding(aapl, holder, Q4, 100_000, "acc-q4"));
+        await seed.SaveChangesAsync();
+
+        var service = BuildService();
+        var first = service.RebuildQuarterAsync(Q4, CancellationToken.None);
+        var second = service.RebuildQuarterAsync(Q4, CancellationToken.None);
+
+        await Task.WhenAll(first, second);
+
+        await using var read = FreshContext();
+        var rows = await read.Set<AumQuarterlySnapshot>()
+            .Where(s => s.ReportDate == Q4)
+            .ToListAsync();
+        rows.Should().ContainSingle();
+        rows[0].TotalValue.Should().Be(100_000);
+    }
+
+    [Fact]
     public async Task RebuildAllAsync_RebuildsEveryDistinctReportDate()
     {
         await using var seed = FreshContext();

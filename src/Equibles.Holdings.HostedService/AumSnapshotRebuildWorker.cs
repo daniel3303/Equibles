@@ -15,10 +15,11 @@ namespace Equibles.Holdings.HostedService;
 /// to a transient bus failure, or a snapshot row missed during a bulk
 /// historical replay, gets reconciled within 24h.
 ///
-/// On first boot (snapshot tables empty but the holdings table is not), the
-/// worker performs a one-off backfill of every existing quarter with an
-/// extended <c>CommandTimeout</c> for the initial pass — afterwards the
-/// per-quarter work is small enough that the default timeout is fine.
+/// On boot, the worker runs a one-off backfill with an extended
+/// <c>CommandTimeout</c> whenever the snapshot tables don't yet cover every
+/// quarter present in the holdings table. The naive "snapshot tables empty"
+/// gate this replaced lost the backfill whenever the realtime consumer beat
+/// the worker to inserting the first row.
 /// </summary>
 public class AumSnapshotRebuildWorker : BackgroundService
 {
@@ -57,7 +58,25 @@ public class AumSnapshotRebuildWorker : BackgroundService
             }
         }
 
-        await TryBackfillIfEmpty(stoppingToken);
+        // A throw out of TryBackfillIfNeeded propagates out of ExecuteAsync —
+        // BackgroundService treats that as fatal and shuts the worker down
+        // for the process lifetime. Catch everything except cancellation so a
+        // transient DB hiccup at boot time doesn't kill the safety-net.
+        try
+        {
+            await TryBackfillIfNeeded(stoppingToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "AUM snapshot first-boot backfill failed; daily safety-net will retry full rebuild on each cycle"
+            );
+        }
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -89,27 +108,33 @@ public class AumSnapshotRebuildWorker : BackgroundService
         }
     }
 
-    private async Task TryBackfillIfEmpty(CancellationToken cancellationToken)
+    private async Task TryBackfillIfNeeded(CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
-        var snapshotsExist = await dbContext
-            .Set<AumQuarterlySnapshot>()
-            .AnyAsync(cancellationToken);
-        if (snapshotsExist)
+        var holdingQuarters = await dbContext
+            .Set<InstitutionalHolding>()
+            .Select(h => h.ReportDate)
+            .Distinct()
+            .CountAsync(cancellationToken);
+        if (holdingQuarters == 0)
         {
             return;
         }
 
-        var hasHoldings = await dbContext.Set<InstitutionalHolding>().AnyAsync(cancellationToken);
-        if (!hasHoldings)
+        var snapshotQuarters = await dbContext
+            .Set<AumQuarterlySnapshot>()
+            .CountAsync(cancellationToken);
+        if (snapshotQuarters >= holdingQuarters)
         {
             return;
         }
 
         _logger.LogInformation(
-            "AUM snapshot tables are empty but holdings exist — running one-off backfill with {Timeout}s command timeout",
+            "AUM snapshot coverage incomplete ({Snapshots}/{Holdings} quarters) — running backfill with {Timeout}s command timeout",
+            snapshotQuarters,
+            holdingQuarters,
             BackfillCommandTimeout.TotalSeconds
         );
 
