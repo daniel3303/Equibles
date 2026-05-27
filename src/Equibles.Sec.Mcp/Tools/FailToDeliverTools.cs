@@ -57,13 +57,10 @@ public class FailToDeliverTools
                 if (stock == null)
                     return McpToolExecutor.StockNotFound(ticker);
 
-                var start = McpToolExecutor.ParseDateOr(
+                var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
-                );
-                var end = McpToolExecutor.ParseDateOr(
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow)
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
                 );
 
                 var records = await _ftdRepository

@@ -64,13 +64,10 @@ public class CongressTools
                 if (stock == null)
                     return McpToolExecutor.StockNotFound(ticker);
 
-                var start = McpToolExecutor.ParseDateOr(
+                var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
-                );
-                var end = McpToolExecutor.ParseDateOr(
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow)
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
                 );
 
                 var query = _tradeRepository.GetByStock(stock, start, end);
@@ -132,13 +129,10 @@ public class CongressTools
                 if (member == null)
                     return $"Member '{memberName}' not found. Use SearchCongressMembers to find the exact name.";
 
-                var start = McpToolExecutor.ParseDateOr(
+                var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
-                );
-                var end = McpToolExecutor.ParseDateOr(
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow)
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
                 );
 
                 var query = _tradeRepository
