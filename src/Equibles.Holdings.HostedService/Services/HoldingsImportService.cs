@@ -9,7 +9,9 @@ using Equibles.Errors.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.Repositories;
+using Equibles.Messaging.Contracts.Holdings;
 using FlexLabs.EntityFrameworkCore.Upsert;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using static Equibles.Holdings.HostedService.Services.HoldingsParsingHelper;
@@ -23,18 +25,21 @@ public class HoldingsImportService
     private readonly ILogger<HoldingsImportService> _logger;
     private readonly WorkerOptions _workerOptions;
     private readonly IStockPriceProvider _stockPriceProvider;
+    private readonly IBus _bus;
 
     public HoldingsImportService(
         IServiceScopeFactory scopeFactory,
         ILogger<HoldingsImportService> logger,
         IOptions<WorkerOptions> workerOptions,
-        IStockPriceProvider stockPriceProvider
+        IStockPriceProvider stockPriceProvider,
+        IBus bus
     )
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _workerOptions = workerOptions.Value;
         _stockPriceProvider = stockPriceProvider;
+        _bus = bus;
     }
 
     public async Task<ImportResult> ImportDataSet(
@@ -74,7 +79,43 @@ public class HoldingsImportService
         await UpsertInstitutionalHolders(context, cancellationToken);
         await HandleAmendments(context, cancellationToken);
         await StreamAndInsertHoldings(context, cancellationToken);
+        await PublishAffectedQuartersAsync(context, cancellationToken);
         return new ImportResult(submissionCount, IsComplete: true);
+    }
+
+    // Bulk data sets routinely import many quarters at once, so group submissions
+    // by ReportDate and publish one Filings13FImported per distinct quarter. The
+    // consumer rebuilds the per-quarter AUM + sector snapshots; the work is
+    // bounded per event, and deduplicating here keeps the import path from
+    // stampeding the consumer with one event per filing.
+    private async Task PublishAffectedQuartersAsync(
+        ImportContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        var byQuarter = new Dictionary<DateOnly, int>();
+        foreach (var submission in context.Submissions.Values)
+        {
+            if (TryParseDateOnly(submission.PeriodOfReport, out var reportDate))
+            {
+                byQuarter[reportDate] = byQuarter.GetValueOrDefault(reportDate) + 1;
+            }
+        }
+
+        if (byQuarter.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var (reportDate, count) in byQuarter)
+        {
+            await _bus.Publish(new Filings13FImported(reportDate, count), cancellationToken);
+        }
+
+        _logger.LogInformation(
+            "Published Filings13FImported for {Quarters} distinct quarter(s)",
+            byQuarter.Count
+        );
     }
 
     /// <summary>

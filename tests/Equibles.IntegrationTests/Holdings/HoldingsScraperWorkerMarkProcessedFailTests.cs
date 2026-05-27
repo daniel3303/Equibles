@@ -74,7 +74,8 @@ public class HoldingsScraperWorkerMarkProcessedFailTests : ParadeDbMcpTestBase
             sf,
             Substitute.For<ILogger<HoldingsImportService>>(),
             Options.Create(new WorkerOptions()),
-            Substitute.For<IStockPriceProvider>()
+            Substitute.For<IStockPriceProvider>(),
+            Substitute.For<MassTransit.IBus>()
         );
     }
 

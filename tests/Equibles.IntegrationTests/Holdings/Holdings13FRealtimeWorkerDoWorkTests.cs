@@ -107,7 +107,8 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
                     scopeFactory,
                     Substitute.For<ILogger<HoldingsImportService>>(),
                     Options.Create(new WorkerOptions()),
-                    Substitute.For<IStockPriceProvider>()
+                    Substitute.For<IStockPriceProvider>(),
+                    Substitute.For<MassTransit.IBus>()
                 );
                 var ingestion = new Realtime13FIngestionService(
                     edgarClient,

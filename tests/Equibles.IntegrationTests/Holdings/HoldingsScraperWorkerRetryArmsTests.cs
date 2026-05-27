@@ -75,7 +75,8 @@ public class HoldingsScraperWorkerRetryArmsTests : ParadeDbMcpTestBase
             Substitute.For<IServiceScopeFactory>(),
             Substitute.For<ILogger<HoldingsImportService>>(),
             Options.Create(new WorkerOptions()),
-            Substitute.For<IStockPriceProvider>()
+            Substitute.For<IStockPriceProvider>(),
+            Substitute.For<MassTransit.IBus>()
         );
 
     private FastRetryWorker BuildWorker(Exception downloadException)
