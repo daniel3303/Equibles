@@ -57,13 +57,10 @@ public class StockPriceTools
                 if (stock == null)
                     return McpToolExecutor.StockNotFound(ticker);
 
-                var start = McpToolExecutor.ParseDateOr(
+                var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
-                );
-                var end = McpToolExecutor.ParseDateOr(
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow)
+                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
                 );
 
                 var records = await _priceRepository
@@ -355,11 +352,11 @@ public class StockPriceTools
         if (stock == null)
             return (null, null, McpToolExecutor.StockNotFound(ticker));
 
-        var start = McpToolExecutor.ParseDateOr(
+        var (start, end) = McpToolExecutor.ParseDateRange(
             startDate,
+            endDate,
             DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-6))
         );
-        var end = McpToolExecutor.ParseDateOr(endDate, DateOnly.FromDateTime(DateTime.UtcNow));
 
         var records = await _priceRepository
             .GetByStock(stock, start, end)
