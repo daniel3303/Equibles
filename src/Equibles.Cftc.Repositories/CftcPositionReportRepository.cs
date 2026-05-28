@@ -1,5 +1,6 @@
 using Equibles.Cftc.Data.Models;
 using Equibles.Data;
+using Equibles.Data.Extensions;
 
 namespace Equibles.Cftc.Repositories;
 
@@ -29,11 +30,7 @@ public class CftcPositionReportRepository : BaseRepository<CftcPositionReport>
 
     public IQueryable<DateOnly> GetLatestDate(CftcContract contract)
     {
-        return GetAll()
-            .Where(r => r.CftcContractId == contract.Id)
-            .Select(r => r.ReportDate)
-            .OrderByDescending(d => d)
-            .Take(1);
+        return GetAll().Where(r => r.CftcContractId == contract.Id).LatestValue(r => r.ReportDate);
     }
 
     public IQueryable<CftcPositionReport> GetLatestPerContract()
@@ -45,6 +42,6 @@ public class CftcPositionReportRepository : BaseRepository<CftcPositionReport>
 
     public IQueryable<DateOnly> GetGlobalLatestDate()
     {
-        return GetAll().Select(r => r.ReportDate).OrderByDescending(d => d).Take(1);
+        return GetAll().LatestValue(r => r.ReportDate);
     }
 }

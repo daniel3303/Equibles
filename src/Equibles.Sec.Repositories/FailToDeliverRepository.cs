@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
+using Equibles.Data.Extensions;
 using Equibles.Sec.Data.Models;
 
 namespace Equibles.Sec.Repositories;
@@ -16,6 +17,6 @@ public class FailToDeliverRepository : BaseRepository<FailToDeliver>
 
     public IQueryable<DateOnly> GetLatestDate()
     {
-        return GetAll().Select(f => f.SettlementDate).Distinct().OrderByDescending(d => d).Take(1);
+        return GetAll().LatestValue(f => f.SettlementDate, distinct: true);
     }
 }

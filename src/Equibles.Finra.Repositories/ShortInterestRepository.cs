@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
+using Equibles.Data.Extensions;
 using Equibles.Finra.Data.Models;
 
 namespace Equibles.Finra.Repositories;
@@ -22,7 +23,7 @@ public class ShortInterestRepository : BaseRepository<ShortInterest>
 
     public IQueryable<DateOnly> GetLatestSettlementDate()
     {
-        return GetAll().Select(s => s.SettlementDate).Distinct().OrderByDescending(d => d).Take(1);
+        return GetAll().LatestValue(s => s.SettlementDate, distinct: true);
     }
 
     public IQueryable<ShortInterest> GetBySettlementDate(DateOnly settlementDate)

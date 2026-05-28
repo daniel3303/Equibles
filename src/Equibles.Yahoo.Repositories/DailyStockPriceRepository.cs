@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
+using Equibles.Data.Extensions;
 using Equibles.Yahoo.Data.Models;
 
 namespace Equibles.Yahoo.Repositories;
@@ -38,15 +39,11 @@ public class DailyStockPriceRepository : BaseRepository<DailyStockPrice>
 
     public IQueryable<DateOnly> GetLatestDate(CommonStock stock)
     {
-        return GetAll()
-            .Where(p => p.CommonStockId == stock.Id)
-            .Select(p => p.Date)
-            .OrderByDescending(d => d)
-            .Take(1);
+        return GetAll().Where(p => p.CommonStockId == stock.Id).LatestValue(p => p.Date);
     }
 
     public IQueryable<DateOnly> GetLatestDateAcrossAllStocks()
     {
-        return GetAll().Select(p => p.Date).Distinct().OrderByDescending(d => d).Take(1);
+        return GetAll().LatestValue(p => p.Date, distinct: true);
     }
 }
