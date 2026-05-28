@@ -63,10 +63,7 @@ public class StockTabService
     public async Task<HoldingsTabViewModel> LoadHoldingsTab(CommonStock stock, DateOnly? date)
     {
         var reportDates = await _institutionalHoldingRepository
-            .GetHistoryByStock(stock)
-            .Select(h => h.ReportDate)
-            .Distinct()
-            .OrderByDescending(d => d)
+            .GetReportDatesByStock(stock)
             .ToListAsync();
 
         var isCombinedAvailable =
@@ -177,10 +174,7 @@ public class StockTabService
     public async Task<HoldingsTabViewModel> LoadHoldingsCombinedTab(CommonStock stock)
     {
         var reportDates = await _institutionalHoldingRepository
-            .GetHistoryByStock(stock)
-            .Select(h => h.ReportDate)
-            .Distinct()
-            .OrderByDescending(d => d)
+            .GetReportDatesByStock(stock)
             .ToListAsync();
 
         if (reportDates.Count < 2)

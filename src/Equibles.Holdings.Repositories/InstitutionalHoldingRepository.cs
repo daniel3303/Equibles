@@ -59,6 +59,18 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return GetAll().Select(h => h.ReportDate).Distinct().OrderByDescending(d => d);
     }
 
+    // Latest dates first — see GetAvailableReportDates for the ordering contract.
+    public IQueryable<DateOnly> GetReportDatesByStock(CommonStock stock)
+    {
+        return GetHistoryByStock(stock).Select(h => h.ReportDate).Distinct().OrderByDescending(d => d);
+    }
+
+    // Latest dates first — see GetAvailableReportDates for the ordering contract.
+    public IQueryable<DateOnly> GetReportDatesByHolder(InstitutionalHolder holder)
+    {
+        return GetHistoryByHolder(holder).Select(h => h.ReportDate).Distinct().OrderByDescending(d => d);
+    }
+
     public IQueryable<InstitutionalHolding> GetByAccessionNumber(string accessionNumber)
     {
         return GetAll().Where(h => h.AccessionNumber == accessionNumber);

@@ -70,7 +70,9 @@ public class ProfilesController : BaseController
 
         // Header strip + industry allocation — pulled with extra per-quarter
         // materializations so the existing recent-rows list keeps its top-50 shape.
-        var distinctDates = await LoadReportDatesByHolder(holder);
+        var distinctDates = await _institutionalHoldingRepository
+            .GetReportDatesByHolder(holder)
+            .ToListAsync();
         var (summary, industryAllocation) = await BuildSummaryAndAllocation(holder, distinctDates);
         var (quarterlyActivity, activityResolved, activityPrior) = await BuildQuarterlyActivity(
             holder,
@@ -440,7 +442,9 @@ public class ProfilesController : BaseController
         var perHolderDates = new List<List<DateOnly>>();
         foreach (var holder in holders)
         {
-            var dates = await LoadReportDatesByHolder(holder);
+            var dates = await _institutionalHoldingRepository
+                .GetReportDatesByHolder(holder)
+                .ToListAsync();
             perHolderDates.Add(dates);
         }
         return perHolderDates
@@ -465,14 +469,6 @@ public class ProfilesController : BaseController
         }
         return perFund;
     }
-
-    private Task<List<DateOnly>> LoadReportDatesByHolder(InstitutionalHolder holder) =>
-        _institutionalHoldingRepository
-            .GetHistoryByHolder(holder)
-            .Select(h => h.ReportDate)
-            .Distinct()
-            .OrderByDescending(d => d)
-            .ToListAsync();
 
     private Task<List<InstitutionalHolding>> LoadHoldingsByHolderWithStock(
         InstitutionalHolder holder,

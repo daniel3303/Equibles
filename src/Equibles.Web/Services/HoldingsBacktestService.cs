@@ -80,11 +80,10 @@ public class HoldingsBacktestService
         viewModel.BenchmarkName = benchmarkStock.Name;
 
         var reportDates = await _holdingRepository
-            .GetHistoryByHolder(holder)
-            .Select(h => h.ReportDate)
-            .Distinct()
-            .OrderBy(d => d)
+            .GetReportDatesByHolder(holder)
             .ToListAsync();
+        // GetReportDatesByHolder returns latest first; backtest iterates earliest first.
+        reportDates.Reverse();
         if (reportDates.Count == 0)
         {
             viewModel.Result.Reason = "Holder has no 13F snapshots on file.";
