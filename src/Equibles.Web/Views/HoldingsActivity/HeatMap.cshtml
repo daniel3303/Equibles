@@ -81,7 +81,7 @@
                                         <td><a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@p.Ticker" class="link link-hover font-mono">@p.Ticker</a></td>
                                         <td class="max-w-xs truncate">@p.Name</td>
                                         <td class="text-right font-mono @scoreCss">@p.ConvictionScore.ToString("F1")</td>
-                                        <td class="text-right font-mono hidden md:table-cell @p.NetConvictionPct.SignCss()">@(p.NetConvictionPct > 0 ? "+" : "")@p.NetConvictionPct.ToString("F1")%</td>
+                                        <td class="text-right font-mono hidden md:table-cell @p.NetConvictionPct.SignCss()">@p.NetConvictionPct.SignPrefix()@p.NetConvictionPct.ToString("F1")%</td>
                                         <td class="text-right font-mono hidden md:table-cell">@p.RetentionPct.ToString("F1")%</td>
                                         <td class="text-right font-mono hidden lg:table-cell">@p.UniversePct.ToString("F2")%</td>
                                         <td class="text-right font-mono">@p.CurrentFilerCount.ToString("N0")</td>

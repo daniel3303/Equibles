@@ -121,7 +121,7 @@
                                     <td class="text-right tabular-nums hidden lg:table-cell">
                                         @if (report.ChangeOpenInterest.HasValue) {
                                             <span class="@(report.ChangeOpenInterest.Value.SignCss("text-base-content/50"))">
-                                                @(report.ChangeOpenInterest.Value > 0 ? "+" : "")@report.ChangeOpenInterest.Value.ToString("N0")
+                                                @report.ChangeOpenInterest.Value.SignPrefix()@report.ChangeOpenInterest.Value.ToString("N0")
                                             </span>
                                         } else {
                                             <span class="text-base-content/30">&mdash;</span>

@@ -59,7 +59,7 @@
                                         @snap.FilerCount.ToString("N0")
                                         @if (filerDelta.HasValue && filerDelta.Value != 0) {
                                             <span class="text-xs @(filerDelta.Value > 0 ? "text-success" : "text-error")">
-                                                @(filerDelta.Value > 0 ? "+" : "")@filerDelta.Value.ToString("N0")
+                                                @filerDelta.Value.SignPrefix()@filerDelta.Value.ToString("N0")
                                             </span>
                                         }
                                     </td>

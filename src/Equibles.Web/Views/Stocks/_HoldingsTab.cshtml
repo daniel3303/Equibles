@@ -30,8 +30,7 @@
     static string FormatPct(double? pct)
     {
         if (pct == null) return "—";
-        var sign = pct > 0 ? "+" : "";
-        return $"{sign}{pct:F1}%";
+        return $"{pct.SignPrefix()}{pct:F1}%";
     }
 
     static string FormatQuarter(DateOnly? date) =>

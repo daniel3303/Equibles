@@ -73,7 +73,7 @@
                         <div class="text-lg font-bold tabular-nums">@Model.LatestValue.Value.ToString("N2")</div>
                         @if (changePct.HasValue) {
                             <div class="text-xs tabular-nums @(changePct.Value.SignCss("text-base-content/50"))">
-                                @(changePct.Value > 0 ? "+" : "")@changePct.Value.ToString("N2")%
+                                @changePct.Value.SignPrefix()@changePct.Value.ToString("N2")%
                             </div>
                         }
                     </div>
@@ -140,7 +140,7 @@
                                     </td>
                                     <td class="text-right text-sm tabular-nums hidden sm:table-cell @(pctChange.SignCss("text-base-content/50"))">
                                         @if (pctChange.HasValue) {
-                                            @(pctChange.Value > 0 ? "+" : "")@pctChange.Value.ToString("N2")<text>%</text>
+                                            @pctChange.Value.SignPrefix()@pctChange.Value.ToString("N2")<text>%</text>
                                         }
                                     </td>
                                 </tr>
