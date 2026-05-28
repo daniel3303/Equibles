@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Congress.Repositories;
 using Equibles.Core.AutoWiring;
@@ -252,44 +253,50 @@ public class StockTabService
 
     public async Task<ShortVolumeTabViewModel> LoadShortVolumeTab(CommonStock stock)
     {
-        var shortVolumes = await _dailyShortVolumeRepository
-            .GetHistoryByStock(stock)
-            .OrderByDescending(d => d.Date)
-            .Take(90)
-            .ToListAsync();
-        return new ShortVolumeTabViewModel
-        {
-            ShortVolumes = shortVolumes.OrderBy(d => d.Date).ToList(),
-            Ticker = stock.Ticker,
-        };
+        var shortVolumes = await FetchMostRecentAscending(
+            _dailyShortVolumeRepository.GetHistoryByStock(stock),
+            d => d.Date,
+            90
+        );
+        return new ShortVolumeTabViewModel { ShortVolumes = shortVolumes, Ticker = stock.Ticker };
     }
 
     public async Task<ShortInterestTabViewModel> LoadShortInterestTab(CommonStock stock)
     {
-        var shortInterests = await _shortInterestRepository
-            .GetHistoryByStock(stock)
-            .OrderByDescending(s => s.SettlementDate)
-            .Take(24)
-            .ToListAsync();
+        var shortInterests = await FetchMostRecentAscending(
+            _shortInterestRepository.GetHistoryByStock(stock),
+            s => s.SettlementDate,
+            24
+        );
         return new ShortInterestTabViewModel
         {
-            ShortInterests = shortInterests.OrderBy(s => s.SettlementDate).ToList(),
+            ShortInterests = shortInterests,
             Ticker = stock.Ticker,
         };
     }
 
     public async Task<FtdTabViewModel> LoadFtdTab(CommonStock stock)
     {
-        var ftds = await _failToDeliverRepository
-            .GetByStock(stock)
-            .OrderByDescending(f => f.SettlementDate)
-            .Take(90)
-            .ToListAsync();
-        return new FtdTabViewModel
-        {
-            FailsToDeliver = ftds.OrderBy(f => f.SettlementDate).ToList(),
-            Ticker = stock.Ticker,
-        };
+        var ftds = await FetchMostRecentAscending(
+            _failToDeliverRepository.GetByStock(stock),
+            f => f.SettlementDate,
+            90
+        );
+        return new FtdTabViewModel { FailsToDeliver = ftds, Ticker = stock.Ticker };
+    }
+
+    // Fetch the most recent N rows from a query in descending order then re-sort
+    // ascending in memory so chart consumers downstream get chronological data.
+    // OrderBy(orderKey.Compile()) — not List<T>.Reverse() — so ties on the
+    // order key keep deterministic ordering matching the EF-side sort.
+    private static async Task<List<T>> FetchMostRecentAscending<T>(
+        IQueryable<T> source,
+        Expression<Func<T, DateOnly>> orderKey,
+        int take
+    )
+    {
+        var rows = await source.OrderByDescending(orderKey).Take(take).ToListAsync();
+        return rows.OrderBy(orderKey.Compile()).ToList();
     }
 
     public async Task<DocumentsTabViewModel> LoadDocumentsTab(CommonStock stock)
