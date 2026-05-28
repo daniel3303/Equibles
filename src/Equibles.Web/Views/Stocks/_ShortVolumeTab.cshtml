@@ -4,14 +4,7 @@
     <partial name="_EmptyStateCard" model='(IconName: "arrow-trending-down", Heading: "No Short Volume Data", Message: "No daily short volume data is available for this stock yet.")' />
 } else {
     <!-- Chart -->
-    <div class="card bg-base-100 shadow-sm mb-4">
-        <div class="card-body p-4 lg:p-6">
-            <h2 class="font-semibold text-sm mb-3">Short Volume (Last 90 Days)</h2>
-            <div class="h-[200px]">
-                <canvas id="short-volume-chart" role="img" aria-label="Daily short volume history"></canvas>
-            </div>
-        </div>
-    </div>
+    <partial name="_ChartCard" model='("Short Volume (Last 90 Days)", "short-volume-chart", "Daily short volume history", "h-[200px]", "mb-4")' />
 
     <!-- Table -->
     <div class="card bg-base-100 shadow-sm">

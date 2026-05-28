@@ -4,14 +4,7 @@
     <partial name="_EmptyStateCard" model='(IconName: "exclamation-triangle", Heading: "No Fails to Deliver Data", Message: "No fails-to-deliver data is available for this stock yet.")' />
 } else {
     <!-- Chart -->
-    <div class="card bg-base-100 shadow-sm mb-4">
-        <div class="card-body p-4 lg:p-6">
-            <h2 class="font-semibold text-sm mb-3">Fails to Deliver History</h2>
-            <div class="h-[200px]">
-                <canvas id="ftd-chart" role="img" aria-label="Fails-to-deliver history"></canvas>
-            </div>
-        </div>
-    </div>
+    <partial name="_ChartCard" model='("Fails to Deliver History", "ftd-chart", "Fails-to-deliver history", "h-[200px]", "mb-4")' />
 
     <!-- Table -->
     <div class="card bg-base-100 shadow-sm">
