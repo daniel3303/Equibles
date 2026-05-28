@@ -219,6 +219,66 @@ public class ShortDataTools
         );
     }
 
+    [McpServerTool(Name = "GetLargestShortVolume")]
+    [Description(
+        "Get the stocks with the largest daily short volume for a single trading day (defaults to the latest available), sorted by short volume descending. Useful for spotting where short selling was most concentrated on a given day."
+    )]
+    public Task<string> GetLargestShortVolume(
+        [Description("Trading day in YYYY-MM-DD format (defaults to the latest available day)")]
+            string date = null,
+        [Description("Minimum short volume filter (default: 0)")] long minShortVolume = 0,
+        [Description("Maximum number of results to return (default: 50)")] int maxResults = 50
+    )
+    {
+        return _runner.Execute(
+            async () =>
+            {
+                var latestDate = await _shortVolumeRepository.GetLatestDate().FirstOrDefaultAsync();
+                if (latestDate == default)
+                    return "No short volume data available.";
+
+                var tradingDay = McpToolExecutor.ParseDateOr(date, latestDate);
+
+                var query = _shortVolumeRepository
+                    .GetByDate(tradingDay)
+                    .Include(d => d.CommonStock)
+                    .Where(d => d.TotalVolume > 0);
+
+                if (minShortVolume > 0)
+                {
+                    query = query.Where(d => d.ShortVolume >= minShortVolume);
+                }
+
+                var records = await query
+                    .OrderByDescending(d => d.ShortVolume)
+                    .Take(maxResults)
+                    .ToListAsync();
+
+                if (records.Count == 0)
+                    return $"No short volume data found for trading day {tradingDay:yyyy-MM-dd} with short volume >= {minShortVolume:N0}.";
+
+                var result = MarkdownTable.Start(
+                    $"Largest short volume — trading day {tradingDay:yyyy-MM-dd}:",
+                    "| Ticker | Short Volume | Exempt | Total Volume | Short % |",
+                    "|--------|-------------|--------|-------------|---------|"
+                );
+
+                foreach (var r in records)
+                {
+                    var shortPct =
+                        r.TotalVolume > 0 ? (double)r.ShortVolume / r.TotalVolume * 100 : 0;
+                    result.AppendLine(
+                        $"| {r.CommonStock.Ticker} | {r.ShortVolume:N0} | {r.ShortExemptVolume:N0} | {r.TotalVolume:N0} | {shortPct:F1}% |"
+                    );
+                }
+
+                return result.ToString();
+            },
+            "GetLargestShortVolume",
+            $"date: {date}"
+        );
+    }
+
     private static string FormatSignedChange(long change) =>
         change >= 0
             ? $"+{change.ToString("N0", CultureInfo.InvariantCulture)}"
