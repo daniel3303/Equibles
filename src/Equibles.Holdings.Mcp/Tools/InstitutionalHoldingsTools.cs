@@ -129,7 +129,9 @@ public class InstitutionalHoldingsTools
             $"Top institutional holders of {stock.Name} ({ticker}) as of {targetDate:yyyy-MM-dd}:"
         );
         result.AppendLine(
-            $"Showing {holdings.Count} of {totalInstitutions} institutions. Total: {totalSharesAll:N0} shares, ${totalValueAll / 1_000_000m:N1}M value"
+            $"Showing {holdings.Count} of {totalInstitutions} institutions. Total: "
+                + $"{totalSharesAll.ToString("N0", CultureInfo.InvariantCulture)} shares, "
+                + $"${(totalValueAll / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture)}M value"
         );
         result.AppendLine();
         result.AppendLine("| # | Institution | Shares | Value ($M) | % of Total |");
@@ -140,7 +142,10 @@ public class InstitutionalHoldingsTools
             var h = holdings[i];
             var pct = totalSharesAll > 0 ? (double)h.Shares / totalSharesAll * 100 : 0;
             result.AppendLine(
-                $"| {i + 1} | {h.InstitutionalHolder.Name} | {h.Shares:N0} | {h.Value / 1_000_000m:N1} | {pct:F2}% |"
+                $"| {i + 1} | {h.InstitutionalHolder.Name} | "
+                    + $"{h.Shares.ToString("N0", CultureInfo.InvariantCulture)} | "
+                    + $"{(h.Value / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture)} | "
+                    + $"{pct.ToString("F2", CultureInfo.InvariantCulture)}% |"
             );
         }
 
