@@ -106,7 +106,7 @@ public class HoldingsExportController : BaseController
         if (holder == null)
             return NotFound();
 
-        var reportDates = await LoadReportDates(_holdingRepository.GetHistoryByHolder(holder));
+        var reportDates = await _holdingRepository.GetReportDatesByHolder(holder).ToListAsync();
         if (reportDates.Count == 0)
             return NotFound();
 
@@ -251,9 +251,6 @@ public class HoldingsExportController : BaseController
 
     private static DateOnly ResolveSelectedDate(DateOnly? requested, List<DateOnly> available) =>
         requested.HasValue && available.Contains(requested.Value) ? requested.Value : available[0];
-
-    private static Task<List<DateOnly>> LoadReportDates(IQueryable<InstitutionalHolding> query) =>
-        query.Select(h => h.ReportDate).Distinct().OrderByDescending(d => d).ToListAsync();
 
     private static string[] ActivityRow(
         string board,

@@ -75,7 +75,7 @@ public class InstitutionalHoldingsTools
 
                 var (targetDate, found) = await TryResolveLatestReportDate(
                     reportDate,
-                    GetReportDatesByStock(stock)
+                    _holdingRepository.GetReportDatesByStock(stock)
                 );
                 if (!found)
                     return $"No institutional holdings data available for {ticker}.";
@@ -161,7 +161,7 @@ public class InstitutionalHoldingsTools
                 if (stockError != null)
                     return stockError;
 
-                var reportDates = await GetReportDatesByStock(stock).Take(maxPeriods).ToListAsync();
+                var reportDates = await _holdingRepository.GetReportDatesByStock(stock).Take(maxPeriods).ToListAsync();
 
                 if (reportDates.Count == 0)
                     return $"No institutional holdings history available for {ticker}.";
@@ -233,7 +233,7 @@ public class InstitutionalHoldingsTools
 
                 var (targetDate, found) = await TryResolveLatestReportDate(
                     reportDate,
-                    GetReportDatesByHolder(holder)
+                    _holdingRepository.GetReportDatesByHolder(holder)
                 );
                 if (!found)
                     return $"No holdings data for {holder.Name}.";
@@ -339,7 +339,7 @@ public class InstitutionalHoldingsTools
                 if (stockError != null)
                     return stockError;
 
-                var reportDates = await GetReportDatesByStock(stock).ToListAsync();
+                var reportDates = await _holdingRepository.GetReportDatesByStock(stock).ToListAsync();
 
                 var targetDate = TryParseReportDate(reportDate, out var parsed)
                     ? parsed
@@ -942,7 +942,7 @@ public class InstitutionalHoldingsTools
                 if (holderError != null)
                     return holderError;
 
-                var reportDates = await GetReportDatesByHolder(holder).ToListAsync();
+                var reportDates = await _holdingRepository.GetReportDatesByHolder(holder).ToListAsync();
                 if (reportDates.Count < 2)
                     return $"{holder.Name} has fewer than two reported quarters — no diff available.";
 
@@ -1103,7 +1103,7 @@ public class InstitutionalHoldingsTools
     {
         var perHolder = new List<List<DateOnly>>(holders.Count);
         foreach (var holder in holders)
-            perHolder.Add(await GetReportDatesByHolder(holder).ToListAsync());
+            perHolder.Add(await _holdingRepository.GetReportDatesByHolder(holder).ToListAsync());
 
         return perHolder
             .Skip(1)
@@ -1329,26 +1329,12 @@ public class InstitutionalHoldingsTools
         if (holderError != null)
             return (null, null, default, holderError);
 
-        var reportDates = await GetReportDatesByHolder(holder).ToListAsync();
+        var reportDates = await _holdingRepository.GetReportDatesByHolder(holder).ToListAsync();
         if (reportDates.Count == 0)
             return (holder, null, default, $"No 13F holdings reported by {holder.Name}.");
 
         return (holder, reportDates, ResolveReportDate(reportDate, reportDates), null);
     }
-
-    private IQueryable<DateOnly> GetReportDatesByHolder(InstitutionalHolder holder) =>
-        _holdingRepository
-            .GetHistoryByHolder(holder)
-            .Select(h => h.ReportDate)
-            .Distinct()
-            .OrderByDescending(d => d);
-
-    private IQueryable<DateOnly> GetReportDatesByStock(CommonStock stock) =>
-        _holdingRepository
-            .GetHistoryByStock(stock)
-            .Select(h => h.ReportDate)
-            .Distinct()
-            .OrderByDescending(d => d);
 
     private static bool TryParseReportDate(string input, out DateOnly result)
     {
