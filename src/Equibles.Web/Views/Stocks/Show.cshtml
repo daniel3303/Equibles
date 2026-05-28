@@ -100,17 +100,25 @@
             + (activeTab == id ? "btn-neutral" : "btn-ghost bg-base-100 border border-base-300");
         string TabAriaCurrent(string id) => activeTab == id ? "page" : null;
     }
+    @{
+        var sectionTabs = new (string Key, string Action, string Label)[]
+        {
+            ("price", "Price", "Technicals"),
+            ("holdings", "Holdings", "Institutional Holders"),
+            ("short-volume", "ShortVolume", "Short Volume"),
+            ("short-interest", "ShortInterest", "Short Interest"),
+            ("ftd", "Ftd", "Fails to Deliver"),
+            ("financials", "Financials", "Financials"),
+            ("documents", "Documents", "SEC Filings"),
+            ("insider-trading", "InsiderTrading", "Insider Trades"),
+            ("congressional-trades", "CongressionalTrades", "Congressional Trades"),
+        };
+    }
     <!-- Section navbar -->
     <nav class="flex flex-wrap gap-2 mb-6" aria-label="@(stock.Ticker) sections">
-        <a class="@TabBtnClass("price")" aria-current="@TabAriaCurrent("price")" asp-action="Price" asp-route-ticker="@stock.Ticker">Technicals</a>
-        <a class="@TabBtnClass("holdings")" aria-current="@TabAriaCurrent("holdings")" asp-action="Holdings" asp-route-ticker="@stock.Ticker">Institutional Holders</a>
-        <a class="@TabBtnClass("short-volume")" aria-current="@TabAriaCurrent("short-volume")" asp-action="ShortVolume" asp-route-ticker="@stock.Ticker">Short Volume</a>
-        <a class="@TabBtnClass("short-interest")" aria-current="@TabAriaCurrent("short-interest")" asp-action="ShortInterest" asp-route-ticker="@stock.Ticker">Short Interest</a>
-        <a class="@TabBtnClass("ftd")" aria-current="@TabAriaCurrent("ftd")" asp-action="Ftd" asp-route-ticker="@stock.Ticker">Fails to Deliver</a>
-        <a class="@TabBtnClass("financials")" aria-current="@TabAriaCurrent("financials")" asp-action="Financials" asp-route-ticker="@stock.Ticker">Financials</a>
-        <a class="@TabBtnClass("documents")" aria-current="@TabAriaCurrent("documents")" asp-action="Documents" asp-route-ticker="@stock.Ticker">SEC Filings</a>
-        <a class="@TabBtnClass("insider-trading")" aria-current="@TabAriaCurrent("insider-trading")" asp-action="InsiderTrading" asp-route-ticker="@stock.Ticker">Insider Trades</a>
-        <a class="@TabBtnClass("congressional-trades")" aria-current="@TabAriaCurrent("congressional-trades")" asp-action="CongressionalTrades" asp-route-ticker="@stock.Ticker">Congressional Trades</a>
+        @foreach (var tab in sectionTabs) {
+            <a class="@TabBtnClass(tab.Key)" aria-current="@TabAriaCurrent(tab.Key)" asp-action="@tab.Action" asp-route-ticker="@stock.Ticker">@tab.Label</a>
+        }
     </nav>
 
     @if (activeTab == "price" && hasAnyMetric) {
