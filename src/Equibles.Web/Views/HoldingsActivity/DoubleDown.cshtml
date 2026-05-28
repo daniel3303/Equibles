@@ -77,8 +77,7 @@
                             @foreach (var pos in Model.Positions) {
                                 <tr class="hover">
                                     <td class="max-w-[200px]">
-                                        <a asp-action="Institution" asp-controller="Profiles" asp-route-cik="@pos.FilerCik"
-                                           class="font-semibold link link-primary truncate block">@pos.FilerName</a>
+                                        <partial name="_InstitutionLink" model='(Cik: pos.FilerCik, Name: pos.FilerName, Class: "font-semibold link link-primary truncate block")' />
                                         <span class="text-xs text-base-content/50 font-mono">@pos.FilerCik</span>
                                     </td>
                                     <td>

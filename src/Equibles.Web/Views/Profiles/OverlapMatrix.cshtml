@@ -66,8 +66,7 @@
                             @for (var i = 0; i < n; i++) {
                                 <tr>
                                     <th scope="row" class="text-xs max-w-[150px] truncate font-semibold" title="@Model.Matrix.Funds[i].HolderName">
-                                        <a asp-action="Institution" asp-controller="Profiles" asp-route-cik="@Model.Matrix.Funds[i].HolderCik"
-                                           class="link link-primary">@Model.Matrix.Funds[i].HolderName</a>
+                                        <partial name="_InstitutionLink" model='(Cik: Model.Matrix.Funds[i].HolderCik, Name: Model.Matrix.Funds[i].HolderName, Class: "link link-primary")' />
                                     </th>
                                     @for (var j = 0; j < n; j++) {
                                         var count = Model.Matrix.SharedTickerCounts[i][j];
@@ -111,8 +110,7 @@
                             @foreach (var fund in Model.Matrix.Funds) {
                                 <tr>
                                     <td>
-                                        <a asp-action="Institution" asp-controller="Profiles" asp-route-cik="@fund.HolderCik"
-                                           class="link link-primary font-semibold">@fund.HolderName</a>
+                                        <partial name="_InstitutionLink" model='(Cik: fund.HolderCik, Name: fund.HolderName, Class: "link link-primary font-semibold")' />
                                     </td>
                                     <td class="hidden md:table-cell font-mono text-sm text-base-content/60">@fund.HolderCik</td>
                                     <td class="text-right font-mono">@fund.PositionCount.ToString("N0")</td>
