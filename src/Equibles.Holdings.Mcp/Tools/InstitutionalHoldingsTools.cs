@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -273,7 +274,9 @@ public class InstitutionalHoldingsTools
         {
             var h = holdings[i];
             result.AppendLine(
-                $"| {i + 1} | {h.CommonStock.Ticker} | {h.CommonStock.Name} | {h.Shares:N0} | {h.Value / 1_000_000m:N1} |"
+                $"| {i + 1} | {h.CommonStock.Ticker} | {h.CommonStock.Name} | "
+                    + $"{h.Shares.ToString("N0", CultureInfo.InvariantCulture)} | "
+                    + $"{(h.Value / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture)} |"
             );
         }
 

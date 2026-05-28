@@ -31,9 +31,7 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioCultureInvarian
     // reflection-invoke the private static, restore in finally, compare
     // against the Invariant rendering. A failure manifests as the
     // thousand/decimal-separator swap.
-    [Fact(
-        Skip = "GH-2597 — RenderInstitutionPortfolio :N0/:N1 cells follow CurrentCulture (de-DE → 1.234.567 / 1.234,6 vs Invariant 1,234,567 / 1,234.6); MCP output forks by host locale"
-    )]
+    [Fact]
     public void RenderInstitutionPortfolio_UnderNonInvariantCulture_RendersSharesAndValueCellsCultureInvariantly()
     {
         var method = typeof(InstitutionalHoldingsTools).GetMethod(
