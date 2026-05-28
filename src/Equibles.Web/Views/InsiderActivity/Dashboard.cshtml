@@ -46,8 +46,7 @@
                                                    class="link link-primary text-sm">@row.OwnerName</a>
                                             </td>
                                             <td>
-                                                <a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@row.Ticker"
-                                                   class="font-mono link link-primary">@row.Ticker</a>
+                                                <partial name="_StockLink" model='(Ticker: row.Ticker, Class: "font-mono link link-primary")' />
                                             </td>
                                             <td class="text-right font-mono text-success"><compactable-number value="@row.Value" prefix="$" /></td>
                                             <td class="text-right text-sm text-base-content/60 hidden md:table-cell">@row.TransactionDate.ToString("MMM dd")</td>
@@ -88,8 +87,7 @@
                                                    class="link link-primary text-sm">@row.OwnerName</a>
                                             </td>
                                             <td>
-                                                <a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@row.Ticker"
-                                                   class="font-mono link link-primary">@row.Ticker</a>
+                                                <partial name="_StockLink" model='(Ticker: row.Ticker, Class: "font-mono link link-primary")' />
                                             </td>
                                             <td class="text-right font-mono text-error"><compactable-number value="@row.Value" prefix="$" /></td>
                                             <td class="text-right text-sm text-base-content/60 hidden md:table-cell">@row.TransactionDate.ToString("MMM dd")</td>
@@ -134,8 +132,7 @@
                                                class="link link-primary text-sm">@row.OwnerName</a>
                                         </td>
                                         <td>
-                                            <a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@row.Ticker"
-                                               class="font-mono link link-primary">@row.Ticker</a>
+                                            <partial name="_StockLink" model='(Ticker: row.Ticker, Class: "font-mono link link-primary")' />
                                         </td>
                                         <td>
                                             <span class="badge @(row.IsAcquisition ? "badge-success" : "badge-error") badge-xs">

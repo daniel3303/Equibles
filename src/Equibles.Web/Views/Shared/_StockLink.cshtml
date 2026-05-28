@@ -1,0 +1,3 @@
+@model (string Ticker, string Class)
+<a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@Model.Ticker"
+   class="@Model.Class">@Model.Ticker</a>

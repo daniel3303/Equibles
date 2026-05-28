@@ -77,8 +77,7 @@
                         <tr class="hover cursor-pointer stock-row"
                             data-href="@Url.Action("Show", "Stocks", new { ticker = stock.Ticker })">
                             <td>
-                                <a asp-action="Show" asp-controller="Stocks" asp-route-ticker="@stock.Ticker"
-                                   class="font-semibold link link-primary">@stock.Ticker</a>
+                                <partial name="_StockLink" model='(Ticker: stock.Ticker, Class: "font-semibold link link-primary")' />
                             </td>
                             <td class="max-w-xs truncate">@stock.Name</td>
                             <td class="hidden lg:table-cell font-mono text-sm text-base-content/60">@(stock.Cusip ?? "—")</td>

@@ -30,8 +30,7 @@
                         @foreach (var trade in Model.Trades) {
                             <tr>
                                 <td>
-                                    <a asp-action="Show" asp-controller="Stocks" asp-route-ticker="@trade.Ticker"
-                                       class="font-semibold link link-primary">@trade.Ticker</a>
+                                    <partial name="_StockLink" model='(Ticker: trade.Ticker, Class: "font-semibold link link-primary")' />
                                 </td>
                                 <td class="hidden lg:table-cell">@trade.TransactionDate.ToString("yyyy-MM-dd")</td>
                                 <td class="hidden lg:table-cell max-w-xs truncate">@trade.AssetName</td>

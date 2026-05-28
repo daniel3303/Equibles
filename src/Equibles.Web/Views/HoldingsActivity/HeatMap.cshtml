@@ -72,7 +72,7 @@
                                 @foreach (var p in Model.Points.Take(25)) {
                                     var scoreCss = p.ConvictionScore >= 150 ? "text-success" : p.ConvictionScore < 50 ? "text-error" : "";
                                     <tr>
-                                        <td><a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@p.Ticker" class="link link-hover font-mono">@p.Ticker</a></td>
+                                        <td><partial name="_StockLink" model='(Ticker: p.Ticker, Class: "link link-hover font-mono")' /></td>
                                         <td class="max-w-xs truncate">@p.Name</td>
                                         <td class="text-right font-mono @scoreCss">@p.ConvictionScore.ToString("F1")</td>
                                         <td class="text-right font-mono hidden md:table-cell @p.NetConvictionPct.SignCss()">@p.NetConvictionPct.ToStringWithSign("F1")%</td>

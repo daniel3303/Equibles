@@ -82,8 +82,7 @@
                                         <span class="text-xs text-base-content/50 font-mono">@pos.FilerCik</span>
                                     </td>
                                     <td>
-                                        <a asp-action="Show" asp-controller="Stocks" asp-route-ticker="@pos.Ticker"
-                                           class="link link-primary font-mono">@pos.Ticker</a>
+                                        <partial name="_StockLink" model='(Ticker: pos.Ticker, Class: "link link-primary font-mono")' />
                                         <span class="text-xs text-base-content/50 block truncate max-w-[150px]">@pos.StockName</span>
                                     </td>
                                     <td class="text-right font-mono">@pos.PreviousShares.ToString("N0")</td>
