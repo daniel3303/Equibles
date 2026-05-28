@@ -13,7 +13,7 @@ public class MarkdownExtensionsAutolinkJavascriptUriTests
     // construct in the same grammar and falls under the same contract — the AST
     // node is AutolinkInline, not LinkInline, so it bypasses any sanitizer that
     // only walks LinkInline descendants.
-    [Fact(Skip = "GH-2624 — MarkdownToHtml emits active javascript: href for autolink syntax")]
+    [Fact]
     public void MarkdownToHtml_JavascriptAutolink_DoesNotEmitActiveJavascriptHref()
     {
         string captured = null;
