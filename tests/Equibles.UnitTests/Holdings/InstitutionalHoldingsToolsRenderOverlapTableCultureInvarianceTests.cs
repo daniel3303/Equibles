@@ -25,9 +25,7 @@ public class InstitutionalHoldingsToolsRenderOverlapTableCultureInvarianceTests
     // locale. The contract (repo convention; cf. FactMarkdown threading
     // InvariantCulture) is that the same call renders byte-identically regardless
     // of host CurrentCulture.
-    [Fact(
-        Skip = "GH-2647 — RenderOverlapTable :N0/:F1/:N1 and provider-less .ToString(\"N0\")/.ToString(\"F1\") cells follow CurrentCulture (de-DE swaps thousand/decimal separators); MCP output forks by host locale"
-    )]
+    [Fact]
     public void RenderOverlapTable_UnderNonInvariantCulture_RendersCellsCultureInvariantly()
     {
         var holder1 = new InstitutionalHolder { Name = "ACME Capital" };

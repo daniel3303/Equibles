@@ -1150,10 +1150,18 @@ public class InstitutionalHoldingsTools
         result.AppendLine();
         result.AppendLine("| Metric | Value |");
         result.AppendLine("|--------|-------|");
-        result.AppendLine($"| Union positions | {overlap.UnionPositionCount:N0} |");
-        result.AppendLine($"| Shared positions | {overlap.IntersectionPositionCount:N0} |");
-        result.AppendLine($"| Jaccard similarity | {overlap.JaccardSimilarityPercent:F1}% |");
-        result.AppendLine($"| $-weighted overlap | {overlap.DollarWeightedOverlapPercent:F1}% |");
+        result.AppendLine(
+            $"| Union positions | {overlap.UnionPositionCount.ToString("N0", CultureInfo.InvariantCulture)} |"
+        );
+        result.AppendLine(
+            $"| Shared positions | {overlap.IntersectionPositionCount.ToString("N0", CultureInfo.InvariantCulture)} |"
+        );
+        result.AppendLine(
+            $"| Jaccard similarity | {overlap.JaccardSimilarityPercent.ToString("F1", CultureInfo.InvariantCulture)}% |"
+        );
+        result.AppendLine(
+            $"| $-weighted overlap | {overlap.DollarWeightedOverlapPercent.ToString("F1", CultureInfo.InvariantCulture)}% |"
+        );
         result.AppendLine();
 
         if (overlap.Rows.Count == 0)
@@ -1175,7 +1183,7 @@ public class InstitutionalHoldingsTools
             var a = row.Slices[0];
             var b = row.Slices[1];
             result.AppendLine(
-                $"| {i + 1} | {row.Ticker} | {row.Name} | {(a.Shares > 0 ? a.Shares.ToString("N0") : "—")} | {(a.Value > 0 ? a.PercentOfPortfolio.ToString("F1") + "%" : "—")} | {(b.Shares > 0 ? b.Shares.ToString("N0") : "—")} | {(b.Value > 0 ? b.PercentOfPortfolio.ToString("F1") + "%" : "—")} | {row.CombinedValue / 1_000_000m:N1} |"
+                $"| {i + 1} | {row.Ticker} | {row.Name} | {(a.Shares > 0 ? a.Shares.ToString("N0", CultureInfo.InvariantCulture) : "—")} | {(a.Value > 0 ? a.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture) + "%" : "—")} | {(b.Shares > 0 ? b.Shares.ToString("N0", CultureInfo.InvariantCulture) : "—")} | {(b.Value > 0 ? b.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture) + "%" : "—")} | {(row.CombinedValue / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture)} |"
             );
         }
         return result.ToString();
