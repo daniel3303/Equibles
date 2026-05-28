@@ -37,9 +37,7 @@ public class RagManagerBuildContextCultureInvarianceTests
     // RenderInstitutionPortfolio culture-invariance siblings: capture
     // CurrentCulture, render once under Invariant, render once under
     // de-DE, restore in finally, and assert byte-equality.
-    [Fact(
-        Skip = "GH-2608 — BuildContext :N0 on StartLineNumber and default DateOnly.ToString() on ReportingDate follow CurrentCulture (de-DE → `1.234` and `31.12.2024` vs Invariant `1,234` and `12/31/2024`); LLM prompt forks by host locale"
-    )]
+    [Fact]
     public async Task BuildContext_UnderNonInvariantCulture_RendersCultureInvariantly()
     {
         var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };

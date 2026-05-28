@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
@@ -122,7 +123,7 @@ public class RagManager : IRagManager
             var firstChunk = group.First();
             context.AppendLine($"## {firstChunk.Document.CommonStock.Name} ({group.Key.Ticker})");
             context.AppendLine(
-                $"**Document:** {group.Key.DocumentType} filed on {group.Key.ReportingDate}"
+                $"**Document:** {group.Key.DocumentType} filed on {group.Key.ReportingDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
             );
             context.AppendLine();
 
@@ -132,7 +133,7 @@ public class RagManager : IRagManager
                 {
                     context.AppendLine(
                         chunk.StartLineNumber > 0
-                            ? $"**Excerpt {chunk.Index + 1} (line ~{chunk.StartLineNumber:N0}):**"
+                            ? $"**Excerpt {chunk.Index + 1} (line ~{chunk.StartLineNumber.ToString("N0", CultureInfo.InvariantCulture)}):**"
                             : $"**Excerpt {chunk.Index + 1}:**"
                     );
                     context.AppendLine(chunk.Content);
