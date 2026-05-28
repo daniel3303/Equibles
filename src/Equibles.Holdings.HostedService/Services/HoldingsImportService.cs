@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
@@ -854,7 +855,7 @@ public class HoldingsImportService
         OptionType? optionType,
         FilingType filingType
     ) =>
-        $"{commonStockId}|{institutionalHolderId}|{reportDate}|{(int)shareType}|{optionType?.ToString() ?? ""}|{(int)filingType}";
+        $"{commonStockId}|{institutionalHolderId}|{reportDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}|{(int)shareType}|{optionType?.ToString() ?? ""}|{(int)filingType}";
 
     private static string BuildHoldingKey(InstitutionalHolding h) =>
         BuildHoldingKey(

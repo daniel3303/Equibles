@@ -44,9 +44,7 @@ public class HoldingsImportServiceBuildHoldingKeyCultureInvarianceTests
     // Invariant-culture key for the same inputs. Failure manifests as
     // the date-segment separator/order swap (".12.31.2024." vs
     // ".12/31/2024.").
-    [Fact(
-        Skip = "GH-2594 — BuildHoldingKey's reportDate segment renders host-locale short-date pattern (de-DE 31.12.2024 vs Invariant 12/31/2024); dedup-key forks by culture"
-    )]
+    [Fact]
     public void BuildHoldingKey_UnderNonInvariantCulture_RendersReportDateSegmentCultureInvariantly()
     {
         var method = typeof(HoldingsImportService).GetMethod(
