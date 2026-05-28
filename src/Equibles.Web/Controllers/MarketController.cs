@@ -111,12 +111,7 @@ public class MarketController : BaseController
             .ToArray();
         if (values.Length > 0)
         {
-            var s = ComputeStats(values, decimals: 4);
-            viewModel.Mean = s.Mean;
-            viewModel.Median = s.Median;
-            viewModel.Min = s.Min;
-            viewModel.Max = s.Max;
-            viewModel.StdDev = s.StdDev;
+            viewModel.ApplyStats(values.ComputeStats(decimals: 4));
             viewModel.LatestRatio = records.FirstOrDefault()?.PutCallRatio;
             if (records.Count > 1)
                 viewModel.PreviousRatio = records[1].PutCallRatio;
@@ -149,12 +144,7 @@ public class MarketController : BaseController
         var values = records.Select(r => (double)r.Close).ToArray();
         if (values.Length > 0)
         {
-            var s = ComputeStats(values, decimals: 2);
-            viewModel.Mean = s.Mean;
-            viewModel.Median = s.Median;
-            viewModel.Min = s.Min;
-            viewModel.Max = s.Max;
-            viewModel.StdDev = s.StdDev;
+            viewModel.ApplyStats(values.ComputeStats(decimals: 2));
             viewModel.LatestClose = records.FirstOrDefault()?.Close;
             if (records.Count > 1)
                 viewModel.PreviousClose = records[1].Close;
