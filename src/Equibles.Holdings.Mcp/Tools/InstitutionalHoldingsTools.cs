@@ -891,7 +891,7 @@ public class InstitutionalHoldingsTools
         {
             var s = slices[i];
             result.AppendLine(
-                $"| {i + 1} | {s.IndustryName} | {s.PositionCount:N0} | {s.TotalValue / 1_000_000m:N1} | {s.PercentOfPortfolio:F1}% |"
+                $"| {i + 1} | {s.IndustryName} | {s.PositionCount.ToString("N0", CultureInfo.InvariantCulture)} | {(s.TotalValue / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture)} | {s.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture)}% |"
             );
         }
         return result.ToString();
