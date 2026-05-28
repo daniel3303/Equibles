@@ -100,51 +100,29 @@
     <div class="card bg-base-100 shadow-sm @(!Model.DatabaseConnected ? "hidden" : "")" data-status-data-card>
         <div class="card-body">
             <h2 class="card-title text-lg mb-2">Data</h2>
+            @{
+                var dataTiles = new (string Key, string Label, int Value)[]
+                {
+                    ("StockCount", "Stocks", Model.StockCount),
+                    ("DocumentCount", "SEC Filings", Model.DocumentCount),
+                    ("InsiderTransactionCount", "Insider Transactions", Model.InsiderTransactionCount),
+                    ("CongressionalTradeCount", "Congressional Trades", Model.CongressionalTradeCount),
+                    ("InstitutionalHoldingCount", "Institutional Holdings", Model.InstitutionalHoldingCount),
+                    ("FailToDeliverCount", "Fails to Deliver", Model.FailToDeliverCount),
+                    ("FredObservationCount", "Economic Indicators", Model.FredObservationCount),
+                    ("DailyStockPriceCount", "Daily Prices", Model.DailyStockPriceCount),
+                    ("CftcPositionReportCount", "Futures Positions", Model.CftcPositionReportCount),
+                    ("CboePutCallRatioCount", "Put/Call Ratios", Model.CboePutCallRatioCount),
+                    ("CboeVixDailyCount", "VIX Data", Model.CboeVixDailyCount),
+                };
+            }
             <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                <div class="text-center">
-                    <div class="text-2xl font-bold" data-status-count="StockCount">@Model.StockCount.ToString("N0")</div>
-                    <div class="text-xs text-base-content/50">Stocks</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-2xl font-bold" data-status-count="DocumentCount">@Model.DocumentCount.ToString("N0")</div>
-                    <div class="text-xs text-base-content/50">SEC Filings</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-2xl font-bold" data-status-count="InsiderTransactionCount">@Model.InsiderTransactionCount.ToString("N0")</div>
-                    <div class="text-xs text-base-content/50">Insider Transactions</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-2xl font-bold" data-status-count="CongressionalTradeCount">@Model.CongressionalTradeCount.ToString("N0")</div>
-                    <div class="text-xs text-base-content/50">Congressional Trades</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-2xl font-bold" data-status-count="InstitutionalHoldingCount">@Model.InstitutionalHoldingCount.ToString("N0")</div>
-                    <div class="text-xs text-base-content/50">Institutional Holdings</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-2xl font-bold" data-status-count="FailToDeliverCount">@Model.FailToDeliverCount.ToString("N0")</div>
-                    <div class="text-xs text-base-content/50">Fails to Deliver</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-2xl font-bold" data-status-count="FredObservationCount">@Model.FredObservationCount.ToString("N0")</div>
-                    <div class="text-xs text-base-content/50">Economic Indicators</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-2xl font-bold" data-status-count="DailyStockPriceCount">@Model.DailyStockPriceCount.ToString("N0")</div>
-                    <div class="text-xs text-base-content/50">Daily Prices</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-2xl font-bold" data-status-count="CftcPositionReportCount">@Model.CftcPositionReportCount.ToString("N0")</div>
-                    <div class="text-xs text-base-content/50">Futures Positions</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-2xl font-bold" data-status-count="CboePutCallRatioCount">@Model.CboePutCallRatioCount.ToString("N0")</div>
-                    <div class="text-xs text-base-content/50">Put/Call Ratios</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-2xl font-bold" data-status-count="CboeVixDailyCount">@Model.CboeVixDailyCount.ToString("N0")</div>
-                    <div class="text-xs text-base-content/50">VIX Data</div>
-                </div>
+                @foreach (var tile in dataTiles) {
+                    <div class="text-center">
+                        <div class="text-2xl font-bold" data-status-count="@tile.Key">@tile.Value.ToString("N0")</div>
+                        <div class="text-xs text-base-content/50">@tile.Label</div>
+                    </div>
+                }
             </div>
         </div>
     </div>
