@@ -131,7 +131,7 @@ public class InstitutionalHoldingsTools
         result.AppendLine(
             $"Showing {holdings.Count} of {totalInstitutions} institutions. Total: "
                 + $"{totalSharesAll.ToString("N0", CultureInfo.InvariantCulture)} shares, "
-                + $"${(totalValueAll / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture)}M value"
+                + $"${FormatMillions(totalValueAll)}M value"
         );
         result.AppendLine();
         result.AppendLine("| # | Institution | Shares | Value ($M) | % of Total |");
@@ -144,7 +144,7 @@ public class InstitutionalHoldingsTools
             result.AppendLine(
                 $"| {i + 1} | {h.InstitutionalHolder.Name} | "
                     + $"{h.Shares.ToString("N0", CultureInfo.InvariantCulture)} | "
-                    + $"{(h.Value / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture)} | "
+                    + $"{FormatMillions(h.Value)} | "
                     + $"{pct.ToString("F2", CultureInfo.InvariantCulture)}% |"
             );
         }
@@ -281,7 +281,7 @@ public class InstitutionalHoldingsTools
             result.AppendLine(
                 $"| {i + 1} | {h.CommonStock.Ticker} | {h.CommonStock.Name} | "
                     + $"{h.Shares.ToString("N0", CultureInfo.InvariantCulture)} | "
-                    + $"{(h.Value / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture)} |"
+                    + $"{FormatMillions(h.Value)} |"
             );
         }
 
@@ -891,7 +891,7 @@ public class InstitutionalHoldingsTools
         {
             var s = slices[i];
             result.AppendLine(
-                $"| {i + 1} | {s.IndustryName} | {s.PositionCount.ToString("N0", CultureInfo.InvariantCulture)} | {(s.TotalValue / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture)} | {s.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture)}% |"
+                $"| {i + 1} | {s.IndustryName} | {s.PositionCount.ToString("N0", CultureInfo.InvariantCulture)} | {FormatMillions(s.TotalValue)} | {s.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture)}% |"
             );
         }
         return result.ToString();
@@ -1183,7 +1183,7 @@ public class InstitutionalHoldingsTools
             var a = row.Slices[0];
             var b = row.Slices[1];
             result.AppendLine(
-                $"| {i + 1} | {row.Ticker} | {row.Name} | {(a.Shares > 0 ? a.Shares.ToString("N0", CultureInfo.InvariantCulture) : "—")} | {(a.Value > 0 ? a.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture) + "%" : "—")} | {(b.Shares > 0 ? b.Shares.ToString("N0", CultureInfo.InvariantCulture) : "—")} | {(b.Value > 0 ? b.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture) + "%" : "—")} | {(row.CombinedValue / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture)} |"
+                $"| {i + 1} | {row.Ticker} | {row.Name} | {(a.Shares > 0 ? a.Shares.ToString("N0", CultureInfo.InvariantCulture) : "—")} | {(a.Value > 0 ? a.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture) + "%" : "—")} | {(b.Shares > 0 ? b.Shares.ToString("N0", CultureInfo.InvariantCulture) : "—")} | {(b.Value > 0 ? b.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture) + "%" : "—")} | {FormatMillions(row.CombinedValue)} |"
             );
         }
         return result.ToString();
@@ -1341,6 +1341,10 @@ public class InstitutionalHoldingsTools
     // pending switch to InvariantCulture (the other cells here are already invariant).
     private static string FormatSignedMillions(decimal value) =>
         (value / 1_000_000m).ToString("+#,##0.0;-#,##0.0;0.0");
+
+    // Raw dollar values rendered in $millions with one decimal place, invariant culture.
+    private static string FormatMillions(decimal value) =>
+        (value / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture);
 
     private async Task<(
         InstitutionalHolder Holder,
