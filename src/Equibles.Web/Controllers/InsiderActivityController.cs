@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Web.Controllers.Abstract;
@@ -25,12 +26,9 @@ public class InsiderActivityController : BaseController
     {
         var since = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
 
-        var topBuys = await _transactionRepository
-            .GetRecentByType(TransactionCode.Purchase, since)
-            .Where(t => t.IsPriceValid)
-            .OrderByDescending(t => t.Shares * t.PricePerShare)
-            .Take(InsiderDashboardViewModel.RowCap)
-            .Select(t => new InsiderDashboardRow
+        var topBuys = await LoadTopRows(
+            _transactionRepository.GetRecentByType(TransactionCode.Purchase, since),
+            t => new InsiderDashboardRow
             {
                 OwnerName = t.InsiderOwner.Name,
                 OwnerCik = t.InsiderOwner.OwnerCik,
@@ -41,15 +39,12 @@ public class InsiderActivityController : BaseController
                 SecurityTitle = t.SecurityTitle,
                 TransactionCodeLabel = "Buy",
                 IsAcquisition = true,
-            })
-            .ToListAsync();
+            }
+        );
 
-        var topSells = await _transactionRepository
-            .GetRecentByType(TransactionCode.Sale, since)
-            .Where(t => t.IsPriceValid)
-            .OrderByDescending(t => t.Shares * t.PricePerShare)
-            .Take(InsiderDashboardViewModel.RowCap)
-            .Select(t => new InsiderDashboardRow
+        var topSells = await LoadTopRows(
+            _transactionRepository.GetRecentByType(TransactionCode.Sale, since),
+            t => new InsiderDashboardRow
             {
                 OwnerName = t.InsiderOwner.Name,
                 OwnerCik = t.InsiderOwner.OwnerCik,
@@ -60,15 +55,12 @@ public class InsiderActivityController : BaseController
                 SecurityTitle = t.SecurityTitle,
                 TransactionCodeLabel = "Sell",
                 IsAcquisition = false,
-            })
-            .ToListAsync();
+            }
+        );
 
-        var biggest = await _transactionRepository
-            .GetRecent(since)
-            .Where(t => t.IsPriceValid)
-            .OrderByDescending(t => t.Shares * t.PricePerShare)
-            .Take(InsiderDashboardViewModel.RowCap)
-            .Select(t => new InsiderDashboardRow
+        var biggest = await LoadTopRows(
+            _transactionRepository.GetRecent(since),
+            t => new InsiderDashboardRow
             {
                 OwnerName = t.InsiderOwner.Name,
                 OwnerCik = t.InsiderOwner.OwnerCik,
@@ -79,8 +71,8 @@ public class InsiderActivityController : BaseController
                 SecurityTitle = t.SecurityTitle,
                 TransactionCodeLabel = t.TransactionCode.ToString(),
                 IsAcquisition = t.AcquiredDisposed == AcquiredDisposed.Acquired,
-            })
-            .ToListAsync();
+            }
+        );
 
         return View(
             new InsiderDashboardViewModel
@@ -91,4 +83,18 @@ public class InsiderActivityController : BaseController
             }
         );
     }
+
+    // Top N priced transactions by dollar value (Shares * PricePerShare) from the given
+    // source query, projected via the caller's expression. EF translates the projection
+    // server-side, so the SELECT shape per call matches the previous inline chain.
+    private static Task<List<TRow>> LoadTopRows<TRow>(
+        IQueryable<InsiderTransaction> source,
+        Expression<Func<InsiderTransaction, TRow>> projection
+    ) =>
+        source
+            .Where(t => t.IsPriceValid)
+            .OrderByDescending(t => t.Shares * t.PricePerShare)
+            .Take(InsiderDashboardViewModel.RowCap)
+            .Select(projection)
+            .ToListAsync();
 }
