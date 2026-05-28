@@ -184,11 +184,10 @@ public class HoldingsScreenerController : BaseController
         // The default comparison must track the selected date — picking a fixed
         // reportDates[1] collapses to selected==comparison when selected is the
         // second-latest, and to a *newer* comparison when selected is older.
-        var selectedIndex = reportDates.IndexOf(selected);
         DateOnly? comparison =
-            compareDate.HasValue && reportDates.Contains(compareDate.Value) ? compareDate.Value
-            : selectedIndex < reportDates.Count - 1 ? reportDates[selectedIndex + 1]
-            : null;
+            compareDate.HasValue && reportDates.Contains(compareDate.Value)
+                ? compareDate.Value
+                : reportDates.PreviousFrom(selected);
         if (comparison is null)
             return (reportDates, null, null);
         return (reportDates, selected, comparison.Value);

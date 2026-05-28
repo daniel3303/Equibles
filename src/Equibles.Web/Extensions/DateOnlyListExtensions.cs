@@ -10,4 +10,12 @@ public static class DateOnlyListExtensions
         this IList<DateOnly> available,
         DateOnly? requested
     ) => requested.HasValue && available.Contains(requested.Value) ? requested.Value : available[0];
+
+    // List is latest-first (descending); returns the quarter immediately older than
+    // `current`, or null when `current` is the oldest entry or not in the list.
+    public static DateOnly? PreviousFrom(this IList<DateOnly> available, DateOnly current)
+    {
+        var index = available.IndexOf(current);
+        return index >= 0 && index < available.Count - 1 ? available[index + 1] : null;
+    }
 }

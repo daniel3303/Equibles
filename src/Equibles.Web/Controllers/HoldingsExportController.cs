@@ -171,10 +171,8 @@ public class HoldingsExportController : BaseController
             return NotFound();
 
         var selectedDate = reportDates.ResolveSelectedDateOrFirst(date);
-        var selectedIndex = reportDates.IndexOf(selectedDate);
-        if (selectedIndex >= reportDates.Count - 1)
+        if (reportDates.PreviousFrom(selectedDate) is not { } previousDate)
             return NotFound();
-        var previousDate = reportDates[selectedIndex + 1];
 
         // Per-stock buy/sell movers (CSV has no row cap — analysts expect the full set).
         var activity = await _holdingRepository

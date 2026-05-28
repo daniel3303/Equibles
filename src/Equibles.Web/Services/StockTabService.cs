@@ -11,6 +11,7 @@ using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Statements;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.Repositories;
+using Equibles.Web.Extensions;
 using Equibles.Web.ViewModels.Stocks;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -89,11 +90,7 @@ public class StockTabService
         // so the in-memory aggregates are cheaper than re-querying.
         var allCurrent = await LoadHoldingsByStockWithHolder(stock, selectedDate);
 
-        var selectedIndex = reportDates.IndexOf(selectedDate);
-        var previousDate =
-            selectedIndex >= 0 && selectedIndex < reportDates.Count - 1
-                ? reportDates[selectedIndex + 1]
-                : (DateOnly?)null;
+        var previousDate = reportDates.PreviousFrom(selectedDate);
         var allPrevious = previousDate.HasValue
             ? await LoadHoldingsByStockWithHolder(stock, previousDate.Value)
             : [];
