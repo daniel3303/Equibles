@@ -54,28 +54,16 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     }
 
     // Latest dates first — callers consistently treat index 0 as the newest filing window.
-    public IQueryable<DateOnly> GetAvailableReportDates()
-    {
-        return GetAll().Select(h => h.ReportDate).Distinct().OrderByDescending(d => d);
-    }
+    public IQueryable<DateOnly> GetAvailableReportDates() =>
+        GetAll().DistinctReportDatesDescending();
 
     // Latest dates first — see GetAvailableReportDates for the ordering contract.
-    public IQueryable<DateOnly> GetReportDatesByStock(CommonStock stock)
-    {
-        return GetHistoryByStock(stock)
-            .Select(h => h.ReportDate)
-            .Distinct()
-            .OrderByDescending(d => d);
-    }
+    public IQueryable<DateOnly> GetReportDatesByStock(CommonStock stock) =>
+        GetHistoryByStock(stock).DistinctReportDatesDescending();
 
     // Latest dates first — see GetAvailableReportDates for the ordering contract.
-    public IQueryable<DateOnly> GetReportDatesByHolder(InstitutionalHolder holder)
-    {
-        return GetHistoryByHolder(holder)
-            .Select(h => h.ReportDate)
-            .Distinct()
-            .OrderByDescending(d => d);
-    }
+    public IQueryable<DateOnly> GetReportDatesByHolder(InstitutionalHolder holder) =>
+        GetHistoryByHolder(holder).DistinctReportDatesDescending();
 
     public IQueryable<InstitutionalHolding> GetByAccessionNumber(string accessionNumber)
     {
@@ -736,4 +724,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         combined
             ? GetDoubleDownPositionsCombined(current, previous, minPctIncrease)
             : GetDoubleDownPositions(current, previous, minPctIncrease);
+}
+
+file static class InstitutionalHoldingQueryableExtensions
+{
+    public static IQueryable<DateOnly> DistinctReportDatesDescending(
+        this IQueryable<InstitutionalHolding> source
+    ) => source.Select(h => h.ReportDate).Distinct().OrderByDescending(d => d);
 }
