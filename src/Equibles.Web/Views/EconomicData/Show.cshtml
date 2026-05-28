@@ -159,12 +159,12 @@
             const ctx = document.getElementById('economy-chart');
             if (!ctx || typeof Chart === 'undefined') return;
 
-            const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chronological.Select(o => o.Date.ToString("yyyy-MM-dd")).ToList()));
-            const values = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chronological.Select(o => o.Value).ToList()));
-            const sma20 = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sma20));
-            const sma50 = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sma50));
+            const labels = @Html.Json(chronological.Select(o => o.Date.ToString("yyyy-MM-dd")).ToList());
+            const values = @Html.Json(chronological.Select(o => o.Value).ToList());
+            const sma20 = @Html.Json(Model.Sma20);
+            const sma50 = @Html.Json(Model.Sma50);
 
-            const seriesLabel = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.SeriesId));
+            const seriesLabel = @Html.Json(Model.SeriesId);
             const datasets = [{
                 label: seriesLabel,
                 data: values,

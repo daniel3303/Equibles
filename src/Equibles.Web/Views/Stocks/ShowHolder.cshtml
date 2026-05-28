@@ -146,8 +146,8 @@
                 const ctx = document.getElementById('holder-position-chart');
                 if (!ctx || typeof Chart === 'undefined') return;
 
-                const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chartHoldings.Select(h => h.ReportDate.ToString("yyyy-MM-dd")).ToList()));
-                const shares = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chartHoldings.Select(h => h.Shares).ToList()));
+                const labels = @Html.Json(chartHoldings.Select(h => h.ReportDate.ToString("yyyy-MM-dd")).ToList());
+                const shares = @Html.Json(chartHoldings.Select(h => h.Shares).ToList());
 
                 new Chart(ctx, {
                     type: 'line',

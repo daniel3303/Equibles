@@ -39,8 +39,8 @@
         const ctx = document.getElementById('ftd-chart');
         if (!ctx || typeof Chart === 'undefined') return;
 
-        const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.FailsToDeliver.Select(f => f.SettlementDate.ToString("yyyy-MM-dd")).ToList()));
-        const quantities = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.FailsToDeliver.Select(f => f.Quantity).ToList()));
+        const labels = @Html.Json(Model.FailsToDeliver.Select(f => f.SettlementDate.ToString("yyyy-MM-dd")).ToList());
+        const quantities = @Html.Json(Model.FailsToDeliver.Select(f => f.Quantity).ToList());
 
         new Chart(ctx, {
             type: 'bar',

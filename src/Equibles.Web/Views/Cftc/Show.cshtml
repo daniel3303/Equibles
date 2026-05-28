@@ -146,9 +146,9 @@
             const ctx = document.getElementById('cftc-chart');
             if (!ctx || typeof Chart === 'undefined') return;
 
-            const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chronological.Select(r => r.ReportDate.ToString("yyyy-MM-dd")).ToList()));
-            const commNet = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chronological.Select(r => r.CommLong - r.CommShort).ToList()));
-            const nonCommNet = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chronological.Select(r => r.NonCommLong - r.NonCommShort).ToList()));
+            const labels = @Html.Json(chronological.Select(r => r.ReportDate.ToString("yyyy-MM-dd")).ToList());
+            const commNet = @Html.Json(chronological.Select(r => r.CommLong - r.CommShort).ToList());
+            const nonCommNet = @Html.Json(chronological.Select(r => r.NonCommLong - r.NonCommShort).ToList());
 
             new Chart(ctx, {
                 type: 'line',

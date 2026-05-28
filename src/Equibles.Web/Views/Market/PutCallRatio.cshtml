@@ -129,8 +129,8 @@
             const ctx = document.getElementById('pcr-chart');
             if (!ctx || typeof Chart === 'undefined') return;
 
-            const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chronological.Select(r => r.Date.ToString("yyyy-MM-dd")).ToList()));
-            const values = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chronological.Select(r => r.PutCallRatio).ToList()));
+            const labels = @Html.Json(chronological.Select(r => r.Date.ToString("yyyy-MM-dd")).ToList());
+            const values = @Html.Json(chronological.Select(r => r.PutCallRatio).ToList());
 
             new Chart(ctx, {
                 type: 'line',

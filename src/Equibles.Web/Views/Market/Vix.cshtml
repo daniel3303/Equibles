@@ -134,8 +134,8 @@
             const ctx = document.getElementById('vix-chart');
             if (!ctx || typeof Chart === 'undefined') return;
 
-            const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chronological.Select(r => r.Date.ToString("yyyy-MM-dd")).ToList()));
-            const closes = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chronological.Select(r => r.Close).ToList()));
+            const labels = @Html.Json(chronological.Select(r => r.Date.ToString("yyyy-MM-dd")).ToList());
+            const closes = @Html.Json(chronological.Select(r => r.Close).ToList());
 
             // Compute SMA-20 and SMA-50 from chart data
             function computeSma(data, period) {
