@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Web.Controllers.Abstract;
+using Equibles.Web.Extensions;
 using Equibles.Web.Services;
 using Equibles.Web.ViewModels.Stocks;
 using Microsoft.AspNetCore.Mvc;
@@ -110,7 +111,7 @@ public class HoldingsExportController : BaseController
         if (reportDates.Count == 0)
             return NotFound();
 
-        var selectedDate = ResolveSelectedDate(date, reportDates);
+        var selectedDate = reportDates.ResolveSelectedDateOrFirst(date);
 
         var rowsRaw = await _holdingRepository
             .GetByHolder(holder, selectedDate)
@@ -169,7 +170,7 @@ public class HoldingsExportController : BaseController
         if (reportDates.Count < 2)
             return NotFound();
 
-        var selectedDate = ResolveSelectedDate(date, reportDates);
+        var selectedDate = reportDates.ResolveSelectedDateOrFirst(date);
         var selectedIndex = reportDates.IndexOf(selectedDate);
         if (selectedIndex >= reportDates.Count - 1)
             return NotFound();
@@ -247,9 +248,6 @@ public class HoldingsExportController : BaseController
         Response.Headers.CacheControl = "no-store";
         return File(Encoding.UTF8.GetBytes(csv), "text/csv", filename);
     }
-
-    private static DateOnly ResolveSelectedDate(DateOnly? requested, List<DateOnly> available) =>
-        requested.HasValue && available.Contains(requested.Value) ? requested.Value : available[0];
 
     private static string[] ActivityRow(
         string board,
