@@ -164,21 +164,35 @@ public abstract class BaseScraperWorker : BackgroundService
                 );
             }
 
-            var interval = _retrySoonRequested ? NotReadyRetryInterval : SleepInterval;
-            Logger.LogInformation(
-                _retrySoonRequested
-                    ? "{Worker} not ready (dependency pending); retrying in {Interval}"
-                    : "{Worker} cycle complete. Sleeping for {Interval}",
-                WorkerName,
-                interval
-            );
-            await PublishActivity(
-                _retrySoonRequested ? ScraperActivitySeverity.Warn : ScraperActivitySeverity.Info,
-                _retrySoonRequested
-                    ? $"not ready, retrying in {FormatInterval(interval)}"
-                    : $"cycle complete, sleeping {FormatInterval(interval)}",
-                stoppingToken
-            );
+            TimeSpan interval;
+            if (_retrySoonRequested)
+            {
+                interval = NotReadyRetryInterval;
+                Logger.LogInformation(
+                    "{Worker} not ready (dependency pending); retrying in {Interval}",
+                    WorkerName,
+                    interval
+                );
+                await PublishActivity(
+                    ScraperActivitySeverity.Warn,
+                    $"not ready, retrying in {FormatInterval(interval)}",
+                    stoppingToken
+                );
+            }
+            else
+            {
+                interval = SleepInterval;
+                Logger.LogInformation(
+                    "{Worker} cycle complete. Sleeping for {Interval}",
+                    WorkerName,
+                    interval
+                );
+                await PublishActivity(
+                    ScraperActivitySeverity.Info,
+                    $"cycle complete, sleeping {FormatInterval(interval)}",
+                    stoppingToken
+                );
+            }
             await WaitForNextCycle(interval, stoppingToken);
         }
     }
