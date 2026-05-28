@@ -4,15 +4,11 @@
 @{
     ViewData["Title"] = "Compare institutions";
 
-    var pickerVm = new InstitutionPickerViewModel
-    {
-        Picks = Model.InitialPicks,
-        MinPicks = InstitutionCompareViewModel.MinCiks,
-        MaxPicks = InstitutionCompareViewModel.MaxCiks,
-        CommonReportDates = Model.CommonReportDates,
-        SelectedDate = Model.SelectedDate,
-        SubmitLabel = "Compare",
-    };
+    var pickerVm = InstitutionPickerViewModel.For(
+        Model,
+        InstitutionCompareViewModel.MinCiks,
+        InstitutionCompareViewModel.MaxCiks,
+        "Compare");
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">

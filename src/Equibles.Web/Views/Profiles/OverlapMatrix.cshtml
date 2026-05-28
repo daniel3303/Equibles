@@ -5,15 +5,11 @@
     ViewData["Title"] = "Overlap Matrix";
     ViewData["Description"] = "Pairwise overlap of institutional 13F holdings — count of shared tickers between each pair.";
 
-    var pickerVm = new InstitutionPickerViewModel
-    {
-        Picks = Model.InitialPicks,
-        MinPicks = InstitutionOverlapMatrixViewModel.MinCiks,
-        MaxPicks = InstitutionOverlapMatrixViewModel.MaxCiks,
-        CommonReportDates = Model.CommonReportDates,
-        SelectedDate = Model.SelectedDate,
-        SubmitLabel = "Compare",
-    };
+    var pickerVm = InstitutionPickerViewModel.For(
+        Model,
+        InstitutionOverlapMatrixViewModel.MinCiks,
+        InstitutionOverlapMatrixViewModel.MaxCiks,
+        "Compare");
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
