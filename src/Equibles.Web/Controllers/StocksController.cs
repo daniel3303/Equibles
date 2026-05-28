@@ -229,7 +229,7 @@ public class StocksController : BaseController
 
     private async Task<Equibles.CommonStocks.Data.Models.CommonStock> LoadStock(string ticker)
     {
-        return await _commonStockRepository.GetByTicker(ticker.ToUpper());
+        return await _commonStockRepository.GetByTicker(ticker.ToUpperInvariant());
     }
 
     private StockDetailViewModel BuildStockViewModel(
@@ -266,17 +266,17 @@ public class StocksController : BaseController
         {
             Document = document,
             Content = content,
-            Ticker = ticker.ToUpper(),
+            Ticker = ticker.ToUpperInvariant(),
         };
 
-        ViewData["Title"] = $"{document.DocumentType.DisplayName} - {ticker.ToUpper()}";
+        ViewData["Title"] = $"{document.DocumentType.DisplayName} - {ticker.ToUpperInvariant()}";
         return View(viewModel);
     }
 
     [HttpGet("~/stocks/{ticker}/holders/{cik}")]
     public async Task<IActionResult> ShowHolder(string ticker, string cik)
     {
-        var stock = await _commonStockRepository.GetByTicker(ticker.ToUpper());
+        var stock = await _commonStockRepository.GetByTicker(ticker.ToUpperInvariant());
         if (stock == null)
             return NotFound();
 
@@ -286,7 +286,7 @@ public class StocksController : BaseController
 
         var viewModel = await _stockTabService.LoadHolderDetail(stock, holder);
 
-        ViewData["Title"] = $"{holder.Name} - {ticker.ToUpper()}";
+        ViewData["Title"] = $"{holder.Name} - {ticker.ToUpperInvariant()}";
         return View(viewModel);
     }
 }
