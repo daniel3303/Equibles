@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
@@ -53,7 +54,7 @@ public class ShortDataTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) = await ResolveStockByTicker(ticker);
+                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
                     return stockError;
 
@@ -114,7 +115,7 @@ public class ShortDataTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) = await ResolveStockByTicker(ticker);
+                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
                     return stockError;
 
@@ -233,13 +234,7 @@ public class ShortDataTools
             ? $"+{change.ToString("N0", CultureInfo.InvariantCulture)}"
             : change.ToString("N0", CultureInfo.InvariantCulture);
 
-    private async Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker)
-    {
-        var stock = await _commonStockRepository.GetByTicker(
-            McpToolExecutor.NormalizeTicker(ticker)
-        );
-        if (stock == null)
-            return (null, McpToolExecutor.StockNotFound(ticker));
-        return (stock, null);
-    }
+    // Thin forwarder so existing reflection-based normalization tests still find the method.
+    private Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker) =>
+        _commonStockRepository.ResolveByTicker(ticker);
 }
