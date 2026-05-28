@@ -1,3 +1,5 @@
+using Equibles.Web.Extensions;
+
 namespace Equibles.Web.ViewModels.Institutions;
 
 public class InstitutionBrowserViewModel
@@ -13,5 +15,5 @@ public class InstitutionBrowserViewModel
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 50;
     public int TotalCount { get; set; }
-    public int TotalPages => Math.Max(1, (TotalCount + PageSize - 1) / PageSize);
+    public int TotalPages => Pagination.PageCount(TotalCount, PageSize);
 }

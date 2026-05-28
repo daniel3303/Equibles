@@ -1,3 +1,5 @@
+using Equibles.Web.Extensions;
+
 namespace Equibles.Web.ViewModels.Holdings;
 
 public class HoldingsMostHeldViewModel : QuarterlySelectionViewModel
@@ -17,7 +19,7 @@ public class HoldingsMostHeldViewModel : QuarterlySelectionViewModel
     // 1-based page number; total rows + page count drive the pager footer.
     public int Page { get; set; } = 1;
     public int TotalRows { get; set; }
-    public int TotalPages => Math.Max(1, (TotalRows + PageSize - 1) / PageSize);
+    public int TotalPages => Pagination.PageCount(TotalRows, PageSize);
 
     public List<HoldingsMostHeldRow> Rows { get; set; } = [];
 }
