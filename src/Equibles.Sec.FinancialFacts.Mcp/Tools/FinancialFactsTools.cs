@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
@@ -80,11 +81,9 @@ public class FinancialFactsTools
                 if (string.IsNullOrWhiteSpace(concept))
                     return $"A concept is required. {SupportedAliasesNote()}";
 
-                var stock = await _commonStockRepository.GetByTicker(
-                    McpToolExecutor.NormalizeTicker(ticker)
-                );
-                if (stock == null)
-                    return McpToolExecutor.StockNotFound(ticker);
+                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                if (stockError != null)
+                    return stockError;
 
                 if (!FinancialConceptAliases.TryResolve(concept, out var conceptRefs))
                     return $"Unknown concept '{concept}'. {SupportedAliasesNote()}";

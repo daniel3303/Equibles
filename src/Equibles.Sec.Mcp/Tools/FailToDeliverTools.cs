@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
@@ -48,11 +49,9 @@ public class FailToDeliverTools
         return _runner.Execute(
             async () =>
             {
-                var stock = await _commonStockRepository.GetByTicker(
-                    McpToolExecutor.NormalizeTicker(ticker)
-                );
-                if (stock == null)
-                    return McpToolExecutor.StockNotFound(ticker);
+                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                if (stockError != null)
+                    return stockError;
 
                 var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
