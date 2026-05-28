@@ -11,4 +11,20 @@ public class InstitutionPickerViewModel
     public List<DateOnly> CommonReportDates { get; set; } = [];
     public DateOnly? SelectedDate { get; set; }
     public string SubmitLabel { get; set; } = "Compare";
+
+    public static InstitutionPickerViewModel For(
+        MultiInstitutionViewModel source,
+        int minPicks,
+        int maxPicks,
+        string submitLabel
+    ) =>
+        new()
+        {
+            Picks = source.InitialPicks,
+            MinPicks = minPicks,
+            MaxPicks = maxPicks,
+            CommonReportDates = source.CommonReportDates,
+            SelectedDate = source.SelectedDate,
+            SubmitLabel = submitLabel,
+        };
 }

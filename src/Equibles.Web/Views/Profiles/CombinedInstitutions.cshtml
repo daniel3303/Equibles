@@ -4,15 +4,11 @@
 @{
     ViewData["Title"] = "Combined portfolio";
 
-    var pickerVm = new InstitutionPickerViewModel
-    {
-        Picks = Model.InitialPicks,
-        MinPicks = InstitutionCombinedViewModel.MinCiks,
-        MaxPicks = InstitutionCombinedViewModel.MaxCiks,
-        CommonReportDates = Model.CommonReportDates,
-        SelectedDate = Model.SelectedDate,
-        SubmitLabel = "Combine",
-    };
+    var pickerVm = InstitutionPickerViewModel.For(
+        Model,
+        InstitutionCombinedViewModel.MinCiks,
+        InstitutionCombinedViewModel.MaxCiks,
+        "Combine");
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
