@@ -1,10 +1,9 @@
 namespace Equibles.Web.ViewModels.Stocks;
 
-public class HoldingsTabViewModel
+public class HoldingsTabViewModel : StockTabViewModel
 {
     public List<DateOnly> AvailableDates { get; set; } = [];
     public DateOnly SelectedDate { get; set; }
-    public string Ticker { get; set; }
     public long TotalValue { get; set; }
     public long TotalShares { get; set; }
     public int HolderCount { get; set; }
