@@ -31,21 +31,7 @@
                     <label for="heatmap-date" class="text-base-content/60 whitespace-nowrap">Report Date:</label>
                     <select id="heatmap-date" class="select select-bordered select-sm"
                         onchange="var v=this.value; window.location.href = v==='combined' ? 'HeatMap?combined=true' : 'HeatMap?date=' + v">
-                        @if (Model.IsCombinedAvailable) {
-                            if (Model.IsCombinedSelected) {
-                                <option value="combined" selected>Current Combined</option>
-                            } else {
-                                <option value="combined">Current Combined</option>
-                            }
-                        }
-                        @foreach (var d in Model.AvailableDates) {
-                            var sel = !Model.IsCombinedSelected && d == Model.SelectedDate;
-                            if (sel) {
-                                <option value="@d.ToString("yyyy-MM-dd")" selected>@d.ToString("MMM dd, yyyy")</option>
-                            } else {
-                                <option value="@d.ToString("yyyy-MM-dd")">@d.ToString("MMM dd, yyyy")</option>
-                            }
-                        }
+                        <partial name="_QuarterDateOptions" model="Model" />
                     </select>
                 </div>
                 <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Stocks:</span> <strong>@Model.Points.Count.ToString("N0")</strong></div>
