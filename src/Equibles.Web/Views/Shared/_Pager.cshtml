@@ -1,0 +1,43 @@
+@model (int Page, int TotalPages, string Action, string AriaLabel, string TestId, IDictionary<string, string> RouteData)
+@if (Model.TotalPages > 1) {
+    var startPage = Math.Max(1, Model.Page - 2);
+    var endPage = Math.Min(Model.TotalPages, Model.Page + 2);
+    var routeData = Model.RouteData ?? new Dictionary<string, string>();
+    var testId = string.IsNullOrEmpty(Model.TestId) ? null : Model.TestId;
+    <nav class="flex justify-center mt-6" aria-label="@Model.AriaLabel" data-testid="@testId">
+        <div class="join">
+            @if (Model.Page > 1) {
+                <a asp-action="@Model.Action" asp-all-route-data="routeData" asp-route-page="@(Model.Page - 1)"
+                   class="join-item btn btn-sm" aria-label="Go to previous page">Previous</a>
+            }
+
+            @if (startPage > 1) {
+                <a asp-action="@Model.Action" asp-all-route-data="routeData" asp-route-page="1"
+                   class="join-item btn btn-sm" aria-label="Go to page 1">1</a>
+                @if (startPage > 2) {
+                    <span class="join-item btn btn-sm btn-disabled" aria-hidden="true">...</span>
+                }
+            }
+
+            @for (var i = startPage; i <= endPage; i++) {
+                <a asp-action="@Model.Action" asp-all-route-data="routeData" asp-route-page="@i"
+                   class="join-item btn btn-sm @(i == Model.Page ? "btn-active" : "")"
+                   aria-label="Go to page @i"
+                   aria-current="@(i == Model.Page ? "page" : null)">@i</a>
+            }
+
+            @if (endPage < Model.TotalPages) {
+                @if (endPage < Model.TotalPages - 1) {
+                    <span class="join-item btn btn-sm btn-disabled" aria-hidden="true">...</span>
+                }
+                <a asp-action="@Model.Action" asp-all-route-data="routeData" asp-route-page="@Model.TotalPages"
+                   class="join-item btn btn-sm" aria-label="Go to page @Model.TotalPages">@Model.TotalPages</a>
+            }
+
+            @if (Model.Page < Model.TotalPages) {
+                <a asp-action="@Model.Action" asp-all-route-data="routeData" asp-route-page="@(Model.Page + 1)"
+                   class="join-item btn btn-sm" aria-label="Go to next page">Next</a>
+            }
+        </div>
+    </nav>
+}
