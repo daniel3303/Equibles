@@ -76,10 +76,10 @@ public class CboeTools
 
                 foreach (var r in records.OrderBy(r => r.Date))
                 {
-                    var callStr = r.CallVolume?.ToString("N0") ?? "—";
-                    var putStr = r.PutVolume?.ToString("N0") ?? "—";
-                    var totalStr = r.TotalVolume?.ToString("N0") ?? "—";
-                    var ratioStr = r.PutCallRatio?.ToString("F2") ?? "—";
+                    var callStr = McpFormat.OrDash(r.CallVolume, "N0");
+                    var putStr = McpFormat.OrDash(r.PutVolume, "N0");
+                    var totalStr = McpFormat.OrDash(r.TotalVolume, "N0");
+                    var ratioStr = McpFormat.OrDash(r.PutCallRatio, "F2");
                     result.AppendLine(
                         $"| {r.Date:yyyy-MM-dd} | {callStr} | {putStr} | {totalStr} | {ratioStr} |"
                     );

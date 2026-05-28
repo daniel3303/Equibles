@@ -152,8 +152,8 @@ public class CftcTools
 
                     latestReports.TryGetValue(contract.Id, out var report);
 
-                    var dateStr = report?.ReportDate.ToString("yyyy-MM-dd") ?? "—";
-                    var oiStr = report?.OpenInterest.ToString("N0") ?? "—";
+                    var dateStr = McpFormat.OrDash(report?.ReportDate, "yyyy-MM-dd");
+                    var oiStr = McpFormat.OrDash(report?.OpenInterest, "N0");
                     var commNet =
                         report != null ? (report.CommLong - report.CommShort).ToString("N0") : "—";
                     var nonCommNet =
