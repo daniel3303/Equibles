@@ -16,18 +16,12 @@
     <!-- ReportDate + sort selector + universe size header. -->
     <div class="mb-4 text-sm">
         <div class="flex flex-wrap items-center gap-x-5 gap-y-2 mb-1">
-            <div class="flex items-center gap-2 shrink-0">
-                <label for="most-held-date" class="text-base-content/60 whitespace-nowrap">Report Date:</label>
-                @{
-                    var mostHeldDateParam = Model.IsCombinedSelected
-                        ? "combined=true"
-                        : "date=" + Model.SelectedDate.ToString("yyyy-MM-dd");
-                }
-                <select id="most-held-date" class="select select-bordered select-sm"
-                    onchange="var v=this.value; window.location.href = v==='combined' ? 'MostHeld?combined=true&sort=@Model.Sort' : 'MostHeld?date=' + v + '&sort=@Model.Sort'">
-                    <partial name="_QuarterDateOptions" model="Model" />
-                </select>
-            </div>
+            @{
+                var mostHeldDateParam = Model.IsCombinedSelected
+                    ? "combined=true"
+                    : "date=" + Model.SelectedDate.ToString("yyyy-MM-dd");
+            }
+            <partial name="_ReportDateSelector" model='("most-held-date", "MostHeld", $"&sort={Model.Sort}", (Equibles.Web.ViewModels.Holdings.QuarterlySelectionViewModel)Model)' />
             <div class="flex items-center gap-2 shrink-0">
                 <label for="most-held-sort" class="text-base-content/60 whitespace-nowrap">Sort by:</label>
                 <select id="most-held-sort" class="select select-bordered select-sm"

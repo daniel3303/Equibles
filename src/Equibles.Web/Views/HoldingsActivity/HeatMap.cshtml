@@ -19,13 +19,7 @@
     } else {
         <div class="mb-4 text-sm">
             <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
-                <div class="flex items-center gap-2 shrink-0">
-                    <label for="heatmap-date" class="text-base-content/60 whitespace-nowrap">Report Date:</label>
-                    <select id="heatmap-date" class="select select-bordered select-sm"
-                        onchange="var v=this.value; window.location.href = v==='combined' ? 'HeatMap?combined=true' : 'HeatMap?date=' + v">
-                        <partial name="_QuarterDateOptions" model="Model" />
-                    </select>
-                </div>
+                <partial name="_ReportDateSelector" model='("heatmap-date", "HeatMap", "", (Equibles.Web.ViewModels.Holdings.QuarterlySelectionViewModel)Model)' />
                 <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Stocks:</span> <strong>@Model.Points.Count.ToString("N0")</strong></div>
                 <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">13F Universe:</span> <strong>@Model.TotalUniverseFilers.ToString("N0") filers</strong></div>
             </div>

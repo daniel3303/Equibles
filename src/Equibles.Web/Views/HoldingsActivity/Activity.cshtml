@@ -13,13 +13,7 @@
     <!-- ReportDate selector + comparison subtitle -->
     <div class="mb-4 text-sm">
         <div class="flex flex-wrap items-center gap-x-5 gap-y-2 mb-1">
-            <div class="flex items-center gap-2 shrink-0">
-                <label for="activity-date" class="text-base-content/60 whitespace-nowrap">Report Date:</label>
-                <select id="activity-date" class="select select-bordered select-sm"
-                    onchange="var v=this.value; window.location.href = v==='combined' ? 'Activity?combined=true' : 'Activity?date=' + v">
-                    <partial name="_QuarterDateOptions" model="Model" />
-                </select>
-            </div>
+            <partial name="_ReportDateSelector" model='("activity-date", "Activity", "", (Equibles.Web.ViewModels.Holdings.QuarterlySelectionViewModel)Model)' />
             @if (Model.PreviousDate.HasValue) {
                 <div class="text-xs text-base-content/50">vs prior quarter @Model.PreviousDate.Value.ToString("MMM dd, yyyy")</div>
                 <!-- CSV download covers all four boards for the selected ReportDate. -->

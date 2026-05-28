@@ -1,0 +1,9 @@
+@using Equibles.Web.ViewModels.Holdings
+@model (string Id, string Action, string ExtraQuery, QuarterlySelectionViewModel Quarter)
+<div class="flex items-center gap-2 shrink-0">
+    <label for="@Model.Id" class="text-base-content/60 whitespace-nowrap">Report Date:</label>
+    <select id="@Model.Id" class="select select-bordered select-sm"
+        onchange="var v=this.value; window.location.href = v==='combined' ? '@(Model.Action)?combined=true@Html.Raw(Model.ExtraQuery)' : '@(Model.Action)?date=' + v + '@Html.Raw(Model.ExtraQuery)'">
+        <partial name="_QuarterDateOptions" model="Model.Quarter" />
+    </select>
+</div>
