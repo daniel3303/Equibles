@@ -159,7 +159,7 @@ public class VersionCheckService
     {
         if (
             !Version.TryParse(NormalizeVersion(current), out var currentVersion)
-            || !Version.TryParse(latest, out var latestVersion)
+            || !Version.TryParse(NormalizeVersion(latest), out var latestVersion)
         )
         {
             return false;
