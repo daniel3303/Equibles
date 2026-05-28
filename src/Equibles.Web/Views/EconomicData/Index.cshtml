@@ -82,15 +82,3 @@
         }
     </div>
 </div>
-
-@section Scripts {
-    <script>
-    // Make table rows clickable to navigate to the series detail page
-    document.querySelectorAll('.economy-row').forEach(function(row) {
-        row.addEventListener('click', function(e) {
-            if (e.target.closest('a')) return; // let native link clicks through
-            window.location.href = this.dataset.href;
-        });
-    });
-    </script>
-}

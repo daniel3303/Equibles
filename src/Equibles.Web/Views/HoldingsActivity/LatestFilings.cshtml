@@ -69,15 +69,3 @@
 
     <partial name="_Pager" model='(Model.Page, Model.TotalPages, "LatestFilings", "Filings pagination", "filings-pager", (IDictionary<string, string>)null)' />
 </div>
-
-@section Scripts {
-    <script>
-    // Row-click navigation
-    document.querySelectorAll('.filing-row').forEach(function(row) {
-        row.addEventListener('click', function(e) {
-            if (e.target.closest('a')) return;
-            window.location.href = this.dataset.href;
-        });
-    });
-    </script>
-}

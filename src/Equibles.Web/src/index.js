@@ -26,3 +26,4 @@ import './js/search-clear';
 import './js/copy-button';
 import './js/compact-numbers';
 import './js/institution-picker';
+import './js/row-click-navigation';

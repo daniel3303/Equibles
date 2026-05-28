@@ -107,16 +107,3 @@
 
     <partial name="_Pager" model='(Model.Page, Model.TotalPages, "Index", "Institutions pagination", "institutions-pager", (IDictionary<string, string>)filterRoute)' />
 </div>
-
-@section Scripts {
-    <script>
-    // Row-click navigation: same UX as the Stocks index — clicking anywhere on
-    // a row (other than an inner link) navigates to the institution profile.
-    document.querySelectorAll('.institution-row').forEach(function(row) {
-        row.addEventListener('click', function(e) {
-            if (e.target.closest('a')) return; // let native link clicks through
-            window.location.href = this.dataset.href;
-        });
-    });
-    </script>
-}
