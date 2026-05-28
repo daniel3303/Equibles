@@ -441,4 +441,180 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
         result.Should().NotContain("99,999");
         result.Should().NotContain("2026-02-28");
     }
+
+    // ── GetLargestShortVolume ────────────────────────────────────────────
+
+    private static DailyShortVolume ShortVolume(
+        CommonStock stock,
+        DateOnly date,
+        long shortVolume,
+        long totalVolume,
+        long exemptVolume = 0
+    ) =>
+        new()
+        {
+            CommonStock = stock,
+            CommonStockId = stock.Id,
+            Date = date,
+            ShortVolume = shortVolume,
+            ShortExemptVolume = exemptVolume,
+            TotalVolume = totalVolume,
+            Market = "ALL",
+        };
+
+    [Fact]
+    public async Task GetLargestShortVolume_NoData_ReturnsEmptyMessage()
+    {
+        var result = await Sut().GetLargestShortVolume();
+
+        result.Should().Be("No short volume data available.");
+    }
+
+    [Fact]
+    public async Task GetLargestShortVolume_RanksByShortVolumeDescending()
+    {
+        var gme = GmeStock();
+        var amc = AmcStock();
+        DbContext.Set<CommonStock>().AddRange(gme, amc);
+        var day = new DateOnly(2026, 4, 2);
+        DbContext
+            .Set<DailyShortVolume>()
+            .AddRange(
+                ShortVolume(gme, day, shortVolume: 5_000_000, totalVolume: 8_000_000),
+                ShortVolume(amc, day, shortVolume: 9_000_000, totalVolume: 20_000_000)
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetLargestShortVolume();
+
+        result.Should().Contain($"trading day {day:yyyy-MM-dd}");
+        // AMC has the larger short volume so it must rank above GME.
+        result.IndexOf("AMC").Should().BeLessThan(result.IndexOf("GME"));
+    }
+
+    [Fact]
+    public async Task GetLargestShortVolume_DefaultsToLatestTradingDay()
+    {
+        var gme = GmeStock();
+        DbContext.Set<CommonStock>().Add(gme);
+        DbContext
+            .Set<DailyShortVolume>()
+            .AddRange(
+                ShortVolume(gme, new DateOnly(2026, 4, 1), shortVolume: 1_000, totalVolume: 2_000),
+                ShortVolume(gme, new DateOnly(2026, 4, 2), shortVolume: 9_999, totalVolume: 20_000)
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetLargestShortVolume();
+
+        result.Should().Contain("2026-04-02");
+        result.Should().Contain("9,999");
+        result.Should().NotContain("2026-04-01");
+    }
+
+    [Fact]
+    public async Task GetLargestShortVolume_ExplicitDate_OverridesLatest()
+    {
+        var gme = GmeStock();
+        DbContext.Set<CommonStock>().Add(gme);
+        DbContext
+            .Set<DailyShortVolume>()
+            .AddRange(
+                ShortVolume(gme, new DateOnly(2026, 4, 1), shortVolume: 1_234, totalVolume: 5_000),
+                ShortVolume(gme, new DateOnly(2026, 4, 2), shortVolume: 9_999, totalVolume: 20_000)
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetLargestShortVolume(date: "2026-04-01");
+
+        result.Should().Contain("2026-04-01");
+        result.Should().Contain("1,234");
+        result.Should().NotContain("9,999");
+    }
+
+    [Fact]
+    public async Task GetLargestShortVolume_ComputesShortPercentage()
+    {
+        var gme = GmeStock();
+        DbContext.Set<CommonStock>().Add(gme);
+        DbContext
+            .Set<DailyShortVolume>()
+            .Add(
+                ShortVolume(
+                    gme,
+                    new DateOnly(2026, 4, 2),
+                    shortVolume: 750_000,
+                    totalVolume: 1_000_000
+                )
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetLargestShortVolume();
+
+        result.Should().Contain("75.0%");
+    }
+
+    [Fact]
+    public async Task GetLargestShortVolume_MinShortVolumeFiltersResults()
+    {
+        var gme = GmeStock();
+        var amc = AmcStock();
+        DbContext.Set<CommonStock>().AddRange(gme, amc);
+        var day = new DateOnly(2026, 4, 2);
+        DbContext
+            .Set<DailyShortVolume>()
+            .AddRange(
+                ShortVolume(gme, day, shortVolume: 5_000_000, totalVolume: 8_000_000),
+                ShortVolume(amc, day, shortVolume: 100_000, totalVolume: 500_000)
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetLargestShortVolume(minShortVolume: 1_000_000);
+
+        result.Should().Contain("GME");
+        result.Should().NotContain("AMC");
+    }
+
+    [Fact]
+    public async Task GetLargestShortVolume_ExcludesZeroTotalVolume()
+    {
+        var gme = GmeStock();
+        var amc = AmcStock();
+        DbContext.Set<CommonStock>().AddRange(gme, amc);
+        var day = new DateOnly(2026, 4, 2);
+        DbContext
+            .Set<DailyShortVolume>()
+            .AddRange(
+                ShortVolume(gme, day, shortVolume: 5_000_000, totalVolume: 8_000_000),
+                ShortVolume(amc, day, shortVolume: 1_000, totalVolume: 0)
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetLargestShortVolume();
+
+        result.Should().Contain("GME");
+        result.Should().NotContain("AMC");
+    }
+
+    [Fact]
+    public async Task GetLargestShortVolume_MaxResultsLimitsRows()
+    {
+        var gme = GmeStock();
+        var amc = AmcStock();
+        DbContext.Set<CommonStock>().AddRange(gme, amc);
+        var day = new DateOnly(2026, 4, 2);
+        DbContext
+            .Set<DailyShortVolume>()
+            .AddRange(
+                ShortVolume(gme, day, shortVolume: 5_000_000, totalVolume: 8_000_000),
+                ShortVolume(amc, day, shortVolume: 9_000_000, totalVolume: 20_000_000)
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetLargestShortVolume(maxResults: 1);
+
+        // Only the top-ranked stock (AMC) is retained.
+        result.Should().Contain("AMC");
+        result.Should().NotContain("GME");
+    }
 }
