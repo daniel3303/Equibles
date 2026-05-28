@@ -254,8 +254,7 @@
                         @foreach (var holding in Model.Holdings) {
                             <tr>
                                 <td>
-                                    <a asp-action="Show" asp-controller="Stocks" asp-route-ticker="@holding.Ticker"
-                                       class="font-semibold link link-primary">@holding.Ticker</a>
+                                    <partial name="_StockLink" model='(Ticker: holding.Ticker, Class: "font-semibold link link-primary")' />
                                 </td>
                                 <td class="max-w-xs truncate">@holding.Company</td>
                                 <td class="hidden lg:table-cell">@holding.ReportDate.ToString("yyyy-MM-dd")</td>
