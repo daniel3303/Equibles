@@ -1,0 +1,12 @@
+@model (string IconName, string Heading, string Message)
+<div class="card bg-base-100 shadow-sm">
+    <div class="card-body items-center text-center py-12">
+        @if (!string.IsNullOrEmpty(Model.IconName)) {
+            <div class="text-base-content/30 mb-3">
+                <icon name="@Model.IconName" size="12" />
+            </div>
+        }
+        <h2 class="text-base-content/60 mb-2">@Model.Heading</h2>
+        <p class="text-base-content/40 text-sm">@Model.Message</p>
+    </div>
+</div>

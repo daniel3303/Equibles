@@ -3,15 +3,7 @@
 @model Equibles.Web.ViewModels.Stocks.FinancialsTabViewModel
 
 @if (!Model.HasData) {
-    <div class="card bg-base-100 shadow-sm">
-        <div class="card-body items-center text-center py-12">
-            <div class="text-base-content/30 mb-3">
-                <icon name="document-text" size="12" />
-            </div>
-            <h2 class="text-base-content/60 mb-2">No Financial Data</h2>
-            <p class="text-base-content/40 text-sm">No structured financial facts have been ingested for this stock yet.</p>
-        </div>
-    </div>
+    <partial name="_EmptyStateCard" model='(IconName: "document-text", Heading: "No Financial Data", Message: "No structured financial facts have been ingested for this stock yet.")' />
 } else {
     @* Reuse the single Token definition from FinancialsPeriodOption rather than
        rebuilding the "year-period" string here, so the format lives in one place. *@

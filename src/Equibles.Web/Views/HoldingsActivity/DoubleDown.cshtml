@@ -26,15 +26,7 @@
     </div>
 
     @if (Model.AvailableDates.Count < 2) {
-        <div class="card bg-base-100 shadow-sm">
-            <div class="card-body items-center text-center py-12">
-                <div class="text-base-content/30 mb-3">
-                    <icon name="arrow-trending-up" size="12" />
-                </div>
-                <h2 class="text-base-content/60 mb-2">Not enough data</h2>
-                <p class="text-base-content/40 text-sm">The double-down report needs at least two quarters of 13F data.</p>
-            </div>
-        </div>
+        <partial name="_EmptyStateCard" model='(IconName: "arrow-trending-up", Heading: "Not enough data", Message: "The double-down report needs at least two quarters of 13F data.")' />
     } else {
         <!-- Controls -->
         <form method="get" class="mb-6">
