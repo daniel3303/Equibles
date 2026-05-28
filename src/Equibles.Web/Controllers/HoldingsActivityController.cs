@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Repositories;
 using Equibles.Web.Controllers.Abstract;
+using Equibles.Web.Extensions;
 using Equibles.Web.ViewModels.Holdings;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -464,14 +465,8 @@ public class HoldingsActivityController : BaseController
         List<DateOnly> reportDates
     )
     {
-        var requestedIndex = requested.HasValue ? reportDates.IndexOf(requested.Value) : -1;
-        var selectedIndex = requestedIndex < 0 ? 0 : requestedIndex;
-        var selected = reportDates[selectedIndex];
-        var previous =
-            selectedIndex < reportDates.Count - 1
-                ? reportDates[selectedIndex + 1]
-                : (DateOnly?)null;
-        return (selected, previous);
+        var selected = reportDates.ResolveSelectedDateOrFirst(requested);
+        return (selected, reportDates.PreviousFrom(selected));
     }
 
     private static (string Ticker, string Name) ResolveStockCells(
