@@ -1,5 +1,6 @@
 using Equibles.Cboe.Data.Models;
 using Equibles.Data;
+using Equibles.Data.Extensions;
 
 namespace Equibles.Cboe.Repositories;
 
@@ -15,6 +16,6 @@ public class CboeVixDailyRepository : BaseRepository<CboeVixDaily>
 
     public IQueryable<DateOnly> GetLatestDate()
     {
-        return GetAll().Select(v => v.Date).OrderByDescending(d => d).Take(1);
+        return GetAll().LatestValue(v => v.Date);
     }
 }

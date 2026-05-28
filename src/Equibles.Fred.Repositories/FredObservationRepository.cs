@@ -1,4 +1,5 @@
 using Equibles.Data;
+using Equibles.Data.Extensions;
 using Equibles.Fred.Data.Models;
 
 namespace Equibles.Fred.Repositories;
@@ -25,11 +26,7 @@ public class FredObservationRepository : BaseRepository<FredObservation>
 
     public IQueryable<DateOnly> GetLatestDate(FredSeries series)
     {
-        return GetAll()
-            .Where(o => o.FredSeriesId == series.Id)
-            .Select(o => o.Date)
-            .OrderByDescending(d => d)
-            .Take(1);
+        return GetAll().Where(o => o.FredSeriesId == series.Id).LatestValue(o => o.Date);
     }
 
     public IQueryable<FredObservation> GetLatestPerSeries()

@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
+using Equibles.Data.Extensions;
 using Equibles.Finra.Data.Models;
 
 namespace Equibles.Finra.Repositories;
@@ -21,7 +22,7 @@ public class DailyShortVolumeRepository : BaseRepository<DailyShortVolume>
 
     public IQueryable<DateOnly> GetLatestDate()
     {
-        return GetAll().Select(d => d.Date).Distinct().OrderByDescending(d => d).Take(1);
+        return GetAll().LatestValue(d => d.Date, distinct: true);
     }
 
     public IQueryable<DailyShortVolume> GetByDate(DateOnly date)

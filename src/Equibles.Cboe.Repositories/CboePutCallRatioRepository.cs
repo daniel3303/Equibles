@@ -1,5 +1,6 @@
 using Equibles.Cboe.Data.Models;
 using Equibles.Data;
+using Equibles.Data.Extensions;
 
 namespace Equibles.Cboe.Repositories;
 
@@ -24,11 +25,7 @@ public class CboePutCallRatioRepository : BaseRepository<CboePutCallRatio>
 
     public IQueryable<DateOnly> GetLatestDate(CboePutCallRatioType type)
     {
-        return GetAll()
-            .Where(r => r.RatioType == type)
-            .Select(r => r.Date)
-            .OrderByDescending(d => d)
-            .Take(1);
+        return GetAll().Where(r => r.RatioType == type).LatestValue(r => r.Date);
     }
 
     public IQueryable<CboePutCallRatio> GetLatestPerType()
