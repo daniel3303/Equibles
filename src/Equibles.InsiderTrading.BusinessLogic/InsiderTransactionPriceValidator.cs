@@ -66,11 +66,8 @@ public class InsiderTransactionPriceValidator
     {
         if (string.IsNullOrWhiteSpace(securityTitle))
             return false;
-        foreach (var keyword in DerivativeTitleKeywords)
-        {
-            if (securityTitle.Contains(keyword, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-        return false;
+        return DerivativeTitleKeywords.Any(keyword =>
+            securityTitle.Contains(keyword, StringComparison.OrdinalIgnoreCase)
+        );
     }
 }
