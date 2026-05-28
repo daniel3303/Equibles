@@ -2,15 +2,7 @@
 @model Equibles.Web.ViewModels.Stocks.CongressionalTradesTabViewModel
 
 @if (Model.Trades.Count == 0) {
-    <div class="card bg-base-100 shadow-sm">
-        <div class="card-body items-center text-center py-12">
-            <div class="text-base-content/30 mb-3">
-                <icon name="building-library" size="12" />
-            </div>
-            <h2 class="text-base-content/60 mb-2">No Congressional Trades</h2>
-            <p class="text-base-content/40 text-sm">No congressional trading data is available for this stock yet.</p>
-        </div>
-    </div>
+    <partial name="_EmptyStateCard" model='(IconName: "building-library", Heading: "No Congressional Trades", Message: "No congressional trading data is available for this stock yet.")' />
 } else {
     <div class="card bg-base-100 shadow-sm">
         <div class="overflow-x-auto">

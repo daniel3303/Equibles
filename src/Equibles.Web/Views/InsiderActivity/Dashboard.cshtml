@@ -15,15 +15,7 @@
     </div>
 
     @if (Model.TopBuys.Count == 0 && Model.TopSells.Count == 0) {
-        <div class="card bg-base-100 shadow-sm">
-            <div class="card-body items-center text-center py-12">
-                <div class="text-base-content/30 mb-3">
-                    <icon name="user-group" size="12" />
-                </div>
-                <h2 class="text-base-content/60 mb-2">No insider transactions yet</h2>
-                <p class="text-base-content/40 text-sm">Once Form 4 filings have been ingested, the insider dashboard appears here.</p>
-            </div>
-        </div>
+        <partial name="_EmptyStateCard" model='(IconName: "user-group", Heading: "No insider transactions yet", Message: "Once Form 4 filings have been ingested, the insider dashboard appears here.")' />
     } else {
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <!-- Top Buys -->

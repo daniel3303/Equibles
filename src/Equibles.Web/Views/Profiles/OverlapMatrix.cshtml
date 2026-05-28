@@ -30,22 +30,10 @@
     }
 
     @if (Model.RequestedCiks.Count < InstitutionOverlapMatrixViewModel.MinCiks) {
-        <div class="card bg-base-100 shadow-sm">
-            <div class="card-body items-center text-center py-12">
-                <div class="text-base-content/30 mb-3">
-                    <icon name="table-cells" size="12" />
-                </div>
-                <h2 class="text-base-content/60 mb-2">Pick at least @InstitutionOverlapMatrixViewModel.MinCiks institutions</h2>
-                <p class="text-base-content/40 text-sm">Search by name or CIK above to see how their 13F portfolios overlap.</p>
-            </div>
-        </div>
+        <partial name="_EmptyStateCard" model='(IconName: "table-cells", Heading: $"Pick at least {InstitutionOverlapMatrixViewModel.MinCiks} institutions", Message: "Search by name or CIK above to see how their 13F portfolios overlap.")' />
     } else if (Model.CommonReportDates.Count == 0 && Model.MissingCiks.Count < Model.RequestedCiks.Count) {
-        <div class="card bg-base-100 shadow-sm">
-            <div class="card-body items-center text-center py-12">
-                <h2 class="text-base-content/60 mb-2">No common report dates</h2>
-                <p class="text-base-content/40 text-sm">The selected institutions don't share any 13F reporting quarter.</p>
-            </div>
-        </div>
+        var noDatesModel = (IconName: "", Heading: "No common report dates", Message: "The selected institutions don't share any 13F reporting quarter.");
+        <partial name="_EmptyStateCard" model="noDatesModel" />
     } else if (Model.Matrix != null) {
         var n = Model.Matrix.Funds.Count;
         var maxOverlap = 0;

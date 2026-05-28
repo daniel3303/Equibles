@@ -1,15 +1,7 @@
 @model Equibles.Web.ViewModels.Stocks.ShortInterestTabViewModel
 
 @if (Model.ShortInterests.Count == 0) {
-    <div class="card bg-base-100 shadow-sm">
-        <div class="card-body items-center text-center py-12">
-            <div class="text-base-content/30 mb-3">
-                <icon name="chart-bar" size="12" />
-            </div>
-            <h2 class="text-base-content/60 mb-2">No Short Interest Data</h2>
-            <p class="text-base-content/40 text-sm">No short interest data is available for this stock yet.</p>
-        </div>
-    </div>
+    <partial name="_EmptyStateCard" model='(IconName: "chart-bar", Heading: "No Short Interest Data", Message: "No short interest data is available for this stock yet.")' />
 } else {
     <!-- Chart -->
     <div class="card bg-base-100 shadow-sm mb-4">

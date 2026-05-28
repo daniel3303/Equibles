@@ -2,15 +2,7 @@
 @model Equibles.Web.ViewModels.Stocks.InsiderTradingTabViewModel
 
 @if (Model.Transactions.Count == 0) {
-    <div class="card bg-base-100 shadow-sm">
-        <div class="card-body items-center text-center py-12">
-            <div class="text-base-content/30 mb-3">
-                <icon name="user" size="12" />
-            </div>
-            <h2 class="text-base-content/60 mb-2">No Insider Trading Data</h2>
-            <p class="text-base-content/40 text-sm">No insider transactions are available for this stock yet.</p>
-        </div>
-    </div>
+    <partial name="_EmptyStateCard" model='(IconName: "user", Heading: "No Insider Trading Data", Message: "No insider transactions are available for this stock yet.")' />
 } else {
     <div class="card bg-base-100 shadow-sm">
         <div class="overflow-x-auto">
