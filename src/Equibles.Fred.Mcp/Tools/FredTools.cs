@@ -152,8 +152,8 @@ public class FredTools
 
                     latestObservations.TryGetValue(series.Id, out var latestObs);
 
-                    var dateStr = latestObs?.Date.ToString("yyyy-MM-dd") ?? "—";
-                    var valueStr = latestObs?.Value?.ToString("G") ?? "—";
+                    var dateStr = McpFormat.OrDash(latestObs?.Date, "yyyy-MM-dd");
+                    var valueStr = McpFormat.OrDash(latestObs?.Value, "G");
 
                     result.AppendLine(
                         $"| {series.SeriesId} | {series.Title} | {dateStr} | {valueStr} | {series.Units} |"

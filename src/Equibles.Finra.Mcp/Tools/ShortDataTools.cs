@@ -146,8 +146,8 @@ public class ShortDataTools
                 foreach (var r in records.OrderBy(r => r.SettlementDate))
                 {
                     var changeStr = FormatSignedChange(r.ChangeInShortPosition);
-                    var advStr = r.AverageDailyVolume?.ToString("N0") ?? "—";
-                    var dtcStr = r.DaysToCover?.ToString("F1") ?? "—";
+                    var advStr = McpFormat.OrDash(r.AverageDailyVolume, "N0");
+                    var dtcStr = McpFormat.OrDash(r.DaysToCover, "F1");
                     result.AppendLine(
                         $"| {r.SettlementDate:yyyy-MM-dd} | {r.CurrentShortPosition:N0} | {changeStr} | {advStr} | {dtcStr} |"
                     );
@@ -206,7 +206,7 @@ public class ShortDataTools
                 foreach (var r in records)
                 {
                     var changeStr = FormatSignedChange(r.ChangeInShortPosition);
-                    var advStr = r.AverageDailyVolume?.ToString("N0") ?? "—";
+                    var advStr = McpFormat.OrDash(r.AverageDailyVolume, "N0");
                     result.AppendLine(
                         $"| {r.CommonStock.Ticker} | {r.CurrentShortPosition:N0} | {changeStr} | {advStr} | {r.DaysToCover:F1} |"
                     );
