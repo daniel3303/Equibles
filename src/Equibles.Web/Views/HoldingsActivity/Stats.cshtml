@@ -23,12 +23,19 @@
             <span class="text-xs text-base-content/50">@Model.Latest.ReportDate.ToString("MMM dd, yyyy")</span>
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
-            <partial name="_MetricCard" model='(Label: "Filers", Value: Model.Latest.FilerCount.ToString("N0"))' />
-            <partial name="_MetricCard" model='(Label: "Filings", Value: Model.Latest.FilingCount.ToString("N0"))' />
-            <partial name="_MetricCard" model='(Label: "Stocks", Value: Model.Latest.StockCount.ToString("N0"))' />
-            <partial name="_MetricCard" model='(Label: "Positions", Value: Model.Latest.PositionCount.ToString("N0"))' />
-            <partial name="_MetricCard" model='(Label: "Avg Pos/Filer", Value: Model.Latest.AvgPositionsPerFiler.ToString("F1"))' />
-            <partial name="_MetricCard" model='(Label: "Total AUM", Value: "$" + (Model.Latest.TotalValue / 1_000_000_000m).ToString("N1") + "B")' />
+            @{
+                var tiles = new (string Label, string Value)[] {
+                    ("Filers", Model.Latest.FilerCount.ToString("N0")),
+                    ("Filings", Model.Latest.FilingCount.ToString("N0")),
+                    ("Stocks", Model.Latest.StockCount.ToString("N0")),
+                    ("Positions", Model.Latest.PositionCount.ToString("N0")),
+                    ("Avg Pos/Filer", Model.Latest.AvgPositionsPerFiler.ToString("F1")),
+                    ("Total AUM", "$" + (Model.Latest.TotalValue / 1_000_000_000m).ToString("N1") + "B"),
+                };
+            }
+            @foreach (var tile in tiles) {
+                <partial name="_MetricCard" model="tile" />
+            }
         </div>
 
         <!-- Historical Table -->
