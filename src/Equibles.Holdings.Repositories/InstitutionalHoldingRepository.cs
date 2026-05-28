@@ -62,13 +62,19 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // Latest dates first — see GetAvailableReportDates for the ordering contract.
     public IQueryable<DateOnly> GetReportDatesByStock(CommonStock stock)
     {
-        return GetHistoryByStock(stock).Select(h => h.ReportDate).Distinct().OrderByDescending(d => d);
+        return GetHistoryByStock(stock)
+            .Select(h => h.ReportDate)
+            .Distinct()
+            .OrderByDescending(d => d);
     }
 
     // Latest dates first — see GetAvailableReportDates for the ordering contract.
     public IQueryable<DateOnly> GetReportDatesByHolder(InstitutionalHolder holder)
     {
-        return GetHistoryByHolder(holder).Select(h => h.ReportDate).Distinct().OrderByDescending(d => d);
+        return GetHistoryByHolder(holder)
+            .Select(h => h.ReportDate)
+            .Distinct()
+            .OrderByDescending(d => d);
     }
 
     public IQueryable<InstitutionalHolding> GetByAccessionNumber(string accessionNumber)
@@ -693,4 +699,41 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     }
             );
     }
+
+    public IQueryable<MarketWideStockActivity> GetQuarterlyActivity(
+        DateOnly current,
+        DateOnly previous,
+        bool combined
+    ) =>
+        combined
+            ? GetQuarterlyActivityCombined(current, previous)
+            : GetQuarterlyActivity(current, previous);
+
+    public IQueryable<MarketWideStockActivity> GetMostHeld(
+        DateOnly current,
+        DateOnly previous,
+        bool combined
+    ) => combined ? GetMostHeldCombined(current, previous) : GetMostHeld(current, previous);
+
+    public IQueryable<Guid> GetUniqueFilerIds(DateOnly current, DateOnly previous, bool combined) =>
+        combined ? GetUniqueFilerIdsCombined(current, previous) : GetUniqueFilerIds(current);
+
+    public IQueryable<MarketWideStockChurn> GetQuarterlyNewSoldOutPositions(
+        DateOnly current,
+        DateOnly previous,
+        bool combined
+    ) =>
+        combined
+            ? GetQuarterlyNewSoldOutPositionsCombined(current, previous)
+            : GetQuarterlyNewSoldOutPositions(current, previous);
+
+    public IQueryable<DoubleDownPosition> GetDoubleDownPositions(
+        DateOnly current,
+        DateOnly previous,
+        double minPctIncrease,
+        bool combined
+    ) =>
+        combined
+            ? GetDoubleDownPositionsCombined(current, previous, minPctIncrease)
+            : GetDoubleDownPositions(current, previous, minPctIncrease);
 }
