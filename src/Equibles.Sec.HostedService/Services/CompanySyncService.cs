@@ -640,7 +640,8 @@ public class CompanySyncService : ICompanySyncService
                             + "keeping {ExistingParent}. Manual cleanup required.",
                         subCik,
                         secondaryCikToParent[subCik].Ticker,
-                        stock.Ticker
+                        stock.Ticker,
+                        secondaryCikToParent[subCik].Ticker
                     );
                 }
             }
