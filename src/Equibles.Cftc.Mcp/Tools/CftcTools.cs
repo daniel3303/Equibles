@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text;
 using Equibles.Cftc.Data.Models;
 using Equibles.Cftc.Repositories;
 using Equibles.Core.Extensions;
@@ -7,6 +6,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
+using Equibles.Mcp.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -74,15 +74,9 @@ public class CftcTools
                 if (reports.Count == 0)
                     return $"No COT reports found for {contract.MarketName} ({contract.MarketCode}) in the specified date range.";
 
-                var result = new StringBuilder();
-                result.AppendLine(
-                    $"{contract.MarketName} ({contract.MarketCode}) — {contract.Category.NameForHumans()}"
-                );
-                result.AppendLine();
-                result.AppendLine(
-                    "| Date | Open Interest | Comm Long | Comm Short | Non-Comm Long | Non-Comm Short | Non-Comm Spread |"
-                );
-                result.AppendLine(
+                var result = MarkdownTable.Start(
+                    $"{contract.MarketName} ({contract.MarketCode}) — {contract.Category.NameForHumans()}",
+                    "| Date | Open Interest | Comm Long | Comm Short | Non-Comm Long | Non-Comm Short | Non-Comm Spread |",
                     "|------|--------------|-----------|------------|---------------|----------------|-----------------|"
                 );
 
@@ -140,11 +134,11 @@ public class CftcTools
                     .GetLatestPerContract()
                     .ToDictionaryAsync(r => r.CftcContractId);
 
-                var result = new StringBuilder();
-                result.AppendLine("Latest COT Positioning:");
-                result.AppendLine();
-                result.AppendLine("| Market | Date | Open Interest | Comm Net | Non-Comm Net |");
-                result.AppendLine("|--------|------|--------------|----------|--------------|");
+                var result = MarkdownTable.Start(
+                    "Latest COT Positioning:",
+                    "| Market | Date | Open Interest | Comm Net | Non-Comm Net |",
+                    "|--------|------|--------------|----------|--------------|"
+                );
 
                 CftcContractCategory? currentCategory = null;
 
@@ -204,11 +198,11 @@ public class CftcTools
                 if (contracts.Count == 0)
                     return $"No contracts found matching '{query}'.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"CFTC contracts matching '{query}':");
-                result.AppendLine();
-                result.AppendLine("| Market Code | Name | Category |");
-                result.AppendLine("|-------------|------|----------|");
+                var result = MarkdownTable.Start(
+                    $"CFTC contracts matching '{query}':",
+                    "| Market Code | Name | Category |",
+                    "|-------------|------|----------|"
+                );
 
                 foreach (var c in contracts)
                 {

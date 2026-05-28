@@ -9,6 +9,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
+using Equibles.Mcp.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
@@ -305,11 +306,11 @@ public class FinancialFactsTools
         List<string> skipped
     )
     {
-        var result = new StringBuilder();
-        result.AppendLine($"{concept} — {fiscalYear} {period.NameForHumans()} peer comparison:");
-        result.AppendLine();
-        result.AppendLine("| Ticker | Company | Value | Unit | Form | Filed |");
-        result.AppendLine("|--------|---------|------:|------|------|-------|");
+        var result = MarkdownTable.Start(
+            $"{concept} — {fiscalYear} {period.NameForHumans()} peer comparison:",
+            "| Ticker | Company | Value | Unit | Form | Filed |",
+            "|--------|---------|------:|------|------|-------|"
+        );
         foreach (var (ticker, name, fact) in rows)
         {
             result.AppendLine(

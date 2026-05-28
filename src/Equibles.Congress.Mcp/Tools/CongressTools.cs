@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Congress.Data.Models;
@@ -9,6 +8,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
+using Equibles.Mcp.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -78,11 +78,11 @@ public class CongressTools
                 if (trades.Count == 0)
                     return $"No congressional trades found for {stock.Ticker} in the specified date range.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"Congressional trades for {stock.Ticker} ({stock.Name}):");
-                result.AppendLine();
-                result.AppendLine("| Date | Member | Position | Type | Amount Range | Owner |");
-                result.AppendLine("|------|--------|----------|------|-------------|-------|");
+                var result = MarkdownTable.Start(
+                    $"Congressional trades for {stock.Ticker} ({stock.Name}):",
+                    "| Date | Member | Position | Type | Amount Range | Owner |",
+                    "|------|--------|----------|------|-------------|-------|"
+                );
 
                 foreach (var t in trades)
                 {
@@ -145,11 +145,11 @@ public class CongressTools
                 if (trades.Count == 0)
                     return $"No trades found for {member.Name} ({member.Position.NameForHumans()}) in the specified date range.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"Trades by {member.Name} ({member.Position.NameForHumans()}):");
-                result.AppendLine();
-                result.AppendLine("| Date | Ticker | Type | Amount Range | Asset | Owner |");
-                result.AppendLine("|------|--------|------|-------------|-------|-------|");
+                var result = MarkdownTable.Start(
+                    $"Trades by {member.Name} ({member.Position.NameForHumans()}):",
+                    "| Date | Ticker | Type | Amount Range | Asset | Owner |",
+                    "|------|--------|------|-------------|-------|-------|"
+                );
 
                 foreach (var t in trades)
                 {
@@ -189,11 +189,11 @@ public class CongressTools
                 if (members.Count == 0)
                     return $"No congress members found matching '{query}'.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"Congress members matching '{query}':");
-                result.AppendLine();
-                result.AppendLine("| Name | Position |");
-                result.AppendLine("|------|----------|");
+                var result = MarkdownTable.Start(
+                    $"Congress members matching '{query}':",
+                    "| Name | Position |",
+                    "|------|----------|"
+                );
 
                 foreach (var m in members)
                 {

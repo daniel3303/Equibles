@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Globalization;
-using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
@@ -9,6 +8,7 @@ using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Finra.Repositories;
 using Equibles.Mcp;
+using Equibles.Mcp.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -76,11 +76,11 @@ public class ShortDataTools
                 if (records.Count == 0)
                     return $"No short volume data found for {stock.Ticker} in the specified date range.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"Daily short volume for {stock.Ticker} ({stock.Name}):");
-                result.AppendLine();
-                result.AppendLine("| Date | Short Volume | Exempt | Total Volume | Short % |");
-                result.AppendLine("|------|-------------|--------|-------------|---------|");
+                var result = MarkdownTable.Start(
+                    $"Daily short volume for {stock.Ticker} ({stock.Name}):",
+                    "| Date | Short Volume | Exempt | Total Volume | Short % |",
+                    "|------|-------------|--------|-------------|---------|"
+                );
 
                 foreach (var r in records.OrderBy(r => r.Date))
                 {
@@ -137,13 +137,9 @@ public class ShortDataTools
                 if (records.Count == 0)
                     return $"No short interest data found for {stock.Ticker} in the specified date range.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"Short interest for {stock.Ticker} ({stock.Name}):");
-                result.AppendLine();
-                result.AppendLine(
-                    "| Settlement Date | Short Position | Change | Avg Daily Volume | Days to Cover |"
-                );
-                result.AppendLine(
+                var result = MarkdownTable.Start(
+                    $"Short interest for {stock.Ticker} ({stock.Name}):",
+                    "| Settlement Date | Short Position | Change | Avg Daily Volume | Days to Cover |",
                     "|----------------|---------------|--------|-----------------|---------------|"
                 );
 
@@ -201,15 +197,9 @@ public class ShortDataTools
                 if (records.Count == 0)
                     return $"No short interest data found for settlement date {latestDate:yyyy-MM-dd} with days to cover >= {minDaysToCover}.";
 
-                var result = new StringBuilder();
-                result.AppendLine(
-                    $"Short interest snapshot — settlement date {latestDate:yyyy-MM-dd}:"
-                );
-                result.AppendLine();
-                result.AppendLine(
-                    "| Ticker | Short Position | Change | Avg Daily Volume | Days to Cover |"
-                );
-                result.AppendLine(
+                var result = MarkdownTable.Start(
+                    $"Short interest snapshot — settlement date {latestDate:yyyy-MM-dd}:",
+                    "| Ticker | Short Position | Change | Avg Daily Volume | Days to Cover |",
                     "|--------|---------------|--------|-----------------|---------------|"
                 );
 
