@@ -100,8 +100,7 @@ public class HoldingsActivityController : BaseController
     [HttpGet("~/holdings/latest-13f-filings")]
     public async Task<IActionResult> LatestFilings(int page = 1)
     {
-        if (page < 1)
-            page = 1;
+        page = Pagination.ClampPage(page);
 
         var query = _holdingRepository.GetRecentFilings().OrderByDescending(f => f.ImportedAt);
 
@@ -151,7 +150,7 @@ public class HoldingsActivityController : BaseController
         {
             AvailableDates = reportDates,
             MinPctIncrease = threshold,
-            Page = Math.Max(1, page),
+            Page = Pagination.ClampPage(page),
         };
         if (reportDates.Count < 2)
             return View(viewModel);
@@ -228,7 +227,7 @@ public class HoldingsActivityController : BaseController
         {
             AvailableDates = reportDates,
             Sort = normalizedSort,
-            Page = Math.Max(1, page),
+            Page = Pagination.ClampPage(page),
         };
         if (reportDates.Count == 0)
             return View(viewModel);
