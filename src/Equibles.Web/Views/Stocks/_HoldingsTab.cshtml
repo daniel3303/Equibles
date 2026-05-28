@@ -69,11 +69,7 @@
             <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Value:</span> <strong><compactable-number value="@Model.TotalValue" prefix="$" /></strong></div>
             <div class="shrink-0 whitespace-nowrap"><span class="text-base-content/60">Total Shares:</span> <strong><compactable-number value="@Model.TotalShares" /></strong></div>
             <div class="flex items-center gap-2 ml-auto">
-                <label class="flex items-center gap-1.5 cursor-pointer" title="Toggle compact numbers (1M, 1B)">
-                    <span class="text-xs text-base-content/60">Compact</span>
-                    <input type="checkbox" class="toggle toggle-xs toggle-primary btn-compact-toggle"
-                           onchange="toggleCompactNumbers()" />
-                </label>
+                <partial name="_CompactToggle" />
                 @if (!Model.IsCombinedView) {
                     <a class="btn btn-outline btn-sm"
                        asp-controller="HoldingsExport" asp-action="Holders"
