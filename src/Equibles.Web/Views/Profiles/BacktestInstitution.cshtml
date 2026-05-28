@@ -63,18 +63,9 @@
                     <div class="card-body p-4">
                         <h2 class="text-base font-medium mb-2">@row.Label</h2>
                         <div class="stats stats-vertical sm:stats-horizontal shadow-sm bg-base-200 w-full">
-                            <div class="stat">
-                                <div class="stat-title">Total return</div>
-                                <div class="stat-value text-2xl font-mono">@row.Summary.TotalReturnPercent.ToString("F2")%</div>
-                            </div>
-                            <div class="stat">
-                                <div class="stat-title">CAGR</div>
-                                <div class="stat-value text-2xl font-mono">@row.Summary.CagrPercent.ToString("F2")%</div>
-                            </div>
-                            <div class="stat">
-                                <div class="stat-title">Max drawdown</div>
-                                <div class="stat-value text-2xl font-mono">@row.Summary.MaxDrawdownPercent.ToString("F2")%</div>
-                            </div>
+                            <stat-tile title="Total return">@row.Summary.TotalReturnPercent.ToString("F2")%</stat-tile>
+                            <stat-tile title="CAGR">@row.Summary.CagrPercent.ToString("F2")%</stat-tile>
+                            <stat-tile title="Max drawdown">@row.Summary.MaxDrawdownPercent.ToString("F2")%</stat-tile>
                         </div>
                     </div>
                 </div>

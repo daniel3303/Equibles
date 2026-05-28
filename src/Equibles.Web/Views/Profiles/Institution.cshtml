@@ -57,26 +57,11 @@
                     <span class="badge badge-ghost">Quarters reported: @Model.Summary.QuartersReported</span>
                 </div>
                 <div class="stats stats-vertical lg:stats-horizontal shadow-sm bg-base-200 w-full">
-                    <div class="stat">
-                        <div class="stat-title">Reported AUM</div>
-                        <div class="stat-value text-2xl font-mono"><compactable-number value="@Model.Summary.ReportedAum" prefix="$" /></div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-title"># Positions</div>
-                        <div class="stat-value text-2xl font-mono"><compactable-number value="@Model.Summary.PositionCount" /></div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-title">Top 10 concentration</div>
-                        <div class="stat-value text-2xl font-mono">@Model.Summary.Top10ConcentrationPercent.ToString("F1")%</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-title">Top 25 concentration</div>
-                        <div class="stat-value text-2xl font-mono">@Model.Summary.Top25ConcentrationPercent.ToString("F1")%</div>
-                    </div>
-                    <div class="stat" title="(Σ |Δ shares × current price proxy|) / (2 × AUM)">
-                        <div class="stat-title">QoQ turnover</div>
-                        <div class="stat-value text-2xl font-mono">@Model.Summary.QoQTurnoverPercent.ToString("F1")%</div>
-                    </div>
+                    <stat-tile title="Reported AUM"><compactable-number value="@Model.Summary.ReportedAum" prefix="$" /></stat-tile>
+                    <stat-tile title="# Positions"><compactable-number value="@Model.Summary.PositionCount" /></stat-tile>
+                    <stat-tile title="Top 10 concentration">@Model.Summary.Top10ConcentrationPercent.ToString("F1")%</stat-tile>
+                    <stat-tile title="Top 25 concentration">@Model.Summary.Top25ConcentrationPercent.ToString("F1")%</stat-tile>
+                    <stat-tile title="QoQ turnover" tooltip="(Σ |Δ shares × current price proxy|) / (2 × AUM)">@Model.Summary.QoQTurnoverPercent.ToString("F1")%</stat-tile>
                 </div>
             </div>
         </div>
