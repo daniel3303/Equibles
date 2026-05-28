@@ -46,11 +46,9 @@ public class HoldingsActivityController : BaseController
         var selectedDate = viewModel.SelectedDate;
         var previousDate = viewModel.PreviousDate.Value;
 
-        var movers = (
-            viewModel.IsCombinedSelected
-                ? _holdingRepository.GetQuarterlyActivityCombined(selectedDate, previousDate)
-                : _holdingRepository.GetQuarterlyActivity(selectedDate, previousDate)
-        ).Where(a => a.CurrentShares != a.PreviousShares);
+        var movers = _holdingRepository
+            .GetQuarterlyActivity(selectedDate, previousDate, viewModel.IsCombinedSelected)
+            .Where(a => a.CurrentShares != a.PreviousShares);
 
         var topBuysAgg = await movers
             .Where(a => a.CurrentShares > a.PreviousShares)
@@ -63,9 +61,11 @@ public class HoldingsActivityController : BaseController
             .Take(HoldingsActivityViewModel.RowCap)
             .ToListAsync();
 
-        var churn = viewModel.IsCombinedSelected
-            ? _holdingRepository.GetQuarterlyNewSoldOutPositionsCombined(selectedDate, previousDate)
-            : _holdingRepository.GetQuarterlyNewSoldOutPositions(selectedDate, previousDate);
+        var churn = _holdingRepository.GetQuarterlyNewSoldOutPositions(
+            selectedDate,
+            previousDate,
+            viewModel.IsCombinedSelected
+        );
         var newPositionsAgg = await churn
             .Where(c => c.NewFilerCount > 0)
             .OrderByDescending(c => c.NewFilerCount)
@@ -164,15 +164,16 @@ public class HoldingsActivityController : BaseController
         var selectedDate = viewModel.SelectedDate;
         var previousDate = viewModel.PreviousDate.Value;
 
-        var query = (
-            viewModel.IsCombinedSelected
-                ? _holdingRepository.GetDoubleDownPositionsCombined(
-                    selectedDate,
-                    previousDate,
-                    threshold
-                )
-                : _holdingRepository.GetDoubleDownPositions(selectedDate, previousDate, threshold)
-        ).OrderByDescending(p => (double)(p.CurrentShares - p.PreviousShares) / p.PreviousShares);
+        var query = _holdingRepository
+            .GetDoubleDownPositions(
+                selectedDate,
+                previousDate,
+                threshold,
+                viewModel.IsCombinedSelected
+            )
+            .OrderByDescending(p =>
+                (double)(p.CurrentShares - p.PreviousShares) / p.PreviousShares
+            );
 
         viewModel.TotalCount = await query.CountAsync();
         var skip = (viewModel.Page - 1) * DoubleDownViewModel.PageSize;
@@ -239,16 +240,16 @@ public class HoldingsActivityController : BaseController
         var selectedDate = viewModel.SelectedDate;
         var priorForRepo = viewModel.PreviousDate ?? selectedDate;
 
-        var rankingQuery = viewModel.IsCombinedSelected
-            ? _holdingRepository.GetMostHeldCombined(selectedDate, priorForRepo)
-            : _holdingRepository.GetMostHeld(selectedDate, priorForRepo);
+        var rankingQuery = _holdingRepository.GetMostHeld(
+            selectedDate,
+            priorForRepo,
+            viewModel.IsCombinedSelected
+        );
 
         viewModel.TotalRows = await rankingQuery.CountAsync();
-        viewModel.TotalUniverseFilers = viewModel.IsCombinedSelected
-            ? await _holdingRepository
-                .GetUniqueFilerIdsCombined(selectedDate, priorForRepo)
-                .CountAsync()
-            : await _holdingRepository.GetUniqueFilerIds(selectedDate).CountAsync();
+        viewModel.TotalUniverseFilers = await _holdingRepository
+            .GetUniqueFilerIds(selectedDate, priorForRepo, viewModel.IsCombinedSelected)
+            .CountAsync();
         var skip = (viewModel.Page - 1) * HoldingsMostHeldViewModel.PageSize;
 
         var orderedQuery = normalizedSort switch
@@ -346,30 +347,24 @@ public class HoldingsActivityController : BaseController
         var selectedDate = viewModel.SelectedDate;
         var previousDate = viewModel.PreviousDate.Value;
 
-        var totalFilers = viewModel.IsCombinedSelected
-            ? await _holdingRepository
-                .GetUniqueFilerIdsCombined(selectedDate, previousDate)
-                .CountAsync()
-            : await _holdingRepository.GetUniqueFilerIds(selectedDate).CountAsync();
+        var totalFilers = await _holdingRepository
+            .GetUniqueFilerIds(selectedDate, previousDate, viewModel.IsCombinedSelected)
+            .CountAsync();
         viewModel.TotalUniverseFilers = totalFilers;
 
-        var activity = await (
-            viewModel.IsCombinedSelected
-                ? _holdingRepository.GetQuarterlyActivityCombined(selectedDate, previousDate)
-                : _holdingRepository.GetQuarterlyActivity(selectedDate, previousDate)
-        )
+        var activity = await _holdingRepository
+            .GetQuarterlyActivity(selectedDate, previousDate, viewModel.IsCombinedSelected)
             .Where(a => a.CurrentFilerCount >= 3)
             .ToListAsync();
 
         var churnLookup = (
-            await (
-                viewModel.IsCombinedSelected
-                    ? _holdingRepository.GetQuarterlyNewSoldOutPositionsCombined(
-                        selectedDate,
-                        previousDate
-                    )
-                    : _holdingRepository.GetQuarterlyNewSoldOutPositions(selectedDate, previousDate)
-            ).ToListAsync()
+            await _holdingRepository
+                .GetQuarterlyNewSoldOutPositions(
+                    selectedDate,
+                    previousDate,
+                    viewModel.IsCombinedSelected
+                )
+                .ToListAsync()
         ).ToDictionary(c => c.CommonStockId);
 
         var stockIds = activity.Select(a => a.CommonStockId).ToList();
