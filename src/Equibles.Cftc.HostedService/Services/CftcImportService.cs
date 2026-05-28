@@ -16,7 +16,7 @@ using Microsoft.Extensions.Options;
 namespace Equibles.Cftc.HostedService.Services;
 
 [Service]
-public class CftcImportService
+public class CftcImportService : IImporter
 {
     private const int InsertBatchSize = 1000;
     private const int EarliestCftcYear = 1986;

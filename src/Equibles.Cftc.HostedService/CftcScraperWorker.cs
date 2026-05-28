@@ -24,10 +24,6 @@ public class CftcScraperWorker : BaseScraperWorker
         SleepInterval = TimeSpan.FromHours(options.Value.SleepIntervalHours);
     }
 
-    protected override async Task DoWork(CancellationToken stoppingToken)
-    {
-        await using var scope = ScopeFactory.CreateAsyncScope();
-        var importService = scope.ServiceProvider.GetRequiredService<CftcImportService>();
-        await importService.Import(stoppingToken);
-    }
+    protected override Task DoWork(CancellationToken stoppingToken) =>
+        RunImport<CftcImportService>(stoppingToken);
 }

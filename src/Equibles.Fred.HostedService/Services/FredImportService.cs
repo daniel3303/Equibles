@@ -16,7 +16,7 @@ using Microsoft.Extensions.Options;
 namespace Equibles.Fred.HostedService.Services;
 
 [Service]
-public class FredImportService
+public class FredImportService : IImporter
 {
     private const int InsertBatchSize = 1000;
 
