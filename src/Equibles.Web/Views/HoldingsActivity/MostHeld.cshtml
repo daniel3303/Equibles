@@ -68,8 +68,8 @@
                         <tbody>
                             @{ var rowNumber = firstRowNumber; }
                             @foreach (var row in Model.Rows) {
-                                var deltaFilersCss = row.DeltaFilerCount > 0 ? "text-success" : row.DeltaFilerCount < 0 ? "text-error" : "";
-                                var deltaValueCss = row.DeltaValue > 0 ? "text-success" : row.DeltaValue < 0 ? "text-error" : "";
+                                var deltaFilersCss = row.DeltaFilerCount.SignCss();
+                                var deltaValueCss = row.DeltaValue.SignCss();
                                 <tr>
                                     <td class="text-right text-base-content/60">@rowNumber.ToString("N0")</td>
                                     <td class="font-mono">@row.Ticker</td>

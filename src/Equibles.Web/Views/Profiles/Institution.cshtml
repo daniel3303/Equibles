@@ -208,8 +208,8 @@
                                         </thead>
                                         <tbody>
                                             @foreach (var row in rows) {
-                                                var deltaSharesCss = row.DeltaShares > 0 ? "text-success" : row.DeltaShares < 0 ? "text-error" : "";
-                                                var deltaValueCss = row.DeltaValue > 0 ? "text-success" : row.DeltaValue < 0 ? "text-error" : "";
+                                                var deltaSharesCss = row.DeltaShares.SignCss();
+                                                var deltaValueCss = row.DeltaValue.SignCss();
                                                 <tr>
                                                     <td class="font-mono">@row.Ticker</td>
                                                     <td class="max-w-xs truncate">@row.Name</td>

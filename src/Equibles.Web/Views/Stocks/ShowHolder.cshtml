@@ -114,7 +114,7 @@
                                 <td class="text-right font-mono"><compactable-number value="@h.Shares" /></td>
                                 <td class="text-right font-mono hidden md:table-cell">
                                     @if (changePercent.HasValue) {
-                                        var css = changePercent.Value > 0 ? "text-success" : changePercent.Value < 0 ? "text-error" : "";
+                                        var css = changePercent.Value.SignCss();
                                         var sign = changePercent.Value > 0 ? "+" : "";
                                         <span class="@css">@sign@changePercent.Value.ToString("F1")%</span>
                                     } else {
