@@ -2,6 +2,7 @@ using Equibles.Data;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Web.Controllers.Abstract;
+using Equibles.Web.Extensions;
 using Equibles.Web.ViewModels.Institutions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -97,8 +98,7 @@ public class InstitutionsController : BaseController
         var totalCount = await ordered.CountAsync();
 
         var pageRows = await ordered
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Page(page, pageSize)
             .Select(x => new InstitutionListItemViewModel
             {
                 Id = x.h.Id,

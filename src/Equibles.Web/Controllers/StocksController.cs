@@ -79,8 +79,7 @@ public class StocksController : BaseController
 
         var stocks = await query
             .Include(s => s.Industry)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Page(page, pageSize)
             .Select(s => new StockListItemViewModel
             {
                 Ticker = s.Ticker,

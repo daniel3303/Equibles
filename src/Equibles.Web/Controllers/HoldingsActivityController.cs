@@ -106,9 +106,8 @@ public class HoldingsActivityController : BaseController
         var query = _holdingRepository.GetRecentFilings().OrderByDescending(f => f.ImportedAt);
 
         var totalCount = await query.CountAsync();
-        var skip = (page - 1) * LatestFilingsViewModel.PageSize;
 
-        var filings = await query.Skip(skip).Take(LatestFilingsViewModel.PageSize).ToListAsync();
+        var filings = await query.Page(page, LatestFilingsViewModel.PageSize).ToListAsync();
 
         return View(
             new LatestFilingsViewModel
@@ -177,10 +176,8 @@ public class HoldingsActivityController : BaseController
             );
 
         viewModel.TotalCount = await query.CountAsync();
-        var skip = (viewModel.Page - 1) * DoubleDownViewModel.PageSize;
         viewModel.Positions = await query
-            .Skip(skip)
-            .Take(DoubleDownViewModel.PageSize)
+            .Page(viewModel.Page, DoubleDownViewModel.PageSize)
             .ToListAsync();
 
         return View(viewModel);
@@ -251,7 +248,6 @@ public class HoldingsActivityController : BaseController
         viewModel.TotalUniverseFilers = await _holdingRepository
             .GetUniqueFilerIds(selectedDate, priorForRepo, viewModel.IsCombinedSelected)
             .CountAsync();
-        var skip = (viewModel.Page - 1) * HoldingsMostHeldViewModel.PageSize;
 
         var orderedQuery = normalizedSort switch
         {
@@ -267,8 +263,7 @@ public class HoldingsActivityController : BaseController
         };
 
         var pageRows = await orderedQuery
-            .Skip(skip)
-            .Take(HoldingsMostHeldViewModel.PageSize)
+            .Page(viewModel.Page, HoldingsMostHeldViewModel.PageSize)
             .ToListAsync();
 
         var stockIds = pageRows.Select(r => r.CommonStockId).ToList();
