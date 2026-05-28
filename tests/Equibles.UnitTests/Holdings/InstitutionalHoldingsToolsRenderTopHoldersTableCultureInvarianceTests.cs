@@ -24,9 +24,7 @@ public class InstitutionalHoldingsToolsRenderTopHoldersTableCultureInvarianceTes
     // host locale. The contract (repo convention; cf. FactMarkdown threading
     // InvariantCulture) is that the same call renders byte-identically
     // regardless of host CurrentCulture.
-    [Fact(
-        Skip = "GH-2628 — RenderTopHoldersTable :N0/:N1/:F2 cells follow CurrentCulture (de-DE → 9.876.543 / $9.876,5M / 12,50% vs Invariant 9,876,543 / $9,876.5M / 12.50%); MCP output forks by host locale"
-    )]
+    [Fact]
     public void RenderTopHoldersTable_UnderNonInvariantCulture_RendersCellsCultureInvariantly()
     {
         var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
