@@ -39,23 +39,18 @@
         <span class="text-xs text-base-content/50">@Model.Records.Count observations</span>
     </div>
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        @if (Model.LatestRatio.HasValue) {
-            <partial name="_MetricCard" model='(Label: "Latest", Value: Model.LatestRatio.Value.ToString("N2"))' />
+        @{
+            var stats = new (string Label, decimal? Value)[] {
+                ("Latest", Model.LatestRatio),
+                ("Mean", Model.Mean),
+                ("Median", Model.Median),
+                ("Min", Model.Min),
+                ("Max", Model.Max),
+                ("Std Dev", Model.StdDev),
+            };
         }
-        @if (Model.Mean.HasValue) {
-            <partial name="_MetricCard" model='(Label: "Mean", Value: Model.Mean.Value.ToString("N2"))' />
-        }
-        @if (Model.Median.HasValue) {
-            <partial name="_MetricCard" model='(Label: "Median", Value: Model.Median.Value.ToString("N2"))' />
-        }
-        @if (Model.Min.HasValue) {
-            <partial name="_MetricCard" model='(Label: "Min", Value: Model.Min.Value.ToString("N2"))' />
-        }
-        @if (Model.Max.HasValue) {
-            <partial name="_MetricCard" model='(Label: "Max", Value: Model.Max.Value.ToString("N2"))' />
-        }
-        @if (Model.StdDev.HasValue) {
-            <partial name="_MetricCard" model='(Label: "Std Dev", Value: Model.StdDev.Value.ToString("N2"))' />
+        @foreach (var stat in stats.Where(s => s.Value.HasValue)) {
+            <partial name="_MetricCard" model='(Label: stat.Label, Value: stat.Value.Value.ToString("N2"))' />
         }
     </div>
 
