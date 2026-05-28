@@ -70,6 +70,20 @@ public static partial class MarkdownExtensions
             link.Url = string.Empty;
         }
 
+        // Markdig represents the autolink syntax `<scheme:body>` as AutolinkInline,
+        // not LinkInline, so it bypasses the loop above. Neutralize unsafe-scheme
+        // autolinks by replacing the node with its plain text — no active href.
+        // Materialize first: ReplaceBy mutates the tree during enumeration.
+        foreach (
+            var autolink in document
+                .Descendants<AutolinkInline>()
+                .Where(autolink => !IsSafeUrl(autolink.Url))
+                .ToList()
+        )
+        {
+            autolink.ReplaceBy(new LiteralInline(autolink.Url));
+        }
+
         return htmlHelper.Raw(document.ToHtml(pipeline));
     }
 }
