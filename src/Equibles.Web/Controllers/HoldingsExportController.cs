@@ -209,8 +209,7 @@ public class HoldingsExportController : BaseController
             .Distinct()
             .ToList();
         var stocks = await _stockRepository
-            .GetAll()
-            .Where(s => stockIds.Contains(s.Id))
+            .GetByIds(stockIds)
             .Select(s => new StockLabel(s.Id, s.Ticker, s.Name))
             .ToDictionaryAsync(s => s.Id);
 

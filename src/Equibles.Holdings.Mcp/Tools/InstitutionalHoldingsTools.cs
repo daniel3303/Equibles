@@ -161,7 +161,10 @@ public class InstitutionalHoldingsTools
                 if (stockError != null)
                     return stockError;
 
-                var reportDates = await _holdingRepository.GetReportDatesByStock(stock).Take(maxPeriods).ToListAsync();
+                var reportDates = await _holdingRepository
+                    .GetReportDatesByStock(stock)
+                    .Take(maxPeriods)
+                    .ToListAsync();
 
                 if (reportDates.Count == 0)
                     return $"No institutional holdings history available for {ticker}.";
@@ -339,7 +342,9 @@ public class InstitutionalHoldingsTools
                 if (stockError != null)
                     return stockError;
 
-                var reportDates = await _holdingRepository.GetReportDatesByStock(stock).ToListAsync();
+                var reportDates = await _holdingRepository
+                    .GetReportDatesByStock(stock)
+                    .ToListAsync();
 
                 var targetDate = TryParseReportDate(reportDate, out var parsed)
                     ? parsed
@@ -942,7 +947,9 @@ public class InstitutionalHoldingsTools
                 if (holderError != null)
                     return holderError;
 
-                var reportDates = await _holdingRepository.GetReportDatesByHolder(holder).ToListAsync();
+                var reportDates = await _holdingRepository
+                    .GetReportDatesByHolder(holder)
+                    .ToListAsync();
                 if (reportDates.Count < 2)
                     return $"{holder.Name} has fewer than two reported quarters — no diff available.";
 
@@ -1304,10 +1311,7 @@ public class InstitutionalHoldingsTools
             .ToListAsync();
 
     private Task<Dictionary<Guid, CommonStock>> LoadStocksByIds(List<Guid> stockIds) =>
-        _commonStockRepository
-            .GetAll()
-            .Where(s => stockIds.Contains(s.Id))
-            .ToDictionaryAsync(s => s.Id);
+        _commonStockRepository.GetByIds(stockIds).ToDictionaryAsync(s => s.Id);
 
     private static (string Ticker, string Name) ResolveStockCells(
         IDictionary<Guid, CommonStock> stocks,
