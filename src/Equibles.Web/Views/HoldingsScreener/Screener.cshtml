@@ -148,8 +148,8 @@
                             </thead>
                             <tbody>
                                 @foreach (var row in Model.Rows) {
-                                    var deltaFilerCss = row.DeltaFilerCount > 0 ? "text-success" : row.DeltaFilerCount < 0 ? "text-error" : "";
-                                    var deltaValueCss = row.DeltaValue > 0 ? "text-success" : row.DeltaValue < 0 ? "text-error" : "";
+                                    var deltaFilerCss = row.DeltaFilerCount.SignCss();
+                                    var deltaValueCss = row.DeltaValue.SignCss();
                                     var deltaFilerText = (row.DeltaFilerCount > 0 ? "+" : row.DeltaFilerCount < 0 ? "-" : "") + Math.Abs(row.DeltaFilerCount).ToString("N0");
                                     var deltaValueText = (row.DeltaValue > 0 ? "+$" : row.DeltaValue < 0 ? "-$" : "$") + Math.Abs(row.DeltaValue).ToString("N0");
                                     <tr>

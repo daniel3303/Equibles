@@ -120,7 +120,7 @@
                                     <td class="text-right tabular-nums hidden lg:table-cell">@report.NonCommSpreads.ToString("N0")</td>
                                     <td class="text-right tabular-nums hidden lg:table-cell">
                                         @if (report.ChangeOpenInterest.HasValue) {
-                                            <span class="@(report.ChangeOpenInterest.Value > 0 ? "text-success" : report.ChangeOpenInterest.Value < 0 ? "text-error" : "text-base-content/50")">
+                                            <span class="@(report.ChangeOpenInterest.Value.SignCss("text-base-content/50"))">
                                                 @(report.ChangeOpenInterest.Value > 0 ? "+" : "")@report.ChangeOpenInterest.Value.ToString("N0")
                                             </span>
                                         } else {

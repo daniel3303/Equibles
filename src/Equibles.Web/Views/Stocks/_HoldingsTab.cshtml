@@ -34,9 +34,6 @@
         return $"{sign}{pct:F1}%";
     }
 
-    static string PctCss(double? pct) =>
-        pct > 0 ? "text-success" : pct < 0 ? "text-error" : "";
-
     static string FormatQuarter(DateOnly? date) =>
         date == null ? "—" : $"Q{(date.Value.Month - 1) / 3 + 1} {date.Value.Year}";
 
@@ -180,12 +177,12 @@
                                     </thead>
                                     <tbody>
                                         @foreach (var e in card.Entries) {
-                                            var deltaSharesCss = e.DeltaShares > 0 ? "text-success" : e.DeltaShares < 0 ? "text-error" : "";
-                                            var deltaValueCss = e.DeltaValue > 0 ? "text-success" : e.DeltaValue < 0 ? "text-error" : "";
+                                            var deltaSharesCss = e.DeltaShares.SignCss();
+                                            var deltaValueCss = e.DeltaValue.SignCss();
                                             <tr>
                                                 <td class="max-w-xs truncate">@(e.InstitutionalHolder?.Name ?? "Unknown")</td>
                                                 <td class="text-right font-mono @deltaSharesCss"><compactable-number value="@e.DeltaShares" sign /></td>
-                                                <td class="text-right font-mono hidden md:table-cell @PctCss(e.ChangePercent)">@FormatPct(e.ChangePercent)</td>
+                                                <td class="text-right font-mono hidden md:table-cell @e.ChangePercent.SignCss()">@FormatPct(e.ChangePercent)</td>
                                                 <td class="text-right font-mono hidden md:table-cell @deltaValueCss"><compactable-number value="@e.DeltaValue" prefix="$" sign /></td>
                                             </tr>
                                         }
@@ -240,8 +237,8 @@
                         <tbody>
                             @foreach (var x in allHolders) {
                                 var e = x.Entry;
-                                var deltaSharesCss = e.DeltaShares > 0 ? "text-success" : e.DeltaShares < 0 ? "text-error" : "";
-                                var deltaValueCss = e.DeltaValue > 0 ? "text-success" : e.DeltaValue < 0 ? "text-error" : "";
+                                var deltaSharesCss = e.DeltaShares.SignCss();
+                                var deltaValueCss = e.DeltaValue.SignCss();
                                 var own = e.OwnershipPercent(Model.SharesOutstanding);
                                 <tr>
                                     <td class="max-w-xs truncate">
@@ -253,7 +250,7 @@
                                     <td class="text-right font-mono whitespace-nowrap"><compactable-number value="@e.CurrentShares" /></td>
                                     @if (!Model.IsCombinedView) {
                                         <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @deltaSharesCss"><compactable-number value="@e.DeltaShares" sign /></td>
-                                        <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @PctCss(e.ChangePercent)">@FormatPct(e.ChangePercent)</td>
+                                        <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @e.ChangePercent.SignCss()">@FormatPct(e.ChangePercent)</td>
                                     }
                                     <td class="text-right font-mono hidden lg:table-cell whitespace-nowrap">@(own != null ? $"{own:F2}%" : "—")</td>
                                     <td class="text-right font-mono hidden lg:table-cell whitespace-nowrap"><compactable-number value="@e.CurrentValue" prefix="$" /></td>
@@ -316,8 +313,8 @@
                             </thead>
                             <tbody>
                                 @foreach (var e in sorted) {
-                                    var deltaSharesCss = e.DeltaShares > 0 ? "text-success" : e.DeltaShares < 0 ? "text-error" : "";
-                                    var deltaValueCss = e.DeltaValue > 0 ? "text-success" : e.DeltaValue < 0 ? "text-error" : "";
+                                    var deltaSharesCss = e.DeltaShares.SignCss();
+                                    var deltaValueCss = e.DeltaValue.SignCss();
                                     var own = e.OwnershipPercent(Model.SharesOutstanding);
                                     <tr>
                                         <td class="max-w-xs truncate">
@@ -328,7 +325,7 @@
                                         </td>
                                         <td class="text-right font-mono"><compactable-number value="@e.CurrentShares" /></td>
                                         <td class="text-right font-mono hidden md:table-cell @deltaSharesCss"><compactable-number value="@e.DeltaShares" sign /></td>
-                                        <td class="text-right font-mono hidden md:table-cell @PctCss(e.ChangePercent)">@FormatPct(e.ChangePercent)</td>
+                                        <td class="text-right font-mono hidden md:table-cell @e.ChangePercent.SignCss()">@FormatPct(e.ChangePercent)</td>
                                         <td class="text-right font-mono hidden lg:table-cell">@(own != null ? $"{own:F2}%" : "—")</td>
                                         <td class="text-right font-mono hidden lg:table-cell"><compactable-number value="@e.CurrentValue" prefix="$" /></td>
                                         <td class="text-right hidden xl:table-cell text-base-content/60">@FormatQuarter(e.QuarterFirstOwned)</td>
