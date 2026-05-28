@@ -34,10 +34,7 @@ public class InstitutionsController : BaseController
     {
         ViewData["Title"] = "Institutions";
 
-        // page is a client-supplied query value; a non-positive page would emit
-        // Skip((page-1)*pageSize) = a negative OFFSET, which PostgreSQL rejects.
-        if (page < 1)
-            page = 1;
+        page = Pagination.ClampPage(page);
 
         const int pageSize = 50;
 
