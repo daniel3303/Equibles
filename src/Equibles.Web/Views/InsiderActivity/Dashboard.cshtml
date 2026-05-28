@@ -42,8 +42,7 @@
                                     @foreach (var row in Model.TopBuys) {
                                         <tr>
                                             <td class="max-w-[150px] truncate">
-                                                <a asp-controller="Profiles" asp-action="Insider" asp-route-ownerCik="@row.OwnerCik"
-                                                   class="link link-primary text-sm">@row.OwnerName</a>
+                                                <partial name="_InsiderLink" model='(OwnerCik: row.OwnerCik, OwnerName: row.OwnerName, Class: "link link-primary text-sm")' />
                                             </td>
                                             <td>
                                                 <partial name="_StockLink" model='(Ticker: row.Ticker, Class: "font-mono link link-primary")' />
@@ -83,8 +82,7 @@
                                     @foreach (var row in Model.TopSells) {
                                         <tr>
                                             <td class="max-w-[150px] truncate">
-                                                <a asp-controller="Profiles" asp-action="Insider" asp-route-ownerCik="@row.OwnerCik"
-                                                   class="link link-primary text-sm">@row.OwnerName</a>
+                                                <partial name="_InsiderLink" model='(OwnerCik: row.OwnerCik, OwnerName: row.OwnerName, Class: "link link-primary text-sm")' />
                                             </td>
                                             <td>
                                                 <partial name="_StockLink" model='(Ticker: row.Ticker, Class: "font-mono link link-primary")' />
@@ -128,8 +126,7 @@
                                 @foreach (var row in Model.BiggestTransactions) {
                                     <tr>
                                         <td class="max-w-[150px] truncate">
-                                            <a asp-controller="Profiles" asp-action="Insider" asp-route-ownerCik="@row.OwnerCik"
-                                               class="link link-primary text-sm">@row.OwnerName</a>
+                                            <partial name="_InsiderLink" model='(OwnerCik: row.OwnerCik, OwnerName: row.OwnerName, Class: "link link-primary text-sm")' />
                                         </td>
                                         <td>
                                             <partial name="_StockLink" model='(Ticker: row.Ticker, Class: "font-mono link link-primary")' />

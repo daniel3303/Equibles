@@ -1,0 +1,3 @@
+@model (string OwnerCik, string OwnerName, string Class)
+<a asp-controller="Profiles" asp-action="Insider" asp-route-ownerCik="@Model.OwnerCik"
+   class="@Model.Class">@Model.OwnerName</a>
