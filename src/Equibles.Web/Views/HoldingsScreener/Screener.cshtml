@@ -5,6 +5,13 @@
     ViewData["Menu"] = "Holdings";
     var filters = Model.Filters;
     var selectedIndustryIds = new HashSet<Guid>(filters.IndustryIds ?? []);
+    var minMaxFilters = new (string Legend, string MinName, object MinValue, string MaxName, object MaxValue, string Step)[] {
+        ("Filers (min / max)", "MinFilerCount", filters.MinFilerCount, "MaxFilerCount", filters.MaxFilerCount, null),
+        ("Δ Filers (min / max)", "MinDeltaFilerCount", filters.MinDeltaFilerCount, "MaxDeltaFilerCount", filters.MaxDeltaFilerCount, null),
+        ("Total $ value (min / max)", "MinTotalValue", filters.MinTotalValue, "MaxTotalValue", filters.MaxTotalValue, null),
+        ("Δ $ value (min / max)", "MinDeltaValue", filters.MinDeltaValue, "MaxDeltaValue", filters.MaxDeltaValue, null),
+        ("% of float (min / max)", "MinPctFloat", filters.MinPctFloat, "MaxPctFloat", filters.MaxPctFloat, "0.1"),
+    };
 }
 
 <div class="max-w-7xl mx-auto px-6 py-8">
@@ -44,43 +51,15 @@
                         </select>
                     </fieldset>
 
-                    <fieldset class="fieldset">
-                        <legend class="fieldset-legend">Filers (min / max)</legend>
-                        <div class="flex gap-2">
-                            <input type="number" name="MinFilerCount" value="@filters.MinFilerCount" placeholder="min" class="input input-bordered w-1/2" />
-                            <input type="number" name="MaxFilerCount" value="@filters.MaxFilerCount" placeholder="max" class="input input-bordered w-1/2" />
-                        </div>
-                    </fieldset>
-                    <fieldset class="fieldset">
-                        <legend class="fieldset-legend">Δ Filers (min / max)</legend>
-                        <div class="flex gap-2">
-                            <input type="number" name="MinDeltaFilerCount" value="@filters.MinDeltaFilerCount" placeholder="min" class="input input-bordered w-1/2" />
-                            <input type="number" name="MaxDeltaFilerCount" value="@filters.MaxDeltaFilerCount" placeholder="max" class="input input-bordered w-1/2" />
-                        </div>
-                    </fieldset>
-
-                    <fieldset class="fieldset">
-                        <legend class="fieldset-legend">Total $ value (min / max)</legend>
-                        <div class="flex gap-2">
-                            <input type="number" name="MinTotalValue" value="@filters.MinTotalValue" placeholder="min" class="input input-bordered w-1/2" />
-                            <input type="number" name="MaxTotalValue" value="@filters.MaxTotalValue" placeholder="max" class="input input-bordered w-1/2" />
-                        </div>
-                    </fieldset>
-                    <fieldset class="fieldset">
-                        <legend class="fieldset-legend">Δ $ value (min / max)</legend>
-                        <div class="flex gap-2">
-                            <input type="number" name="MinDeltaValue" value="@filters.MinDeltaValue" placeholder="min" class="input input-bordered w-1/2" />
-                            <input type="number" name="MaxDeltaValue" value="@filters.MaxDeltaValue" placeholder="max" class="input input-bordered w-1/2" />
-                        </div>
-                    </fieldset>
-
-                    <fieldset class="fieldset">
-                        <legend class="fieldset-legend">% of float (min / max)</legend>
-                        <div class="flex gap-2">
-                            <input type="number" step="0.1" name="MinPctFloat" value="@filters.MinPctFloat" placeholder="min" class="input input-bordered w-1/2" />
-                            <input type="number" step="0.1" name="MaxPctFloat" value="@filters.MaxPctFloat" placeholder="max" class="input input-bordered w-1/2" />
-                        </div>
-                    </fieldset>
+                    @foreach (var f in minMaxFilters) {
+                        <fieldset class="fieldset">
+                            <legend class="fieldset-legend">@f.Legend</legend>
+                            <div class="flex gap-2">
+                                <input type="number" step="@f.Step" name="@f.MinName" value="@f.MinValue" placeholder="min" class="input input-bordered w-1/2" />
+                                <input type="number" step="@f.Step" name="@f.MaxName" value="@f.MaxValue" placeholder="max" class="input input-bordered w-1/2" />
+                            </div>
+                        </fieldset>
+                    }
 
                     <fieldset class="fieldset">
                         <legend class="fieldset-legend">New positions (min)</legend>
