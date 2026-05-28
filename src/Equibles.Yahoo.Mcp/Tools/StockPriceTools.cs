@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
@@ -50,9 +51,9 @@ public class StockPriceTools
         return _runner.Execute(
             async () =>
             {
-                var stock = await FindStockByTicker(ticker);
-                if (stock == null)
-                    return McpToolExecutor.StockNotFound(ticker);
+                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                if (stockError != null)
+                    return stockError;
 
                 var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
@@ -345,9 +346,9 @@ public class StockPriceTools
         string Error
     )> LoadAscendingPriceWindow(string ticker, string startDate, string endDate)
     {
-        var stock = await FindStockByTicker(ticker);
-        if (stock == null)
-            return (null, null, McpToolExecutor.StockNotFound(ticker));
+        var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+        if (stockError != null)
+            return (null, null, stockError);
 
         var (start, end) = McpToolExecutor.ParseDateRange(
             startDate,
@@ -405,7 +406,4 @@ public class StockPriceTools
             records.Select(p => p.Low).ToList(),
             records.Select(p => p.Close).ToList()
         );
-
-    private Task<CommonStock> FindStockByTicker(string ticker) =>
-        _commonStockRepository.GetByTicker(McpToolExecutor.NormalizeTicker(ticker));
 }
