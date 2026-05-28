@@ -225,11 +225,7 @@ public class FtdImportService
         // stocks alongside the orphan.
         var stockIds = items.Select(i => i.CommonStockId).Distinct().ToHashSet();
         var existingIds = (
-            await stockRepo
-                .GetAll()
-                .Where(s => stockIds.Contains(s.Id))
-                .Select(s => s.Id)
-                .ToListAsync()
+            await stockRepo.GetByIds(stockIds).Select(s => s.Id).ToListAsync()
         ).ToHashSet();
 
         var safeItems = items.Where(i => existingIds.Contains(i.CommonStockId)).ToList();

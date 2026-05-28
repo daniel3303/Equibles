@@ -97,6 +97,11 @@ public class CommonStockRepository : BaseRepository<CommonStock>
             );
     }
 
+    public IQueryable<CommonStock> GetByIds(IEnumerable<Guid> ids)
+    {
+        return GetAll().Where(cs => ids.Contains(cs.Id));
+    }
+
     public IQueryable<string> GetAllTickers()
     {
         return GetAll().Select(cs => cs.Ticker);

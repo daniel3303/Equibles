@@ -425,8 +425,7 @@ public class HoldingsActivityController : BaseController
 
     private Task<Dictionary<Guid, StockLabel>> LoadStockLabels(List<Guid> stockIds) =>
         _commonStockRepository
-            .GetAll()
-            .Where(s => stockIds.Contains(s.Id))
+            .GetByIds(stockIds)
             .Select(s => new StockLabel
             {
                 Id = s.Id,
