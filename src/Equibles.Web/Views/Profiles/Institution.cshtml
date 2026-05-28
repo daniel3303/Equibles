@@ -139,12 +139,7 @@
                                 onchange="window.location.href='?activityDate=' + this.value">
                                 @foreach (var date in Model.AvailableReportDates) {
                                     if (date == Model.AvailableReportDates[^1]) { continue; }
-                                    var isSelected = date == Model.ActivityDate;
-                                    if (isSelected) {
-                                        <option value="@date.ToString("yyyy-MM-dd")" selected>@date.ToString("MMM dd, yyyy")</option>
-                                    } else {
-                                        <option value="@date.ToString("yyyy-MM-dd")">@date.ToString("MMM dd, yyyy")</option>
-                                    }
+                                    <date-option date="@date" selected="@(date == Model.ActivityDate)" />
                                 }
                             </select>
                         </div>
