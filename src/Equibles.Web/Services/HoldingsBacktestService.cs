@@ -79,9 +79,7 @@ public class HoldingsBacktestService
         }
         viewModel.BenchmarkName = benchmarkStock.Name;
 
-        var reportDates = await _holdingRepository
-            .GetReportDatesByHolder(holder)
-            .ToListAsync();
+        var reportDates = await _holdingRepository.GetReportDatesByHolder(holder).ToListAsync();
         // GetReportDatesByHolder returns latest first; backtest iterates earliest first.
         reportDates.Reverse();
         if (reportDates.Count == 0)
