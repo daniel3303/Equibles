@@ -4,6 +4,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
 using Equibles.Web.Controllers.Abstract;
+using Equibles.Web.Extensions;
 using Equibles.Web.Services;
 using Equibles.Web.ViewModels.Holdings;
 using Microsoft.AspNetCore.Mvc;
@@ -179,8 +180,7 @@ public class HoldingsScreenerController : BaseController
         var reportDates = await _holdingRepository.GetAvailableReportDates().ToListAsync();
         if (reportDates.Count < 2)
             return (reportDates, null, null);
-        var selected =
-            date.HasValue && reportDates.Contains(date.Value) ? date.Value : reportDates[0];
+        var selected = reportDates.ResolveSelectedDateOrFirst(date);
         // The default comparison must track the selected date — picking a fixed
         // reportDates[1] collapses to selected==comparison when selected is the
         // second-latest, and to a *newer* comparison when selected is older.

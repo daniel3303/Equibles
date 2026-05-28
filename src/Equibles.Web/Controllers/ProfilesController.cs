@@ -480,7 +480,7 @@ public class ProfilesController : BaseController
             .ToListAsync();
 
     private static DateOnly ResolveSelectedDate(DateOnly? requested, List<DateOnly> available) =>
-        requested.HasValue && available.Contains(requested.Value) ? requested.Value : available[0];
+        available.ResolveSelectedDateOrFirst(requested);
 
     private static List<string> NormalizeCiks(string[] ciks) =>
         (ciks ?? [])
