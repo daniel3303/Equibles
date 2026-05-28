@@ -10,13 +10,11 @@
 <div class="max-w-6xl mx-auto px-6 py-8">
     <!-- Breadcrumb -->
     <div class="flex items-center justify-between mb-2">
-        <div class="breadcrumbs text-sm text-base-content/60">
-            <ul>
-                <li><a asp-controller="Stocks" asp-action="Index">Stocks</a></li>
-                <li><a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@stock.Ticker">@stock.Ticker</a></li>
-                <li><span class="font-semibold text-base-content">@holder.Name</span></li>
-            </ul>
-        </div>
+        <breadcrumbs>
+            <li><a asp-controller="Stocks" asp-action="Index">Stocks</a></li>
+            <li><a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@stock.Ticker">@stock.Ticker</a></li>
+            <li><span class="font-semibold text-base-content">@holder.Name</span></li>
+        </breadcrumbs>
     </div>
 
     <!-- Holder Info -->

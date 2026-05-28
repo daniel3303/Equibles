@@ -10,14 +10,12 @@
 
 <div class="max-w-6xl mx-auto px-6 py-8">
     <!-- Breadcrumb -->
-    <div class="breadcrumbs text-sm text-base-content/60 mb-2">
-        <ul>
-            <li><a asp-controller="EconomicData" asp-action="Index">Economic Data</a></li>
-            <li>
-                <span class="font-semibold text-base-content">@Model.SeriesId</span>
-            </li>
-        </ul>
-    </div>
+    <breadcrumbs class="mb-2">
+        <li><a asp-controller="EconomicData" asp-action="Index">Economic Data</a></li>
+        <li>
+            <span class="font-semibold text-base-content">@Model.SeriesId</span>
+        </li>
+    </breadcrumbs>
 
     <!-- Series Header -->
     <div class="card bg-base-100 shadow-sm mb-6">

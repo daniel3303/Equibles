@@ -15,14 +15,12 @@
 
 <div class="max-w-6xl mx-auto px-6 py-8">
     <!-- Breadcrumb -->
-    <div class="breadcrumbs text-sm text-base-content/60 mb-2">
-        <ul>
-            <li><a asp-controller="Cftc" asp-action="Index">Futures</a></li>
-            <li>
-                <span class="font-semibold text-base-content">@Model.MarketCode</span>
-            </li>
-        </ul>
-    </div>
+    <breadcrumbs class="mb-2">
+        <li><a asp-controller="Cftc" asp-action="Index">Futures</a></li>
+        <li>
+            <span class="font-semibold text-base-content">@Model.MarketCode</span>
+        </li>
+    </breadcrumbs>
 
     <!-- Contract Header -->
     <div class="card bg-base-100 shadow-sm mb-6">
