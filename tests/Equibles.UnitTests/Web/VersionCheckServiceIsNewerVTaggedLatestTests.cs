@@ -25,9 +25,7 @@ namespace Equibles.UnitTests.Web;
 /// </summary>
 public class VersionCheckServiceIsNewerVTaggedLatestTests
 {
-    [Fact(
-        Skip = "GH-2614 — IsNewer normalizes current via NormalizeVersion but feeds latest to Version.TryParse raw; v-prefixed GitHub release tags (the exact format the docstring names) parse as false and the in-app update banner never fires"
-    )]
+    [Fact]
     public void IsNewer_BareCurrentVsVPrefixedLatest_DetectsBumpDespiteTagPrefix()
     {
         var method = typeof(VersionCheckService).GetMethod(
