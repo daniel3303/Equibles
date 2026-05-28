@@ -42,11 +42,11 @@
         const ctx = document.getElementById('short-volume-chart');
         if (!ctx || typeof Chart === 'undefined') return;
 
-        const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ShortVolumes.Select(v => v.Date.ToString("yyyy-MM-dd")).ToList()));
-        const shortVol = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ShortVolumes.Select(v => v.ShortVolume).ToList()));
-        const totalVol = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ShortVolumes.Select(v => v.TotalVolume).ToList()));
+        const labels = @Html.Json(Model.ShortVolumes.Select(v => v.Date.ToString("yyyy-MM-dd")).ToList());
+        const shortVol = @Html.Json(Model.ShortVolumes.Select(v => v.ShortVolume).ToList());
+        const totalVol = @Html.Json(Model.ShortVolumes.Select(v => v.TotalVolume).ToList());
         // Short volume as a percentage of total volume, per day
-        const shortPct = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ShortVolumes.Select(v => v.TotalVolume > 0 ? Math.Round((double)v.ShortVolume / v.TotalVolume * 100, 2) : 0).ToList()));
+        const shortPct = @Html.Json(Model.ShortVolumes.Select(v => v.TotalVolume > 0 ? Math.Round((double)v.ShortVolume / v.TotalVolume * 100, 2) : 0).ToList());
 
         new Chart(ctx, {
             type: 'bar',

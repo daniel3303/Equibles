@@ -38,14 +38,14 @@
         document.addEventListener('DOMContentLoaded', function() {
             if (typeof Chart === 'undefined') return;
 
-            const aumLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
-                Model.AumSnapshots.Select(a => a.ReportDate.ToString("yyyy-MM-dd")).ToList()));
-            const aumValues = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
-                Model.AumSnapshots.Select(a => a.TotalValue / 1_000_000_000m).ToList()));
-            const filerCounts = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
-                Model.AumSnapshots.Select(a => a.FilerCount).ToList()));
-            const positionCounts = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
-                Model.AumSnapshots.Select(a => a.PositionCount).ToList()));
+            const aumLabels = @Html.Json(
+                Model.AumSnapshots.Select(a => a.ReportDate.ToString("yyyy-MM-dd")).ToList());
+            const aumValues = @Html.Json(
+                Model.AumSnapshots.Select(a => a.TotalValue / 1_000_000_000m).ToList());
+            const filerCounts = @Html.Json(
+                Model.AumSnapshots.Select(a => a.FilerCount).ToList());
+            const positionCounts = @Html.Json(
+                Model.AumSnapshots.Select(a => a.PositionCount).ToList());
 
             const sharedOptions = {
                 responsive: true,
@@ -149,8 +149,8 @@
                     .ToDictionary(s => (s.ReportDate, s.SectorName ?? "Unknown"), s => s.TotalValue);
 
                 <text>
-                const sectorLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
-                    sectorDates.Select(d => d.ToString("yyyy-MM-dd")).ToList()));
+                const sectorLabels = @Html.Json(
+                    sectorDates.Select(d => d.ToString("yyyy-MM-dd")).ToList());
                 const sectorColors = [
                     'oklch(55% 0.15 250)', 'oklch(65% 0.2 145)', 'oklch(65% 0.15 30)',
                     'oklch(55% 0.2 310)', 'oklch(60% 0.15 80)', 'oklch(50% 0.15 200)',
@@ -167,8 +167,8 @@
                         .ToList();
                     <text>
                     sectorDatasets.push({
-                        label: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(sector)),
-                        data: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(values)),
+                        label: @Html.Json(sector),
+                        data: @Html.Json(values),
                         backgroundColor: sectorColors[@i % sectorColors.length] + ' / 0.6)',
                         borderColor: sectorColors[@i % sectorColors.length],
                         borderWidth: 1,

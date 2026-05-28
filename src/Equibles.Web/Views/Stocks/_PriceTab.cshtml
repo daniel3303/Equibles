@@ -98,16 +98,16 @@
         if (typeof Chart === 'undefined') return;
 
         // Serialize all data from server
-        const allLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Prices.Select(p => p.Date.ToString("yyyy-MM-dd")).ToList()));
-        const allClose = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Prices.Select(p => (decimal?)p.Close).ToList()));
-        const allVolume = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Prices.Select(p => p.Volume).ToList()));
-        const allSma20 = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sma20));
-        const allSma50 = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sma50));
-        const allSma200 = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sma200));
-        const allRsi = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Rsi14));
-        const allMacdLine = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MacdLine));
-        const allMacdSignal = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MacdSignal));
-        const allMacdHist = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MacdHistogram));
+        const allLabels = @Html.Json(Model.Prices.Select(p => p.Date.ToString("yyyy-MM-dd")).ToList());
+        const allClose = @Html.Json(Model.Prices.Select(p => (decimal?)p.Close).ToList());
+        const allVolume = @Html.Json(Model.Prices.Select(p => p.Volume).ToList());
+        const allSma20 = @Html.Json(Model.Sma20);
+        const allSma50 = @Html.Json(Model.Sma50);
+        const allSma200 = @Html.Json(Model.Sma200);
+        const allRsi = @Html.Json(Model.Rsi14);
+        const allMacdLine = @Html.Json(Model.MacdLine);
+        const allMacdSignal = @Html.Json(Model.MacdSignal);
+        const allMacdHist = @Html.Json(Model.MacdHistogram);
 
         let priceChart, volumeChart, rsiChart, macdChart;
 

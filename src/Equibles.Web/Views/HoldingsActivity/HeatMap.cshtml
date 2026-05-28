@@ -99,7 +99,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             if (typeof Chart === 'undefined') return;
 
-            const points = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+            const points = @Html.Json(
                 Model.Points.Select(p => new {
                     x = p.CurrentFilerCount,
                     y = p.ConvictionScore,
@@ -111,7 +111,7 @@
                     net = p.NetConvictionPct,
                     ret = p.RetentionPct,
                     univ = p.UniversePct,
-                }).ToList()));
+                }).ToList());
 
             // Score-based color: green for high, yellow for mid, red for low
             function scoreColor(score) {

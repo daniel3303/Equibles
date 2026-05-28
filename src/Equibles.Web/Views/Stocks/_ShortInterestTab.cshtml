@@ -51,8 +51,8 @@
         const ctx = document.getElementById('short-interest-chart');
         if (!ctx || typeof Chart === 'undefined') return;
 
-        const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ShortInterests.Select(s => s.SettlementDate.ToString("yyyy-MM-dd")).ToList()));
-        const positions = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ShortInterests.Select(s => s.CurrentShortPosition).ToList()));
+        const labels = @Html.Json(Model.ShortInterests.Select(s => s.SettlementDate.ToString("yyyy-MM-dd")).ToList());
+        const positions = @Html.Json(Model.ShortInterests.Select(s => s.CurrentShortPosition).ToList());
 
         new Chart(ctx, {
             type: 'line',
