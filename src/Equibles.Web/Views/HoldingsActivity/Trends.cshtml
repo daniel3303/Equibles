@@ -18,14 +18,14 @@
         <partial name="_EmptyStateCard" model='(IconName: "chart-bar", Heading: "No 13F data yet", Message: "Once at least one quarter of 13F filings has been ingested, the trend charts appear here.")' />
     } else {
         <!-- AUM Over Time -->
-        <partial name="_ChartCard" model='("Total Assets Under Management", "aum-chart", "Total AUM trend chart", "h-[320px]")' />
+        <partial name="_ChartCard" model='("Total Assets Under Management", "aum-chart", "Total AUM trend chart", "h-[320px]", "mb-6")' />
 
         <!-- Filer & Position Count Over Time -->
-        <partial name="_ChartCard" model='("Filers and Positions", "filer-chart", "Filer and position count trend chart", "h-[320px]")' />
+        <partial name="_ChartCard" model='("Filers and Positions", "filer-chart", "Filer and position count trend chart", "h-[320px]", "mb-6")' />
 
         <!-- Sector Allocation Over Time -->
         @if (Model.SectorAllocations.Count > 0) {
-            <partial name="_ChartCard" model='("Sector Allocation", "sector-chart", "Sector allocation trend chart", "h-[400px]")' />
+            <partial name="_ChartCard" model='("Sector Allocation", "sector-chart", "Sector allocation trend chart", "h-[400px]", "mb-6")' />
         }
     }
 </div>

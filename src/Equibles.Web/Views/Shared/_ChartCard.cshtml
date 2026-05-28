@@ -1,5 +1,5 @@
-@model (string Title, string ChartId, string AriaLabel, string HeightClass)
-<div class="card bg-base-100 shadow-sm mb-6">
+@model (string Title, string ChartId, string AriaLabel, string HeightClass, string MarginClass)
+<div class="card bg-base-100 shadow-sm @Model.MarginClass">
     <div class="card-body p-4 lg:p-6">
         <h2 class="font-semibold text-sm mb-3">@Model.Title</h2>
         <div class="@Model.HeightClass">

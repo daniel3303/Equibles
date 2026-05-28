@@ -4,14 +4,7 @@
     <partial name="_EmptyStateCard" model='(IconName: "chart-bar", Heading: "No Short Interest Data", Message: "No short interest data is available for this stock yet.")' />
 } else {
     <!-- Chart -->
-    <div class="card bg-base-100 shadow-sm mb-4">
-        <div class="card-body p-4 lg:p-6">
-            <h2 class="font-semibold text-sm mb-3">Short Interest History</h2>
-            <div class="h-[200px]">
-                <canvas id="short-interest-chart" role="img" aria-label="Short interest history"></canvas>
-            </div>
-        </div>
-    </div>
+    <partial name="_ChartCard" model='("Short Interest History", "short-interest-chart", "Short interest history", "h-[200px]", "mb-4")' />
 
     <!-- Table -->
     <div class="card bg-base-100 shadow-sm">
