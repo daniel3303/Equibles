@@ -15,7 +15,7 @@
     </div>
 
     @if (Model.AumSnapshots.Count == 0) {
-        <partial name="_No13FDataYet" model='(IconName: "chart-bar", Message: "Once at least one quarter of 13F filings has been ingested, the trend charts appear here.")' />
+        <partial name="_EmptyStateCard" model='(IconName: "chart-bar", Heading: "No 13F data yet", Message: "Once at least one quarter of 13F filings has been ingested, the trend charts appear here.")' />
     } else {
         <!-- AUM Over Time -->
         <partial name="_ChartCard" model='("Total Assets Under Management", "aum-chart", "Total AUM trend chart", "h-[320px]")' />

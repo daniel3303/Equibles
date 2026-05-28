@@ -11,7 +11,7 @@
 <h1 class="text-2xl font-bold mb-4">Most-Held Stocks</h1>
 
 @if (Model.AvailableDates.Count == 0) {
-    <partial name="_No13FDataYet" model='(IconName: "building-office", Message: "Once at least one quarter of 13F filings has been ingested, the most-held ranking appears here.")' />
+    <partial name="_EmptyStateCard" model='(IconName: "building-office", Heading: "No 13F data yet", Message: "Once at least one quarter of 13F filings has been ingested, the most-held ranking appears here.")' />
 } else {
     <!-- ReportDate + sort selector + universe size header. -->
     <div class="mb-4 text-sm">
