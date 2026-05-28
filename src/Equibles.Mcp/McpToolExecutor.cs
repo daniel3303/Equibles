@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 
 namespace Equibles.Mcp;
@@ -5,7 +6,15 @@ namespace Equibles.Mcp;
 public static class McpToolExecutor
 {
     public static DateOnly ParseDateOr(string text, DateOnly fallback) =>
-        !string.IsNullOrEmpty(text) && DateOnly.TryParse(text, out var parsed) ? parsed : fallback;
+        !string.IsNullOrEmpty(text)
+        && DateOnly.TryParse(
+            text,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var parsed
+        )
+            ? parsed
+            : fallback;
 
     public static (DateOnly Start, DateOnly End) ParseDateRange(
         string startText,

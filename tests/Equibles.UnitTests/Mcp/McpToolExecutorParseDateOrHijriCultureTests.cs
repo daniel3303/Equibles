@@ -23,7 +23,7 @@ public class McpToolExecutorParseDateOrHijriCultureTests
     // default range. The sibling unparseable-input test pins "returns
     // fallback"; this pins that a *valid* ISO date round-trips regardless
     // of host culture.
-    [Fact(Skip = "GH-2640 — ParseDateOr omits InvariantCulture; ISO dates misparse under ar-SA")]
+    [Fact]
     public void ParseDateOr_IsoDateUnderHijriCulture_ReturnsParsedDate()
     {
         var fallback = new DateOnly(1999, 12, 31);
