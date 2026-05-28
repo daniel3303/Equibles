@@ -25,9 +25,7 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class CompanySyncServiceBuildSecondaryCikToParentTests
 {
-    [Fact(
-        Skip = "GH-2606 — log template has 4 placeholder occurrences but only 3 args; LogWarning throws FormatException on duplicate subsidiary CIK"
-    )]
+    [Fact]
     public void BuildSecondaryCikToParent_DuplicateSubsidiaryCik_WarningRendersExistingTickerAtEveryPlaceholderSite()
     {
         var capturing = new CapturingLogger();
