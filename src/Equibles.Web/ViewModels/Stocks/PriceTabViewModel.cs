@@ -2,9 +2,8 @@ using Equibles.Yahoo.Data.Models;
 
 namespace Equibles.Web.ViewModels.Stocks;
 
-public class PriceTabViewModel
+public class PriceTabViewModel : StockTabViewModel
 {
-    public string Ticker { get; set; }
     public List<DailyStockPrice> Prices { get; set; } = [];
 
     // Pre-computed indicator series (same length as Prices, null-padded at start)

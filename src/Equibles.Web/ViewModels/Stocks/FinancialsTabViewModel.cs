@@ -2,10 +2,8 @@ using Equibles.Sec.FinancialFacts.Data.Enums;
 
 namespace Equibles.Web.ViewModels.Stocks;
 
-public class FinancialsTabViewModel
+public class FinancialsTabViewModel : StockTabViewModel
 {
-    public string Ticker { get; set; }
-
     public FinancialStatementType StatementType { get; set; }
 
     public List<FinancialsPeriodOption> AvailablePeriods { get; set; } = [];
