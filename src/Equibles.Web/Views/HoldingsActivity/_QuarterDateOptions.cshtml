@@ -1,0 +1,17 @@
+@using Equibles.Web.ViewModels.Holdings
+@model QuarterlySelectionViewModel
+@if (Model.IsCombinedAvailable) {
+    if (Model.IsCombinedSelected) {
+        <option value="combined" selected>Current Combined</option>
+    } else {
+        <option value="combined">Current Combined</option>
+    }
+}
+@foreach (var date in Model.AvailableDates) {
+    var isSelected = !Model.IsCombinedSelected && date == Model.SelectedDate;
+    if (isSelected) {
+        <option value="@date.ToString("yyyy-MM-dd")" selected>@date.ToString("MMM dd, yyyy")</option>
+    } else {
+        <option value="@date.ToString("yyyy-MM-dd")">@date.ToString("MMM dd, yyyy")</option>
+    }
+}
