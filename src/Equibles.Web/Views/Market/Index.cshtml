@@ -120,15 +120,3 @@
         </div>
     </div>
 </div>
-
-@section Scripts {
-    <script>
-    // Make table rows clickable to navigate to the detail page
-    document.querySelectorAll('.market-row').forEach(function(row) {
-        row.addEventListener('click', function(e) {
-            if (e.target.closest('a')) return; // let native link clicks through
-            window.location.href = this.dataset.href;
-        });
-    });
-    </script>
-}
