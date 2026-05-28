@@ -8,10 +8,5 @@
     }
 }
 @foreach (var date in Model.AvailableDates) {
-    var isSelected = !Model.IsCombinedSelected && date == Model.SelectedDate;
-    if (isSelected) {
-        <option value="@date.ToString("yyyy-MM-dd")" selected>@date.ToString("MMM dd, yyyy")</option>
-    } else {
-        <option value="@date.ToString("yyyy-MM-dd")">@date.ToString("MMM dd, yyyy")</option>
-    }
+    <date-option date="@date" selected="@(!Model.IsCombinedSelected && date == Model.SelectedDate)" />
 }

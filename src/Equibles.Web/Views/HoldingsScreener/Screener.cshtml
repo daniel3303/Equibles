@@ -36,8 +36,7 @@
                         <legend class="fieldset-legend">Report quarter</legend>
                         <select name="date" class="select select-bordered w-full">
                             @foreach (var date in Model.AvailableDates) {
-                                var isSelected = date == Model.SelectedDate;
-                                <option value="@date.ToString("yyyy-MM-dd")" selected="@(isSelected ? "selected" : null)">@date.ToString("MMM dd, yyyy")</option>
+                                <date-option date="@date" selected="@(date == Model.SelectedDate)" />
                             }
                         </select>
                     </fieldset>
@@ -45,8 +44,7 @@
                         <legend class="fieldset-legend">Comparison quarter</legend>
                         <select name="compareDate" class="select select-bordered w-full">
                             @foreach (var date in Model.AvailableDates) {
-                                var isSelected = date == Model.ComparisonDate;
-                                <option value="@date.ToString("yyyy-MM-dd")" selected="@(isSelected ? "selected" : null)">@date.ToString("MMM dd, yyyy")</option>
+                                <date-option date="@date" selected="@(date == Model.ComparisonDate)" />
                             }
                         </select>
                     </fieldset>
