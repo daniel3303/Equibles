@@ -23,9 +23,7 @@ public class InstitutionalHoldingsToolsRenderInstitutionSummaryCultureInvariance
     // MCP output by host locale. The contract (repo convention; cf. FactMarkdown
     // threading InvariantCulture) is that the same call renders byte-identically
     // regardless of host CurrentCulture.
-    [Fact(
-        Skip = "GH-2637 — RenderInstitutionSummary :N0/:F1 metric cells follow CurrentCulture (de-DE → 1.234.567.890 / 12,3 vs Invariant 1,234,567,890 / 12.3); MCP output forks by host locale"
-    )]
+    [Fact]
     public void RenderInstitutionSummary_UnderNonInvariantCulture_RendersMetricCellsCultureInvariantly()
     {
         var holder = new InstitutionalHolder { Name = "ACME Capital" };
