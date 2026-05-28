@@ -50,7 +50,7 @@
                     <div class="text-xs text-base-content/50 uppercase tracking-wider">Latest Close</div>
                     <div class="text-lg font-bold tabular-nums">@Model.LatestClose.Value.ToString("N2")</div>
                     @if (vixChange.HasValue) {
-                        <div class="text-xs tabular-nums @(vixChange.Value > 0 ? "text-error" : vixChange.Value < 0 ? "text-success" : "text-base-content/50")">
+                        <div class="text-xs tabular-nums @(vixChange.Value.InverseSignCss("text-base-content/50"))">
                             @(vixChange.Value > 0 ? "+" : "")@vixChange.Value.ToString("N2")
                         </div>
                     }

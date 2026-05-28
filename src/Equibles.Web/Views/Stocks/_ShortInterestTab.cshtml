@@ -33,7 +33,7 @@
                             <td>@si.SettlementDate.ToString("yyyy-MM-dd")</td>
                             <td class="text-right font-mono"><compactable-number value="@si.CurrentShortPosition" /></td>
                             <td class="text-right font-mono"><compactable-number value="@si.PreviousShortPosition" /></td>
-                            <td class="text-right font-mono @(si.ChangeInShortPosition > 0 ? "text-error" : si.ChangeInShortPosition < 0 ? "text-success" : "")">
+                            <td class="text-right font-mono @si.ChangeInShortPosition.InverseSignCss()">
                                 <compactable-number value="@si.ChangeInShortPosition" sign />
                             </td>
                             <td class="text-right font-mono hidden md:table-cell">
