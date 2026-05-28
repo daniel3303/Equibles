@@ -96,6 +96,14 @@ public abstract class BaseScraperWorker : BackgroundService
         ErrorReporter = errorReporter;
     }
 
+    protected async Task RunImport<TImporter>(CancellationToken stoppingToken)
+        where TImporter : IImporter
+    {
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var importer = scope.ServiceProvider.GetRequiredService<TImporter>();
+        await importer.Import(stoppingToken);
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!ValidateConfiguration())

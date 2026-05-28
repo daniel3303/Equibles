@@ -13,7 +13,7 @@ using Microsoft.Extensions.Logging;
 namespace Equibles.Cboe.HostedService.Services;
 
 [Service]
-public class CboeImportService
+public class CboeImportService : IImporter
 {
     private const int InsertBatchSize = 1000;
 
