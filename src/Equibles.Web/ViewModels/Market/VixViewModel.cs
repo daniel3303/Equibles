@@ -1,15 +1,11 @@
+using Equibles.Web.ViewModels.Shared;
+
 namespace Equibles.Web.ViewModels.Market;
 
-public class VixViewModel
+public class VixViewModel : StatsViewModel
 {
     public List<VixDailyItem> Records { get; set; } = [];
 
-    // Statistics
-    public decimal? Mean { get; set; }
-    public decimal? Median { get; set; }
-    public decimal? Min { get; set; }
-    public decimal? Max { get; set; }
-    public decimal? StdDev { get; set; }
     public decimal? LatestClose { get; set; }
     public decimal? PreviousClose { get; set; }
     public List<decimal?> Sma20 { get; set; } = [];

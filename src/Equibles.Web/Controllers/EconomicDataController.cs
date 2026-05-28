@@ -105,12 +105,7 @@ public class EconomicDataController : BaseController
             .ToArray();
         if (chronological.Length > 0)
         {
-            var s = ComputeStats(chronological, decimals: 4);
-            viewModel.Mean = s.Mean;
-            viewModel.Min = s.Min;
-            viewModel.Max = s.Max;
-            viewModel.Median = s.Median;
-            viewModel.StdDev = s.StdDev;
+            viewModel.ApplyStats(chronological.ComputeStats(decimals: 4));
             viewModel.LatestValue = observations[0].Value; // observations are desc by date
             if (observations.Count > 1)
                 viewModel.PreviousValue = observations[1].Value;

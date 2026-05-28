@@ -1,19 +1,14 @@
 using Equibles.Cboe.Data.Models;
+using Equibles.Web.ViewModels.Shared;
 
 namespace Equibles.Web.ViewModels.Market;
 
-public class PutCallRatioViewModel
+public class PutCallRatioViewModel : StatsViewModel
 {
     public CboePutCallRatioType Type { get; set; }
     public string DisplayName { get; set; }
     public List<PutCallRatioItem> Records { get; set; } = [];
 
-    // Statistics
-    public decimal? Mean { get; set; }
-    public decimal? Median { get; set; }
-    public decimal? Min { get; set; }
-    public decimal? Max { get; set; }
-    public decimal? StdDev { get; set; }
     public decimal? LatestRatio { get; set; }
     public decimal? PreviousRatio { get; set; }
 }

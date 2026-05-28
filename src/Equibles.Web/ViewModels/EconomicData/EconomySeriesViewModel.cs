@@ -1,8 +1,9 @@
 using Equibles.Fred.Data.Models;
+using Equibles.Web.ViewModels.Shared;
 
 namespace Equibles.Web.ViewModels.EconomicData;
 
-public class EconomySeriesViewModel
+public class EconomySeriesViewModel : StatsViewModel
 {
     public string SeriesId { get; set; }
     public string Title { get; set; }
@@ -13,12 +14,6 @@ public class EconomySeriesViewModel
     public string SeasonalAdjustment { get; set; }
     public List<ObservationItem> Observations { get; set; } = [];
 
-    // Statistics
-    public decimal? Mean { get; set; }
-    public decimal? Median { get; set; }
-    public decimal? Min { get; set; }
-    public decimal? Max { get; set; }
-    public decimal? StdDev { get; set; }
     public decimal? LatestValue { get; set; }
     public decimal? PreviousValue { get; set; }
 
