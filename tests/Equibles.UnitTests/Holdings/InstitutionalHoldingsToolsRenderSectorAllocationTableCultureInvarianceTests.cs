@@ -23,9 +23,7 @@ public class InstitutionalHoldingsToolsRenderSectorAllocationTableCultureInvaria
     // forking the LLM-consumed MCP output by host locale. The contract (repo
     // convention; cf. FactMarkdown threading InvariantCulture) is that the same call
     // renders byte-identically regardless of host CurrentCulture.
-    [Fact(
-        Skip = "GH-2641 — RenderSectorAllocationTable :N0/:N1/:F1 row cells follow CurrentCulture (de-DE → 1.234 / 12.345,7 / 42,3 vs Invariant 1,234 / 12,345.7 / 42.3); MCP output forks by host locale"
-    )]
+    [Fact]
     public void RenderSectorAllocationTable_UnderNonInvariantCulture_RendersRowCellsCultureInvariantly()
     {
         var holder = new InstitutionalHolder { Name = "ACME Capital" };
