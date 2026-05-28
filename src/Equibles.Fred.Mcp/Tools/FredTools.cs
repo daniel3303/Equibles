@@ -6,6 +6,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Fred.Data.Models;
 using Equibles.Fred.Repositories;
 using Equibles.Mcp;
+using Equibles.Mcp.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -133,11 +134,11 @@ public class FredTools
                     .GetLatestPerSeries()
                     .ToDictionaryAsync(o => o.FredSeriesId);
 
-                var result = new StringBuilder();
-                result.AppendLine("Latest Economic Indicators:");
-                result.AppendLine();
-                result.AppendLine("| Series | Title | Latest Date | Value | Units |");
-                result.AppendLine("|--------|-------|-------------|-------|-------|");
+                var result = MarkdownTable.Start(
+                    "Latest Economic Indicators:",
+                    "| Series | Title | Latest Date | Value | Units |",
+                    "|--------|-------|-------------|-------|-------|"
+                );
 
                 var currentCategory = (FredSeriesCategory?)null;
 
@@ -191,11 +192,11 @@ public class FredTools
                 if (series.Count == 0)
                     return $"No series found matching '{query}'.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"Economic indicators matching '{query}':");
-                result.AppendLine();
-                result.AppendLine("| Series ID | Title | Category | Frequency | Units |");
-                result.AppendLine("|-----------|-------|----------|-----------|-------|");
+                var result = MarkdownTable.Start(
+                    $"Economic indicators matching '{query}':",
+                    "| Series ID | Title | Category | Frequency | Units |",
+                    "|-----------|-------|----------|-----------|-------|"
+                );
 
                 foreach (var s in series)
                 {

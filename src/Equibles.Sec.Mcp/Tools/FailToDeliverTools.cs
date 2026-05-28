@@ -1,11 +1,11 @@
 using System.ComponentModel;
-using System.Text;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
+using Equibles.Mcp.Helpers;
 using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -69,11 +69,11 @@ public class FailToDeliverTools
                 if (records.Count == 0)
                     return $"No FTD data found for {stock.Ticker} in the specified date range.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"Fails-to-deliver for {stock.Ticker} ({stock.Name}):");
-                result.AppendLine();
-                result.AppendLine("| Settlement Date | Quantity | Price | Value |");
-                result.AppendLine("|----------------|---------|-------|-------|");
+                var result = MarkdownTable.Start(
+                    $"Fails-to-deliver for {stock.Ticker} ({stock.Name}):",
+                    "| Settlement Date | Quantity | Price | Value |",
+                    "|----------------|---------|-------|-------|"
+                );
 
                 foreach (var f in records.OrderBy(f => f.SettlementDate))
                 {

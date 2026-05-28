@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text;
 using Equibles.Cboe.Data.Models;
 using Equibles.Cboe.Repositories;
 using Equibles.Core.Extensions;
@@ -7,6 +6,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
+using Equibles.Mcp.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -68,11 +68,11 @@ public class CboeTools
                 if (records.Count == 0)
                     return $"No put/call ratio data found for {ratioType.NameForHumans()} in the specified date range.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"CBOE {ratioType.NameForHumans()} Put/Call Ratios:");
-                result.AppendLine();
-                result.AppendLine("| Date | Call Volume | Put Volume | Total | P/C Ratio |");
-                result.AppendLine("|------|-----------|----------|-------|-----------|");
+                var result = MarkdownTable.Start(
+                    $"CBOE {ratioType.NameForHumans()} Put/Call Ratios:",
+                    "| Date | Call Volume | Put Volume | Total | P/C Ratio |",
+                    "|------|-----------|----------|-------|-----------|"
+                );
 
                 foreach (var r in records.OrderBy(r => r.Date))
                 {
@@ -123,11 +123,11 @@ public class CboeTools
                 if (records.Count == 0)
                     return "No VIX data found in the specified date range.";
 
-                var result = new StringBuilder();
-                result.AppendLine("CBOE Volatility Index (VIX):");
-                result.AppendLine();
-                result.AppendLine("| Date | Open | High | Low | Close |");
-                result.AppendLine("|------|------|------|-----|-------|");
+                var result = MarkdownTable.Start(
+                    "CBOE Volatility Index (VIX):",
+                    "| Date | Open | High | Low | Close |",
+                    "|------|------|------|-----|-------|"
+                );
 
                 foreach (var v in records.OrderBy(v => v.Date))
                 {

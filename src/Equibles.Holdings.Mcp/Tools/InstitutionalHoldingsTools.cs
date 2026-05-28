@@ -10,6 +10,7 @@ using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
 using Equibles.Mcp;
+using Equibles.Mcp.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -183,13 +184,11 @@ public class InstitutionalHoldingsTools
         List<DateOnly> reportDates
     )
     {
-        var result = new StringBuilder();
-        result.AppendLine($"Institutional ownership history for {stock.Name} ({ticker}):");
-        result.AppendLine();
-        result.AppendLine(
-            "| Report Date | Institutions | Total Shares | Total Value ($M) | Change |"
+        var result = MarkdownTable.Start(
+            $"Institutional ownership history for {stock.Name} ({ticker}):",
+            "| Report Date | Institutions | Total Shares | Total Value ($M) | Change |",
+            "|------------|-------------|-------------|-----------------|--------|"
         );
-        result.AppendLine("|------------|-------------|-------------|-----------------|--------|");
 
         long previousShares = 0;
         foreach (var date in reportDates.OrderBy(d => d))
@@ -264,13 +263,11 @@ public class InstitutionalHoldingsTools
         List<InstitutionalHolding> holdings
     )
     {
-        var result = new StringBuilder();
-        result.AppendLine(
-            $"Portfolio of {holder.Name} (CIK: {holder.Cik}) as of {targetDate:yyyy-MM-dd}:"
+        var result = MarkdownTable.Start(
+            $"Portfolio of {holder.Name} (CIK: {holder.Cik}) as of {targetDate:yyyy-MM-dd}:",
+            "| # | Ticker | Company | Shares | Value ($M) |",
+            "|---|--------|---------|--------|-----------|"
         );
-        result.AppendLine();
-        result.AppendLine("| # | Ticker | Company | Shares | Value ($M) |");
-        result.AppendLine("|---|--------|---------|--------|-----------|");
 
         for (var i = 0; i < holdings.Count; i++)
         {
@@ -304,11 +301,11 @@ public class InstitutionalHoldingsTools
                 if (holders.Count == 0)
                     return $"No institutions found matching '{query}'.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"Institutions matching '{query}':");
-                result.AppendLine();
-                result.AppendLine("| Institution | CIK | City | State/Country |");
-                result.AppendLine("|------------|-----|------|--------------|");
+                var result = MarkdownTable.Start(
+                    $"Institutions matching '{query}':",
+                    "| Institution | CIK | City | State/Country |",
+                    "|------------|-----|------|--------------|"
+                );
 
                 foreach (var h in holders)
                 {
