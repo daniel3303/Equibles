@@ -1,0 +1,3 @@
+@model (string Cik, string Name, string Class)
+<a asp-controller="Profiles" asp-action="Institution" asp-route-cik="@Model.Cik"
+   class="@Model.Class">@Model.Name</a>

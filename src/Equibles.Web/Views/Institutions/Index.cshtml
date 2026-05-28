@@ -78,8 +78,7 @@
                         <tr class="hover cursor-pointer institution-row"
                             data-href="@Url.Action("Institution", "Profiles", new { cik = inst.Cik })">
                             <td class="max-w-xs">
-                                <a asp-action="Institution" asp-controller="Profiles" asp-route-cik="@inst.Cik"
-                                   class="font-semibold link link-primary">@inst.Name</a>
+                                <partial name="_InstitutionLink" model='(Cik: inst.Cik, Name: inst.Name, Class: "font-semibold link link-primary")' />
                             </td>
                             <td class="hidden md:table-cell font-mono text-sm text-base-content/60">@inst.Cik</td>
                             <td class="hidden lg:table-cell text-sm text-base-content/60">@(string.IsNullOrEmpty(location) ? "—" : location)</td>

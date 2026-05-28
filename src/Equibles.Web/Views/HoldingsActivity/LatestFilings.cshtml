@@ -36,8 +36,7 @@
                             data-href="@Url.Action("Institution", "Profiles", new { cik = filing.FilerCik })">
                             <td class="max-w-xs">
                                 <div class="flex items-center gap-2">
-                                    <a asp-action="Institution" asp-controller="Profiles" asp-route-cik="@filing.FilerCik"
-                                       class="font-semibold link link-primary truncate">@filing.FilerName</a>
+                                    <partial name="_InstitutionLink" model='(Cik: filing.FilerCik, Name: filing.FilerName, Class: "font-semibold link link-primary truncate")' />
                                     @if (filing.IsNewFiler) {
                                         <span class="badge badge-info badge-xs whitespace-nowrap" title="First 13F filing for this CIK">New</span>
                                     }
