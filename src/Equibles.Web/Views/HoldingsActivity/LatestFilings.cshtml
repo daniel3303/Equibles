@@ -67,50 +67,7 @@
         </div>
     </div>
 
-    <!-- Pagination -->
-    @if (Model.TotalPages > 1) {
-        <nav class="flex justify-center mt-6" aria-label="Filings pagination" data-testid="filings-pager">
-            <div class="join">
-                @if (Model.Page > 1) {
-                    <a asp-action="LatestFilings" asp-route-page="@(Model.Page - 1)"
-                       class="join-item btn btn-sm" aria-label="Go to previous page">Previous</a>
-                }
-
-                @{
-                    var startPage = Math.Max(1, Model.Page - 2);
-                    var endPage = Math.Min(Model.TotalPages, Model.Page + 2);
-                }
-
-                @if (startPage > 1) {
-                    <a asp-action="LatestFilings" asp-route-page="1"
-                       class="join-item btn btn-sm" aria-label="Go to page 1">1</a>
-                    @if (startPage > 2) {
-                        <span class="join-item btn btn-sm btn-disabled" aria-hidden="true">...</span>
-                    }
-                }
-
-                @for (var i = startPage; i <= endPage; i++) {
-                    <a asp-action="LatestFilings" asp-route-page="@i"
-                       class="join-item btn btn-sm @(i == Model.Page ? "btn-active" : "")"
-                       aria-label="Go to page @i"
-                       aria-current="@(i == Model.Page ? "page" : null)">@i</a>
-                }
-
-                @if (endPage < Model.TotalPages) {
-                    @if (endPage < Model.TotalPages - 1) {
-                        <span class="join-item btn btn-sm btn-disabled" aria-hidden="true">...</span>
-                    }
-                    <a asp-action="LatestFilings" asp-route-page="@Model.TotalPages"
-                       class="join-item btn btn-sm" aria-label="Go to page @Model.TotalPages">@Model.TotalPages</a>
-                }
-
-                @if (Model.Page < Model.TotalPages) {
-                    <a asp-action="LatestFilings" asp-route-page="@(Model.Page + 1)"
-                       class="join-item btn btn-sm" aria-label="Go to next page">Next</a>
-                }
-            </div>
-        </nav>
-    }
+    <partial name="_Pager" model='(Model.Page, Model.TotalPages, "LatestFilings", "Filings pagination", "filings-pager", (IDictionary<string, string>)null)' />
 </div>
 
 @section Scripts {
