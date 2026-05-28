@@ -838,11 +838,21 @@ public class InstitutionalHoldingsTools
         result.AppendLine();
         result.AppendLine("| Metric | Value |");
         result.AppendLine("|--------|-------|");
-        result.AppendLine($"| Reported AUM | ${summary.ReportedAum:N0} |");
-        result.AppendLine($"| # Positions | {summary.PositionCount:N0} |");
-        result.AppendLine($"| Top 10 concentration | {summary.Top10ConcentrationPercent:F1}% |");
-        result.AppendLine($"| Top 25 concentration | {summary.Top25ConcentrationPercent:F1}% |");
-        result.AppendLine($"| QoQ turnover | {summary.QoQTurnoverPercent:F1}% |");
+        result.AppendLine(
+            $"| Reported AUM | ${summary.ReportedAum.ToString("N0", CultureInfo.InvariantCulture)} |"
+        );
+        result.AppendLine(
+            $"| # Positions | {summary.PositionCount.ToString("N0", CultureInfo.InvariantCulture)} |"
+        );
+        result.AppendLine(
+            $"| Top 10 concentration | {summary.Top10ConcentrationPercent.ToString("F1", CultureInfo.InvariantCulture)}% |"
+        );
+        result.AppendLine(
+            $"| Top 25 concentration | {summary.Top25ConcentrationPercent.ToString("F1", CultureInfo.InvariantCulture)}% |"
+        );
+        result.AppendLine(
+            $"| QoQ turnover | {summary.QoQTurnoverPercent.ToString("F1", CultureInfo.InvariantCulture)}% |"
+        );
         result.AppendLine($"| Quarters reported | {summary.QuartersReported} |");
         result.AppendLine();
         result.AppendLine(
