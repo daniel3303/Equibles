@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Globalization;
+using System.Numerics;
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -500,10 +501,8 @@ public class InstitutionalHoldingsTools
             for (var i = 0; i < rows.Count; i++)
             {
                 var m = rows[i];
-                // `+` for positive deltas; N0 already emits `-` for negatives.
-                var sign = m.DeltaShares > 0 ? "+" : "";
                 sb.AppendLine(
-                    $"| {i + 1} | {m.Name} | {sign}{m.DeltaShares:N0} | {FormatSignedMillions(m.DeltaValue)} | {m.PreviousShares:N0} → {m.CurrentShares:N0} |"
+                    $"| {i + 1} | {m.Name} | {FormatSignedShares(m.DeltaShares)} | {FormatSignedMillions(m.DeltaValue)} | {m.PreviousShares:N0} → {m.CurrentShares:N0} |"
                 );
             }
         }
@@ -630,9 +629,8 @@ public class InstitutionalHoldingsTools
         {
             var r = rows[i];
             var (ticker, name) = ResolveStockCells(stocks, r.CommonStockId);
-            var sign = r.DeltaShares > 0 ? "+" : "";
             result.AppendLine(
-                $"| {i + 1} | {ticker} | {name} | {sign}{r.DeltaShares:N0} | {FormatSignedMillions(r.DeltaValue)} |"
+                $"| {i + 1} | {ticker} | {name} | {FormatSignedShares(r.DeltaShares)} | {FormatSignedMillions(r.DeltaValue)} |"
             );
         }
         return result.ToString();
@@ -768,9 +766,8 @@ public class InstitutionalHoldingsTools
             var (ticker, name) = ResolveStockCells(stocks, r.CommonStockId);
             var pct = universeFilers > 0 ? (double)r.CurrentFilerCount / universeFilers * 100.0 : 0;
             var deltaFilers = r.CurrentFilerCount - r.PreviousFilerCount;
-            var filerSign = deltaFilers > 0 ? "+" : "";
             result.AppendLine(
-                $"| {i + 1} | {ticker} | {name} | {r.CurrentFilerCount:N0} | {filerSign}{deltaFilers:N0} | {r.CurrentValue / 1_000_000m:N1} | {FormatSignedMillions(r.DeltaValue)} | {pct:F1}% |"
+                $"| {i + 1} | {ticker} | {name} | {r.CurrentFilerCount:N0} | {FormatSignedShares(deltaFilers)} | {r.CurrentValue / 1_000_000m:N1} | {FormatSignedMillions(r.DeltaValue)} | {pct:F1}% |"
             );
         }
         return result.ToString();
@@ -1055,9 +1052,8 @@ public class InstitutionalHoldingsTools
         for (var i = 0; i < rows.Count; i++)
         {
             var r = rows[i];
-            var sign = r.DeltaShares > 0 ? "+" : "";
             result.AppendLine(
-                $"| {i + 1} | {r.Ticker} | {r.Name} | {r.PreviousShares:N0} | {r.CurrentShares:N0} | {sign}{r.DeltaShares:N0} | {FormatSignedMillions(r.DeltaValue)} |"
+                $"| {i + 1} | {r.Ticker} | {r.Name} | {r.PreviousShares:N0} | {r.CurrentShares:N0} | {FormatSignedShares(r.DeltaShares)} | {FormatSignedMillions(r.DeltaValue)} |"
             );
         }
         result.AppendLine();
@@ -1337,6 +1333,10 @@ public class InstitutionalHoldingsTools
     }
 
     // Raw dollar values rendered in $millions with an explicit leading +/- sign.
+    // `+` for positive deltas; N0 already emits `-` for negatives.
+    private static string FormatSignedShares<T>(T value)
+        where T : INumber<T> => (value > T.Zero ? "+" : "") + value.ToString("N0", null);
+
     // Uses the ambient culture to match the previous inline formatting; see #2658 for the
     // pending switch to InvariantCulture (the other cells here are already invariant).
     private static string FormatSignedMillions(decimal value) =>
