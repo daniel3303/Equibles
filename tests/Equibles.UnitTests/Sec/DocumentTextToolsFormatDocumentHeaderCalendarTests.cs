@@ -15,7 +15,7 @@ public class DocumentTextToolsFormatDocumentHeaderCalendarTests
     // th-TH (Buddhist, year + 543) the banner the LLM consumer parses must
     // still carry the Gregorian ISO date — same bug class fixed for the
     // holdings MCP date headers (GH-2681).
-    [Fact(Skip = "GH-2773 — bare :yyyy-MM-dd renders Buddhist year under th-TH calendar")]
+    [Fact]
     public void FormatDocumentHeader_UnderNonGregorianCalendar_RendersGregorianIsoDate()
     {
         var document = new Document
