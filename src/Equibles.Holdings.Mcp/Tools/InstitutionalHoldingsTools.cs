@@ -750,7 +750,7 @@ public class InstitutionalHoldingsTools
         var result = new StringBuilder();
         result.AppendLine($"Most-held 13F stocks as of {targetDate:yyyy-MM-dd}");
         result.AppendLine(
-            $"vs prior quarter {previousDate:yyyy-MM-dd} · {universeFilers:N0} filers in the 13F universe"
+            $"vs prior quarter {previousDate:yyyy-MM-dd} · {universeFilers.ToString("N0", CultureInfo.InvariantCulture)} filers in the 13F universe"
         );
         result.AppendLine($"Sorted by: {sort}");
         result.AppendLine();
@@ -767,7 +767,7 @@ public class InstitutionalHoldingsTools
             var pct = universeFilers > 0 ? (double)r.CurrentFilerCount / universeFilers * 100.0 : 0;
             var deltaFilers = r.CurrentFilerCount - r.PreviousFilerCount;
             result.AppendLine(
-                $"| {i + 1} | {ticker} | {name} | {r.CurrentFilerCount:N0} | {FormatSignedShares(deltaFilers)} | {r.CurrentValue / 1_000_000m:N1} | {FormatSignedMillions(r.DeltaValue)} | {pct:F1}% |"
+                $"| {i + 1} | {ticker} | {name} | {r.CurrentFilerCount.ToString("N0", CultureInfo.InvariantCulture)} | {FormatSignedShares(deltaFilers)} | {(r.CurrentValue / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture)} | {FormatSignedMillions(r.DeltaValue)} | {pct.ToString("F1", CultureInfo.InvariantCulture)}% |"
             );
         }
         return result.ToString();

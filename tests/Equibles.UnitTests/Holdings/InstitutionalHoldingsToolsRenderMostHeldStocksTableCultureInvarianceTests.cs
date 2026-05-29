@@ -22,7 +22,7 @@ public class InstitutionalHoldingsToolsRenderMostHeldStocksTableCultureInvarianc
     // (GH-2637) and RenderSectorAllocationTable (GH-2641) siblings. The repo
     // convention (cf. FactMarkdown threading InvariantCulture) is that the same
     // call renders byte-identically regardless of host CurrentCulture.
-    [Fact(Skip = "GH-2656 — RenderMostHeldStocksTable emits host-locale digit separators")]
+    [Fact]
     public void RenderMostHeldStocksTable_UnderNonInvariantCulture_RendersCellsCultureInvariantly()
     {
         var targetDate = new DateOnly(2024, 12, 31);
