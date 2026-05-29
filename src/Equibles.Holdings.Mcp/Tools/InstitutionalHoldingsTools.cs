@@ -838,14 +838,12 @@ public class InstitutionalHoldingsTools
         result.AppendLine($"| Reported AUM | ${FormatWholeNumber(summary.ReportedAum)} |");
         result.AppendLine($"| # Positions | {FormatWholeNumber(summary.PositionCount)} |");
         result.AppendLine(
-            $"| Top 10 concentration | {summary.Top10ConcentrationPercent.ToString("F1", CultureInfo.InvariantCulture)}% |"
+            $"| Top 10 concentration | {FormatPercent(summary.Top10ConcentrationPercent)}% |"
         );
         result.AppendLine(
-            $"| Top 25 concentration | {summary.Top25ConcentrationPercent.ToString("F1", CultureInfo.InvariantCulture)}% |"
+            $"| Top 25 concentration | {FormatPercent(summary.Top25ConcentrationPercent)}% |"
         );
-        result.AppendLine(
-            $"| QoQ turnover | {summary.QoQTurnoverPercent.ToString("F1", CultureInfo.InvariantCulture)}% |"
-        );
+        result.AppendLine($"| QoQ turnover | {FormatPercent(summary.QoQTurnoverPercent)}% |");
         result.AppendLine($"| Quarters reported | {summary.QuartersReported} |");
         result.AppendLine();
         result.AppendLine(
@@ -884,7 +882,7 @@ public class InstitutionalHoldingsTools
         {
             var s = slices[i];
             result.AppendLine(
-                $"| {i + 1} | {s.IndustryName} | {FormatWholeNumber(s.PositionCount)} | {FormatMillions(s.TotalValue)} | {s.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture)}% |"
+                $"| {i + 1} | {s.IndustryName} | {FormatWholeNumber(s.PositionCount)} | {FormatMillions(s.TotalValue)} | {FormatPercent(s.PercentOfPortfolio)}% |"
             );
         }
         return result.ToString();
@@ -1147,10 +1145,10 @@ public class InstitutionalHoldingsTools
             $"| Shared positions | {FormatWholeNumber(overlap.IntersectionPositionCount)} |"
         );
         result.AppendLine(
-            $"| Jaccard similarity | {overlap.JaccardSimilarityPercent.ToString("F1", CultureInfo.InvariantCulture)}% |"
+            $"| Jaccard similarity | {FormatPercent(overlap.JaccardSimilarityPercent)}% |"
         );
         result.AppendLine(
-            $"| $-weighted overlap | {overlap.DollarWeightedOverlapPercent.ToString("F1", CultureInfo.InvariantCulture)}% |"
+            $"| $-weighted overlap | {FormatPercent(overlap.DollarWeightedOverlapPercent)}% |"
         );
         result.AppendLine();
 
@@ -1173,7 +1171,7 @@ public class InstitutionalHoldingsTools
             var a = row.Slices[0];
             var b = row.Slices[1];
             result.AppendLine(
-                $"| {i + 1} | {row.Ticker} | {row.Name} | {(a.Shares > 0 ? FormatWholeNumber(a.Shares) : "—")} | {(a.Value > 0 ? a.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture) + "%" : "—")} | {(b.Shares > 0 ? FormatWholeNumber(b.Shares) : "—")} | {(b.Value > 0 ? b.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture) + "%" : "—")} | {FormatMillions(row.CombinedValue)} |"
+                $"| {i + 1} | {row.Ticker} | {row.Name} | {(a.Shares > 0 ? FormatWholeNumber(a.Shares) : "—")} | {(a.Value > 0 ? FormatPercent(a.PercentOfPortfolio) + "%" : "—")} | {(b.Shares > 0 ? FormatWholeNumber(b.Shares) : "—")} | {(b.Value > 0 ? FormatPercent(b.PercentOfPortfolio) + "%" : "—")} | {FormatMillions(row.CombinedValue)} |"
             );
         }
         return result.ToString();
@@ -1344,6 +1342,11 @@ public class InstitutionalHoldingsTools
     // Raw dollar values rendered in $millions with one decimal place, invariant culture.
     private static string FormatMillions(decimal value) =>
         (value / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture);
+
+    // Percentages rendered with one decimal place in invariant culture; callers append the
+    // literal `%`. Keeps the separator stable across host locales like the other helpers.
+    private static string FormatPercent<T>(T value)
+        where T : INumber<T> => value.ToString("F1", CultureInfo.InvariantCulture);
 
     private async Task<(
         InstitutionalHolder Holder,
