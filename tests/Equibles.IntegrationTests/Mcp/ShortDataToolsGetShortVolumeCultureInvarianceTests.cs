@@ -32,7 +32,7 @@ public class ShortDataToolsGetShortVolumeCultureInvarianceTests : ParadeDbMcpTes
     // markdown renders byte-identically regardless of host locale. de-DE swaps the
     // thousand separator (1,234,567 → 1.234.567), forking the response — same bug
     // class as the sibling GetShortInterest cells (#2777).
-    [Fact(Skip = "GH-2794 — GetShortVolume :N0/:F1 cells follow host CurrentCulture")]
+    [Fact]
     public async Task GetShortVolume_UnderNonInvariantCulture_RendersVolumeCultureInvariantly()
     {
         var stock = new CommonStock
@@ -73,7 +73,11 @@ public class ShortDataToolsGetShortVolumeCultureInvarianceTests : ParadeDbMcpTes
             CultureInfo.CurrentCulture = previous;
         }
 
-        // 1,234,567 shares of short volume must render with en-US grouping on every host locale.
+        // Numeric cells must render with en-US separators on any host locale:
+        // volumes (:N0) and short-% (:F1). de-DE would produce 1.234.567,
+        // 2.000.000, and 61,7%.
         result.Should().Contain("| 1,234,567 |");
+        result.Should().Contain("| 2,000,000 |");
+        result.Should().Contain("| 61.7% |");
     }
 }
