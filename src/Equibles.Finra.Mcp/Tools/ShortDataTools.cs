@@ -149,7 +149,7 @@ public class ShortDataTools
                     var advStr = McpFormat.OrDash(r.AverageDailyVolume, "N0");
                     var dtcStr = McpFormat.OrDash(r.DaysToCover, "F1");
                     result.AppendLine(
-                        $"| {r.SettlementDate:yyyy-MM-dd} | {r.CurrentShortPosition:N0} | {changeStr} | {advStr} | {dtcStr} |"
+                        $"| {r.SettlementDate:yyyy-MM-dd} | {r.CurrentShortPosition.ToString("N0", CultureInfo.InvariantCulture)} | {changeStr} | {advStr} | {dtcStr} |"
                     );
                 }
 
