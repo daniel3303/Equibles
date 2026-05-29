@@ -21,7 +21,7 @@ public class InstitutionalHoldingsToolsRenderTopHoldersTableDateCalendarTests
     // the orthogonal calendar axis. Under th-TH (Buddhist, year + 543) the
     // header must still be the Gregorian ISO date — same bug class as the
     // DateOptionTagHelper calendar issue (GH-2654).
-    [Fact(Skip = "GH-2681 — RenderTopHoldersTable date header uses host-locale calendar under th-TH")]
+    [Fact]
     public void RenderTopHoldersTable_UnderNonGregorianCalendar_RendersGregorianIsoDate()
     {
         var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };

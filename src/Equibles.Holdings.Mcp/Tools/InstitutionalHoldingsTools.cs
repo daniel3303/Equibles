@@ -98,7 +98,7 @@ public class InstitutionalHoldingsTools
                     .ToListAsync();
 
                 if (holdings.Count == 0)
-                    return $"No institutional holdings found for {ticker} as of {targetDate:yyyy-MM-dd}.";
+                    return $"No institutional holdings found for {ticker} as of {targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.";
 
                 return RenderTopHoldersTable(
                     stock,
@@ -127,7 +127,7 @@ public class InstitutionalHoldingsTools
     {
         var result = new StringBuilder();
         result.AppendLine(
-            $"Top institutional holders of {stock.Name} ({ticker}) as of {targetDate:yyyy-MM-dd}:"
+            $"Top institutional holders of {stock.Name} ({ticker}) as of {targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}:"
         );
         result.AppendLine(
             $"Showing {holdings.Count} of {totalInstitutions} institutions. Total: "
@@ -211,7 +211,7 @@ public class InstitutionalHoldingsTools
                     : "—";
 
             result.AppendLine(
-                $"| {date:yyyy-MM-dd} | {institutionCount:N0} | {totalShares:N0} | {totalValue / 1_000_000m:N1} | {change} |"
+                $"| {date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)} | {institutionCount:N0} | {totalShares:N0} | {totalValue / 1_000_000m:N1} | {change} |"
             );
 
             previousShares = totalShares;
@@ -255,7 +255,7 @@ public class InstitutionalHoldingsTools
                     .ToListAsync();
 
                 if (holdings.Count == 0)
-                    return $"No holdings found for {holder.Name} as of {targetDate:yyyy-MM-dd}.";
+                    return $"No holdings found for {holder.Name} as of {targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.";
 
                 return RenderInstitutionPortfolio(holder, targetDate, holdings);
             },
@@ -271,7 +271,7 @@ public class InstitutionalHoldingsTools
     )
     {
         var result = MarkdownTable.Start(
-            $"Portfolio of {holder.Name} (CIK: {holder.Cik}) as of {targetDate:yyyy-MM-dd}:",
+            $"Portfolio of {holder.Name} (CIK: {holder.Cik}) as of {targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}:",
             "| # | Ticker | Company | Shares | Value ($M) |",
             "|---|--------|---------|--------|-----------|"
         );
@@ -426,7 +426,7 @@ public class InstitutionalHoldingsTools
                     .ToList();
 
                 if (topBuyers.Count == 0 && topSellers.Count == 0)
-                    return $"No quarter-over-quarter movement found for {stock.Name} ({ticker}) as of {targetDate:yyyy-MM-dd}.";
+                    return $"No quarter-over-quarter movement found for {stock.Name} ({ticker}) as of {targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.";
 
                 return RenderBuyersSellersTable(
                     stock,
@@ -465,10 +465,12 @@ public class InstitutionalHoldingsTools
     {
         var result = new StringBuilder();
         result.AppendLine(
-            $"Top buyers and sellers of {stock.Name} ({ticker}) as of {targetDate:yyyy-MM-dd}"
+            $"Top buyers and sellers of {stock.Name} ({ticker}) as of {targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
         );
         if (previousDate.HasValue)
-            result.AppendLine($"vs prior quarter {previousDate.Value:yyyy-MM-dd}");
+            result.AppendLine(
+                $"vs prior quarter {previousDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
+            );
         result.AppendLine();
 
         AppendMoverSection(result, "## Top Buyers", "_No buyers this quarter._", topBuyers);
@@ -536,9 +538,11 @@ public class InstitutionalHoldingsTools
                 // Headline + comparison subtitle.
                 var result = new StringBuilder();
                 result.AppendLine(
-                    $"Market-wide 13F **{normalizedBucket}** for {targetDate:yyyy-MM-dd}"
+                    $"Market-wide 13F **{normalizedBucket}** for {targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
                 );
-                result.AppendLine($"vs prior quarter {previousDate:yyyy-MM-dd}");
+                result.AppendLine(
+                    $"vs prior quarter {previousDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
+                );
                 result.AppendLine();
 
                 if (normalizedBucket is "top-buys" or "top-sells")
@@ -583,14 +587,14 @@ public class InstitutionalHoldingsTools
             return (
                 default,
                 default,
-                $"Report date {targetDate:yyyy-MM-dd} not found. Available dates: {string.Join(", ", reportDates.Take(5).Select(d => d.ToString("yyyy-MM-dd")))}{(reportDates.Count > 5 ? "…" : "")}."
+                $"Report date {targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)} not found. Available dates: {string.Join(", ", reportDates.Take(5).Select(d => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)))}{(reportDates.Count > 5 ? "…" : "")}."
             );
 
         if (targetIndex >= reportDates.Count - 1)
             return (
                 default,
                 default,
-                $"No prior quarter to compare against for {targetDate:yyyy-MM-dd}."
+                $"No prior quarter to compare against for {targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}."
             );
 
         return (targetDate, reportDates[targetIndex + 1], null);
@@ -717,7 +721,7 @@ public class InstitutionalHoldingsTools
                 };
                 var rows = await ranking.Take(maxResults).ToListAsync();
                 if (rows.Count == 0)
-                    return $"No stocks were held by 13F filers as of {targetDate:yyyy-MM-dd}.";
+                    return $"No stocks were held by 13F filers as of {targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.";
 
                 var universeFilers = await _holdingRepository
                     .GetUniqueFilerIds(targetDate)
@@ -748,9 +752,11 @@ public class InstitutionalHoldingsTools
     )
     {
         var result = new StringBuilder();
-        result.AppendLine($"Most-held 13F stocks as of {targetDate:yyyy-MM-dd}");
         result.AppendLine(
-            $"vs prior quarter {previousDate:yyyy-MM-dd} · {universeFilers.ToString("N0", CultureInfo.InvariantCulture)} filers in the 13F universe"
+            $"Most-held 13F stocks as of {targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
+        );
+        result.AppendLine(
+            $"vs prior quarter {previousDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)} · {universeFilers.ToString("N0", CultureInfo.InvariantCulture)} filers in the 13F universe"
         );
         result.AppendLine($"Sorted by: {sort}");
         result.AppendLine();
@@ -829,9 +835,13 @@ public class InstitutionalHoldingsTools
     )
     {
         var result = new StringBuilder();
-        result.AppendLine($"Portfolio summary — **{holder.Name}** as of {targetDate:yyyy-MM-dd}");
+        result.AppendLine(
+            $"Portfolio summary — **{holder.Name}** as of {targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
+        );
         if (previousDate.HasValue)
-            result.AppendLine($"vs prior quarter {previousDate.Value:yyyy-MM-dd}");
+            result.AppendLine(
+                $"vs prior quarter {previousDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
+            );
         result.AppendLine();
         result.AppendLine("| Metric | Value |");
         result.AppendLine("|--------|-------|");
@@ -868,7 +878,9 @@ public class InstitutionalHoldingsTools
     )
     {
         var result = new StringBuilder();
-        result.AppendLine($"Sector allocation — **{holder.Name}** as of {targetDate:yyyy-MM-dd}");
+        result.AppendLine(
+            $"Sector allocation — **{holder.Name}** as of {targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
+        );
         result.AppendLine();
         if (slices.Count == 0)
         {
@@ -963,7 +975,7 @@ public class InstitutionalHoldingsTools
                 var targetDate = ResolveReportDate(reportDate, reportDates);
                 var targetIndex = reportDates.IndexOf(targetDate);
                 if (targetIndex >= reportDates.Count - 1)
-                    return $"{targetDate:yyyy-MM-dd} is the oldest reported quarter for {holder.Name} — no prior to compare against.";
+                    return $"{targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)} is the oldest reported quarter for {holder.Name} — no prior to compare against.";
 
                 var priorDate = reportDates[targetIndex + 1];
                 var currentHoldings = await LoadHoldingsByHolderWithStock(holder, targetDate);
@@ -1005,8 +1017,12 @@ public class InstitutionalHoldingsTools
         };
 
         var result = new StringBuilder();
-        result.AppendLine($"Quarterly activity — **{holder.Name}** as of {targetDate:yyyy-MM-dd}");
-        result.AppendLine($"vs prior quarter {priorDate:yyyy-MM-dd}");
+        result.AppendLine(
+            $"Quarterly activity — **{holder.Name}** as of {targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
+        );
+        result.AppendLine(
+            $"vs prior quarter {priorDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
+        );
         result.AppendLine();
 
         var rendered = 0;
@@ -1135,7 +1151,7 @@ public class InstitutionalHoldingsTools
     {
         var result = new StringBuilder();
         result.AppendLine(
-            $"Portfolio overlap — **{holder1.Name}** vs **{holder2.Name}** as of {selected:yyyy-MM-dd}"
+            $"Portfolio overlap — **{holder1.Name}** vs **{holder2.Name}** as of {selected.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
         );
         result.AppendLine();
         result.AppendLine("| Metric | Value |");
@@ -1263,7 +1279,7 @@ public class InstitutionalHoldingsTools
     {
         var result = new StringBuilder();
         result.AppendLine(
-            $"Consensus holdings — **{holders.Count} funds** as of {selected:yyyy-MM-dd}"
+            $"Consensus holdings — **{holders.Count} funds** as of {selected.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
         );
         if (missing.Count > 0)
             result.AppendLine($"_Could not resolve: {string.Join(", ", missing)}._");
