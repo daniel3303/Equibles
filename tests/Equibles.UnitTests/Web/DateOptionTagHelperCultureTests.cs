@@ -10,7 +10,7 @@ namespace Equibles.UnitTests.Web;
 // culture-dependent ToString would emit "2567-01-15" and break the round-trip.
 public class DateOptionTagHelperCultureTests
 {
-    [Fact(Skip = "GH-2654 — DateOptionTagHelper emits option value in the host-locale calendar")]
+    [Fact]
     public void Process_UnderNonGregorianCulture_EmitsInvariantIsoDateValue()
     {
         var original = CultureInfo.CurrentCulture;

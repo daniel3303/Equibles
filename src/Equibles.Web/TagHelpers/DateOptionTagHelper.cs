@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Razor.TagHelpers;
 
 namespace Equibles.Web.TagHelpers;
@@ -15,9 +16,12 @@ public class DateOptionTagHelper : TagHelper
     {
         output.TagName = "option";
         output.TagMode = TagMode.StartTagAndEndTag;
-        output.Attributes.SetAttribute("value", Date.ToString("yyyy-MM-dd"));
+        output.Attributes.SetAttribute(
+            "value",
+            Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+        );
         if (Selected)
             output.Attributes.SetAttribute("selected", "selected");
-        output.Content.SetContent(Date.ToString("MMM dd, yyyy"));
+        output.Content.SetContent(Date.ToString("MMM dd, yyyy", CultureInfo.InvariantCulture));
     }
 }
