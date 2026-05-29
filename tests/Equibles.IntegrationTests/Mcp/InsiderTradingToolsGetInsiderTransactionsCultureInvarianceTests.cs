@@ -31,7 +31,7 @@ public class InsiderTradingToolsGetInsiderTransactionsCultureInvarianceTests : P
     // separators by host locale") is that the LLM-facing markdown renders the same
     // on every host. de-DE swaps the thousand separator (1,234,567 → 1.234.567),
     // forking the response — same bug class as the fixed Holdings render methods (#2628).
-    [Fact(Skip = "GH-2781 — GetInsiderTransactions :N0/:N2 cells follow host CurrentCulture")]
+    [Fact]
     public async Task GetInsiderTransactions_UnderNonInvariantCulture_RendersSharesCultureInvariantly()
     {
         var stock = new CommonStock
@@ -82,7 +82,12 @@ public class InsiderTradingToolsGetInsiderTransactionsCultureInvarianceTests : P
             CultureInfo.CurrentCulture = previous;
         }
 
-        // 1,234,567 shares must render with en-US grouping on every host locale.
+        // Every numeric cell must render with en-US separators on any host locale:
+        // Shares (:N0), Price (:N2), Value (:N0), Owned After (:N0). de-DE would
+        // produce 1.234.567 / $175,50 / $216.666.509 / 7.654.321.
         result.Should().Contain("| 1,234,567 |");
+        result.Should().Contain("| $175.50 |");
+        result.Should().Contain("| $216,666,509 |");
+        result.Should().Contain("| 7,654,321 |");
     }
 }

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -87,7 +88,7 @@ public class InsiderTradingTools
 
                     var value = t.Shares * t.PricePerShare;
                     result.AppendLine(
-                        $"| {t.TransactionDate:yyyy-MM-dd} | {t.InsiderOwner.Name} | {role} | {type} | {t.Shares:N0} | ${t.PricePerShare:N2} | ${value:N0} | {t.SharesOwnedAfter:N0} |"
+                        $"| {t.TransactionDate:yyyy-MM-dd} | {t.InsiderOwner.Name} | {role} | {type} | {t.Shares.ToString("N0", CultureInfo.InvariantCulture)} | ${t.PricePerShare.ToString("N2", CultureInfo.InvariantCulture)} | ${value.ToString("N0", CultureInfo.InvariantCulture)} | {t.SharesOwnedAfter.ToString("N0", CultureInfo.InvariantCulture)} |"
                     );
                 }
 
