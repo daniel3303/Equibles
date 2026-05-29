@@ -1,10 +1,10 @@
 using System.ComponentModel;
-using System.Text;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
+using Equibles.Mcp.Helpers;
 using Equibles.Sec.BusinessLogic.Search;
 using Equibles.Sec.BusinessLogic.Search.Models;
 using Equibles.Sec.Data.Models;
@@ -162,13 +162,11 @@ public class RagSearchTools
                     return $"No documents found for ticker {ticker}";
                 }
 
-                var result = new StringBuilder();
-                result.AppendLine(
-                    $"Financial documents for {documents.First().CompanyName} ({ticker}) — page {page}:"
+                var result = MarkdownTable.Start(
+                    $"Financial documents for {documents.First().CompanyName} ({ticker}) — page {page}:",
+                    "ID | Type | Filed | Reporting For | Lines",
+                    "---|------|-------|---------------|------"
                 );
-                result.AppendLine();
-                result.AppendLine("ID | Type | Filed | Reporting For | Lines");
-                result.AppendLine("---|------|-------|---------------|------");
 
                 foreach (var doc in documents)
                 {
