@@ -25,11 +25,7 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class DocumentScraperBuildRetryPipelineFinalAttemptErrorLogTests
 {
-    [Fact(
-        Skip = "GH-2771 — OnRetry's zero-based AttemptNumber (0,1,2) never reaches "
-            + "maxRetryAttempts (3), so the final-attempt LogError branch is dead code.",
-        Timeout = 60000
-    )]
+    [Fact(Timeout = 60000)]
     public async Task BuildRetryPipeline_AfterExhaustingAllRetries_LogsErrorOnFinalAttempt()
     {
         var logger = Substitute.For<ILogger<DocumentScraper>>();

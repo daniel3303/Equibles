@@ -714,7 +714,7 @@ public class DocumentScraper : IDocumentScraper
                     Delay = TimeSpan.FromSeconds(2),
                     OnRetry = context =>
                     {
-                        if (context.AttemptNumber < maxRetryAttempts)
+                        if (context.AttemptNumber < maxRetryAttempts - 1)
                         {
                             _logger.LogWarning(
                                 context.Outcome.Exception,
