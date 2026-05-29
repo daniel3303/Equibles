@@ -32,9 +32,7 @@ public class ShortDataToolsGetShortInterestCultureInvarianceTests : ParadeDbMcpT
     // LLM-facing markdown renders byte-identically regardless of host locale.
     // de-DE swaps the thousand separator (1,234,567 → 1.234.567), forking the
     // response — same bug class as the fixed Holdings RenderTopHoldersTable (#2628).
-    [Fact(
-        Skip = "GH-2777 — GetShortInterest numeric cells follow host CurrentCulture (bare :N0 + McpFormat.OrDash null provider)"
-    )]
+    [Fact]
     public async Task GetShortInterest_UnderNonInvariantCulture_RendersShortPositionCultureInvariantly()
     {
         var stock = new CommonStock
@@ -76,7 +74,11 @@ public class ShortDataToolsGetShortInterestCultureInvarianceTests : ParadeDbMcpT
             CultureInfo.CurrentCulture = previous;
         }
 
-        // 1,234,567 shares must render with en-US grouping on every host locale.
+        // Every numeric cell must render with en-US separators on any host locale:
+        // Short Position (bare :N0), Avg Daily Volume (OrDash "N0"), Days to Cover
+        // (OrDash "F1"). de-DE would produce 1.234.567 / 100.000 / 12,3.
         result.Should().Contain("| 1,234,567 |");
+        result.Should().Contain("| 100,000 |");
+        result.Should().Contain("| 12.3 |");
     }
 }
