@@ -52,6 +52,7 @@
                             <li><a asp-action="Index" asp-controller="EconomicData">Economic Data</a></li>
                             <li><a asp-action="Index" asp-controller="Cftc">Futures</a></li>
                             <li><a asp-action="Index" asp-controller="Market">Market</a></li>
+                            <li><a asp-action="Index" asp-controller="ShortVolume">Largest Short Volume</a></li>
                         </ul>
                     </div>
                     <a asp-action="Connect" asp-controller="Home" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">MCP</a>
@@ -169,6 +170,11 @@
                         <li>
                             <a asp-action="Index" asp-controller="Market">
                                 <icon name="chart-bar-square" size="4" /> Market
+                            </a>
+                        </li>
+                        <li>
+                            <a asp-action="Index" asp-controller="ShortVolume">
+                                <icon name="arrow-trending-down" size="4" /> Largest Short Volume
                             </a>
                         </li>
                         <li>
