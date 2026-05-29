@@ -15,7 +15,7 @@ public class InstitutionalHoldingsToolsTryParseReportDateCultureInvarianceTests
     // Buddhist-era year (-> 1481 CE); the parsed date then fails the
     // validDates Contains() check in ResolveReportDate, so the caller's
     // explicit quarter selection is silently dropped to the latest filing.
-    [Fact(Skip = "GH-2677 — reportDate MCP arg parsed with host culture, not InvariantCulture")]
+    [Fact]
     public void TryParseReportDate_IsoQuarterEndUnderThaiBuddhistCulture_ResolvesGregorianDate()
     {
         var method = typeof(InstitutionalHoldingsTools).GetMethod(

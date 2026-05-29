@@ -1369,7 +1369,13 @@ public class InstitutionalHoldingsTools
     private static bool TryParseReportDate(string input, out DateOnly result)
     {
         result = default;
-        return !string.IsNullOrEmpty(input) && DateOnly.TryParse(input, out result);
+        return !string.IsNullOrEmpty(input)
+            && DateOnly.TryParse(
+                input,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out result
+            );
     }
 
     private static DateOnly ResolveReportDate(string input, IReadOnlyList<DateOnly> validDates) =>
