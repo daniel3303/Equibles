@@ -21,7 +21,7 @@ public class InstitutionalHoldingsToolsAppendActivitySectionCultureInvarianceTes
     // share counts gain '.' group separators (1.234.567), forking the LLM-
     // consumed MCP output by host locale. Asserts only the share-count cell so
     // it is independent of the Δ Value cell tracked separately by #2658.
-    [Fact(Skip = "GH-2665 — AppendActivitySection emits host-locale digit separators in share-count cells")]
+    [Fact]
     public void AppendActivitySection_UnderNonInvariantCulture_RendersShareCountsCultureInvariantly()
     {
         var rows = new List<StockPositionChange>
