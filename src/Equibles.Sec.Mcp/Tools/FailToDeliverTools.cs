@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Errors.BusinessLogic;
@@ -79,7 +80,7 @@ public class FailToDeliverTools
                 {
                     var value = f.Quantity * f.Price;
                     result.AppendLine(
-                        $"| {f.SettlementDate:yyyy-MM-dd} | {f.Quantity:N0} | ${f.Price:F2} | ${value:N0} |"
+                        $"| {f.SettlementDate:yyyy-MM-dd} | {f.Quantity.ToString("N0", CultureInfo.InvariantCulture)} | ${f.Price.ToString("F2", CultureInfo.InvariantCulture)} | ${value.ToString("N0", CultureInfo.InvariantCulture)} |"
                     );
                 }
 
