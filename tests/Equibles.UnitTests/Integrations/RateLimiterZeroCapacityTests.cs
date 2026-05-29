@@ -4,9 +4,7 @@ namespace Equibles.UnitTests.Integrations;
 
 public class RateLimiterZeroCapacityTests
 {
-    [Fact(
-        Skip = "GH-2806 — maxRequests <= 0 is accepted; first WaitAsync throws InvalidOperationException"
-    )]
+    [Fact]
     public void Constructor_ZeroMaxRequests_RejectsInvalidCapacity()
     {
         // A limiter whose capacity is zero can never release a request — it is an

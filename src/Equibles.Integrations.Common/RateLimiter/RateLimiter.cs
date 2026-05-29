@@ -10,6 +10,11 @@ public class RateLimiter : IRateLimiter
 
     public RateLimiter(int maxRequests = 5, TimeSpan? timeWindow = null)
     {
+        // A capacity of zero or less can never release a request; fail fast at
+        // construction rather than throwing InvalidOperationException from the
+        // first WaitAsync (cf. SemaphoreSlim's initialCount).
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxRequests);
+
         _maxRequests = maxRequests;
         _timeWindow = timeWindow ?? TimeSpan.FromMinutes(1);
         _requestTimes = new Queue<DateTime>();
