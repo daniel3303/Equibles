@@ -13,21 +13,20 @@ public class InstitutionalHoldingsToolsRenderBuyersSellersTableCultureInvariance
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-    // RenderBuyersSellersTable's AppendMoverSection renders the "Prior → New
-    // Shares" column with the culture-implicit :N0 specifier on PreviousShares
-    // / CurrentShares, which resolves through the thread CurrentCulture. The
-    // rest of the row (FormatSignedShares / FormatSignedMillions) already
-    // threads InvariantCulture explicitly. Same bug class as the already-fixed
-    // RenderTopHoldersTable (GH-2628), RenderInstitutionSummary (GH-2637),
-    // RenderSectorAllocationTable (GH-2641), and RenderOverlapTable (GH-2647)
-    // siblings: de-DE swaps the thousand separator (1,234,567 → 1.234.567),
-    // forking the LLM-consumed markdown by host locale. The contract is that
-    // the same call renders byte-identically regardless of host CurrentCulture.
+    // RenderBuyersSellersTable builds the "Prior → New Shares" column with the
+    // culture-implicit :N0 specifier (m.PreviousShares / m.CurrentShares), which
+    // resolves through the thread CurrentCulture. Same bug class as the already
+    // -fixed RenderTopHoldersTable / RenderInstitutionSummary / RenderOverlapTable
+    // / RenderSectorAllocationTable siblings: de-DE swaps the thousand separator
+    // (1,234,567 → 1.234.567), forking the LLM-consumed markdown by host locale.
+    // The contract (this file's own helpers thread InvariantCulture explicitly,
+    // commenting "MCP markdown must not fork the separators by host locale") is
+    // that the same call renders byte-identically regardless of host CurrentCulture.
     [Fact]
     public void RenderBuyersSellersTable_UnderNonInvariantCulture_RendersCellsCultureInvariantly()
     {
         var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
-        var topBuyers = new List<(
+        var buyers = new List<(
             string Name,
             long CurrentShares,
             long PreviousShares,
@@ -35,24 +34,26 @@ public class InstitutionalHoldingsToolsRenderBuyersSellersTableCultureInvariance
             long DeltaValue
         )>
         {
-            ("ACME Capital", 7_654_321L, 1_234_567L, 6_419_754L, 1_234_600_000L),
+            ("ACME Capital", 7_654_321L, 1_234_567L, 6_419_754L, 1_234_567_890L),
         };
-        var topSellers =
-            new List<(
-                string Name,
-                long CurrentShares,
-                long PreviousShares,
-                long DeltaShares,
-                long DeltaValue
-            )>();
+        var sellers = new List<(
+            string Name,
+            long CurrentShares,
+            long PreviousShares,
+            long DeltaShares,
+            long DeltaValue
+        )>
+        {
+            ("Globex Advisors", 2_345_678L, 9_876_543L, -7_530_865L, -2_345_678_901L),
+        };
         object[] args =
         [
             stock,
             "AAPL",
             new DateOnly(2024, 12, 31),
             (DateOnly?)new DateOnly(2024, 9, 30),
-            topBuyers,
-            topSellers,
+            buyers,
+            sellers,
         ];
 
         var original = CultureInfo.CurrentCulture;
@@ -75,7 +76,7 @@ public class InstitutionalHoldingsToolsRenderBuyersSellersTableCultureInvariance
             .Should()
             .Be(
                 invariantOutput,
-                "MCP markdown output is consumed by LLMs trained on en-US conventions; the bare :N0 cells in the \"Prior → New Shares\" column follow CurrentCulture (de-DE → 1.234.567 → 7.654.321), forking the response by host locale — same bug class as the RenderTopHoldersTable culture-invariance sibling"
+                "MCP markdown output is consumed by LLMs trained on en-US conventions; the :N0 cells in the 'Prior → New Shares' column without an explicit IFormatProvider follow CurrentCulture (de-DE → 1.234.567), forking the response by host locale — same bug class as the RenderTopHoldersTable culture-invariance sibling"
             );
     }
 }
