@@ -113,12 +113,7 @@
                             <legend class="text-xs font-semibold text-base-content/50 mb-2">Sort by</legend>
                             <select name="sort" id="search-sort" class="select select-bordered select-sm w-full"
                                     aria-label="Sort results">
-                                @foreach (var option in Html.GetEnumSelectList<SearchSort>()) {
-                                    <option value="@option.Value"
-                                            selected="@(option.Value == ((int)Model.SortBy).ToString())">
-                                        @option.Text
-                                    </option>
-                                }
+                                <partial name="_SortOptions" model='(Html.GetEnumSelectList<SearchSort>(), (int)Model.SortBy)' />
                             </select>
                         </fieldset>
 
