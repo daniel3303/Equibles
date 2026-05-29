@@ -30,7 +30,7 @@ public class StockPriceToolsGetStockPricesCultureInvarianceTests : ParadeDbMcpTe
     // is that the LLM-facing markdown renders the same on every host. de-DE swaps the
     // thousand separator (1,234,567 → 1.234.567), forking the response — same bug
     // class as the fixed Holdings render methods (#2628).
-    [Fact(Skip = "GH-2783 — GetStockPrices :F2/:N0 cells follow host CurrentCulture")]
+    [Fact]
     public async Task GetStockPrices_UnderNonInvariantCulture_RendersVolumeCultureInvariantly()
     {
         var stock = new CommonStock
@@ -69,7 +69,10 @@ public class StockPriceToolsGetStockPricesCultureInvarianceTests : ParadeDbMcpTe
             CultureInfo.CurrentCulture = previous;
         }
 
-        // 1,234,567 shares of volume must render with en-US grouping on every host locale.
+        // Numeric cells must render with en-US separators on any host locale:
+        // OHLC (:F2, decimal point) and Volume (:N0, thousand comma). de-DE would
+        // produce 149,00 and 1.234.567.
+        result.Should().Contain("| 149.00 |");
         result.Should().Contain("| 1,234,567 |");
     }
 }
