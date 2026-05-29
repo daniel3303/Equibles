@@ -1290,7 +1290,7 @@ public class InstitutionalHoldingsTools
         {
             var x = rowsWithConsensus[i];
             result.AppendLine(
-                $"| {i + 1} | {x.Row.Ticker} | {x.Row.Name} | {x.HeldBy}/{holders.Count} | {x.Row.CombinedValue / 1_000_000m:N1} |"
+                $"| {i + 1} | {x.Row.Ticker} | {x.Row.Name} | {x.HeldBy}/{holders.Count} | {(x.Row.CombinedValue / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture)} |"
             );
         }
         return result.ToString();

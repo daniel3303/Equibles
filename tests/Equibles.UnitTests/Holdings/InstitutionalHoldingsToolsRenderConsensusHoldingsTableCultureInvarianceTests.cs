@@ -21,7 +21,7 @@ public class InstitutionalHoldingsToolsRenderConsensusHoldingsTableCultureInvari
     // RenderSectorAllocationTable (GH-2641) siblings. The repo convention (cf.
     // FactMarkdown threading InvariantCulture) is that the same call renders
     // byte-identically regardless of host CurrentCulture.
-    [Fact(Skip = "GH-2660 — RenderConsensusHoldingsTable emits host-locale digit separators")]
+    [Fact]
     public void RenderConsensusHoldingsTable_UnderNonInvariantCulture_RendersCellsCultureInvariantly()
     {
         var holders = new List<InstitutionalHolder>
