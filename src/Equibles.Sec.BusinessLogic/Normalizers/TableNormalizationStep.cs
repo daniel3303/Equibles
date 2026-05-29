@@ -44,10 +44,20 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
 
             cell.RemoveAttribute("colspan");
 
+            // A cell that also spans rows occupies a rectangular block; carry its
+            // rowspan onto the new colspan cells so FixRowspan fills the full width
+            // of every spanned row (otherwise those rows come out short by
+            // colspan - 1 cells and the grid is ragged).
+            var rowspanAttr = cell.GetAttribute("rowspan");
+
             var currentCell = cell;
             for (int i = 1; i < colspanValue; i++)
             {
                 var newCell = doc.CreateElement("td");
+                if (rowspanAttr != null)
+                {
+                    newCell.SetAttribute("rowspan", rowspanAttr);
+                }
                 if (currentCell.ParentElement != null)
                 {
                     HtmlElementExtensions.InsertAfter(

@@ -10,7 +10,7 @@ public class TableNormalizationStepRowspanColspanCombinedTests
     // same column count and trailing cells column-aligned. Existing pins cover
     // colspan and rowspan in isolation; this pins their combination, where the
     // colspan width must also propagate down the rowspan-spanned rows.
-    [Fact(Skip = "GH-2801 — rowspan+colspan cell expands to a ragged grid")]
+    [Fact]
     public void Execute_CellWithBothRowspanAndColspan_ProducesRectangularGrid()
     {
         // Cell A spans rows 0-1 and cols 0-1; B sits at col 2 of row 0, so C
