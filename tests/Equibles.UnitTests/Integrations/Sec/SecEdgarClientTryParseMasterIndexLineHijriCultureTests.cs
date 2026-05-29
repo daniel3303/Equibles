@@ -25,9 +25,7 @@ public class SecEdgarClientTryParseMasterIndexLineHijriCultureTests
     // stamped with the wrong filing date on a Hijri-locale host. Pin: a valid
     // ISO DateFiled round-trips regardless of thread culture (fallback is set
     // distinct so a fallback substitution is visible).
-    [Fact(
-        Skip = "GH-2649 — TryParseMasterIndexLine omits InvariantCulture; ISO DateFiled misparses under ar-SA"
-    )]
+    [Fact]
     public void TryParseMasterIndexLine_IsoDateFiledUnderHijriCulture_UsesParsedDateNotFallback()
     {
         const string line =

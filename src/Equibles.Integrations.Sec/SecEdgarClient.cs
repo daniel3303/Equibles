@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -529,7 +530,14 @@ public class SecEdgarClient : ISecEdgarClient
             FormType = formType,
             CompanyName = company,
             Cik = cik,
-            DateFiled = DateOnly.TryParse(dateFiled, out var d) ? d : fallbackDate,
+            DateFiled = DateOnly.TryParse(
+                dateFiled,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var d
+            )
+                ? d
+                : fallbackDate,
             AccessionNumber = accession,
         };
         return true;
