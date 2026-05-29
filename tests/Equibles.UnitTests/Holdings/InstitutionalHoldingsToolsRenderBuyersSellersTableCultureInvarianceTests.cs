@@ -22,9 +22,7 @@ public class InstitutionalHoldingsToolsRenderBuyersSellersTableCultureInvariance
     // The contract (this file's own helpers thread InvariantCulture explicitly,
     // commenting "MCP markdown must not fork the separators by host locale") is
     // that the same call renders byte-identically regardless of host CurrentCulture.
-    [Fact(
-        Skip = "GH-2775 — RenderBuyersSellersTable 'Prior → New Shares' :N0 cells follow host CurrentCulture"
-    )]
+    [Fact]
     public void RenderBuyersSellersTable_UnderNonInvariantCulture_RendersCellsCultureInvariantly()
     {
         var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
