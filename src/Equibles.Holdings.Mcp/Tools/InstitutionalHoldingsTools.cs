@@ -207,11 +207,11 @@ public class InstitutionalHoldingsTools
 
             var change =
                 previousShares > 0
-                    ? $"{(double)(totalShares - previousShares) / previousShares * 100:+0.0;-0.0}%"
+                    ? $"{((double)(totalShares - previousShares) / previousShares * 100).ToString("+0.0;-0.0", CultureInfo.InvariantCulture)}%"
                     : "—";
 
             result.AppendLine(
-                $"| {FormatDate(date)} | {institutionCount:N0} | {totalShares:N0} | {totalValue / 1_000_000m:N1} | {change} |"
+                $"| {FormatDate(date)} | {institutionCount.ToString("N0", CultureInfo.InvariantCulture)} | {totalShares.ToString("N0", CultureInfo.InvariantCulture)} | {(totalValue / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture)} | {change} |"
             );
 
             previousShares = totalShares;
