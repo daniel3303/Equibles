@@ -502,7 +502,7 @@ public class InstitutionalHoldingsTools
             {
                 var m = rows[i];
                 sb.AppendLine(
-                    $"| {i + 1} | {m.Name} | {FormatSignedShares(m.DeltaShares)} | {FormatSignedMillions(m.DeltaValue)} | {m.PreviousShares:N0} → {m.CurrentShares:N0} |"
+                    $"| {i + 1} | {m.Name} | {FormatSignedShares(m.DeltaShares)} | {FormatSignedMillions(m.DeltaValue)} | {m.PreviousShares.ToString("N0", CultureInfo.InvariantCulture)} → {m.CurrentShares.ToString("N0", CultureInfo.InvariantCulture)} |"
                 );
             }
         }
