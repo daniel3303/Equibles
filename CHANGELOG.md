@@ -31,6 +31,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Short-interest pages (the `/most-shorted` leaderboard and the per-stock settlement-date selector) load faster: `ShortInterestRepository.GetAllSettlementDates` now walks the distinct settlement dates with a recursive loose index scan instead of `SELECT DISTINCT`, which scanned the whole `SettlementDate` index on every request and spiked on a cold buffer cache. Falls back to the `DISTINCT` query on non-relational providers.
 - `CommonStockManager.SetCusip` publishes `StockCusipChanged` via the root `IBus` instead of the scoped `IPublishEndpoint`. A commercial host that enables a bus outbox on a different DbContext (the customer database) would otherwise capture this publish into that context and never deliver it — the flow only saves the financial context. Tests updated to substitute `IBus`. PR #2271.
 - Culture-invariance hardening — MCP tool tables, web date/number formatting, SEC/CFTC/FINRA date parsing, and worker interval logging now consistently use the invariant culture, so output and parsing no longer depend on the server locale. Numerous PRs (e.g. #2748, #2735, #2724, #2705, #2661, #2464, #2460).
 - Ticker normalization uses `ToUpperInvariant` across the web `StocksController` and the Holdings / InsiderTrading MCP resolvers. PRs #2609, #2517.
