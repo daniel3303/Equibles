@@ -87,7 +87,7 @@ public class ShortDataTools
                     var shortPct =
                         r.TotalVolume > 0 ? (double)r.ShortVolume / r.TotalVolume * 100 : 0;
                     result.AppendLine(
-                        $"| {r.Date:yyyy-MM-dd} | {r.ShortVolume:N0} | {r.ShortExemptVolume:N0} | {r.TotalVolume:N0} | {shortPct:F1}% |"
+                        $"| {r.Date:yyyy-MM-dd} | {r.ShortVolume.ToString("N0", CultureInfo.InvariantCulture)} | {r.ShortExemptVolume.ToString("N0", CultureInfo.InvariantCulture)} | {r.TotalVolume.ToString("N0", CultureInfo.InvariantCulture)} | {shortPct.ToString("F1", CultureInfo.InvariantCulture)}% |"
                     );
                 }
 
