@@ -11,16 +11,37 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Contributor License Agreement (`CLA.md`) based on Project Harmony HA-CLA-I-ANY 1.0. Contributors must sign via CLA Assistant before pull requests can be merged. Enables Equibles to remain AGPL-3.0 while sharing code with the commercial offering.
 - Optional `configureOptions` callback on `AddEquiblesDbContext<TContext>` (applied after the standard Npgsql + lazy-loading setup) so a host can adjust context-level `DbContextOptions` — e.g. suppress a specific warning — without replacing the registration helper. Default behavior unchanged. PR #2279.
+- Most-shorted stocks leaderboard at `/most-shorted` — ranks stocks by FINRA short interest for a selected bi-monthly settlement date (current short position, change vs. previous, days to cover, average daily volume), with a settlement-date selector, server-side sort, and pagination; each row links to the per-stock short-interest tab. Issue #2536 (PR #2755).
+- Largest short volume page at `/short-volume` — ranks stocks by FINRA consolidated daily short volume for a selected trading day, with a trading-day selector, sort, and pagination. Issue #2644 (PR #2753).
+- `GetLargestShortVolume` MCP tool — market-wide ranking of the largest daily short volume for a trading day (defaults to the latest available). PR #2646.
+- Per-quarter 13F aggregate snapshot tables, with background rebuild + drain workers and first-boot backfill, backing the holdings stats/trends pages. PRs #2463, #2468, #2473, #2476.
+- Segmented stock-section navbar with summary metrics on the Technicals tab. PR #2534.
+- Short-volume-percentage line overlaid on the per-stock short volume chart. PR #2533.
+- Typeahead institution picker on the overlap matrix page. PR #2524.
+- Exact-ticker search submissions now redirect straight to the stock page. PR #2529.
+- `Cmd`/`Ctrl`+`K` global search shortcut (replacing `/`) to match the commercial portal. PR #2510.
+- Insider-trading per-share prices are cross-checked against Yahoo and flagged when implausible.
 
 ### Changed
 
 - **Multi-context module system.** Split `EquiblesDbContext` into an abstract `EquiblesDbContextBase` (module iteration, no Postgres extensions) plus a concrete `EquiblesFinancialDbContext` (enables pgvector; ParadeDB stays in the Npgsql options). Renamed `EquiblesDbContext` → `EquiblesFinancialDbContext`. Added `IFinancialModule` / `ICustomerModule` markers so a host can scan for either domain; every OSS module implements `IFinancialModule`. `BaseRepository` is now generic over the context (`BaseRepository<TEntity, TContext>`) with a one-arg shim binding to the financial context, so existing repositories are unchanged. `AddEquiblesDbContext` is generic over the context with a per-context `ModuleConfigurationSet<TContext>` (no shared module list); added the `AddEquiblesFinancialDbContext` convenience overload. Unlocks deployments running a second context (e.g. a customer database) over the same module system. PR #2258.
 - **No transactional outbox in OSS standalone.** `AddMessaging` no longer registers the EF outbox and gains a `configureBus` hook so a host can opt a context into one. OSS consumers must therefore be idempotent (no inbox/dedup ships). `CommonStockManager.SetCusip` now publishes **after** `SaveChanges` to avoid phantom events on rollback. PR #2258.
 - **Holdings snapshot rebuilds are now throttled and coalesced.** `Filings13FImportedConsumer` no longer rebuilds the AUM/sector snapshots inline — it marks the affected quarter dirty via a new `DirtyAt` timestamp on `AumQuarterlySnapshot`. A new `AumSnapshotDrainWorker` ticks every 5 minutes and rebuilds any quarter whose dirty flag has been set for more than an hour, using optimistic-concurrency clear so a consumer event landing mid-rebuild isn't lost. During 13F filing-season burst windows hundreds of imports per day for the same quarter now produce one rebuild per cooldown window instead of one per import. The daily safety-net `AumSnapshotRebuildWorker` is narrowed to the four most recent quarters (older quarters are effectively frozen — amendments trigger their own consumer event). First-boot backfill of every quarter is unchanged.
+- Holdings stats and trends pages (`/holdings/stats`, `/holdings/trends`) now read the per-quarter snapshots instead of recomputing aggregates on each request. PR #2479.
 
 ### Fixed
 
 - `CommonStockManager.SetCusip` publishes `StockCusipChanged` via the root `IBus` instead of the scoped `IPublishEndpoint`. A commercial host that enables a bus outbox on a different DbContext (the customer database) would otherwise capture this publish into that context and never deliver it — the flow only saves the financial context. Tests updated to substitute `IBus`. PR #2271.
+- Culture-invariance hardening — MCP tool tables, web date/number formatting, SEC/CFTC/FINRA date parsing, and worker interval logging now consistently use the invariant culture, so output and parsing no longer depend on the server locale. Numerous PRs (e.g. #2748, #2735, #2724, #2705, #2661, #2464, #2460).
+- Ticker normalization uses `ToUpperInvariant` across the web `StocksController` and the Holdings / InsiderTrading MCP resolvers. PRs #2609, #2517.
+- Version comparison handles `v`-prefixed tags so the new-version banner doesn't misfire. PR #2621.
+- CBOE put/call ingestion switched to the daily-page scraper and now persists incrementally so a cold start populates. PRs #2526, #2751.
+- House congressional PTR PDFs are parsed via page geometry so Representatives land in the right columns. PR #2530.
+- SEC Form 4 transaction-code mapping corrected (I/W). PR #2469.
+
+### Security
+
+- Neutralized the `javascript:` scheme in Markdown autolinks. PR #2633.
 
 ## [1.2.0] — 2026-05-26
 
