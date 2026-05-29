@@ -85,6 +85,28 @@ public class CboeImportService : IImporter
 
         var pending = new List<CboePutCallRatio>();
         var perTypeInserts = new Dictionary<CboePutCallRatioType, int>();
+        var totalInserted = 0;
+
+        // Persist as we go rather than once at the end. A cold-start backfill
+        // walks years of trading days at ~10 requests/min, so deferring every
+        // write to the end means a worker restart (or cancellation) mid-backfill
+        // discards all scraped rows — and the next cycle, seeing an empty table,
+        // restarts from DailyPageMinDate, so put/call data would never land.
+        // Flushing each full batch makes progress durable and lets the next
+        // cycle resume from the last persisted date.
+        async Task Flush()
+        {
+            if (pending.Count == 0)
+                return;
+
+            await BatchPersister.Persist<CboePutCallRatio, CboePutCallRatioRepository>(
+                pending,
+                InsertBatchSize,
+                _scopeFactory
+            );
+            totalInserted += pending.Count;
+            pending.Clear();
+        }
 
         for (var date = start; date <= today; date = date.AddDays(1))
         {
@@ -149,19 +171,18 @@ public class CboeImportService : IImporter
                 perTypeInserts.TryGetValue(ratioType, out var n);
                 perTypeInserts[ratioType] = n + 1;
             }
+
+            if (pending.Count >= InsertBatchSize)
+                await Flush();
         }
 
-        if (pending.Count == 0)
+        await Flush();
+
+        if (totalInserted == 0)
         {
             _logger.LogDebug("CBOE put/call ratios are up to date");
             return;
         }
-
-        await BatchPersister.Persist<CboePutCallRatio, CboePutCallRatioRepository>(
-            pending,
-            InsertBatchSize,
-            _scopeFactory
-        );
 
         foreach (var (ratioType, count) in perTypeInserts)
         {
