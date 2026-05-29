@@ -323,7 +323,16 @@ public class InlineXbrlParser
         )
             return false;
 
-        if (parenthesised)
+        // Accounting parentheses and the sign="-" attribute are two encodings of
+        // the same negativity; applying both would double-negate into a positive.
+        // Negate for parentheses only when sign="-" is absent (TryApplyScaleAndSign
+        // applies the sign negation).
+        var signNegative = string.Equals(
+            element.GetAttribute("sign"),
+            "-",
+            StringComparison.Ordinal
+        );
+        if (parenthesised && !signNegative)
             parsed = -parsed;
 
         return TryApplyScaleAndSign(parsed, element, out value);
