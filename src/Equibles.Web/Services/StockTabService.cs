@@ -134,15 +134,7 @@ public class StockTabService
         );
 
         var allChanges = grouped.SelectMany(g => g.Value).ToList();
-        var holderIds = allChanges.Select(h => h.InstitutionalHolderId).Distinct().ToList();
-        var firstOwned = await _institutionalHoldingRepository
-            .GetFirstOwnedQuarters(stock, holderIds)
-            .ToDictionaryAsync(kv => kv.Key, kv => kv.Value);
-        foreach (var change in allChanges)
-        {
-            if (firstOwned.TryGetValue(change.InstitutionalHolderId, out var quarter))
-                change.QuarterFirstOwned = quarter;
-        }
+        await ApplyQuarterFirstOwned(stock, allChanges);
 
         var bucketCounts = grouped.ToDictionary(g => g.Key, g => g.Value.Count);
         var (topBuyers, topSellers) = HoldingsTopMoversSelector.Select(
@@ -213,15 +205,7 @@ public class StockTabService
             })
             .ToList();
 
-        var holderIds = holders.Select(h => h.InstitutionalHolderId).Distinct().ToList();
-        var firstOwned = await _institutionalHoldingRepository
-            .GetFirstOwnedQuarters(stock, holderIds)
-            .ToDictionaryAsync(kv => kv.Key, kv => kv.Value);
-        foreach (var holder in holders)
-        {
-            if (firstOwned.TryGetValue(holder.InstitutionalHolderId, out var quarter))
-                holder.QuarterFirstOwned = quarter;
-        }
+        await ApplyQuarterFirstOwned(stock, holders);
 
         var grouped = new Dictionary<PositionChangeType, List<HolderPositionChange>>
         {
@@ -556,6 +540,20 @@ public class StockTabService
             Holder = holder,
             Holdings = holdings,
         };
+    }
+
+    // Stamp each holder's first-owned quarter for this stock via one batched lookup.
+    private async Task ApplyQuarterFirstOwned(CommonStock stock, List<HolderPositionChange> changes)
+    {
+        var holderIds = changes.Select(h => h.InstitutionalHolderId).Distinct().ToList();
+        var firstOwned = await _institutionalHoldingRepository
+            .GetFirstOwnedQuarters(stock, holderIds)
+            .ToDictionaryAsync(kv => kv.Key, kv => kv.Value);
+        foreach (var change in changes)
+        {
+            if (firstOwned.TryGetValue(change.InstitutionalHolderId, out var quarter))
+                change.QuarterFirstOwned = quarter;
+        }
     }
 
     private Task<List<InstitutionalHolding>> LoadHoldingsByStockWithHolder(
