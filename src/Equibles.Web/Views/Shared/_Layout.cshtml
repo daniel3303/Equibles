@@ -53,6 +53,7 @@
                             <li><a asp-action="Index" asp-controller="Cftc">Futures</a></li>
                             <li><a asp-action="Index" asp-controller="Market">Market</a></li>
                             <li><a asp-action="Index" asp-controller="ShortVolume">Largest Short Volume</a></li>
+                            <li><a asp-action="MostShorted" asp-controller="ShortActivity">Most Shorted</a></li>
                         </ul>
                     </div>
                     <a asp-action="Connect" asp-controller="Home" class="text-sm text-base-content/60 hover:text-base-content focus-visible:underline transition-colors">MCP</a>
@@ -175,6 +176,11 @@
                         <li>
                             <a asp-action="Index" asp-controller="ShortVolume">
                                 <icon name="arrow-trending-down" size="4" /> Largest Short Volume
+                            </a>
+                        </li>
+                        <li>
+                            <a asp-action="MostShorted" asp-controller="ShortActivity">
+                                <icon name="fire" size="4" /> Most Shorted
                             </a>
                         </li>
                         <li>
