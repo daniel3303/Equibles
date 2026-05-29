@@ -171,24 +171,18 @@ public class CboeClient : ICboeClient
 
         var depth = 0;
         var inString = false;
-        var escaped = false;
         var end = -1;
         for (var i = start; i < html.Length; i++)
         {
             var c = html[i];
-            if (escaped)
+            if (c == '\\' && i + 1 < html.Length)
             {
-                escaped = false;
-                continue;
-            }
-            if (c == '\\')
-            {
-                escaped = true;
-                continue;
-            }
-            if (c == '"')
-            {
-                inString = !inString;
+                // String delimiters in the double-escaped RSC payload appear as \" .
+                // Toggle string context on \" ; skip any other escape (\\, \n, …)
+                // whole so its payload can't be misread as a structural brace.
+                if (html[i + 1] == '"')
+                    inString = !inString;
+                i++;
                 continue;
             }
             if (inString)

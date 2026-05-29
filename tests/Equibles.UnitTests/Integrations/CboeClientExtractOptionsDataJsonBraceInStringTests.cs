@@ -16,9 +16,7 @@ public class CboeClientExtractOptionsDataJsonBraceInStringTests
     // `\"`), so each '"' is consumed by the escape branch and inString never
     // becomes true. A '}' inside a string value therefore decrements depth to
     // zero and truncates extraction to invalid JSON.
-    [Fact(
-        Skip = "GH-2722 — ExtractOptionsDataJson truncates JSON on a brace inside a string value"
-    )]
+    [Fact]
     public void ExtractOptionsDataJson_BraceInsideStringValue_ReturnsCompleteObject()
     {
         var method = typeof(CboeClient).GetMethod(
