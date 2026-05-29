@@ -19,7 +19,7 @@ public class InstitutionalHoldingsToolsFormatSignedSharesCultureInvarianceTests
     // file is invariant, so the contract is that a share count renders
     // byte-identically regardless of host CurrentCulture (en-US grouping). This
     // attacks the culture/encoding risk surface under de-DE.
-    [Fact(Skip = "GH-2675 — FormatSignedShares passes null IFormatProvider; share counts misformat under de-DE")]
+    [Fact]
     public void FormatSignedShares_UnderNonInvariantCulture_RendersInvariantGrouping()
     {
         var original = CultureInfo.CurrentCulture;
