@@ -16,9 +16,7 @@ public class SecEdgarClientGetArchiveFilingsToDateSkipCultureTests
     // host calendar (ar-SA) the ISO date fails to parse, the skip guard
     // short-circuits, and the out-of-window archive is fetched anyway —
     // needless SEC load. The contract is host-culture-independent pruning.
-    [Fact(
-        Skip = "GH-2706 — GetArchiveFilings prune parses filingFrom/filingTo with host culture under ar-SA"
-    )]
+    [Fact]
     public async Task GetCompanyFilings_ArchiveFileAfterToDate_UnderHijriCulture_StillSkipsWithoutFetch()
     {
         var json =

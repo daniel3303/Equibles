@@ -296,7 +296,12 @@ public class SecEdgarClient : ISecEdgarClient
             // Skip archive files whose date range is entirely outside the requested window
             if (
                 fromDate.HasValue
-                && DateOnly.TryParse(archiveFile.FilingTo, out var archiveTo)
+                && DateOnly.TryParse(
+                    archiveFile.FilingTo,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var archiveTo
+                )
                 && archiveTo < fromDate.Value
             )
             {
@@ -310,7 +315,12 @@ public class SecEdgarClient : ISecEdgarClient
 
             if (
                 toDate.HasValue
-                && DateOnly.TryParse(archiveFile.FilingFrom, out var archiveFrom)
+                && DateOnly.TryParse(
+                    archiveFile.FilingFrom,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var archiveFrom
+                )
                 && archiveFrom > toDate.Value
             )
             {
