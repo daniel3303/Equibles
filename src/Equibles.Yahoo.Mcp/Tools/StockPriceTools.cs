@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -80,7 +81,7 @@ public class StockPriceTools
                 foreach (var p in records.OrderBy(p => p.Date))
                 {
                     result.AppendLine(
-                        $"| {p.Date:yyyy-MM-dd} | {p.Open:F2} | {p.High:F2} | {p.Low:F2} | {p.Close:F2} | {p.Volume:N0} |"
+                        $"| {p.Date:yyyy-MM-dd} | {p.Open.ToString("F2", CultureInfo.InvariantCulture)} | {p.High.ToString("F2", CultureInfo.InvariantCulture)} | {p.Low.ToString("F2", CultureInfo.InvariantCulture)} | {p.Close.ToString("F2", CultureInfo.InvariantCulture)} | {p.Volume.ToString("N0", CultureInfo.InvariantCulture)} |"
                     );
                 }
 
