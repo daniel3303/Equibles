@@ -119,15 +119,7 @@ public class StandaloneXbrlParser
     )
     {
         var instant = period.Element(InstantElement);
-        if (
-            instant != null
-            && DateOnly.TryParse(
-                instant.Value,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out var instantDate
-            )
-        )
+        if (instant != null && TryParseInvariantDate(instant.Value, out var instantDate))
         {
             isInstant = true;
             start = instantDate;
@@ -140,18 +132,8 @@ public class StandaloneXbrlParser
         if (
             startElement != null
             && endElement != null
-            && DateOnly.TryParse(
-                startElement.Value,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out var startDate
-            )
-            && DateOnly.TryParse(
-                endElement.Value,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out var endDate
-            )
+            && TryParseInvariantDate(startElement.Value, out var startDate)
+            && TryParseInvariantDate(endElement.Value, out var endDate)
         )
         {
             isInstant = false;
@@ -165,6 +147,9 @@ public class StandaloneXbrlParser
         end = default;
         return false;
     }
+
+    private static bool TryParseInvariantDate(string value, out DateOnly date) =>
+        DateOnly.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
 
     private static List<ParsedXbrlDimension> ExtractDimensions(XElement contextElement)
     {
