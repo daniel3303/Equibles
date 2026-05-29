@@ -28,7 +28,7 @@ public class InstitutionalHoldingsToolsRenderOwnershipHistoryCultureInvarianceTe
     // separators by host locale") is that the LLM-facing markdown renders the same
     // on every host. de-DE swaps the thousand separator (1,234,567 → 1.234.567),
     // forking the response — same bug class as the fixed sibling RenderTopHoldersTable (#2628).
-    [Fact(Skip = "GH-2779 — RenderOwnershipHistory :N0/:N1/:+0.0 cells follow host CurrentCulture")]
+    [Fact]
     public async Task GetOwnershipHistory_UnderNonInvariantCulture_RendersTotalSharesCultureInvariantly()
     {
         var stock = new CommonStock
@@ -71,8 +71,11 @@ public class InstitutionalHoldingsToolsRenderOwnershipHistoryCultureInvarianceTe
             CultureInfo.CurrentCulture = previous;
         }
 
-        // 1,234,567 shares must render with en-US grouping on every host locale.
+        // Numeric cells must render with en-US separators on every host locale:
+        // Total Shares (:N0) and Total Value $M (:N1). de-DE would produce
+        // 1.234.567 and 123,5.
         output.Should().Contain("| 1,234,567 |");
+        output.Should().Contain("| 123.5 |");
     }
 
     private static InstitutionalHolding MakeHolding(
