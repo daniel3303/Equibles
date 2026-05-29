@@ -131,7 +131,7 @@ public class InstitutionalHoldingsTools
         );
         result.AppendLine(
             $"Showing {holdings.Count} of {totalInstitutions} institutions. Total: "
-                + $"{totalSharesAll.ToString("N0", CultureInfo.InvariantCulture)} shares, "
+                + $"{FormatWholeNumber(totalSharesAll)} shares, "
                 + $"${FormatMillions(totalValueAll)}M value"
         );
         result.AppendLine();
@@ -144,7 +144,7 @@ public class InstitutionalHoldingsTools
             var pct = totalSharesAll > 0 ? (double)h.Shares / totalSharesAll * 100 : 0;
             result.AppendLine(
                 $"| {i + 1} | {h.InstitutionalHolder.Name} | "
-                    + $"{h.Shares.ToString("N0", CultureInfo.InvariantCulture)} | "
+                    + $"{FormatWholeNumber(h.Shares)} | "
                     + $"{FormatMillions(h.Value)} | "
                     + $"{pct.ToString("F2", CultureInfo.InvariantCulture)}% |"
             );
@@ -281,7 +281,7 @@ public class InstitutionalHoldingsTools
             var h = holdings[i];
             result.AppendLine(
                 $"| {i + 1} | {h.CommonStock.Ticker} | {h.CommonStock.Name} | "
-                    + $"{h.Shares.ToString("N0", CultureInfo.InvariantCulture)} | "
+                    + $"{FormatWholeNumber(h.Shares)} | "
                     + $"{FormatMillions(h.Value)} |"
             );
         }
@@ -835,12 +835,8 @@ public class InstitutionalHoldingsTools
         result.AppendLine();
         result.AppendLine("| Metric | Value |");
         result.AppendLine("|--------|-------|");
-        result.AppendLine(
-            $"| Reported AUM | ${summary.ReportedAum.ToString("N0", CultureInfo.InvariantCulture)} |"
-        );
-        result.AppendLine(
-            $"| # Positions | {summary.PositionCount.ToString("N0", CultureInfo.InvariantCulture)} |"
-        );
+        result.AppendLine($"| Reported AUM | ${FormatWholeNumber(summary.ReportedAum)} |");
+        result.AppendLine($"| # Positions | {FormatWholeNumber(summary.PositionCount)} |");
         result.AppendLine(
             $"| Top 10 concentration | {summary.Top10ConcentrationPercent.ToString("F1", CultureInfo.InvariantCulture)}% |"
         );
@@ -888,7 +884,7 @@ public class InstitutionalHoldingsTools
         {
             var s = slices[i];
             result.AppendLine(
-                $"| {i + 1} | {s.IndustryName} | {s.PositionCount.ToString("N0", CultureInfo.InvariantCulture)} | {FormatMillions(s.TotalValue)} | {s.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture)}% |"
+                $"| {i + 1} | {s.IndustryName} | {FormatWholeNumber(s.PositionCount)} | {FormatMillions(s.TotalValue)} | {s.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture)}% |"
             );
         }
         return result.ToString();
@@ -1146,11 +1142,9 @@ public class InstitutionalHoldingsTools
         result.AppendLine();
         result.AppendLine("| Metric | Value |");
         result.AppendLine("|--------|-------|");
+        result.AppendLine($"| Union positions | {FormatWholeNumber(overlap.UnionPositionCount)} |");
         result.AppendLine(
-            $"| Union positions | {overlap.UnionPositionCount.ToString("N0", CultureInfo.InvariantCulture)} |"
-        );
-        result.AppendLine(
-            $"| Shared positions | {overlap.IntersectionPositionCount.ToString("N0", CultureInfo.InvariantCulture)} |"
+            $"| Shared positions | {FormatWholeNumber(overlap.IntersectionPositionCount)} |"
         );
         result.AppendLine(
             $"| Jaccard similarity | {overlap.JaccardSimilarityPercent.ToString("F1", CultureInfo.InvariantCulture)}% |"
@@ -1179,7 +1173,7 @@ public class InstitutionalHoldingsTools
             var a = row.Slices[0];
             var b = row.Slices[1];
             result.AppendLine(
-                $"| {i + 1} | {row.Ticker} | {row.Name} | {(a.Shares > 0 ? a.Shares.ToString("N0", CultureInfo.InvariantCulture) : "—")} | {(a.Value > 0 ? a.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture) + "%" : "—")} | {(b.Shares > 0 ? b.Shares.ToString("N0", CultureInfo.InvariantCulture) : "—")} | {(b.Value > 0 ? b.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture) + "%" : "—")} | {FormatMillions(row.CombinedValue)} |"
+                $"| {i + 1} | {row.Ticker} | {row.Name} | {(a.Shares > 0 ? FormatWholeNumber(a.Shares) : "—")} | {(a.Value > 0 ? a.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture) + "%" : "—")} | {(b.Shares > 0 ? FormatWholeNumber(b.Shares) : "—")} | {(b.Value > 0 ? b.PercentOfPortfolio.ToString("F1", CultureInfo.InvariantCulture) + "%" : "—")} | {FormatMillions(row.CombinedValue)} |"
             );
         }
         return result.ToString();
@@ -1332,11 +1326,15 @@ public class InstitutionalHoldingsTools
         return (s?.Ticker ?? "—", s?.Name ?? "Unknown");
     }
 
+    // Whole numbers (share counts, position counts, whole-dollar amounts) rendered with
+    // thousands separators in invariant culture, matching the other invariant cells.
+    private static string FormatWholeNumber<T>(T value)
+        where T : INumber<T> => value.ToString("N0", CultureInfo.InvariantCulture);
+
     // Raw dollar values rendered in $millions with an explicit leading +/- sign.
     // `+` for positive deltas; N0 already emits `-` for negatives.
     private static string FormatSignedShares<T>(T value)
-        where T : INumber<T> =>
-        (value > T.Zero ? "+" : "") + value.ToString("N0", CultureInfo.InvariantCulture);
+        where T : INumber<T> => (value > T.Zero ? "+" : "") + FormatWholeNumber(value);
 
     // Uses the ambient culture to match the previous inline formatting; see #2658 for the
     // pending switch to InvariantCulture (the other cells here are already invariant).
