@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Congress.Data.Models;
@@ -88,7 +89,8 @@ public class CongressTools
                 {
                     var position = t.CongressMember.Position.NameForHumans();
                     var type = t.TransactionType.NameForHumans();
-                    var amount = $"${t.AmountFrom:N0}–${t.AmountTo:N0}";
+                    var amount =
+                        $"${t.AmountFrom.ToString("N0", CultureInfo.InvariantCulture)}–${t.AmountTo.ToString("N0", CultureInfo.InvariantCulture)}";
                     result.AppendLine(
                         $"| {t.TransactionDate:yyyy-MM-dd} | {t.CongressMember.Name} | {position} | {type} | {amount} | {t.OwnerType ?? "—"} |"
                     );
