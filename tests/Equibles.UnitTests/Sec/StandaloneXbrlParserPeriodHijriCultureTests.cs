@@ -19,9 +19,7 @@ public class StandaloneXbrlParserPeriodHijriCultureTests
     // host would ingest zero financial facts from otherwise-valid filings.
     // Pin: a valid duration fact survives parsing and keeps its ISO period
     // regardless of thread culture.
-    [Fact(
-        Skip = "GH-2652 — TryParsePeriod omits InvariantCulture; ISO xs:date periods drop facts under ar-SA"
-    )]
+    [Fact]
     public void Parse_DurationContextUnderHijriCulture_EmitsFactWithIsoPeriod()
     {
         var xml =

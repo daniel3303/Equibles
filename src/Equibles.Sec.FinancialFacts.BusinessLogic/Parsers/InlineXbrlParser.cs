@@ -144,7 +144,13 @@ public class InlineXbrlParser
     {
         date = default;
         var child = FindFirstChildByLocalName(parent, localName);
-        return child != null && DateOnly.TryParse(child.TextContent.Trim(), out date);
+        return child != null
+            && DateOnly.TryParse(
+                child.TextContent.Trim(),
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out date
+            );
     }
 
     private static List<ParsedXbrlDimension> ExtractDimensions(IElement contextElement)
