@@ -1336,10 +1336,10 @@ public class InstitutionalHoldingsTools
     private static string FormatSignedShares<T>(T value)
         where T : INumber<T> => (value > T.Zero ? "+" : "") + FormatWholeNumber(value);
 
-    // Uses the ambient culture to match the previous inline formatting; see #2658 for the
-    // pending switch to InvariantCulture (the other cells here are already invariant).
+    // Signed $millions with one decimal place, invariant culture (matches FormatMillions
+    // and the rest of this file; MCP markdown must not fork the separators by host locale).
     private static string FormatSignedMillions(decimal value) =>
-        (value / 1_000_000m).ToString("+#,##0.0;-#,##0.0;0.0");
+        (value / 1_000_000m).ToString("+#,##0.0;-#,##0.0;0.0", CultureInfo.InvariantCulture);
 
     // Raw dollar values rendered in $millions with one decimal place, invariant culture.
     private static string FormatMillions(decimal value) =>
