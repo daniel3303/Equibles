@@ -1047,7 +1047,7 @@ public class InstitutionalHoldingsTools
         {
             var r = rows[i];
             result.AppendLine(
-                $"| {i + 1} | {r.Ticker} | {r.Name} | {r.PreviousShares.ToString("N0", CultureInfo.InvariantCulture)} | {r.CurrentShares.ToString("N0", CultureInfo.InvariantCulture)} | {FormatSignedShares(r.DeltaShares)} | {FormatSignedMillions(r.DeltaValue)} |"
+                $"| {i + 1} | {r.Ticker} | {r.Name} | {FormatWholeNumber(r.PreviousShares)} | {FormatWholeNumber(r.CurrentShares)} | {FormatSignedShares(r.DeltaShares)} | {FormatSignedMillions(r.DeltaValue)} |"
             );
         }
         result.AppendLine();
