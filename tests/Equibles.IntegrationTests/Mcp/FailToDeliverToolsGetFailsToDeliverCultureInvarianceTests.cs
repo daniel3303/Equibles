@@ -30,7 +30,7 @@ public class FailToDeliverToolsGetFailsToDeliverCultureInvarianceTests : ParadeD
     // markdown renders the same on every host. de-DE swaps the thousand separator
     // (1,234,567 → 1.234.567), forking the response — same bug class as the fixed Holdings
     // render methods (#2628).
-    [Fact(Skip = "GH-2791 — GetFailsToDeliver :N0/:F2 cells follow host CurrentCulture")]
+    [Fact]
     public async Task GetFailsToDeliver_UnderNonInvariantCulture_RendersQuantityCultureInvariantly()
     {
         var stock = new CommonStock
@@ -66,7 +66,11 @@ public class FailToDeliverToolsGetFailsToDeliverCultureInvarianceTests : ParadeD
             CultureInfo.CurrentCulture = previous;
         }
 
-        // 1,234,567 fail-to-deliver shares must render with en-US grouping on every host locale.
+        // Every numeric cell must render with en-US separators on any host locale:
+        // Quantity (:N0), Price (:F2), Value (:N0). de-DE would produce
+        // 1.234.567 / $25,50 / $31.481.459.
         result.Should().Contain("| 1,234,567 |");
+        result.Should().Contain("| $25.50 |");
+        result.Should().Contain("| $31,481,459 |");
     }
 }
