@@ -1,0 +1,118 @@
+@using Equibles.Web.ViewModels.ShortActivity
+@model MostShortedBrowserViewModel
+
+@{
+    ViewData["Title"] = "Most Shorted";
+    ViewData["Description"] = "The most shorted stocks across the market for a FINRA bi-monthly settlement date — ranked by current short position, with change vs. the previous report, days to cover, and average daily volume.";
+
+    // Active filters carried across pagination links so paging never drops the
+    // selected settlement date or sort order.
+    var filterRoute = new Dictionary<string, string>();
+    if (Model.SelectedDate.HasValue) {
+        filterRoute["date"] = Model.SelectedDate.Value.ToString("yyyy-MM-dd");
+    }
+    if (Model.Sort != MostShortedSort.CurrentShortPositionDescending) {
+        filterRoute["sort"] = Model.Sort.ToString();
+    }
+    var hasData = Model.LatestDate.HasValue;
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">Most Shorted</h1>
+        <p class="text-base-content/60">
+            @if (hasData) {
+                <span>@Model.TotalCount.ToString("N0") stocks ranked by FINRA short interest for settlement date <strong class="text-base-content">@Model.SelectedDate?.ToString("MMM dd, yyyy")</strong></span>
+                @if (Model.SelectedDate != Model.LatestDate) {
+                    <span> · latest available @Model.LatestDate?.ToString("MMM dd, yyyy")</span>
+                }
+            } else {
+                <span>No short interest data has been ingested yet.</span>
+            }
+        </p>
+    </div>
+
+    <!-- Settlement-date + sort selector (plain query-param names, bound to ShortActivityController.MostShorted) -->
+    <form method="get" class="mb-6">
+        <div class="flex flex-wrap gap-3 items-end">
+            <label class="form-control">
+                <span class="label-text text-sm mb-1">Settlement date</span>
+                <select name="date" class="select select-bordered" aria-label="Select settlement date"
+                        @(Model.AvailableDates.Count == 0 ? "disabled" : null)>
+                    @foreach (var day in Model.AvailableDates) {
+                        <option value="@day.ToString("yyyy-MM-dd")"
+                                selected="@(day == Model.SelectedDate)">
+                            @day.ToString("MMM dd, yyyy")
+                        </option>
+                    }
+                </select>
+            </label>
+            <label class="form-control">
+                <span class="label-text text-sm mb-1">Sort by</span>
+                <select name="sort" class="select select-bordered" aria-label="Sort stocks">
+                    <partial name="_SortOptions" model='(Html.GetEnumSelectList<MostShortedSort>(), (int)Model.Sort)' />
+                </select>
+            </label>
+            <button type="submit" class="btn btn-primary">Apply</button>
+            @if (filterRoute.ContainsKey("sort")) {
+                <a asp-action="MostShorted" asp-route-date="@Model.SelectedDate?.ToString("yyyy-MM-dd")" class="btn btn-ghost">Reset sort</a>
+            }
+        </div>
+    </form>
+
+    <!-- Results Table -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table table-zebra table-sm" aria-label="Most shorted stocks" data-testid="most-shorted-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Ticker</th>
+                        <th scope="col" class="hidden md:table-cell">Name</th>
+                        <th scope="col" class="text-right">Current Short Position</th>
+                        <th scope="col" class="text-right">Change vs Prev</th>
+                        <th scope="col" class="text-right">Days to Cover</th>
+                        <th scope="col" class="text-right hidden lg:table-cell">Avg Daily Volume</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Model.Records) {
+                        <tr class="hover">
+                            <td class="font-mono font-semibold">
+                                <a asp-controller="Stocks" asp-action="ShortInterest" asp-route-ticker="@row.Ticker" class="link link-primary">@row.Ticker</a>
+                            </td>
+                            <td class="hidden md:table-cell max-w-xs truncate text-base-content/70">@row.Name</td>
+                            <td class="text-right font-mono"><compactable-number value="@row.CurrentShortPosition" /></td>
+                            <td class="text-right font-mono">
+                                @* Rising short interest is bearish (red); a covered/reduced position is green. *@
+                                @{
+                                    var change = row.ChangeInShortPosition;
+                                    var changeClass = change > 0 ? "text-error" : change < 0 ? "text-success" : "text-base-content/50";
+                                }
+                                <span class="@changeClass">@(change > 0 ? "+" : "")<compactable-number value="@change" /></span>
+                            </td>
+                            <td class="text-right font-mono">@(row.DaysToCover.HasValue ? row.DaysToCover.Value.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) : "—")</td>
+                            <td class="text-right font-mono hidden lg:table-cell">
+                                @if (row.AverageDailyVolume.HasValue) {
+                                    <compactable-number value="@row.AverageDailyVolume.Value" />
+                                } else {
+                                    <span class="text-base-content/30">—</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    @if (Model.Records.Count == 0) {
+                        <empty-row colspan="6">
+                            @if (hasData) {
+                                <span>No short interest data for @Model.SelectedDate?.ToString("MMM dd, yyyy").</span>
+                            } else {
+                                <span>No short interest has been ingested yet. This page lights up once the worker finishes its first FINRA short-interest cycle.</span>
+                            }
+                        </empty-row>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <partial name="_Pager" model='(Model.Page, Model.TotalPages, "MostShorted", "Most shorted pagination", "most-shorted-pager", (IDictionary<string, string>)filterRoute)' />
+</div>
