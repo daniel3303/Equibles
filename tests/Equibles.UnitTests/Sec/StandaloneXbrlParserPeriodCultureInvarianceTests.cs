@@ -16,7 +16,7 @@ public class StandaloneXbrlParserPeriodCultureInvarianceTests
     // InvariantCulture; under th-TH (ThaiBuddhist calendar, +543-year era) the
     // ambient parser reads "2024" as a Buddhist-era year (-> 1481 CE), feeding
     // a corrupt period into the financial-facts pipeline on a non-US host.
-    [Fact(Skip = "GH-2670 — XBRL ISO period dates misparsed under non-Gregorian host cultures")]
+    [Fact]
     public void Parse_InstantDateUnderThaiBuddhistCulture_ResolvesGregorianIsoDate()
     {
         var xml =
