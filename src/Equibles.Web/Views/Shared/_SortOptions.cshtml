@@ -1,0 +1,14 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@model (IEnumerable<SelectListItem> Options, int Selected)
+
+@* Renders the <option> list for an enum-backed sort <select>. The selected option is
+   matched by comparing each item's value to the current sort's numeric value, mirroring
+   how the query-param sort is bound. Shared across the browser pages (stocks, institutions,
+   short volume, search). *@
+@foreach (var option in Model.Options)
+{
+    <option value="@option.Value"
+            selected="@(option.Value == Model.Selected.ToString())">
+        @option.Text
+    </option>
+}

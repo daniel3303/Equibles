@@ -38,12 +38,7 @@
             <label class="form-control">
                 <span class="label-text text-sm mb-1">Sort by</span>
                 <select name="sort" class="select select-bordered" aria-label="Sort stocks">
-                    @foreach (var option in Html.GetEnumSelectList<StockSort>()) {
-                        <option value="@option.Value"
-                                selected="@(option.Value == ((int)Model.Sort).ToString())">
-                            @option.Text
-                        </option>
-                    }
+                    <partial name="_SortOptions" model='(Html.GetEnumSelectList<StockSort>(), (int)Model.Sort)' />
                 </select>
             </label>
             <label class="form-control">
