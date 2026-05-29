@@ -1335,7 +1335,8 @@ public class InstitutionalHoldingsTools
     // Raw dollar values rendered in $millions with an explicit leading +/- sign.
     // `+` for positive deltas; N0 already emits `-` for negatives.
     private static string FormatSignedShares<T>(T value)
-        where T : INumber<T> => (value > T.Zero ? "+" : "") + value.ToString("N0", null);
+        where T : INumber<T> =>
+        (value > T.Zero ? "+" : "") + value.ToString("N0", CultureInfo.InvariantCulture);
 
     // Uses the ambient culture to match the previous inline formatting; see #2658 for the
     // pending switch to InvariantCulture (the other cells here are already invariant).
