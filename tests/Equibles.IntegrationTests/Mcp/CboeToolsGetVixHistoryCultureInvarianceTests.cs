@@ -28,7 +28,7 @@ public class CboeToolsGetVixHistoryCultureInvarianceTests : ParadeDbMcpTestBase
     // markdown renders the same on every host. de-DE swaps the decimal separator
     // (18.55 → 18,55), forking the response — same bug class as the fixed Holdings
     // render methods (#2628).
-    [Fact(Skip = "GH-2789 — GetVixHistory :F2 cells follow host CurrentCulture")]
+    [Fact]
     public async Task GetVixHistory_UnderNonInvariantCulture_RendersCloseCultureInvariantly()
     {
         DbContext
@@ -59,7 +59,9 @@ public class CboeToolsGetVixHistoryCultureInvarianceTests : ParadeDbMcpTestBase
             CultureInfo.CurrentCulture = previous;
         }
 
-        // A VIX close of 18.55 must render with an en-US decimal point on every host locale.
+        // The :F2 OHLC cells must render with an en-US decimal point on every host
+        // locale; de-DE would produce 14,20 and 18,55.
         result.Should().Contain("| 18.55 |");
+        result.Should().Contain("| 14.20 |");
     }
 }
