@@ -401,7 +401,13 @@ public class McpModuleToolDiscoveryTests
             },
             {
                 typeof(ShortDataTools),
-                new[] { "GetShortVolume", "GetShortInterest", "GetShortInterestSnapshot" }
+                new[]
+                {
+                    "GetShortVolume",
+                    "GetShortInterest",
+                    "GetShortInterestSnapshot",
+                    "GetLargestShortVolume"
+                }
             },
             {
                 typeof(StockPriceTools),
