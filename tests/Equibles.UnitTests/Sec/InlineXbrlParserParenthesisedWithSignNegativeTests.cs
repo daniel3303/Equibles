@@ -21,7 +21,7 @@ public class InlineXbrlParserParenthesisedWithSignNegativeTests
 
     private const string DocClose = "</body></html>";
 
-    [Fact(Skip = "GH-2799 — parens + sign=\"-\" double-negates to positive")]
+    [Fact]
     public void Parse_ParenthesisedValueWithSignNegative_StaysNegative()
     {
         // Accounting parentheses and the sign="-" attribute are two encodings of
