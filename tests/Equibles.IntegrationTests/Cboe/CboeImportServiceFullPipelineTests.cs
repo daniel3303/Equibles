@@ -105,6 +105,22 @@ public class CboeImportServiceFullPipelineTests : IAsyncLifetime
         return client;
     }
 
+    private static Dictionary<CboePutCallProductType, CboePutCallRecord> AllFiveProducts(
+        DateOnly date
+    ) =>
+        Enum.GetValues<CboePutCallProductType>()
+            .ToDictionary(
+                p => p,
+                p => new CboePutCallRecord
+                {
+                    Date = date,
+                    CallVolume = 1,
+                    PutVolume = 1,
+                    TotalVolume = 2,
+                    PutCallRatio = 1m,
+                }
+            );
+
     private static CboePutCallRatio Seed(CboePutCallRatioType type, DateOnly date) =>
         new()
         {
@@ -429,5 +445,48 @@ public class CboeImportServiceFullPipelineTests : IAsyncLifetime
                 Arg.Any<string>(),
                 Arg.Any<string>()
             );
+    }
+
+    [Fact]
+    public async Task Import_ColdStartCancelledMidBackfill_KeepsAlreadyFlushedBatches()
+    {
+        // Regression for the "put/call data never populates" bug. A cold-start
+        // backfill walks years of trading days at a throttled request rate. If
+        // every write is deferred to the end of the loop, a worker restart or
+        // cancellation mid-backfill discards every scraped row, and the next
+        // cycle — seeing an empty table — restarts from the beginning, so data
+        // never lands. Flushing each full batch must make that progress durable
+        // even when the cycle is cancelled before it finishes.
+        var cts = new CancellationTokenSource();
+        var downloads = 0;
+
+        var client = Substitute.For<ICboeClient>();
+        client.DownloadVixHistory().Returns(new List<CboeVixRecord>());
+        client
+            .DownloadDailyPutCallRatios(Arg.Any<DateOnly>())
+            .Returns(call =>
+            {
+                var date = call.Arg<DateOnly>();
+                downloads++;
+                // 200 weekdays × 5 products = one full 1000-row batch flushed.
+                // Cancel a little past that so exactly one batch is durable when
+                // the loop's next ThrowIfCancellationRequested fires.
+                if (downloads >= 250)
+                    cts.Cancel();
+                return Task.FromResult(AllFiveProducts(date));
+            });
+
+        // today is far enough past DailyPageMinDate (2019-10-07) to cover 250+
+        // weekdays without the cold-start loop ever reaching its end.
+        var sut = CreateSut(CreateScopeFactory(), client, new DateOnly(2020, 12, 31));
+
+        var act = async () => await sut.Import(cts.Token);
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        using var verify = FreshContext();
+        var persisted = await verify.Set<CboePutCallRatio>().CountAsync();
+        persisted
+            .Should()
+            .Be(1000, "the full batch flushed mid-backfill survives the cancellation");
     }
 }
