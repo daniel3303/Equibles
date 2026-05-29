@@ -7,6 +7,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
+using Equibles.Mcp.Helpers;
 using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -215,8 +216,8 @@ public class StockPriceTools
                     maxResults,
                     i =>
                     {
-                        var kCell = k[i].HasValue ? k[i].Value.ToString("F2") : "—";
-                        var dCell = d[i].HasValue ? d[i].Value.ToString("F2") : "—";
+                        var kCell = McpFormat.OrDash(k[i], "F2");
+                        var dCell = McpFormat.OrDash(d[i], "F2");
                         return $"| {records[i].Date:yyyy-MM-dd} | {records[i].Close:F2} | {kCell} | {dCell} |";
                     }
                 );
@@ -275,7 +276,7 @@ public class StockPriceTools
                     maxResults,
                     i =>
                     {
-                        var atrCell = atr[i].HasValue ? atr[i].Value.ToString("F4") : "—";
+                        var atrCell = McpFormat.OrDash(atr[i], "F4");
                         return $"| {records[i].Date:yyyy-MM-dd} | {records[i].Close:F2} | {atrCell} |";
                     }
                 );
