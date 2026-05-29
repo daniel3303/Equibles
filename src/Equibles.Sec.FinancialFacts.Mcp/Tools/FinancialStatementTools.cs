@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
@@ -8,6 +7,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
+using Equibles.Mcp.Helpers;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
@@ -153,15 +153,13 @@ public class FinancialStatementTools
         Dictionary<Guid, FinancialFact> latestByConcept
     )
     {
-        var result = new StringBuilder();
-        result.AppendLine(
+        var result = MarkdownTable.Start(
             $"{statementType.NameForHumans()} for {stock.Ticker} "
                 + $"({FactMarkdown.Cell(stock.Name)}) — "
-                + $"FY{selectedYear} {selectedPeriod.NameForHumans()}:"
+                + $"FY{selectedYear} {selectedPeriod.NameForHumans()}:",
+            "| Line Item | Value | Unit | Period End | Form | Filed |",
+            "|-----------|------:|------|-----------|------|-------|"
         );
-        result.AppendLine();
-        result.AppendLine("| Line Item | Value | Unit | Period End | Form | Filed |");
-        result.AppendLine("|-----------|------:|------|-----------|------|-------|");
 
         var rendered = 0;
         foreach (var line in statementLines)
