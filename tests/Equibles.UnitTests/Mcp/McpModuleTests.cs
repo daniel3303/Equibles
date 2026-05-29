@@ -406,7 +406,7 @@ public class McpModuleToolDiscoveryTests
                     "GetShortVolume",
                     "GetShortInterest",
                     "GetShortInterestSnapshot",
-                    "GetLargestShortVolume"
+                    "GetLargestShortVolume",
                 }
             },
             {
