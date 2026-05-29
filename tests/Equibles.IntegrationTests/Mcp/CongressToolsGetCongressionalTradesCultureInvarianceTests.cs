@@ -31,7 +31,7 @@ public class CongressToolsGetCongressionalTradesCultureInvarianceTests : ParadeD
     // LLM-facing markdown renders the same on every host. de-DE swaps the thousand separator
     // (1,000,000 → 1.000.000), forking the response — same bug class as the fixed Holdings
     // render methods (#2628).
-    [Fact(Skip = "GH-2785 — GetCongressionalTrades :N0 amount cells follow host CurrentCulture")]
+    [Fact]
     public async Task GetCongressionalTrades_UnderNonInvariantCulture_RendersAmountCultureInvariantly()
     {
         var stock = new CommonStock
@@ -78,7 +78,9 @@ public class CongressToolsGetCongressionalTradesCultureInvarianceTests : ParadeD
             CultureInfo.CurrentCulture = previous;
         }
 
-        // $1,000,000 must render with en-US grouping on every host locale.
+        // Both amount-range bounds (:N0) must render with en-US grouping on every
+        // host locale; de-DE would produce $1.000.000 and $5.000.000.
         result.Should().Contain("$1,000,000");
+        result.Should().Contain("$5,000,000");
     }
 }
