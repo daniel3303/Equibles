@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using Equibles.Cftc.Data.Models;
 using Equibles.Cftc.Repositories;
 using Equibles.Core.Extensions;
@@ -83,7 +84,7 @@ public class CftcTools
                 foreach (var r in reports.OrderBy(r => r.ReportDate))
                 {
                     result.AppendLine(
-                        $"| {r.ReportDate:yyyy-MM-dd} | {r.OpenInterest:N0} | {r.CommLong:N0} | {r.CommShort:N0} | {r.NonCommLong:N0} | {r.NonCommShort:N0} | {r.NonCommSpreads:N0} |"
+                        $"| {r.ReportDate:yyyy-MM-dd} | {r.OpenInterest.ToString("N0", CultureInfo.InvariantCulture)} | {r.CommLong.ToString("N0", CultureInfo.InvariantCulture)} | {r.CommShort.ToString("N0", CultureInfo.InvariantCulture)} | {r.NonCommLong.ToString("N0", CultureInfo.InvariantCulture)} | {r.NonCommShort.ToString("N0", CultureInfo.InvariantCulture)} | {r.NonCommSpreads.ToString("N0", CultureInfo.InvariantCulture)} |"
                     );
                 }
 

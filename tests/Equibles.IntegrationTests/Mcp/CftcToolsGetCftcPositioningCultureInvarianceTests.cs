@@ -28,7 +28,7 @@ public class CftcToolsGetCftcPositioningCultureInvarianceTests : ParadeDbMcpTest
     // markdown renders the same on every host. de-DE swaps the thousand separator
     // (1,234,567 → 1.234.567), forking the response — same bug class as the fixed
     // Holdings render methods (#2628).
-    [Fact(Skip = "GH-2787 — GetCftcPositioning :N0 cells follow host CurrentCulture")]
+    [Fact]
     public async Task GetCftcPositioning_UnderNonInvariantCulture_RendersOpenInterestCultureInvariantly()
     {
         var contract = new CftcContract
@@ -71,7 +71,9 @@ public class CftcToolsGetCftcPositioningCultureInvarianceTests : ParadeDbMcpTest
             CultureInfo.CurrentCulture = previous;
         }
 
-        // 1,234,567 open interest must render with en-US grouping on every host locale.
+        // The :N0 positioning cells must render with en-US grouping on every host
+        // locale; de-DE would produce 1.234.567 and 600.000.
         result.Should().Contain("| 1,234,567 |");
+        result.Should().Contain("| 600,000 |");
     }
 }
