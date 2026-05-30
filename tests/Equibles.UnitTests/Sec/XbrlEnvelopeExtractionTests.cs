@@ -99,6 +99,27 @@ public class XbrlEnvelopeExtractionTests
     }
 
     [Fact]
+    public void TryExtractXbrlEnvelope_InlinePresentButPrimaryNameBlank_StillReturnsInline()
+    {
+        // PrimaryDocument can be missing/blank for some filings; a block carrying inline
+        // markers must still be captured rather than wrongly recorded as not-present.
+        var envelope = Submission("acme-10k.htm", InlinePrimaryBody, withInstance: false);
+
+        var found = SecDocumentEnvelopeParser.TryExtractXbrlEnvelope(
+            envelope,
+            primaryDocumentFileName: "",
+            out var type,
+            out var sourceFileName,
+            out var content
+        );
+
+        found.Should().BeTrue();
+        type.Should().Be(XbrlType.InlineIxbrl);
+        sourceFileName.Should().Be("acme-10k.htm");
+        content.Should().Be(InlinePrimaryBody);
+    }
+
+    [Fact]
     public void TryExtractXbrlEnvelope_NoInlineAndNoInstance_ReturnsFalse()
     {
         var envelope = Submission("acme-10k.htm", PlainPrimaryBody, withInstance: false);

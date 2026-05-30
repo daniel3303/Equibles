@@ -11,6 +11,8 @@ namespace Equibles.Sec.HostedService.Services;
 
 public class DocumentPersistenceService : IDocumentPersistenceService
 {
+    private const int MaxFileNameLength = 256;
+
     private readonly DocumentRepository _documentRepository;
     private readonly IFileManager _fileManager;
 
@@ -85,9 +87,15 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         }
 
         var compressed = Compress(xbrl.RawBytes);
+        // File.Name is capped at 256 chars; EDGAR document names are bare short tokens, but
+        // guard against a pathological envelope value so the insert can never overflow.
+        var name =
+            xbrl.SourceFileName?.Length > MaxFileNameLength
+                ? xbrl.SourceFileName[..MaxFileNameLength]
+                : xbrl.SourceFileName;
         var xbrlFile = await _fileManager.SaveInternalFile(
             compressed,
-            xbrl.SourceFileName,
+            name,
             "gz",
             "application/gzip"
         );
