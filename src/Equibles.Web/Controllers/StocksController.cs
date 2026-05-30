@@ -192,6 +192,14 @@ public class StocksController : BaseController
             async s => await _stockTabService.LoadExemptOfferingsTab(s)
         );
 
+    [HttpGet("~/stocks/{ticker}/fund-operations")]
+    public Task<IActionResult> FundOperations(string ticker) =>
+        ShowStockTab(
+            ticker,
+            "fund-operations",
+            async s => await _stockTabService.LoadFundOperationsTab(s)
+        );
+
     [HttpGet("~/stocks/{ticker}/congressional-trades")]
     public Task<IActionResult> CongressionalTrades(string ticker) =>
         ShowStockTab(

@@ -1,0 +1,84 @@
+@using Equibles.Core.Extensions
+@model Equibles.Web.ViewModels.Stocks.FundOperationsTabViewModel
+
+@if (Model.Filings.Count == 0) {
+    <partial name="_EmptyStateCard" model='(IconName: "building-library", Heading: "No Fund Operations Data", Message: "No Form N-CEN annual reports are available for this stock yet. Only registered investment companies — mutual funds, ETFs and closed-end funds — file N-CEN.")' />
+} else {
+    var latest = Model.Filings[0];
+    <div class="space-y-4">
+        <!-- Annual N-CEN reports: the registrant's operational filings, newest first. -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="overflow-x-auto">
+                <table class="table table-zebra table-sm">
+                    <thead>
+                        <tr>
+                            <th scope="col">Filed</th>
+                            <th scope="col">Period End</th>
+                            <th scope="col"><span class="tooltip tooltip-right cursor-help" data-tip="Investment-company registration type: N-1A open-end fund/ETF, N-2 closed-end fund, N-3/N-4/N-6 insurance products">Type</span></th>
+                            <th scope="col" class="hidden md:table-cell">File Number</th>
+                            <th scope="col">Amendment</th>
+                            <th scope="col" class="hidden lg:table-cell">First Filing</th>
+                            <th scope="col" class="hidden lg:table-cell">Last Filing</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var f in Model.Filings) {
+                            <tr>
+                                <td>@f.FilingDate.ToString("yyyy-MM-dd")</td>
+                                <td>@f.ReportEndingPeriod.ToString("yyyy-MM-dd")</td>
+                                <td>@(string.IsNullOrEmpty(f.InvestmentCompanyType) ? "—" : f.InvestmentCompanyType)</td>
+                                <td class="hidden md:table-cell text-sm text-base-content/60">@(string.IsNullOrEmpty(f.InvestmentCompanyFileNumber) ? "—" : f.InvestmentCompanyFileNumber)</td>
+                                <td>
+                                    @if (f.IsAmendment) {
+                                        <span class="badge badge-sm badge-warning">Amendment</span>
+                                    } else {
+                                        <span class="badge badge-sm badge-ghost">Original</span>
+                                    }
+                                </td>
+                                <td class="hidden lg:table-cell">@(f.IsFirstFiling ? "Yes" : "—")</td>
+                                <td class="hidden lg:table-cell">@(f.IsLastFiling ? "Yes" : "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (latest.ServiceProviders.Count > 0) {
+            <!-- Service providers named on the most recent report — who runs and services the fund. -->
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body p-4 lg:p-6">
+                    <h3 class="text-sm font-semibold text-base-content/70">Service providers (latest report, filed @latest.FilingDate.ToString("yyyy-MM-dd"))</h3>
+                    <div class="overflow-x-auto">
+                        <table class="table table-zebra table-sm">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Role</th>
+                                    <th scope="col">Firm</th>
+                                    <th scope="col" class="hidden md:table-cell">Country</th>
+                                    <th scope="col"><span class="tooltip tooltip-left cursor-help" data-tip="Whether the firm is affiliated with the registrant">Affiliated</span></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var p in latest.ServiceProviders.OrderBy(p => p.ProviderType).ThenBy(p => p.Name)) {
+                                    <tr>
+                                        <td>@p.ProviderType.NameForHumans()</td>
+                                        <td>@p.Name</td>
+                                        <td class="hidden md:table-cell text-sm text-base-content/60">@(string.IsNullOrEmpty(p.Country) ? "—" : p.Country)</td>
+                                        <td>
+                                            @if (p.IsAffiliated) {
+                                                <span class="badge badge-sm badge-info">Yes</span>
+                                            } else {
+                                                <span class="text-base-content/60">—</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
