@@ -33,6 +33,17 @@ public class DocumentScraper : IDocumentScraper
     private readonly ErrorReporter _errorReporter;
     private readonly ResiliencePipeline _retryPipeline;
 
+    // Annual foreign-filer forms tried (in order) when SEC metadata and 10-Ks are both
+    // absent. 20-F first, then 40-F — Canadian cross-listed companies file 40-F instead.
+    private static readonly (
+        DocumentTypeFilter Filter,
+        string FormName
+    )[] ForeignFilerAnnualForms =
+    [
+        (DocumentTypeFilter.TwentyF, "20-F"),
+        (DocumentTypeFilter.FortyF, "40-F"),
+    ];
+
     public DocumentScraper(
         IServiceScopeFactory serviceScopeFactory,
         ICompanySyncService companySyncService,
@@ -248,36 +259,22 @@ public class DocumentScraper : IDocumentScraper
                 return;
             }
 
-            // No 10-K filings — try annual foreign-filer forms from the
-            // cached submissions JSON (zero extra SEC requests).
-            var twentyFDate = await secEdgarClient.GetMostRecentReportDate(
-                company.Cik,
-                DocumentTypeFilter.TwentyF
-            );
-            if (twentyFDate is { } twentyF)
+            // No 10-K filings — try annual foreign-filer forms from the cached
+            // submissions JSON (zero extra SEC requests), 20-F first then 40-F.
+            foreach (var (filter, formName) in ForeignFilerAnnualForms)
             {
-                _logger.LogInformation(
-                    "SEC metadata has no fiscal year-end for {Ticker}; inferred from 20-F report date {Date}",
-                    company.Ticker,
-                    twentyF
-                );
-                await commonStockManager.SetFiscalYearEnd(company, twentyF.Month, twentyF.Day);
-                return;
-            }
-
-            var fortyFDate = await secEdgarClient.GetMostRecentReportDate(
-                company.Cik,
-                DocumentTypeFilter.FortyF
-            );
-            if (fortyFDate is { } fortyF)
-            {
-                _logger.LogInformation(
-                    "SEC metadata has no fiscal year-end for {Ticker}; inferred from 40-F report date {Date}",
-                    company.Ticker,
-                    fortyF
-                );
-                await commonStockManager.SetFiscalYearEnd(company, fortyF.Month, fortyF.Day);
-                return;
+                var reportDate = await secEdgarClient.GetMostRecentReportDate(company.Cik, filter);
+                if (reportDate is { } date)
+                {
+                    _logger.LogInformation(
+                        "SEC metadata has no fiscal year-end for {Ticker}; inferred from {Form} report date {Date}",
+                        company.Ticker,
+                        formName,
+                        date
+                    );
+                    await commonStockManager.SetFiscalYearEnd(company, date.Month, date.Day);
+                    return;
+                }
             }
 
             if (company.FiscalYearEndMonth is null)
