@@ -20,5 +20,5 @@ public class XbrlCaptureOptions
     public bool BackfillEnabled { get; set; }
 
     /// <summary>How many pending documents the backfill processes per cycle.</summary>
-    public int BackfillBatchSize { get; set; } = 100;
+    public int BackfillBatchSize { get; set; } = 32;
 }
