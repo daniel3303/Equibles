@@ -119,4 +119,89 @@ public class InsiderTransactionPriceValidatorTests
 
         result.Should().BeTrue();
     }
+
+    // Evaluate — full tri-state + repair. Unlike IsPlausible, a missing close
+    // is *pending* (null), not an automatic pass: the row gets re-checked once
+    // the close lands instead of being silently accepted.
+    [Fact]
+    public void Evaluate_CommonStockWithNullClose_IsPending()
+    {
+        var result = _validator.Evaluate(
+            0.24m,
+            shares: 1000,
+            "Common Stock",
+            unadjustedClose: null
+        );
+
+        result.IsPriceValid.Should().BeNull();
+        result.WasRepaired.Should().BeFalse();
+        result.EffectivePrice.Should().Be(0.24m);
+    }
+
+    // The bug this feature exists to fix — filer typed the total transaction
+    // value ($24,035,774.40) into the per-share field. Divide by the share
+    // count to recover the unit price, and mark it valid.
+    [Fact]
+    public void Evaluate_TotalValueInPriceField_RepairsByDividingByShares()
+    {
+        var result = _validator.Evaluate(
+            reportedPrice: 24_035_774.40m,
+            shares: 100_149_893, // 24,035,774.40 / 0.24
+            securityTitle: "Common Stock",
+            unadjustedClose: 0.24m
+        );
+
+        result.IsPriceValid.Should().BeTrue();
+        result.WasRepaired.Should().BeTrue();
+        result.EffectivePrice.Should().Be(24_035_774.40m / 100_149_893);
+    }
+
+    // Implausible but no share count to divide by — can't repair, so it's
+    // positively rejected (the only thing dashboards hide).
+    [Fact]
+    public void Evaluate_ImplausibleWithZeroShares_IsInvalidNotRepaired()
+    {
+        var result = _validator.Evaluate(50_000m, shares: 0, "Common Stock", unadjustedClose: 50m);
+
+        result.IsPriceValid.Should().BeFalse();
+        result.WasRepaired.Should().BeFalse();
+        result.EffectivePrice.Should().Be(50_000m);
+    }
+
+    [Fact]
+    public void Evaluate_PlausiblePrice_IsValidUnchanged()
+    {
+        var result = _validator.Evaluate(55m, shares: 1000, "Common Stock", unadjustedClose: 50m);
+
+        result.IsPriceValid.Should().BeTrue();
+        result.WasRepaired.Should().BeFalse();
+        result.EffectivePrice.Should().Be(55m);
+    }
+
+    // Derivatives carry the instrument's own price; never repaired, valid even
+    // far above the underlying close and even with no close on file.
+    [Fact]
+    public void Evaluate_DerivativeWayAboveClose_IsValidUnchanged()
+    {
+        var result = _validator.Evaluate(
+            50_000m,
+            shares: 1000,
+            "Stock Option (Right to Buy)",
+            unadjustedClose: 50m
+        );
+
+        result.IsPriceValid.Should().BeTrue();
+        result.WasRepaired.Should().BeFalse();
+        result.EffectivePrice.Should().Be(50_000m);
+    }
+
+    [Fact]
+    public void Evaluate_ZeroPrice_IsValidWithoutClose()
+    {
+        var result = _validator.Evaluate(0m, shares: 0, "Common Stock", unadjustedClose: null);
+
+        result.IsPriceValid.Should().BeTrue();
+        result.WasRepaired.Should().BeFalse();
+        result.EffectivePrice.Should().Be(0m);
+    }
 }
