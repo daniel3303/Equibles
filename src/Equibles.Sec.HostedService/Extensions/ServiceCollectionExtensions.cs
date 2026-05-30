@@ -19,6 +19,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IFilingProcessor, NportFilingProcessor>();
         services.AddScoped<IDocumentPersistenceService, DocumentPersistenceService>();
         services.AddScoped<ICompanySyncService, CompanySyncService>();
+        services.AddScoped<RawXbrlArtifactCaptureService>();
         services.AddScoped<IDocumentScraper, DocumentScraper>();
 
         services.AddHostedService<SecScraperWorker>();

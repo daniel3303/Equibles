@@ -71,6 +71,9 @@ builder.Services.Configure<Equibles.Finra.HostedService.Configuration.FinraScrap
 builder.Services.Configure<Equibles.Sec.HostedService.Configuration.FtdScraperOptions>(
     builder.Configuration.GetSection("FtdScraper")
 );
+builder.Services.Configure<Equibles.Sec.HostedService.Configuration.RawXbrlArtifactOptions>(
+    builder.Configuration.GetSection("RawXbrlArtifacts")
+);
 builder.Services.Configure<FinancialFactsScraperOptions>(
     builder.Configuration.GetSection("FinancialFactsScraper")
 );
