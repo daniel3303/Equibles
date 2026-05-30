@@ -412,4 +412,56 @@ public static class TechnicalIndicatorService
 
         return (days, direction);
     }
+
+    /// <summary>
+    /// Bollinger Bands. The middle band is the <paramref name="period"/>-bar simple moving
+    /// average of close; the upper and lower bands sit <paramref name="stdDev"/> standard
+    /// deviations above and below it. The population standard deviation (denominator =
+    /// <paramref name="period"/>) is used, per John Bollinger's original definition.
+    /// Returns three lists aligned to input length, null-padded at the start while the
+    /// lookback window fills.
+    /// </summary>
+    public static (
+        List<decimal?> Middle,
+        List<decimal?> Upper,
+        List<decimal?> Lower
+    ) ComputeBollingerBands(List<decimal> prices, int period = 20, decimal stdDev = 2m)
+    {
+        var count = prices.Count;
+        var middle = new List<decimal?>(count);
+        var upper = new List<decimal?>(count);
+        var lower = new List<decimal?>(count);
+
+        for (var i = 0; i < count; i++)
+        {
+            if (i < period - 1)
+            {
+                middle.Add(null);
+                upper.Add(null);
+                lower.Add(null);
+                continue;
+            }
+
+            var mean = 0m;
+            for (var j = i - period + 1; j <= i; j++)
+                mean += prices[j];
+            mean /= period;
+
+            var sumSquares = 0m;
+            for (var j = i - period + 1; j <= i; j++)
+            {
+                var diff = prices[j] - mean;
+                sumSquares += diff * diff;
+            }
+            // Population standard deviation (denominator = period) — the Bollinger convention.
+            var deviation = (decimal)Math.Sqrt((double)(sumSquares / period));
+            var offset = stdDev * deviation;
+
+            middle.Add(Math.Round(mean, RoundingDigits));
+            upper.Add(Math.Round(mean + offset, RoundingDigits));
+            lower.Add(Math.Round(mean - offset, RoundingDigits));
+        }
+
+        return (middle, upper, lower);
+    }
 }
