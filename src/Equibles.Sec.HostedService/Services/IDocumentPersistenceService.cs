@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.HostedService.Models;
 
 namespace Equibles.Sec.HostedService.Services;
 
@@ -21,6 +22,7 @@ public interface IDocumentPersistenceService
         DateOnly reportingForDate,
         string sourceUrl,
         string accessionNumber = null,
+        XbrlCaptureResult xbrl = null,
         CancellationToken cancellationToken = default
     );
 }

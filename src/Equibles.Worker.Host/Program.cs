@@ -74,8 +74,8 @@ builder.Services.Configure<Equibles.Sec.HostedService.Configuration.FtdScraperOp
 builder.Services.Configure<Equibles.Sec.HostedService.Configuration.FormAdvScraperOptions>(
     builder.Configuration.GetSection("FormAdvScraper")
 );
-builder.Services.Configure<Equibles.Sec.HostedService.Configuration.RawXbrlArtifactOptions>(
-    builder.Configuration.GetSection("RawXbrlArtifacts")
+builder.Services.Configure<Equibles.Sec.HostedService.Configuration.XbrlCaptureOptions>(
+    builder.Configuration.GetSection("XbrlCapture")
 );
 builder.Services.Configure<FinancialFactsScraperOptions>(
     builder.Configuration.GetSection("FinancialFactsScraper")
