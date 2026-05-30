@@ -92,8 +92,17 @@ public class StocksPriceSeededTests
             .Expect(page.Locator("h2").Filter(new() { HasTextString = "No Price Data" }))
             .ToHaveCountAsync(0);
         await Assertions
-            .Expect(page.Locator("h2").Filter(new() { HasTextString = "Price & Moving Averages" }))
+            .Expect(
+                page.Locator("h2")
+                    .Filter(new() { HasTextString = "Price, Moving Averages & Bollinger Bands" })
+            )
             .ToHaveCountAsync(1);
+
+        // Bollinger Bands are drawn on the price chart canvas, so assert the band series
+        // and dataset are wired into the inline chart script rather than into the DOM.
+        var html = await page.ContentAsync();
+        html.Should().Contain("allBbUpper");
+        html.Should().Contain("BB Upper");
 
         // Data Range text is rendered as `{first.Date} — {last.Date}` (em-dash). The text
         // is built from Model.Prices.First()/Last() — LoadPriceTab uses OrderBy(Date), so

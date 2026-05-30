@@ -39,9 +39,9 @@
     <!-- Price + SMA Chart -->
     <div class="card bg-base-100 shadow-sm mb-2">
         <div class="card-body p-4 lg:p-6 pb-2 lg:pb-2">
-            <h2 class="font-semibold text-sm mb-3">Price &amp; Moving Averages</h2>
+            <h2 class="font-semibold text-sm mb-3">Price, Moving Averages &amp; Bollinger Bands</h2>
             <div class="h-[350px]">
-                <canvas id="price-chart" role="img" aria-label="Stock price with moving averages"></canvas>
+                <canvas id="price-chart" role="img" aria-label="Stock price with moving averages and Bollinger Bands"></canvas>
             </div>
         </div>
     </div>
@@ -190,6 +190,8 @@
         const allMacdLine = @Html.Json(Model.MacdLine);
         const allMacdSignal = @Html.Json(Model.MacdSignal);
         const allMacdHist = @Html.Json(Model.MacdHistogram);
+        const allBbUpper = @Html.Json(Model.BollingerUpper);
+        const allBbLower = @Html.Json(Model.BollingerLower);
 
         let priceChart, volumeChart, rsiChart, macdChart;
 
@@ -212,6 +214,8 @@
             const macdLine = allMacdLine.slice(startIdx);
             const macdSignal = allMacdSignal.slice(startIdx);
             const macdHist = allMacdHist.slice(startIdx);
+            const bbUpper = allBbUpper.slice(startIdx);
+            const bbLower = allBbLower.slice(startIdx);
 
             // Destroy previous charts if they exist
             if (priceChart) priceChart.destroy();
@@ -229,6 +233,9 @@
                         { label: 'SMA 20', data: sma20, borderColor: 'oklch(65% 0.15 145)', borderWidth: 1, pointRadius: 0, borderDash: [4, 2] },
                         { label: 'SMA 50', data: sma50, borderColor: 'oklch(65% 0.2 45)', borderWidth: 1, pointRadius: 0, borderDash: [4, 2] },
                         { label: 'SMA 200', data: sma200, borderColor: 'oklch(55% 0.2 15)', borderWidth: 1, pointRadius: 0, borderDash: [6, 3] },
+                        // Bollinger Bands (20, 2): upper band fills down to the lower band ('+1' = next dataset) to shade the envelope.
+                        { label: 'BB Upper (20, 2)', data: bbUpper, borderColor: 'oklch(60% 0.06 250 / 0.7)', backgroundColor: 'oklch(70% 0.06 250 / 0.08)', borderWidth: 1, pointRadius: 0, fill: '+1' },
+                        { label: 'BB Lower (20, 2)', data: bbLower, borderColor: 'oklch(60% 0.06 250 / 0.7)', borderWidth: 1, pointRadius: 0 },
                     ]
                 },
                 options: {

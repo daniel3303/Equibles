@@ -26,6 +26,11 @@ public class PriceTabViewModel : StockTabViewModel
     public List<decimal?> MacdSignal { get; set; } = [];
     public List<decimal?> MacdHistogram { get; set; } = [];
 
+    // Bollinger Bands (20, 2) upper/lower envelope. The middle band equals Sma20,
+    // so only the envelope is carried to avoid drawing a duplicate line.
+    public List<decimal?> BollingerUpper { get; set; } = [];
+    public List<decimal?> BollingerLower { get; set; } = [];
+
     // Technical signals surfaced as badges near the top of the tab.
     public MovingAverageCrossSignal MaCross { get; set; }
     public int PriceStreakDays { get; set; }
