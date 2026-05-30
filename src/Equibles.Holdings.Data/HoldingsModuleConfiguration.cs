@@ -44,6 +44,7 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<ProcessedDataSet>();
         builder.Entity<ProcessedFiling>();
         builder.Entity<RealtimeSweepState>();
+        builder.Entity<FundScore>();
 
         // AumQuarterlySnapshot uses ReportDate as the primary key. The [Key]
         // attribute can't be paired with [DatabaseGenerated(None)] without EF
