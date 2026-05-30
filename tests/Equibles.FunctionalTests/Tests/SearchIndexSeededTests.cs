@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.FunctionalTests.Fixtures;
+using Equibles.Search.Abstractions;
 using FluentAssertions;
 using Microsoft.Playwright;
 using Xunit;
@@ -62,6 +63,46 @@ public class SearchIndexSeededTests
         // Results should appear — at least a "Stocks" category with AAPL.
         var resultsContainer = page.Locator("#search-results");
         await Assertions.Expect(resultsContainer).ToContainTextAsync("result");
+        await Assertions.Expect(resultsContainer).ToContainTextAsync("AAPL");
+        await Assertions.Expect(resultsContainer).ToContainTextAsync("Stocks");
+    }
+
+    [Fact]
+    public async Task Search_SortByDate_OffersOptionAndLeavesUndatedStockResultsIntact()
+    {
+        // Seed a stock — a date-less category, so the date sort must leave it untouched.
+        await _web.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new CommonStock
+                {
+                    Ticker = "AAPL",
+                    Name = "Apple Inc.",
+                    Cik = "0000320193",
+                }
+            );
+            await Task.CompletedTask;
+        });
+
+        var page = await _playwright.NewPageAsync(_web.BaseUrl);
+
+        // Search by company name (not the exact ticker, which would redirect to the stock page)
+        // and request the date sort straight from the URL, so the assertions hold whether or not
+        // the instant-search script is bundled — the server renders the sorted results itself.
+        var response = await page.GotoAsync("/Search?q=Apple&sort=Date");
+        response.Should().NotBeNull();
+        response!.Status.Should().Be(200);
+
+        // The new sort mode must be offered and reflected as the active selection.
+        var sortSelect = page.Locator("#search-sort");
+        await Assertions
+            .Expect(sortSelect.Locator("option").Filter(new() { HasTextString = "Date (newest)" }))
+            .ToHaveCountAsync(1);
+        await Assertions.Expect(sortSelect).ToHaveValueAsync(((int)SearchSort.Date).ToString());
+
+        // The date-less Stocks group must still render under the date sort — providers without a
+        // date dimension are unaffected.
+        var resultsContainer = page.Locator("#search-results");
         await Assertions.Expect(resultsContainer).ToContainTextAsync("AAPL");
         await Assertions.Expect(resultsContainer).ToContainTextAsync("Stocks");
     }

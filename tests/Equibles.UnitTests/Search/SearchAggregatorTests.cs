@@ -76,6 +76,18 @@ public class SearchAggregatorTests
         };
     }
 
+    // Builds a group whose hits carry the given dates (null = undated), titled by index so the
+    // test can assert order independently of the dates.
+    private static SearchResultGroup GroupWithDates(string category, params DateOnly?[] dates)
+    {
+        return new SearchResultGroup
+        {
+            Category = category,
+            Order = 0,
+            Hits = dates.Select((d, i) => new SearchHit { Title = $"hit-{i}", Date = d }).ToList(),
+        };
+    }
+
     [Fact]
     public async Task Search_SortByName_OrdersHitsByTitleCaseInsensitive()
     {
@@ -106,6 +118,51 @@ public class SearchAggregatorTests
             CancellationToken.None,
             SearchSort.Relevance
         );
+
+        result.Should().ContainSingle();
+        result[0].Hits.Select(h => h.Title).Should().Equal("zeta", "alpha", "mid");
+    }
+
+    [Fact]
+    public async Task Search_SortByDate_OrdersNewestFirstWithUndatedHitsLast()
+    {
+        var aggregator = Build(
+            new StubA(
+                "SEC Filings",
+                0,
+                _ =>
+                    GroupWithDates(
+                        "SEC Filings",
+                        new DateOnly(2024, 3, 1),
+                        null,
+                        new DateOnly(2024, 9, 1),
+                        new DateOnly(2024, 6, 1)
+                    )
+            )
+        );
+
+        var result = await aggregator.Search("are", 5, CancellationToken.None, SearchSort.Date);
+
+        result.Should().ContainSingle();
+        result[0]
+            .Hits.Select(h => h.Date)
+            .Should()
+            .Equal(
+                new DateOnly(2024, 9, 1),
+                new DateOnly(2024, 6, 1),
+                new DateOnly(2024, 3, 1),
+                null
+            );
+    }
+
+    [Fact]
+    public async Task Search_SortByDate_LeavesUndatedGroupInProviderOrder()
+    {
+        var aggregator = Build(
+            new StubA("Stocks", 0, _ => GroupWithTitles("Stocks", "zeta", "alpha", "mid"))
+        );
+
+        var result = await aggregator.Search("are", 5, CancellationToken.None, SearchSort.Date);
 
         result.Should().ContainSingle();
         result[0].Hits.Select(h => h.Title).Should().Equal("zeta", "alpha", "mid");

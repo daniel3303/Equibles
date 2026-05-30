@@ -52,6 +52,7 @@ public class SecDocumentSearchProvider : ISearchProvider
                     Title = $"{chunk.DocumentType.DisplayName} · {chunk.Ticker}",
                     Subtitle = chunk.ReportingDate.ToString("yyyy-MM-dd"),
                     Kind = "Filing",
+                    Date = DateOnly.FromDateTime(chunk.ReportingDate),
                     RouteValues =
                     {
                         ["ticker"] = chunk.Ticker,
