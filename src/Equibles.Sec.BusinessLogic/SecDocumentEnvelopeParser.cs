@@ -60,6 +60,8 @@ public static class SecDocumentEnvelopeParser
         if (string.IsNullOrEmpty(envelope))
             return false;
 
+        string inlineFallbackFileName = null;
+        string inlineFallbackBody = null;
         string standaloneFileName = null;
         string standaloneBody = null;
 
@@ -68,8 +70,8 @@ public static class SecDocumentEnvelopeParser
             TryExtractSgmlTagValue(block, "FILENAME", out var blockFileName);
             TryExtractSgmlTagValue(block, "TYPE", out var blockType);
 
-            // Inline iXBRL is embedded in the primary document; prefer it and return as
-            // soon as we confirm the primary block actually carries inline markers.
+            // Inline iXBRL is embedded in the primary document; prefer the named primary and
+            // return as soon as we confirm it actually carries inline markers.
             if (
                 !string.IsNullOrEmpty(primaryDocumentFileName)
                 && string.Equals(
@@ -87,8 +89,22 @@ public static class SecDocumentEnvelopeParser
                 return true;
             }
 
+            // Fallback inline: any block whose body carries inline markers, covering filings
+            // whose PrimaryDocument name is missing or doesn't match the envelope's FILENAME —
+            // without it those would be wrongly recorded as NotPresent (terminal). The cheap
+            // pre-check on the raw block avoids materializing bodies for non-XBRL exhibits.
+            if (
+                inlineFallbackBody == null
+                && ContainsInlineXbrl(block)
+                && TryExtractTextBody(block, out var fallbackBody)
+            )
+            {
+                inlineFallbackFileName = blockFileName;
+                inlineFallbackBody = fallbackBody;
+            }
+
             // Older filings ship the instance as a separate EX-10x.INS document. Remember the
-            // first one in case the primary turns out to have no inline XBRL.
+            // first one in case neither the named primary nor any block carries inline XBRL.
             if (
                 standaloneBody == null
                 && !string.IsNullOrEmpty(blockType)
@@ -99,6 +115,14 @@ public static class SecDocumentEnvelopeParser
                 standaloneFileName = blockFileName;
                 standaloneBody = instanceBody;
             }
+        }
+
+        if (inlineFallbackBody != null)
+        {
+            type = XbrlType.InlineIxbrl;
+            sourceFileName = inlineFallbackFileName ?? string.Empty;
+            content = inlineFallbackBody;
+            return true;
         }
 
         if (standaloneBody != null)
