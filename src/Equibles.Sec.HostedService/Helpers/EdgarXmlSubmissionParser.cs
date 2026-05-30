@@ -17,6 +17,9 @@ internal static class EdgarXmlSubmissionParser
     private const string XmlEnvelopeStart = "<XML>";
     private const string XmlEnvelopeEnd = "</XML>";
 
+    // Optional fields the filer leaves blank are reported as the literal "N/A"; treat as absent.
+    private const string NotApplicable = "N/A";
+
     /// <summary>
     /// Strips the SGML envelope and escapes stray ampersands so the payload parses as XML.
     /// </summary>
@@ -111,5 +114,25 @@ internal static class EdgarXmlSubmissionParser
     {
         var value = El(parent, name)?.Value?.Trim();
         return string.IsNullOrEmpty(value) ? null : value;
+    }
+
+    /// <summary>
+    /// Trimmed value of the named attribute (namespace-agnostic), or <c>null</c> when missing or empty.
+    /// </summary>
+    internal static string Attr(XElement element, string name)
+    {
+        var value = element?.Attributes().FirstOrDefault(a => a.Name.LocalName == name)?.Value;
+        return string.IsNullOrEmpty(value) ? null : value.Trim();
+    }
+
+    /// <summary>
+    /// Trimmed text with the "N/A" placeholder and blanks normalized to <c>null</c>.
+    /// </summary>
+    internal static string Clean(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        var trimmed = value.Trim();
+        return trimmed.Equals(NotApplicable, StringComparison.OrdinalIgnoreCase) ? null : trimmed;
     }
 }
