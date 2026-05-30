@@ -16,6 +16,12 @@ public class SearchHit
     /// <summary>Provider-local relevance; only meaningful for ranking within the same group.</summary>
     public double Score { get; set; }
 
+    /// <summary>
+    /// The hit's date dimension (e.g. a filing's reporting date), used by the aggregator for
+    /// <see cref="SearchSort.Date"/>. Null for hits with no date; those sink below dated hits.
+    /// </summary>
+    public DateOnly? Date { get; set; }
+
     /// <summary>Route components the consumer needs to build a link (e.g. ticker, id, seriesId).</summary>
     public Dictionary<string, string> RouteValues { get; set; } = [];
 }

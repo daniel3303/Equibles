@@ -75,7 +75,8 @@ public class SearchAggregator
     }
 
     // Reorders a group's hits per the requested sort. Relevance keeps the provider's own ranking
-    // (providers return hits already scored); Name is a stable, case-insensitive title sort.
+    // (providers return hits already scored); Name is a stable, case-insensitive title sort; Date
+    // is newest-first with undated hits sinking to the bottom in their original order.
     private static SearchResultGroup SortHits(SearchResultGroup group, SearchSort sortBy)
     {
         if (sortBy == SearchSort.Name)
@@ -83,6 +84,12 @@ public class SearchAggregator
             group.Hits = group
                 .Hits.OrderBy(hit => hit.Title ?? string.Empty, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+        else if (sortBy == SearchSort.Date)
+        {
+            // OrderByDescending sorts a null DateOnly? last, and is stable — so undated groups
+            // (e.g. Stocks) keep their relevance order, and dated hits sharing a date do too.
+            group.Hits = group.Hits.OrderByDescending(hit => hit.Date).ToList();
         }
 
         return group;
