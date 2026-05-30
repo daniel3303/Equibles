@@ -198,21 +198,7 @@ public class CftcImportService : IImporter
         var minDate = allDates.Min();
         var maxDate = allDates.Max();
 
-        HashSet<(Guid, DateOnly)> existingKeys;
-        using (var scope = _scopeFactory.CreateScope())
-        {
-            var reportRepo =
-                scope.ServiceProvider.GetRequiredService<CftcPositionReportRepository>();
-            existingKeys = (
-                await reportRepo
-                    .GetAll()
-                    .Where(r => r.ReportDate >= minDate && r.ReportDate <= maxDate)
-                    .Select(r => new { r.CftcContractId, r.ReportDate })
-                    .ToListAsync(cancellationToken)
-            )
-                .Select(r => (r.CftcContractId, r.ReportDate))
-                .ToHashSet();
-        }
+        var existingKeys = await LoadExistingReportKeys(minDate, maxDate, cancellationToken);
 
         var totalInserted = await BatchPersister.Persist<
             CftcPositionReport,
@@ -248,6 +234,27 @@ public class CftcImportService : IImporter
             year,
             totalInserted
         );
+    }
+
+    // Load the (contract, date) keys already stored within the date window so the import
+    // can skip rows that would collide with existing data.
+    private async Task<HashSet<(Guid, DateOnly)>> LoadExistingReportKeys(
+        DateOnly minDate,
+        DateOnly maxDate,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var reportRepo = scope.ServiceProvider.GetRequiredService<CftcPositionReportRepository>();
+        return (
+            await reportRepo
+                .GetAll()
+                .Where(r => r.ReportDate >= minDate && r.ReportDate <= maxDate)
+                .Select(r => new { r.CftcContractId, r.ReportDate })
+                .ToListAsync(cancellationToken)
+        )
+            .Select(r => (r.CftcContractId, r.ReportDate))
+            .ToHashSet();
     }
 
     private async Task UpdateContractMetadata(
