@@ -8,6 +8,8 @@ public class InsiderTradingModuleConfiguration : Equibles.Data.IFinancialModule
     public void ConfigureEntities(ModelBuilder builder)
     {
         builder.Entity<InsiderOwner>();
+        builder.Entity<Form144Filing>();
+        builder.Entity<Form144PriorSale>();
         builder.Entity<InsiderTransaction>(entity =>
         {
             // SQL DEFAULT true so the column add doesn't backfill existing
