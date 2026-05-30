@@ -25,4 +25,11 @@ public interface IDocumentPersistenceService
         XbrlCaptureResult xbrl = null,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// Applies a resolved XBRL capture result onto an already-persisted, tracked
+    /// <see cref="Document"/> and saves — used by the backfill to fill in documents
+    /// ingested before capture was enabled.
+    /// </summary>
+    Task UpdateXbrl(Document document, XbrlCaptureResult xbrl);
 }

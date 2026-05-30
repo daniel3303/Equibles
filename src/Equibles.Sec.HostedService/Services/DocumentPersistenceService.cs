@@ -75,6 +75,12 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         await transaction.CommitAsync(cancellationToken);
     }
 
+    public async Task UpdateXbrl(Document document, XbrlCaptureResult xbrl)
+    {
+        await ApplyXbrlCapture(document, xbrl ?? XbrlCaptureResult.NotChecked);
+        await _documentRepository.SaveChanges();
+    }
+
     // Stores the captured XBRL envelope as a gzip-compressed internal File and records its
     // type/sizes on the document. NotChecked/NotPresent only set the status — no File is
     // created — so the document either stays a backfill target or is marked terminally empty.

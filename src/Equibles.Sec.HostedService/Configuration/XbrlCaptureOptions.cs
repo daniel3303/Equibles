@@ -8,6 +8,17 @@ namespace Equibles.Sec.HostedService.Configuration;
 /// </summary>
 public class XbrlCaptureOptions
 {
-    /// <summary>Master switch — no capture happens unless this is true.</summary>
+    /// <summary>Master switch — no capture (forward or backfill) happens unless this is true.</summary>
     public bool Enabled { get; set; }
+
+    /// <summary>
+    /// When true (and <see cref="Enabled"/> is true), a background worker walks documents
+    /// ingested before capture and fills in their XBRL envelope. Separate from forward
+    /// capture so an operator can enable live capture first and opt into the historical
+    /// sweep — which re-fetches each pending filing's submission — deliberately.
+    /// </summary>
+    public bool BackfillEnabled { get; set; }
+
+    /// <summary>How many pending documents the backfill processes per cycle.</summary>
+    public int BackfillBatchSize { get; set; } = 100;
 }
