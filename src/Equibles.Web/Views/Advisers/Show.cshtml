@@ -1,0 +1,116 @@
+@model Equibles.Sec.Data.Models.FormAdvAdviser
+
+@{
+    ViewData["Title"] = Model.LegalName ?? $"Adviser CRD {Model.Crd}";
+
+    var location = string.Join(", ", new[] { Model.MainOfficeCity, Model.MainOfficeState, Model.MainOfficeCountry }
+        .Where(p => !string.IsNullOrEmpty(p)));
+
+    var feeTypes = new List<string>();
+    if (Model.ChargesPercentageOfAum) { feeTypes.Add("Percentage of AUM"); }
+    if (Model.ChargesHourly) { feeTypes.Add("Hourly"); }
+    if (Model.ChargesSubscription) { feeTypes.Add("Subscription"); }
+    if (Model.ChargesFixed) { feeTypes.Add("Fixed fees"); }
+    if (Model.ChargesCommissions) { feeTypes.Add("Commissions"); }
+    if (Model.ChargesPerformanceBased) { feeTypes.Add("Performance-based"); }
+    if (Model.ChargesOther) { feeTypes.Add("Other"); }
+
+    string Aum(long? amount) => amount.HasValue ? "$" + amount.Value.ToString("N0") : "—";
+}
+
+<div class="max-w-4xl mx-auto px-6 py-12">
+    <div class="mb-6">
+        <a asp-action="Index" class="link link-primary text-sm">&larr; All investment advisers</a>
+    </div>
+
+    <page-header title="@(Model.LegalName ?? $"Adviser CRD {Model.Crd}")">
+        @if (!string.IsNullOrEmpty(Model.PrimaryBusinessName)
+            && !string.Equals(Model.PrimaryBusinessName, Model.LegalName, StringComparison.OrdinalIgnoreCase))
+        {
+            <span>Doing business as <strong>@Model.PrimaryBusinessName</strong>.</span>
+        }
+        SEC Form ADV registration profile.
+    </page-header>
+
+    <!-- Headline assets-under-management figures -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        <div class="stat bg-base-100 rounded-box shadow-sm">
+            <div class="stat-title">Total regulatory AUM</div>
+            <div class="stat-value text-2xl tabular-nums">@Aum(Model.TotalRegulatoryAum)</div>
+        </div>
+        <div class="stat bg-base-100 rounded-box shadow-sm">
+            <div class="stat-title">Discretionary</div>
+            <div class="stat-value text-2xl tabular-nums">@Aum(Model.DiscretionaryAum)</div>
+        </div>
+        <div class="stat bg-base-100 rounded-box shadow-sm">
+            <div class="stat-title">Non-discretionary</div>
+            <div class="stat-value text-2xl tabular-nums">@Aum(Model.NonDiscretionaryAum)</div>
+        </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="card-title text-lg">Firm details</h2>
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
+                <div>
+                    <dt class="text-sm text-base-content/60">CRD number</dt>
+                    <dd class="font-mono">@Model.Crd</dd>
+                </div>
+                @if (!string.IsNullOrEmpty(Model.SecNumber))
+                {
+                    <div>
+                        <dt class="text-sm text-base-content/60">SEC file number</dt>
+                        <dd class="font-mono">@Model.SecNumber</dd>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(location))
+                {
+                    <div>
+                        <dt class="text-sm text-base-content/60">Main office</dt>
+                        <dd>@location</dd>
+                    </div>
+                }
+                @if (Model.NumberOfEmployees.HasValue)
+                {
+                    <div>
+                        <dt class="text-sm text-base-content/60">Employees</dt>
+                        <dd class="tabular-nums">@Model.NumberOfEmployees.Value.ToString("N0")</dd>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(Model.SecStatus))
+                {
+                    <div>
+                        <dt class="text-sm text-base-content/60">SEC status</dt>
+                        <dd>@Model.SecStatus</dd>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(Model.WebsiteAddress))
+                {
+                    <div>
+                        <dt class="text-sm text-base-content/60">Website</dt>
+                        <dd><a href="@Model.WebsiteAddress" target="_blank" rel="noopener nofollow" class="link link-primary break-all">@Model.WebsiteAddress</a></dd>
+                    </div>
+                }
+                <div>
+                    <dt class="text-sm text-base-content/60">Fee structure</dt>
+                    <dd>
+                        @if (feeTypes.Count == 0)
+                        {
+                            <span class="text-base-content/40">Not reported</span>
+                        }
+                        else
+                        {
+                            <div class="flex flex-wrap gap-1">
+                                @foreach (var fee in feeTypes)
+                                {
+                                    <span class="badge badge-ghost">@fee</span>
+                                }
+                            </div>
+                        }
+                    </dd>
+                </div>
+            </dl>
+            <p class="text-xs text-base-content/50 mt-4">As of @Model.ReportDate.ToString("MMMM yyyy").</p>
+        </div>
+    </div>
+</div>

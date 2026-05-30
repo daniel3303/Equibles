@@ -1,0 +1,101 @@
+@model Equibles.Web.ViewModels.Advisers.AdvisersIndexViewModel
+
+@{
+    ViewData["Title"] = "Investment Advisers";
+    var filterRoute = new Dictionary<string, string>();
+    if (!string.IsNullOrWhiteSpace(Model.Query))
+    {
+        filterRoute["q"] = Model.Query;
+    }
+
+    string Location(Equibles.Sec.Data.Models.FormAdvAdviser a)
+    {
+        var parts = new[] { a.MainOfficeCity, a.MainOfficeState, a.MainOfficeCountry }
+            .Where(p => !string.IsNullOrEmpty(p));
+        return string.Join(", ", parts);
+    }
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <page-header title="Investment Advisers">
+        @Model.TotalCount.ToString("N0") SEC-registered investment advisers from
+        <a href="https://www.sec.gov/foia-services/frequently-requested-documents/form-adv-data" target="_blank" rel="noopener" class="link link-primary">Form ADV</a>.
+        Click any adviser to see assets under management, location and fee structure.
+    </page-header>
+
+    <!-- Name search: GETs back to this action so the query is shareable/bookmarkable. -->
+    <form method="get" asp-action="Index" class="mb-6">
+        <div class="join w-full max-w-md">
+            <input type="search" name="q" value="@Model.Query"
+                   class="input input-bordered join-item w-full"
+                   placeholder="Search advisers by name..." aria-label="Search investment advisers by name" />
+            <button type="submit" class="btn btn-primary join-item">
+                <icon name="magnifying-glass" size="4" /> Search
+            </button>
+            @if (!string.IsNullOrWhiteSpace(Model.Query))
+            {
+                <a asp-action="Index" class="btn btn-ghost join-item">Clear</a>
+            }
+        </div>
+    </form>
+
+    @if (Model.Advisers.Count == 0)
+    {
+        <partial name="_EmptyStateCard" model='(IconName: "building-library", Heading: "No investment advisers found", Message: "Try a different name, or clear the search to browse the largest advisers.")' />
+    }
+    else
+    {
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-0">
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra" aria-label="Investment advisers">
+                        <thead>
+                            <tr>
+                                <th scope="col">Adviser</th>
+                                <th scope="col" class="hidden md:table-cell">Location</th>
+                                <th scope="col" class="text-right">Regulatory AUM</th>
+                                <th scope="col" class="text-right hidden sm:table-cell">Employees</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var adviser in Model.Advisers)
+                            {
+                                <tr class="hover">
+                                    <td>
+                                        <a asp-action="Show" asp-route-crd="@adviser.Crd" class="link link-primary font-medium">
+                                            @(adviser.LegalName ?? $"CRD {adviser.Crd}")
+                                        </a>
+                                        <div class="text-xs text-base-content/50 font-mono">CRD @adviser.Crd</div>
+                                    </td>
+                                    <td class="hidden md:table-cell text-sm text-base-content/70">@Location(adviser)</td>
+                                    <td class="text-right tabular-nums">
+                                        @if (adviser.TotalRegulatoryAum.HasValue)
+                                        {
+                                            <text>$@adviser.TotalRegulatoryAum.Value.ToString("N0")</text>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-base-content/30">&mdash;</span>
+                                        }
+                                    </td>
+                                    <td class="text-right tabular-nums hidden sm:table-cell">
+                                        @if (adviser.NumberOfEmployees.HasValue)
+                                        {
+                                            @adviser.NumberOfEmployees.Value.ToString("N0")
+                                        }
+                                        else
+                                        {
+                                            <span class="text-base-content/30">&mdash;</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <partial name="_Pager" model='(Model.Page, Model.TotalPages, "Index", "Investment advisers pagination", "advisers-pager", (IDictionary<string, string>)filterRoute)' />
+    }
+</div>

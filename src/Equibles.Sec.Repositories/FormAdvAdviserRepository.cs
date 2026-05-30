@@ -31,12 +31,14 @@ public class FormAdvAdviserRepository : BaseRepository<FormAdvAdviser>
                 EF.Functions.ILike(a.LegalName, $"%{trimmed}%")
                 || EF.Functions.ILike(a.PrimaryBusinessName, $"%{trimmed}%")
             )
-            .OrderByDescending(a => a.TotalRegulatoryAum);
+            // Coalesce so advisers that did not report assets sort last rather than first
+            // (Postgres orders NULL highest under a plain DESC).
+            .OrderByDescending(a => a.TotalRegulatoryAum ?? 0L);
     }
 
     /// <summary>Advisers ordered by total regulatory assets under management, largest first.</summary>
     public IQueryable<FormAdvAdviser> GetLargestByAum()
     {
-        return GetAll().OrderByDescending(a => a.TotalRegulatoryAum);
+        return GetAll().OrderByDescending(a => a.TotalRegulatoryAum ?? 0L);
     }
 }
