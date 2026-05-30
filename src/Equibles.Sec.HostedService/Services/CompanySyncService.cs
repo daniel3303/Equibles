@@ -184,55 +184,8 @@ public class CompanySyncService : ICompanySyncService
         if (!needsUpdate)
             return;
 
-        // Pre-check: only a collision against another company's primary ticker blocks us.
-        // Secondary-ticker overlap is allowed by the domain.
-        if (
-            existingStock.Ticker != primaryTicker
-            && state.ExistingPrimaryTickers.Contains(primaryTicker)
-        )
-        {
-            // Resolve the holder over every row, not just SEC-feed-scoped
-            // ExistingStocks: the holder we need to displace is precisely the
-            // one whose own CIK dropped out of the feed, so a feed-scoped lookup
-            // would never find it and the obsolete-removal arm below would be
-            // unreachable. PrimaryTickerToStock exists for exactly this (see its
-            // construction comment) and is what ReplaceObsoleteStock uses.
-            state.PrimaryTickerToStock.TryGetValue(primaryTicker, out var tickerHolder);
-            if (tickerHolder != null && !state.SecCiks.Contains(tickerHolder.Cik))
-            {
-                try
-                {
-                    await DeleteAndUntrack(tickerHolder, state);
-
-                    _logger.LogInformation(
-                        "Removed obsolete company {Name} (CIK: {Cik}) holding ticker {Ticker}",
-                        tickerHolder.Name,
-                        tickerHolder.Cik,
-                        primaryTicker
-                    );
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(
-                        ex,
-                        "Error removing obsolete company for ticker {Ticker}",
-                        primaryTicker
-                    );
-                    await ReportError("CompanySync.RemoveObsolete", ex, $"ticker: {primaryTicker}");
-                    return;
-                }
-            }
-            else
-            {
-                _logger.LogWarning(
-                    "Cannot update {OldTicker} to {NewTicker} (CIK: {Cik}) - ticker already in use by active company, skipping",
-                    existingStock.Ticker,
-                    primaryTicker,
-                    secCompany.Cik
-                );
-                return;
-            }
-        }
+        if (!await TryClearPrimaryTickerCollision(secCompany, existingStock, primaryTicker, state))
+            return;
 
         // Save old values for rollback
         var oldTicker = existingStock.Ticker;
@@ -294,6 +247,69 @@ public class CompanySyncService : ICompanySyncService
                 $"ticker: {primaryTicker}, cik: {secCompany.Cik}"
             );
         }
+    }
+
+    // Clears the way to assign primaryTicker to existingStock. Returns true when the
+    // ticker is free to take (no collision, or the obsolete holder was removed); false
+    // when the collision can't be resolved and the caller must skip the update.
+    private async Task<bool> TryClearPrimaryTickerCollision(
+        CompanyInfo secCompany,
+        CommonStock existingStock,
+        string primaryTicker,
+        StockSyncState state
+    )
+    {
+        // Only a collision against another company's primary ticker blocks us.
+        // Secondary-ticker overlap is allowed by the domain.
+        if (
+            existingStock.Ticker == primaryTicker
+            || !state.ExistingPrimaryTickers.Contains(primaryTicker)
+        )
+            return true;
+
+        // Resolve the holder over every row, not just SEC-feed-scoped
+        // ExistingStocks: the holder we need to displace is precisely the
+        // one whose own CIK dropped out of the feed, so a feed-scoped lookup
+        // would never find it and the obsolete-removal arm below would be
+        // unreachable. PrimaryTickerToStock exists for exactly this (see its
+        // construction comment) and is what ReplaceObsoleteStock uses.
+        state.PrimaryTickerToStock.TryGetValue(primaryTicker, out var tickerHolder);
+        if (tickerHolder != null && !state.SecCiks.Contains(tickerHolder.Cik))
+        {
+            try
+            {
+                await DeleteAndUntrack(tickerHolder, state);
+
+                _logger.LogInformation(
+                    "Removed obsolete company {Name} (CIK: {Cik}) holding ticker {Ticker}",
+                    tickerHolder.Name,
+                    tickerHolder.Cik,
+                    primaryTicker
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Error removing obsolete company for ticker {Ticker}",
+                    primaryTicker
+                );
+                await ReportError("CompanySync.RemoveObsolete", ex, $"ticker: {primaryTicker}");
+                return false;
+            }
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Cannot update {OldTicker} to {NewTicker} (CIK: {Cik}) - ticker already in use by active company, skipping",
+                existingStock.Ticker,
+                primaryTicker,
+                secCompany.Cik
+            );
+            return false;
+        }
+
+        return true;
     }
 
     private async Task ReplaceObsoleteStock(
