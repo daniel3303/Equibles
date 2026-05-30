@@ -1,0 +1,42 @@
+@model Equibles.Web.ViewModels.Stocks.ProposedSalesTabViewModel
+
+@if (Model.Filings.Count == 0) {
+    <partial name="_EmptyStateCard" model='(IconName: "arrow-trending-down", Heading: "No Proposed Sales", Message: "No Form 144 proposed-sale notices are available for this stock yet.")' />
+} else {
+    <div class="card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table table-zebra table-sm">
+                <thead>
+                    <tr>
+                        <th scope="col">Filed</th>
+                        <th scope="col">Seller</th>
+                        <th scope="col" class="hidden md:table-cell">Relationship</th>
+                        <th scope="col" class="text-right">Shares</th>
+                        <th scope="col" class="text-right hidden md:table-cell"><span class="tooltip tooltip-left cursor-help" data-tip="Aggregate market value of the shares to be sold, as reported on the notice">Market Value</span></th>
+                        <th scope="col" class="hidden lg:table-cell"><span class="tooltip tooltip-left cursor-help" data-tip="Approximate date of the proposed sale">Approx. Sale</span></th>
+                        <th scope="col" class="hidden lg:table-cell">Broker</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var f in Model.Filings) {
+                        <tr>
+                            <td>@f.FilingDate.ToString("yyyy-MM-dd")</td>
+                            <td class="max-w-xs truncate">@(string.IsNullOrEmpty(f.SellerName) ? "Unknown" : f.SellerName)</td>
+                            <td class="hidden md:table-cell text-sm text-base-content/60">@(string.IsNullOrEmpty(f.RelationshipToIssuer) ? "—" : f.RelationshipToIssuer)</td>
+                            <td class="text-right font-mono"><compactable-number value="@f.SharesToBeSold" /></td>
+                            <td class="text-right font-mono hidden md:table-cell">
+                                @if (f.AggregateMarketValue > 0) {
+                                    <compactable-number value="@f.AggregateMarketValue" prefix="$" />
+                                } else {
+                                    <text>—</text>
+                                }
+                            </td>
+                            <td class="hidden lg:table-cell text-sm text-base-content/60">@(f.ApproxSaleDate?.ToString("yyyy-MM-dd") ?? "—")</td>
+                            <td class="hidden lg:table-cell text-sm text-base-content/60 max-w-xs truncate">@(string.IsNullOrEmpty(f.BrokerName) ? "—" : f.BrokerName)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}

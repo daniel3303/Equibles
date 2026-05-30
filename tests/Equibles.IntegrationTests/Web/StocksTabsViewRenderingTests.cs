@@ -127,4 +127,44 @@ public class StocksTabsViewRenderingTests
         var html = await response.Content.ReadAsStringAsync();
         html.Should().Contain("Cook Timothy D", "the insider-trading tab lists the insider");
     }
+
+    [Fact]
+    public async Task GetStocksProposedSales_WithSeededForm144_RendersProposedSalesTab()
+    {
+        await _fixture.ResetAndSeedAsync(async db =>
+        {
+            var stock = new CommonStock
+            {
+                Cik = "0000320193",
+                Ticker = Ticker,
+                Name = "Apple Inc.",
+            };
+            db.Add(stock);
+            db.Add(
+                new Form144Filing
+                {
+                    CommonStockId = stock.Id,
+                    AccessionNumber = "0001921094-26-000555",
+                    FilingDate = new DateOnly(2026, 5, 27),
+                    SellerName = "Levinson Arthur D",
+                    RelationshipToIssuer = "Director",
+                    SecurityClassTitle = "Common",
+                    BrokerName = "Charles Schwab & Co., Inc.",
+                    SharesToBeSold = 50_000,
+                    AggregateMarketValue = 15_551_085.00m,
+                    SharesOutstanding = 14_687_356_000,
+                    ApproxSaleDate = new DateOnly(2026, 5, 27),
+                    SecuritiesExchangeName = "NASDAQ",
+                }
+            );
+            await Task.CompletedTask;
+        });
+
+        var response = await _fixture.Client.GetAsync($"/stocks/{Ticker}/proposed-sales");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.Content.ReadAsStringAsync();
+        html.Should().Contain("Levinson Arthur D", "the proposed-sales tab lists the seller");
+        html.Should().Contain("Proposed Sales", "the section tab is labelled");
+    }
 }

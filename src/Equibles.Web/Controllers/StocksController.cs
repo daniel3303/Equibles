@@ -176,6 +176,14 @@ public class StocksController : BaseController
             async s => await _stockTabService.LoadInsiderTradingTab(s)
         );
 
+    [HttpGet("~/stocks/{ticker}/proposed-sales")]
+    public Task<IActionResult> ProposedSales(string ticker) =>
+        ShowStockTab(
+            ticker,
+            "proposed-sales",
+            async s => await _stockTabService.LoadProposedSalesTab(s)
+        );
+
     [HttpGet("~/stocks/{ticker}/congressional-trades")]
     public Task<IActionResult> CongressionalTrades(string ticker) =>
         ShowStockTab(

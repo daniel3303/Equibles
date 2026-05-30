@@ -32,6 +32,7 @@ public class StockTabService
     private readonly FailToDeliverRepository _failToDeliverRepository;
     private readonly DocumentRepository _documentRepository;
     private readonly InsiderTransactionRepository _insiderTransactionRepository;
+    private readonly Form144FilingRepository _form144FilingRepository;
     private readonly CongressionalTradeRepository _congressionalTradeRepository;
     private readonly DailyStockPriceRepository _dailyStockPriceRepository;
     private readonly FinancialFactRepository _financialFactRepository;
@@ -54,6 +55,7 @@ public class StockTabService
         FailToDeliverRepository failToDeliverRepository,
         DocumentRepository documentRepository,
         InsiderTransactionRepository insiderTransactionRepository,
+        Form144FilingRepository form144FilingRepository,
         CongressionalTradeRepository congressionalTradeRepository,
         DailyStockPriceRepository dailyStockPriceRepository,
         FinancialFactRepository financialFactRepository,
@@ -68,6 +70,7 @@ public class StockTabService
         _failToDeliverRepository = failToDeliverRepository;
         _documentRepository = documentRepository;
         _insiderTransactionRepository = insiderTransactionRepository;
+        _form144FilingRepository = form144FilingRepository;
         _congressionalTradeRepository = congressionalTradeRepository;
         _dailyStockPriceRepository = dailyStockPriceRepository;
         _financialFactRepository = financialFactRepository;
@@ -290,6 +293,16 @@ public class StockTabService
             Transactions = transactions,
             Ticker = stock.Ticker,
         };
+    }
+
+    public async Task<ProposedSalesTabViewModel> LoadProposedSalesTab(CommonStock stock)
+    {
+        var filings = await _form144FilingRepository
+            .GetByStock(stock)
+            .OrderByDescending(f => f.FilingDate)
+            .Take(RecentRowLimit)
+            .ToListAsync();
+        return new ProposedSalesTabViewModel { Filings = filings, Ticker = stock.Ticker };
     }
 
     public async Task<CongressionalTradesTabViewModel> LoadCongressionalTradesTab(CommonStock stock)
