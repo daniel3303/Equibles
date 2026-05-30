@@ -35,6 +35,7 @@ public class StockTabService
     private readonly Form144FilingRepository _form144FilingRepository;
     private readonly FormDFilingRepository _formDFilingRepository;
     private readonly NCenFilingRepository _nCenFilingRepository;
+    private readonly NportFilingRepository _nportFilingRepository;
     private readonly CongressionalTradeRepository _congressionalTradeRepository;
     private readonly DailyStockPriceRepository _dailyStockPriceRepository;
     private readonly FinancialFactRepository _financialFactRepository;
@@ -60,6 +61,7 @@ public class StockTabService
         Form144FilingRepository form144FilingRepository,
         FormDFilingRepository formDFilingRepository,
         NCenFilingRepository nCenFilingRepository,
+        NportFilingRepository nportFilingRepository,
         CongressionalTradeRepository congressionalTradeRepository,
         DailyStockPriceRepository dailyStockPriceRepository,
         FinancialFactRepository financialFactRepository,
@@ -77,6 +79,7 @@ public class StockTabService
         _form144FilingRepository = form144FilingRepository;
         _formDFilingRepository = formDFilingRepository;
         _nCenFilingRepository = nCenFilingRepository;
+        _nportFilingRepository = nportFilingRepository;
         _congressionalTradeRepository = congressionalTradeRepository;
         _dailyStockPriceRepository = dailyStockPriceRepository;
         _financialFactRepository = financialFactRepository;
@@ -330,6 +333,35 @@ public class StockTabService
             .Take(RecentRowLimit)
             .ToListAsync();
         return new FundOperationsTabViewModel { Filings = filings, Ticker = stock.Ticker };
+    }
+
+    public async Task<FundHoldingsTabViewModel> LoadFundHoldingsTab(CommonStock stock)
+    {
+        var filing = await _nportFilingRepository
+            .GetByStock(stock)
+            .OrderByDescending(f => f.FilingDate)
+            .FirstOrDefaultAsync();
+
+        if (filing == null)
+            return new FundHoldingsTabViewModel { Ticker = stock.Ticker };
+
+        // NPORT-P reports can carry thousands of positions; show the largest by value and
+        // report the full count rather than loading the whole schedule into the page.
+        var holdings = await _nportFilingRepository
+            .GetHoldings(filing)
+            .OrderByDescending(h => h.ValueUsd)
+            .Take(RecentRowLimit)
+            .ToListAsync();
+
+        var totalHoldings = await _nportFilingRepository.GetHoldings(filing).CountAsync();
+
+        return new FundHoldingsTabViewModel
+        {
+            Ticker = stock.Ticker,
+            Filing = filing,
+            Holdings = holdings,
+            TotalHoldings = totalHoldings,
+        };
     }
 
     public async Task<CongressionalTradesTabViewModel> LoadCongressionalTradesTab(CommonStock stock)

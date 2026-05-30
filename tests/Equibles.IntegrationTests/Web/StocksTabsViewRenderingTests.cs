@@ -264,4 +264,62 @@ public class StocksTabsViewRenderingTests
         html.Should().Contain("Investment Adviser", "the provider's role is labelled");
         html.Should().Contain("Fund Operations", "the section tab is labelled");
     }
+
+    [Fact]
+    public async Task GetStocksFundHoldings_WithSeededNport_RendersFundHoldingsTab()
+    {
+        await _fixture.ResetAndSeedAsync(async db =>
+        {
+            var stock = new CommonStock
+            {
+                Cik = "0000320193",
+                Ticker = Ticker,
+                Name = "Apple Inc.",
+            };
+            db.Add(stock);
+            db.Add(
+                new NportFiling
+                {
+                    CommonStockId = stock.Id,
+                    AccessionNumber = "0000036405-25-000002",
+                    FilingDate = new DateOnly(2025, 1, 31),
+                    IsAmendment = false,
+                    RegistrantName = "VANGUARD INDEX FUNDS",
+                    SeriesName = "Vanguard 500 Index Fund",
+                    SeriesId = "S000002277",
+                    ReportPeriodDate = new DateOnly(2024, 12, 31),
+                    ReportPeriodEnd = new DateOnly(2025, 12, 31),
+                    TotalAssets = 1_200_000_000m,
+                    TotalLiabilities = 50_000_000m,
+                    NetAssets = 1_150_000_000m,
+                    Holdings =
+                    [
+                        new NportHolding
+                        {
+                            Name = "Microsoft Corp",
+                            Cusip = "594918104",
+                            Balance = 250000m,
+                            Units = "NS",
+                            Currency = "USD",
+                            ValueUsd = 100_000_000m,
+                            PercentValue = 8.7m,
+                            PayoffProfile = "Long",
+                            AssetCategory = "EC",
+                            InvestmentCountry = "US",
+                        },
+                    ],
+                }
+            );
+            await Task.CompletedTask;
+        });
+
+        var response = await _fixture.Client.GetAsync($"/stocks/{Ticker}/fund-holdings");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.Content.ReadAsStringAsync();
+        html.Should().Contain("Vanguard 500 Index Fund", "the fund-holdings tab names the series");
+        html.Should().Contain("Microsoft Corp", "the tab lists the holding");
+        html.Should().Contain("594918104", "the tab lists the holding CUSIP");
+        html.Should().Contain("Fund Holdings", "the section tab is labelled");
+    }
 }
