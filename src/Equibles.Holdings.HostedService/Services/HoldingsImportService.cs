@@ -669,25 +669,14 @@ public class HoldingsImportService
                 reportDate,
                 context
             );
-            var uniqueKey = BuildHoldingKey(holding);
-
-            if (holdingsMap.TryGetValue(uniqueKey, out var existing))
-            {
-                totalDuplicates++;
-                existing.Shares += holding.Shares;
-                existing.Value += holding.Value;
-                existing.VotingAuthSole += holding.VotingAuthSole;
-                existing.VotingAuthShared += holding.VotingAuthShared;
-                existing.VotingAuthNone += holding.VotingAuthNone;
-                existing.ManagerEntries.Add(managerEntry);
-            }
-            else
+            if (AddOrMergeHolding(holdingsMap, holding, managerEntry))
             {
                 if (valuePending)
                     totalPending++;
-
-                holding.ManagerEntries.Add(managerEntry);
-                holdingsMap[uniqueKey] = holding;
+            }
+            else
+            {
+                totalDuplicates++;
             }
         }
 
@@ -704,6 +693,34 @@ public class HoldingsImportService
             totalDuplicates,
             totalPending
         );
+    }
+
+    // Buffers a parsed row by its upsert key. A 13F holder can split one security
+    // across several otherManager codes, so the same key recurs within a filing;
+    // those rows accumulate into the in-memory position rather than overwriting it.
+    // Returns true when the row started a new position, false when it merged into
+    // an existing buffered one.
+    private static bool AddOrMergeHolding(
+        Dictionary<string, InstitutionalHolding> holdingsMap,
+        InstitutionalHolding holding,
+        HoldingManagerEntry managerEntry
+    )
+    {
+        var uniqueKey = BuildHoldingKey(holding);
+        if (holdingsMap.TryGetValue(uniqueKey, out var existing))
+        {
+            existing.Shares += holding.Shares;
+            existing.Value += holding.Value;
+            existing.VotingAuthSole += holding.VotingAuthSole;
+            existing.VotingAuthShared += holding.VotingAuthShared;
+            existing.VotingAuthNone += holding.VotingAuthNone;
+            existing.ManagerEntries.Add(managerEntry);
+            return false;
+        }
+
+        holding.ManagerEntries.Add(managerEntry);
+        holdingsMap[uniqueKey] = holding;
+        return true;
     }
 
     private static (
