@@ -23,9 +23,6 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
     // N-CEN dates are ISO yyyy-MM-dd.
     private static readonly string[] DateFormats = ["yyyy-MM-dd"];
 
-    // Optional fields the filer leaves blank are reported as the literal "N/A"; treat as absent.
-    private const string NotApplicable = "N/A";
-
     public NCenFilingProcessor(
         IServiceScopeFactory scopeFactory,
         ILogger<NCenFilingProcessor> logger,
@@ -253,23 +250,6 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
             return submissionType.Contains("/A", StringComparison.OrdinalIgnoreCase);
 
         return filing.Form?.Contains("/A", StringComparison.OrdinalIgnoreCase) == true;
-    }
-
-    // ── XML helpers (navigate by local name; N-CEN declares the ncen namespace) ──────
-
-    private static string Attr(XElement element, string name)
-    {
-        var value = element?.Attributes().FirstOrDefault(a => a.Name.LocalName == name)?.Value;
-        return string.IsNullOrEmpty(value) ? null : value.Trim();
-    }
-
-    // Normalize the "N/A" placeholder and blanks to null.
-    private static string Clean(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-        var trimmed = value.Trim();
-        return trimmed.Equals(NotApplicable, StringComparison.OrdinalIgnoreCase) ? null : trimmed;
     }
 
     // Pinned by processor-scoped tests; the implementation lives in the shared parser.
