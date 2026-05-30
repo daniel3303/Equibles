@@ -326,6 +326,11 @@ public class StockTabService
             closePrices
         );
 
+        // Middle band is the 20-bar SMA (already exposed as Sma20), so discard it here.
+        var (_, bollingerUpper, bollingerLower) = TechnicalIndicatorService.ComputeBollingerBands(
+            closePrices
+        );
+
         return new PriceTabViewModel
         {
             Ticker = stock.Ticker,
@@ -340,6 +345,8 @@ public class StockTabService
             MacdLine = macdLine,
             MacdSignal = macdSignal,
             MacdHistogram = macdHistogram,
+            BollingerUpper = bollingerUpper,
+            BollingerLower = bollingerLower,
             MaCross = TechnicalIndicatorService.DetectMaCross(sma50, sma200),
             PriceStreakDays = streakDays,
             PriceStreakDirection = streakDirection,
