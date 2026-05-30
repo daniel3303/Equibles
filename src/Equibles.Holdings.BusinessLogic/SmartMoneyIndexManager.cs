@@ -228,39 +228,23 @@ public class SmartMoneyIndexManager
                 ? DateOnly.MaxValue
                 : constructionDate.AddDays(HoldingsBacktestCalculator.RebalanceDelayDays);
 
-        var priceWindowFrom =
-            from > DateOnly.MinValue.AddDays(BacktestPriceLoader.PriceLookbackDays)
-                ? from.AddDays(-BacktestPriceLoader.PriceLookbackDays)
-                : DateOnly.MinValue;
-
         var stockIds = constituents.Select(c => c.CommonStockId).ToList();
-        var pricesByStock = (
-            await BacktestPriceLoader.LoadPrices(
-                _priceRepository.GetByStocks(stockIds, priceWindowFrom, asOf)
-            )
-        )
-            .GroupBy(p => p.StockId)
-            .ToDictionary(g => g.Key, g => g.ToArray());
 
-        var benchmarkSeries = (
-            await BacktestPriceLoader.LoadPrices(
-                _priceRepository.GetByStock(benchmarkStock, priceWindowFrom, asOf)
-            )
-        ).ToArray();
-        if (benchmarkSeries.Length == 0)
+        var backtest = await BacktestPriceLoader.RunBacktest(
+            _priceRepository,
+            [snapshot],
+            stockIds,
+            benchmarkStock,
+            from,
+            asOf
+        );
+        if (backtest == null)
         {
             result.Backtest.Reason =
                 $"No price data available for benchmark {result.BenchmarkTicker} in the tracked window.";
             return;
         }
 
-        result.Backtest = HoldingsBacktestCalculator.Calculate(
-            [snapshot],
-            from,
-            asOf,
-            priceOf: (stockId, date) =>
-                BacktestPriceLoader.ForwardFill(pricesByStock, stockId, date),
-            benchmarkPriceOf: date => BacktestPriceLoader.ForwardFill(benchmarkSeries, date)
-        );
+        result.Backtest = backtest;
     }
 }
