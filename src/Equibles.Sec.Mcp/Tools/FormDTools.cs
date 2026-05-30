@@ -67,7 +67,7 @@ public class FormDTools
                 foreach (var f in filings)
                 {
                     result.AppendLine(
-                        $"| {f.FilingDate:yyyy-MM-dd} | {(f.IsAmendment ? "Yes" : "No")} | {f.IndustryGroup ?? "-"} | {FormatAmount(f.TotalOfferingAmount, f.IsOfferingAmountIndefinite)} | ${f.TotalAmountSold.ToString("N0", CultureInfo.InvariantCulture)} | ${f.MinimumInvestmentAccepted.ToString("N0", CultureInfo.InvariantCulture)} | {f.TotalNumberAlreadyInvested.ToString("N0", CultureInfo.InvariantCulture)} | {f.FederalExemptions ?? "-"} |"
+                        $"| {f.FilingDate:yyyy-MM-dd} | {(f.IsAmendment ? "Yes" : "No")} | {f.IndustryGroup ?? "-"} | {FormatAmount(f.TotalOfferingAmount, f.IsOfferingAmountIndefinite)} | ${FormatWholeNumber(f.TotalAmountSold)} | ${FormatWholeNumber(f.MinimumInvestmentAccepted)} | {FormatWholeNumber(f.TotalNumberAlreadyInvested)} | {f.FederalExemptions ?? "-"} |"
                     );
                 }
 
@@ -82,8 +82,9 @@ public class FormDTools
     {
         if (isIndefinite)
             return "Indefinite";
-        return amount.HasValue
-            ? $"${amount.Value.ToString("N0", CultureInfo.InvariantCulture)}"
-            : "-";
+        return amount.HasValue ? $"${FormatWholeNumber(amount.Value)}" : "-";
     }
+
+    private static string FormatWholeNumber(long value) =>
+        value.ToString("N0", CultureInfo.InvariantCulture);
 }
