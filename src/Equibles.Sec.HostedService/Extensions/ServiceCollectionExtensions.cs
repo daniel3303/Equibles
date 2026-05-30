@@ -25,6 +25,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<SecScraperWorker>();
         services.AddHostedService<DocumentProcessorWorker>();
         services.AddHostedService<FtdScraperWorker>();
+        services.AddHostedService<FormAdvScraperWorker>();
 
         return services;
     }
