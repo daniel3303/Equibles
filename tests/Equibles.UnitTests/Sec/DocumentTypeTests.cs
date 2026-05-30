@@ -46,6 +46,8 @@ public class DocumentTypeTests
     [InlineData("3", "FormThree")]
     [InlineData("D", "FormD")]
     [InlineData("D/A", "FormDa")]
+    [InlineData("N-CEN", "NCen")]
+    [InlineData("N-CEN/A", "NCenA")]
     public void FromDisplayName_ReturnsCorrectType(string displayName, string expectedValue)
     {
         var result = DocumentType.FromDisplayName(displayName);
@@ -96,6 +98,8 @@ public class DocumentTypeTests
                     DocumentType.Form144,
                     DocumentType.FormD,
                     DocumentType.FormDa,
+                    DocumentType.NCen,
+                    DocumentType.NCenA,
                     DocumentType.Other,
                 }
             );

@@ -45,4 +45,10 @@ public enum DocumentTypeFilter
 
     [Display(Name = "D/A")]
     FormDa,
+
+    [Display(Name = "N-CEN")]
+    NCen,
+
+    [Display(Name = "N-CEN/A")]
+    NCenA,
 }
