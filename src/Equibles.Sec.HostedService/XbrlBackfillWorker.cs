@@ -24,7 +24,11 @@ public class XbrlBackfillWorker : BaseScraperWorker
     private readonly WorkerOptions _workerOptions;
 
     protected override string WorkerName => "XBRL backfill";
-    protected override TimeSpan SleepInterval => TimeSpan.FromMinutes(1);
+
+    // A historical sweep, not a latency-sensitive job: a longer interval keeps it from
+    // re-querying and re-spending the shared EDGAR budget when the queue is drained or stuck
+    // on exhausted documents.
+    protected override TimeSpan SleepInterval => TimeSpan.FromMinutes(5);
     protected override ErrorSource ErrorSource => ErrorSource.DocumentScraper;
 
     // Yield to the live SEC scrapers at deploy time before spending the shared EDGAR budget

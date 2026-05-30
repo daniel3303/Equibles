@@ -17,6 +17,11 @@ namespace Equibles.Sec.HostedService.Services;
 /// </summary>
 public class XbrlBackfillService
 {
+    // After this many failed cycles a document is no longer selected, so a permanently
+    // unfetchable filing (deleted/superseded on EDGAR, unparseable) can't sit at the head of
+    // the newest-first queue and starve every older document behind it.
+    private const int MaxAttempts = 5;
+
     private readonly DocumentRepository _documentRepository;
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly XbrlEnvelopeCaptureService _captureService;
@@ -50,11 +55,17 @@ public class XbrlBackfillService
             return result;
         }
 
-        // Only documents that came from a filing (an accession to re-fetch) qualify; legacy
-        // and paper-only rows have no accession. Newest first so recent filings fill in soonest.
+        // Only documents that came from a filing (an accession to re-fetch) and whose issuer
+        // has a CIK qualify; legacy/paper rows have neither. Documents that have exhausted
+        // their retry ceiling are dropped from the working set so they can't block the queue.
+        // Newest first so recent filings fill in soonest.
         var query = _documentRepository
             .GetByXbrlStatus(XbrlCaptureStatus.NotChecked)
-            .Where(d => d.AccessionNumber != null);
+            .Where(d =>
+                d.AccessionNumber != null
+                && d.CommonStock.Cik != null
+                && d.XbrlCaptureAttempts < MaxAttempts
+            );
 
         if (minReportingDate.HasValue)
         {
@@ -71,24 +82,23 @@ public class XbrlBackfillService
         {
             cancellationToken.ThrowIfCancellationRequested();
             result.Processed++;
+            // Count the attempt up front so a fetch/parse failure still advances the retry
+            // ceiling and the document eventually drops out of the working set.
+            document.XbrlCaptureAttempts++;
 
             try
             {
-                var cik = document.CommonStock?.Cik;
-                if (string.IsNullOrEmpty(cik))
-                {
-                    // Without a CIK the submission can't be located; leave NotChecked.
-                    result.Skipped++;
-                    continue;
-                }
-
                 var content = await _secEdgarClient.GetDocumentContent(
                     document.AccessionNumber,
-                    cik
+                    document.CommonStock.Cik
                 );
                 var capture = _captureService.Capture(
                     content,
-                    new FilingData { Cik = cik, AccessionNumber = document.AccessionNumber }
+                    new FilingData
+                    {
+                        Cik = document.CommonStock.Cik,
+                        AccessionNumber = document.AccessionNumber,
+                    }
                 );
                 await _persistenceService.UpdateXbrl(document, capture);
 
@@ -101,13 +111,16 @@ public class XbrlBackfillService
                         result.NotPresent++;
                         break;
                     default:
+                        // Successful fetch but extraction left it NotChecked — persisted with
+                        // the bumped attempt count by UpdateXbrl; retried until the ceiling.
                         result.Skipped++;
                         break;
                 }
             }
             catch (Exception ex)
             {
-                // Best-effort: leave the document NotChecked so a later cycle retries it.
+                // Best-effort: leave the document NotChecked so a later cycle retries it, but
+                // persist the bumped attempt count so it can't be retried forever.
                 result.Failed++;
                 _logger.LogWarning(
                     ex,
@@ -115,9 +128,24 @@ public class XbrlBackfillService
                     document.Id,
                     document.AccessionNumber
                 );
+                await PersistAttempt();
             }
         }
 
         return result;
+    }
+
+    // Saves the bumped attempt count after a fetch failure. Best-effort: a save failure here
+    // must not abort the rest of the batch.
+    private async Task PersistAttempt()
+    {
+        try
+        {
+            await _documentRepository.SaveChanges();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to persist XBRL backfill attempt count.");
+        }
     }
 }
