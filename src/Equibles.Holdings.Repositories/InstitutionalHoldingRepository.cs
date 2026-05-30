@@ -1,7 +1,9 @@
+using System.Linq.Expressions;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Data.Models.Taxonomies;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.Repositories.Extensions;
 using Equibles.Holdings.Repositories.Models;
 
 namespace Equibles.Holdings.Repositories;
@@ -338,67 +340,75 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     .Count(),
             });
 
-        if (criteria.MinFilerCount.HasValue)
-            aggregated = aggregated.Where(r => r.CurrentFilerCount >= criteria.MinFilerCount.Value);
-        if (criteria.MaxFilerCount.HasValue)
-            aggregated = aggregated.Where(r => r.CurrentFilerCount <= criteria.MaxFilerCount.Value);
-        if (criteria.MinDeltaFilerCount.HasValue)
-            aggregated = aggregated.Where(r =>
-                r.CurrentFilerCount - r.PreviousFilerCount >= criteria.MinDeltaFilerCount.Value
-            );
-        if (criteria.MaxDeltaFilerCount.HasValue)
-            aggregated = aggregated.Where(r =>
-                r.CurrentFilerCount - r.PreviousFilerCount <= criteria.MaxDeltaFilerCount.Value
-            );
-        if (criteria.MinTotalValue.HasValue)
-            aggregated = aggregated.Where(r => r.CurrentValue >= criteria.MinTotalValue.Value);
-        if (criteria.MaxTotalValue.HasValue)
-            aggregated = aggregated.Where(r => r.CurrentValue <= criteria.MaxTotalValue.Value);
-        if (criteria.MinDeltaValue.HasValue)
-            aggregated = aggregated.Where(r =>
-                r.CurrentValue - r.PreviousValue >= criteria.MinDeltaValue.Value
-            );
-        if (criteria.MaxDeltaValue.HasValue)
-            aggregated = aggregated.Where(r =>
-                r.CurrentValue - r.PreviousValue <= criteria.MaxDeltaValue.Value
-            );
-        if (criteria.MinNewPositions.HasValue)
-            aggregated = aggregated.Where(r => r.NewFilerCount >= criteria.MinNewPositions.Value);
-        if (criteria.MinSoldOutPositions.HasValue)
-            aggregated = aggregated.Where(r =>
-                r.SoldOutFilerCount >= criteria.MinSoldOutPositions.Value
+        aggregated = aggregated
+            .WhereIf(
+                criteria.MinFilerCount.HasValue,
+                r => r.CurrentFilerCount >= criteria.MinFilerCount.Value
+            )
+            .WhereIf(
+                criteria.MaxFilerCount.HasValue,
+                r => r.CurrentFilerCount <= criteria.MaxFilerCount.Value
+            )
+            .WhereIf(
+                criteria.MinDeltaFilerCount.HasValue,
+                r => r.CurrentFilerCount - r.PreviousFilerCount >= criteria.MinDeltaFilerCount.Value
+            )
+            .WhereIf(
+                criteria.MaxDeltaFilerCount.HasValue,
+                r => r.CurrentFilerCount - r.PreviousFilerCount <= criteria.MaxDeltaFilerCount.Value
+            )
+            .WhereIf(
+                criteria.MinTotalValue.HasValue,
+                r => r.CurrentValue >= criteria.MinTotalValue.Value
+            )
+            .WhereIf(
+                criteria.MaxTotalValue.HasValue,
+                r => r.CurrentValue <= criteria.MaxTotalValue.Value
+            )
+            .WhereIf(
+                criteria.MinDeltaValue.HasValue,
+                r => r.CurrentValue - r.PreviousValue >= criteria.MinDeltaValue.Value
+            )
+            .WhereIf(
+                criteria.MaxDeltaValue.HasValue,
+                r => r.CurrentValue - r.PreviousValue <= criteria.MaxDeltaValue.Value
+            )
+            .WhereIf(
+                criteria.MinNewPositions.HasValue,
+                r => r.NewFilerCount >= criteria.MinNewPositions.Value
+            )
+            .WhereIf(
+                criteria.MinSoldOutPositions.HasValue,
+                r => r.SoldOutFilerCount >= criteria.MinSoldOutPositions.Value
             );
 
-        var joined = aggregated.Join(
-            DbContext.Set<CommonStock>(),
-            agg => agg.CommonStockId,
-            cs => cs.Id,
-            (agg, cs) => new { agg, cs }
-        );
-
-        if (criteria.IndustryIds.Count > 0)
-            joined = joined.Where(j =>
-                j.cs.IndustryId != null && criteria.IndustryIds.Contains(j.cs.IndustryId.Value)
+        var joined = aggregated
+            .Join(
+                DbContext.Set<CommonStock>(),
+                agg => agg.CommonStockId,
+                cs => cs.Id,
+                (agg, cs) => new { agg, cs }
+            )
+            .WhereIf(
+                criteria.IndustryIds.Count > 0,
+                j => j.cs.IndustryId != null && criteria.IndustryIds.Contains(j.cs.IndustryId.Value)
+            )
+            // SharesOutStanding == 0 means "unknown" in the current schema; any % filter
+            // excludes those stocks rather than treating them as 100% held (false positive).
+            .WhereIf(
+                criteria.MinPctFloat.HasValue,
+                j =>
+                    j.cs.SharesOutStanding > 0
+                    && (double)j.agg.CurrentShares / j.cs.SharesOutStanding * 100.0
+                        >= criteria.MinPctFloat.Value
+            )
+            .WhereIf(
+                criteria.MaxPctFloat.HasValue,
+                j =>
+                    j.cs.SharesOutStanding > 0
+                    && (double)j.agg.CurrentShares / j.cs.SharesOutStanding * 100.0
+                        <= criteria.MaxPctFloat.Value
             );
-
-        // SharesOutStanding == 0 means "unknown" in the current schema; any % filter
-        // excludes those stocks rather than treating them as 100% held (false positive).
-        if (criteria.MinPctFloat.HasValue)
-        {
-            var min = criteria.MinPctFloat.Value;
-            joined = joined.Where(j =>
-                j.cs.SharesOutStanding > 0
-                && (double)j.agg.CurrentShares / j.cs.SharesOutStanding * 100.0 >= min
-            );
-        }
-        if (criteria.MaxPctFloat.HasValue)
-        {
-            var max = criteria.MaxPctFloat.Value;
-            joined = joined.Where(j =>
-                j.cs.SharesOutStanding > 0
-                && (double)j.agg.CurrentShares / j.cs.SharesOutStanding * 100.0 <= max
-            );
-        }
 
         return joined.Select(j => new ScreenerRow
         {
