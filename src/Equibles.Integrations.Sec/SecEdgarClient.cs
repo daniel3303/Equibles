@@ -68,10 +68,7 @@ public class SecEdgarClient : ISecEdgarClient
             var url = $"{FilesBaseUrl}/files/company_tickers_exchange.json";
             _logger.LogInformation("Requesting: {Url}", url);
 
-            using var response = await SendWithRetryAsync(url);
-            response.EnsureSuccessStatusCode();
-
-            var content = await response.Content.ReadAsStringAsync();
+            var content = await FetchStringAsync(url);
             var companiesResponse = JsonConvert.DeserializeObject<CompanyTickersResponse>(content);
 
             var companies = ParseCompaniesFromResponse(companiesResponse);
@@ -102,10 +99,7 @@ public class SecEdgarClient : ISecEdgarClient
             var formattedCik = FormatCik(cik);
             var url = BuildUrl($"/submissions/CIK{formattedCik}.json");
 
-            using var response = await SendWithRetryAsync(url);
-            response.EnsureSuccessStatusCode();
-
-            var content = await response.Content.ReadAsStringAsync();
+            var content = await FetchStringAsync(url);
             var apiResponse = JsonConvert.DeserializeObject<SecApiResponse>(content);
 
             if (apiResponse == null)
@@ -194,10 +188,7 @@ public class SecEdgarClient : ISecEdgarClient
             }
             else
             {
-                using var response = await SendWithRetryAsync(url);
-                response.EnsureSuccessStatusCode();
-
-                content = await response.Content.ReadAsStringAsync();
+                content = await FetchStringAsync(url);
                 _cachedContent = new CachedResponse(url, content);
             }
 
@@ -247,9 +238,7 @@ public class SecEdgarClient : ISecEdgarClient
             }
             else
             {
-                using var response = await SendWithRetryAsync(url);
-                response.EnsureSuccessStatusCode();
-                content = await response.Content.ReadAsStringAsync();
+                content = await FetchStringAsync(url);
                 _cachedContent = new CachedResponse(url, content);
             }
 
@@ -339,10 +328,7 @@ public class SecEdgarClient : ISecEdgarClient
                 archiveFile.FilingCount
             );
 
-            using var response = await SendWithRetryAsync(archiveUrl);
-            response.EnsureSuccessStatusCode();
-
-            var content = await response.Content.ReadAsStringAsync();
+            var content = await FetchStringAsync(archiveUrl);
             var archiveFilings = JsonConvert.DeserializeObject<RecentFilings>(content);
             result.AddRange(MapToFilingData(archiveFilings, cik));
         }
@@ -369,10 +355,7 @@ public class SecEdgarClient : ISecEdgarClient
 
             _logger.LogInformation("Requesting document: {Url}", url);
 
-            using var response = await SendWithRetryAsync(url);
-            response.EnsureSuccessStatusCode();
-
-            var content = await response.Content.ReadAsStringAsync();
+            var content = await FetchStringAsync(url);
 
             _logger.LogInformation(
                 "Successfully retrieved document content ({Length} characters)",
@@ -580,6 +563,14 @@ public class SecEdgarClient : ISecEdgarClient
                 .Select(item => item.Name)
                 .ToList()
             ?? [];
+    }
+
+    // Send a retrying GET, throw on a non-success status, and return the fully-buffered body.
+    private async Task<string> FetchStringAsync(string url)
+    {
+        using var response = await SendWithRetryAsync(url);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
     }
 
     private Task<HttpResponseMessage> SendWithRetryAsync(
