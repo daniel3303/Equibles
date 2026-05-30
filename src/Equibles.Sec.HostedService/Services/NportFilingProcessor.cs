@@ -9,6 +9,7 @@ using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Helpers;
 using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
+using static Equibles.Sec.HostedService.Helpers.EdgarXmlSubmissionParser;
 
 namespace Equibles.Sec.HostedService.Services;
 
@@ -200,18 +201,6 @@ public class NportFilingProcessor : IFilingProcessor
     }
 
     // ── XML helpers (navigate by local name; NPORT declares the nport namespace) ──────
-
-    private static XElement El(XElement parent, string name) =>
-        parent?.Elements().FirstOrDefault(e => e.Name.LocalName == name);
-
-    private static IEnumerable<XElement> Els(XElement parent, string name) =>
-        parent?.Elements().Where(e => e.Name.LocalName == name) ?? [];
-
-    private static string Val(XElement parent, string name)
-    {
-        var value = El(parent, name)?.Value?.Trim();
-        return string.IsNullOrEmpty(value) ? null : value;
-    }
 
     private static string Attr(XElement element, string name)
     {
