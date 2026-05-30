@@ -1133,13 +1133,11 @@ public class InstitutionalHoldingsTools
         int maxResults
     )
     {
-        var result = new StringBuilder();
-        result.AppendLine(
-            $"Portfolio overlap — **{holder1.Name}** vs **{holder2.Name}** as of {FormatDate(selected)}"
+        var result = MarkdownTable.Start(
+            $"Portfolio overlap — **{holder1.Name}** vs **{holder2.Name}** as of {FormatDate(selected)}",
+            "| Metric | Value |",
+            "|--------|-------|"
         );
-        result.AppendLine();
-        result.AppendLine("| Metric | Value |");
-        result.AppendLine("|--------|-------|");
         result.AppendLine($"| Union positions | {FormatWholeNumber(overlap.UnionPositionCount)} |");
         result.AppendLine(
             $"| Shared positions | {FormatWholeNumber(overlap.IntersectionPositionCount)} |"
