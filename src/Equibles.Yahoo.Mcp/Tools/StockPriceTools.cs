@@ -342,6 +342,75 @@ public class StockPriceTools
         );
     }
 
+    [McpServerTool(Name = "GetBollingerBands")]
+    [Description(
+        "Bollinger Bands for a stock. A middle band (simple moving average of close) with "
+            + "upper and lower bands set a number of standard deviations above and below it. "
+            + "Bands widen when volatility rises and contract when it falls; price touching "
+            + "the upper/lower band is a common overbought/oversold cue."
+    )]
+    public Task<string> GetBollingerBands(
+        [Description("Stock ticker symbol (e.g., AAPL, MSFT)")] string ticker,
+        [Description("Start date in YYYY-MM-DD format (defaults to 6 months ago)")]
+            string startDate = null,
+        [Description("End date in YYYY-MM-DD format (defaults to latest available)")]
+            string endDate = null,
+        [Description("Moving-average window (default: 20)")] int period = 20,
+        [Description("Standard deviations for the upper/lower bands (default: 2)")]
+            decimal stdDev = 2m,
+        [Description("Maximum number of records to return (default: 60, newest first)")]
+            int maxResults = 60
+    )
+    {
+        return _runner.Execute(
+            async () =>
+            {
+                if (period < 2)
+                    return "period must be at least 2.";
+                if (stdDev <= 0)
+                    return "stdDev must be greater than 0.";
+
+                var (stock, records, error) = await LoadAscendingPriceWindow(
+                    ticker,
+                    startDate,
+                    endDate
+                );
+                if (error != null)
+                    return error;
+
+                var closes = records.Select(p => p.Close).ToList();
+                var (middle, upper, lower) = TechnicalIndicatorService.ComputeBollingerBands(
+                    closes,
+                    period,
+                    stdDev
+                );
+
+                var result = StartTable(
+                    $"Bollinger Bands (period={period}, stdDev={stdDev.ToString("0.#", CultureInfo.InvariantCulture)}) for {stock.Ticker} ({stock.Name}):",
+                    "| Date | Close | Lower | Middle | Upper |",
+                    "|------|-------|-------|--------|-------|"
+                );
+
+                AppendNewestFirstRows(
+                    result,
+                    records.Count,
+                    maxResults,
+                    i =>
+                    {
+                        var lowerCell = McpFormat.OrDash(lower[i], "F2");
+                        var middleCell = McpFormat.OrDash(middle[i], "F2");
+                        var upperCell = McpFormat.OrDash(upper[i], "F2");
+                        return $"| {records[i].Date:yyyy-MM-dd} | {records[i].Close:F2} | {lowerCell} | {middleCell} | {upperCell} |";
+                    }
+                );
+
+                return result.ToString();
+            },
+            "GetBollingerBands",
+            $"ticker: {ticker}"
+        );
+    }
+
     private async Task<(
         CommonStock Stock,
         List<DailyStockPrice> Records,
