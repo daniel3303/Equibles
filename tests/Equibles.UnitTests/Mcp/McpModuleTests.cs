@@ -305,6 +305,7 @@ public class McpModuleToolDiscoveryTests
         toolNames.Should().Contain("GetFailsToDeliver");
         toolNames.Should().Contain("GetExemptOfferings");
         toolNames.Should().Contain("GetFundOperations");
+        toolNames.Should().Contain("GetFundHoldings");
     }
 
     // ── Cross-module uniqueness ─────────────────────────────────────────
@@ -399,6 +400,7 @@ public class McpModuleToolDiscoveryTests
                     "GetFailsToDeliver",
                     "GetExemptOfferings",
                     "GetFundOperations",
+                    "GetFundHoldings",
                 }
             },
             { typeof(CboeTools), new[] { "GetPutCallRatios", "GetVixHistory" } },
