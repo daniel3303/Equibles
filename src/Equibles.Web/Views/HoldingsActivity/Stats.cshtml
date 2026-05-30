@@ -7,12 +7,9 @@
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold mb-2">13F Statistics</h1>
-        <p class="text-base-content/60">
+    <page-header title="13F Statistics">
             Market-wide aggregate statistics across all 13F-HR filers
-        </p>
-    </div>
+        </page-header>
 
     @if (Model.Latest == null) {
         <partial name="_EmptyStateCard" model='(IconName: "chart-bar", Heading: "No 13F data yet", Message: "Once at least one quarter of 13F filings has been ingested, the statistics appear here.")' />

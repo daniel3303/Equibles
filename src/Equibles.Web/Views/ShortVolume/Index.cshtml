@@ -18,9 +18,7 @@
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold mb-2">Largest Short Volume</h1>
-        <p class="text-base-content/60">
+    <page-header title="Largest Short Volume">
             @if (hasData) {
                 <span>@Model.TotalCount.ToString("N0") stocks ranked by FINRA consolidated daily short volume for <strong class="text-base-content">@Model.SelectedDate?.ToString("MMM dd, yyyy")</strong></span>
                 @if (Model.SelectedDate != Model.LatestDate) {
@@ -29,8 +27,7 @@
             } else {
                 <span>No daily short volume data has been ingested yet.</span>
             }
-        </p>
-    </div>
+        </page-header>
 
     <!-- Trading-day + sort selector (plain query-param names, bound to ShortVolumeController.Index) -->
     <form method="get" class="mb-6">

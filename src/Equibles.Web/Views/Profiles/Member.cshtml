@@ -5,10 +5,7 @@
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold mb-2">@Model.Name</h1>
-        <p class="text-base-content/60">Member of Congress</p>
-    </div>
+    <page-header title="@Model.Name">Member of Congress</page-header>
 
     <h2 class="text-xl font-semibold mb-3">Recent trades</h2>
     @if (Model.Trades.Count == 0) {

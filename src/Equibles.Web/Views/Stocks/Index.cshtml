@@ -20,10 +20,7 @@
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold mb-2">Stocks</h1>
-        <p class="text-base-content/60">Browse @Model.TotalCount.ToString("N0") US common stocks</p>
-    </div>
+    <page-header title="Stocks">Browse @Model.TotalCount.ToString("N0") US common stocks</page-header>
 
     <!-- Search + filters (plain query-param names, bound to StocksController.Index) -->
     <form method="get" class="mb-6">
