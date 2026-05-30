@@ -27,6 +27,8 @@ public sealed class DocumentType
     public static readonly DocumentType FormFour = new("FormFour", "4");
     public static readonly DocumentType FormThree = new("FormThree", "3");
     public static readonly DocumentType Form144 = new("Form144", "144");
+    public static readonly DocumentType FormD = new("FormD", "D");
+    public static readonly DocumentType FormDa = new("FormDa", "D/A");
     public static readonly DocumentType Other = new("Other", "Other");
 
     private static readonly ConcurrentDictionary<string, DocumentType> AllByValue = new(
@@ -44,6 +46,8 @@ public sealed class DocumentType
             new KeyValuePair<string, DocumentType>(FormFour.Value, FormFour),
             new KeyValuePair<string, DocumentType>(FormThree.Value, FormThree),
             new KeyValuePair<string, DocumentType>(Form144.Value, Form144),
+            new KeyValuePair<string, DocumentType>(FormD.Value, FormD),
+            new KeyValuePair<string, DocumentType>(FormDa.Value, FormDa),
             new KeyValuePair<string, DocumentType>(Other.Value, Other),
         },
         StringComparer.OrdinalIgnoreCase
@@ -64,6 +68,8 @@ public sealed class DocumentType
             new KeyValuePair<string, DocumentType>(FormFour.DisplayName, FormFour),
             new KeyValuePair<string, DocumentType>(FormThree.DisplayName, FormThree),
             new KeyValuePair<string, DocumentType>(Form144.DisplayName, Form144),
+            new KeyValuePair<string, DocumentType>(FormD.DisplayName, FormD),
+            new KeyValuePair<string, DocumentType>(FormDa.DisplayName, FormDa),
             new KeyValuePair<string, DocumentType>(Other.DisplayName, Other),
         },
         StringComparer.OrdinalIgnoreCase

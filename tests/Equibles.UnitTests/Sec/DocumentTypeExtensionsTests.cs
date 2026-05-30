@@ -19,6 +19,8 @@ public class DocumentTypeExtensionsTests
     [InlineData("FormFour", DocumentTypeFilter.FormFour)]
     [InlineData("FormThree", DocumentTypeFilter.FormThree)]
     [InlineData("Form144", DocumentTypeFilter.Form144)]
+    [InlineData("FormD", DocumentTypeFilter.FormD)]
+    [InlineData("FormDa", DocumentTypeFilter.FormDa)]
     public void ToSecEdgarFilter_MappedType_ReturnsCorrectFilter(
         string documentTypeValue,
         DocumentTypeFilter expectedFilter
@@ -76,6 +78,8 @@ public class DocumentTypeExtensionsTests
     [InlineData("4", DocumentTypeFilter.FormFour)]
     [InlineData("3", DocumentTypeFilter.FormThree)]
     [InlineData("144", DocumentTypeFilter.Form144)]
+    [InlineData("D", DocumentTypeFilter.FormD)]
+    [InlineData("D/A", DocumentTypeFilter.FormDa)]
     public void FromFormName_ThenToSecEdgarFilter_RoundTrips(
         string formName,
         DocumentTypeFilter expectedFilter
