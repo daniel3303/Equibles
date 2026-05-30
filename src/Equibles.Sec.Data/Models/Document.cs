@@ -73,5 +73,14 @@ public class Document
     /// <summary>Size in bytes of the XBRL envelope before gzip compression. Null when none captured.</summary>
     public long? XbrlUncompressedSize { get; set; }
 
+    /// <summary>
+    /// How many times the backfill has tried (and failed to reach a terminal result) to
+    /// capture this document's XBRL. The backfill stops selecting a document once this hits
+    /// its retry ceiling, so a permanently-unfetchable filing can't starve the rest of the
+    /// queue. Only meaningful while <see cref="XbrlStatus"/> is
+    /// <see cref="XbrlCaptureStatus.NotChecked"/>.
+    /// </summary>
+    public int XbrlCaptureAttempts { get; set; }
+
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }

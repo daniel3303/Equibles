@@ -10,6 +10,7 @@ using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Xunit;
 using File = Equibles.Media.Data.Models.File;
 
@@ -144,6 +145,41 @@ public class XbrlBackfillServiceTests : ParadeDbMcpTestBase
             .Set<Document>()
             .SingleAsync(d => d.AccessionNumber == "0000320193-20-000001");
         stale.XbrlStatus.Should().Be(XbrlCaptureStatus.NotChecked);
+    }
+
+    [Fact]
+    public async Task Backfill_PermanentlyFailingNewestDocument_DoesNotStarveOlderHealthyOne()
+    {
+        // A newer document that always fails to fetch must not block the older healthy one
+        // forever: after its retry ceiling it leaves the working set and the older one captures.
+        var company = await SeedCompany();
+        await SeedDocument(company.Id, "FAIL-NEWEST", new DateOnly(2024, 3, 1));
+        await SeedDocument(company.Id, "OK-OLDER", new DateOnly(2024, 1, 1));
+        DbContext.ChangeTracker.Clear();
+
+        var client = Substitute.For<ISecEdgarClient>();
+        client
+            .GetDocumentContent("FAIL-NEWEST", Arg.Any<string>())
+            .ThrowsAsync(new Exception("gone"));
+        client.GetDocumentContent("OK-OLDER", Arg.Any<string>()).Returns(InlineSubmission);
+        var sut = BuildSut(client);
+
+        // batchSize 1 means each cycle only the single newest pending doc is taken — the
+        // failing one, until it exhausts its attempts.
+        for (var cycle = 0; cycle < 6; cycle++)
+        {
+            await sut.Backfill(batchSize: 1, null);
+        }
+
+        await using var verify = Fixture.CreateDbContext();
+        var failing = await verify
+            .Set<Document>()
+            .SingleAsync(d => d.AccessionNumber == "FAIL-NEWEST");
+        var healthy = await verify
+            .Set<Document>()
+            .SingleAsync(d => d.AccessionNumber == "OK-OLDER");
+        failing.XbrlStatus.Should().Be(XbrlCaptureStatus.NotChecked);
+        healthy.XbrlStatus.Should().Be(XbrlCaptureStatus.Captured);
     }
 
     [Fact]
