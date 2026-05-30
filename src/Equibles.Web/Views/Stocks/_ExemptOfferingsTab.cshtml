@@ -1,0 +1,58 @@
+@model Equibles.Web.ViewModels.Stocks.ExemptOfferingsTabViewModel
+
+@if (Model.Filings.Count == 0) {
+    <partial name="_EmptyStateCard" model='(IconName: "building-library", Heading: "No Exempt Offerings", Message: "No Form D exempt-offering notices are available for this stock yet.")' />
+} else {
+    <div class="card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table table-zebra table-sm">
+                <thead>
+                    <tr>
+                        <th scope="col">Filed</th>
+                        <th scope="col">Type</th>
+                        <th scope="col" class="hidden md:table-cell">Industry</th>
+                        <th scope="col" class="text-right"><span class="tooltip tooltip-left cursor-help" data-tip="Total dollar amount of the offering, or 'Indefinite' when the issuer reports no fixed cap">Offering</span></th>
+                        <th scope="col" class="text-right">Sold</th>
+                        <th scope="col" class="text-right hidden lg:table-cell"><span class="tooltip tooltip-left cursor-help" data-tip="Minimum investment the issuer will accept">Min. Invest.</span></th>
+                        <th scope="col" class="text-right hidden lg:table-cell">Investors</th>
+                        <th scope="col" class="hidden lg:table-cell"><span class="tooltip tooltip-left cursor-help" data-tip="Claimed Regulation D exemptions/exclusions">Exemptions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var f in Model.Filings) {
+                        <tr>
+                            <td>@f.FilingDate.ToString("yyyy-MM-dd")</td>
+                            <td>
+                                @if (f.IsAmendment) {
+                                    <span class="badge badge-sm badge-warning">Amendment</span>
+                                } else {
+                                    <span class="badge badge-sm badge-ghost">New</span>
+                                }
+                            </td>
+                            <td class="hidden md:table-cell text-sm text-base-content/60">@(string.IsNullOrEmpty(f.IndustryGroup) ? "—" : f.IndustryGroup)</td>
+                            <td class="text-right font-mono">
+                                @if (f.IsOfferingAmountIndefinite) {
+                                    <span class="text-base-content/60">Indefinite</span>
+                                } else if (f.TotalOfferingAmount.HasValue) {
+                                    <compactable-number value="@f.TotalOfferingAmount.Value" prefix="$" />
+                                } else {
+                                    <text>—</text>
+                                }
+                            </td>
+                            <td class="text-right font-mono"><compactable-number value="@f.TotalAmountSold" prefix="$" /></td>
+                            <td class="text-right font-mono hidden lg:table-cell">
+                                @if (f.MinimumInvestmentAccepted > 0) {
+                                    <compactable-number value="@f.MinimumInvestmentAccepted" prefix="$" />
+                                } else {
+                                    <text>—</text>
+                                }
+                            </td>
+                            <td class="text-right font-mono hidden lg:table-cell">@f.TotalNumberAlreadyInvested.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)</td>
+                            <td class="hidden lg:table-cell text-sm text-base-content/60 max-w-xs truncate">@(string.IsNullOrEmpty(f.FederalExemptions) ? "—" : f.FederalExemptions)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}

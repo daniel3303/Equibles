@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Sec.Data.Models;
 using Xunit;
 
 namespace Equibles.IntegrationTests.Web;
@@ -166,5 +167,51 @@ public class StocksTabsViewRenderingTests
         var html = await response.Content.ReadAsStringAsync();
         html.Should().Contain("Levinson Arthur D", "the proposed-sales tab lists the seller");
         html.Should().Contain("Proposed Sales", "the section tab is labelled");
+    }
+
+    [Fact]
+    public async Task GetStocksExemptOfferings_WithSeededFormD_RendersExemptOfferingsTab()
+    {
+        await _fixture.ResetAndSeedAsync(async db =>
+        {
+            var stock = new CommonStock
+            {
+                Cik = "0000320193",
+                Ticker = Ticker,
+                Name = "Apple Inc.",
+            };
+            db.Add(stock);
+            db.Add(
+                new FormDFiling
+                {
+                    CommonStockId = stock.Id,
+                    AccessionNumber = "0002058722-25-000001",
+                    FilingDate = new DateOnly(2025, 2, 28),
+                    IsAmendment = false,
+                    EntityName = "AJ Boulder Fund LLC",
+                    EntityType = "Limited Liability Company",
+                    JurisdictionOfInc = "DELAWARE",
+                    IndustryGroup = "Pooled Investment Fund",
+                    FederalExemptions = "06b, 3C, 3C.7",
+                    TotalOfferingAmount = null,
+                    IsOfferingAmountIndefinite = true,
+                    TotalAmountSold = 0,
+                    TotalRemaining = null,
+                    IsRemainingIndefinite = true,
+                    MinimumInvestmentAccepted = 0,
+                    TotalNumberAlreadyInvested = 0,
+                }
+            );
+            await Task.CompletedTask;
+        });
+
+        var response = await _fixture.Client.GetAsync($"/stocks/{Ticker}/exempt-offerings");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.Content.ReadAsStringAsync();
+        html.Should()
+            .Contain("Pooled Investment Fund", "the exempt-offerings tab lists the industry");
+        html.Should().Contain("Indefinite", "an indefinite offering amount renders as text");
+        html.Should().Contain("Exempt Offerings", "the section tab is labelled");
     }
 }
