@@ -10,6 +10,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Mcp;
+using Equibles.Mcp.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -234,11 +235,11 @@ public class InsiderTradingTools
                 if (insiders.Count == 0)
                     return $"No insiders found matching '{query}'.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"Insiders matching '{query}':");
-                result.AppendLine();
-                result.AppendLine("| Name | CIK | Role | Location |");
-                result.AppendLine("|------|-----|------|----------|");
+                var result = MarkdownTable.Start(
+                    $"Insiders matching '{query}':",
+                    "| Name | CIK | Role | Location |",
+                    "|------|-----|------|----------|"
+                );
 
                 foreach (var insider in insiders)
                 {

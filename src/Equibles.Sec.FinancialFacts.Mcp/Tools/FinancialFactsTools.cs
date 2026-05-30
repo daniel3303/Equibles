@@ -247,13 +247,11 @@ public class FinancialFactsTools
     )
     {
         var basis = asOriginallyReported ? "as originally reported" : "latest restated";
-        var result = new StringBuilder();
-        result.AppendLine(
-            $"{concept} for {stock.Ticker} ({FactMarkdown.Cell(stock.Name)}) — {basis}:"
+        var result = MarkdownTable.Start(
+            $"{concept} for {stock.Ticker} ({FactMarkdown.Cell(stock.Name)}) — {basis}:",
+            "| Period End | FY | Period | Value | Unit | Form | Filed | Accession |",
+            "|-----------|---:|--------|------:|------|------|-------|-----------|"
         );
-        result.AppendLine();
-        result.AppendLine("| Period End | FY | Period | Value | Unit | Form | Filed | Accession |");
-        result.AppendLine("|-----------|---:|--------|------:|------|------|-------|-----------|");
         foreach (var f in perPeriod)
         {
             result.AppendLine(
