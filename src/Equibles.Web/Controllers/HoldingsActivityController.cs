@@ -369,37 +369,7 @@ public class HoldingsActivityController : BaseController
         foreach (var a in activity)
         {
             churnLookup.TryGetValue(a.CommonStockId, out var churn);
-            var newFilers = churn?.NewFilerCount ?? 0;
-            var soldOut = churn?.SoldOutFilerCount ?? 0;
-
-            var netConviction =
-                a.CurrentFilerCount > 0
-                    ? (double)(newFilers - soldOut) / a.CurrentFilerCount * 100.0
-                    : 0;
-            var retention =
-                a.PreviousFilerCount > 0
-                    ? (1.0 - (double)soldOut / a.PreviousFilerCount) * 100.0
-                    : 0;
-            var universePct =
-                totalFilers > 0 ? (double)a.CurrentFilerCount / totalFilers * 100.0 : 0;
-
-            var score = netConviction + retention + universePct;
-
-            var (ticker, name) = ResolveStockCells(stocks, a.CommonStockId);
-            points.Add(
-                new HeatMapPoint
-                {
-                    CommonStockId = a.CommonStockId,
-                    Ticker = ticker,
-                    Name = name,
-                    CurrentFilerCount = a.CurrentFilerCount,
-                    CurrentValue = a.CurrentValue,
-                    ConvictionScore = Math.Round(score, 1),
-                    NetConvictionPct = Math.Round(netConviction, 1),
-                    RetentionPct = Math.Round(retention, 1),
-                    UniversePct = Math.Round(universePct, 2),
-                }
-            );
+            points.Add(BuildHeatMapPoint(a, churn, totalFilers, stocks));
         }
 
         viewModel.Points = points
@@ -470,6 +440,44 @@ public class HoldingsActivityController : BaseController
     {
         stocks.TryGetValue(stockId, out var stock);
         return (stock?.Ticker ?? "—", stock?.Name ?? "Unknown");
+    }
+
+    private static HeatMapPoint BuildHeatMapPoint(
+        Equibles.Holdings.Repositories.Models.MarketWideStockActivity activity,
+        Equibles.Holdings.Repositories.Models.MarketWideStockChurn churn,
+        int totalFilers,
+        IDictionary<Guid, StockLabel> stocks
+    )
+    {
+        var newFilers = churn?.NewFilerCount ?? 0;
+        var soldOut = churn?.SoldOutFilerCount ?? 0;
+
+        var netConviction =
+            activity.CurrentFilerCount > 0
+                ? (double)(newFilers - soldOut) / activity.CurrentFilerCount * 100.0
+                : 0;
+        var retention =
+            activity.PreviousFilerCount > 0
+                ? (1.0 - (double)soldOut / activity.PreviousFilerCount) * 100.0
+                : 0;
+        var universePct =
+            totalFilers > 0 ? (double)activity.CurrentFilerCount / totalFilers * 100.0 : 0;
+
+        var score = netConviction + retention + universePct;
+
+        var (ticker, name) = ResolveStockCells(stocks, activity.CommonStockId);
+        return new HeatMapPoint
+        {
+            CommonStockId = activity.CommonStockId,
+            Ticker = ticker,
+            Name = name,
+            CurrentFilerCount = activity.CurrentFilerCount,
+            CurrentValue = activity.CurrentValue,
+            ConvictionScore = Math.Round(score, 1),
+            NetConvictionPct = Math.Round(netConviction, 1),
+            RetentionPct = Math.Round(retention, 1),
+            UniversePct = Math.Round(universePct, 2),
+        };
     }
 
     private class StockLabel
