@@ -336,4 +336,80 @@ public static class TechnicalIndicatorService
 
         return (macdLine, signal, histogram);
     }
+
+    /// <summary>
+    /// Detects the most recent moving-average crossover between a shorter average
+    /// (e.g. 50-day) and a longer one (e.g. 200-day) within the last
+    /// <paramref name="lookback"/> bars. A golden cross is the bar where the shorter
+    /// average rises from at-or-below to strictly above the longer average; a death
+    /// cross is the mirror. Both series must be aligned to the same bars (as produced
+    /// by <see cref="ComputeSma"/>); nulls from the warm-up period are skipped.
+    /// Returns <see cref="MovingAverageCrossSignal.None"/> when no crossover occurred
+    /// in the window or there is insufficient data to compare adjacent bars.
+    /// </summary>
+    public static MovingAverageCrossSignal DetectMaCross(
+        List<decimal?> shortMa,
+        List<decimal?> longMa,
+        int lookback = 5
+    )
+    {
+        if (shortMa.Count != longMa.Count)
+            throw new ArgumentException("shortMa and longMa must have the same length");
+
+        // Walk adjacent bar-pairs from newest backwards; the first crossover found is
+        // the most recent one. Each pair needs all four values present to compare.
+        var lastIndex = shortMa.Count - 1;
+        var oldestPair = Math.Max(1, lastIndex - lookback + 1);
+        for (var i = lastIndex; i >= oldestPair; i--)
+        {
+            var currShort = shortMa[i];
+            var currLong = longMa[i];
+            var prevShort = shortMa[i - 1];
+            var prevLong = longMa[i - 1];
+            if (currShort == null || currLong == null || prevShort == null || prevLong == null)
+                continue;
+
+            if (prevShort <= prevLong && currShort > currLong)
+                return MovingAverageCrossSignal.GoldenCross;
+            if (prevShort >= prevLong && currShort < currLong)
+                return MovingAverageCrossSignal.DeathCross;
+        }
+
+        return MovingAverageCrossSignal.None;
+    }
+
+    /// <summary>
+    /// Counts the run of consecutive most-recent closes that each moved the same way
+    /// versus the prior close. Returns the streak length and its direction; an
+    /// unchanged close ends the run, and fewer than two prices yields a zero-length
+    /// <see cref="PriceStreakDirection.None"/> streak.
+    /// </summary>
+    public static (int Days, PriceStreakDirection Direction) CountConsecutiveStreak(
+        List<decimal> closes
+    )
+    {
+        if (closes.Count < 2)
+            return (0, PriceStreakDirection.None);
+
+        var lastIndex = closes.Count - 1;
+        var lastMove = closes[lastIndex] - closes[lastIndex - 1];
+        if (lastMove == 0)
+            return (0, PriceStreakDirection.None);
+
+        var direction = lastMove > 0 ? PriceStreakDirection.Up : PriceStreakDirection.Down;
+        var days = 0;
+        for (var i = lastIndex; i >= 1; i--)
+        {
+            var move = closes[i] - closes[i - 1];
+            var moveUp = move > 0;
+            var moveDown = move < 0;
+            var matchesUp = direction == PriceStreakDirection.Up && moveUp;
+            var matchesDown = direction == PriceStreakDirection.Down && moveDown;
+            if (!matchesUp && !matchesDown)
+                break;
+            days++;
+        }
+
+        return (days, direction);
+    }
 }
