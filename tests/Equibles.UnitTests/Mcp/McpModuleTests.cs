@@ -418,6 +418,7 @@ public class McpModuleToolDiscoveryTests
                     "GetStochasticOscillator",
                     "GetAverageTrueRange",
                     "GetOnBalanceVolume",
+                    "GetBollingerBands",
                 }
             },
         };
