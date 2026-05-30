@@ -19,16 +19,19 @@ public class InstitutionsController : BaseController
 
     private readonly InstitutionalHolderRepository _holderRepository;
     private readonly EquiblesFinancialDbContext _dbContext;
+    private readonly SmartMoneyIndexManager _smartMoneyIndexManager;
 
     public InstitutionsController(
         InstitutionalHolderRepository holderRepository,
         EquiblesFinancialDbContext dbContext,
+        SmartMoneyIndexManager smartMoneyIndexManager,
         ILogger<InstitutionsController> logger
     )
         : base(logger)
     {
         _holderRepository = holderRepository;
         _dbContext = dbContext;
+        _smartMoneyIndexManager = smartMoneyIndexManager;
     }
 
     [HttpGet("~/institutions")]
@@ -202,6 +205,34 @@ public class InstitutionsController : BaseController
         };
 
         return View(viewModel);
+    }
+
+    // Smart-money index: the equal-weighted basket of the top-scoring funds' highest-conviction
+    // common holdings, with its forward performance tracked against the benchmark. Query params
+    // tune the construction; each is clamped so hand-edited URLs can't push the build off-range.
+    [HttpGet("~/institutions/smart-money-index")]
+    public async Task<IActionResult> SmartMoneyIndex(
+        int topFunds = SmartMoneyIndexCalculator.DefaultTopFunds,
+        int maxConstituents = SmartMoneyIndexCalculator.DefaultMaxConstituents,
+        int minConsensus = SmartMoneyIndexCalculator.DefaultMinConsensus
+    )
+    {
+        ViewData["Title"] = "Smart Money Index";
+
+        topFunds = Math.Clamp(topFunds, 1, 100);
+        maxConstituents = Math.Clamp(maxConstituents, 1, 100);
+        minConsensus = Math.Clamp(minConsensus, 1, topFunds);
+
+        var result = await _smartMoneyIndexManager.Build(
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            topFunds,
+            maxConstituents,
+            minConsensus,
+            ScoreWindowYears,
+            ScoreBenchmark
+        );
+
+        return View(result);
     }
 
     // JSON typeahead endpoint backing the institution picker (overlap/compare/combined
