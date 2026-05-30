@@ -1,0 +1,42 @@
+using Equibles.Data;
+using Equibles.Sec.Data.Models;
+using Microsoft.EntityFrameworkCore;
+
+namespace Equibles.Sec.Repositories;
+
+public class FormAdvAdviserRepository : BaseRepository<FormAdvAdviser>
+{
+    public FormAdvAdviserRepository(EquiblesFinancialDbContext dbContext)
+        : base(dbContext) { }
+
+    public IQueryable<FormAdvAdviser> GetByCrd(int crd)
+    {
+        return GetAll().Where(a => a.Crd == crd);
+    }
+
+    /// <summary>
+    /// Matches advisers whose legal or primary business name contains <paramref name="term"/>,
+    /// largest by total regulatory assets under management first. Returns nothing for a blank term.
+    /// </summary>
+    public IQueryable<FormAdvAdviser> Search(string term)
+    {
+        if (string.IsNullOrWhiteSpace(term))
+        {
+            return GetAll().Where(a => false);
+        }
+
+        var trimmed = term.Trim();
+        return GetAll()
+            .Where(a =>
+                EF.Functions.ILike(a.LegalName, $"%{trimmed}%")
+                || EF.Functions.ILike(a.PrimaryBusinessName, $"%{trimmed}%")
+            )
+            .OrderByDescending(a => a.TotalRegulatoryAum);
+    }
+
+    /// <summary>Advisers ordered by total regulatory assets under management, largest first.</summary>
+    public IQueryable<FormAdvAdviser> GetLargestByAum()
+    {
+        return GetAll().OrderByDescending(a => a.TotalRegulatoryAum);
+    }
+}
