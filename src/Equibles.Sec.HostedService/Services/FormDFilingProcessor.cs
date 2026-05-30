@@ -1,13 +1,12 @@
 using System.Globalization;
-using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Errors.BusinessLogic;
-using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Contracts;
+using Equibles.Sec.HostedService.Helpers;
 using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
 
@@ -73,7 +72,15 @@ public class FormDFilingProcessor : IFilingProcessor
             return false;
         }
 
-        var root = await TryParseSubmission(content, filing, companyTicker);
+        var root = await EdgarXmlSubmissionParser.TryParseSubmission(
+            content,
+            filing,
+            companyTicker,
+            "Form D",
+            "FormD.ParseXml",
+            _logger,
+            _errorReporter
+        );
         if (root == null)
             return false;
 
@@ -101,49 +108,6 @@ public class FormDFilingProcessor : IFilingProcessor
         );
 
         return true;
-    }
-
-    private async Task<XElement> TryParseSubmission(
-        string content,
-        FilingData filing,
-        string companyTicker
-    )
-    {
-        var sanitized = SanitizeXml(content);
-
-        // Form D has only been filed as XML since 2008, so a submission without the
-        // <edgarSubmission> root is unexpected — skip quietly.
-        if (!sanitized.Contains("<edgarSubmission", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.LogDebug(
-                "Skipping non-XML Form D filing for {Ticker} - {AccessionNumber}",
-                companyTicker,
-                filing.AccessionNumber
-            );
-            return null;
-        }
-
-        try
-        {
-            return XDocument.Parse(sanitized).Root;
-        }
-        catch (System.Xml.XmlException ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Malformed Form D XML for {Ticker} - {AccessionNumber}",
-                companyTicker,
-                filing.AccessionNumber
-            );
-            await _errorReporter.Report(
-                ErrorSource.DocumentScraper,
-                "FormD.ParseXml",
-                ex.Message,
-                ex.StackTrace,
-                $"ticker: {companyTicker}, accession: {filing.AccessionNumber}"
-            );
-            return null;
-        }
     }
 
     private static FormDFiling ParseFiling(XElement root, Guid companyId, FilingData filing)
@@ -255,23 +219,8 @@ public class FormDFilingProcessor : IFilingProcessor
         return string.IsNullOrEmpty(value) ? null : value;
     }
 
-    private const string XmlEnvelopeStart = "<XML>";
-    private const string XmlEnvelopeEnd = "</XML>";
-
-    internal static string SanitizeXml(string xml)
-    {
-        // SEC filings wrap the actual XML inside an SGML envelope (one .txt holds the whole
-        // submission); pull out the <XML>...</XML> body before parsing.
-        var xmlStart = xml.IndexOf(XmlEnvelopeStart, StringComparison.OrdinalIgnoreCase);
-        var xmlEnd = xml.IndexOf(XmlEnvelopeEnd, StringComparison.OrdinalIgnoreCase);
-        if (xmlStart >= 0 && xmlEnd > xmlStart)
-        {
-            xml = xml[(xmlStart + XmlEnvelopeStart.Length)..xmlEnd].Trim();
-        }
-
-        // Escape stray ampersands that aren't already part of an entity.
-        return Regex.Replace(xml, @"&(?!(amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)", "&amp;");
-    }
+    // Pinned by processor-scoped tests; the implementation lives in the shared parser.
+    internal static string SanitizeXml(string xml) => EdgarXmlSubmissionParser.SanitizeXml(xml);
 
     // Returns (amount, isIndefinite). Form D reports offering amounts either as a dollar figure
     // or the literal "Indefinite"; the latter is stored as null and flagged.
