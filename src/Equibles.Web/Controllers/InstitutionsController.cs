@@ -28,6 +28,8 @@ public class InstitutionsController : BaseController
     [HttpGet("~/institutions")]
     public async Task<IActionResult> Index(
         string search,
+        string state,
+        string city,
         InstitutionSort sort = InstitutionSort.Name,
         int page = 1
     )
@@ -72,6 +74,19 @@ public class InstitutionsController : BaseController
             });
 
         var holders = _holderRepository.Search(search ?? string.Empty);
+
+        // Location filters narrow the filer set before the aggregate join. State
+        // is an exact match on a dropdown value; city is a case-insensitive
+        // substring so "new" matches "New York".
+        if (!string.IsNullOrWhiteSpace(state))
+        {
+            holders = holders.Where(h => h.StateOrCountry == state);
+        }
+        if (!string.IsNullOrWhiteSpace(city))
+        {
+            holders = holders.Where(h => EF.Functions.ILike(h.City, $"%{city.Trim()}%"));
+        }
+
         var joined = holders.GroupJoin(
             aggByHolder,
             h => h.Id,
@@ -109,10 +124,18 @@ public class InstitutionsController : BaseController
             })
             .ToListAsync();
 
+        var states = await _holderRepository
+            .DistinctStatesOrCountries()
+            .OrderBy(s => s)
+            .ToListAsync();
+
         var viewModel = new InstitutionBrowserViewModel
         {
             Institutions = pageRows,
             Search = search,
+            State = state,
+            City = city,
+            States = states,
             Sort = sort,
             LatestReportDate = latestReportDate,
             Page = page,

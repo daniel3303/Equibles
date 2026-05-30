@@ -8,6 +8,15 @@ public class InstitutionBrowserViewModel
     public string Search { get; set; }
     public InstitutionSort Sort { get; set; } = InstitutionSort.Name;
 
+    // Active location filters. State is an exact match on the dropdown value;
+    // City is a case-insensitive substring match. Null/empty means unfiltered.
+    public string State { get; set; }
+    public string City { get; set; }
+
+    // Distinct state/country codes present in the filer universe, sorted, used
+    // to render the location dropdown options.
+    public List<string> States { get; set; } = [];
+
     // Latest universe-wide 13F report date — drives the per-filer aggregates
     // and the page subtitle. Null when no holdings have been ingested yet.
     public DateOnly? LatestReportDate { get; set; }

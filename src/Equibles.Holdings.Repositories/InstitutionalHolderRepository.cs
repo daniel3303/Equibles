@@ -43,6 +43,17 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
     private static string EscapeLikePattern(string input) =>
         input.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
+    // Distinct non-empty state/country codes across the filer universe, used to
+    // populate the location filter dropdown on the institutions index so the user
+    // picks from values that actually exist rather than typing a free-form code.
+    public IQueryable<string> DistinctStatesOrCountries()
+    {
+        return GetAll()
+            .Where(h => h.StateOrCountry != null && h.StateOrCountry != "")
+            .Select(h => h.StateOrCountry)
+            .Distinct();
+    }
+
     public IQueryable<InstitutionalHolder> GetUnclassified()
     {
         return GetAll()
