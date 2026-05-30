@@ -202,8 +202,8 @@ public class StandaloneXbrlParser
             var denominatorMeasure = denominator?.Element(MeasureElement)?.Value?.Trim();
             if (string.IsNullOrEmpty(numeratorMeasure) || string.IsNullOrEmpty(denominatorMeasure))
                 return null;
-            var numeratorLocal = StripPrefix(numeratorMeasure);
-            var denominatorLocal = StripPrefix(denominatorMeasure);
+            var numeratorLocal = XbrlValueParser.StripPrefix(numeratorMeasure);
+            var denominatorLocal = XbrlValueParser.StripPrefix(denominatorMeasure);
             if (numeratorLocal == null || denominatorLocal == null)
                 return null;
             return $"{numeratorLocal}/{denominatorLocal}";
@@ -213,18 +213,7 @@ public class StandaloneXbrlParser
         var measureValue = measure?.Value?.Trim();
         if (string.IsNullOrEmpty(measureValue))
             return null;
-        return StripPrefix(measureValue);
-    }
-
-    // Returns null when the QName has a prefix but an empty local name
-    // (e.g. "iso4217:"); such a measure is unresolvable.
-    private static string StripPrefix(string qname)
-    {
-        var colonIdx = qname.IndexOf(':');
-        if (colonIdx < 0)
-            return qname;
-        var local = qname.Substring(colonIdx + 1);
-        return local.Length == 0 ? null : local;
+        return XbrlValueParser.StripPrefix(measureValue);
     }
 
     private static bool TryParseFact(
@@ -278,18 +267,9 @@ public class StandaloneXbrlParser
             PeriodStart = context.Start,
             PeriodEnd = context.End,
             Dimensions = context.Dimensions,
-            Decimals = ParseDecimals((string)element.Attribute("decimals")),
+            Decimals = XbrlValueParser.ParseDecimals((string)element.Attribute("decimals")),
         };
         return true;
-    }
-
-    private static int? ParseDecimals(string decimalsAttribute)
-    {
-        if (string.IsNullOrEmpty(decimalsAttribute))
-            return null;
-        if (string.Equals(decimalsAttribute, "INF", StringComparison.OrdinalIgnoreCase))
-            return int.MaxValue;
-        return int.TryParse(decimalsAttribute, out var value) ? value : null;
     }
 
     private record struct ParsedContext(
