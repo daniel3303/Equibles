@@ -35,17 +35,14 @@
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold mb-2">Institutions</h1>
-        <p class="text-base-content/60">
+    <page-header title="Institutions">
             Browse @Model.TotalCount.ToString("N0") 13F filers
             @if (Model.LatestReportDate.HasValue) {
                 <span> · aggregates from each filer's most-recent 13F report (universe latest @Model.LatestReportDate.Value.ToString("MMM dd, yyyy"))</span>
             } else {
                 <span> · no 13F data ingested yet</span>
             }
-        </p>
-    </div>
+        </page-header>
 
     <!-- Search + sort (plain query-param names, bound to InstitutionsController.Index) -->
     <form method="get" class="mb-6">

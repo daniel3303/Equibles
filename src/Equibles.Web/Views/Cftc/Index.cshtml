@@ -6,15 +6,12 @@
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold mb-2">Futures</h1>
-        <p class="text-base-content/60">
+    <page-header title="Futures">
             @Model.Categories.Sum(c => c.Contracts.Count) contracts from
             <a href="https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm" target="_blank" rel="noopener" class="link link-primary">CFTC</a>
             across @Model.Categories.Count categories.
             Click any contract to explore positioning charts and historical data.
-        </p>
-    </div>
+        </page-header>
 
     <div class="space-y-6">
         @foreach (var category in Model.Categories) {

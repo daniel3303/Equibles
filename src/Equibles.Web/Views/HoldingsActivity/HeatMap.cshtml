@@ -7,12 +7,9 @@
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold mb-2">13F Conviction Heat Map</h1>
-        <p class="text-base-content/60">
+    <page-header title="13F Conviction Heat Map">
             Each bubble is a stock. X = number of 13F filers, Y = conviction score, size = total institutional value.
-        </p>
-    </div>
+        </page-header>
 
     @if (Model.AvailableDates.Count < 2) {
         <partial name="_EmptyStateCard" model='(IconName: "fire", Heading: "Not enough data", Message: "At least two quarters of 13F filings are required for the heat map.")' />

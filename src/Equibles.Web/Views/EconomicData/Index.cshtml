@@ -6,15 +6,12 @@
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold mb-2">Economic Data</h1>
-        <p class="text-base-content/60">
+    <page-header title="Economic Data">
             @Model.Categories.Sum(c => c.Series.Count) indicators from
             <a href="https://fred.stlouisfed.org" target="_blank" rel="noopener" class="link link-primary">FRED</a>
             across @Model.Categories.Count categories.
             Click any indicator to explore charts, statistics, and historical data.
-        </p>
-    </div>
+        </page-header>
 
     @if (!Model.Categories.Any()) {
         <div class="card bg-base-100 shadow-sm">

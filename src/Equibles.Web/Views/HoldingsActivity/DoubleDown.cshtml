@@ -17,13 +17,10 @@
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold mb-2">Double-Down Report</h1>
-        <p class="text-base-content/60">
+    <page-header title="Double-Down Report">
             Positions where an institution increased its share count by
             @Model.MinPctIncrease.ToString("F0")%+ quarter over quarter — ranked by conviction
-        </p>
-    </div>
+        </page-header>
 
     @if (Model.AvailableDates.Count < 2) {
         <partial name="_EmptyStateCard" model='(IconName: "arrow-trending-up", Heading: "Not enough data", Message: "The double-down report needs at least two quarters of 13F data.")' />

@@ -7,12 +7,9 @@
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold mb-2">13F Trend Charts</h1>
-        <p class="text-base-content/60">
+    <page-header title="13F Trend Charts">
             Market-wide aggregates across all 13F-HR filers by report date
-        </p>
-    </div>
+        </page-header>
 
     @if (Model.AumSnapshots.Count == 0) {
         <partial name="_EmptyStateCard" model='(IconName: "chart-bar", Heading: "No 13F data yet", Message: "Once at least one quarter of 13F filings has been ingested, the trend charts appear here.")' />

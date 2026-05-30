@@ -7,12 +7,9 @@
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold mb-2">Insider Trading Dashboard</h1>
-        <p class="text-base-content/60">
+    <page-header title="Insider Trading Dashboard">
             Top insider transactions from the last 90 days (SEC Form 4 filings)
-        </p>
-    </div>
+        </page-header>
 
     @if (Model.TopBuys.Count == 0 && Model.TopSells.Count == 0) {
         <partial name="_EmptyStateCard" model='(IconName: "user-group", Heading: "No insider transactions yet", Message: "Once Form 4 filings have been ingested, the insider dashboard appears here.")' />
