@@ -402,6 +402,22 @@ public class HoldingsImportService
             cikToHolderId[holder.Cik] = holder.Id;
         }
 
+        RefreshExistingHolderConfidentialTreatment(context, existingHolders);
+        CreateMissingHolders(context, existingHolders, holderRepo, cikToHolderId);
+
+        await holderRepo.SaveChanges();
+
+        _logger.LogInformation("Upserted {Count} institutional holders", cikToHolderId.Count);
+        context.CikToHolderId = cikToHolderId;
+    }
+
+    // Refresh the confidential-treatment flag on holders we already track from
+    // the current filing's cover page; their identity columns stay as first seen.
+    private void RefreshExistingHolderConfidentialTreatment(
+        ImportContext context,
+        List<InstitutionalHolder> existingHolders
+    )
+    {
         foreach (var holder in existingHolders)
         {
             var submission = context.Submissions.Values.FirstOrDefault(s =>
@@ -413,7 +429,17 @@ public class HoldingsImportService
             if (cp != null)
                 holder.ConfidentialTreatmentRequested = IsYes(cp.ConfidentialTreatment);
         }
+    }
 
+    // Submissions whose CIK has no holder row yet become new InstitutionalHolder
+    // records populated from the cover page where available.
+    private void CreateMissingHolders(
+        ImportContext context,
+        List<InstitutionalHolder> existingHolders,
+        InstitutionalHolderRepository holderRepo,
+        Dictionary<string, Guid> cikToHolderId
+    )
+    {
         var existingCiks = existingHolders
             .Select(h => h.Cik)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -441,11 +467,6 @@ public class HoldingsImportService
             cikToHolderId[submission.Cik] = holder.Id;
             existingCiks.Add(submission.Cik);
         }
-
-        await holderRepo.SaveChanges();
-
-        _logger.LogInformation("Upserted {Count} institutional holders", cikToHolderId.Count);
-        context.CikToHolderId = cikToHolderId;
     }
 
     private async Task ParseOtherManagers(
