@@ -89,4 +89,27 @@ internal static class EdgarXmlSubmissionParser
             return null;
         }
     }
+
+    /// <summary>
+    /// First child element with the given local name (namespace-agnostic), or <c>null</c>.
+    /// EDGAR forms declare assorted default namespaces, so matching on the local name keeps
+    /// the navigation prefix-independent.
+    /// </summary>
+    internal static XElement El(XElement parent, string name) =>
+        parent?.Elements().FirstOrDefault(e => e.Name.LocalName == name);
+
+    /// <summary>
+    /// All child elements with the given local name (namespace-agnostic), never <c>null</c>.
+    /// </summary>
+    internal static IEnumerable<XElement> Els(XElement parent, string name) =>
+        parent?.Elements().Where(e => e.Name.LocalName == name) ?? [];
+
+    /// <summary>
+    /// Trimmed text of the named child element, or <c>null</c> when missing or empty.
+    /// </summary>
+    internal static string Val(XElement parent, string name)
+    {
+        var value = El(parent, name)?.Value?.Trim();
+        return string.IsNullOrEmpty(value) ? null : value;
+    }
 }
