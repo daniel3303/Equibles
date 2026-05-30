@@ -16,5 +16,7 @@ public class DocumentScraperOptions
         DocumentType.FormDa,
         DocumentType.NCen,
         DocumentType.NCenA,
+        DocumentType.NportP,
+        DocumentType.NportPa,
     ];
 }

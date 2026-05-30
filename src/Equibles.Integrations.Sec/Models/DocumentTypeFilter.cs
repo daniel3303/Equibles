@@ -51,4 +51,10 @@ public enum DocumentTypeFilter
 
     [Display(Name = "N-CEN/A")]
     NCenA,
+
+    [Display(Name = "NPORT-P")]
+    NportP,
+
+    [Display(Name = "NPORT-P/A")]
+    NportPa,
 }
