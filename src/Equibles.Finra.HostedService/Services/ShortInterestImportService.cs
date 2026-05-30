@@ -164,23 +164,13 @@ public class ShortInterestImportService
             if (missingStockIds.Count == 0)
                 return -1;
 
-            List<ShortInterestRecord> records;
-            var useBulkFetch =
-                missingStockIds.Count == trackedStockIds.Count
-                || missingStockIds.Count > filteredFetchThreshold;
-
-            if (useBulkFetch)
-            {
-                records = await _finraClient.GetShortInterest(date);
-            }
-            else
-            {
-                var missingSymbols = missingStockIds
-                    .Where(id => reverseMap.ContainsKey(id))
-                    .Select(id => reverseMap[id])
-                    .ToList();
-                records = await _finraClient.GetShortInterest(date, missingSymbols);
-            }
+            var records = await FetchMissingRecords(
+                date,
+                missingStockIds,
+                trackedStockIds,
+                reverseMap,
+                filteredFetchThreshold
+            );
 
             if (records.Count == 0)
             {
@@ -237,6 +227,30 @@ public class ShortInterestImportService
             );
             return 0;
         }
+    }
+
+    // Fetch this date's short-interest rows: a single bulk request when most/all tracked
+    // stocks are missing, or a symbol-filtered request when only a few need backfilling.
+    private Task<List<ShortInterestRecord>> FetchMissingRecords(
+        DateOnly date,
+        HashSet<Guid> missingStockIds,
+        HashSet<Guid> trackedStockIds,
+        Dictionary<Guid, string> reverseMap,
+        int filteredFetchThreshold
+    )
+    {
+        var useBulkFetch =
+            missingStockIds.Count == trackedStockIds.Count
+            || missingStockIds.Count > filteredFetchThreshold;
+
+        if (useBulkFetch)
+            return _finraClient.GetShortInterest(date);
+
+        var missingSymbols = missingStockIds
+            .Where(id => reverseMap.ContainsKey(id))
+            .Select(id => reverseMap[id])
+            .ToList();
+        return _finraClient.GetShortInterest(date, missingSymbols);
     }
 
     // tickerMap was built at the start of Import and goes stale if CompanySyncService
