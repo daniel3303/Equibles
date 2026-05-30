@@ -13,6 +13,7 @@ public static class ServiceCollectionExtensions
         services.AutoWireServicesFrom<Equibles.Integrations.Sec.SecEdgarClient>();
 
         services.AddScoped<IFilingProcessor, InsiderTradingFilingProcessor>();
+        services.AddScoped<IFilingProcessor, Form144FilingProcessor>();
         services.AddScoped<IDocumentPersistenceService, DocumentPersistenceService>();
         services.AddScoped<ICompanySyncService, CompanySyncService>();
         services.AddScoped<IDocumentScraper, DocumentScraper>();

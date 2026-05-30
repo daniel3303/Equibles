@@ -91,6 +91,7 @@ public class DocumentTypeTests
                     DocumentType.FortyF,
                     DocumentType.FormFour,
                     DocumentType.FormThree,
+                    DocumentType.Form144,
                     DocumentType.Other,
                 }
             );

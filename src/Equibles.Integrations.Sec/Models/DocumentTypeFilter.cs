@@ -36,4 +36,7 @@ public enum DocumentTypeFilter
 
     [Display(Name = "3")]
     FormThree,
+
+    [Display(Name = "144")]
+    Form144,
 }
