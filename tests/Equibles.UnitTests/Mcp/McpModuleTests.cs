@@ -286,6 +286,7 @@ public class McpModuleToolDiscoveryTests
         toolNames.Should().Contain("GetInsiderTransactions");
         toolNames.Should().Contain("GetInsiderOwnership");
         toolNames.Should().Contain("SearchInsiders");
+        toolNames.Should().Contain("GetProposedSales");
     }
 
     // ── SEC module specific ─────────────────────────────────────────────
@@ -375,7 +376,13 @@ public class McpModuleToolDiscoveryTests
             },
             {
                 typeof(InsiderTradingTools),
-                new[] { "GetInsiderTransactions", "GetInsiderOwnership", "SearchInsiders" }
+                new[]
+                {
+                    "GetInsiderTransactions",
+                    "GetInsiderOwnership",
+                    "SearchInsiders",
+                    "GetProposedSales",
+                }
             },
             {
                 typeof(RagSearchTools),

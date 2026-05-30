@@ -21,12 +21,14 @@ public class InsiderTradingTools
 {
     private readonly InsiderTransactionRepository _transactionRepository;
     private readonly InsiderOwnerRepository _ownerRepository;
+    private readonly Form144FilingRepository _form144Repository;
     private readonly CommonStockRepository _commonStockRepository;
     private readonly McpToolRunner _runner;
 
     public InsiderTradingTools(
         InsiderTransactionRepository transactionRepository,
         InsiderOwnerRepository ownerRepository,
+        Form144FilingRepository form144Repository,
         CommonStockRepository commonStockRepository,
         ErrorManager errorManager,
         ILogger<InsiderTradingTools> logger
@@ -34,6 +36,7 @@ public class InsiderTradingTools
     {
         _transactionRepository = transactionRepository;
         _ownerRepository = ownerRepository;
+        _form144Repository = form144Repository;
         _commonStockRepository = commonStockRepository;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
@@ -157,6 +160,59 @@ public class InsiderTradingTools
                 return result.ToString();
             },
             "GetInsiderOwnership",
+            $"ticker: {ticker}"
+        );
+    }
+
+    [McpServerTool(Name = "GetProposedSales")]
+    [Description(
+        "Get recent proposed insider sales for a stock from SEC Form 144 notices. Each Form 144 is an affiliate's declaration of intent to sell restricted or control securities, showing the seller, their relationship to the company, the number of shares and aggregate market value to be sold, the approximate sale date, and the broker. Use this to anticipate upcoming insider selling before it shows up as an executed Form 4."
+    )]
+    public Task<string> GetProposedSales(
+        [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
+        [Description("Maximum number of notices to return (default: 50)")] int maxResults = 50
+    )
+    {
+        return _runner.Execute(
+            async () =>
+            {
+                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                if (stockError != null)
+                    return stockError;
+
+                var filings = await _form144Repository
+                    .GetByStock(stock)
+                    .OrderByDescending(f => f.FilingDate)
+                    .Take(maxResults)
+                    .ToListAsync();
+
+                if (filings.Count == 0)
+                    return $"No Form 144 proposed sales found for {ticker}.";
+
+                var result = new StringBuilder();
+                result.AppendLine($"Recent proposed sales (Form 144) for {stock.Name} ({ticker}):");
+                result.AppendLine($"Showing {filings.Count} most recent notices");
+                result.AppendLine();
+                result.AppendLine(
+                    "| Filed | Seller | Relationship | Shares | Market Value | Approx. Sale Date | Broker |"
+                );
+                result.AppendLine(
+                    "|-------|--------|--------------|--------|--------------|-------------------|--------|"
+                );
+
+                foreach (var f in filings)
+                {
+                    var approxSaleDate =
+                        f.ApproxSaleDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                        ?? "-";
+                    result.AppendLine(
+                        $"| {f.FilingDate:yyyy-MM-dd} | {f.SellerName} | {f.RelationshipToIssuer} | {f.SharesToBeSold.ToString("N0", CultureInfo.InvariantCulture)} | ${f.AggregateMarketValue.ToString("N0", CultureInfo.InvariantCulture)} | {approxSaleDate} | {f.BrokerName} |"
+                    );
+                }
+
+                return result.ToString();
+            },
+            "GetProposedSales",
             $"ticker: {ticker}"
         );
     }
