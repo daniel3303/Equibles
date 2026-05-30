@@ -320,6 +320,12 @@ public class StockTabService
             closePrices
         );
 
+        var sma50 = TechnicalIndicatorService.ComputeSma(closePrices, 50);
+        var sma200 = TechnicalIndicatorService.ComputeSma(closePrices, 200);
+        var (streakDays, streakDirection) = TechnicalIndicatorService.CountConsecutiveStreak(
+            closePrices
+        );
+
         return new PriceTabViewModel
         {
             Ticker = stock.Ticker,
@@ -328,12 +334,15 @@ public class StockTabService
             BenchmarkTicker = BenchmarkTicker,
             BenchmarkReturns = await LoadBenchmarkReturns(stock, prices),
             Sma20 = TechnicalIndicatorService.ComputeSma(closePrices, 20),
-            Sma50 = TechnicalIndicatorService.ComputeSma(closePrices, 50),
-            Sma200 = TechnicalIndicatorService.ComputeSma(closePrices, 200),
+            Sma50 = sma50,
+            Sma200 = sma200,
             Rsi14 = TechnicalIndicatorService.ComputeRsi(closePrices),
             MacdLine = macdLine,
             MacdSignal = macdSignal,
             MacdHistogram = macdHistogram,
+            MaCross = TechnicalIndicatorService.DetectMaCross(sma50, sma200),
+            PriceStreakDays = streakDays,
+            PriceStreakDirection = streakDirection,
         };
     }
 

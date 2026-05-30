@@ -2,6 +2,7 @@ using System.Net;
 using Equibles.Cboe.Data.Models;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Yahoo.Data.Models;
 using Xunit;
 
 namespace Equibles.IntegrationTests.Web;
@@ -78,5 +79,57 @@ public class PutCallAndStockViewRenderingTests
         var html = await response.Content.ReadAsStringAsync();
         html.Should().Contain("AAPL", "the Show shell must render the stock ticker");
         html.Should().Contain("Apple Inc.", "the Show shell must render the stock name");
+    }
+
+    [Fact]
+    public async Task GetStocksPrice_WithRisingPriceStreak_RendersUpStreakBadge()
+    {
+        var stockId = Guid.NewGuid();
+        await _fixture.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new CommonStock
+                {
+                    Id = stockId,
+                    Cik = "0000789019",
+                    Ticker = "MSFT",
+                    Name = "Microsoft Corporation",
+                }
+            );
+
+            // 40 trading days of strictly rising closes — every day closed higher
+            // than the prior, so the Price tab must surface a consecutive up-day
+            // streak badge.
+            var start = new DateOnly(2026, 1, 5);
+            for (var i = 0; i < 40; i++)
+            {
+                var close = 100m + i;
+                db.Add(
+                    new DailyStockPrice
+                    {
+                        CommonStockId = stockId,
+                        Date = start.AddDays(i),
+                        Open = close,
+                        High = close,
+                        Low = close,
+                        Close = close,
+                        AdjustedClose = close,
+                        Volume = 1_000_000,
+                    }
+                );
+            }
+            await Task.CompletedTask;
+        });
+
+        var response = await _fixture.Client.GetAsync("/Stocks/MSFT/Price");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.Content.ReadAsStringAsync();
+        html.Should().Contain("Technical signals", "the technical-signal badge row must render");
+        html.Should()
+            .Contain(
+                "Up Days",
+                "a rising price series must surface a consecutive up-day streak badge"
+            );
     }
 }

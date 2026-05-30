@@ -1,3 +1,4 @@
+@using Equibles.Yahoo.Repositories
 @model Equibles.Web.ViewModels.Stocks.PriceTabViewModel
 
 @if (Model.Prices.Count == 0) {
@@ -12,6 +13,28 @@
         <button class="btn btn-sm btn-ghost border border-base-300 period-btn" data-months="60">5Y</button>
         <button class="btn btn-sm btn-ghost border border-base-300 period-btn" data-months="0">All</button>
     </div>
+
+    // Technical signal badges: the 50- vs 200-day moving-average cross and the
+    // current run of consecutive same-direction daily closes. Each renders only
+    // when present so most pages show a single, uncluttered badge.
+    var hasCross = Model.MaCross != MovingAverageCrossSignal.None;
+    var hasStreak = Model.PriceStreakDays > 0
+        && Model.PriceStreakDirection != PriceStreakDirection.None;
+    var streakDayLabel = Model.PriceStreakDays == 1 ? "Day" : "Days";
+    if (hasCross || hasStreak) {
+        <div class="flex flex-wrap items-center gap-2 mb-4" aria-label="Technical signals">
+            @if (Model.MaCross == MovingAverageCrossSignal.GoldenCross) {
+                <span class="badge badge-success" title="The 50-day moving average has crossed above the 200-day moving average — a bullish trend signal.">Golden Cross (50/200)</span>
+            } else if (Model.MaCross == MovingAverageCrossSignal.DeathCross) {
+                <span class="badge badge-error" title="The 50-day moving average has crossed below the 200-day moving average — a bearish trend signal.">Death Cross (50/200)</span>
+            }
+            @if (hasStreak && Model.PriceStreakDirection == PriceStreakDirection.Up) {
+                <span class="badge badge-success" title="Consecutive days closing higher than the previous close.">@Model.PriceStreakDays Up @streakDayLabel</span>
+            } else if (hasStreak) {
+                <span class="badge badge-error" title="Consecutive days closing lower than the previous close.">@Model.PriceStreakDays Down @streakDayLabel</span>
+            }
+        </div>
+    }
 
     <!-- Price + SMA Chart -->
     <div class="card bg-base-100 shadow-sm mb-2">
