@@ -73,6 +73,9 @@ public partial class Program
 
         builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();
         builder.Services.AutoWireServicesFrom<Equibles.Web.Services.StockTabService>();
+        // Holdings business-logic services the portal consumes directly (e.g. the smart-money
+        // index manager). Repositories these depend on are registered by AddAllRepositories.
+        builder.Services.AutoWireServicesFrom<Equibles.Holdings.BusinessLogic.SmartMoneyIndexManager>();
 
         var authSettings =
             builder.Configuration.GetSection("Auth").Get<AuthSettings>() ?? new AuthSettings();

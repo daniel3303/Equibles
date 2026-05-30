@@ -1,0 +1,188 @@
+@model Equibles.Holdings.BusinessLogic.Models.SmartMoneyIndexResult
+
+@{
+    ViewData["Title"] = "Smart Money Index";
+    var hasConstituents = Model.Constituents.Count > 0;
+    var hasPoints = Model.Backtest.Points.Count > 0;
+}
+
+<div class="max-w-6xl mx-auto px-6 py-12">
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold mb-1" data-testid="smart-money-heading">Smart Money Index</h1>
+        <p class="text-base-content/60 text-sm">
+            An equal-weighted basket of the highest-conviction common holdings among the top funds ranked by 3-year alpha vs @Model.BenchmarkTicker. Each fund's latest 13F portfolio votes; stocks held by enough of them are kept, ranked by consensus then average position weight. Performance is tracked forward from the construction date (45 days after the freshest filing) so the simulation never peeks at holdings before they were public.
+        </p>
+    </div>
+
+    <!-- Construction parameters — submitted via GET so the URL captures the chosen basket. -->
+    <div class="card bg-base-100 shadow-sm mb-6" data-testid="smart-money-filters">
+        <div class="card-body p-4">
+            <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <fieldset class="fieldset">
+                    <legend class="fieldset-legend">Top funds</legend>
+                    <input type="number" name="topFunds" min="1" max="100" value="@Model.RequestedTopFunds" class="input input-bordered w-full" />
+                </fieldset>
+                <fieldset class="fieldset">
+                    <legend class="fieldset-legend">Max holdings</legend>
+                    <input type="number" name="maxConstituents" min="1" max="100" value="@Model.MaxConstituents" class="input input-bordered w-full" />
+                </fieldset>
+                <fieldset class="fieldset">
+                    <legend class="fieldset-legend">Min funds holding</legend>
+                    <input type="number" name="minConsensus" min="1" max="100" value="@Model.MinConsensus" class="input input-bordered w-full" />
+                </fieldset>
+                <div class="flex items-end">
+                    <button type="submit" class="btn btn-primary w-full">Rebuild</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (!hasConstituents) {
+        <div class="alert alert-warning mb-6" data-testid="smart-money-reason">
+            <span>@(Model.Reason ?? "The index could not be built.")</span>
+        </div>
+    } else {
+        <!-- Index meta line: how many funds fed the basket and which quarter it reflects. -->
+        <p class="text-sm text-base-content/60 mb-4" data-testid="smart-money-meta">
+            @Model.Constituents.Count holdings · drawn from the top @Model.FundCount funds@(Model.ConstructionDate.HasValue ? " · " + Model.ConstructionDate.Value.ToString("yyyy-MM-dd") + " portfolios" : "") · tracked vs @Model.BenchmarkTicker
+        </p>
+
+        @if (hasPoints) {
+            <!-- Summary cards: index vs benchmark, identical layout for visual comparison. -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                @{
+                    var rows = new[] {
+                        new { Label = "Smart Money Index", Summary = Model.Backtest.PortfolioSummary, TestId = "smart-money-index-summary" },
+                        new { Label = "Benchmark (" + Model.BenchmarkTicker + ")", Summary = Model.Backtest.BenchmarkSummary, TestId = "smart-money-benchmark-summary" },
+                    };
+                }
+                @foreach (var row in rows) {
+                    <div class="card bg-base-100 shadow-sm" data-testid="@row.TestId">
+                        <div class="card-body p-4">
+                            <h2 class="text-base font-medium mb-2">@row.Label</h2>
+                            <div class="stats stats-vertical sm:stats-horizontal shadow-sm bg-base-200 w-full">
+                                <stat-tile title="Total return">@row.Summary.TotalReturnPercent.ToString("F2")%</stat-tile>
+                                <stat-tile title="CAGR">@row.Summary.CagrPercent.ToString("F2")%</stat-tile>
+                                <stat-tile title="Max drawdown">@row.Summary.MaxDrawdownPercent.ToString("F2")%</stat-tile>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Cumulative-return chart — index vs benchmark, both normalized to 100 at the
+                 construction date. Values at 100 mean "broke even with the start", 200 = doubled. -->
+            <div class="card bg-base-100 shadow-sm mb-6" data-testid="smart-money-chart-card">
+                <div class="card-body p-4">
+                    <div class="flex items-baseline justify-between mb-3">
+                        <h2 class="text-base font-medium m-0">Cumulative return (=100)</h2>
+                        <span class="text-xs text-base-content/60">@Model.Backtest.StartDate.ToString("yyyy-MM-dd") → @Model.Backtest.EndDate.ToString("yyyy-MM-dd") · @Model.Backtest.Points.Count.ToString("N0") days</span>
+                    </div>
+                    <div class="h-[360px]">
+                        <canvas id="smart-money-chart" data-testid="smart-money-chart" role="img" aria-label="Smart money index cumulative return"></canvas>
+                    </div>
+                </div>
+            </div>
+        } else if (!string.IsNullOrWhiteSpace(Model.Backtest.Reason)) {
+            <div class="alert alert-info mb-6" data-testid="smart-money-backtest-reason">
+                <span>Performance can't be tracked yet: @Model.Backtest.Reason</span>
+            </div>
+        }
+
+        <!-- Constituents: one row per selected stock, ordered as the index weights them. -->
+        <div class="card bg-base-100 shadow-sm" data-testid="smart-money-constituents-card">
+            <div class="card-body p-4">
+                <h2 class="text-base font-medium mb-3">Constituents</h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-sm" data-testid="smart-money-constituents">
+                        <thead>
+                            <tr>
+                                <th>Ticker</th>
+                                <th>Name</th>
+                                <th class="text-right">Held by</th>
+                                <th class="text-right">Avg position weight</th>
+                                <th class="text-right">Index weight</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var constituent in Model.Constituents) {
+                                <tr>
+                                    <td class="font-mono font-medium">@constituent.Ticker</td>
+                                    <td class="text-base-content/70">@constituent.Name</td>
+                                    <td class="text-right">@constituent.HeldByCount / @Model.FundCount</td>
+                                    <td class="text-right">@constituent.AverageWeightPercent.ToString("F1")%</td>
+                                    <td class="text-right">@constituent.IndexWeightPercent.ToString("F2")%</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@if (hasPoints) {
+    @section Scripts {
+        <partial name="_ChartJs" />
+        <script>
+        // Render the smart-money index vs benchmark cumulative-return line chart.
+        document.addEventListener('DOMContentLoaded', function () {
+            const ctx = document.getElementById('smart-money-chart');
+            if (!ctx || typeof Chart === 'undefined') return;
+
+            const labels = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model.Backtest.Points.Select(p => p.Date.ToString("yyyy-MM-dd")).ToList()));
+            const index = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model.Backtest.Points.Select(p => p.PortfolioValue).ToList()));
+            const benchmark = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model.Backtest.Points.Select(p => p.BenchmarkValue).ToList()));
+            const benchmarkLabel = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model.BenchmarkTicker));
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Smart Money Index',
+                            data: index,
+                            borderColor: 'oklch(55% 0.18 250)',
+                            backgroundColor: 'oklch(55% 0.18 250 / 0.08)',
+                            fill: true,
+                            tension: 0.2,
+                            pointRadius: 0,
+                            pointHitRadius: 6,
+                            borderWidth: 2,
+                        },
+                        {
+                            label: 'Benchmark · ' + benchmarkLabel,
+                            data: benchmark,
+                            borderColor: 'oklch(60% 0.15 30)',
+                            borderWidth: 1.5,
+                            borderDash: [4, 2],
+                            pointRadius: 0,
+                            fill: false,
+                            tension: 0.2,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: { ticks: { maxTicksLimit: 12, font: { size: 10 } } },
+                        y: { ticks: { callback: v => Number(v).toFixed(0) } },
+                    },
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => ctx.dataset.label + ': ' + Number(ctx.raw).toFixed(2),
+                            },
+                        },
+                    },
+                },
+            });
+        });
+        </script>
+    }
+}
