@@ -28,6 +28,8 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<FormDRelatedPerson>();
         builder.Entity<NCenFiling>();
         builder.Entity<NCenServiceProvider>();
+        builder.Entity<NportFiling>();
+        builder.Entity<NportHolding>();
         builder.Entity<TranscriptCheckStatus>();
     }
 }
