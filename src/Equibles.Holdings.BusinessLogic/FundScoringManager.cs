@@ -110,42 +110,19 @@ public class FundScoringManager
 
         var snapshots = BuildSnapshots(holdings);
 
-        var priceWindowFrom =
-            from > DateOnly.MinValue.AddDays(BacktestPriceLoader.PriceLookbackDays)
-                ? from.AddDays(-BacktestPriceLoader.PriceLookbackDays)
-                : DateOnly.MinValue;
-
         var stockIds = holdings
             .Where(h => h.OptionType == null && h.Value > 0)
             .Select(h => h.CommonStockId)
             .Distinct()
             .ToList();
 
-        var pricesByStock = (
-            stockIds.Count == 0
-                ? []
-                : await BacktestPriceLoader.LoadPrices(
-                    _priceRepository.GetByStocks(stockIds, priceWindowFrom, to)
-                )
-        )
-            .GroupBy(p => p.StockId)
-            .ToDictionary(g => g.Key, g => g.ToArray());
-
-        var benchmarkSeries = (
-            await BacktestPriceLoader.LoadPrices(
-                _priceRepository.GetByStock(benchmarkStock, priceWindowFrom, to)
-            )
-        ).ToArray();
-        if (benchmarkSeries.Length == 0)
-            return null;
-
-        return HoldingsBacktestCalculator.Calculate(
+        return await BacktestPriceLoader.RunBacktest(
+            _priceRepository,
             snapshots,
+            stockIds,
+            benchmarkStock,
             from,
-            to,
-            priceOf: (stockId, date) =>
-                BacktestPriceLoader.ForwardFill(pricesByStock, stockId, date),
-            benchmarkPriceOf: date => BacktestPriceLoader.ForwardFill(benchmarkSeries, date)
+            to
         );
     }
 
