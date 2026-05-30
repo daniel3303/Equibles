@@ -311,7 +311,8 @@ public class StocksControllerTests : IDisposable
             new CongressionalTradeRepository(_dbContext),
             new DailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
-            new FinancialConceptRepository(_dbContext)
+            new FinancialConceptRepository(_dbContext),
+            new CommonStockRepository(_dbContext)
         );
     }
 

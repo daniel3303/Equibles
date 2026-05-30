@@ -74,7 +74,8 @@ public class StocksControllerShortVolumeTabTests : IDisposable
             new CongressionalTradeRepository(_dbContext),
             new DailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
-            new FinancialConceptRepository(_dbContext)
+            new FinancialConceptRepository(_dbContext),
+            new CommonStockRepository(_dbContext)
         );
         var controller = new StocksController(
             new CommonStockRepository(_dbContext),

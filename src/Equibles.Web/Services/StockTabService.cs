@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Extensions;
@@ -13,6 +14,7 @@ using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.Repositories;
 using Equibles.Web.Extensions;
 using Equibles.Web.ViewModels.Stocks;
+using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
 
@@ -34,6 +36,15 @@ public class StockTabService
     private readonly DailyStockPriceRepository _dailyStockPriceRepository;
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
+    private readonly CommonStockRepository _commonStockRepository;
+
+    // Benchmark the Price tab compares each stock's returns against.
+    private const string BenchmarkTicker = "SPY";
+
+    // SPY history loaded back from the latest bar to cover every return window:
+    // the 120-trading-day window (~168 calendar days) and the YTD anchor (up to a
+    // full prior year). 420 days clears both with margin.
+    private const int BenchmarkLookbackDays = 420;
 
     public StockTabService(
         InstitutionalHoldingRepository institutionalHoldingRepository,
@@ -46,7 +57,8 @@ public class StockTabService
         CongressionalTradeRepository congressionalTradeRepository,
         DailyStockPriceRepository dailyStockPriceRepository,
         FinancialFactRepository financialFactRepository,
-        FinancialConceptRepository financialConceptRepository
+        FinancialConceptRepository financialConceptRepository,
+        CommonStockRepository commonStockRepository
     )
     {
         _institutionalHoldingRepository = institutionalHoldingRepository;
@@ -60,6 +72,7 @@ public class StockTabService
         _dailyStockPriceRepository = dailyStockPriceRepository;
         _financialFactRepository = financialFactRepository;
         _financialConceptRepository = financialConceptRepository;
+        _commonStockRepository = commonStockRepository;
     }
 
     public async Task<HoldingsTabViewModel> LoadHoldingsTab(CommonStock stock, DateOnly? date)
@@ -302,10 +315,18 @@ public class StockTabService
             closePrices
         );
 
+        var returns = PriceReturnCalculator.Compute(
+            prices.Select(p => p.Date).ToList(),
+            closePrices
+        );
+
         return new PriceTabViewModel
         {
             Ticker = stock.Ticker,
             Prices = prices,
+            Returns = returns,
+            BenchmarkTicker = BenchmarkTicker,
+            BenchmarkReturns = await LoadBenchmarkReturns(stock, prices),
             Sma20 = TechnicalIndicatorService.ComputeSma(closePrices, 20),
             Sma50 = TechnicalIndicatorService.ComputeSma(closePrices, 50),
             Sma200 = TechnicalIndicatorService.ComputeSma(closePrices, 200),
@@ -314,6 +335,37 @@ public class StockTabService
             MacdSignal = macdSignal,
             MacdHistogram = macdHistogram,
         };
+    }
+
+    // Returns for the benchmark (SPY) over the same windows, so the Price tab can
+    // show out/under-performance. Null when there's no benchmark to compare against:
+    // the stock has no prices, the benchmark isn't tracked, this stock IS the
+    // benchmark, or the benchmark has no prices in the lookback window.
+    private async Task<PriceReturns> LoadBenchmarkReturns(
+        CommonStock stock,
+        List<DailyStockPrice> stockPrices
+    )
+    {
+        if (stockPrices.Count == 0)
+            return null;
+
+        var benchmark = await _commonStockRepository.GetByPrimaryTicker(BenchmarkTicker);
+        if (benchmark == null || benchmark.Id == stock.Id)
+            return null;
+
+        var latestDate = stockPrices[^1].Date;
+        var benchmarkPrices = await _dailyStockPriceRepository
+            .GetByStock(benchmark, latestDate.AddDays(-BenchmarkLookbackDays), latestDate)
+            .OrderBy(p => p.Date)
+            .ToListAsync();
+
+        if (benchmarkPrices.Count == 0)
+            return null;
+
+        return PriceReturnCalculator.Compute(
+            benchmarkPrices.Select(p => p.Date).ToList(),
+            benchmarkPrices.Select(p => p.Close).ToList()
+        );
     }
 
     public async Task<FinancialsTabViewModel> LoadFinancialsTab(
