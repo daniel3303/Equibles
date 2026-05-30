@@ -110,6 +110,7 @@
             ("documents", "Documents", "SEC Filings"),
             ("insider-trading", "InsiderTrading", "Insider Trades"),
             ("proposed-sales", "ProposedSales", "Proposed Sales"),
+            ("exempt-offerings", "ExemptOfferings", "Exempt Offerings"),
             ("congressional-trades", "CongressionalTrades", "Congressional Trades"),
         };
     }
@@ -171,6 +172,9 @@
                 break;
             case "proposed-sales":
                 @await Html.PartialAsync("_ProposedSalesTab", (ProposedSalesTabViewModel)ViewData["TabViewModel"])
+                break;
+            case "exempt-offerings":
+                @await Html.PartialAsync("_ExemptOfferingsTab", (ExemptOfferingsTabViewModel)ViewData["TabViewModel"])
                 break;
             case "congressional-trades":
                 @await Html.PartialAsync("_CongressionalTradesTab", (CongressionalTradesTabViewModel)ViewData["TabViewModel"])
