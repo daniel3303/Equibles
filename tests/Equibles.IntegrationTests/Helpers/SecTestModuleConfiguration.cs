@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.IntegrationTests.Helpers;
 
 /// <summary>
-/// Registers only Document and FailToDeliver entities for InMemory tests.
+/// Registers the non-vector Sec entities (Document, FailToDeliver, Form D) for InMemory tests.
 /// The production <see cref="Equibles.Sec.Data.SecModuleConfiguration"/> also
 /// registers Chunk and Embedding, which use pgvector's <c>Vector</c> type that
 /// the EF Core InMemory provider cannot construct. We explicitly ignore those
@@ -28,6 +28,8 @@ public class SecTestModuleConfiguration : Equibles.Data.IModuleConfiguration
         });
 
         builder.Entity<FailToDeliver>();
+        builder.Entity<FormDFiling>();
+        builder.Entity<FormDRelatedPerson>();
         builder.Ignore<Chunk>();
         builder.Ignore<Embedding>();
     }

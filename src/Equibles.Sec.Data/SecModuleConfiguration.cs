@@ -24,6 +24,8 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
         });
 
         builder.Entity<FailToDeliver>();
+        builder.Entity<FormDFiling>();
+        builder.Entity<FormDRelatedPerson>();
         builder.Entity<TranscriptCheckStatus>();
     }
 }
