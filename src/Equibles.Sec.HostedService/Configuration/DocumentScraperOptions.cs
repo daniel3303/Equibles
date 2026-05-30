@@ -11,5 +11,6 @@ public class DocumentScraperOptions
         DocumentType.EightK,
         DocumentType.FormFour,
         DocumentType.FormThree,
+        DocumentType.Form144,
     ];
 }

@@ -10,7 +10,7 @@ namespace Equibles.UnitTests.Sec;
 public class SecHostedServiceCollectionExtensionsTests
 {
     [Fact]
-    public void AddSecWorker_RegistersIFilingProcessorAsInsiderTradingFilingProcessor()
+    public void AddSecWorker_RegistersFilingProcessorsAsScoped()
     {
         // Sibling to `AddSecWorker_RegistersIDocumentScraperAsScoped`. That
         // pin covers the IDocumentScraper binding shape. This pin covers
@@ -20,43 +20,52 @@ public class SecHostedServiceCollectionExtensionsTests
         //
         // IFilingProcessor is a one-of-many extension point: callers
         // register one or more implementations and DocumentScraper
-        // resolves them all via `IEnumerable<IFilingProcessor>`. Today
-        // the only registered implementation is
-        // InsiderTradingFilingProcessor (handles Form 3/4/5 ownership
-        // filings). The implementation_type binding matters: a refactor
-        // that swapped the concrete to a stub
-        // (`services.AddScoped<IFilingProcessor, StubFilingProcessor>()`
-        // — a common copy-paste mistake when adding NEW processors to
-        // the list) would compile, pass the IDocumentScraper sibling,
-        // and silently disable insider-trading filing processing while
-        // looking like a "wiring works" green test.
+        // resolves them all via `IEnumerable<IFilingProcessor>`. Two are
+        // registered today:
+        //   • InsiderTradingFilingProcessor — Form 3/4/5 ownership filings
+        //   • Form144FilingProcessor        — Form 144 proposed-sale notices
+        // The implementation_type binding matters: a refactor that swapped a
+        // concrete to a stub (`services.AddScoped<IFilingProcessor,
+        // StubFilingProcessor>()` — a common copy-paste mistake when adding
+        // NEW processors to the list) would compile, pass the IDocumentScraper
+        // sibling, and silently disable a form family while looking like a
+        // "wiring works" green test.
         //
         // The risk this catches:
-        //   • Dropped binding: every Form 4 (insider transactions) would
-        //     download but never persist insider transactions. The
-        //     "Insider Transactions" page would silently stop receiving
-        //     new data.
-        //   • Lifetime drift: AddScoped vs AddSingleton/AddTransient
-        //     matters because InsiderTradingFilingProcessor depends on
-        //     scoped repositories (transaction-per-request semantics).
-        //     A singleton lifetime would cache repositories across
-        //     requests, breaking EF Core's tracking and producing
-        //     unpredictable concurrency errors.
-        //   • Wrong concrete type: tests above this pin (the IDocumentScraper
-        //     sibling) only assert ServiceType+Lifetime; ImplementationType
-        //     can drift without that pin failing. This pin asserts the
-        //     IMPLEMENTATION TYPE explicitly.
-        //
-        // Assert ALL THREE: descriptor exists, ImplementationType is the
-        // concrete InsiderTradingFilingProcessor, Lifetime is Scoped.
+        //   • Dropped binding: a missing processor means its form family
+        //     downloads but never persists. The matching page would silently
+        //     stop receiving new data.
+        //   • Lifetime drift: AddScoped vs AddSingleton/AddTransient matters
+        //     because the processors depend on scoped repositories
+        //     (transaction-per-request semantics). A singleton lifetime would
+        //     cache repositories across requests, breaking EF Core's tracking
+        //     and producing unpredictable concurrency errors.
+        //   • Wrong concrete type: the IDocumentScraper sibling only asserts
+        //     ServiceType+Lifetime; ImplementationType can drift without that
+        //     pin failing. This pin asserts the IMPLEMENTATION TYPES explicitly.
         var services = new ServiceCollection();
 
         services.AddSecWorker();
 
-        var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(IFilingProcessor));
-        descriptor.Should().NotBeNull();
-        descriptor.ImplementationType.Should().Be(typeof(InsiderTradingFilingProcessor));
-        descriptor.Lifetime.Should().Be(ServiceLifetime.Scoped);
+        var descriptors = services.Where(d => d.ServiceType == typeof(IFilingProcessor)).ToList();
+        descriptors
+            .Should()
+            .HaveCount(
+                2,
+                "AddSecWorker registers one IFilingProcessor per supported structured form family"
+            );
+        descriptors
+            .Should()
+            .Contain(d =>
+                d.ImplementationType == typeof(InsiderTradingFilingProcessor)
+                && d.Lifetime == ServiceLifetime.Scoped
+            );
+        descriptors
+            .Should()
+            .Contain(d =>
+                d.ImplementationType == typeof(Form144FilingProcessor)
+                && d.Lifetime == ServiceLifetime.Scoped
+            );
     }
 
     [Fact]
