@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.Sec.Data.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Sec.Data.Models;
@@ -17,7 +18,7 @@ namespace Equibles.Sec.Data.Models;
 [Index(nameof(CommonStockId), nameof(FilingDate))]
 [Index(nameof(AccessionNumber), IsUnique = true)]
 [Index(nameof(FilingDate))]
-public class NportFiling
+public class NportFiling : IStockFiling
 {
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
