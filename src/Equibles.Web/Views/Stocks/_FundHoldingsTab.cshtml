@@ -1,0 +1,81 @@
+@using System.Globalization
+@model Equibles.Web.ViewModels.Stocks.FundHoldingsTabViewModel
+
+@if (Model.Filing == null) {
+    <partial name="_EmptyStateCard" model='(IconName: "chart-bar", Heading: "No Fund Holdings Data", Message: "No Form NPORT-P portfolio reports are available for this stock yet. Only registered investment companies — mutual funds and ETFs — file NPORT-P.")' />
+} else {
+    var filing = Model.Filing;
+    <div class="space-y-4">
+        <!-- Report header: the series and period this portfolio snapshot belongs to. -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4 lg:p-6">
+                <div class="flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 class="text-sm font-semibold text-base-content/70">
+                        @(string.IsNullOrEmpty(filing.SeriesName) ? filing.RegistrantName : filing.SeriesName)
+                    </h3>
+                    <span class="text-sm text-base-content/60">Reported @filing.ReportPeriodDate.ToString("yyyy-MM-dd")</span>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
+                    <div>
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider">Net Assets</div>
+                        <div class="font-mono font-semibold"><compactable-number value="@filing.NetAssets" prefix="$" /></div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider">Total Assets</div>
+                        <div class="font-mono font-semibold"><compactable-number value="@filing.TotalAssets" prefix="$" /></div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider">Holdings</div>
+                        <div class="font-mono font-semibold">@Model.TotalHoldings.ToString("N0", CultureInfo.InvariantCulture)</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-base-content/50 uppercase tracking-wider">Filed</div>
+                        <div class="font-mono font-semibold">@filing.FilingDate.ToString("yyyy-MM-dd")</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (Model.Holdings.Count == 0) {
+            <partial name="_EmptyStateCard" model='(IconName: "chart-bar", Heading: "No Positions Reported", Message: "This NPORT-P report lists no portfolio investments.")' />
+        } else {
+            <div class="card bg-base-100 shadow-sm">
+                @if (Model.TotalHoldings > Model.Holdings.Count) {
+                    <div class="px-4 pt-3 text-sm text-base-content/60">
+                        Showing the @Model.Holdings.Count largest holdings by value of @Model.TotalHoldings total.
+                    </div>
+                }
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra table-sm">
+                        <thead>
+                            <tr>
+                                <th scope="col">Holding</th>
+                                <th scope="col" class="hidden md:table-cell">CUSIP</th>
+                                <th scope="col" class="text-right">Balance</th>
+                                <th scope="col" class="hidden lg:table-cell">Units</th>
+                                <th scope="col" class="text-right">Value</th>
+                                <th scope="col" class="text-right"><span class="tooltip tooltip-left cursor-help" data-tip="Share of the fund's net assets this position represents">% Net Assets</span></th>
+                                <th scope="col" class="hidden lg:table-cell"><span class="tooltip tooltip-left cursor-help" data-tip="NPORT asset category: EC equity-common, DBT debt, DE derivative, and so on">Category</span></th>
+                                <th scope="col" class="hidden lg:table-cell">Country</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var h in Model.Holdings) {
+                                <tr>
+                                    <td>@(string.IsNullOrEmpty(h.Name) ? "—" : h.Name)</td>
+                                    <td class="hidden md:table-cell text-sm text-base-content/60 font-mono">@(string.IsNullOrEmpty(h.Cusip) ? "—" : h.Cusip)</td>
+                                    <td class="text-right font-mono"><compactable-number value="@h.Balance" /></td>
+                                    <td class="hidden lg:table-cell text-sm text-base-content/60">@(string.IsNullOrEmpty(h.Units) ? "—" : h.Units)</td>
+                                    <td class="text-right font-mono"><compactable-number value="@h.ValueUsd" prefix="$" /></td>
+                                    <td class="text-right font-mono">@h.PercentValue.ToString("N2", CultureInfo.InvariantCulture)%</td>
+                                    <td class="hidden lg:table-cell text-sm text-base-content/60">@(string.IsNullOrEmpty(h.AssetCategory) ? "—" : h.AssetCategory)</td>
+                                    <td class="hidden lg:table-cell text-sm text-base-content/60">@(string.IsNullOrEmpty(h.InvestmentCountry) ? "—" : h.InvestmentCountry)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+}

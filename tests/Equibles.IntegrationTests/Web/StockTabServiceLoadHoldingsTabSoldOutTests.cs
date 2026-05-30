@@ -59,6 +59,7 @@ public class StockTabServiceLoadHoldingsTabSoldOutTests : IDisposable
             new Form144FilingRepository(_dbContext),
             new FormDFilingRepository(_dbContext),
             new NCenFilingRepository(_dbContext),
+            new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
             new DailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),

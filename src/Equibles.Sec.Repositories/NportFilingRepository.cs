@@ -23,4 +23,9 @@ public class NportFilingRepository : BaseRepository<NportFiling>
     {
         return GetAll().Where(f => f.FilingDate >= since);
     }
+
+    public IQueryable<NportHolding> GetHoldings(NportFiling filing)
+    {
+        return DbContext.Set<NportHolding>().Where(h => h.NportFilingId == filing.Id);
+    }
 }

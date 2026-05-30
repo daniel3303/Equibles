@@ -112,6 +112,7 @@
             ("proposed-sales", "ProposedSales", "Proposed Sales"),
             ("exempt-offerings", "ExemptOfferings", "Exempt Offerings"),
             ("fund-operations", "FundOperations", "Fund Operations"),
+            ("fund-holdings", "FundHoldings", "Fund Holdings"),
             ("congressional-trades", "CongressionalTrades", "Congressional Trades"),
         };
     }
@@ -179,6 +180,9 @@
                 break;
             case "fund-operations":
                 @await Html.PartialAsync("_FundOperationsTab", (FundOperationsTabViewModel)ViewData["TabViewModel"])
+                break;
+            case "fund-holdings":
+                @await Html.PartialAsync("_FundHoldingsTab", (FundHoldingsTabViewModel)ViewData["TabViewModel"])
                 break;
             case "congressional-trades":
                 @await Html.PartialAsync("_CongressionalTradesTab", (CongressionalTradesTabViewModel)ViewData["TabViewModel"])

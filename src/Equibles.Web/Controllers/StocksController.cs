@@ -200,6 +200,14 @@ public class StocksController : BaseController
             async s => await _stockTabService.LoadFundOperationsTab(s)
         );
 
+    [HttpGet("~/stocks/{ticker}/fund-holdings")]
+    public Task<IActionResult> FundHoldings(string ticker) =>
+        ShowStockTab(
+            ticker,
+            "fund-holdings",
+            async s => await _stockTabService.LoadFundHoldingsTab(s)
+        );
+
     [HttpGet("~/stocks/{ticker}/congressional-trades")]
     public Task<IActionResult> CongressionalTrades(string ticker) =>
         ShowStockTab(
