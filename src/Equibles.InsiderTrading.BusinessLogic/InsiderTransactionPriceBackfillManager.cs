@@ -11,15 +11,18 @@ using Microsoft.Extensions.Logging;
 namespace Equibles.InsiderTrading.BusinessLogic;
 
 /// <summary>
-/// One-off recompute of <see cref="InsiderTransaction.IsPriceValid"/> across
-/// every row. Cross-checks the filer-reported <c>PricePerShare</c> against
-/// the Yahoo unadjusted close on the transaction date (most recent prior
-/// trading day if the transaction date fell on a weekend / holiday) and
-/// flips the flag according to <see cref="InsiderTransactionPriceValidator"/>.
+/// Evaluates the not-yet-checked insider transactions — those whose
+/// <see cref="InsiderTransaction.IsPriceValid"/> is still <c>null</c>. Each
+/// row's reported price is cross-checked against the Yahoo unadjusted close
+/// on the transaction date (most recent prior trading day for weekends /
+/// holidays) via <see cref="InsiderTransactionPriceValidator"/>; implausible
+/// rows are repaired (reported total ÷ shares) and the raw value preserved in
+/// <see cref="InsiderTransaction.ReportedPricePerShare"/>.
 ///
-/// Triggered from the backoffice maintenance dashboard after a parser fix
-/// lands. Idempotent and re-entrant — safe to click again. Iterates in
-/// batches with a progress callback so the UI can show an SSE-driven bar.
+/// Only null rows are touched, so a row is evaluated exactly once and re-runs
+/// don't re-scan the whole table. Rows with no usable close stay null and are
+/// retried on a later run. Triggered from the backoffice maintenance
+/// dashboard; iterates in batches with a progress callback for the SSE bar.
 /// </summary>
 [Service]
 public class InsiderTransactionPriceBackfillManager
@@ -59,9 +62,13 @@ public class InsiderTransactionPriceBackfillManager
         Func<InsiderTransactionPriceBackfillResult, Task> onProgress = null
     )
     {
+        // Snapshot of the work-set size for the progress bar. The live parser
+        // may insert more null (pending) rows while this runs; those land
+        // behind the advancing cursor and are picked up on the next run, so
+        // Processed can briefly nudge past Total — harmless and self-correcting.
         var result = new InsiderTransactionPriceBackfillResult
         {
-            Total = await _transactionRepository.GetAll().CountAsync(),
+            Total = await _transactionRepository.GetAll().CountAsync(t => t.IsPriceValid == null),
         };
 
         if (result.Total == 0)
@@ -69,21 +76,27 @@ public class InsiderTransactionPriceBackfillManager
 
         _dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
 
-        // Keyset (cursor) pagination on Id. Postgres OFFSET scans and
-        // discards N rows before returning the M for that batch, so a
-        // Skip(N).Take(M) loop is O(N²) — the last batch in a 3M-row table
-        // is thousands of times slower than the first. Filtering by
-        // `Id > lastSeenId` instead lets the index seek straight to the
-        // next page, keeping every batch roughly the same speed and the
-        // whole pass O(N). Npgsql translates `Guid > Guid` to PostgreSQL's
-        // native `uuid > uuid` comparison.
-        var lastSeenId = Guid.Empty;
+        // Keyset (cursor) pagination on (TransactionDate, Id) over the
+        // unevaluated rows. Ordering by date — not the random Guid Id — keeps
+        // each batch inside a narrow date window, so FetchCloses pulls a small
+        // price range per batch instead of every stock's full history (the
+        // Id-ordered version scattered each batch across all dates, making
+        // FetchCloses load decades of prices at a time). The
+        // (IsPriceValid, TransactionDate) index backs both the filter and the
+        // order. Rows left pending (still null) fall behind the advancing
+        // cursor, so the run terminates; they're retried on the next run.
+        var lastDate = DateOnly.MinValue;
+        var lastId = Guid.Empty;
         while (true)
         {
             var batch = await _transactionRepository
                 .GetAll()
-                .Where(t => t.Id > lastSeenId)
-                .OrderBy(t => t.Id)
+                .Where(t => t.IsPriceValid == null)
+                .Where(t =>
+                    t.TransactionDate > lastDate || (t.TransactionDate == lastDate && t.Id > lastId)
+                )
+                .OrderBy(t => t.TransactionDate)
+                .ThenBy(t => t.Id)
                 .Take(BatchSize)
                 .ToListAsync();
 
@@ -97,32 +110,44 @@ public class InsiderTransactionPriceBackfillManager
                 var key = (transaction.CommonStockId, transaction.TransactionDate);
                 decimal? close = closes.TryGetValue(key, out var value) ? value : null;
 
-                var wasValid = transaction.IsPriceValid;
-                var nowValid = _validator.IsPlausible(
-                    transaction.PricePerShare,
+                var evaluation = _validator.Evaluate(
+                    transaction.ReportedPricePerShare,
+                    transaction.Shares,
                     transaction.SecurityTitle,
                     close
                 );
 
-                if (wasValid != nowValid)
-                {
-                    transaction.IsPriceValid = nowValid;
-                }
-                if (!nowValid)
-                    result.MarkedInvalid++;
+                transaction.PricePerShare = evaluation.EffectivePrice;
+                transaction.IsPriceValid = evaluation.IsPriceValid;
+
+                if (evaluation.IsPriceValid == null)
+                    result.Pending++;
+                else if (evaluation.WasRepaired)
+                    result.Repaired++;
+                else if (evaluation.IsPriceValid == true)
+                    result.Valid++;
                 else
-                    result.MarkedValid++;
+                    result.Invalid++;
             }
 
             await _transactionRepository.SaveChanges();
+
+            // Detach the saved batch so the change tracker doesn't grow to the
+            // full unevaluated set — otherwise every SaveChanges re-scans an
+            // ever-larger graph (quadratic) and memory balloons across the run.
+            _dbContext.ChangeTracker.Clear();
+
             result.Processed += batch.Count;
-            lastSeenId = batch[^1].Id;
+            lastDate = batch[^1].TransactionDate;
+            lastId = batch[^1].Id;
 
             _logger.LogInformation(
-                "Insider price backfill: processed {Processed}/{Total}, invalid={Invalid}",
+                "Insider price backfill: processed {Processed}/{Total}, repaired={Repaired}, invalid={Invalid}, pending={Pending}",
                 result.Processed,
                 result.Total,
-                result.MarkedInvalid
+                result.Repaired,
+                result.Invalid,
+                result.Pending
             );
 
             if (onProgress != null)

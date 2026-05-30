@@ -92,7 +92,9 @@ public class InsiderActivityController : BaseController
         Expression<Func<InsiderTransaction, TRow>> projection
     ) =>
         source
-            .Where(t => t.IsPriceValid)
+            // Show valid and not-yet-evaluated (null) rows; hide only rows
+            // positively rejected as implausible.
+            .Where(t => t.IsPriceValid != false)
             .OrderByDescending(t => t.Shares * t.PricePerShare)
             .Take(InsiderDashboardViewModel.RowCap)
             .Select(projection)

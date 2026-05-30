@@ -26,7 +26,24 @@ public class InsiderTransaction
     public TransactionCode TransactionCode { get; set; }
 
     public long Shares { get; set; }
+
+    /// <summary>
+    /// Effective per-share price used by dashboards and sorts. Equals
+    /// <see cref="ReportedPricePerShare"/> for normal rows; diverges only
+    /// when a fat-fingered filing was repaired — see <see cref="IsPriceValid"/>.
+    /// </summary>
     public decimal PricePerShare { get; set; }
+
+    /// <summary>
+    /// The per-share price exactly as filed, before any repair. Always
+    /// populated, so the raw filing value is never lost. When a filer types
+    /// the total transaction value into the per-share field, the repair
+    /// recovers the unit price as <c>ReportedPricePerShare / Shares</c> and
+    /// stores it in <see cref="PricePerShare"/>, leaving this column holding
+    /// the original (bad) value for audit and reversibility.
+    /// </summary>
+    public decimal ReportedPricePerShare { get; set; }
+
     public AcquiredDisposed AcquiredDisposed { get; set; }
     public long SharesOwnedAfter { get; set; }
     public OwnershipNature OwnershipNature { get; set; }
@@ -46,14 +63,22 @@ public class InsiderTransaction
     public bool IsAmendment { get; set; }
 
     /// <summary>
-    /// False when the filer typed a bogus value into transactionPricePerShare —
-    /// most commonly the total transaction value instead of the per-share price.
-    /// Detected by cross-checking against the Yahoo unadjusted close on
-    /// TransactionDate. Dashboards filter on this so a single fat-fingered Form 4
-    /// doesn't drown out every other row when sorted by Shares × PricePerShare.
-    /// Default true — only rows we positively reject are flipped to false.
+    /// Tri-state price-plausibility flag, cross-checked against the Yahoo
+    /// unadjusted close on TransactionDate:
+    /// <list type="bullet">
+    /// <item><c>null</c> — not evaluated yet (no close available when the row
+    /// was ingested); a later maintenance recompute re-checks it once the
+    /// close exists.</item>
+    /// <item><c>true</c> — plausible, or repaired (see
+    /// <see cref="ReportedPricePerShare"/>).</item>
+    /// <item><c>false</c> — implausible and not repairable (<see cref="Shares"/>
+    /// is 0, so the mis-entered total can't be divided back to a unit price).</item>
+    /// </list>
+    /// Dashboards show a row unless this is positively <c>false</c>, so a
+    /// single fat-fingered Form 4 doesn't drown out every other row when
+    /// sorted by Shares × PricePerShare.
     /// </summary>
-    public bool IsPriceValid { get; set; } = true;
+    public bool? IsPriceValid { get; set; }
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }

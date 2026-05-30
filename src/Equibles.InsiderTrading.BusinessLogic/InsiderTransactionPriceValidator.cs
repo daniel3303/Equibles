@@ -1,4 +1,5 @@
 using Equibles.Core.AutoWiring;
+using Equibles.InsiderTrading.BusinessLogic.Models;
 
 namespace Equibles.InsiderTrading.BusinessLogic;
 
@@ -60,6 +61,79 @@ public class InsiderTransactionPriceValidator
             return true;
 
         return pricePerShare <= unadjustedClose.Value * MaxPriceToCloseMultiplier;
+    }
+
+    /// <summary>
+    /// Full tri-state evaluation of a reported per-share price, plus the repair.
+    /// Pure — the caller supplies the close and persists the outcome.
+    ///
+    /// Differs from <see cref="IsPlausible"/> in two ways:
+    /// <list type="bullet">
+    /// <item>A missing close yields a <em>pending</em> result (null) instead of
+    /// valid, so the row is re-checked by a later recompute once the close
+    /// lands rather than being silently accepted.</item>
+    /// <item>An implausible real price is <em>repaired</em>: the per-share
+    /// field almost always holds the total transaction value, so dividing by
+    /// <paramref name="shares"/> recovers the unit price. Rows with no share
+    /// count can't be divided and stay flagged invalid.</item>
+    /// </list>
+    /// </summary>
+    public InsiderTransactionPriceEvaluation Evaluate(
+        decimal reportedPrice,
+        long shares,
+        string securityTitle,
+        decimal? unadjustedClose
+    )
+    {
+        // Zero/negative prices (holdings, sentinels) and derivatives need no
+        // close — they're valid as-is and never repaired.
+        if (reportedPrice <= 0m || IsDerivativeSecurity(securityTitle))
+        {
+            return new InsiderTransactionPriceEvaluation
+            {
+                IsPriceValid = true,
+                EffectivePrice = reportedPrice,
+            };
+        }
+
+        // A real price we can't yet check stays pending (null), not valid.
+        if (!unadjustedClose.HasValue || unadjustedClose.Value <= 0m)
+        {
+            return new InsiderTransactionPriceEvaluation
+            {
+                IsPriceValid = null,
+                EffectivePrice = reportedPrice,
+            };
+        }
+
+        // Plausible against the close — keep as filed.
+        if (reportedPrice <= unadjustedClose.Value * MaxPriceToCloseMultiplier)
+        {
+            return new InsiderTransactionPriceEvaluation
+            {
+                IsPriceValid = true,
+                EffectivePrice = reportedPrice,
+            };
+        }
+
+        // Implausible but unrepairable without a share count.
+        if (shares == 0)
+        {
+            return new InsiderTransactionPriceEvaluation
+            {
+                IsPriceValid = false,
+                EffectivePrice = reportedPrice,
+            };
+        }
+
+        // Implausible — repair by dividing the mis-entered total by the share
+        // count and accept the result as the per-share price.
+        return new InsiderTransactionPriceEvaluation
+        {
+            IsPriceValid = true,
+            EffectivePrice = reportedPrice / shares,
+            WasRepaired = true,
+        };
     }
 
     private static bool IsDerivativeSecurity(string securityTitle)

@@ -339,6 +339,8 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
                 AccessionNumber = filing.AccessionNumber,
                 SecurityTitle = "No Securities Owned",
                 TransactionOrder = 0,
+                // 0-price holding sentinel: nothing to validate or repair.
+                IsPriceValid = true,
             }
         );
         await transactionRepository.SaveChanges();
@@ -347,12 +349,13 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
     // Filer-reported transactionPricePerShare is unvalidated by EDGAR — some
     // filings dump the total transaction value (or a placeholder like the
     // share count) into that field, which then explodes the dashboard's
-    // Shares × Price sort. Cross-check against Yahoo's unadjusted close on
-    // the TransactionDate (most recent prior trading day for weekends/
-    // holidays) and flip the flag accordingly. If the Yahoo feed hasn't
-    // caught up yet for a freshly-filed transaction date, leave the default
-    // (true) — the backoffice backfill button re-evaluates everything once
-    // the close is available.
+    // Shares × Price sort. Preserve the as-filed value in ReportedPricePerShare,
+    // then cross-check against Yahoo's unadjusted close on the TransactionDate
+    // (most recent prior trading day for weekends/holidays): plausible rows
+    // stay as filed, implausible rows are repaired (total ÷ shares). If the
+    // Yahoo feed hasn't caught up yet, IsPriceValid is left null (pending) —
+    // the backoffice maintenance recompute re-evaluates it once the close
+    // exists, rather than silently accepting it as valid.
     private static async Task ApplyPriceValidity(
         List<InsiderTransaction> transactions,
         Guid companyId,
@@ -379,11 +382,20 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
                 .Where(p => p.Date <= transaction.TransactionDate)
                 .Select(p => (decimal?)p.Close)
                 .FirstOrDefault();
-            transaction.IsPriceValid = priceValidator.IsPlausible(
-                transaction.PricePerShare,
+
+            // Capture the as-filed price first; both this path and the backfill
+            // manager evaluate from ReportedPricePerShare so the "reported is
+            // the source of truth" invariant holds regardless of ordering.
+            transaction.ReportedPricePerShare = transaction.PricePerShare;
+
+            var evaluation = priceValidator.Evaluate(
+                transaction.ReportedPricePerShare,
+                transaction.Shares,
                 transaction.SecurityTitle,
                 close
             );
+            transaction.PricePerShare = evaluation.EffectivePrice;
+            transaction.IsPriceValid = evaluation.IsPriceValid;
         }
     }
 
