@@ -45,6 +45,11 @@ public class DocumentRepository : BaseRepository<Document>
         return GetAll().Where(d => d.DocumentType == documentType);
     }
 
+    public IQueryable<Document> GetByXbrlStatus(XbrlCaptureStatus status)
+    {
+        return GetAll().Where(d => d.XbrlStatus == status);
+    }
+
     public async Task<Document> GetWithContent(Guid id)
     {
         return await GetAll().FirstOrDefaultAsync(d => d.Id == id);

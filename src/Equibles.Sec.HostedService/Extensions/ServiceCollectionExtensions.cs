@@ -20,12 +20,14 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDocumentPersistenceService, DocumentPersistenceService>();
         services.AddScoped<ICompanySyncService, CompanySyncService>();
         services.AddScoped<XbrlEnvelopeCaptureService>();
+        services.AddScoped<XbrlBackfillService>();
         services.AddScoped<IDocumentScraper, DocumentScraper>();
 
         services.AddHostedService<SecScraperWorker>();
         services.AddHostedService<DocumentProcessorWorker>();
         services.AddHostedService<FtdScraperWorker>();
         services.AddHostedService<FormAdvScraperWorker>();
+        services.AddHostedService<XbrlBackfillWorker>();
 
         return services;
     }
