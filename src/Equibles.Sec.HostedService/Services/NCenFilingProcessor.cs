@@ -1,14 +1,10 @@
 using System.Globalization;
 using System.Xml.Linq;
-using Equibles.CommonStocks.Data.Models;
 using Equibles.Errors.BusinessLogic;
-using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.Data.Models;
-using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Helpers;
 using Equibles.Sec.Repositories;
-using Microsoft.EntityFrameworkCore;
 using static Equibles.Sec.HostedService.Helpers.EdgarXmlSubmissionParser;
 
 namespace Equibles.Sec.HostedService.Services;
@@ -22,12 +18,8 @@ namespace Equibles.Sec.HostedService.Services;
 /// <c>http://www.sec.gov/edgar/ncen</c> namespace, so elements are navigated by local name.
 /// Booleans are reported as "Y"/"N".
 /// </summary>
-public class NCenFilingProcessor : IFilingProcessor
+public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFilingRepository>
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<NCenFilingProcessor> _logger;
-    private readonly ErrorReporter _errorReporter;
-
     // N-CEN dates are ISO yyyy-MM-dd.
     private static readonly string[] DateFormats = ["yyyy-MM-dd"];
 
@@ -39,80 +31,37 @@ public class NCenFilingProcessor : IFilingProcessor
         ILogger<NCenFilingProcessor> logger,
         ErrorReporter errorReporter
     )
-    {
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-        _errorReporter = errorReporter;
-    }
+        : base(scopeFactory, logger, errorReporter) { }
 
-    public bool CanProcess(DocumentType documentType)
+    public override bool CanProcess(DocumentType documentType)
     {
         return documentType == DocumentType.NCen || documentType == DocumentType.NCenA;
     }
 
-    public async Task<bool> Process(FilingData filing, CommonStock companyOutContext)
+    protected override string FormLabel => "N-CEN";
+
+    protected override string ParseContext => "NCen.ParseXml";
+
+    protected override string RequiredSection => "registrantInfo";
+
+    protected override IQueryable<NCenFiling> GetByAccessionNumber(
+        NCenFilingRepository repository,
+        string accessionNumber
+    ) => repository.GetByAccessionNumber(accessionNumber);
+
+    protected override void LogImported(NCenFiling entity, string ticker, string accessionNumber)
     {
-        var companyId = companyOutContext.Id;
-        var companyTicker = companyOutContext.Ticker;
-
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        var secEdgarClient = scope.ServiceProvider.GetRequiredService<ISecEdgarClient>();
-        var repository = scope.ServiceProvider.GetRequiredService<NCenFilingRepository>();
-
-        var existing = await repository.GetByAccessionNumber(filing.AccessionNumber).AnyAsync();
-        if (existing)
-            return false;
-
-        var content = await secEdgarClient.GetDocumentContent(filing);
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            _logger.LogWarning(
-                "Empty content for {Ticker} N-CEN - {AccessionNumber}",
-                companyTicker,
-                filing.AccessionNumber
-            );
-            return false;
-        }
-
-        var root = await EdgarXmlSubmissionParser.TryParseSubmission(
-            content,
-            filing,
-            companyTicker,
-            "N-CEN",
-            "NCen.ParseXml",
-            _logger,
-            _errorReporter
-        );
-        if (root == null)
-            return false;
-
-        var entity = ParseFiling(root, companyId, filing);
-        if (entity == null)
-        {
-            _logger.LogWarning(
-                "N-CEN XML missing registrantInfo for {Ticker} - {AccessionNumber}",
-                companyTicker,
-                filing.AccessionNumber
-            );
-            return false;
-        }
-
-        repository.Add(entity);
-        await repository.SaveChanges();
-
-        _logger.LogInformation(
+        Logger.LogInformation(
             "Imported N-CEN for {Ticker} ({Registrant}, type {Type}, {Providers} service providers) from {AccessionNumber}",
-            companyTicker,
+            ticker,
             entity.RegistrantName,
             entity.InvestmentCompanyType,
             entity.ServiceProviders.Count,
-            filing.AccessionNumber
+            accessionNumber
         );
-
-        return true;
     }
 
-    private static NCenFiling ParseFiling(XElement root, Guid companyId, FilingData filing)
+    protected override NCenFiling ParseFiling(XElement root, Guid companyId, FilingData filing)
     {
         var headerData = El(root, "headerData");
         var filerInfo = El(headerData, "filerInfo");

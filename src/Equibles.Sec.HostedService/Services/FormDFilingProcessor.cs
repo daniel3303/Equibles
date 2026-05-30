@@ -1,14 +1,10 @@
 using System.Globalization;
 using System.Xml.Linq;
-using Equibles.CommonStocks.Data.Models;
 using Equibles.Errors.BusinessLogic;
-using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.Data.Models;
-using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Helpers;
 using Equibles.Sec.Repositories;
-using Microsoft.EntityFrameworkCore;
 using static Equibles.Sec.HostedService.Helpers.EdgarXmlSubmissionParser;
 
 namespace Equibles.Sec.HostedService.Services;
@@ -21,12 +17,8 @@ namespace Equibles.Sec.HostedService.Services;
 /// notice ("D") and its amendments ("D/A") are processed. The XML root is
 /// <c>edgarSubmission</c> with no default namespace, so elements are navigated by local name.
 /// </summary>
-public class FormDFilingProcessor : IFilingProcessor
+public class FormDFilingProcessor : IssuerFeedFilingProcessor<FormDFiling, FormDFilingRepository>
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<FormDFilingProcessor> _logger;
-    private readonly ErrorReporter _errorReporter;
-
     // Form D dates are ISO yyyy-MM-dd; accept the US MM/dd/yyyy fallback defensively.
     private static readonly string[] DateFormats = ["yyyy-MM-dd", "MM/dd/yyyy", "M/d/yyyy"];
 
@@ -37,81 +29,37 @@ public class FormDFilingProcessor : IFilingProcessor
         ILogger<FormDFilingProcessor> logger,
         ErrorReporter errorReporter
     )
-    {
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-        _errorReporter = errorReporter;
-    }
+        : base(scopeFactory, logger, errorReporter) { }
 
-    public bool CanProcess(DocumentType documentType)
+    public override bool CanProcess(DocumentType documentType)
     {
         return documentType == DocumentType.FormD || documentType == DocumentType.FormDa;
     }
 
-    public async Task<bool> Process(FilingData filing, CommonStock companyOutContext)
+    protected override string FormLabel => "Form D";
+
+    protected override string ParseContext => "FormD.ParseXml";
+
+    protected override string RequiredSection => "offeringData";
+
+    protected override IQueryable<FormDFiling> GetByAccessionNumber(
+        FormDFilingRepository repository,
+        string accessionNumber
+    ) => repository.GetByAccessionNumber(accessionNumber);
+
+    protected override void LogImported(FormDFiling entity, string ticker, string accessionNumber)
     {
-        // Capture IDs from the outer-scope entity to avoid leaking untracked entities into inner scope.
-        var companyId = companyOutContext.Id;
-        var companyTicker = companyOutContext.Ticker;
-
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        var secEdgarClient = scope.ServiceProvider.GetRequiredService<ISecEdgarClient>();
-        var repository = scope.ServiceProvider.GetRequiredService<FormDFilingRepository>();
-
-        var existing = await repository.GetByAccessionNumber(filing.AccessionNumber).AnyAsync();
-        if (existing)
-            return false;
-
-        var content = await secEdgarClient.GetDocumentContent(filing);
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            _logger.LogWarning(
-                "Empty content for {Ticker} Form D - {AccessionNumber}",
-                companyTicker,
-                filing.AccessionNumber
-            );
-            return false;
-        }
-
-        var root = await EdgarXmlSubmissionParser.TryParseSubmission(
-            content,
-            filing,
-            companyTicker,
-            "Form D",
-            "FormD.ParseXml",
-            _logger,
-            _errorReporter
-        );
-        if (root == null)
-            return false;
-
-        var entity = ParseFiling(root, companyId, filing);
-        if (entity == null)
-        {
-            _logger.LogWarning(
-                "Form D XML missing offeringData for {Ticker} - {AccessionNumber}",
-                companyTicker,
-                filing.AccessionNumber
-            );
-            return false;
-        }
-
-        repository.Add(entity);
-        await repository.SaveChanges();
-
-        _logger.LogInformation(
+        Logger.LogInformation(
             "Imported Form D for {Ticker} ({EntityName}, sold {Sold}, {Persons} related persons) from {AccessionNumber}",
-            companyTicker,
+            ticker,
             entity.EntityName,
             entity.TotalAmountSold,
             entity.RelatedPersons.Count,
-            filing.AccessionNumber
+            accessionNumber
         );
-
-        return true;
     }
 
-    private static FormDFiling ParseFiling(XElement root, Guid companyId, FilingData filing)
+    protected override FormDFiling ParseFiling(XElement root, Guid companyId, FilingData filing)
     {
         var offeringData = El(root, "offeringData");
         if (offeringData == null)

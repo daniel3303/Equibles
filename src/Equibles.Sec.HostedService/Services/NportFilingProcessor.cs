@@ -1,14 +1,10 @@
 using System.Globalization;
 using System.Xml.Linq;
-using Equibles.CommonStocks.Data.Models;
 using Equibles.Errors.BusinessLogic;
-using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.Data.Models;
-using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Helpers;
 using Equibles.Sec.Repositories;
-using Microsoft.EntityFrameworkCore;
 using static Equibles.Sec.HostedService.Helpers.EdgarXmlSubmissionParser;
 
 namespace Equibles.Sec.HostedService.Services;
@@ -22,12 +18,8 @@ namespace Equibles.Sec.HostedService.Services;
 /// <c>edgarSubmission</c> in the <c>http://www.sec.gov/edgar/nport</c> namespace, so elements are
 /// navigated by local name. Booleans are reported as "Y"/"N"; amounts are decimal strings.
 /// </summary>
-public class NportFilingProcessor : IFilingProcessor
+public class NportFilingProcessor : IssuerFeedFilingProcessor<NportFiling, NportFilingRepository>
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<NportFilingProcessor> _logger;
-    private readonly ErrorReporter _errorReporter;
-
     // NPORT dates are ISO yyyy-MM-dd.
     private static readonly string[] DateFormats = ["yyyy-MM-dd"];
 
@@ -39,80 +31,37 @@ public class NportFilingProcessor : IFilingProcessor
         ILogger<NportFilingProcessor> logger,
         ErrorReporter errorReporter
     )
-    {
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-        _errorReporter = errorReporter;
-    }
+        : base(scopeFactory, logger, errorReporter) { }
 
-    public bool CanProcess(DocumentType documentType)
+    public override bool CanProcess(DocumentType documentType)
     {
         return documentType == DocumentType.NportP || documentType == DocumentType.NportPa;
     }
 
-    public async Task<bool> Process(FilingData filing, CommonStock companyOutContext)
+    protected override string FormLabel => "NPORT-P";
+
+    protected override string ParseContext => "Nport.ParseXml";
+
+    protected override string RequiredSection => "genInfo";
+
+    protected override IQueryable<NportFiling> GetByAccessionNumber(
+        NportFilingRepository repository,
+        string accessionNumber
+    ) => repository.GetByAccessionNumber(accessionNumber);
+
+    protected override void LogImported(NportFiling entity, string ticker, string accessionNumber)
     {
-        var companyId = companyOutContext.Id;
-        var companyTicker = companyOutContext.Ticker;
-
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        var secEdgarClient = scope.ServiceProvider.GetRequiredService<ISecEdgarClient>();
-        var repository = scope.ServiceProvider.GetRequiredService<NportFilingRepository>();
-
-        var existing = await repository.GetByAccessionNumber(filing.AccessionNumber).AnyAsync();
-        if (existing)
-            return false;
-
-        var content = await secEdgarClient.GetDocumentContent(filing);
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            _logger.LogWarning(
-                "Empty content for {Ticker} NPORT-P - {AccessionNumber}",
-                companyTicker,
-                filing.AccessionNumber
-            );
-            return false;
-        }
-
-        var root = await EdgarXmlSubmissionParser.TryParseSubmission(
-            content,
-            filing,
-            companyTicker,
-            "NPORT-P",
-            "Nport.ParseXml",
-            _logger,
-            _errorReporter
-        );
-        if (root == null)
-            return false;
-
-        var entity = ParseFiling(root, companyId, filing);
-        if (entity == null)
-        {
-            _logger.LogWarning(
-                "NPORT-P XML missing genInfo for {Ticker} - {AccessionNumber}",
-                companyTicker,
-                filing.AccessionNumber
-            );
-            return false;
-        }
-
-        repository.Add(entity);
-        await repository.SaveChanges();
-
-        _logger.LogInformation(
+        Logger.LogInformation(
             "Imported NPORT-P for {Ticker} ({Series}, net assets {NetAssets}, {Holdings} holdings) from {AccessionNumber}",
-            companyTicker,
+            ticker,
             entity.SeriesName,
             entity.NetAssets,
             entity.Holdings.Count,
-            filing.AccessionNumber
+            accessionNumber
         );
-
-        return true;
     }
 
-    private static NportFiling ParseFiling(XElement root, Guid companyId, FilingData filing)
+    protected override NportFiling ParseFiling(XElement root, Guid companyId, FilingData filing)
     {
         var headerData = El(root, "headerData");
         var formData = El(root, "formData");

@@ -1,15 +1,11 @@
 using System.Globalization;
 using System.Xml.Linq;
-using Equibles.CommonStocks.Data.Models;
 using Equibles.Errors.BusinessLogic;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Repositories;
-using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.Data.Models;
-using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Helpers;
-using Microsoft.EntityFrameworkCore;
 using static Equibles.Sec.HostedService.Helpers.EdgarXmlSubmissionParser;
 
 namespace Equibles.Sec.HostedService.Services;
@@ -21,12 +17,9 @@ namespace Equibles.Sec.HostedService.Services;
 /// is attributed to the issuer's stock. The XML uses the same <c>edgar/ownership</c> namespace
 /// as Forms 3/4/5 but a different root (<c>edgarSubmission</c>) and flat (unwrapped) values.
 /// </summary>
-public class Form144FilingProcessor : IFilingProcessor
+public class Form144FilingProcessor
+    : IssuerFeedFilingProcessor<Form144Filing, Form144FilingRepository>
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<Form144FilingProcessor> _logger;
-    private readonly ErrorReporter _errorReporter;
-
     private static readonly string[] DateFormats = ["MM/dd/yyyy", "M/d/yyyy"];
 
     public Form144FilingProcessor(
@@ -34,80 +27,36 @@ public class Form144FilingProcessor : IFilingProcessor
         ILogger<Form144FilingProcessor> logger,
         ErrorReporter errorReporter
     )
-    {
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-        _errorReporter = errorReporter;
-    }
+        : base(scopeFactory, logger, errorReporter) { }
 
-    public bool CanProcess(DocumentType documentType)
+    public override bool CanProcess(DocumentType documentType)
     {
         return documentType == DocumentType.Form144;
     }
 
-    public async Task<bool> Process(FilingData filing, CommonStock companyOutContext)
+    protected override string FormLabel => "Form 144";
+
+    protected override string ParseContext => "Form144.ParseXml";
+
+    protected override string RequiredSection => "formData";
+
+    protected override IQueryable<Form144Filing> GetByAccessionNumber(
+        Form144FilingRepository repository,
+        string accessionNumber
+    ) => repository.GetByAccessionNumber(accessionNumber);
+
+    protected override void LogImported(Form144Filing entity, string ticker, string accessionNumber)
     {
-        // Capture IDs from the outer-scope entity to avoid leaking untracked entities into inner scope.
-        var companyId = companyOutContext.Id;
-        var companyTicker = companyOutContext.Ticker;
-
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        var secEdgarClient = scope.ServiceProvider.GetRequiredService<ISecEdgarClient>();
-        var repository = scope.ServiceProvider.GetRequiredService<Form144FilingRepository>();
-
-        var existing = await repository.GetByAccessionNumber(filing.AccessionNumber).AnyAsync();
-        if (existing)
-            return false;
-
-        var content = await secEdgarClient.GetDocumentContent(filing);
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            _logger.LogWarning(
-                "Empty content for {Ticker} Form 144 - {AccessionNumber}",
-                companyTicker,
-                filing.AccessionNumber
-            );
-            return false;
-        }
-
-        var root = await EdgarXmlSubmissionParser.TryParseSubmission(
-            content,
-            filing,
-            companyTicker,
-            "Form 144",
-            "Form144.ParseXml",
-            _logger,
-            _errorReporter
-        );
-        if (root == null)
-            return false;
-
-        var entity = ParseFiling(root, companyId, filing);
-        if (entity == null)
-        {
-            _logger.LogWarning(
-                "Form 144 XML missing formData for {Ticker} - {AccessionNumber}",
-                companyTicker,
-                filing.AccessionNumber
-            );
-            return false;
-        }
-
-        repository.Add(entity);
-        await repository.SaveChanges();
-
-        _logger.LogInformation(
+        Logger.LogInformation(
             "Imported Form 144 for {Ticker} ({Shares} shares, {Prior} prior sales) from {AccessionNumber}",
-            companyTicker,
+            ticker,
             entity.SharesToBeSold,
             entity.PriorSales.Count,
-            filing.AccessionNumber
+            accessionNumber
         );
-
-        return true;
     }
 
-    private static Form144Filing ParseFiling(XElement root, Guid companyId, FilingData filing)
+    protected override Form144Filing ParseFiling(XElement root, Guid companyId, FilingData filing)
     {
         var formData = El(root, "formData");
         if (formData == null)
