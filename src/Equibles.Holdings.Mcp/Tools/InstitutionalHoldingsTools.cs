@@ -211,7 +211,7 @@ public class InstitutionalHoldingsTools
                     : "—";
 
             result.AppendLine(
-                $"| {FormatDate(date)} | {institutionCount.ToString("N0", CultureInfo.InvariantCulture)} | {totalShares.ToString("N0", CultureInfo.InvariantCulture)} | {(totalValue / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture)} | {change} |"
+                $"| {FormatDate(date)} | {FormatWholeNumber(institutionCount)} | {FormatWholeNumber(totalShares)} | {FormatMillions(totalValue)} | {change} |"
             );
 
             previousShares = totalShares;
@@ -502,7 +502,7 @@ public class InstitutionalHoldingsTools
             {
                 var m = rows[i];
                 sb.AppendLine(
-                    $"| {i + 1} | {m.Name} | {FormatSignedShares(m.DeltaShares)} | {FormatSignedMillions(m.DeltaValue)} | {m.PreviousShares.ToString("N0", CultureInfo.InvariantCulture)} → {m.CurrentShares.ToString("N0", CultureInfo.InvariantCulture)} |"
+                    $"| {i + 1} | {m.Name} | {FormatSignedShares(m.DeltaShares)} | {FormatSignedMillions(m.DeltaValue)} | {FormatWholeNumber(m.PreviousShares)} → {FormatWholeNumber(m.CurrentShares)} |"
                 );
             }
         }
@@ -750,7 +750,7 @@ public class InstitutionalHoldingsTools
         var result = new StringBuilder();
         result.AppendLine($"Most-held 13F stocks as of {FormatDate(targetDate)}");
         result.AppendLine(
-            $"vs prior quarter {FormatDate(previousDate)} · {universeFilers.ToString("N0", CultureInfo.InvariantCulture)} filers in the 13F universe"
+            $"vs prior quarter {FormatDate(previousDate)} · {FormatWholeNumber(universeFilers)} filers in the 13F universe"
         );
         result.AppendLine($"Sorted by: {sort}");
         result.AppendLine();
@@ -767,7 +767,7 @@ public class InstitutionalHoldingsTools
             var pct = universeFilers > 0 ? (double)r.CurrentFilerCount / universeFilers * 100.0 : 0;
             var deltaFilers = r.CurrentFilerCount - r.PreviousFilerCount;
             result.AppendLine(
-                $"| {i + 1} | {ticker} | {name} | {r.CurrentFilerCount.ToString("N0", CultureInfo.InvariantCulture)} | {FormatSignedShares(deltaFilers)} | {(r.CurrentValue / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture)} | {FormatSignedMillions(r.DeltaValue)} | {pct.ToString("F1", CultureInfo.InvariantCulture)}% |"
+                $"| {i + 1} | {ticker} | {name} | {FormatWholeNumber(r.CurrentFilerCount)} | {FormatSignedShares(deltaFilers)} | {FormatMillions(r.CurrentValue)} | {FormatSignedMillions(r.DeltaValue)} | {FormatPercent(pct)}% |"
             );
         }
         return result.ToString();
