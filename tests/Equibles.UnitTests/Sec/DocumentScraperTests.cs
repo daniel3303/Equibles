@@ -623,6 +623,15 @@ public class DocumentScraperTests
             services.AddSingleton(Converter);
             services.AddSingleton(PdfTextExtractor);
             services.AddSingleton(Persistence);
+            // DocumentScraper resolves the raw-XBRL capture service per scope. These
+            // tests exercise the default markdown-persistence flow, so capture stays
+            // disabled (default options) and short-circuits without touching the repo.
+            services.AddLogging();
+            services.AddScoped<RawFilingArtifactRepository>();
+            services.AddSingleton<IOptions<RawXbrlArtifactOptions>>(
+                Options.Create(new RawXbrlArtifactOptions())
+            );
+            services.AddScoped<RawXbrlArtifactCaptureService>();
 
             var provider = services.BuildServiceProvider();
             ScopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
