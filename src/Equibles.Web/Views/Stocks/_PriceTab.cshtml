@@ -52,6 +52,65 @@
         </div>
     </div>
 
+    <!-- Performance vs benchmark -->
+    <div class="card bg-base-100 shadow-sm mb-2">
+        <div class="card-body p-4 lg:p-6">
+            <h2 class="font-semibold text-sm mb-3">Performance</h2>
+            @{
+                var windows = new[] {
+                    (Label: "5D", Stock: Model.Returns.FiveDay, Bench: Model.BenchmarkReturns?.FiveDay),
+                    (Label: "20D", Stock: Model.Returns.TwentyDay, Bench: Model.BenchmarkReturns?.TwentyDay),
+                    (Label: "120D", Stock: Model.Returns.OneHundredTwentyDay, Bench: Model.BenchmarkReturns?.OneHundredTwentyDay),
+                    (Label: "MTD", Stock: Model.Returns.MonthToDate, Bench: Model.BenchmarkReturns?.MonthToDate),
+                    (Label: "YTD", Stock: Model.Returns.YearToDate, Bench: Model.BenchmarkReturns?.YearToDate),
+                };
+                // Green for gains, red for losses, muted dash when the window has no data.
+                string Cls(decimal? v) => v == null ? "text-base-content/40" : v >= 0 ? "text-success" : "text-error";
+                // Signed percentage (e.g. "+12.5%"); em dash when unavailable. Invariant
+                // so the decimal separator stays a dot regardless of server culture.
+                string Fmt(decimal? v) => v == null ? "—" : (v >= 0 ? "+" : "") + v.Value.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "%";
+            }
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            @foreach (var w in windows) {
+                                <th class="text-right font-mono">@w.Label</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="text-base-content/50">@Model.Ticker</td>
+                            @foreach (var w in windows) {
+                                <td class="text-right font-mono @Cls(w.Stock)">@Fmt(w.Stock)</td>
+                            }
+                        </tr>
+                        @if (Model.BenchmarkReturns != null) {
+                            <tr>
+                                <td class="text-base-content/50">@Model.BenchmarkTicker</td>
+                                @foreach (var w in windows) {
+                                    <td class="text-right font-mono @Cls(w.Bench)">@Fmt(w.Bench)</td>
+                                }
+                            </tr>
+                            <tr>
+                                <td class="text-base-content/50">vs @Model.BenchmarkTicker</td>
+                                @foreach (var w in windows) {
+                                    var delta = w.Stock.HasValue && w.Bench.HasValue ? w.Stock - w.Bench : null;
+                                    <td class="text-right font-mono @Cls(delta)">@Fmt(delta)</td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (Model.BenchmarkReturns == null) {
+                <p class="text-xs text-base-content/50 mt-2">@(Model.BenchmarkTicker ?? "SPY") comparison unavailable.</p>
+            }
+        </div>
+    </div>
+
     <!-- Summary stats -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body p-4 lg:p-6">

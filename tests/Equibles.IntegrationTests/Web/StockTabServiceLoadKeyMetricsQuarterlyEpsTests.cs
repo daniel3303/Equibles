@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Data;
 using Equibles.Congress.Repositories;
 using Equibles.Data;
@@ -58,7 +59,8 @@ public class StockTabServiceLoadKeyMetricsQuarterlyEpsTests : IDisposable
             new CongressionalTradeRepository(_dbContext),
             new DailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
-            new FinancialConceptRepository(_dbContext)
+            new FinancialConceptRepository(_dbContext),
+            new CommonStockRepository(_dbContext)
         );
     }
 

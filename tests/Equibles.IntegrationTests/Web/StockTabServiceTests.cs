@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Data;
 using Equibles.Congress.Data.Models;
 using Equibles.Congress.Repositories;
@@ -59,7 +60,8 @@ public class StockTabServiceTests : IDisposable
             new CongressionalTradeRepository(_dbContext),
             new DailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
-            new FinancialConceptRepository(_dbContext)
+            new FinancialConceptRepository(_dbContext),
+            new CommonStockRepository(_dbContext)
         );
     }
 
@@ -804,6 +806,102 @@ public class StockTabServiceTests : IDisposable
         var result = await _service.LoadPriceTab(stock);
 
         result.Prices.Select(p => p.Date).Should().BeInAscendingOrder();
+    }
+
+    // Add one bar per close, on consecutive days starting at startDate. OHLC are all
+    // set to the close so returns (close-based) are exactly the intended values.
+    private void AddDailyPrices(CommonStock stock, DateOnly startDate, params decimal[] closes)
+    {
+        for (var i = 0; i < closes.Length; i++)
+        {
+            _dbContext
+                .Set<DailyStockPrice>()
+                .Add(
+                    new DailyStockPrice
+                    {
+                        CommonStockId = stock.Id,
+                        Date = startDate.AddDays(i),
+                        Open = closes[i],
+                        High = closes[i],
+                        Low = closes[i],
+                        Close = closes[i],
+                        AdjustedClose = closes[i],
+                        Volume = 1_000_000,
+                    }
+                );
+        }
+    }
+
+    [Fact]
+    public async Task LoadPriceTab_ComputesStockReturns()
+    {
+        var stock = CreateStock();
+        // 6 bars: the close 5 bars before the last (100) is the base, latest 110 → +10%.
+        AddDailyPrices(stock, new DateOnly(2025, 6, 2), 100m, 102m, 104m, 106m, 108m, 110m);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.LoadPriceTab(stock);
+
+        result.Returns.Should().NotBeNull();
+        result.Returns.FiveDay.Should().Be(10m);
+        result.BenchmarkTicker.Should().Be("SPY");
+    }
+
+    [Fact]
+    public async Task LoadPriceTab_WithBenchmark_ComputesBenchmarkReturns()
+    {
+        var stock = CreateStock("AAPL", "Apple Inc.");
+        var spy = CreateStock("SPY", "SPDR S&P 500 ETF", "0000884394");
+        AddDailyPrices(stock, new DateOnly(2025, 6, 2), 100m, 102m, 104m, 106m, 108m, 110m); // +10%
+        AddDailyPrices(spy, new DateOnly(2025, 6, 2), 100m, 101m, 102m, 103m, 104m, 105m); // +5%
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.LoadPriceTab(stock);
+
+        result.Returns.FiveDay.Should().Be(10m);
+        result.BenchmarkReturns.Should().NotBeNull();
+        result.BenchmarkReturns.FiveDay.Should().Be(5m);
+    }
+
+    [Fact]
+    public async Task LoadPriceTab_NoBenchmarkTracked_BenchmarkReturnsNull()
+    {
+        var stock = CreateStock();
+        AddDailyPrices(stock, new DateOnly(2025, 6, 2), 100m, 102m, 104m, 106m, 108m, 110m);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.LoadPriceTab(stock);
+
+        result.BenchmarkReturns.Should().BeNull();
+        result.BenchmarkTicker.Should().Be("SPY");
+    }
+
+    [Fact]
+    public async Task LoadPriceTab_StockIsBenchmark_DoesNotCompareToItself()
+    {
+        var spy = CreateStock("SPY", "SPDR S&P 500 ETF", "0000884394");
+        AddDailyPrices(spy, new DateOnly(2025, 6, 2), 100m, 102m, 104m, 106m, 108m, 110m);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.LoadPriceTab(spy);
+
+        result.Returns.FiveDay.Should().Be(10m);
+        result.BenchmarkReturns.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task LoadPriceTab_NoPrices_BenchmarkReturnsNullEvenWhenSpyExists()
+    {
+        var stock = CreateStock("AAPL", "Apple Inc.");
+        var spy = CreateStock("SPY", "SPDR S&P 500 ETF", "0000884394");
+        AddDailyPrices(spy, new DateOnly(2025, 6, 2), 100m, 101m, 102m, 103m, 104m, 105m);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.LoadPriceTab(stock);
+
+        result.Prices.Should().BeEmpty();
+        result.Returns.FiveDay.Should().BeNull();
+        result.BenchmarkReturns.Should().BeNull();
     }
 
     // ── LoadHoldingsTab ─────────────────────────────────────────────────
