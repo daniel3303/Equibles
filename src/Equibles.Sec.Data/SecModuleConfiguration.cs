@@ -24,6 +24,7 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
         });
 
         builder.Entity<FailToDeliver>();
+        builder.Entity<FormAdvAdviser>();
         builder.Entity<FormDFiling>();
         builder.Entity<FormDRelatedPerson>();
         builder.Entity<NCenFiling>();
