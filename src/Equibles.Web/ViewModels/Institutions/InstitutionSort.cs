@@ -12,4 +12,7 @@ public enum InstitutionSort
 
     [Display(Name = "Total $ Value (latest 13F)")]
     ValueDescending = 2,
+
+    [Display(Name = "3Y alpha vs S&P 500")]
+    AlphaDescending = 3,
 }

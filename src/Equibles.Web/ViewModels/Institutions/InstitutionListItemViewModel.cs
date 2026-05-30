@@ -15,4 +15,8 @@ public class InstitutionListItemViewModel
     public int PositionCount { get; set; }
     public long TotalValue { get; set; }
     public DateOnly? LatestReportDate { get; set; }
+
+    // Latest 3-year alpha vs the S&P 500 (portfolio CAGR minus benchmark CAGR),
+    // as a percentage. Null when the filer has no fund score yet.
+    public decimal? AlphaPercent { get; set; }
 }

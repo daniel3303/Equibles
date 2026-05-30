@@ -1,4 +1,5 @@
 using Equibles.Data;
+using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Web.Controllers.Abstract;
@@ -11,6 +12,11 @@ namespace Equibles.Web.Controllers;
 
 public class InstitutionsController : BaseController
 {
+    // The fund-score variant surfaced in the list: the same default rolling window and benchmark
+    // the scoring worker writes, so the alpha column and sort read the rows it produces.
+    private const int ScoreWindowYears = FundScoringManager.DefaultWindowYears;
+    private const string ScoreBenchmark = FundScoringManager.DefaultBenchmark;
+
     private readonly InstitutionalHolderRepository _holderRepository;
     private readonly EquiblesFinancialDbContext _dbContext;
 
@@ -118,6 +124,14 @@ public class InstitutionsController : BaseController
             joined = joined.Where(x => (x.agg != null ? x.agg.Positions : 0) <= maxPositions.Value);
         }
 
+        // Each filer's latest alpha for the surfaced window/benchmark, as a correlated scalar
+        // subquery. The unique index makes it 1:0..1; a missing score reads as null. Kept as a
+        // subquery (not a second GroupJoin) so it composes onto the aggregate join above without
+        // an untranslatable join-of-a-join.
+        var scoresQuery = _dbContext
+            .Set<FundScore>()
+            .Where(s => s.WindowYears == ScoreWindowYears && s.BenchmarkTicker == ScoreBenchmark);
+
         var ordered = sort switch
         {
             InstitutionSort.PositionsDescending => joined
@@ -126,6 +140,18 @@ public class InstitutionsController : BaseController
                 .ThenBy(x => x.h.Id),
             InstitutionSort.ValueDescending => joined
                 .OrderByDescending(x => x.agg != null ? x.agg.Value : 0L)
+                .ThenBy(x => x.h.Name)
+                .ThenBy(x => x.h.Id),
+            // Scored filers first (alpha highest to lowest), unscored filers last: a missing score
+            // coalesces to the smallest value so it sinks to the bottom of a descending sort.
+            InstitutionSort.AlphaDescending => joined
+                .OrderByDescending(x =>
+                    scoresQuery
+                        .Where(s => s.InstitutionalHolderId == x.h.Id)
+                        .Select(s => (decimal?)s.AlphaPercent)
+                        .FirstOrDefault()
+                    ?? decimal.MinValue
+                )
                 .ThenBy(x => x.h.Name)
                 .ThenBy(x => x.h.Id),
             _ => joined.OrderBy(x => x.h.Name).ThenBy(x => x.h.Id),
@@ -145,6 +171,10 @@ public class InstitutionsController : BaseController
                 PositionCount = x.agg != null ? x.agg.Positions : 0,
                 TotalValue = x.agg != null ? x.agg.Value : 0L,
                 LatestReportDate = x.agg != null ? (DateOnly?)x.agg.LatestDate : null,
+                AlphaPercent = scoresQuery
+                    .Where(s => s.InstitutionalHolderId == x.h.Id)
+                    .Select(s => (decimal?)s.AlphaPercent)
+                    .FirstOrDefault(),
             })
             .ToListAsync();
 

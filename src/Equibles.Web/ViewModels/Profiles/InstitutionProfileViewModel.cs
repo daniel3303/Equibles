@@ -11,6 +11,11 @@ public class InstitutionProfileViewModel
     public FundClassification Classification { get; set; }
     public bool ConfidentialTreatmentRequested { get; set; }
     public List<HoldingRowViewModel> Holdings { get; set; } = [];
+
+    // Latest fund score for the default rolling window / benchmark, or null when this filer
+    // hasn't been scored yet (e.g. no price history for its holdings).
+    public FundScore FundScore { get; set; }
+
     public InstitutionPortfolioSummary Summary { get; set; } = new();
     public List<IndustryAllocationSlice> IndustryAllocation { get; set; } = [];
 
