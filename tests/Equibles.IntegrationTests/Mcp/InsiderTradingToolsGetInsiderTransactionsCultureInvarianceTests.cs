@@ -19,6 +19,7 @@ public class InsiderTradingToolsGetInsiderTransactionsCultureInvarianceTests : P
         new(
             new InsiderTransactionRepository(DbContext),
             new InsiderOwnerRepository(DbContext),
+            new Form144FilingRepository(DbContext),
             new CommonStockRepository(DbContext),
             ErrorManager,
             NullLogger<InsiderTradingTools>()

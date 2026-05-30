@@ -32,6 +32,7 @@ public class InsiderTradingToolsResolveStockByTickerNormalizationTests : IDispos
         _tools = new InsiderTradingTools(
             new InsiderTransactionRepository(_dbContext),
             new InsiderOwnerRepository(_dbContext),
+            new Form144FilingRepository(_dbContext),
             new CommonStockRepository(_dbContext),
             errorManager: null,
             NullLogger<InsiderTradingTools>.Instance
