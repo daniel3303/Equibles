@@ -157,128 +157,95 @@ public class NCenFilingProcessor : IFilingProcessor
         var providers = new List<NCenServiceProvider>();
 
         // Registrant-level providers.
-        foreach (var accountant in Els(El(registrant, "publicAccountants"), "publicAccountant"))
-        {
-            providers.Add(
-                MakeProvider(
-                    NCenServiceProviderType.PublicAccountant,
-                    Val(accountant, "publicAccountantName"),
-                    Attr(El(accountant, "publicAccountantStateCountry"), "publicAccountantCountry"),
-                    affiliated: false
-                )
-            );
-        }
+        AddProviders(
+            providers,
+            Els(El(registrant, "publicAccountants"), "publicAccountant"),
+            NCenServiceProviderType.PublicAccountant,
+            a => Val(a, "publicAccountantName"),
+            a => Attr(El(a, "publicAccountantStateCountry"), "publicAccountantCountry"),
+            _ => false
+        );
 
-        foreach (
-            var underwriter in Els(El(registrant, "principalUnderwriters"), "principalUnderwriter")
-        )
-        {
-            providers.Add(
-                MakeProvider(
-                    NCenServiceProviderType.PrincipalUnderwriter,
-                    Val(underwriter, "principalUnderwriterName"),
-                    Val(underwriter, "principalUnderWriterCountry"),
-                    ParseYesNo(Val(underwriter, "isPrincipalUnderwriterAffiliatedWithRegistrant"))
-                )
-            );
-        }
+        AddProviders(
+            providers,
+            Els(El(registrant, "principalUnderwriters"), "principalUnderwriter"),
+            NCenServiceProviderType.PrincipalUnderwriter,
+            u => Val(u, "principalUnderwriterName"),
+            u => Val(u, "principalUnderWriterCountry"),
+            u => ParseYesNo(Val(u, "isPrincipalUnderwriterAffiliatedWithRegistrant"))
+        );
 
         // Per-series (management investment company) providers. A multi-series fund repeats the
         // same firms across series, so the list is de-duplicated by role + name below.
         var seriesInfo = El(formData, "managementInvestmentQuestionSeriesInfo");
         foreach (var question in Els(seriesInfo, "managementInvestmentQuestion"))
         {
-            foreach (var adviser in Els(El(question, "investmentAdvisers"), "investmentAdviser"))
-            {
-                providers.Add(
-                    MakeProvider(
-                        NCenServiceProviderType.InvestmentAdviser,
-                        Val(adviser, "investmentAdviserName"),
-                        Val(adviser, "investmentAdviserCountry"),
-                        affiliated: false
-                    )
-                );
-            }
+            AddProviders(
+                providers,
+                Els(El(question, "investmentAdvisers"), "investmentAdviser"),
+                NCenServiceProviderType.InvestmentAdviser,
+                a => Val(a, "investmentAdviserName"),
+                a => Val(a, "investmentAdviserCountry"),
+                _ => false
+            );
 
-            foreach (var subAdviser in Els(El(question, "subAdvisers"), "subAdviser"))
-            {
-                providers.Add(
-                    MakeProvider(
-                        NCenServiceProviderType.SubAdviser,
-                        Val(subAdviser, "subAdviserName"),
-                        Val(subAdviser, "subAdviserCountry"),
-                        ParseYesNo(Val(subAdviser, "isSubAdviserAffiliated"))
-                    )
-                );
-            }
+            AddProviders(
+                providers,
+                Els(El(question, "subAdvisers"), "subAdviser"),
+                NCenServiceProviderType.SubAdviser,
+                a => Val(a, "subAdviserName"),
+                a => Val(a, "subAdviserCountry"),
+                a => ParseYesNo(Val(a, "isSubAdviserAffiliated"))
+            );
 
-            foreach (var custodian in Els(El(question, "custodians"), "custodian"))
-            {
-                providers.Add(
-                    MakeProvider(
-                        NCenServiceProviderType.Custodian,
-                        Val(custodian, "custodianName"),
-                        Val(custodian, "custodianCountry"),
-                        ParseYesNo(Val(custodian, "isCustodianAffiliated"))
-                    )
-                );
-            }
+            AddProviders(
+                providers,
+                Els(El(question, "custodians"), "custodian"),
+                NCenServiceProviderType.Custodian,
+                c => Val(c, "custodianName"),
+                c => Val(c, "custodianCountry"),
+                c => ParseYesNo(Val(c, "isCustodianAffiliated"))
+            );
 
-            foreach (var agent in Els(El(question, "transferAgents"), "transferAgent"))
-            {
-                providers.Add(
-                    MakeProvider(
-                        NCenServiceProviderType.TransferAgent,
-                        Val(agent, "transferAgentName"),
-                        Attr(El(agent, "transferAgentStateCountry"), "transferAgentCountry"),
-                        ParseYesNo(Val(agent, "isTransferAgentAffiliated"))
-                    )
-                );
-            }
+            AddProviders(
+                providers,
+                Els(El(question, "transferAgents"), "transferAgent"),
+                NCenServiceProviderType.TransferAgent,
+                a => Val(a, "transferAgentName"),
+                a => Attr(El(a, "transferAgentStateCountry"), "transferAgentCountry"),
+                a => ParseYesNo(Val(a, "isTransferAgentAffiliated"))
+            );
 
-            foreach (var admin in Els(El(question, "admins"), "admin"))
-            {
-                providers.Add(
-                    MakeProvider(
-                        NCenServiceProviderType.Administrator,
-                        Val(admin, "adminName"),
-                        Attr(El(admin, "adminStateCountry"), "adminCountry"),
-                        ParseYesNo(Val(admin, "isAdminAffiliated"))
-                    )
-                );
-            }
+            AddProviders(
+                providers,
+                Els(El(question, "admins"), "admin"),
+                NCenServiceProviderType.Administrator,
+                a => Val(a, "adminName"),
+                a => Attr(El(a, "adminStateCountry"), "adminCountry"),
+                a => ParseYesNo(Val(a, "isAdminAffiliated"))
+            );
 
-            foreach (var pricing in Els(El(question, "pricingServices"), "pricingService"))
-            {
-                providers.Add(
-                    MakeProvider(
-                        NCenServiceProviderType.PricingService,
-                        Val(pricing, "pricingServiceName"),
-                        Val(pricing, "pricingServiceCountry"),
-                        ParseYesNo(Val(pricing, "isPricingServiceAffiliated"))
-                    )
-                );
-            }
+            AddProviders(
+                providers,
+                Els(El(question, "pricingServices"), "pricingService"),
+                NCenServiceProviderType.PricingService,
+                p => Val(p, "pricingServiceName"),
+                p => Val(p, "pricingServiceCountry"),
+                p => ParseYesNo(Val(p, "isPricingServiceAffiliated"))
+            );
 
-            foreach (
-                var shareholder in Els(
-                    El(question, "shareholderServicingAgents"),
-                    "shareholderServicingAgent"
-                )
-            )
-            {
-                providers.Add(
-                    MakeProvider(
-                        NCenServiceProviderType.ShareholderServicingAgent,
-                        Val(shareholder, "shareholderServiceAgentName"),
-                        Attr(
-                            El(shareholder, "shareholderServiceAgentStateCountry"),
-                            "shareholderServiceAgentCountry"
-                        ),
-                        ParseYesNo(Val(shareholder, "isShareholderServiceAgentAffiliated"))
-                    )
-                );
-            }
+            AddProviders(
+                providers,
+                Els(El(question, "shareholderServicingAgents"), "shareholderServicingAgent"),
+                NCenServiceProviderType.ShareholderServicingAgent,
+                s => Val(s, "shareholderServiceAgentName"),
+                s =>
+                    Attr(
+                        El(s, "shareholderServiceAgentStateCountry"),
+                        "shareholderServiceAgentCountry"
+                    ),
+                s => ParseYesNo(Val(s, "isShareholderServiceAgentAffiliated"))
+            );
         }
 
         foreach (
@@ -290,6 +257,22 @@ public class NCenFilingProcessor : IFilingProcessor
         {
             entity.ServiceProviders.Add(provider);
         }
+    }
+
+    // Iterate one provider collection, building a provider per element with the given
+    // role + field accessors. MakeProvider may return null (blank / "N/A" placeholder);
+    // those nulls are filtered out during the role+name de-duplication above.
+    private static void AddProviders(
+        List<NCenServiceProvider> providers,
+        IEnumerable<XElement> items,
+        NCenServiceProviderType type,
+        Func<XElement, string> name,
+        Func<XElement, string> country,
+        Func<XElement, bool> affiliated
+    )
+    {
+        foreach (var item in items)
+            providers.Add(MakeProvider(type, name(item), country(item), affiliated(item)));
     }
 
     // Returns null when the firm has no usable name (blank or the literal "N/A"), so the caller
