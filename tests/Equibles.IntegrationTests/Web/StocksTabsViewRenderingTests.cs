@@ -214,4 +214,54 @@ public class StocksTabsViewRenderingTests
         html.Should().Contain("Indefinite", "an indefinite offering amount renders as text");
         html.Should().Contain("Exempt Offerings", "the section tab is labelled");
     }
+
+    [Fact]
+    public async Task GetStocksFundOperations_WithSeededNCen_RendersFundOperationsTab()
+    {
+        await _fixture.ResetAndSeedAsync(async db =>
+        {
+            var stock = new CommonStock
+            {
+                Cik = "0000320193",
+                Ticker = Ticker,
+                Name = "Apple Inc.",
+            };
+            db.Add(stock);
+            db.Add(
+                new NCenFiling
+                {
+                    CommonStockId = stock.Id,
+                    AccessionNumber = "0000065433-24-000002",
+                    FilingDate = new DateOnly(2025, 1, 15),
+                    IsAmendment = false,
+                    RegistrantName = "MEXICO FUND INC",
+                    InvestmentCompanyType = "N-2",
+                    InvestmentCompanyFileNumber = "811-02409",
+                    State = "US-MD",
+                    Country = "US",
+                    ReportEndingPeriod = new DateOnly(2024, 10, 31),
+                    ServiceProviders =
+                    [
+                        new NCenServiceProvider
+                        {
+                            ProviderType = NCenServiceProviderType.InvestmentAdviser,
+                            Name = "Impulsora del Fondo Mexico SC",
+                            Country = "MX",
+                        },
+                    ],
+                }
+            );
+            await Task.CompletedTask;
+        });
+
+        var response = await _fixture.Client.GetAsync($"/stocks/{Ticker}/fund-operations");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.Content.ReadAsStringAsync();
+        html.Should().Contain("811-02409", "the fund-operations tab lists the file number");
+        html.Should()
+            .Contain("Impulsora del Fondo Mexico SC", "the tab lists the service provider");
+        html.Should().Contain("Investment Adviser", "the provider's role is labelled");
+        html.Should().Contain("Fund Operations", "the section tab is labelled");
+    }
 }

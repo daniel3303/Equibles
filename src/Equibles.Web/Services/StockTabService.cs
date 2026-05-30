@@ -34,6 +34,7 @@ public class StockTabService
     private readonly InsiderTransactionRepository _insiderTransactionRepository;
     private readonly Form144FilingRepository _form144FilingRepository;
     private readonly FormDFilingRepository _formDFilingRepository;
+    private readonly NCenFilingRepository _nCenFilingRepository;
     private readonly CongressionalTradeRepository _congressionalTradeRepository;
     private readonly DailyStockPriceRepository _dailyStockPriceRepository;
     private readonly FinancialFactRepository _financialFactRepository;
@@ -58,6 +59,7 @@ public class StockTabService
         InsiderTransactionRepository insiderTransactionRepository,
         Form144FilingRepository form144FilingRepository,
         FormDFilingRepository formDFilingRepository,
+        NCenFilingRepository nCenFilingRepository,
         CongressionalTradeRepository congressionalTradeRepository,
         DailyStockPriceRepository dailyStockPriceRepository,
         FinancialFactRepository financialFactRepository,
@@ -74,6 +76,7 @@ public class StockTabService
         _insiderTransactionRepository = insiderTransactionRepository;
         _form144FilingRepository = form144FilingRepository;
         _formDFilingRepository = formDFilingRepository;
+        _nCenFilingRepository = nCenFilingRepository;
         _congressionalTradeRepository = congressionalTradeRepository;
         _dailyStockPriceRepository = dailyStockPriceRepository;
         _financialFactRepository = financialFactRepository;
@@ -316,6 +319,17 @@ public class StockTabService
             .Take(RecentRowLimit)
             .ToListAsync();
         return new ExemptOfferingsTabViewModel { Filings = filings, Ticker = stock.Ticker };
+    }
+
+    public async Task<FundOperationsTabViewModel> LoadFundOperationsTab(CommonStock stock)
+    {
+        var filings = await _nCenFilingRepository
+            .GetByStock(stock)
+            .Include(f => f.ServiceProviders)
+            .OrderByDescending(f => f.FilingDate)
+            .Take(RecentRowLimit)
+            .ToListAsync();
+        return new FundOperationsTabViewModel { Filings = filings, Ticker = stock.Ticker };
     }
 
     public async Task<CongressionalTradesTabViewModel> LoadCongressionalTradesTab(CommonStock stock)
