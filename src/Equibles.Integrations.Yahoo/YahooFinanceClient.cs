@@ -101,44 +101,14 @@ public class YahooFinanceClient : IYahooFinanceClient
                 continue;
             }
 
-            // Yahoo occasionally returns a ragged payload — a timestamp array
-            // longer than the OHLC/volume columns, or a column with a null
-            // hole on a holiday / early-close row. Bound every column access
-            // and require the full OHLC quartet: an incomplete row is treated
-            // like a holiday gap (skipped) rather than emitted as an
-            // OHLC-impossible bar (e.g. High=0 while Close>0) or aborting the
-            // whole import.
-            T? At<T>(List<T?> col)
-                where T : struct => i < col.Count ? col[i] : null;
-
-            var open = At(quote.Open);
-            var high = At(quote.High);
-            var low = At(quote.Low);
-            var close = At(quote.Close);
-            if (open == null || high == null || low == null || close == null)
+            var price = TryBuildPrice(quote, adjCloseList, i, date);
+            if (price == null)
             {
                 skipped++;
                 continue;
             }
 
-            prices.Add(
-                new HistoricalPrice
-                {
-                    Date = date,
-                    Open = Math.Round(open.Value, 4),
-                    High = Math.Round(high.Value, 4),
-                    Low = Math.Round(low.Value, 4),
-                    Close = Math.Round(close.Value, 4),
-                    // adjclose may be absent (no array / short) OR a null hole
-                    // on a holiday-edge row. Both mean "unavailable" → fall
-                    // back to the day's Close, never 0.
-                    AdjustedClose = Math.Round(
-                        (adjCloseList != null ? At(adjCloseList) : null) ?? close.Value,
-                        4
-                    ),
-                    Volume = At(quote.Volume) ?? 0,
-                }
-            );
+            prices.Add(price);
         }
 
         _logger.LogDebug(
@@ -149,6 +119,48 @@ public class YahooFinanceClient : IYahooFinanceClient
             outsideWindow
         );
         return prices;
+    }
+
+    // Build one HistoricalPrice from row i of the chart columns, or null when the row is
+    // incomplete and should be skipped like a holiday gap.
+    //
+    // Yahoo occasionally returns a ragged payload — a timestamp array longer than the
+    // OHLC/volume columns, or a column with a null hole on a holiday / early-close row.
+    // Bound every column access and require the full OHLC quartet: an incomplete row is
+    // skipped rather than emitted as an OHLC-impossible bar (e.g. High=0 while Close>0)
+    // or aborting the whole import.
+    private static HistoricalPrice TryBuildPrice(
+        ChartQuote quote,
+        List<decimal?> adjCloseList,
+        int i,
+        DateOnly date
+    )
+    {
+        T? At<T>(List<T?> col)
+            where T : struct => i < col.Count ? col[i] : null;
+
+        var open = At(quote.Open);
+        var high = At(quote.High);
+        var low = At(quote.Low);
+        var close = At(quote.Close);
+        if (open == null || high == null || low == null || close == null)
+            return null;
+
+        return new HistoricalPrice
+        {
+            Date = date,
+            Open = Math.Round(open.Value, 4),
+            High = Math.Round(high.Value, 4),
+            Low = Math.Round(low.Value, 4),
+            Close = Math.Round(close.Value, 4),
+            // adjclose may be absent (no array / short) OR a null hole on a holiday-edge
+            // row. Both mean "unavailable" → fall back to the day's Close, never 0.
+            AdjustedClose = Math.Round(
+                (adjCloseList != null ? At(adjCloseList) : null) ?? close.Value,
+                4
+            ),
+            Volume = At(quote.Volume) ?? 0,
+        };
     }
 
     public async Task<List<RecommendationTrend>> GetRecommendationTrends(string ticker)
