@@ -25,4 +25,9 @@ public class PriceTabViewModel : StockTabViewModel
     public List<decimal?> MacdLine { get; set; } = [];
     public List<decimal?> MacdSignal { get; set; } = [];
     public List<decimal?> MacdHistogram { get; set; } = [];
+
+    // Technical signals surfaced as badges near the top of the tab.
+    public MovingAverageCrossSignal MaCross { get; set; }
+    public int PriceStreakDays { get; set; }
+    public PriceStreakDirection PriceStreakDirection { get; set; }
 }
