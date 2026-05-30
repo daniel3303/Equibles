@@ -22,11 +22,7 @@ public static class TechnicalIndicatorService
                 continue;
             }
 
-            var sum = 0m;
-            for (var j = i - period + 1; j <= i; j++)
-            {
-                sum += prices[j];
-            }
+            var sum = SumWindow(prices, i - period + 1, period);
             result.Add(Math.Round(sum / period, RoundingDigits));
         }
         return result;
@@ -48,9 +44,7 @@ public static class TechnicalIndicatorService
             if (i == period - 1)
             {
                 // Seed EMA with SMA for the first value
-                var sum = 0m;
-                for (var j = 0; j < period; j++)
-                    sum += prices[j];
+                var sum = SumWindow(prices, 0, period);
                 result.Add(Math.Round(sum / period, RoundingDigits));
                 continue;
             }
@@ -442,10 +436,7 @@ public static class TechnicalIndicatorService
                 continue;
             }
 
-            var mean = 0m;
-            for (var j = i - period + 1; j <= i; j++)
-                mean += prices[j];
-            mean /= period;
+            var mean = SumWindow(prices, i - period + 1, period) / period;
 
             var sumSquares = 0m;
             for (var j = i - period + 1; j <= i; j++)
@@ -463,5 +454,15 @@ public static class TechnicalIndicatorService
         }
 
         return (middle, upper, lower);
+    }
+
+    // Sum of `count` consecutive values starting at `start`, summed in ascending index
+    // order so the decimal result is independent of how callers compute their windows.
+    private static decimal SumWindow(List<decimal> values, int start, int count)
+    {
+        var sum = 0m;
+        for (var i = start; i < start + count; i++)
+            sum += values[i];
+        return sum;
     }
 }
