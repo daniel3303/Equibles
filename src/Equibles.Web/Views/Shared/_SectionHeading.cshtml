@@ -1,0 +1,5 @@
+@model (string Title, string BadgeClass, string BadgeContent)
+<div class="flex items-center gap-2 mb-2">
+    <h2 class="text-base font-medium m-0">@Model.Title</h2>
+    <span class="badge @Model.BadgeClass badge-sm">@Model.BadgeContent</span>
+</div>
