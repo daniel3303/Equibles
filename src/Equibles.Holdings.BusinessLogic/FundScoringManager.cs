@@ -4,7 +4,6 @@ using Equibles.Core.AutoWiring;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
-using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
 
@@ -26,10 +25,6 @@ public class FundScoringManager
 {
     public const string DefaultBenchmark = "SPY";
     public const int DefaultWindowYears = 3;
-
-    // Forward-fill needs a few trading days of pre-window history so day-zero resolves to the
-    // last close even on a weekend or holiday.
-    private const int PriceLookbackDays = 14;
 
     // Annualised compounding can saturate to decimal.MaxValue on degenerate inputs; numeric(18,4)
     // tops out far below that, so anything past this magnitude isn't a storable (or meaningful) score.
@@ -116,8 +111,8 @@ public class FundScoringManager
         var snapshots = BuildSnapshots(holdings);
 
         var priceWindowFrom =
-            from > DateOnly.MinValue.AddDays(PriceLookbackDays)
-                ? from.AddDays(-PriceLookbackDays)
+            from > DateOnly.MinValue.AddDays(BacktestPriceLoader.PriceLookbackDays)
+                ? from.AddDays(-BacktestPriceLoader.PriceLookbackDays)
                 : DateOnly.MinValue;
 
         var stockIds = holdings
@@ -129,13 +124,17 @@ public class FundScoringManager
         var pricesByStock = (
             stockIds.Count == 0
                 ? []
-                : await LoadPrices(_priceRepository.GetByStocks(stockIds, priceWindowFrom, to))
+                : await BacktestPriceLoader.LoadPrices(
+                    _priceRepository.GetByStocks(stockIds, priceWindowFrom, to)
+                )
         )
             .GroupBy(p => p.StockId)
             .ToDictionary(g => g.Key, g => g.ToArray());
 
         var benchmarkSeries = (
-            await LoadPrices(_priceRepository.GetByStock(benchmarkStock, priceWindowFrom, to))
+            await BacktestPriceLoader.LoadPrices(
+                _priceRepository.GetByStock(benchmarkStock, priceWindowFrom, to)
+            )
         ).ToArray();
         if (benchmarkSeries.Length == 0)
             return null;
@@ -144,8 +143,9 @@ public class FundScoringManager
             snapshots,
             from,
             to,
-            priceOf: (stockId, date) => ForwardFill(pricesByStock, stockId, date),
-            benchmarkPriceOf: date => ForwardFill(benchmarkSeries, date)
+            priceOf: (stockId, date) =>
+                BacktestPriceLoader.ForwardFill(pricesByStock, stockId, date),
+            benchmarkPriceOf: date => BacktestPriceLoader.ForwardFill(benchmarkSeries, date)
         );
     }
 
@@ -226,14 +226,6 @@ public class FundScoringManager
             })
             .ToList();
 
-    // OrderBy must precede the record projection — EF can't translate an OrderBy keyed off a
-    // projected record's property because the constructor isn't translatable.
-    private static Task<List<PriceRow>> LoadPrices(IQueryable<DailyStockPrice> query) =>
-        query
-            .OrderBy(p => p.Date)
-            .Select(p => new PriceRow(p.CommonStockId, p.Date, p.AdjustedClose))
-            .ToListAsync();
-
     private static bool IsStorable(BacktestResult result) =>
         InRange(result.PortfolioSummary.TotalReturnPercent)
         && InRange(result.PortfolioSummary.CagrPercent)
@@ -243,36 +235,6 @@ public class FundScoringManager
 
     private static bool InRange(decimal value) => Math.Abs(value) < MaxStorableMagnitude;
 
-    private static decimal? ForwardFill(
-        Dictionary<Guid, PriceRow[]> pricesByStock,
-        Guid stockId,
-        DateOnly date
-    ) => pricesByStock.TryGetValue(stockId, out var series) ? ForwardFill(series, date) : null;
-
-    // Largest close on or before `date` via binary search; null when the series starts later.
-    private static decimal? ForwardFill(PriceRow[] series, DateOnly date)
-    {
-        if (series.Length == 0)
-            return null;
-        var lo = 0;
-        var hi = series.Length - 1;
-        var matchIdx = -1;
-        while (lo <= hi)
-        {
-            var mid = (lo + hi) >>> 1;
-            if (series[mid].Date <= date)
-            {
-                matchIdx = mid;
-                lo = mid + 1;
-            }
-            else
-            {
-                hi = mid - 1;
-            }
-        }
-        return matchIdx < 0 ? null : series[matchIdx].Price;
-    }
-
     private readonly record struct HoldingRow(
         DateOnly ReportDate,
         Guid CommonStockId,
@@ -280,6 +242,4 @@ public class FundScoringManager
         long Value,
         OptionType? OptionType
     );
-
-    private readonly record struct PriceRow(Guid StockId, DateOnly Date, decimal Price);
 }

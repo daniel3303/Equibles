@@ -5,7 +5,6 @@ using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
-using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
 
@@ -29,10 +28,6 @@ public class SmartMoneyIndexManager
 {
     public const string DefaultBenchmark = FundScoringManager.DefaultBenchmark;
     public const int DefaultWindowYears = FundScoringManager.DefaultWindowYears;
-
-    // Forward-fill needs a few trading days of pre-window history so day-zero resolves to the
-    // last close even on a weekend or holiday.
-    private const int PriceLookbackDays = 14;
 
     // Equal-weighted basket: every constituent gets the same nominal value so the backtest's
     // value-weighting collapses to equal weighting.
@@ -234,19 +229,23 @@ public class SmartMoneyIndexManager
                 : constructionDate.AddDays(HoldingsBacktestCalculator.RebalanceDelayDays);
 
         var priceWindowFrom =
-            from > DateOnly.MinValue.AddDays(PriceLookbackDays)
-                ? from.AddDays(-PriceLookbackDays)
+            from > DateOnly.MinValue.AddDays(BacktestPriceLoader.PriceLookbackDays)
+                ? from.AddDays(-BacktestPriceLoader.PriceLookbackDays)
                 : DateOnly.MinValue;
 
         var stockIds = constituents.Select(c => c.CommonStockId).ToList();
         var pricesByStock = (
-            await LoadPrices(_priceRepository.GetByStocks(stockIds, priceWindowFrom, asOf))
+            await BacktestPriceLoader.LoadPrices(
+                _priceRepository.GetByStocks(stockIds, priceWindowFrom, asOf)
+            )
         )
             .GroupBy(p => p.StockId)
             .ToDictionary(g => g.Key, g => g.ToArray());
 
         var benchmarkSeries = (
-            await LoadPrices(_priceRepository.GetByStock(benchmarkStock, priceWindowFrom, asOf))
+            await BacktestPriceLoader.LoadPrices(
+                _priceRepository.GetByStock(benchmarkStock, priceWindowFrom, asOf)
+            )
         ).ToArray();
         if (benchmarkSeries.Length == 0)
         {
@@ -259,48 +258,9 @@ public class SmartMoneyIndexManager
             [snapshot],
             from,
             asOf,
-            priceOf: (stockId, date) => ForwardFill(pricesByStock, stockId, date),
-            benchmarkPriceOf: date => ForwardFill(benchmarkSeries, date)
+            priceOf: (stockId, date) =>
+                BacktestPriceLoader.ForwardFill(pricesByStock, stockId, date),
+            benchmarkPriceOf: date => BacktestPriceLoader.ForwardFill(benchmarkSeries, date)
         );
     }
-
-    // OrderBy must precede the record projection — EF can't translate an OrderBy keyed off a
-    // projected record's property because the constructor isn't translatable.
-    private static Task<List<PriceRow>> LoadPrices(IQueryable<DailyStockPrice> query) =>
-        query
-            .OrderBy(p => p.Date)
-            .Select(p => new PriceRow(p.CommonStockId, p.Date, p.AdjustedClose))
-            .ToListAsync();
-
-    private static decimal? ForwardFill(
-        Dictionary<Guid, PriceRow[]> pricesByStock,
-        Guid stockId,
-        DateOnly date
-    ) => pricesByStock.TryGetValue(stockId, out var series) ? ForwardFill(series, date) : null;
-
-    // Largest close on or before `date` via binary search; null when the series starts later.
-    private static decimal? ForwardFill(PriceRow[] series, DateOnly date)
-    {
-        if (series.Length == 0)
-            return null;
-        var lo = 0;
-        var hi = series.Length - 1;
-        var matchIdx = -1;
-        while (lo <= hi)
-        {
-            var mid = (lo + hi) >>> 1;
-            if (series[mid].Date <= date)
-            {
-                matchIdx = mid;
-                lo = mid + 1;
-            }
-            else
-            {
-                hi = mid - 1;
-            }
-        }
-        return matchIdx < 0 ? null : series[matchIdx].Price;
-    }
-
-    private readonly record struct PriceRow(Guid StockId, DateOnly Date, decimal Price);
 }
