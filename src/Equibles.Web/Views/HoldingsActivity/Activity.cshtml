@@ -44,10 +44,7 @@
             @foreach (var board in deltaBoards) {
                 <div class="card bg-base-100 shadow-sm" data-testid="@board.TestId">
                     <div class="card-body p-4">
-                        <div class="flex items-center gap-2 mb-2">
-                            <h2 class="text-base font-medium m-0">@board.Label</h2>
-                            <span class="badge @board.BadgeCss badge-sm">@board.Rows.Count.ToString("N0")</span>
-                        </div>
+                        <partial name="_SectionHeading" model='(Title: board.Label, BadgeClass: board.BadgeCss, BadgeContent: board.Rows.Count.ToString("N0"))' />
                         @if (board.Rows.Count == 0) {
                             <div class="text-xs text-base-content/50">No stocks in this bucket for the selected quarter.</div>
                         } else {
@@ -99,10 +96,7 @@
             @foreach (var board in churnBoards) {
                 <div class="card bg-base-100 shadow-sm" data-testid="@board.TestId">
                     <div class="card-body p-4">
-                        <div class="flex items-center gap-2 mb-2">
-                            <h2 class="text-base font-medium m-0">@board.Label</h2>
-                            <span class="badge @board.BadgeCss badge-sm">@board.Rows.Count.ToString("N0")</span>
-                        </div>
+                        <partial name="_SectionHeading" model='(Title: board.Label, BadgeClass: board.BadgeCss, BadgeContent: board.Rows.Count.ToString("N0"))' />
                         @if (board.Rows.Count == 0) {
                             <div class="text-xs text-base-content/50">No stocks in this bucket for the selected quarter.</div>
                         } else {
