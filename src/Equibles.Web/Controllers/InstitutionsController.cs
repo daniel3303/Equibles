@@ -30,6 +30,10 @@ public class InstitutionsController : BaseController
         string search,
         string state,
         string city,
+        long? minValue,
+        long? maxValue,
+        int? minPositions,
+        int? maxPositions,
         InstitutionSort sort = InstitutionSort.Name,
         int page = 1
     )
@@ -94,6 +98,26 @@ public class InstitutionsController : BaseController
             (h, aggs) => new { h, agg = aggs.FirstOrDefault() }
         );
 
+        // AUM ($ value) and position-count range filters apply to each filer's
+        // most-recent 13F aggregate. A filer with no holdings is treated as zero
+        // on both axes, so any positive lower bound excludes never-reported filers.
+        if (minValue.HasValue)
+        {
+            joined = joined.Where(x => (x.agg != null ? x.agg.Value : 0L) >= minValue.Value);
+        }
+        if (maxValue.HasValue)
+        {
+            joined = joined.Where(x => (x.agg != null ? x.agg.Value : 0L) <= maxValue.Value);
+        }
+        if (minPositions.HasValue)
+        {
+            joined = joined.Where(x => (x.agg != null ? x.agg.Positions : 0) >= minPositions.Value);
+        }
+        if (maxPositions.HasValue)
+        {
+            joined = joined.Where(x => (x.agg != null ? x.agg.Positions : 0) <= maxPositions.Value);
+        }
+
         var ordered = sort switch
         {
             InstitutionSort.PositionsDescending => joined
@@ -136,6 +160,10 @@ public class InstitutionsController : BaseController
             State = state,
             City = city,
             States = states,
+            MinValue = minValue,
+            MaxValue = maxValue,
+            MinPositions = minPositions,
+            MaxPositions = maxPositions,
             Sort = sort,
             LatestReportDate = latestReportDate,
             Page = page,

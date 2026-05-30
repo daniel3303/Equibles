@@ -17,6 +17,14 @@ public class InstitutionBrowserViewModel
     // to render the location dropdown options.
     public List<string> States { get; set; } = [];
 
+    // Range filters on each filer's most-recent 13F aggregate. MinValue/MaxValue
+    // bound the total book size in dollars; MinPositions/MaxPositions bound the
+    // holding count. Null means that bound is unset.
+    public long? MinValue { get; set; }
+    public long? MaxValue { get; set; }
+    public int? MinPositions { get; set; }
+    public int? MaxPositions { get; set; }
+
     // Latest universe-wide 13F report date — drives the per-filer aggregates
     // and the page subtitle. Null when no holdings have been ingested yet.
     public DateOnly? LatestReportDate { get; set; }
