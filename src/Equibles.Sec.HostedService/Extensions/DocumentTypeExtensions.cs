@@ -20,6 +20,8 @@ public static class DocumentTypeExtensions
             { DocumentType.FormFour, DocumentTypeFilter.FormFour },
             { DocumentType.FormThree, DocumentTypeFilter.FormThree },
             { DocumentType.Form144, DocumentTypeFilter.Form144 },
+            { DocumentType.FormD, DocumentTypeFilter.FormD },
+            { DocumentType.FormDa, DocumentTypeFilter.FormDa },
         };
 
     public static DocumentTypeFilter? ToSecEdgarFilter(this DocumentType docType)

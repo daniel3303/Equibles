@@ -44,6 +44,8 @@ public class DocumentTypeTests
     [InlineData("20-F", "TwentyF")]
     [InlineData("4", "FormFour")]
     [InlineData("3", "FormThree")]
+    [InlineData("D", "FormD")]
+    [InlineData("D/A", "FormDa")]
     public void FromDisplayName_ReturnsCorrectType(string displayName, string expectedValue)
     {
         var result = DocumentType.FromDisplayName(displayName);
@@ -92,6 +94,8 @@ public class DocumentTypeTests
                     DocumentType.FormFour,
                     DocumentType.FormThree,
                     DocumentType.Form144,
+                    DocumentType.FormD,
+                    DocumentType.FormDa,
                     DocumentType.Other,
                 }
             );

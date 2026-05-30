@@ -14,6 +14,7 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<IFilingProcessor, InsiderTradingFilingProcessor>();
         services.AddScoped<IFilingProcessor, Form144FilingProcessor>();
+        services.AddScoped<IFilingProcessor, FormDFilingProcessor>();
         services.AddScoped<IDocumentPersistenceService, DocumentPersistenceService>();
         services.AddScoped<ICompanySyncService, CompanySyncService>();
         services.AddScoped<IDocumentScraper, DocumentScraper>();

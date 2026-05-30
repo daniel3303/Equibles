@@ -12,5 +12,7 @@ public class DocumentScraperOptions
         DocumentType.FormFour,
         DocumentType.FormThree,
         DocumentType.Form144,
+        DocumentType.FormD,
+        DocumentType.FormDa,
     ];
 }

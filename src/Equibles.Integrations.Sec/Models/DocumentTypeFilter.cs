@@ -39,4 +39,10 @@ public enum DocumentTypeFilter
 
     [Display(Name = "144")]
     Form144,
+
+    [Display(Name = "D")]
+    FormD,
+
+    [Display(Name = "D/A")]
+    FormDa,
 }
