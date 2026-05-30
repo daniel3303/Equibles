@@ -26,6 +26,7 @@ public class SecHostedServiceCollectionExtensionsTests
         //   • Form144FilingProcessor        — Form 144 proposed-sale notices
         //   • FormDFilingProcessor          — Form D exempt-offering notices
         //   • NCenFilingProcessor           — N-CEN registered-fund annual reports
+        //   • NportFilingProcessor          — NPORT-P fund portfolio holdings
         // The implementation_type binding matters: a refactor that swapped a
         // concrete to a stub (`services.AddScoped<IFilingProcessor,
         // StubFilingProcessor>()` — a common copy-paste mistake when adding
@@ -53,7 +54,7 @@ public class SecHostedServiceCollectionExtensionsTests
         descriptors
             .Should()
             .HaveCount(
-                4,
+                5,
                 "AddSecWorker registers one IFilingProcessor per supported structured form family"
             );
         descriptors
@@ -78,6 +79,12 @@ public class SecHostedServiceCollectionExtensionsTests
             .Should()
             .Contain(d =>
                 d.ImplementationType == typeof(NCenFilingProcessor)
+                && d.Lifetime == ServiceLifetime.Scoped
+            );
+        descriptors
+            .Should()
+            .Contain(d =>
+                d.ImplementationType == typeof(NportFilingProcessor)
                 && d.Lifetime == ServiceLifetime.Scoped
             );
     }

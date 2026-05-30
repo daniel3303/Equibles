@@ -144,7 +144,7 @@ public class ConfigurationTests
         options
             .DocumentTypesToSync.Should()
             .NotBeNull()
-            .And.HaveCount(10)
+            .And.HaveCount(12)
             .And.ContainInOrder(
                 DocumentType.TenK,
                 DocumentType.TenQ,
@@ -155,7 +155,9 @@ public class ConfigurationTests
                 DocumentType.FormD,
                 DocumentType.FormDa,
                 DocumentType.NCen,
-                DocumentType.NCenA
+                DocumentType.NCenA,
+                DocumentType.NportP,
+                DocumentType.NportPa
             );
     }
 

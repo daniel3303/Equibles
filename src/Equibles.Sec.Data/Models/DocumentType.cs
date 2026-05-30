@@ -31,6 +31,8 @@ public sealed class DocumentType
     public static readonly DocumentType FormDa = new("FormDa", "D/A");
     public static readonly DocumentType NCen = new("NCen", "N-CEN");
     public static readonly DocumentType NCenA = new("NCenA", "N-CEN/A");
+    public static readonly DocumentType NportP = new("NportP", "NPORT-P");
+    public static readonly DocumentType NportPa = new("NportPa", "NPORT-P/A");
     public static readonly DocumentType Other = new("Other", "Other");
 
     private static readonly ConcurrentDictionary<string, DocumentType> AllByValue = new(
@@ -52,6 +54,8 @@ public sealed class DocumentType
             new KeyValuePair<string, DocumentType>(FormDa.Value, FormDa),
             new KeyValuePair<string, DocumentType>(NCen.Value, NCen),
             new KeyValuePair<string, DocumentType>(NCenA.Value, NCenA),
+            new KeyValuePair<string, DocumentType>(NportP.Value, NportP),
+            new KeyValuePair<string, DocumentType>(NportPa.Value, NportPa),
             new KeyValuePair<string, DocumentType>(Other.Value, Other),
         },
         StringComparer.OrdinalIgnoreCase
@@ -76,6 +80,8 @@ public sealed class DocumentType
             new KeyValuePair<string, DocumentType>(FormDa.DisplayName, FormDa),
             new KeyValuePair<string, DocumentType>(NCen.DisplayName, NCen),
             new KeyValuePair<string, DocumentType>(NCenA.DisplayName, NCenA),
+            new KeyValuePair<string, DocumentType>(NportP.DisplayName, NportP),
+            new KeyValuePair<string, DocumentType>(NportPa.DisplayName, NportPa),
             new KeyValuePair<string, DocumentType>(Other.DisplayName, Other),
         },
         StringComparer.OrdinalIgnoreCase

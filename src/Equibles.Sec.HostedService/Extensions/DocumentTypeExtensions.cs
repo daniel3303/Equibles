@@ -24,6 +24,8 @@ public static class DocumentTypeExtensions
             { DocumentType.FormDa, DocumentTypeFilter.FormDa },
             { DocumentType.NCen, DocumentTypeFilter.NCen },
             { DocumentType.NCenA, DocumentTypeFilter.NCenA },
+            { DocumentType.NportP, DocumentTypeFilter.NportP },
+            { DocumentType.NportPa, DocumentTypeFilter.NportPa },
         };
 
     public static DocumentTypeFilter? ToSecEdgarFilter(this DocumentType docType)
