@@ -1,9 +1,13 @@
+using Equibles.Sec.Data.Models;
+
 namespace Equibles.Sec.BusinessLogic;
 
 public static class SecDocumentEnvelopeParser
 {
     private const string DocumentStartTag = "<DOCUMENT>";
     private const string DocumentEndTag = "</DOCUMENT>";
+    private const string TextStartTag = "<TEXT>";
+    private const string TextEndTag = "</TEXT>";
 
     /// <summary>
     /// Some SEC filings (typically &lt;PAPER&gt; 6-K submissions and other digitized filings) are
@@ -16,34 +20,9 @@ public static class SecDocumentEnvelopeParser
     public static bool TryExtractPaperPdfFilename(string envelope, out string filename)
     {
         filename = string.Empty;
-        if (string.IsNullOrEmpty(envelope))
-            return false;
 
-        var pos = 0;
-        while (pos < envelope.Length)
+        foreach (var block in EnumerateDocumentBlocks(envelope))
         {
-            var blockStart = envelope.IndexOf(
-                DocumentStartTag,
-                pos,
-                StringComparison.OrdinalIgnoreCase
-            );
-            if (blockStart == -1)
-                return false;
-
-            var blockEnd = envelope.IndexOf(
-                DocumentEndTag,
-                blockStart,
-                StringComparison.OrdinalIgnoreCase
-            );
-            if (blockEnd == -1)
-                return false;
-
-            var block = envelope.Substring(
-                blockStart,
-                blockEnd - blockStart + DocumentEndTag.Length
-            );
-            pos = blockEnd + DocumentEndTag.Length;
-
             if (!TryExtractSgmlTagValue(block, "FILENAME", out var candidate))
                 continue;
             if (!candidate.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
@@ -56,6 +35,171 @@ public static class SecDocumentEnvelopeParser
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Extracts the raw XBRL envelope from a full SEC submission (the <c>{accession}.txt</c>
+    /// file). Prefers the inline iXBRL primary document; when the primary carries no inline
+    /// XBRL it falls back to the standalone XBRL instance — the <c>&lt;DOCUMENT&gt;</c> whose
+    /// SGML <c>&lt;TYPE&gt;</c> ends in <c>.INS</c> (e.g. <c>EX-101.INS</c>). Reading the
+    /// envelope already fetched for ingest means no extra EDGAR round-trip.
+    /// </summary>
+    /// <returns>True when an XBRL envelope was found; otherwise the filing carries no XBRL.</returns>
+    public static bool TryExtractXbrlEnvelope(
+        string envelope,
+        string primaryDocumentFileName,
+        out XbrlType type,
+        out string sourceFileName,
+        out string content
+    )
+    {
+        type = default;
+        sourceFileName = string.Empty;
+        content = string.Empty;
+
+        if (string.IsNullOrEmpty(envelope))
+            return false;
+
+        string inlineFallbackFileName = null;
+        string inlineFallbackBody = null;
+        string standaloneFileName = null;
+        string standaloneBody = null;
+
+        foreach (var block in EnumerateDocumentBlocks(envelope))
+        {
+            TryExtractSgmlTagValue(block, "FILENAME", out var blockFileName);
+            TryExtractSgmlTagValue(block, "TYPE", out var blockType);
+
+            // Inline iXBRL is embedded in the primary document; prefer the named primary and
+            // return as soon as we confirm it actually carries inline markers.
+            if (
+                !string.IsNullOrEmpty(primaryDocumentFileName)
+                && string.Equals(
+                    blockFileName,
+                    primaryDocumentFileName,
+                    StringComparison.OrdinalIgnoreCase
+                )
+                && TryExtractTextBody(block, out var primaryBody)
+                && ContainsInlineXbrl(primaryBody)
+            )
+            {
+                type = XbrlType.InlineIxbrl;
+                sourceFileName = blockFileName;
+                content = primaryBody;
+                return true;
+            }
+
+            // Fallback inline: any block whose body carries inline markers, covering filings
+            // whose PrimaryDocument name is missing or doesn't match the envelope's FILENAME —
+            // without it those would be wrongly recorded as NotPresent (terminal). The cheap
+            // pre-check on the raw block avoids materializing bodies for non-XBRL exhibits.
+            if (
+                inlineFallbackBody == null
+                && ContainsInlineXbrl(block)
+                && TryExtractTextBody(block, out var fallbackBody)
+            )
+            {
+                inlineFallbackFileName = blockFileName;
+                inlineFallbackBody = fallbackBody;
+            }
+
+            // Older filings ship the instance as a separate EX-10x.INS document. Remember the
+            // first one in case neither the named primary nor any block carries inline XBRL.
+            if (
+                standaloneBody == null
+                && !string.IsNullOrEmpty(blockType)
+                && blockType.EndsWith(".INS", StringComparison.OrdinalIgnoreCase)
+                && TryExtractTextBody(block, out var instanceBody)
+            )
+            {
+                standaloneFileName = blockFileName;
+                standaloneBody = instanceBody;
+            }
+        }
+
+        if (inlineFallbackBody != null)
+        {
+            type = XbrlType.InlineIxbrl;
+            sourceFileName = inlineFallbackFileName ?? string.Empty;
+            content = inlineFallbackBody;
+            return true;
+        }
+
+        if (standaloneBody != null)
+        {
+            type = XbrlType.StandaloneXbrl;
+            sourceFileName = standaloneFileName ?? string.Empty;
+            content = standaloneBody;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// True when the document carries inline XBRL — the <c>ix</c> namespace declaration or
+    /// any element in that namespace.
+    /// </summary>
+    public static bool ContainsInlineXbrl(string content)
+    {
+        if (string.IsNullOrEmpty(content))
+            return false;
+
+        return content.Contains("xmlns:ix=", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("<ix:", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Walks the SGML envelope yielding each <DOCUMENT>...</DOCUMENT> block verbatim. Stops at
+    // the first unterminated block, matching EDGAR's well-formed-or-nothing guarantee.
+    private static IEnumerable<string> EnumerateDocumentBlocks(string envelope)
+    {
+        if (string.IsNullOrEmpty(envelope))
+            yield break;
+
+        var pos = 0;
+        while (pos < envelope.Length)
+        {
+            var blockStart = envelope.IndexOf(
+                DocumentStartTag,
+                pos,
+                StringComparison.OrdinalIgnoreCase
+            );
+            if (blockStart == -1)
+                yield break;
+
+            var blockEnd = envelope.IndexOf(
+                DocumentEndTag,
+                blockStart,
+                StringComparison.OrdinalIgnoreCase
+            );
+            if (blockEnd == -1)
+                yield break;
+
+            yield return envelope.Substring(
+                blockStart,
+                blockEnd - blockStart + DocumentEndTag.Length
+            );
+            pos = blockEnd + DocumentEndTag.Length;
+        }
+    }
+
+    // Returns the document body between <TEXT> and </TEXT>. The body may itself be large
+    // (a full iXBRL primary document), so the substring is taken span-wise without copying tags.
+    private static bool TryExtractTextBody(string block, out string body)
+    {
+        body = string.Empty;
+
+        var start = block.IndexOf(TextStartTag, StringComparison.OrdinalIgnoreCase);
+        if (start == -1)
+            return false;
+
+        var bodyStart = start + TextStartTag.Length;
+        var end = block.LastIndexOf(TextEndTag, StringComparison.OrdinalIgnoreCase);
+        if (end == -1 || end < bodyStart)
+            return false;
+
+        body = block.Substring(bodyStart, end - bodyStart).Trim();
+        return body.Length > 0;
     }
 
     // Filename flows from an untrusted envelope body into a URL. EDGAR filenames are always

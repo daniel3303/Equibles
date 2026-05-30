@@ -584,12 +584,12 @@ public class DocumentScraper : IDocumentScraper
                 var company = await companyRepository.Get(companyOutContext.Id);
                 var content = await secEdgarClient.GetDocumentContent(filing);
 
-                // Persist the raw XBRL envelope (when enabled): the inline iXBRL primary
-                // document and/or the standalone XBRL instance, fetched by name. Opt-in
-                // and best-effort — never breaks ingest.
-                var rawXbrlCapture =
-                    scope.ServiceProvider.GetRequiredService<RawXbrlArtifactCaptureService>();
-                await rawXbrlCapture.Capture(company, filing, cancellationToken);
+                // Resolve the raw XBRL envelope from the submission we already fetched
+                // (opt-in, best-effort, no extra EDGAR round-trip). The result is stored on
+                // the document by the persistence service below.
+                var xbrlCapture =
+                    scope.ServiceProvider.GetRequiredService<XbrlEnvelopeCaptureService>();
+                var xbrl = xbrlCapture.Capture(content, filing);
 
                 var normalizedHtml = normalizer.Normalize(content);
                 var markdownDocument = converter.Convert(normalizedHtml);
@@ -618,6 +618,7 @@ public class DocumentScraper : IDocumentScraper
                     filing.ReportDate,
                     filing.DocumentUrl,
                     filing.AccessionNumber,
+                    xbrl,
                     cancellationToken
                 );
 
