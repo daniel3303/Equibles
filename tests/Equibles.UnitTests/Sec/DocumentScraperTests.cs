@@ -14,6 +14,7 @@ using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Contracts;
+using Equibles.Sec.HostedService.Models;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
 using MassTransit;
@@ -69,7 +70,18 @@ public class DocumentScraperTests
             .GetCompanyFilings(default, default, default, default);
         await harness
             .Persistence.DidNotReceiveWithAnyArgs()
-            .Save(default, default, default, default, default, default, default, default, default);
+            .Save(
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default
+            );
     }
 
     [Fact]
@@ -139,6 +151,7 @@ public class DocumentScraperTests
                 ReportDateAlpha,
                 "https://sec.gov/acme-10k.htm",
                 "0000123456-25-000001",
+                Arg.Any<XbrlCaptureResult>(),
                 Arg.Any<CancellationToken>()
             );
         harness.PdfTextExtractor.DidNotReceiveWithAnyArgs().Extract(default);
@@ -191,7 +204,18 @@ public class DocumentScraperTests
             .Exists(default, default, default, default);
         await harness
             .Persistence.DidNotReceiveWithAnyArgs()
-            .Save(default, default, default, default, default, default, default, default, default);
+            .Save(
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default
+            );
         harness.Converter.DidNotReceiveWithAnyArgs().Convert(default);
     }
 
@@ -256,6 +280,7 @@ public class DocumentScraperTests
                 Arg.Any<DateOnly>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
+                Arg.Any<XbrlCaptureResult>(),
                 Arg.Any<CancellationToken>()
             );
         await harness
@@ -269,6 +294,7 @@ public class DocumentScraperTests
                 Arg.Any<DateOnly>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
+                Arg.Any<XbrlCaptureResult>(),
                 Arg.Any<CancellationToken>()
             );
         await harness
@@ -282,6 +308,7 @@ public class DocumentScraperTests
                 Arg.Any<DateOnly>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
+                Arg.Any<XbrlCaptureResult>(),
                 Arg.Any<CancellationToken>()
             );
     }
@@ -310,7 +337,18 @@ public class DocumentScraperTests
         result.Errors.Should().Be(0);
         await harness
             .Persistence.DidNotReceiveWithAnyArgs()
-            .Save(default, default, default, default, default, default, default, default, default);
+            .Save(
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default
+            );
     }
 
     [Fact]
@@ -623,15 +661,14 @@ public class DocumentScraperTests
             services.AddSingleton(Converter);
             services.AddSingleton(PdfTextExtractor);
             services.AddSingleton(Persistence);
-            // DocumentScraper resolves the raw-XBRL capture service per scope. These
-            // tests exercise the default markdown-persistence flow, so capture stays
-            // disabled (default options) and short-circuits without touching the repo.
+            // DocumentScraper resolves the XBRL capture service per scope. These tests
+            // exercise the default markdown-persistence flow, so capture stays disabled
+            // (default options) and resolves to NotChecked without reading the submission.
             services.AddLogging();
-            services.AddScoped<RawFilingArtifactRepository>();
-            services.AddSingleton<IOptions<RawXbrlArtifactOptions>>(
-                Options.Create(new RawXbrlArtifactOptions())
+            services.AddSingleton<IOptions<XbrlCaptureOptions>>(
+                Options.Create(new XbrlCaptureOptions())
             );
-            services.AddScoped<RawXbrlArtifactCaptureService>();
+            services.AddScoped<XbrlEnvelopeCaptureService>();
 
             var provider = services.BuildServiceProvider();
             ScopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
