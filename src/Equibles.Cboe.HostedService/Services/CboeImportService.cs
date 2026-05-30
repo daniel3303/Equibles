@@ -151,26 +151,7 @@ public class CboeImportService : IImporter
                 break;
             }
 
-            foreach (var (productType, record) in dailyRecords)
-            {
-                var ratioType = MapProduct(productType);
-                if (record.Date <= latestPerType[ratioType])
-                    continue;
-
-                pending.Add(
-                    new CboePutCallRatio
-                    {
-                        RatioType = ratioType,
-                        Date = record.Date,
-                        CallVolume = record.CallVolume,
-                        PutVolume = record.PutVolume,
-                        TotalVolume = record.TotalVolume,
-                        PutCallRatio = record.PutCallRatio,
-                    }
-                );
-                perTypeInserts.TryGetValue(ratioType, out var n);
-                perTypeInserts[ratioType] = n + 1;
-            }
+            StageNewRecords(dailyRecords, latestPerType, pending, perTypeInserts);
 
             if (pending.Count >= InsertBatchSize)
                 await Flush();
@@ -191,6 +172,37 @@ public class CboeImportService : IImporter
                 ratioType,
                 count
             );
+        }
+    }
+
+    // Map each product's daily record to a CboePutCallRatio and stage the ones newer than
+    // what's already stored, tallying inserts per type. pending/perTypeInserts are mutated in place.
+    private static void StageNewRecords(
+        Dictionary<CboePutCallProductType, CboePutCallRecord> dailyRecords,
+        Dictionary<CboePutCallRatioType, DateOnly> latestPerType,
+        List<CboePutCallRatio> pending,
+        Dictionary<CboePutCallRatioType, int> perTypeInserts
+    )
+    {
+        foreach (var (productType, record) in dailyRecords)
+        {
+            var ratioType = MapProduct(productType);
+            if (record.Date <= latestPerType[ratioType])
+                continue;
+
+            pending.Add(
+                new CboePutCallRatio
+                {
+                    RatioType = ratioType,
+                    Date = record.Date,
+                    CallVolume = record.CallVolume,
+                    PutVolume = record.PutVolume,
+                    TotalVolume = record.TotalVolume,
+                    PutCallRatio = record.PutCallRatio,
+                }
+            );
+            perTypeInserts.TryGetValue(ratioType, out var n);
+            perTypeInserts[ratioType] = n + 1;
         }
     }
 
