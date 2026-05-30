@@ -38,6 +38,7 @@
     <ProjectReference Include="..\..\src\Equibles.CommonStocks.BusinessLogic\Equibles.CommonStocks.BusinessLogic.csproj" />
     <ProjectReference Include="..\..\src\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Holdings.Data\Equibles.Holdings.Data.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Holdings.BusinessLogic\Equibles.Holdings.BusinessLogic.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Holdings.HostedService\Equibles.Holdings.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.InsiderTrading.Data\Equibles.InsiderTrading.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.InsiderTrading.BusinessLogic\Equibles.InsiderTrading.BusinessLogic.csproj" />
