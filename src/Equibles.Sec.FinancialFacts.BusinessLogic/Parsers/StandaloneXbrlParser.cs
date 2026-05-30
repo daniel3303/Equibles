@@ -271,11 +271,4 @@ public class StandaloneXbrlParser
         };
         return true;
     }
-
-    private record struct ParsedContext(
-        bool IsInstant,
-        DateOnly Start,
-        DateOnly End,
-        List<ParsedXbrlDimension> Dimensions
-    );
 }

@@ -395,11 +395,4 @@ public class InlineXbrlParser
         value = parsed;
         return true;
     }
-
-    private record struct ParsedContext(
-        bool IsInstant,
-        DateOnly Start,
-        DateOnly End,
-        List<ParsedXbrlDimension> Dimensions
-    );
 }
