@@ -308,6 +308,7 @@ public class StocksControllerTests : IDisposable
             new FailToDeliverRepository(_dbContext),
             _documentRepository,
             new InsiderTransactionRepository(_dbContext),
+            new Form144FilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
             new DailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
