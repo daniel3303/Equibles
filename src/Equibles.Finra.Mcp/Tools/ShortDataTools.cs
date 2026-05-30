@@ -87,7 +87,7 @@ public class ShortDataTools
                     var shortPct =
                         r.TotalVolume > 0 ? (double)r.ShortVolume / r.TotalVolume * 100 : 0;
                     result.AppendLine(
-                        $"| {r.Date:yyyy-MM-dd} | {r.ShortVolume.ToString("N0", CultureInfo.InvariantCulture)} | {r.ShortExemptVolume.ToString("N0", CultureInfo.InvariantCulture)} | {r.TotalVolume.ToString("N0", CultureInfo.InvariantCulture)} | {shortPct.ToString("F1", CultureInfo.InvariantCulture)}% |"
+                        $"| {r.Date:yyyy-MM-dd} | {FormatWholeNumber(r.ShortVolume)} | {FormatWholeNumber(r.ShortExemptVolume)} | {FormatWholeNumber(r.TotalVolume)} | {shortPct.ToString("F1", CultureInfo.InvariantCulture)}% |"
                     );
                 }
 
@@ -149,7 +149,7 @@ public class ShortDataTools
                     var advStr = McpFormat.OrDash(r.AverageDailyVolume, "N0");
                     var dtcStr = McpFormat.OrDash(r.DaysToCover, "F1");
                     result.AppendLine(
-                        $"| {r.SettlementDate:yyyy-MM-dd} | {r.CurrentShortPosition.ToString("N0", CultureInfo.InvariantCulture)} | {changeStr} | {advStr} | {dtcStr} |"
+                        $"| {r.SettlementDate:yyyy-MM-dd} | {FormatWholeNumber(r.CurrentShortPosition)} | {changeStr} | {advStr} | {dtcStr} |"
                     );
                 }
 
@@ -279,10 +279,11 @@ public class ShortDataTools
         );
     }
 
+    private static string FormatWholeNumber(long value) =>
+        value.ToString("N0", CultureInfo.InvariantCulture);
+
     private static string FormatSignedChange(long change) =>
-        change >= 0
-            ? $"+{change.ToString("N0", CultureInfo.InvariantCulture)}"
-            : change.ToString("N0", CultureInfo.InvariantCulture);
+        change >= 0 ? $"+{FormatWholeNumber(change)}" : FormatWholeNumber(change);
 
     // Thin forwarder so existing reflection-based normalization tests still find the method.
     private Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker) =>
