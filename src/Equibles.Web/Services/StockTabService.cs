@@ -279,24 +279,28 @@ public class StockTabService
         return rows.OrderBy(orderKey.Compile()).ToList();
     }
 
+    // Materialize the most recent RecentRowLimit rows of a query, newest first.
+    // Any Include() is applied by the caller before passing the query in.
+    private static Task<List<T>> TakeMostRecent<T, TKey>(
+        IQueryable<T> source,
+        Expression<Func<T, TKey>> orderKey
+    ) => source.OrderByDescending(orderKey).Take(RecentRowLimit).ToListAsync();
+
     public async Task<DocumentsTabViewModel> LoadDocumentsTab(CommonStock stock)
     {
-        var documents = await _documentRepository
-            .GetByCompany(stock)
-            .OrderByDescending(d => d.ReportingDate)
-            .Take(RecentRowLimit)
-            .ToListAsync();
+        var documents = await TakeMostRecent(
+            _documentRepository.GetByCompany(stock),
+            d => d.ReportingDate
+        );
         return new DocumentsTabViewModel { Documents = documents, Ticker = stock.Ticker };
     }
 
     public async Task<InsiderTradingTabViewModel> LoadInsiderTradingTab(CommonStock stock)
     {
-        var transactions = await _insiderTransactionRepository
-            .GetByStock(stock)
-            .Include(t => t.InsiderOwner)
-            .OrderByDescending(t => t.TransactionDate)
-            .Take(RecentRowLimit)
-            .ToListAsync();
+        var transactions = await TakeMostRecent(
+            _insiderTransactionRepository.GetByStock(stock).Include(t => t.InsiderOwner),
+            t => t.TransactionDate
+        );
         return new InsiderTradingTabViewModel
         {
             Transactions = transactions,
@@ -306,32 +310,28 @@ public class StockTabService
 
     public async Task<ProposedSalesTabViewModel> LoadProposedSalesTab(CommonStock stock)
     {
-        var filings = await _form144FilingRepository
-            .GetByStock(stock)
-            .OrderByDescending(f => f.FilingDate)
-            .Take(RecentRowLimit)
-            .ToListAsync();
+        var filings = await TakeMostRecent(
+            _form144FilingRepository.GetByStock(stock),
+            f => f.FilingDate
+        );
         return new ProposedSalesTabViewModel { Filings = filings, Ticker = stock.Ticker };
     }
 
     public async Task<ExemptOfferingsTabViewModel> LoadExemptOfferingsTab(CommonStock stock)
     {
-        var filings = await _formDFilingRepository
-            .GetByStock(stock)
-            .OrderByDescending(f => f.FilingDate)
-            .Take(RecentRowLimit)
-            .ToListAsync();
+        var filings = await TakeMostRecent(
+            _formDFilingRepository.GetByStock(stock),
+            f => f.FilingDate
+        );
         return new ExemptOfferingsTabViewModel { Filings = filings, Ticker = stock.Ticker };
     }
 
     public async Task<FundOperationsTabViewModel> LoadFundOperationsTab(CommonStock stock)
     {
-        var filings = await _nCenFilingRepository
-            .GetByStock(stock)
-            .Include(f => f.ServiceProviders)
-            .OrderByDescending(f => f.FilingDate)
-            .Take(RecentRowLimit)
-            .ToListAsync();
+        var filings = await TakeMostRecent(
+            _nCenFilingRepository.GetByStock(stock).Include(f => f.ServiceProviders),
+            f => f.FilingDate
+        );
         return new FundOperationsTabViewModel { Filings = filings, Ticker = stock.Ticker };
     }
 
@@ -347,11 +347,10 @@ public class StockTabService
 
         // NPORT-P reports can carry thousands of positions; show the largest by value and
         // report the full count rather than loading the whole schedule into the page.
-        var holdings = await _nportFilingRepository
-            .GetHoldings(filing)
-            .OrderByDescending(h => h.ValueUsd)
-            .Take(RecentRowLimit)
-            .ToListAsync();
+        var holdings = await TakeMostRecent(
+            _nportFilingRepository.GetHoldings(filing),
+            h => h.ValueUsd
+        );
 
         var totalHoldings = await _nportFilingRepository.GetHoldings(filing).CountAsync();
 
@@ -366,12 +365,10 @@ public class StockTabService
 
     public async Task<CongressionalTradesTabViewModel> LoadCongressionalTradesTab(CommonStock stock)
     {
-        var trades = await _congressionalTradeRepository
-            .GetByStock(stock)
-            .Include(t => t.CongressMember)
-            .OrderByDescending(t => t.TransactionDate)
-            .Take(RecentRowLimit)
-            .ToListAsync();
+        var trades = await TakeMostRecent(
+            _congressionalTradeRepository.GetByStock(stock).Include(t => t.CongressMember),
+            t => t.TransactionDate
+        );
         return new CongressionalTradesTabViewModel { Trades = trades, Ticker = stock.Ticker };
     }
 
