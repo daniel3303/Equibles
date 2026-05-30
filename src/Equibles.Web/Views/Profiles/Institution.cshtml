@@ -67,6 +67,34 @@
         </div>
     }
 
+    @if (Model.FundScore != null) {
+        <!-- Fund score: a rolling-window backtest of the reported 13F portfolio vs the S&P 500.
+             Alpha is the portfolio's annualised return (CAGR) minus the benchmark's over the same
+             window, using the same look-ahead-safe rebalancing as the on-demand backtest. -->
+        <div class="card bg-base-100 shadow-sm mb-8" data-testid="institution-fund-score">
+            <div class="card-body p-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <h2 class="text-base font-medium m-0">@Model.FundScore.WindowYears-year performance vs @Model.FundScore.BenchmarkTicker</h2>
+                    <span class="text-xs text-base-content/50">
+                        @Model.FundScore.WindowStart.ToString("MMM yyyy") – @Model.FundScore.WindowEnd.ToString("MMM yyyy")
+                    </span>
+                </div>
+                <div class="stats stats-vertical lg:stats-horizontal shadow-sm bg-base-200 w-full">
+                    <stat-tile title="Alpha vs @Model.FundScore.BenchmarkTicker">
+                        <span class="@(Model.FundScore.AlphaPercent >= 0 ? "text-success" : "text-error")" data-testid="fund-score-alpha">@(Model.FundScore.AlphaPercent >= 0 ? "+" : "")@Model.FundScore.AlphaPercent.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)%</span>
+                    </stat-tile>
+                    <stat-tile title="Portfolio CAGR">@Model.FundScore.PortfolioCagrPercent.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)%</stat-tile>
+                    <stat-tile title="@(Model.FundScore.BenchmarkTicker) CAGR">@Model.FundScore.BenchmarkCagrPercent.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)%</stat-tile>
+                    <stat-tile title="Max drawdown">@Model.FundScore.MaxDrawdownPercent.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)%</stat-tile>
+                </div>
+                <p class="text-xs text-base-content/50 mt-2">
+                    Hypothetical buy-and-hold of the reported 13F portfolio, rebalanced 45 days after each
+                    quarter-end. Past performance does not guarantee future results.
+                </p>
+            </div>
+        </div>
+    }
+
     @if (Model.IndustryAllocation.Count > 0) {
         <!-- Sector / industry allocation for the latest reported quarter. Unclassified
              stocks (no IndustryId on CommonStock) collapse into a single row at the end. -->

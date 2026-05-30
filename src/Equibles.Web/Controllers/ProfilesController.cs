@@ -1,4 +1,5 @@
 using Equibles.Congress.Repositories;
+using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
@@ -18,8 +19,14 @@ public class ProfilesController : BaseController
 {
     private const int RecentRowLimit = 25;
 
+    // The fund-score variant shown on the profile: the default rolling window and benchmark the
+    // scoring worker writes.
+    private const int ScoreWindowYears = FundScoringManager.DefaultWindowYears;
+    private const string ScoreBenchmark = FundScoringManager.DefaultBenchmark;
+
     private readonly InstitutionalHolderRepository _institutionalHolderRepository;
     private readonly InstitutionalHoldingRepository _institutionalHoldingRepository;
+    private readonly FundScoreRepository _fundScoreRepository;
     private readonly InsiderOwnerRepository _insiderOwnerRepository;
     private readonly InsiderTransactionRepository _insiderTransactionRepository;
     private readonly CongressMemberRepository _congressMemberRepository;
@@ -29,6 +36,7 @@ public class ProfilesController : BaseController
     public ProfilesController(
         InstitutionalHolderRepository institutionalHolderRepository,
         InstitutionalHoldingRepository institutionalHoldingRepository,
+        FundScoreRepository fundScoreRepository,
         InsiderOwnerRepository insiderOwnerRepository,
         InsiderTransactionRepository insiderTransactionRepository,
         CongressMemberRepository congressMemberRepository,
@@ -40,6 +48,7 @@ public class ProfilesController : BaseController
     {
         _institutionalHolderRepository = institutionalHolderRepository;
         _institutionalHoldingRepository = institutionalHoldingRepository;
+        _fundScoreRepository = fundScoreRepository;
         _insiderOwnerRepository = insiderOwnerRepository;
         _insiderTransactionRepository = insiderTransactionRepository;
         _congressMemberRepository = congressMemberRepository;
@@ -80,6 +89,12 @@ public class ProfilesController : BaseController
             activityDate
         );
 
+        var fundScore = await _fundScoreRepository.GetByHolder(
+            holder,
+            ScoreWindowYears,
+            ScoreBenchmark
+        );
+
         ViewData["Title"] = holder.Name;
         return View(
             new InstitutionProfileViewModel
@@ -90,6 +105,7 @@ public class ProfilesController : BaseController
                 ConfidentialTreatmentRequested = holder.ConfidentialTreatmentRequested,
                 Location = ProfileFormatting.JoinLocation(holder.City, holder.StateOrCountry),
                 Holdings = holdings,
+                FundScore = fundScore,
                 Summary = summary,
                 IndustryAllocation = industryAllocation,
                 AvailableReportDates = distinctDates,
