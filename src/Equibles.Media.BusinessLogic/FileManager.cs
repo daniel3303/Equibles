@@ -86,6 +86,34 @@ public class FileManager : IFileManager
     }
 
     /// <summary>
+    /// Persists a trusted, system-generated blob with an explicit extension and content
+    /// type, bypassing the <see cref="AcceptedExtensions"/> upload allowlist. The db context
+    /// is not saved. Intended only for content the application produces itself (e.g. a
+    /// gzip-compressed XBRL envelope captured during SEC ingest), never for user uploads —
+    /// those must go through <see cref="SaveFile"/> so the allowlist is enforced.
+    /// </summary>
+    public Task<File> SaveInternalFile(
+        byte[] content,
+        string name,
+        string extension,
+        string contentType
+    )
+    {
+        var file = new File()
+        {
+            Extension = extension,
+            Name = name,
+            Size = content.Length,
+            ContentType = contentType,
+        };
+
+        file.FileContent = new FileContent() { File = file, Bytes = content };
+
+        _fileRepository.Add(file);
+        return Task.FromResult(file);
+    }
+
+    /// <summary>
     /// Deletes a file from the database. The db context is not saved.
     /// </summary>
     /// <param name="file">The file to delete</param>

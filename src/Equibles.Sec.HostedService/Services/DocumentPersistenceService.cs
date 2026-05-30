@@ -1,8 +1,10 @@
 using System.Data;
+using System.IO.Compression;
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Media.BusinessLogic;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.HostedService.Models;
 using Equibles.Sec.Repositories;
 
 namespace Equibles.Sec.HostedService.Services;
@@ -40,6 +42,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         DateOnly reportingForDate,
         string sourceUrl,
         string accessionNumber = null,
+        XbrlCaptureResult xbrl = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -63,8 +66,45 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             LineCount = lineCount,
         };
 
+        await ApplyXbrlCapture(document, xbrl ?? XbrlCaptureResult.NotChecked);
+
         _documentRepository.Add(document);
         await _documentRepository.SaveChanges();
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    // Stores the captured XBRL envelope as a gzip-compressed internal File and records its
+    // type/sizes on the document. NotChecked/NotPresent only set the status — no File is
+    // created — so the document either stays a backfill target or is marked terminally empty.
+    private async Task ApplyXbrlCapture(Document document, XbrlCaptureResult xbrl)
+    {
+        if (xbrl.Status != XbrlCaptureStatus.Captured || xbrl.RawBytes == null)
+        {
+            document.XbrlStatus = xbrl.Status;
+            return;
+        }
+
+        var compressed = Compress(xbrl.RawBytes);
+        var xbrlFile = await _fileManager.SaveInternalFile(
+            compressed,
+            xbrl.SourceFileName,
+            "gz",
+            "application/gzip"
+        );
+
+        document.XbrlContent = xbrlFile;
+        document.XbrlType = xbrl.Type;
+        document.XbrlUncompressedSize = xbrl.RawBytes.Length;
+        document.XbrlStatus = XbrlCaptureStatus.Captured;
+    }
+
+    private static byte[] Compress(byte[] raw)
+    {
+        using var output = new MemoryStream();
+        using (var gzip = new GZipStream(output, CompressionLevel.Optimal))
+        {
+            gzip.Write(raw, 0, raw.Length);
+        }
+        return output.ToArray();
     }
 }

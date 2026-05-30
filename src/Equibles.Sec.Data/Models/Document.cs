@@ -11,6 +11,7 @@ namespace Equibles.Sec.Data.Models;
 [Index(nameof(ReportingDate), IsUnique = false)]
 [Index(nameof(ReportingForDate), IsUnique = false)]
 [Index(nameof(AccessionNumber), IsUnique = false)]
+[Index(nameof(XbrlStatus), IsUnique = false)]
 public class Document
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -46,6 +47,31 @@ public class Document
     /// </summary>
     [MaxLength(32)]
     public string AccessionNumber { get; set; }
+
+    /// <summary>
+    /// Tracks whether the filing's raw XBRL envelope has been captured. Defaults to
+    /// <see cref="XbrlCaptureStatus.NotChecked"/> so existing rows and freshly-ingested
+    /// documents are picked up by the backfill until examined.
+    /// </summary>
+    public XbrlCaptureStatus XbrlStatus { get; set; } = XbrlCaptureStatus.NotChecked;
+
+    /// <summary>
+    /// Which kind of XBRL envelope was captured. Null until <see cref="XbrlStatus"/> is
+    /// <see cref="XbrlCaptureStatus.Captured"/>.
+    /// </summary>
+    public XbrlType? XbrlType { get; set; }
+
+    /// <summary>
+    /// The file holding the gzip-compressed raw XBRL envelope. Null when no envelope was
+    /// captured (status <see cref="XbrlCaptureStatus.NotChecked"/> or
+    /// <see cref="XbrlCaptureStatus.NotPresent"/>). The stored (compressed) size is
+    /// <c>XbrlContent.Size</c>; the pre-compression size is <see cref="XbrlUncompressedSize"/>.
+    /// </summary>
+    public Guid? XbrlContentId { get; set; }
+    public virtual File XbrlContent { get; set; }
+
+    /// <summary>Size in bytes of the XBRL envelope before gzip compression. Null when none captured.</summary>
+    public long? XbrlUncompressedSize { get; set; }
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }
