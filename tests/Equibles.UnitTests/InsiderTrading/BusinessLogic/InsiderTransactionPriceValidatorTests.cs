@@ -204,4 +204,25 @@ public class InsiderTransactionPriceValidatorTests
         result.WasRepaired.Should().BeFalse();
         result.EffectivePrice.Should().Be(0m);
     }
+
+    // Shares comes straight from ParseLong (long.TryParse), which accepts "-N",
+    // so a malformed / amended Form 4 can carry a negative share count into
+    // Evaluate. The repair only guards shares == 0, so reportedPrice / shares
+    // becomes a NEGATIVE per-share price — yet it's stamped valid + repaired.
+    // A recovered unit price is never negative; like the zero-shares case the
+    // total can't be divided into a sensible unit price, so the row must be
+    // rejected, not accepted as valid.
+    [Fact(Skip = "GH-2955 — Evaluate stamps a negative repaired price valid when shares < 0")]
+    public void Evaluate_ImplausibleWithNegativeShares_IsNotAcceptedAsNegativePrice()
+    {
+        var result = _validator.Evaluate(
+            reportedPrice: 50_000m,
+            shares: -1000,
+            securityTitle: "Common Stock",
+            unadjustedClose: 50m
+        );
+
+        result.IsPriceValid.Should().NotBe(true);
+        result.EffectivePrice.Should().BeGreaterThanOrEqualTo(0m);
+    }
 }
