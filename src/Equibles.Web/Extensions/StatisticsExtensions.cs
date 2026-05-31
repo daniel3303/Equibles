@@ -24,10 +24,7 @@ public static class StatisticsExtensions
     public static List<decimal?> ComputeSma(this double[] values, int period, int digits)
     {
         var sma = values.MovingAverage(period);
-        return sma.Select(
-                (v, i) => i < period - 1 ? (decimal?)null : (decimal?)Math.Round(v, digits)
-            )
-            .ToList();
+        return sma.Select((v, i) => i < period - 1 ? (decimal?)null : v.SafeRound(digits)).ToList();
     }
 
     public static StatsSummary ComputeStats(this double[] values, int decimals)
