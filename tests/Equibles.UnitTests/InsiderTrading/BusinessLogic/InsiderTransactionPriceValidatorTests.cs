@@ -272,7 +272,7 @@ public class InsiderTransactionPriceValidatorTests
     // A recovered unit price is never negative; like the zero-shares case the
     // total can't be divided into a sensible unit price, so the row must be
     // rejected, not accepted as valid.
-    [Fact(Skip = "GH-2955 — Evaluate stamps a negative repaired price valid when shares < 0")]
+    [Fact]
     public void Evaluate_ImplausibleWithNegativeShares_IsNotAcceptedAsNegativePrice()
     {
         var result = _validator.Evaluate(
