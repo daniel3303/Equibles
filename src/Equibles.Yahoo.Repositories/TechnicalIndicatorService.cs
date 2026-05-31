@@ -256,7 +256,10 @@ public static class TechnicalIndicatorService
         var d = new List<decimal?>(count);
         for (var i = 0; i < count; i++)
         {
-            if (i < kPeriod - 1 + dPeriod - 1)
+            // Computed in long: kPeriod + dPeriod can exceed int.MaxValue, and an int
+            // overflow here would wrap the threshold negative so the guard never fires
+            // and the inner loop indexes %K out of range.
+            if (i < (long)kPeriod - 1 + dPeriod - 1)
             {
                 d.Add(null);
                 continue;
