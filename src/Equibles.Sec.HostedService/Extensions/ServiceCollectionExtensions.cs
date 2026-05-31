@@ -28,6 +28,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<FtdScraperWorker>();
         services.AddHostedService<FormAdvScraperWorker>();
         services.AddHostedService<XbrlBackfillWorker>();
+        services.AddHostedService<InsiderFilingReprocessWorker>();
 
         return services;
     }

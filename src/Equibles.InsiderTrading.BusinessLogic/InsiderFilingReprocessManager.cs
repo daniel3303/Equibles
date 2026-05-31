@@ -70,7 +70,8 @@ public class InsiderFilingReprocessManager
     }
 
     public async Task<InsiderFilingReprocessResult> Run(
-        Func<InsiderFilingReprocessResult, Task> onProgress = null
+        Func<InsiderFilingReprocessResult, Task> onProgress = null,
+        CancellationToken cancellationToken = default
     )
     {
         // Snapshot of the work-set for the progress bar. The live ingest worker may
@@ -97,7 +98,7 @@ public class InsiderFilingReprocessManager
         // run still terminates; they're retried on the next run (string ordering would
         // be collation-dependent, so a textual keyset is deliberately avoided).
         var failedThisRun = new HashSet<string>();
-        while (true)
+        while (!cancellationToken.IsCancellationRequested)
         {
             var accessions = await _transactionRepository
                 .GetAll()
@@ -106,13 +107,15 @@ public class InsiderFilingReprocessManager
                 .Select(t => t.AccessionNumber)
                 .Distinct()
                 .Take(BatchSize)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
 
             if (accessions.Count == 0)
                 break;
 
             foreach (var accession in accessions)
             {
+                if (cancellationToken.IsCancellationRequested)
+                    break;
                 try
                 {
                     await ReprocessFiling(accession, result);
