@@ -69,7 +69,7 @@ public class FinraClient : IFinraClient
 
     public async Task<List<ShortVolumeRecord>> GetDailyShortVolume(DateOnly date)
     {
-        var dateStr = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var dateStr = FormatDate(date);
         _logger.LogDebug("Fetching daily short volume for {Date}", dateStr);
 
         var results = new List<ShortVolumeRecord>();
@@ -124,7 +124,7 @@ public class FinraClient : IFinraClient
         IReadOnlyList<string> symbols
     )
     {
-        var dateStr = settlementDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var dateStr = FormatDate(settlementDate);
         _logger.LogDebug(
             "Fetching short interest for settlement date {Date}{Filter}",
             dateStr,
@@ -188,12 +188,8 @@ public class FinraClient : IFinraClient
 
     public async Task<List<DateOnly>> GetShortInterestSettlementDatesAfter(DateOnly afterDate)
     {
-        var startDateStr = afterDate
-            .AddDays(1)
-            .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        var endDateStr = DateOnly
-            .FromDateTime(DateTime.UtcNow)
-            .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var startDateStr = FormatDate(afterDate.AddDays(1));
+        var endDateStr = FormatDate(DateOnly.FromDateTime(DateTime.UtcNow));
 
         _logger.LogDebug("Discovering settlement dates after {Date}", afterDate);
 
@@ -338,6 +334,11 @@ public class FinraClient : IFinraClient
 
     private static TimeSpan ExponentialBackoff(int attempt) =>
         TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+
+    // FINRA's API expects Gregorian ISO dates; InvariantCulture keeps the format
+    // stable on non-Gregorian threads (e.g. ar-SA emits Hijri otherwise).
+    private static string FormatDate(DateOnly date) =>
+        date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     private async Task<string> GetAccessToken()
     {
