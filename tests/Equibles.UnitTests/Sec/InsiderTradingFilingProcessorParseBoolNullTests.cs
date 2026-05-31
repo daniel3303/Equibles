@@ -1,5 +1,5 @@
 using System.Reflection;
-using Equibles.Sec.HostedService.Services;
+using Equibles.InsiderTrading.BusinessLogic;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -36,7 +36,7 @@ public class InsiderTradingFilingProcessorParseBoolNullTests
     [Fact]
     public void ParseBool_NullInput_ReturnsFalseWithoutThrowing()
     {
-        var method = typeof(InsiderTradingFilingProcessor).GetMethod(
+        var method = typeof(InsiderFilingParser).GetMethod(
             "ParseBool",
             BindingFlags.NonPublic | BindingFlags.Static
         );

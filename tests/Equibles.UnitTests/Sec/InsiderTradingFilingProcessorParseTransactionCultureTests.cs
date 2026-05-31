@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.Reflection;
 using System.Xml.Linq;
+using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.Integrations.Sec.Models;
-using Equibles.Sec.HostedService.Services;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -43,10 +43,6 @@ public class InsiderTradingFilingProcessorParseTransactionCultureTests
                 )
             );
 
-            var processor = Activator.CreateInstance(
-                typeof(InsiderTradingFilingProcessor),
-                [null, null, null]
-            )!;
             var owner = new InsiderOwner { Id = Guid.NewGuid() };
             var filing = new FilingData
             {
@@ -55,14 +51,14 @@ public class InsiderTradingFilingProcessorParseTransactionCultureTests
                 ReportDate = new DateOnly(2024, 2, 2),
             };
 
-            var method = typeof(InsiderTradingFilingProcessor).GetMethod(
+            var method = typeof(InsiderFilingParser).GetMethod(
                 "ParseTransaction",
-                BindingFlags.NonPublic | BindingFlags.Instance
+                BindingFlags.NonPublic | BindingFlags.Static
             )!;
 
             var result = (InsiderTransaction)
                 method.Invoke(
-                    processor,
+                    null,
                     [tx, owner, Guid.NewGuid(), filing, false, InsiderSecurityKind.NonDerivative]
                 );
 

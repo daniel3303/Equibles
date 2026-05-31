@@ -1,5 +1,5 @@
 using System.Reflection;
-using Equibles.Sec.HostedService.Services;
+using Equibles.InsiderTrading.BusinessLogic;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -33,7 +33,7 @@ public class InsiderTradingFilingProcessorParseDecimalThousandsSeparatorTests
     [Fact]
     public void ParseDecimal_ValueWithThousandsSeparator_ParsesViaNumberStylesAny()
     {
-        var method = typeof(InsiderTradingFilingProcessor).GetMethod(
+        var method = typeof(InsiderFilingParser).GetMethod(
             "ParseDecimal",
             BindingFlags.NonPublic | BindingFlags.Static
         );

@@ -1,5 +1,5 @@
 using System.Reflection;
-using Equibles.Sec.HostedService.Services;
+using Equibles.InsiderTrading.BusinessLogic;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -22,7 +22,7 @@ public class InsiderTradingFilingProcessorParseBoolLowercaseTrueTests
         // The lowercase "true" arm is the canonical xsd:boolean form and the
         // representation older Form 4 filings emit. Pin it explicitly so the
         // arm survives a "simplify the predicate" refactor.
-        var method = typeof(InsiderTradingFilingProcessor).GetMethod(
+        var method = typeof(InsiderFilingParser).GetMethod(
             "ParseBool",
             BindingFlags.NonPublic | BindingFlags.Static
         )!;

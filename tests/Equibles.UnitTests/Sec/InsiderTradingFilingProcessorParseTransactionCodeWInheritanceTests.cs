@@ -1,6 +1,6 @@
 using System.Reflection;
+using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data.Models;
-using Equibles.Sec.HostedService.Services;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -17,7 +17,7 @@ namespace Equibles.UnitTests.Sec;
 public class InsiderTradingFilingProcessorParseTransactionCodeWInheritanceTests
 {
     private static readonly MethodInfo ParseTransactionCodeMethod =
-        typeof(InsiderTradingFilingProcessor).GetMethod(
+        typeof(InsiderFilingParser).GetMethod(
             "ParseTransactionCode",
             BindingFlags.NonPublic | BindingFlags.Static
         );

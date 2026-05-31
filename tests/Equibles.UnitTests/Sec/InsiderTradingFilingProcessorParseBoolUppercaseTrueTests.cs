@@ -1,5 +1,5 @@
 using System.Reflection;
-using Equibles.Sec.HostedService.Services;
+using Equibles.InsiderTrading.BusinessLogic;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -32,7 +32,7 @@ public class InsiderTradingFilingProcessorParseBoolUppercaseTrueTests
     [Fact]
     public void ParseBool_UppercaseTrue_ReturnsTrue()
     {
-        var method = typeof(InsiderTradingFilingProcessor).GetMethod(
+        var method = typeof(InsiderFilingParser).GetMethod(
             "ParseBool",
             BindingFlags.NonPublic | BindingFlags.Static
         );

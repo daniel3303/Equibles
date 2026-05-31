@@ -1,5 +1,6 @@
 using Equibles.Core.AutoWiring;
 using Equibles.InsiderTrading.BusinessLogic.Models;
+using Equibles.InsiderTrading.Data.Models;
 
 namespace Equibles.InsiderTrading.BusinessLogic;
 
@@ -77,17 +78,22 @@ public class InsiderTransactionPriceValidator
     /// <paramref name="shares"/> recovers the unit price. Rows with no share
     /// count can't be divided and stay flagged invalid.</item>
     /// </list>
+    ///
+    /// Derivative classification uses the authoritative <paramref name="kind"/>
+    /// (from the Form 4 table). Only when it's <see cref="InsiderSecurityKind.Unknown"/>
+    /// (rows not yet reclassified) does it fall back to the title-keyword heuristic.
     /// </summary>
     public InsiderTransactionPriceEvaluation Evaluate(
         decimal reportedPrice,
         long shares,
+        InsiderSecurityKind kind,
         string securityTitle,
         decimal? unadjustedClose
     )
     {
         // Zero/negative prices (holdings, sentinels) and derivatives need no
         // close — they're valid as-is and never repaired.
-        if (reportedPrice <= 0m || IsDerivativeSecurity(securityTitle))
+        if (reportedPrice <= 0m || IsDerivative(kind, securityTitle))
         {
             return new InsiderTransactionPriceEvaluation
             {
@@ -133,6 +139,19 @@ public class InsiderTransactionPriceValidator
             IsPriceValid = true,
             EffectivePrice = reportedPrice / shares,
             WasRepaired = true,
+        };
+    }
+
+    // Authoritative when the row carries a known kind (parsed from the Form 4
+    // table); only Unknown rows (not yet reclassified) fall back to the title
+    // keyword heuristic.
+    private static bool IsDerivative(InsiderSecurityKind kind, string securityTitle)
+    {
+        return kind switch
+        {
+            InsiderSecurityKind.Derivative => true,
+            InsiderSecurityKind.NonDerivative => false,
+            _ => IsDerivativeSecurity(securityTitle),
         };
     }
 

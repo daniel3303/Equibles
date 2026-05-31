@@ -1,5 +1,5 @@
 using System.Xml.Linq;
-using Equibles.Sec.HostedService.Services;
+using Equibles.InsiderTrading.BusinessLogic;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -15,7 +15,7 @@ public class InsiderTradingFilingProcessorSanitizeXmlNumericEntityTests
     {
         var input = "<XML><ownershipDocument><name>Jos&#xE9;</name></ownershipDocument></XML>";
 
-        var result = InsiderTradingFilingProcessor.SanitizeXml(input);
+        var result = InsiderFilingParser.SanitizeXml(input);
 
         result.Should().Contain("&#xE9;").And.NotContain("&amp;#xE9;");
         XDocument.Parse(result).Root!.Value.Should().Be("José");

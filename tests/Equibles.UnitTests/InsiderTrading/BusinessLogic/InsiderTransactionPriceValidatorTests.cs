@@ -1,4 +1,5 @@
 using Equibles.InsiderTrading.BusinessLogic;
+using Equibles.InsiderTrading.Data.Models;
 
 namespace Equibles.UnitTests.InsiderTrading.BusinessLogic;
 
@@ -129,6 +130,7 @@ public class InsiderTransactionPriceValidatorTests
         var result = _validator.Evaluate(
             0.24m,
             shares: 1000,
+            InsiderSecurityKind.NonDerivative,
             "Common Stock",
             unadjustedClose: null
         );
@@ -147,6 +149,7 @@ public class InsiderTransactionPriceValidatorTests
         var result = _validator.Evaluate(
             reportedPrice: 24_035_774.40m,
             shares: 100_149_893, // 24,035,774.40 / 0.24
+            kind: InsiderSecurityKind.NonDerivative,
             securityTitle: "Common Stock",
             unadjustedClose: 0.24m
         );
@@ -161,7 +164,13 @@ public class InsiderTransactionPriceValidatorTests
     [Fact]
     public void Evaluate_ImplausibleWithZeroShares_IsInvalidNotRepaired()
     {
-        var result = _validator.Evaluate(50_000m, shares: 0, "Common Stock", unadjustedClose: 50m);
+        var result = _validator.Evaluate(
+            50_000m,
+            shares: 0,
+            InsiderSecurityKind.NonDerivative,
+            "Common Stock",
+            unadjustedClose: 50m
+        );
 
         result.IsPriceValid.Should().BeFalse();
         result.WasRepaired.Should().BeFalse();
@@ -171,7 +180,13 @@ public class InsiderTransactionPriceValidatorTests
     [Fact]
     public void Evaluate_PlausiblePrice_IsValidUnchanged()
     {
-        var result = _validator.Evaluate(55m, shares: 1000, "Common Stock", unadjustedClose: 50m);
+        var result = _validator.Evaluate(
+            55m,
+            shares: 1000,
+            InsiderSecurityKind.NonDerivative,
+            "Common Stock",
+            unadjustedClose: 50m
+        );
 
         result.IsPriceValid.Should().BeTrue();
         result.WasRepaired.Should().BeFalse();
@@ -179,14 +194,53 @@ public class InsiderTransactionPriceValidatorTests
     }
 
     // Derivatives carry the instrument's own price; never repaired, valid even
-    // far above the underlying close and even with no close on file.
+    // far above the underlying close and even with no close on file. The kind is
+    // authoritative (from the Form 4 table), so the title is irrelevant.
     [Fact]
     public void Evaluate_DerivativeWayAboveClose_IsValidUnchanged()
     {
         var result = _validator.Evaluate(
             50_000m,
             shares: 1000,
+            InsiderSecurityKind.Derivative,
             "Stock Option (Right to Buy)",
+            unadjustedClose: 50m
+        );
+
+        result.IsPriceValid.Should().BeTrue();
+        result.WasRepaired.Should().BeFalse();
+        result.EffectivePrice.Should().Be(50_000m);
+    }
+
+    // A convertible note titled "Common Stock" (the VELO case) sits in the
+    // derivative table, so an authoritative Derivative kind must override the
+    // misleading title — never repaired, never flagged.
+    [Fact]
+    public void Evaluate_DerivativeKindWithCommonStockTitle_IsValidUnchanged()
+    {
+        var result = _validator.Evaluate(
+            6_390_707.73m,
+            shares: 5_000_000,
+            InsiderSecurityKind.Derivative,
+            "Common Stock",
+            unadjustedClose: 1.20m
+        );
+
+        result.IsPriceValid.Should().BeTrue();
+        result.WasRepaired.Should().BeFalse();
+        result.EffectivePrice.Should().Be(6_390_707.73m);
+    }
+
+    // Unknown kind (rows not yet reclassified) falls back to the title keyword
+    // heuristic — a derivative-titled row is still treated as a derivative.
+    [Fact]
+    public void Evaluate_UnknownKindWithDerivativeTitle_FallsBackToTitleHeuristic()
+    {
+        var result = _validator.Evaluate(
+            50_000m,
+            shares: 1000,
+            InsiderSecurityKind.Unknown,
+            "Warrant",
             unadjustedClose: 50m
         );
 
@@ -198,7 +252,13 @@ public class InsiderTransactionPriceValidatorTests
     [Fact]
     public void Evaluate_ZeroPrice_IsValidWithoutClose()
     {
-        var result = _validator.Evaluate(0m, shares: 0, "Common Stock", unadjustedClose: null);
+        var result = _validator.Evaluate(
+            0m,
+            shares: 0,
+            InsiderSecurityKind.NonDerivative,
+            "Common Stock",
+            unadjustedClose: null
+        );
 
         result.IsPriceValid.Should().BeTrue();
         result.WasRepaired.Should().BeFalse();
@@ -218,6 +278,7 @@ public class InsiderTransactionPriceValidatorTests
         var result = _validator.Evaluate(
             reportedPrice: 50_000m,
             shares: -1000,
+            kind: InsiderSecurityKind.NonDerivative,
             securityTitle: "Common Stock",
             unadjustedClose: 50m
         );

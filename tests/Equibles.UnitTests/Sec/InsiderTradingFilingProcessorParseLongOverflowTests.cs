@@ -1,15 +1,14 @@
 using System.Reflection;
-using Equibles.Sec.HostedService.Services;
+using Equibles.InsiderTrading.BusinessLogic;
 
 namespace Equibles.UnitTests.Sec;
 
 public class InsiderTradingFilingProcessorParseLongOverflowTests
 {
-    private static readonly MethodInfo ParseLongMethod =
-        typeof(InsiderTradingFilingProcessor).GetMethod(
-            "ParseLong",
-            BindingFlags.NonPublic | BindingFlags.Static
-        );
+    private static readonly MethodInfo ParseLongMethod = typeof(InsiderFilingParser).GetMethod(
+        "ParseLong",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
     // Every sibling Parse* helper in InsiderTradingFilingProcessor (ParseBool,
     // ParseDecimal, ParseTransactionCode, TryParseTransactionDate) returns a

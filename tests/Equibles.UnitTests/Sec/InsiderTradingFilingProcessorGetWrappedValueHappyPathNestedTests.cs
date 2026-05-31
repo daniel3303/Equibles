@@ -1,6 +1,6 @@
 using System.Reflection;
 using System.Xml.Linq;
-using Equibles.Sec.HostedService.Services;
+using Equibles.InsiderTrading.BusinessLogic;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -26,7 +26,7 @@ public class InsiderTradingFilingProcessorGetWrappedValueHappyPathNestedTests
     [Fact]
     public void GetWrappedValue_NestedPathWithSidecarSibling_ReturnsInnerValueTextOnly()
     {
-        var method = typeof(InsiderTradingFilingProcessor).GetMethod(
+        var method = typeof(InsiderFilingParser).GetMethod(
             "GetWrappedValue",
             BindingFlags.NonPublic | BindingFlags.Static
         );
