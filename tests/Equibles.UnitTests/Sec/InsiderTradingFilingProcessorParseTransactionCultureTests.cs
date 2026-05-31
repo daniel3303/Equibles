@@ -59,7 +59,15 @@ public class InsiderTradingFilingProcessorParseTransactionCultureTests
             var result = (InsiderTransaction)
                 method.Invoke(
                     null,
-                    [tx, owner, Guid.NewGuid(), filing, false, InsiderSecurityKind.NonDerivative]
+                    [
+                        tx,
+                        owner,
+                        Guid.NewGuid(),
+                        filing,
+                        false,
+                        InsiderSecurityKind.NonDerivative,
+                        new Dictionary<string, string>(),
+                    ]
                 );
 
             result.Should().NotBeNull();

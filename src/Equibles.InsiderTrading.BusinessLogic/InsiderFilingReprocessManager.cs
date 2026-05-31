@@ -204,19 +204,35 @@ public class InsiderFilingReprocessManager
         );
         // TransactionOrder is unique within a parse by construction, so a direct
         // dictionary is safe; a duplicate would be a parser bug worth surfacing.
-        var kindByOrder = parsed.ToDictionary(t => t.TransactionOrder, t => t.SecurityKind);
+        var parsedByOrder = parsed.ToDictionary(t => t.TransactionOrder);
+
+        // The re-parse should reproduce the stored rows exactly. If the counts
+        // diverge, some stored rows won't map to a parsed row — they keep their
+        // prior data but are still advanced to the current version. Rare, but log
+        // it so the assumption is observable across a full backlog reprocess.
+        if (rows.Count != parsed.Count)
+        {
+            _logger.LogWarning(
+                "Insider reprocess: {AccessionNumber} has {StoredCount} stored rows but re-parsed {ParsedCount}; unmatched rows keep prior data",
+                accession,
+                rows.Count,
+                parsed.Count
+            );
+        }
 
         var closes = await FetchCloses(first.CommonStockId, rows);
 
         foreach (var row in rows)
         {
-            if (
-                kindByOrder.TryGetValue(row.TransactionOrder, out var kind)
-                && row.SecurityKind != kind
-            )
+            if (parsedByOrder.TryGetValue(row.TransactionOrder, out var reparsed))
             {
-                row.SecurityKind = kind;
-                result.Reclassified++;
+                if (row.SecurityKind != reparsed.SecurityKind)
+                {
+                    row.SecurityKind = reparsed.SecurityKind;
+                    result.Reclassified++;
+                }
+                // Re-derive footnotes (added in parser v2); cheap to always copy.
+                row.Notes = reparsed.Notes;
             }
 
             decimal? close = closes.TryGetValue(row.TransactionDate, out var value) ? value : null;

@@ -20,8 +20,10 @@ public class InsiderTransaction
     /// field, a corrected classification). Rows below this value can be
     /// re-parsed from the cached <see cref="InsiderFiling"/> XML rather than
     /// re-fetched from EDGAR. Rows ingested before versioning default to 0.
+    ///
+    /// History: v1 added SecurityKind; v2 added <see cref="Notes"/> (footnotes).
     /// </summary>
-    public const int CurrentParserVersion = 1;
+    public const int CurrentParserVersion = 2;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -87,6 +89,15 @@ public class InsiderTransaction
     /// before versioning, which marks them for reprocessing.
     /// </summary>
     public int ParserVersion { get; set; }
+
+    /// <summary>
+    /// Footnotes attached to this transaction in the Form 4 filing, resolved to
+    /// their text. A Form 4 references footnotes by id (<c>footnoteId</c>) on the
+    /// transaction itself or on individual fields; this collects every footnote
+    /// referenced anywhere within the row, de-duplicated, in document order.
+    /// Empty when the filing annotated nothing. Stored as a Postgres array.
+    /// </summary>
+    public List<string> Notes { get; set; } = [];
 
     /// <summary>
     /// Tri-state price-plausibility flag, cross-checked against the Yahoo
