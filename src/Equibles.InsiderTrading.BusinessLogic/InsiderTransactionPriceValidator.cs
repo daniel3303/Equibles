@@ -61,7 +61,10 @@ public class InsiderTransactionPriceValidator
         if (!unadjustedClose.HasValue || unadjustedClose.Value <= 0m)
             return true;
 
-        return pricePerShare <= unadjustedClose.Value * MaxPriceToCloseMultiplier;
+        // Compare via division rather than close * multiplier: an extreme-but-
+        // legal close (near decimal.MaxValue) overflows the product, and this
+        // method must always return a verdict, never throw.
+        return pricePerShare / MaxPriceToCloseMultiplier <= unadjustedClose.Value;
     }
 
     /// <summary>
@@ -112,8 +115,9 @@ public class InsiderTransactionPriceValidator
             };
         }
 
-        // Plausible against the close — keep as filed.
-        if (reportedPrice <= unadjustedClose.Value * MaxPriceToCloseMultiplier)
+        // Plausible against the close — keep as filed. Divide rather than
+        // multiply the close so a near-decimal.MaxValue close can't overflow.
+        if (reportedPrice / MaxPriceToCloseMultiplier <= unadjustedClose.Value)
         {
             return new InsiderTransactionPriceEvaluation
             {
