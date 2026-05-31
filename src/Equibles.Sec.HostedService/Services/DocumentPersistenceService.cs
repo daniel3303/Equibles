@@ -1,5 +1,4 @@
 using System.Data;
-using System.IO.Compression;
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Media.BusinessLogic;
@@ -92,7 +91,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             return;
         }
 
-        var compressed = Compress(xbrl.RawBytes);
+        var compressed = GzipCompressor.Compress(xbrl.RawBytes);
         // File.Name is capped at 256 chars; EDGAR document names are bare short tokens, but
         // guard against a pathological envelope value so the insert can never overflow.
         var name =
@@ -110,15 +109,5 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         document.XbrlType = xbrl.Type;
         document.XbrlUncompressedSize = xbrl.RawBytes.Length;
         document.XbrlStatus = XbrlCaptureStatus.Captured;
-    }
-
-    private static byte[] Compress(byte[] raw)
-    {
-        using var output = new MemoryStream();
-        using (var gzip = new GZipStream(output, CompressionLevel.Optimal))
-        {
-            gzip.Write(raw, 0, raw.Length);
-        }
-        return output.ToArray();
     }
 }

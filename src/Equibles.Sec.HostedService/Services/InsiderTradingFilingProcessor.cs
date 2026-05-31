@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Equibles.CommonStocks.Data.Models;
@@ -9,6 +10,7 @@ using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
+using Equibles.Media.BusinessLogic;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Contracts;
 using Equibles.Yahoo.Repositories;
@@ -53,6 +55,8 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         var ownerRepository = scope.ServiceProvider.GetRequiredService<InsiderOwnerRepository>();
         var transactionRepository =
             scope.ServiceProvider.GetRequiredService<InsiderTransactionRepository>();
+        var filingRepository = scope.ServiceProvider.GetRequiredService<InsiderFilingRepository>();
+        var fileManager = scope.ServiceProvider.GetRequiredService<IFileManager>();
         var dailyStockPriceRepository =
             scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
         var priceValidator =
@@ -85,6 +89,10 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             return false;
 
         var isAmendment = filing.Form.Contains("/A", StringComparison.OrdinalIgnoreCase);
+
+        // Cache the raw ownership XML so the filing can be re-parsed locally
+        // when the parser changes, without re-fetching from EDGAR.
+        await CaptureFilingXml(root, filing, filingRepository, fileManager);
 
         var transactions = ParseAllTransactions(root, owner, companyId, filing, isAmendment);
 
@@ -156,21 +164,83 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             transactions.Add(tx);
         }
 
-        void WalkTable(string tableName, string txName, string holdingName)
+        void WalkTable(
+            string tableName,
+            string txName,
+            string holdingName,
+            InsiderSecurityKind kind
+        )
         {
             var table = root.Element(tableName);
             if (table == null)
                 return;
             foreach (var txElement in table.Elements(txName))
-                AddParsed(ParseTransaction(txElement, owner, companyId, filing, isAmendment));
+                AddParsed(ParseTransaction(txElement, owner, companyId, filing, isAmendment, kind));
             foreach (var holdingElement in table.Elements(holdingName))
-                AddParsed(ParseHolding(holdingElement, owner, companyId, filing, isAmendment));
+                AddParsed(
+                    ParseHolding(holdingElement, owner, companyId, filing, isAmendment, kind)
+                );
         }
 
-        WalkTable("nonDerivativeTable", "nonDerivativeTransaction", "nonDerivativeHolding");
-        WalkTable("derivativeTable", "derivativeTransaction", "derivativeHolding");
+        // The table a row lives in is the authoritative security classification —
+        // nonDerivativeTable holds the issuer's actual shares, derivativeTable
+        // holds options/warrants/convertibles/etc.
+        WalkTable(
+            "nonDerivativeTable",
+            "nonDerivativeTransaction",
+            "nonDerivativeHolding",
+            InsiderSecurityKind.NonDerivative
+        );
+        WalkTable(
+            "derivativeTable",
+            "derivativeTransaction",
+            "derivativeHolding",
+            InsiderSecurityKind.Derivative
+        );
 
         return transactions;
+    }
+
+    // Stores the parsed ownership XML as a gzip-compressed internal File so the
+    // filing can be re-parsed locally if the parser changes, without re-fetching
+    // from EDGAR. root.ToString() re-serializes the already-parsed (well-formed,
+    // SGML-envelope-stripped) document, so the stored payload is guaranteed
+    // re-parseable. The File and InsiderFiling are added to the shared context
+    // here; the caller's SaveChanges persists them alongside the transactions.
+    private static async Task CaptureFilingXml(
+        XElement root,
+        FilingData filing,
+        InsiderFilingRepository filingRepository,
+        IFileManager fileManager
+    )
+    {
+        // A filing is only processed when its transactions don't yet exist, but
+        // guard against a duplicate filing row so the unique accession index
+        // can't be violated by a re-run.
+        var alreadyCaptured = await filingRepository
+            .GetByAccessionNumber(filing.AccessionNumber)
+            .AnyAsync();
+        if (alreadyCaptured)
+            return;
+
+        var rawBytes = Encoding.UTF8.GetBytes(root.ToString(SaveOptions.DisableFormatting));
+        var compressed = GzipCompressor.Compress(rawBytes);
+        var file = await fileManager.SaveInternalFile(
+            compressed,
+            filing.AccessionNumber,
+            "gz",
+            "application/gzip"
+        );
+
+        filingRepository.Add(
+            new InsiderFiling
+            {
+                AccessionNumber = filing.AccessionNumber,
+                Content = file,
+                UncompressedSize = rawBytes.Length,
+                CaptureStatus = InsiderFilingCaptureStatus.Captured,
+            }
+        );
     }
 
     private async Task<XElement> TryParseOwnershipRoot(
@@ -341,6 +411,9 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
                 TransactionOrder = 0,
                 // 0-price holding sentinel: nothing to validate or repair.
                 IsPriceValid = true,
+                // No security exists on a noSecuritiesOwned filing, so SecurityKind
+                // stays Unknown by design — there is no table to classify it from.
+                ParserVersion = InsiderTransaction.CurrentParserVersion,
             }
         );
         await transactionRepository.SaveChanges();
@@ -404,7 +477,8 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         InsiderOwner owner,
         Guid companyId,
         FilingData filing,
-        bool isAmendment
+        bool isAmendment,
+        InsiderSecurityKind kind
     )
     {
         string Wrapped(params string[] path) => GetWrappedValue(txElement, path);
@@ -438,6 +512,8 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             SecurityTitle = securityTitle,
             AccessionNumber = filing.AccessionNumber,
             IsAmendment = isAmendment,
+            SecurityKind = kind,
+            ParserVersion = InsiderTransaction.CurrentParserVersion,
         };
     }
 
@@ -446,7 +522,8 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         InsiderOwner owner,
         Guid companyId,
         FilingData filing,
-        bool isAmendment
+        bool isAmendment,
+        InsiderSecurityKind kind
     )
     {
         var securityTitle = GetWrappedValue(holdingElement, "securityTitle")?.Trim();
@@ -471,6 +548,8 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             SecurityTitle = securityTitle,
             AccessionNumber = filing.AccessionNumber,
             IsAmendment = isAmendment,
+            SecurityKind = kind,
+            ParserVersion = InsiderTransaction.CurrentParserVersion,
         };
     }
 
