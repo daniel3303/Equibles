@@ -1,3 +1,4 @@
+using System.Net;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
@@ -309,6 +310,18 @@ public class HoldingsScraperWorker : BaseScraperWorker
                 }
 
                 await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+                return true;
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                // The SEC publishes each quarterly data set well after the period closes,
+                // so a 404 only means "not filed yet", not a failure. Don't burn retry
+                // attempts or raise a permanent-failure alarm — leave it unprocessed so the
+                // next cycle picks it up once the SEC publishes it.
+                Logger.LogInformation(
+                    "Data set {FileName} is not published by the SEC yet; will retry next cycle",
+                    fileName
+                );
                 return true;
             }
             catch (HttpRequestException ex)
