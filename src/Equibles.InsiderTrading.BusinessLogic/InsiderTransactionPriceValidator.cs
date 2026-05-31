@@ -122,8 +122,12 @@ public class InsiderTransactionPriceValidator
             };
         }
 
-        // Implausible but unrepairable without a share count.
-        if (shares == 0)
+        // Implausible but unrepairable without a positive share count. A zero
+        // count can't be divided; a negative one (a malformed/amended Form 4
+        // carries "-N" through long.TryParse) would only "repair" into a
+        // negative per-share price, which is never a real unit price — so it's
+        // rejected the same way.
+        if (shares <= 0)
         {
             return new InsiderTransactionPriceEvaluation
             {
