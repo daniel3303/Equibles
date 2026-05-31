@@ -23,7 +23,7 @@ public class InstitutionsBacktestReportDateOverflowTests
         _playwright = playwright;
     }
 
-    [Fact(Skip = "GH-2935 — backtest 500s on ReportDate.AddDays(45) overflow; un-skip when fixed")]
+    [Fact]
     public async Task Backtest_HolderWithFarFutureReportDate_DoesNotReturn500()
     {
         // Contract: the backtest page must respond gracefully for any holder that has 13F
