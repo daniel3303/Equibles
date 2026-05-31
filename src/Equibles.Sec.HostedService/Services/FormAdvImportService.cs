@@ -28,7 +28,7 @@ namespace Equibles.Sec.HostedService.Services;
 public class FormAdvImportService : IImporter
 {
     private const string BaseUrl =
-        "https://www.sec.gov/files/investment/data/information-about-registered-investment-advisers-and-exempt-reporting-advisers";
+        "https://www.sec.gov/files/investment/data/other/information-about-registered-investment-advisers-exempt-reporting-advisers";
     private const int MonthsToProbe = 4;
     private const int UpsertBatchSize = 1000;
 
