@@ -251,7 +251,7 @@ public class InstitutionalHoldingsTools
                 var holdings = await _holdingRepository
                     .GetByHolder(holder, targetDate)
                     .OrderByDescending(h => h.Value)
-                    .Take(maxResults)
+                    .Take(Math.Max(0, maxResults))
                     .ToListAsync();
 
                 if (holdings.Count == 0)
