@@ -113,6 +113,7 @@ public class InsiderTransactionPriceBackfillManager
                 var evaluation = _validator.Evaluate(
                     transaction.ReportedPricePerShare,
                     transaction.Shares,
+                    transaction.SecurityKind,
                     transaction.SecurityTitle,
                     close
                 );

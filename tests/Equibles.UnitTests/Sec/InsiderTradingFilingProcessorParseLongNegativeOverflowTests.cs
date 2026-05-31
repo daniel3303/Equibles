@@ -1,15 +1,14 @@
 using System.Reflection;
-using Equibles.Sec.HostedService.Services;
+using Equibles.InsiderTrading.BusinessLogic;
 
 namespace Equibles.UnitTests.Sec;
 
 public class InsiderTradingFilingProcessorParseLongNegativeOverflowTests
 {
-    private static readonly MethodInfo ParseLongMethod =
-        typeof(InsiderTradingFilingProcessor).GetMethod(
-            "ParseLong",
-            BindingFlags.NonPublic | BindingFlags.Static
-        );
+    private static readonly MethodInfo ParseLongMethod = typeof(InsiderFilingParser).GetMethod(
+        "ParseLong",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
     // Symmetric sibling of the GH-1673 positive-overflow pin. The just-shipped
     // clamp is `d > long.MaxValue || d < long.MinValue ? 0 : (long)d`; a

@@ -1,4 +1,4 @@
-using Equibles.Sec.HostedService.Services;
+using Equibles.InsiderTrading.BusinessLogic;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -33,7 +33,7 @@ public class InsiderTradingFilingProcessorSanitizeXmlDecimalNumericTests
     [Fact]
     public void SanitizeXml_DecimalNumericCharacterReference_IsPreservedNotDoubleEscaped()
     {
-        var result = InsiderTradingFilingProcessor.SanitizeXml("<v>&#65;</v>");
+        var result = InsiderFilingParser.SanitizeXml("<v>&#65;</v>");
 
         result.Should().Be("<v>&#65;</v>");
     }

@@ -1,6 +1,6 @@
 using System.Reflection;
 using System.Xml.Linq;
-using Equibles.Sec.HostedService.Services;
+using Equibles.InsiderTrading.BusinessLogic;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -48,7 +48,7 @@ public class InsiderTradingFilingProcessorGetWrappedValueNullPathTests
     [Fact]
     public void GetWrappedValue_PathMissingMidWalk_ReturnsNullWithoutThrowing()
     {
-        var method = typeof(InsiderTradingFilingProcessor).GetMethod(
+        var method = typeof(InsiderFilingParser).GetMethod(
             "GetWrappedValue",
             BindingFlags.NonPublic | BindingFlags.Static
         );

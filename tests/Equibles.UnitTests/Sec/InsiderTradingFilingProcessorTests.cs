@@ -1,40 +1,36 @@
 using System.Reflection;
+using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data.Models;
-using Equibles.Sec.HostedService.Services;
 
 namespace Equibles.UnitTests.Sec;
 
 public class InsiderTradingFilingProcessorTests
 {
-    private static readonly MethodInfo SanitizeXmlMethod =
-        typeof(InsiderTradingFilingProcessor).GetMethod(
-            "SanitizeXml",
-            BindingFlags.NonPublic | BindingFlags.Static
-        );
+    private static readonly MethodInfo SanitizeXmlMethod = typeof(InsiderFilingParser).GetMethod(
+        "SanitizeXml",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
-    private static readonly MethodInfo ParseLongMethod =
-        typeof(InsiderTradingFilingProcessor).GetMethod(
-            "ParseLong",
-            BindingFlags.NonPublic | BindingFlags.Static
-        );
+    private static readonly MethodInfo ParseLongMethod = typeof(InsiderFilingParser).GetMethod(
+        "ParseLong",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
     private static readonly MethodInfo ParseTransactionCodeMethod =
-        typeof(InsiderTradingFilingProcessor).GetMethod(
+        typeof(InsiderFilingParser).GetMethod(
             "ParseTransactionCode",
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-    private static readonly MethodInfo ParseBoolMethod =
-        typeof(InsiderTradingFilingProcessor).GetMethod(
-            "ParseBool",
-            BindingFlags.NonPublic | BindingFlags.Static
-        );
+    private static readonly MethodInfo ParseBoolMethod = typeof(InsiderFilingParser).GetMethod(
+        "ParseBool",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
-    private static readonly MethodInfo ParseDecimalMethod =
-        typeof(InsiderTradingFilingProcessor).GetMethod(
-            "ParseDecimal",
-            BindingFlags.NonPublic | BindingFlags.Static
-        );
+    private static readonly MethodInfo ParseDecimalMethod = typeof(InsiderFilingParser).GetMethod(
+        "ParseDecimal",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
     [Fact]
     public void ParseDecimal_ValueWithThousandsSeparator_ParsesCorrectlyViaNumberStylesAnyAndInvariantCulture()

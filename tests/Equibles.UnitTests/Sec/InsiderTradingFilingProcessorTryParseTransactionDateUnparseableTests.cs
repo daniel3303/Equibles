@@ -1,5 +1,5 @@
 using System.Reflection;
-using Equibles.Sec.HostedService.Services;
+using Equibles.InsiderTrading.BusinessLogic;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -30,7 +30,7 @@ public class InsiderTradingFilingProcessorTryParseTransactionDateUnparseableTest
     [Fact]
     public void TryParseTransactionDate_UnparseableInput_ReturnsFalseWithoutThrowing()
     {
-        var method = typeof(InsiderTradingFilingProcessor).GetMethod(
+        var method = typeof(InsiderFilingParser).GetMethod(
             "TryParseTransactionDate",
             BindingFlags.NonPublic | BindingFlags.Static
         );

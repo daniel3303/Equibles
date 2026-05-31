@@ -1,5 +1,5 @@
 using System.Reflection;
-using Equibles.Sec.HostedService.Services;
+using Equibles.InsiderTrading.BusinessLogic;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -13,11 +13,10 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class InsiderTradingFilingProcessorParseBoolWhitespacePaddedTests
 {
-    private static readonly MethodInfo ParseBoolMethod =
-        typeof(InsiderTradingFilingProcessor).GetMethod(
-            "ParseBool",
-            BindingFlags.NonPublic | BindingFlags.Static
-        );
+    private static readonly MethodInfo ParseBoolMethod = typeof(InsiderFilingParser).GetMethod(
+        "ParseBool",
+        BindingFlags.NonPublic | BindingFlags.Static
+    );
 
     private static bool ParseBool(string value) => (bool)ParseBoolMethod.Invoke(null, [value]);
 

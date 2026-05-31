@@ -1,31 +1,21 @@
-using System.Reflection;
 using System.Xml.Linq;
+using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.Integrations.Sec.Models;
-using Equibles.Sec.HostedService.Services;
 
 namespace Equibles.UnitTests.Sec;
 
 public class InsiderTradingFilingProcessorSecurityKindTests
 {
-    // ParseAllTransactions is the method that walks the two Form 4 tables. The
+    // InsiderFilingParser.ParseTransactions walks the two Form 4 tables. The
     // table a row sits in is the AUTHORITATIVE security classification — the
     // non-derivative table holds the issuer's actual shares, the derivative
     // table holds options/warrants/convertibles. This pins that each row is
     // tagged from its source table rather than from the (unreliable) title
     // text, and that every parsed row is stamped with the current parser
     // version so the reprocessing pipeline can find stale rows.
-    private static readonly MethodInfo ParseAllTransactionsMethod =
-        typeof(InsiderTradingFilingProcessor).GetMethod(
-            "ParseAllTransactions",
-            BindingFlags.NonPublic | BindingFlags.Instance
-        );
-
     private static List<InsiderTransaction> ParseAll(XElement root)
     {
-        // ParseAllTransactions uses none of the constructor dependencies, so
-        // nulls are safe for exercising the pure table-walk logic.
-        var processor = new InsiderTradingFilingProcessor(null, null, null);
         var owner = new InsiderOwner { OwnerCik = "0000000001", Name = "Test Owner" };
         var filing = new FilingData
         {
@@ -35,11 +25,7 @@ public class InsiderTradingFilingProcessorSecurityKindTests
             ReportDate = new DateOnly(2026, 1, 2),
         };
 
-        return (List<InsiderTransaction>)
-            ParseAllTransactionsMethod.Invoke(
-                processor,
-                [root, owner, Guid.NewGuid(), filing, false]
-            );
+        return InsiderFilingParser.ParseTransactions(root, owner, Guid.NewGuid(), filing, false);
     }
 
     private static XElement Transaction(string securityTitle) =>

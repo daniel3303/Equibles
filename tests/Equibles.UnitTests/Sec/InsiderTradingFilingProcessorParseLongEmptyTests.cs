@@ -1,5 +1,5 @@
 using System.Reflection;
-using Equibles.Sec.HostedService.Services;
+using Equibles.InsiderTrading.BusinessLogic;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -46,7 +46,7 @@ public class InsiderTradingFilingProcessorParseLongEmptyTests
     [Fact]
     public void ParseLong_EmptyInput_ReturnsZeroWithoutThrowing()
     {
-        var method = typeof(InsiderTradingFilingProcessor).GetMethod(
+        var method = typeof(InsiderFilingParser).GetMethod(
             "ParseLong",
             BindingFlags.NonPublic | BindingFlags.Static
         );

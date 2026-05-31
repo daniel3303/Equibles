@@ -1,7 +1,7 @@
 using System.Reflection;
 using System.Xml.Linq;
+using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data.Models;
-using Equibles.Sec.HostedService.Services;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -70,7 +70,7 @@ public class InsiderTradingFilingProcessorParseOwnershipNatureIndirectTests
     [Fact]
     public void ParseOwnershipNature_OwnershipNatureValueI_ReturnsIndirect()
     {
-        var method = typeof(InsiderTradingFilingProcessor).GetMethod(
+        var method = typeof(InsiderFilingParser).GetMethod(
             "ParseOwnershipNature",
             BindingFlags.NonPublic | BindingFlags.Static
         );

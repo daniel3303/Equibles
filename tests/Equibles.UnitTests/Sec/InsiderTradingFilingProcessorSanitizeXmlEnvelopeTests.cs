@@ -1,5 +1,5 @@
 using System.Xml.Linq;
-using Equibles.Sec.HostedService.Services;
+using Equibles.InsiderTrading.BusinessLogic;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -20,7 +20,7 @@ public class InsiderTradingFilingProcessorSanitizeXmlEnvelopeTests
             + "  <ownershipDocument><issuer>ACME</issuer></ownershipDocument>\n"
             + "</xml>trailing noise</SEC-DOCUMENT>";
 
-        var result = InsiderTradingFilingProcessor.SanitizeXml(input);
+        var result = InsiderFilingParser.SanitizeXml(input);
 
         result.Should().NotContainAny("<xml>", "</xml>", "SEC-DOCUMENT", "noise");
         result.Should().StartWith("<ownershipDocument>");

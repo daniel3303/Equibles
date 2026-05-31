@@ -36,7 +36,7 @@ public class InsiderTradingFilingProcessorTests
             </SEC-DOCUMENT>
             """;
 
-        var result = InsiderTradingFilingProcessor.SanitizeXml(input);
+        var result = InsiderFilingParser.SanitizeXml(input);
 
         result.Should().Contain("<ownershipDocument>");
         result.Should().NotContain("<SEC-DOCUMENT>");
@@ -48,7 +48,7 @@ public class InsiderTradingFilingProcessorTests
     {
         var input = "<ownershipDocument><root/></ownershipDocument>";
 
-        var result = InsiderTradingFilingProcessor.SanitizeXml(input);
+        var result = InsiderFilingParser.SanitizeXml(input);
 
         result.Should().Contain("<ownershipDocument>");
     }
@@ -58,7 +58,7 @@ public class InsiderTradingFilingProcessorTests
     {
         var input = "<XML><doc>AT&T Corp & Others</doc></XML>";
 
-        var result = InsiderTradingFilingProcessor.SanitizeXml(input);
+        var result = InsiderFilingParser.SanitizeXml(input);
 
         result.Should().Contain("AT&amp;T Corp &amp; Others");
     }
@@ -68,7 +68,7 @@ public class InsiderTradingFilingProcessorTests
     {
         var input = "<XML><doc>&amp; &lt; &gt; &quot; &apos; &#123; &#x1F;</doc></XML>";
 
-        var result = InsiderTradingFilingProcessor.SanitizeXml(input);
+        var result = InsiderFilingParser.SanitizeXml(input);
 
         result.Should().Contain("&amp;");
         result.Should().Contain("&lt;");
@@ -99,7 +99,7 @@ public class InsiderTradingFilingProcessorTests
         TransactionCode expected
     )
     {
-        InsiderTradingFilingProcessor.ParseTransactionCode(code).Should().Be(expected);
+        InsiderFilingParser.ParseTransactionCode(code).Should().Be(expected);
     }
 
     [Theory]
@@ -107,7 +107,7 @@ public class InsiderTradingFilingProcessorTests
     [InlineData("s", TransactionCode.Sale)]
     public void ParseTransactionCode_LowerCase_StillParses(string code, TransactionCode expected)
     {
-        InsiderTradingFilingProcessor.ParseTransactionCode(code).Should().Be(expected);
+        InsiderFilingParser.ParseTransactionCode(code).Should().Be(expected);
     }
 
     [Theory]
@@ -117,7 +117,7 @@ public class InsiderTradingFilingProcessorTests
     [InlineData("PURCHASE")]
     public void ParseTransactionCode_InvalidOrNull_ReturnsOther(string code)
     {
-        InsiderTradingFilingProcessor.ParseTransactionCode(code).Should().Be(TransactionCode.Other);
+        InsiderFilingParser.ParseTransactionCode(code).Should().Be(TransactionCode.Other);
     }
 
     // ── ParseBool ──
@@ -135,7 +135,7 @@ public class InsiderTradingFilingProcessorTests
     [InlineData("yes", false)]
     public void ParseBool_VariousInputs_ReturnsExpected(string input, bool expected)
     {
-        InsiderTradingFilingProcessor.ParseBool(input).Should().Be(expected);
+        InsiderFilingParser.ParseBool(input).Should().Be(expected);
     }
 
     // ── ParseLong ──
@@ -146,14 +146,14 @@ public class InsiderTradingFilingProcessorTests
     [InlineData("-500", -500L)]
     public void ParseLong_IntegerValues_ParsesCorrectly(string input, long expected)
     {
-        InsiderTradingFilingProcessor.ParseLong(input).Should().Be(expected);
+        InsiderFilingParser.ParseLong(input).Should().Be(expected);
     }
 
     [Fact]
     public void ParseLong_DecimalValue_TruncatesToLong()
     {
         // "1234.5678" can't be parsed as long, falls back to ParseDecimal then casts
-        InsiderTradingFilingProcessor.ParseLong("1234.5678").Should().Be(1234L);
+        InsiderFilingParser.ParseLong("1234.5678").Should().Be(1234L);
     }
 
     [Theory]
@@ -162,7 +162,7 @@ public class InsiderTradingFilingProcessorTests
     [InlineData("abc")]
     public void ParseLong_InvalidOrNull_ReturnsZero(string input)
     {
-        InsiderTradingFilingProcessor.ParseLong(input).Should().Be(0L);
+        InsiderFilingParser.ParseLong(input).Should().Be(0L);
     }
 
     // ── ParseDecimal ──
@@ -174,7 +174,7 @@ public class InsiderTradingFilingProcessorTests
     [InlineData("1,234.56", 1234.56)]
     public void ParseDecimal_ValidInput_ReturnsValue(string input, double expected)
     {
-        InsiderTradingFilingProcessor.ParseDecimal(input).Should().Be((decimal)expected);
+        InsiderFilingParser.ParseDecimal(input).Should().Be((decimal)expected);
     }
 
     [Theory]
@@ -183,7 +183,7 @@ public class InsiderTradingFilingProcessorTests
     [InlineData("abc")]
     public void ParseDecimal_InvalidOrNull_ReturnsZero(string input)
     {
-        InsiderTradingFilingProcessor.ParseDecimal(input).Should().Be(0m);
+        InsiderFilingParser.ParseDecimal(input).Should().Be(0m);
     }
 
     // ── CanProcess ──
