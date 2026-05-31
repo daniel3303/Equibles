@@ -69,7 +69,7 @@ public class CftcTools
                 var reports = await _reportRepository
                     .GetByContract(contract, start, end)
                     .OrderByDescending(r => r.ReportDate)
-                    .Take(maxResults)
+                    .Take(Math.Max(0, maxResults))
                     .ToListAsync();
 
                 if (reports.Count == 0)

@@ -20,9 +20,7 @@ public class CftcToolsGetCftcPositioningNegativeMaxResultsTests : ParadeDbMcpTes
             NullLogger<CftcTools>()
         );
 
-    [Fact(
-        Skip = "GH-2939 — negative maxResults becomes a negative SQL LIMIT and surfaces the internal-error sentinel"
-    )]
+    [Fact]
     public async Task GetCftcPositioning_NegativeMaxResults_DegradesGracefullyWithoutInternalError()
     {
         // Contract: maxResults is documented as "Maximum number of reports to return" — a
