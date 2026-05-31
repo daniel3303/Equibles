@@ -35,6 +35,7 @@ public static class InsiderFilingParser
     )
     {
         var transactions = new List<InsiderTransaction>();
+        var footnotes = BuildFootnotes(root);
 
         void AddParsed(InsiderTransaction tx)
         {
@@ -55,10 +56,28 @@ public static class InsiderFilingParser
             if (table == null)
                 return;
             foreach (var txElement in table.Elements(txName))
-                AddParsed(ParseTransaction(txElement, owner, companyId, filing, isAmendment, kind));
+                AddParsed(
+                    ParseTransaction(
+                        txElement,
+                        owner,
+                        companyId,
+                        filing,
+                        isAmendment,
+                        kind,
+                        footnotes
+                    )
+                );
             foreach (var holdingElement in table.Elements(holdingName))
                 AddParsed(
-                    ParseHolding(holdingElement, owner, companyId, filing, isAmendment, kind)
+                    ParseHolding(
+                        holdingElement,
+                        owner,
+                        companyId,
+                        filing,
+                        isAmendment,
+                        kind,
+                        footnotes
+                    )
                 );
         }
 
@@ -111,7 +130,8 @@ public static class InsiderFilingParser
         Guid companyId,
         FilingData filing,
         bool isAmendment,
-        InsiderSecurityKind kind
+        InsiderSecurityKind kind,
+        IReadOnlyDictionary<string, string> footnotes
     )
     {
         string Wrapped(params string[] path) => GetWrappedValue(txElement, path);
@@ -147,6 +167,7 @@ public static class InsiderFilingParser
             IsAmendment = isAmendment,
             SecurityKind = kind,
             ParserVersion = InsiderTransaction.CurrentParserVersion,
+            Notes = ExtractNotes(txElement, footnotes),
         };
     }
 
@@ -156,7 +177,8 @@ public static class InsiderFilingParser
         Guid companyId,
         FilingData filing,
         bool isAmendment,
-        InsiderSecurityKind kind
+        InsiderSecurityKind kind,
+        IReadOnlyDictionary<string, string> footnotes
     )
     {
         var securityTitle = GetWrappedValue(holdingElement, "securityTitle")?.Trim();
@@ -183,7 +205,54 @@ public static class InsiderFilingParser
             IsAmendment = isAmendment,
             SecurityKind = kind,
             ParserVersion = InsiderTransaction.CurrentParserVersion,
+            Notes = ExtractNotes(holdingElement, footnotes),
         };
+    }
+
+    // Build the filing's footnote table: id → text. The <footnotes> block sits at
+    // the document root; transactions reference its entries by id. Returns an empty
+    // map when the filing has no footnotes.
+    private static Dictionary<string, string> BuildFootnotes(XElement root)
+    {
+        var footnotesElement = root.Element("footnotes");
+        if (footnotesElement == null)
+            return new Dictionary<string, string>();
+
+        var result = new Dictionary<string, string>();
+        foreach (var footnote in footnotesElement.Elements("footnote"))
+        {
+            var id = footnote.Attribute("id")?.Value;
+            var text = footnote.Value?.Trim();
+            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(text))
+                continue;
+            // Last one wins on a duplicate id (shouldn't happen, but be deterministic).
+            result[id] = text;
+        }
+        return result;
+    }
+
+    // Resolve every footnote referenced anywhere within a transaction/holding
+    // element — Form 4 places <footnoteId id="Fx"/> on the row itself and on
+    // individual fields (price, shares, ownership). Collect them in document
+    // order, de-duplicated by id, and map to their text. Form 4 transactions are
+    // flat (siblings under their table), so this subtree holds only this row's
+    // references — never a sibling row's or the document-level <footnotes> block.
+    internal static List<string> ExtractNotes(
+        XElement element,
+        IReadOnlyDictionary<string, string> footnotes
+    )
+    {
+        var notes = new List<string>();
+        var seen = new HashSet<string>();
+        foreach (var reference in element.Descendants("footnoteId"))
+        {
+            var id = reference.Attribute("id")?.Value;
+            if (string.IsNullOrEmpty(id) || !seen.Add(id))
+                continue;
+            if (footnotes.TryGetValue(id, out var text) && !string.IsNullOrEmpty(text))
+                notes.Add(text);
+        }
+        return notes;
     }
 
     // "I" → Indirect, anything else (including "D" and absent) → Direct. The
