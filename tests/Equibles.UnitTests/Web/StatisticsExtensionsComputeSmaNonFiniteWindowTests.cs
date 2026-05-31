@@ -17,9 +17,7 @@ public class StatisticsExtensionsComputeSmaNonFiniteWindowTests
     // ComputeSma pins only feed finite, in-range inputs, so this unprotected region
     // (which the ComputeSmaPeriodLargerThanInput comment itself flags as a hazard)
     // escapes them.
-    [Fact(
-        Skip = "GH-2922 — ComputeSma throws OverflowException on a non-finite window instead of yielding null like SafeRound"
-    )]
+    [Fact]
     public void ComputeSma_FullWindowAveragesToNonFinite_ReturnsNullInsteadOfThrowing()
     {
         double[] values = [1.0, 2.0, double.NaN];
