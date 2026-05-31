@@ -26,9 +26,7 @@ public class InstitutionalHoldingsToolsOwnershipHistoryNegativeMaxPeriodsTests :
             NullLogger<InstitutionalHoldingsTools>()
         );
 
-    [Fact(
-        Skip = "GH-2990 — GetOwnershipHistory surfaces an internal error for a negative maxPeriods instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetOwnershipHistory_NegativeMaxPeriods_DoesNotSurfaceInternalError()
     {
         var stock = new CommonStock

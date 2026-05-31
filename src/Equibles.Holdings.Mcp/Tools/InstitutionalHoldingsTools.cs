@@ -172,7 +172,7 @@ public class InstitutionalHoldingsTools
 
                 var reportDates = await _holdingRepository
                     .GetReportDatesByStock(stock)
-                    .Take(maxPeriods)
+                    .Take(Math.Max(0, maxPeriods))
                     .ToListAsync();
 
                 if (reportDates.Count == 0)
