@@ -31,7 +31,11 @@ namespace Equibles.InsiderTrading.BusinessLogic;
 [Service]
 public class InsiderFilingReprocessManager
 {
-    private const int BatchSize = 200;
+    // Small batches so progress is committed often: the work-set is drained per batch
+    // and SaveChanges runs once per batch, so a smaller size means a throttled or
+    // interrupted run still persists what it managed to fetch rather than losing a
+    // large in-flight batch.
+    private const int BatchSize = 32;
     private const int CloseLookbackDays = 10;
 
     // After this many failed fetch/parse attempts a filing is marked NotPresent and
