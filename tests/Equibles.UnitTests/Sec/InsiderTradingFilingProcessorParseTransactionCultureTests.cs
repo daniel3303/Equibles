@@ -61,7 +61,10 @@ public class InsiderTradingFilingProcessorParseTransactionCultureTests
             )!;
 
             var result = (InsiderTransaction)
-                method.Invoke(processor, [tx, owner, Guid.NewGuid(), filing, false]);
+                method.Invoke(
+                    processor,
+                    [tx, owner, Guid.NewGuid(), filing, false, InsiderSecurityKind.NonDerivative]
+                );
 
             result.Should().NotBeNull();
             result!.TransactionDate.Should().Be(new DateOnly(2024, 2, 1));

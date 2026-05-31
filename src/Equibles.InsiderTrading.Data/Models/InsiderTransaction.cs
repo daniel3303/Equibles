@@ -10,8 +10,19 @@ namespace Equibles.InsiderTrading.Data.Models;
 [Index(nameof(FilingDate))]
 [Index(nameof(TransactionDate))]
 [Index(nameof(IsPriceValid), nameof(TransactionDate))]
+[Index(nameof(SecurityKind), nameof(TransactionDate))]
+[Index(nameof(ParserVersion))]
 public class InsiderTransaction
 {
+    /// <summary>
+    /// Version of the parsing algorithm that produced this row. Bumped whenever
+    /// the parser starts extracting something new from the filing XML (a new
+    /// field, a corrected classification). Rows below this value can be
+    /// re-parsed from the cached <see cref="InsiderFiling"/> XML rather than
+    /// re-fetched from EDGAR. Rows ingested before versioning default to 0.
+    /// </summary>
+    public const int CurrentParserVersion = 1;
+
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid InsiderOwnerId { get; set; }
@@ -61,6 +72,21 @@ public class InsiderTransaction
     public int TransactionOrder { get; set; }
 
     public bool IsAmendment { get; set; }
+
+    /// <summary>
+    /// Whether this row concerns the issuer's actual shares or a derivative
+    /// instrument, taken from the Form 4 table it was parsed from (not the
+    /// title text). <see cref="InsiderSecurityKind.Unknown"/> for rows ingested
+    /// before this was captured; those are reclassified by a reprocess pass.
+    /// </summary>
+    public InsiderSecurityKind SecurityKind { get; set; } = InsiderSecurityKind.Unknown;
+
+    /// <summary>
+    /// Parsing-algorithm version that produced this row. See
+    /// <see cref="CurrentParserVersion"/>. Defaults to 0 for rows ingested
+    /// before versioning, which marks them for reprocessing.
+    /// </summary>
+    public int ParserVersion { get; set; }
 
     /// <summary>
     /// Tri-state price-plausibility flag, cross-checked against the Yahoo
