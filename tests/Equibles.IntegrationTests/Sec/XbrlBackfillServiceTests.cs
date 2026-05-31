@@ -183,6 +183,53 @@ public class XbrlBackfillServiceTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task Backfill_PerpetuallySkippedDocument_DropsOutAfterRetryCeiling()
+    {
+        // Contract: a document fetched successfully but whose extraction leaves it NotChecked
+        // (the "Skipped" outcome) must be bounded by the same retry ceiling (5) as a failing
+        // fetch — its bumped attempt count is persisted via UpdateXbrl each cycle, so after the
+        // ceiling it leaves the working set and can't starve older documents. Guards against the
+        // attempt counter being advanced only on the exception path.
+        var company = await SeedCompany();
+        await SeedDocument(company.Id, "SKIP-ME", new DateOnly(2024, 1, 1));
+        DbContext.ChangeTracker.Clear();
+
+        var repo = new DocumentRepository(DbContext);
+        var persistence = new DocumentPersistenceService(
+            repo,
+            new FileManager(new FileRepository(DbContext))
+        );
+        // Capture disabled => every fetched submission resolves to NotChecked (the Skipped branch).
+        var capture = new XbrlEnvelopeCaptureService(
+            Options.Create(new XbrlCaptureOptions { Enabled = false }),
+            NullLogger<XbrlEnvelopeCaptureService>()
+        );
+        var sut = new XbrlBackfillService(
+            repo,
+            StubClient(InlineSubmission),
+            capture,
+            persistence,
+            NullLogger<XbrlBackfillService>()
+        );
+
+        // Five cycles consume the five allowed attempts, each leaving the document Skipped.
+        for (var cycle = 0; cycle < 5; cycle++)
+        {
+            var cycleResult = await sut.Backfill(batchSize: 1, null);
+            cycleResult.Skipped.Should().Be(1);
+        }
+
+        // Sixth cycle: the document has hit the ceiling and is no longer selected.
+        var afterCeiling = await sut.Backfill(batchSize: 1, null);
+        afterCeiling.Processed.Should().Be(0);
+
+        await using var verify = Fixture.CreateDbContext();
+        var doc = await verify.Set<Document>().SingleAsync(d => d.AccessionNumber == "SKIP-ME");
+        doc.XbrlStatus.Should().Be(XbrlCaptureStatus.NotChecked);
+        doc.XbrlCaptureAttempts.Should().Be(5);
+    }
+
+    [Fact]
     public async Task Backfill_SkipsDocumentsWithoutAccession()
     {
         var company = await SeedCompany();
