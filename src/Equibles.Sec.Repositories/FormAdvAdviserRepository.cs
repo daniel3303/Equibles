@@ -26,10 +26,14 @@ public class FormAdvAdviserRepository : BaseRepository<FormAdvAdviser>
         }
 
         var trimmed = term.Trim();
+        // Escape LIKE metacharacters so "_" and "%" in the query match literally
+        // rather than acting as wildcards; pair with an explicit ESCAPE clause.
+        var escaped = trimmed.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+        var pattern = $"%{escaped}%";
         return GetAll()
             .Where(a =>
-                EF.Functions.ILike(a.LegalName, $"%{trimmed}%")
-                || EF.Functions.ILike(a.PrimaryBusinessName, $"%{trimmed}%")
+                EF.Functions.ILike(a.LegalName, pattern, "\\")
+                || EF.Functions.ILike(a.PrimaryBusinessName, pattern, "\\")
             )
             // Coalesce so advisers that did not report assets sort last rather than first
             // (Postgres orders NULL highest under a plain DESC).

@@ -48,9 +48,7 @@ public class AdvisersSearchWildcardEscapingTests
         return Task.CompletedTask;
     }
 
-    [Fact(
-        Skip = "GH-2905 — adviser search treats LIKE wildcards (_, %) as wildcards, not literals"
-    )]
+    [Fact]
     public async Task GetAdvisers_QueryIsBareUnderscore_DoesNotWildcardMatchNamesWithoutUnderscore()
     {
         await _fixture.ResetAndSeedAsync(Seed);
