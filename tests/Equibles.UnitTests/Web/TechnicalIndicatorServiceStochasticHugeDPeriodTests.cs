@@ -4,7 +4,7 @@ namespace Equibles.UnitTests.Web;
 
 public class TechnicalIndicatorServiceStochasticHugeDPeriodTests
 {
-    [Fact(Skip = "GH-2929 — ComputeStochastic warm-up guard overflows int for huge dPeriod")]
+    [Fact]
     public void ComputeStochastic_DPeriodLargerThanSeries_PercentDIsAllNull()
     {
         // Contract: %D is "null-padded at the start while the lookback window fills"; a
