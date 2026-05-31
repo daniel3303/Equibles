@@ -27,9 +27,7 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioNegativeMaxResults
             NullLogger<InstitutionalHoldingsTools>()
         );
 
-    [Fact(
-        Skip = "GH-2994 — GetInstitutionPortfolio surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetInstitutionPortfolio_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         var stock = new CommonStock
