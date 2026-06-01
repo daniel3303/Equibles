@@ -166,11 +166,20 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
         return IsOnlyWhitespaceSpan(cellHtml);
     }
 
+    // Meaningful non-text content: an element that carries data without any text
+    // (a logo/signature/checkmark <img>, a linked <a href>, a form <input>, …).
+    private const string MeaningfulNonSpanSelector =
+        "img, a[href], input, svg, object, embed, iframe, video, audio, canvas, picture";
+
     private bool IsOnlyWhitespaceSpan(string html)
     {
         var tempDoc = _parser.ParseDocument(html);
         var spans = tempDoc.QuerySelectorAll("span").ToList();
-        return spans.Count > 0 && spans.All(span => !IsMeaningfulText(span.TextContent.Trim()));
+        if (spans.Count == 0 || spans.Any(span => IsMeaningfulText(span.TextContent.Trim())))
+            return false;
+        // A whitespace span beside a text-free <img>/<a href>/<input> is NOT "only
+        // whitespace spans" — the cell still holds meaningful content and must be kept.
+        return tempDoc.QuerySelectorAll(MeaningfulNonSpanSelector).Length == 0;
     }
 
     private void RemoveEmptyColumns(IElement table)
