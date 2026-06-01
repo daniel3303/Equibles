@@ -27,7 +27,7 @@ public class DocumentTextToolsReadDocumentLinesCultureInvarianceTests : ParadeDb
     // the LLM-facing banner renders identically on every host. de-DE swaps the
     // thousand separator (1,500 -> 1.500), forking the response. Same bug class as
     // the fixed GetStockPrices volume cell and the GetLatestPrices repro (GH-3100).
-    [Fact(Skip = "GH-3110 — ReadDocumentLines forks line-count :N0 formatting by host locale")]
+    [Fact]
     public async Task ReadDocumentLines_UnderNonInvariantCulture_RendersLineCountsCultureInvariantly()
     {
         var content = string.Join("\n", Enumerable.Repeat("x", 1500)); // 1500 lines
