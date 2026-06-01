@@ -40,9 +40,7 @@ public class AdvisersPaginationOverflowTests
         return Task.CompletedTask;
     }
 
-    [Fact(
-        Skip = "GH-2920 — page=int.MaxValue overflows Skip((page-1)*pageSize) to a negative OFFSET, 500 instead of an empty page"
-    )]
+    [Fact]
     public async Task GetAdvisers_PageIsIntMaxValue_DoesNotOverflowToNegativeOffset()
     {
         await _fixture.ResetAndSeedAsync(Seed);
