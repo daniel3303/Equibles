@@ -56,7 +56,7 @@ public class CboeTools
                 var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
+                    McpToolExecutor.UtcMonthsAgo(3)
                 );
 
                 maxResults = McpLimit.Clamp(maxResults);
@@ -113,7 +113,7 @@ public class CboeTools
                 var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
+                    McpToolExecutor.UtcMonthsAgo(3)
                 );
 
                 maxResults = McpLimit.Clamp(maxResults);
