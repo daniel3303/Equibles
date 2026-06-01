@@ -29,7 +29,7 @@ public class StockPriceToolsGetLatestPricesCultureInvarianceTests : ParadeDbMcpT
     // cells with the culture-implicit specifiers, which honour the thread
     // CurrentCulture — so de-DE swaps the decimal point and thousand separator,
     // forking the response. Same bug class as the already-fixed GetStockPrices (#2628).
-    [Fact(Skip = "GH-3100 — GetLatestPrices renders Close/Volume with culture-implicit specifiers")]
+    [Fact]
     public async Task GetLatestPrices_UnderNonInvariantCulture_RendersCloseAndVolumeCultureInvariantly()
     {
         var stock = new CommonStock
