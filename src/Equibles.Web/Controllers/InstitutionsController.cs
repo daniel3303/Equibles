@@ -97,11 +97,8 @@ public class InstitutionsController : BaseController
         }
         if (!string.IsNullOrWhiteSpace(city))
         {
-            // Escape LIKE metacharacters so '%' / '_' / '\' in the city term match literally
-            // rather than as wildcards (a bare '_' or '%' would otherwise dump the table),
-            // matching the "city contains" intent and the escaping used elsewhere.
-            var cityPattern =
-                $"%{city.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")}%";
+            // "City contains"; escape so '%' / '_' / '\' in the city term match literally.
+            var cityPattern = LikePattern.Contains(city.Trim());
             holders = holders.Where(h => EF.Functions.ILike(h.City, cityPattern, "\\"));
         }
 

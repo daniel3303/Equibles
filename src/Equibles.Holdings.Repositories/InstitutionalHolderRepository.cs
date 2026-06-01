@@ -21,10 +21,8 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
 
     public IQueryable<InstitutionalHolder> Search(string search)
     {
-        // Escape LIKE metacharacters so '%' / '_' / '\\' in the query match literally
-        // rather than behaving as wildcards (e.g. "_" would otherwise match every name),
-        // matching the documented "name contains the term" contract and SearchNameOrCik.
-        var pattern = $"%{EscapeLikePattern(search)}%";
+        // "Name contains the term"; escape so '%' / '_' / '\' match literally, matching SearchNameOrCik.
+        var pattern = LikePattern.Contains(search);
         return GetAll().Where(h => EF.Functions.ILike(h.Name, pattern, "\\"));
     }
 
@@ -44,8 +42,8 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
             );
     }
 
-    private static string EscapeLikePattern(string input) =>
-        input.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+    // Local alias over the shared escaper, kept so SearchNameOrCik reads as one concept.
+    private static string EscapeLikePattern(string input) => LikePattern.Escape(input);
 
     // Distinct non-empty state/country codes across the filer universe, used to
     // populate the location filter dropdown on the institutions index so the user

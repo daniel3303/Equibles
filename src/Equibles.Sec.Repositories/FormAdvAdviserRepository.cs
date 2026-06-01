@@ -25,11 +25,7 @@ public class FormAdvAdviserRepository : BaseRepository<FormAdvAdviser>
             return GetAll().Where(a => false);
         }
 
-        var trimmed = term.Trim();
-        // Escape LIKE metacharacters so "_" and "%" in the query match literally
-        // rather than acting as wildcards; pair with an explicit ESCAPE clause.
-        var escaped = trimmed.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
-        var pattern = $"%{escaped}%";
+        var pattern = LikePattern.Contains(term.Trim());
         return GetAll()
             .Where(a =>
                 EF.Functions.ILike(a.LegalName, pattern, "\\")
