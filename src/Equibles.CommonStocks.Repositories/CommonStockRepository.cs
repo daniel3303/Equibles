@@ -21,10 +21,10 @@ public class CommonStockRepository : BaseRepository<CommonStock>
                 // rather than behaving as a wildcard.
                 var pattern = LikePattern.Contains(word);
                 query = query.Where(c =>
-                    EF.Functions.ILike(c.Ticker, pattern, "\\")
-                    || EF.Functions.ILike(c.Name, pattern, "\\")
-                    || EF.Functions.ILike(c.Description, pattern, "\\")
-                    || EF.Functions.ILike(c.Industry.Name, pattern, "\\")
+                    EF.Functions.ILike(c.Ticker, pattern, LikePattern.EscapeChar)
+                    || EF.Functions.ILike(c.Name, pattern, LikePattern.EscapeChar)
+                    || EF.Functions.ILike(c.Description, pattern, LikePattern.EscapeChar)
+                    || EF.Functions.ILike(c.Industry.Name, pattern, LikePattern.EscapeChar)
                 );
             }
         }

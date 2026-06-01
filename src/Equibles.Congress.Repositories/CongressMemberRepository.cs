@@ -18,6 +18,6 @@ public class CongressMemberRepository : BaseRepository<CongressMember>
     {
         // "Name contains the term"; escape so '%' / '_' / '\' in the query match literally.
         var pattern = LikePattern.Contains(search);
-        return GetAll().Where(m => EF.Functions.ILike(m.Name, pattern, "\\"));
+        return GetAll().Where(m => EF.Functions.ILike(m.Name, pattern, LikePattern.EscapeChar));
     }
 }

@@ -22,8 +22,8 @@ public class ErrorRepository : BaseRepository<Error>
         var pattern = LikePattern.Contains(search);
         return GetAll()
             .Where(e =>
-                EF.Functions.ILike(e.Context, pattern, "\\")
-                || EF.Functions.ILike(e.Message, pattern, "\\")
+                EF.Functions.ILike(e.Context, pattern, LikePattern.EscapeChar)
+                || EF.Functions.ILike(e.Message, pattern, LikePattern.EscapeChar)
             );
     }
 

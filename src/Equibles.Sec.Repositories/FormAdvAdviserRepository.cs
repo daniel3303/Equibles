@@ -28,8 +28,8 @@ public class FormAdvAdviserRepository : BaseRepository<FormAdvAdviser>
         var pattern = LikePattern.Contains(term.Trim());
         return GetAll()
             .Where(a =>
-                EF.Functions.ILike(a.LegalName, pattern, "\\")
-                || EF.Functions.ILike(a.PrimaryBusinessName, pattern, "\\")
+                EF.Functions.ILike(a.LegalName, pattern, LikePattern.EscapeChar)
+                || EF.Functions.ILike(a.PrimaryBusinessName, pattern, LikePattern.EscapeChar)
             )
             // Coalesce so advisers that did not report assets sort last rather than first
             // (Postgres orders NULL highest under a plain DESC).
