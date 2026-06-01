@@ -52,9 +52,7 @@ public class SearchCongressMembersNegativeMaxResultsTests
         }
     }
 
-    [Fact(
-        Skip = "GH-2957 — SearchCongressMembers surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task SearchCongressMembers_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
