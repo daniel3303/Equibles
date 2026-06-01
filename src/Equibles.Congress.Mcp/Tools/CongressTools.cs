@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Globalization;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Congress.Data.Models;
@@ -92,7 +91,7 @@ public class CongressTools
                     var position = t.CongressMember.Position.NameForHumans();
                     var type = t.TransactionType.NameForHumans();
                     var amount =
-                        $"${t.AmountFrom.ToString("N0", CultureInfo.InvariantCulture)}–${t.AmountTo.ToString("N0", CultureInfo.InvariantCulture)}";
+                        $"${McpFormat.WholeNumber(t.AmountFrom)}–${McpFormat.WholeNumber(t.AmountTo)}";
                     result.AppendLine(
                         $"| {t.TransactionDate:yyyy-MM-dd} | {t.CongressMember.Name} | {position} | {type} | {amount} | {t.OwnerType ?? "—"} |"
                     );
@@ -161,7 +160,7 @@ public class CongressTools
                     // Format with InvariantCulture so the MCP markdown does not fork the
                     // separators by host locale (e.g. de-DE would render $1.000.000).
                     var amount =
-                        $"${t.AmountFrom.ToString("N0", CultureInfo.InvariantCulture)}–${t.AmountTo.ToString("N0", CultureInfo.InvariantCulture)}";
+                        $"${McpFormat.WholeNumber(t.AmountFrom)}–${McpFormat.WholeNumber(t.AmountTo)}";
                     result.AppendLine(
                         $"| {t.TransactionDate:yyyy-MM-dd} | {t.CommonStock.Ticker} | {type} | {amount} | {t.AssetName} | {t.OwnerType ?? "—"} |"
                     );

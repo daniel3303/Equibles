@@ -84,7 +84,7 @@ public class CftcTools
                 foreach (var r in reports.OrderBy(r => r.ReportDate))
                 {
                     result.AppendLine(
-                        $"| {r.ReportDate:yyyy-MM-dd} | {r.OpenInterest.ToString("N0", CultureInfo.InvariantCulture)} | {r.CommLong.ToString("N0", CultureInfo.InvariantCulture)} | {r.CommShort.ToString("N0", CultureInfo.InvariantCulture)} | {r.NonCommLong.ToString("N0", CultureInfo.InvariantCulture)} | {r.NonCommShort.ToString("N0", CultureInfo.InvariantCulture)} | {r.NonCommSpreads.ToString("N0", CultureInfo.InvariantCulture)} |"
+                        $"| {r.ReportDate:yyyy-MM-dd} | {McpFormat.WholeNumber(r.OpenInterest)} | {McpFormat.WholeNumber(r.CommLong)} | {McpFormat.WholeNumber(r.CommShort)} | {McpFormat.WholeNumber(r.NonCommLong)} | {McpFormat.WholeNumber(r.NonCommShort)} | {McpFormat.WholeNumber(r.NonCommSpreads)} |"
                     );
                 }
 

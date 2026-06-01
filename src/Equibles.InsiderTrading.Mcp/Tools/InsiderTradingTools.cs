@@ -94,7 +94,7 @@ public class InsiderTradingTools
 
                     var value = t.Shares * t.PricePerShare;
                     result.AppendLine(
-                        $"| {t.TransactionDate:yyyy-MM-dd} | {t.InsiderOwner.Name} | {role} | {type} | {t.Shares.ToString("N0", CultureInfo.InvariantCulture)} | ${t.PricePerShare.ToString("N2", CultureInfo.InvariantCulture)} | ${value.ToString("N0", CultureInfo.InvariantCulture)} | {t.SharesOwnedAfter.ToString("N0", CultureInfo.InvariantCulture)} |"
+                        $"| {t.TransactionDate:yyyy-MM-dd} | {t.InsiderOwner.Name} | {role} | {type} | {McpFormat.WholeNumber(t.Shares)} | ${t.PricePerShare.ToString("N2", CultureInfo.InvariantCulture)} | ${McpFormat.WholeNumber(value)} | {McpFormat.WholeNumber(t.SharesOwnedAfter)} |"
                     );
                 }
 
@@ -215,7 +215,7 @@ public class InsiderTradingTools
                         f.ApproxSaleDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
                         ?? "-";
                     result.AppendLine(
-                        $"| {f.FilingDate:yyyy-MM-dd} | {f.SellerName} | {f.RelationshipToIssuer} | {f.SharesToBeSold.ToString("N0", CultureInfo.InvariantCulture)} | ${f.AggregateMarketValue.ToString("N0", CultureInfo.InvariantCulture)} | {approxSaleDate} | {f.BrokerName} |"
+                        $"| {f.FilingDate:yyyy-MM-dd} | {f.SellerName} | {f.RelationshipToIssuer} | {McpFormat.WholeNumber(f.SharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {approxSaleDate} | {f.BrokerName} |"
                     );
                 }
 

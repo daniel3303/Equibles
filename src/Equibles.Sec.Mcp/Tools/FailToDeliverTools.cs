@@ -82,7 +82,7 @@ public class FailToDeliverTools
                 {
                     var value = f.Quantity * f.Price;
                     result.AppendLine(
-                        $"| {f.SettlementDate:yyyy-MM-dd} | {f.Quantity.ToString("N0", CultureInfo.InvariantCulture)} | ${f.Price.ToString("F2", CultureInfo.InvariantCulture)} | ${value.ToString("N0", CultureInfo.InvariantCulture)} |"
+                        $"| {f.SettlementDate:yyyy-MM-dd} | {McpFormat.WholeNumber(f.Quantity)} | ${f.Price.ToString("F2", CultureInfo.InvariantCulture)} | ${McpFormat.WholeNumber(value)} |"
                     );
                 }
 
