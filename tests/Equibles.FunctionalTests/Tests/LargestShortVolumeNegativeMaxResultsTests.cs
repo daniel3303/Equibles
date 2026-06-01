@@ -52,9 +52,7 @@ public class LargestShortVolumeNegativeMaxResultsTests
         }
     }
 
-    [Fact(
-        Skip = "GH-2974 — GetLargestShortVolume surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetLargestShortVolume_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
