@@ -6,7 +6,7 @@ Every entity in the codebase lives in one shared EF Core migrations history at [
 
 - [`Equibles.Migrations.csproj`](../../src/Equibles.Migrations/Equibles.Migrations.csproj) — references **every** `Equibles.*.Data` project plus `Equibles.Messaging`.
 - The snapshot has to know about every module's entities, so the migrations assembly references them all.
-- [`DesignTimeDbContextFactory.cs`](../../src/Equibles.Migrations/DesignTimeDbContextFactory.cs) — `IDesignTimeDbContextFactory<EquiblesDbContext>` that EF tooling invokes for `dotnet ef ...`.
+- [`DesignTimeDbContextFactory.cs`](../../src/Equibles.Migrations/DesignTimeDbContextFactory.cs) — `IDesignTimeDbContextFactory<EquiblesFinancialDbContext>` that EF tooling invokes for `dotnet ef ...`.
 - [`designsettings.json`](../../src/Equibles.Migrations/designsettings.json) — connection string the design-time factory reads.
 - Default: `Host=localhost;Port=5432;Database=equibles;Username=equibles;Password=equibles`.
 - Override the default locally with `designsettings.Development.json` (gitignored).
@@ -17,8 +17,8 @@ Every entity in the codebase lives in one shared EF Core migrations history at [
 `DesignTimeDbContextFactory.CreateDbContext`:
 
 - Reads `designsettings.json` (+ optional `.Development.json`) for the connection string.
-- Builds `DbContextOptions<EquiblesDbContext>` with `UseNpgsql(connectionString, … UseVector().UseParadeDb().UseQuerySplittingBehavior(SplitQuery).MigrationsAssembly(thisAssembly))` and `UseLazyLoadingProxies()`.
-- Instantiates **every** `IModuleConfiguration` by hand into a `IModuleConfiguration[]` and passes it to the `EquiblesDbContext` constructor.
+- Builds `DbContextOptions<EquiblesFinancialDbContext>` with `UseNpgsql(connectionString, … UseVector().UseParadeDb().UseQuerySplittingBehavior(SplitQuery).MigrationsAssembly(thisAssembly))` and `UseLazyLoadingProxies()`.
+- Instantiates **every** `IModuleConfiguration` by hand into a `IModuleConfiguration[]` and passes it to the `EquiblesFinancialDbContext` constructor.
 
 The explicit array is the key difference vs runtime hosts. Hosts use `AddAllModules()` reflection, but reflection only finds assemblies the runtime has already loaded — and `dotnet ef` doesn't load arbitrary `Equibles.*` assemblies during scaffolding. Listing modules by hand guarantees the migrations snapshot sees every entity declared anywhere in the repo. Forgetting to add a new module to this list is the most common cause of "missing table" errors after a fresh migration.
 
@@ -44,7 +44,7 @@ dotnet ef migrations add <Name> \
 Hosts call `await dbContext.Database.MigrateAsync()` on startup.
 
 - The Web host owns migration application via `ApplyMigrationsAsync` in [`src/Equibles.Web/Program.cs`](../../src/Equibles.Web/Program.cs).
-- The method creates a scope, resolves `EquiblesDbContext`, sets `Database.SetCommandTimeout(TimeSpan.FromHours(1))`, and runs `MigrateAsync()`.
+- The method creates a scope, resolves `EquiblesFinancialDbContext`, sets `Database.SetCommandTimeout(TimeSpan.FromHours(1))`, and runs `MigrateAsync()`.
 - The 1-hour command timeout absorbs index rebuilds on first run; BM25 + pgvector indexes on multi-million-row tables can take many minutes.
 - The MCP server does **not** run migrations. Its compose service `depends_on: web (condition: service_healthy)`, so by the time MCP starts the Web host has already finished migrating.
 - The Worker host doesn't call `MigrateAsync` on the EF model either; EF tables are still owned by Web.
