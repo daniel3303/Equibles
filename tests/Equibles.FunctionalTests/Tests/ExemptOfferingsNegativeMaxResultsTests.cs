@@ -51,9 +51,7 @@ public class ExemptOfferingsNegativeMaxResultsTests
         }
     }
 
-    [Fact(
-        Skip = "GH-2978 — GetExemptOfferings surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetExemptOfferings_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
