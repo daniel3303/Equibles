@@ -733,7 +733,10 @@ public class InstitutionalHoldingsTools
                         .OrderByDescending(a => a.CurrentFilerCount)
                         .ThenByDescending(a => a.CurrentValue),
                 };
-                var rows = await ranking.Take(maxResults).ToListAsync();
+                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
+                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
+                // so a non-positive cap yields zero rows and the existing no-results message.
+                var rows = await ranking.Take(Math.Max(0, maxResults)).ToListAsync();
                 if (rows.Count == 0)
                     return $"No stocks were held by 13F filers as of {FormatDate(targetDate)}.";
 
