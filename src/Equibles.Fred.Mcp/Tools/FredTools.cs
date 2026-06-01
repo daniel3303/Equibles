@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
@@ -74,14 +73,12 @@ public class FredTools
                 if (observations.Count == 0)
                     return $"No observations found for {series.SeriesId} ({series.Title}) in the specified date range.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"{series.Title} ({series.SeriesId})");
-                result.AppendLine(
-                    $"Units: {series.Units} | Frequency: {series.Frequency} | Seasonal Adj: {series.SeasonalAdjustment}"
+                var result = MarkdownTable.Start(
+                    $"{series.Title} ({series.SeriesId})",
+                    $"Units: {series.Units} | Frequency: {series.Frequency} | Seasonal Adj: {series.SeasonalAdjustment}",
+                    "| Date | Value |",
+                    "|------|-------|"
                 );
-                result.AppendLine();
-                result.AppendLine("| Date | Value |");
-                result.AppendLine("|------|-------|");
 
                 foreach (var obs in observations.OrderBy(o => o.Date))
                 {

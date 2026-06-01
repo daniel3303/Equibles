@@ -127,18 +127,14 @@ public class InstitutionalHoldingsTools
         List<InstitutionalHolding> holdings
     )
     {
-        var result = new StringBuilder();
-        result.AppendLine(
-            $"Top institutional holders of {stock.Name} ({ticker}) as of {FormatDate(targetDate)}:"
-        );
-        result.AppendLine(
+        var result = MarkdownTable.Start(
+            $"Top institutional holders of {stock.Name} ({ticker}) as of {FormatDate(targetDate)}:",
             $"Showing {holdings.Count} of {totalInstitutions} institutions. Total: "
                 + $"{McpFormat.WholeNumber(totalSharesAll)} shares, "
-                + $"${FormatMillions(totalValueAll)}M value"
+                + $"${FormatMillions(totalValueAll)}M value",
+            "| # | Institution | Shares | Value ($M) | % of Total |",
+            "|---|------------|--------|-----------|-----------|"
         );
-        result.AppendLine();
-        result.AppendLine("| # | Institution | Shares | Value ($M) | % of Total |");
-        result.AppendLine("|---|------------|--------|-----------|-----------|");
 
         for (var i = 0; i < holdings.Count; i++)
         {
