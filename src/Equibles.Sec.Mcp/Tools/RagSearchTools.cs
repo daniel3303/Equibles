@@ -171,7 +171,7 @@ public class RagSearchTools
                 foreach (var doc in documents)
                 {
                     result.AppendLine(
-                        $"{doc.Id} | {doc.DocumentType} | {doc.ReportingDate:yyyy-MM-dd} | {doc.ReportingForDate:yyyy-MM-dd} | {doc.LineCount:N0}"
+                        $"{doc.Id} | {doc.DocumentType} | {doc.ReportingDate:yyyy-MM-dd} | {doc.ReportingForDate:yyyy-MM-dd} | {McpFormat.WholeNumber(doc.LineCount)}"
                     );
                 }
 

@@ -44,9 +44,7 @@ public class RagSearchToolsListCompanyDocumentsCultureInvarianceTests : ParadeDb
     // (RagSearchTools.cs:174), which honours the thread CurrentCulture — de-DE swaps the thousand
     // separator (1,500 -> 1.500), forking the response by host locale. Same bug class as the
     // already-pinned ReadDocumentLines (GH-3110) and GetLatestPrices (GH-3100) repros.
-    [Fact(
-        Skip = "GH-3114 — ListCompanyDocuments forks the Lines column :N0 formatting by host locale"
-    )]
+    [Fact]
     public async Task ListCompanyDocuments_UnderNonInvariantCulture_RendersLineCountCultureInvariantly()
     {
         var stock = new CommonStock
