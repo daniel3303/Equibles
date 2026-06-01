@@ -47,9 +47,7 @@ public class InstitutionsSearchWildcardEscapingTests
         return Task.CompletedTask;
     }
 
-    [Fact(
-        Skip = "GH-2911 — institution name search treats LIKE wildcards (_, %) as wildcards, not literals"
-    )]
+    [Fact]
     public async Task GetInstitutions_SearchIsBareUnderscore_DoesNotWildcardMatchNamesWithoutUnderscore()
     {
         await _fixture.ResetAndSeedAsync(Seed);
