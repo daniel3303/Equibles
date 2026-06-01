@@ -59,7 +59,7 @@ public class StockPriceTools
                 var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
+                    McpToolExecutor.UtcYearsAgo(1)
                 );
 
                 maxResults = McpLimit.Clamp(maxResults);
@@ -425,7 +425,7 @@ public class StockPriceTools
         var (start, end) = McpToolExecutor.ParseDateRange(
             startDate,
             endDate,
-            DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-6))
+            McpToolExecutor.UtcMonthsAgo(6)
         );
 
         var records = await _priceRepository

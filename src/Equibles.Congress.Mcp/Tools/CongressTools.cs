@@ -63,7 +63,7 @@ public class CongressTools
                 var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
+                    McpToolExecutor.UtcYearsAgo(1)
                 );
 
                 var query = _tradeRepository.GetByStock(stock, start, end);
@@ -131,7 +131,7 @@ public class CongressTools
                 var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
+                    McpToolExecutor.UtcYearsAgo(1)
                 );
 
                 var query = _tradeRepository

@@ -63,7 +63,7 @@ public class ShortDataTools
                 var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
+                    McpToolExecutor.UtcMonthsAgo(3)
                 );
 
                 query = query.Where(d => d.Date >= start && d.Date <= end);
@@ -128,7 +128,7 @@ public class ShortDataTools
                 var (start, end) = McpToolExecutor.ParseDateRange(
                     startDate,
                     endDate,
-                    DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
+                    McpToolExecutor.UtcYearsAgo(1)
                 );
 
                 query = query.Where(s => s.SettlementDate >= start && s.SettlementDate <= end);

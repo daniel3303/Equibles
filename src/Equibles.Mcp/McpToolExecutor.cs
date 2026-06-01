@@ -16,6 +16,12 @@ public static class McpToolExecutor
             ? parsed
             : fallback;
 
+    public static DateOnly UtcMonthsAgo(int months) =>
+        DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-months));
+
+    public static DateOnly UtcYearsAgo(int years) =>
+        DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-years));
+
     public static (DateOnly Start, DateOnly End) ParseDateRange(
         string startText,
         string endText,
