@@ -136,17 +136,17 @@ public class InstitutionalHoldingsTools
             "|---|------------|--------|-----------|-----------|"
         );
 
-        for (var i = 0; i < holdings.Count; i++)
-        {
-            var h = holdings[i];
-            var pct = totalSharesAll > 0 ? (double)h.Shares / totalSharesAll * 100 : 0;
-            result.AppendLine(
-                $"| {i + 1} | {h.InstitutionalHolder.Name} | "
+        result.AppendNumberedRows(
+            holdings,
+            (rank, h) =>
+            {
+                var pct = totalSharesAll > 0 ? (double)h.Shares / totalSharesAll * 100 : 0;
+                return $"| {rank} | {h.InstitutionalHolder.Name} | "
                     + $"{McpFormat.WholeNumber(h.Shares)} | "
                     + $"{FormatMillions(h.Value)} | "
-                    + $"{McpFormat.Invariant(pct, "F2")}% |"
-            );
-        }
+                    + $"{McpFormat.Invariant(pct, "F2")}% |";
+            }
+        );
 
         return result.ToString();
     }
@@ -274,15 +274,13 @@ public class InstitutionalHoldingsTools
             "|---|--------|---------|--------|-----------|"
         );
 
-        for (var i = 0; i < holdings.Count; i++)
-        {
-            var h = holdings[i];
-            result.AppendLine(
-                $"| {i + 1} | {h.CommonStock.Ticker} | {h.CommonStock.Name} | "
-                    + $"{McpFormat.WholeNumber(h.Shares)} | "
-                    + $"{FormatMillions(h.Value)} |"
-            );
-        }
+        result.AppendNumberedRows(
+            holdings,
+            (rank, h) =>
+                $"| {rank} | {h.CommonStock.Ticker} | {h.CommonStock.Name} | "
+                + $"{McpFormat.WholeNumber(h.Shares)} | "
+                + $"{FormatMillions(h.Value)} |"
+        );
 
         return result.ToString();
     }
@@ -498,13 +496,11 @@ public class InstitutionalHoldingsTools
             }
             sb.AppendLine("| # | Institution | Δ Shares | Δ Value ($M) | Prior → New Shares |");
             sb.AppendLine("|---|-------------|---------|-------------|------------------|");
-            for (var i = 0; i < rows.Count; i++)
-            {
-                var m = rows[i];
-                sb.AppendLine(
-                    $"| {i + 1} | {m.Name} | {FormatSignedShares(m.DeltaShares)} | {FormatSignedMillions(m.DeltaValue)} | {McpFormat.WholeNumber(m.PreviousShares)} → {McpFormat.WholeNumber(m.CurrentShares)} |"
-                );
-            }
+            sb.AppendNumberedRows(
+                rows,
+                (rank, m) =>
+                    $"| {rank} | {m.Name} | {FormatSignedShares(m.DeltaShares)} | {FormatSignedMillions(m.DeltaValue)} | {McpFormat.WholeNumber(m.PreviousShares)} → {McpFormat.WholeNumber(m.CurrentShares)} |"
+            );
         }
     }
 
@@ -627,14 +623,14 @@ public class InstitutionalHoldingsTools
 
         result.AppendLine("| # | Ticker | Company | Δ Shares | Δ Value ($M) |");
         result.AppendLine("|---|--------|---------|---------|-------------|");
-        for (var i = 0; i < rows.Count; i++)
-        {
-            var r = rows[i];
-            var (ticker, name) = ResolveStockCells(stocks, r.CommonStockId);
-            result.AppendLine(
-                $"| {i + 1} | {ticker} | {name} | {FormatSignedShares(r.DeltaShares)} | {FormatSignedMillions(r.DeltaValue)} |"
-            );
-        }
+        result.AppendNumberedRows(
+            rows,
+            (rank, r) =>
+            {
+                var (ticker, name) = ResolveStockCells(stocks, r.CommonStockId);
+                return $"| {rank} | {ticker} | {name} | {FormatSignedShares(r.DeltaShares)} | {FormatSignedMillions(r.DeltaValue)} |";
+            }
+        );
         return result.ToString();
     }
 
@@ -667,16 +663,19 @@ public class InstitutionalHoldingsTools
         var label = normalizedBucket == "new-positions" ? "# Filers Initiated" : "# Filers Exited";
         result.AppendLine($"| # | Ticker | Company | {label} |");
         result.AppendLine("|---|--------|---------|-------------|");
-        for (var i = 0; i < rows.Count; i++)
-        {
-            var r = rows[i];
-            var (ticker, name) = ResolveStockCells(stocks, r.CommonStockId);
-            var count = normalizedBucket == "new-positions" ? r.NewFilerCount : r.SoldOutFilerCount;
-            // Format with InvariantCulture so the MCP markdown does not fork the
-            // separators by host locale (e.g. de-DE would render 1.000).
-            var countCell = McpFormat.WholeNumber(count);
-            result.AppendLine($"| {i + 1} | {ticker} | {name} | {countCell} |");
-        }
+        result.AppendNumberedRows(
+            rows,
+            (rank, r) =>
+            {
+                var (ticker, name) = ResolveStockCells(stocks, r.CommonStockId);
+                var count =
+                    normalizedBucket == "new-positions" ? r.NewFilerCount : r.SoldOutFilerCount;
+                // Format with InvariantCulture so the MCP markdown does not fork the
+                // separators by host locale (e.g. de-DE would render 1.000).
+                var countCell = McpFormat.WholeNumber(count);
+                return $"| {rank} | {ticker} | {name} | {countCell} |";
+            }
+        );
         return result.ToString();
     }
 
@@ -765,16 +764,17 @@ public class InstitutionalHoldingsTools
         result.AppendLine(
             "|---|--------|---------|----------|----------------|--------------------|----------------|-------------------|"
         );
-        for (var i = 0; i < rows.Count; i++)
-        {
-            var r = rows[i];
-            var (ticker, name) = ResolveStockCells(stocks, r.CommonStockId);
-            var pct = universeFilers > 0 ? (double)r.CurrentFilerCount / universeFilers * 100.0 : 0;
-            var deltaFilers = r.CurrentFilerCount - r.PreviousFilerCount;
-            result.AppendLine(
-                $"| {i + 1} | {ticker} | {name} | {McpFormat.WholeNumber(r.CurrentFilerCount)} | {FormatSignedShares(deltaFilers)} | {FormatMillions(r.CurrentValue)} | {FormatSignedMillions(r.DeltaValue)} | {FormatPercent(pct)}% |"
-            );
-        }
+        result.AppendNumberedRows(
+            rows,
+            (rank, r) =>
+            {
+                var (ticker, name) = ResolveStockCells(stocks, r.CommonStockId);
+                var pct =
+                    universeFilers > 0 ? (double)r.CurrentFilerCount / universeFilers * 100.0 : 0;
+                var deltaFilers = r.CurrentFilerCount - r.PreviousFilerCount;
+                return $"| {rank} | {ticker} | {name} | {McpFormat.WholeNumber(r.CurrentFilerCount)} | {FormatSignedShares(deltaFilers)} | {FormatMillions(r.CurrentValue)} | {FormatSignedMillions(r.DeltaValue)} | {FormatPercent(pct)}% |";
+            }
+        );
         return result.ToString();
     }
 
@@ -883,13 +883,11 @@ public class InstitutionalHoldingsTools
 
         result.AppendLine("| # | Industry | # Positions | Value ($M) | % of Portfolio |");
         result.AppendLine("|---|----------|-------------|------------|----------------|");
-        for (var i = 0; i < slices.Count; i++)
-        {
-            var s = slices[i];
-            result.AppendLine(
-                $"| {i + 1} | {s.IndustryName} | {McpFormat.WholeNumber(s.PositionCount)} | {FormatMillions(s.TotalValue)} | {FormatPercent(s.PercentOfPortfolio)}% |"
-            );
-        }
+        result.AppendNumberedRows(
+            slices,
+            (rank, s) =>
+                $"| {rank} | {s.IndustryName} | {McpFormat.WholeNumber(s.PositionCount)} | {FormatMillions(s.TotalValue)} | {FormatPercent(s.PercentOfPortfolio)}% |"
+        );
         return result.ToString();
     }
 
@@ -1048,13 +1046,11 @@ public class InstitutionalHoldingsTools
         }
         result.AppendLine("| # | Ticker | Company | Prior | New | Δ Shares | Δ Value ($M) |");
         result.AppendLine("|---|--------|---------|-------|-----|---------|-------------|");
-        for (var i = 0; i < rows.Count; i++)
-        {
-            var r = rows[i];
-            result.AppendLine(
-                $"| {i + 1} | {r.Ticker} | {r.Name} | {McpFormat.WholeNumber(r.PreviousShares)} | {McpFormat.WholeNumber(r.CurrentShares)} | {FormatSignedShares(r.DeltaShares)} | {FormatSignedMillions(r.DeltaValue)} |"
-            );
-        }
+        result.AppendNumberedRows(
+            rows,
+            (rank, r) =>
+                $"| {rank} | {r.Ticker} | {r.Name} | {McpFormat.WholeNumber(r.PreviousShares)} | {McpFormat.WholeNumber(r.CurrentShares)} | {FormatSignedShares(r.DeltaShares)} | {FormatSignedMillions(r.DeltaValue)} |"
+        );
         result.AppendLine();
         return true;
     }
@@ -1170,15 +1166,15 @@ public class InstitutionalHoldingsTools
             "|---|--------|---------|---------|-----|---------|-----|---------------|"
         );
         var rendered = overlap.Rows.Take(maxResults).ToList();
-        for (var i = 0; i < rendered.Count; i++)
-        {
-            var row = rendered[i];
-            var a = row.Slices[0];
-            var b = row.Slices[1];
-            result.AppendLine(
-                $"| {i + 1} | {row.Ticker} | {row.Name} | {(a.Shares > 0 ? McpFormat.WholeNumber(a.Shares) : "—")} | {(a.Value > 0 ? FormatPercent(a.PercentOfPortfolio) + "%" : "—")} | {(b.Shares > 0 ? McpFormat.WholeNumber(b.Shares) : "—")} | {(b.Value > 0 ? FormatPercent(b.PercentOfPortfolio) + "%" : "—")} | {FormatMillions(row.CombinedValue)} |"
-            );
-        }
+        result.AppendNumberedRows(
+            rendered,
+            (rank, row) =>
+            {
+                var a = row.Slices[0];
+                var b = row.Slices[1];
+                return $"| {rank} | {row.Ticker} | {row.Name} | {(a.Shares > 0 ? McpFormat.WholeNumber(a.Shares) : "—")} | {(a.Value > 0 ? FormatPercent(a.PercentOfPortfolio) + "%" : "—")} | {(b.Shares > 0 ? McpFormat.WholeNumber(b.Shares) : "—")} | {(b.Value > 0 ? FormatPercent(b.PercentOfPortfolio) + "%" : "—")} | {FormatMillions(row.CombinedValue)} |";
+            }
+        );
         return result.ToString();
     }
 
@@ -1283,13 +1279,11 @@ public class InstitutionalHoldingsTools
 
         result.AppendLine("| # | Ticker | Company | # Funds | Combined ($M) |");
         result.AppendLine("|---|--------|---------|---------|---------------|");
-        for (var i = 0; i < rowsWithConsensus.Count; i++)
-        {
-            var x = rowsWithConsensus[i];
-            result.AppendLine(
-                $"| {i + 1} | {x.Row.Ticker} | {x.Row.Name} | {x.HeldBy}/{holders.Count} | {McpFormat.Invariant(x.Row.CombinedValue / 1_000_000m, "N1")} |"
-            );
-        }
+        result.AppendNumberedRows(
+            rowsWithConsensus,
+            (rank, x) =>
+                $"| {rank} | {x.Row.Ticker} | {x.Row.Name} | {x.HeldBy}/{holders.Count} | {McpFormat.Invariant(x.Row.CombinedValue / 1_000_000m, "N1")} |"
+        );
         return result.ToString();
     }
 
