@@ -86,17 +86,8 @@ public class HoldingsScraperWorker : BaseScraperWorker
         }
     }
 
-    protected override bool ValidateConfiguration()
-    {
-        if (string.IsNullOrWhiteSpace(_configuration["Sec:ContactEmail"]))
-        {
-            Logger.LogWarning(
-                "Holdings Scraper stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file."
-            );
-            return false;
-        }
-        return true;
-    }
+    protected override bool ValidateConfiguration() =>
+        ValidateSecContactEmail(_configuration, "Holdings Scraper", treatWhitespaceAsAbsent: true);
 
     protected override async Task DoWork(CancellationToken stoppingToken)
     {

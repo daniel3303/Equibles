@@ -3,6 +3,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Messaging.Contracts.Activity;
 using MassTransit;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -227,6 +228,39 @@ public abstract class BaseScraperWorker : BackgroundService
         StartupDelay > TimeSpan.Zero ? Task.Delay(StartupDelay, stoppingToken) : Task.CompletedTask;
 
     protected virtual bool ValidateConfiguration() => true;
+
+    /// <summary>
+    /// Startup gate shared by every SEC-EDGAR-backed scraper: SEC 403-bans a
+    /// source whose User-Agent carries no contact email, so a worker with no
+    /// usable <c>Sec:ContactEmail</c> must not loop uselessly. Logs a warning and
+    /// returns false when the value is absent; returns true otherwise.
+    /// </summary>
+    /// <param name="treatWhitespaceAsAbsent">
+    /// When true a whitespace-only value also fails the gate (its User-Agent
+    /// would carry no real contact). Workers disagree on this today — the SEC
+    /// scrapers accept whitespace while the Holdings/financial-facts scrapers
+    /// reject it — so callers pass their current behavior explicitly to keep it.
+    /// </param>
+    protected bool ValidateSecContactEmail(
+        IConfiguration configuration,
+        string label,
+        bool treatWhitespaceAsAbsent
+    )
+    {
+        var email = configuration["Sec:ContactEmail"];
+        var absent = treatWhitespaceAsAbsent
+            ? string.IsNullOrWhiteSpace(email)
+            : string.IsNullOrEmpty(email);
+        if (absent)
+        {
+            Logger.LogWarning(
+                "{Label} stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file.",
+                label
+            );
+            return false;
+        }
+        return true;
+    }
 
     protected abstract Task DoWork(CancellationToken stoppingToken);
 }

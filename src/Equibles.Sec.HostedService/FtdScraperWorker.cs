@@ -37,17 +37,8 @@ public class FtdScraperWorker : BaseScraperWorker
         _configuration = configuration;
     }
 
-    protected override bool ValidateConfiguration()
-    {
-        if (string.IsNullOrEmpty(_configuration["Sec:ContactEmail"]))
-        {
-            Logger.LogWarning(
-                "FTD Scraper stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file."
-            );
-            return false;
-        }
-        return true;
-    }
+    protected override bool ValidateConfiguration() =>
+        ValidateSecContactEmail(_configuration, "FTD Scraper", treatWhitespaceAsAbsent: false);
 
     protected override async Task DoWork(CancellationToken stoppingToken)
     {

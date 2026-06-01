@@ -33,17 +33,8 @@ public class FormAdvScraperWorker : BaseScraperWorker
         _configuration = configuration;
     }
 
-    protected override bool ValidateConfiguration()
-    {
-        if (string.IsNullOrEmpty(_configuration["Sec:ContactEmail"]))
-        {
-            Logger.LogWarning(
-                "Form ADV Scraper stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file."
-            );
-            return false;
-        }
-        return true;
-    }
+    protected override bool ValidateConfiguration() =>
+        ValidateSecContactEmail(_configuration, "Form ADV Scraper", treatWhitespaceAsAbsent: false);
 
     protected override Task DoWork(CancellationToken stoppingToken) =>
         RunImport<FormAdvImportService>(stoppingToken);
