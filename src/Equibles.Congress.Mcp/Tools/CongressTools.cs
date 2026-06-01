@@ -161,7 +161,10 @@ public class CongressTools
                 foreach (var t in trades)
                 {
                     var type = t.TransactionType.NameForHumans();
-                    var amount = $"${t.AmountFrom:N0}–${t.AmountTo:N0}";
+                    // Format with InvariantCulture so the MCP markdown does not fork the
+                    // separators by host locale (e.g. de-DE would render $1.000.000).
+                    var amount =
+                        $"${t.AmountFrom.ToString("N0", CultureInfo.InvariantCulture)}–${t.AmountTo.ToString("N0", CultureInfo.InvariantCulture)}";
                     result.AppendLine(
                         $"| {t.TransactionDate:yyyy-MM-dd} | {t.CommonStock.Ticker} | {type} | {amount} | {t.AssetName} | {t.OwnerType ?? "—"} |"
                     );

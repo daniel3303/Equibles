@@ -30,9 +30,7 @@ public class CongressToolsGetMemberTradesCultureInvarianceTests : ParadeDbMcpTes
     // culture pin: "MCP markdown must not fork the separators by host locale") is byte-identical
     // output on every host. de-DE swaps the thousand separator (1,000,000 → 1.000.000), forking
     // the response — same bug class as #3013 / #3030 / #3035.
-    [Fact(
-        Skip = "GH-3043 — GetMemberTrades renders the amount range with host-locale separators, forking MCP output by culture"
-    )]
+    [Fact]
     public async Task GetMemberTrades_UnderNonInvariantCulture_RendersAmountCultureInvariantly()
     {
         var stock = new CommonStock
