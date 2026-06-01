@@ -527,6 +527,11 @@ public class InstitutionalHoldingsTools
                 if (!ValidActivityBuckets.Contains(normalizedBucket))
                     return $"Unknown bucket. Use one of: {string.Join(", ", ValidActivityBuckets)}.";
 
+                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
+                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
+                // so a non-positive cap yields zero rows and the existing no-data message.
+                maxResults = Math.Max(0, maxResults);
+
                 var (targetDate, previousDate, error) = await ResolveMarketActivityDates(
                     reportDate
                 );
