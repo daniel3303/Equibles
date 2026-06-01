@@ -83,7 +83,7 @@ public class StockPriceTools
                 foreach (var p in records.OrderBy(p => p.Date))
                 {
                     result.AppendLine(
-                        $"| {p.Date:yyyy-MM-dd} | {p.Open.ToString("F2", CultureInfo.InvariantCulture)} | {p.High.ToString("F2", CultureInfo.InvariantCulture)} | {p.Low.ToString("F2", CultureInfo.InvariantCulture)} | {p.Close.ToString("F2", CultureInfo.InvariantCulture)} | {p.Volume.ToString("N0", CultureInfo.InvariantCulture)} |"
+                        $"| {p.Date:yyyy-MM-dd} | {p.Open.ToString("F2", CultureInfo.InvariantCulture)} | {p.High.ToString("F2", CultureInfo.InvariantCulture)} | {p.Low.ToString("F2", CultureInfo.InvariantCulture)} | {p.Close.ToString("F2", CultureInfo.InvariantCulture)} | {McpFormat.WholeNumber(p.Volume)} |"
                     );
                 }
 

@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Globalization;
 using System.Text;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
@@ -142,10 +141,10 @@ public class InvestmentAdviserTools
     }
 
     private static string FormatAum(long? amount) =>
-        amount.HasValue ? $"${amount.Value.ToString("N0", CultureInfo.InvariantCulture)}" : "-";
+        amount.HasValue ? $"${McpFormat.WholeNumber(amount.Value)}" : "-";
 
     private static string FormatCount(int? count) =>
-        count.HasValue ? count.Value.ToString("N0", CultureInfo.InvariantCulture) : "-";
+        count.HasValue ? McpFormat.WholeNumber(count.Value) : "-";
 
     private static string FormatFeeStructure(FormAdvAdviser a)
     {
