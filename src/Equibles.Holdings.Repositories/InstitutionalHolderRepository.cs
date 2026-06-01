@@ -21,7 +21,11 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
 
     public IQueryable<InstitutionalHolder> Search(string search)
     {
-        return GetAll().Where(h => EF.Functions.ILike(h.Name, $"%{search}%"));
+        // Escape LIKE metacharacters so '%' / '_' / '\\' in the query match literally
+        // rather than behaving as wildcards (e.g. "_" would otherwise match every name),
+        // matching the documented "name contains the term" contract and SearchNameOrCik.
+        var pattern = $"%{EscapeLikePattern(search)}%";
+        return GetAll().Where(h => EF.Functions.ILike(h.Name, pattern, "\\"));
     }
 
     // Typeahead variant: matches a CIK prefix as well as a name substring so the
