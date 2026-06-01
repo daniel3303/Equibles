@@ -1,11 +1,11 @@
 using System.ComponentModel;
-using System.Globalization;
 using System.Text;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
+using Equibles.Mcp.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
 using Microsoft.Extensions.Logging;
@@ -161,7 +161,7 @@ public class DocumentTextTools
     }
 
     private static string FormatDocumentHeader(Document document) =>
-        $"{document.CommonStock.Name} ({document.CommonStock.Ticker}) {document.DocumentType} filed {document.ReportingDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+        $"{document.CommonStock.Name} ({document.CommonStock.Ticker}) {document.DocumentType} filed {McpFormat.Invariant(document.ReportingDate, "yyyy-MM-dd")}";
 
     private static string HighlightKeyword(string line, string keyword)
     {

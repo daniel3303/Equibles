@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Globalization;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Errors.BusinessLogic;
@@ -86,9 +85,7 @@ public class NportTools
         );
     }
 
-    private static string FormatAmount(decimal value) =>
-        value.ToString("N2", CultureInfo.InvariantCulture);
+    private static string FormatAmount(decimal value) => McpFormat.Invariant(value, "N2");
 
-    private static string FormatPercent(decimal value) =>
-        value.ToString("N2", CultureInfo.InvariantCulture) + "%";
+    private static string FormatPercent(decimal value) => McpFormat.Invariant(value, "N2") + "%";
 }

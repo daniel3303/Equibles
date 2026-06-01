@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Globalization;
 using Equibles.Cboe.Data.Models;
 using Equibles.Cboe.Repositories;
 using Equibles.Core.Extensions;
@@ -137,7 +136,7 @@ public class CboeTools
                 foreach (var v in records.OrderBy(v => v.Date))
                 {
                     result.AppendLine(
-                        $"| {v.Date:yyyy-MM-dd} | {v.Open.ToString("F2", CultureInfo.InvariantCulture)} | {v.High.ToString("F2", CultureInfo.InvariantCulture)} | {v.Low.ToString("F2", CultureInfo.InvariantCulture)} | {v.Close.ToString("F2", CultureInfo.InvariantCulture)} |"
+                        $"| {v.Date:yyyy-MM-dd} | {McpFormat.Invariant(v.Open, "F2")} | {McpFormat.Invariant(v.High, "F2")} | {McpFormat.Invariant(v.Low, "F2")} | {McpFormat.Invariant(v.Close, "F2")} |"
                     );
                 }
 

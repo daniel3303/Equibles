@@ -89,7 +89,7 @@ public class ShortDataTools
                     var shortPct =
                         r.TotalVolume > 0 ? (double)r.ShortVolume / r.TotalVolume * 100 : 0;
                     result.AppendLine(
-                        $"| {r.Date:yyyy-MM-dd} | {McpFormat.WholeNumber(r.ShortVolume)} | {McpFormat.WholeNumber(r.ShortExemptVolume)} | {McpFormat.WholeNumber(r.TotalVolume)} | {shortPct.ToString("F1", CultureInfo.InvariantCulture)}% |"
+                        $"| {r.Date:yyyy-MM-dd} | {McpFormat.WholeNumber(r.ShortVolume)} | {McpFormat.WholeNumber(r.ShortExemptVolume)} | {McpFormat.WholeNumber(r.TotalVolume)} | {McpFormat.Invariant(shortPct, "F1")}% |"
                     );
                 }
 
@@ -278,7 +278,7 @@ public class ShortDataTools
                     // Render with InvariantCulture so the MCP markdown does not fork the
                     // separators by host locale (e.g. de-DE would render 5.000.000 / 62,5%).
                     result.AppendLine(
-                        $"| {r.CommonStock.Ticker} | {McpFormat.WholeNumber(r.ShortVolume)} | {McpFormat.WholeNumber(r.ShortExemptVolume)} | {McpFormat.WholeNumber(r.TotalVolume)} | {shortPct.ToString("F1", CultureInfo.InvariantCulture)}% |"
+                        $"| {r.CommonStock.Ticker} | {McpFormat.WholeNumber(r.ShortVolume)} | {McpFormat.WholeNumber(r.ShortExemptVolume)} | {McpFormat.WholeNumber(r.TotalVolume)} | {McpFormat.Invariant(shortPct, "F1")}% |"
                     );
                 }
 

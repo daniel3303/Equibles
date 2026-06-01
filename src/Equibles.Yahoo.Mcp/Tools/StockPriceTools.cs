@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Globalization;
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -83,7 +82,7 @@ public class StockPriceTools
                 foreach (var p in records.OrderBy(p => p.Date))
                 {
                     result.AppendLine(
-                        $"| {p.Date:yyyy-MM-dd} | {p.Open.ToString("F2", CultureInfo.InvariantCulture)} | {p.High.ToString("F2", CultureInfo.InvariantCulture)} | {p.Low.ToString("F2", CultureInfo.InvariantCulture)} | {p.Close.ToString("F2", CultureInfo.InvariantCulture)} | {McpFormat.WholeNumber(p.Volume)} |"
+                        $"| {p.Date:yyyy-MM-dd} | {McpFormat.Invariant(p.Open, "F2")} | {McpFormat.Invariant(p.High, "F2")} | {McpFormat.Invariant(p.Low, "F2")} | {McpFormat.Invariant(p.Close, "F2")} | {McpFormat.WholeNumber(p.Volume)} |"
                     );
                 }
 
@@ -388,7 +387,7 @@ public class StockPriceTools
                 );
 
                 var result = StartTable(
-                    $"Bollinger Bands (period={period}, stdDev={stdDev.ToString("0.#", CultureInfo.InvariantCulture)}) for {stock.Ticker} ({stock.Name}):",
+                    $"Bollinger Bands (period={period}, stdDev={McpFormat.Invariant(stdDev, "0.#")}) for {stock.Ticker} ({stock.Name}):",
                     "| Date | Close | Lower | Middle | Upper |",
                     "|------|-------|-------|--------|-------|"
                 );

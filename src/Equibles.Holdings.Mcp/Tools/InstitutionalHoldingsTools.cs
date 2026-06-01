@@ -148,7 +148,7 @@ public class InstitutionalHoldingsTools
                 $"| {i + 1} | {h.InstitutionalHolder.Name} | "
                     + $"{McpFormat.WholeNumber(h.Shares)} | "
                     + $"{FormatMillions(h.Value)} | "
-                    + $"{pct.ToString("F2", CultureInfo.InvariantCulture)}% |"
+                    + $"{McpFormat.Invariant(pct, "F2")}% |"
             );
         }
 
@@ -209,7 +209,7 @@ public class InstitutionalHoldingsTools
 
             var change =
                 previousShares > 0
-                    ? $"{((double)(totalShares - previousShares) / previousShares * 100).ToString("+0.0;-0.0", CultureInfo.InvariantCulture)}%"
+                    ? $"{McpFormat.Invariant((double)(totalShares - previousShares) / previousShares * 100, "+0.0;-0.0")}%"
                     : "—";
 
             result.AppendLine(
@@ -1291,7 +1291,7 @@ public class InstitutionalHoldingsTools
         {
             var x = rowsWithConsensus[i];
             result.AppendLine(
-                $"| {i + 1} | {x.Row.Ticker} | {x.Row.Name} | {x.HeldBy}/{holders.Count} | {(x.Row.CombinedValue / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture)} |"
+                $"| {i + 1} | {x.Row.Ticker} | {x.Row.Name} | {x.HeldBy}/{holders.Count} | {McpFormat.Invariant(x.Row.CombinedValue / 1_000_000m, "N1")} |"
             );
         }
         return result.ToString();
@@ -1341,21 +1341,20 @@ public class InstitutionalHoldingsTools
     // Signed $millions with one decimal place, invariant culture (matches FormatMillions
     // and the rest of this file; MCP markdown must not fork the separators by host locale).
     private static string FormatSignedMillions(decimal value) =>
-        (value / 1_000_000m).ToString("+#,##0.0;-#,##0.0;0.0", CultureInfo.InvariantCulture);
+        McpFormat.Invariant(value / 1_000_000m, "+#,##0.0;-#,##0.0;0.0");
 
     // Raw dollar values rendered in $millions with one decimal place, invariant culture.
     private static string FormatMillions(decimal value) =>
-        (value / 1_000_000m).ToString("N1", CultureInfo.InvariantCulture);
+        McpFormat.Invariant(value / 1_000_000m, "N1");
 
     // Percentages rendered with one decimal place in invariant culture; callers append the
     // literal `%`. Keeps the separator stable across host locales like the other helpers.
     private static string FormatPercent<T>(T value)
-        where T : INumber<T> => value.ToString("F1", CultureInfo.InvariantCulture);
+        where T : INumber<T> => McpFormat.Invariant(value, "F1");
 
     // yyyy-MM-dd dates rendered in invariant culture so the MCP markdown stays Gregorian ISO
     // regardless of the host calendar/locale (LLMs consume these dates as ISO).
-    private static string FormatDate(DateOnly date) =>
-        date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    private static string FormatDate(DateOnly date) => McpFormat.Invariant(date, "yyyy-MM-dd");
 
     private async Task<(
         InstitutionalHolder Holder,
