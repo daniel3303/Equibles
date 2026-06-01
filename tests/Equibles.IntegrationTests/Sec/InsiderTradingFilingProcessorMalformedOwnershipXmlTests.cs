@@ -9,6 +9,7 @@ using Equibles.InsiderTrading.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Messaging;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
@@ -48,6 +49,8 @@ public class InsiderTradingFilingProcessorMalformedOwnershipXmlTests
             (typeof(ISecEdgarClient), secClient),
             (typeof(InsiderOwnerRepository), new InsiderOwnerRepository(dbContext)),
             (typeof(InsiderTransactionRepository), new InsiderTransactionRepository(dbContext)),
+            (typeof(InsiderFilingRepository), new InsiderFilingRepository(dbContext)),
+            (typeof(IFileManager), Substitute.For<IFileManager>()),
             (typeof(ErrorManager), new ErrorManager(new ErrorRepository(dbContext))),
             (typeof(DailyStockPriceRepository), new DailyStockPriceRepository(dbContext)),
             (typeof(InsiderTransactionPriceValidator), new InsiderTransactionPriceValidator())
