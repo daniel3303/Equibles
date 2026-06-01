@@ -24,9 +24,7 @@ public class StocksControllerSearchWildcardEscapingTests
     public StocksControllerSearchWildcardEscapingTests(WebHostFixture fixture) =>
         _fixture = fixture;
 
-    [Fact(
-        Skip = "GH-2907 — CommonStockRepository.Search treats LIKE wildcards _ and % as wildcards instead of literals"
-    )]
+    [Fact]
     public async Task Index_UnderscoreSearchTerm_DoesNotMatchStocksWithoutLiteralUnderscore()
     {
         await _fixture.ResetAndSeedAsync(async db =>
