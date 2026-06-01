@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
@@ -64,7 +65,7 @@ public class SmartMoneyIndexManager
     )
     {
         topFunds = Math.Max(1, topFunds);
-        benchmarkTicker = benchmarkTicker.Trim().ToUpperInvariant();
+        benchmarkTicker = TickerNormalizer.Normalize(benchmarkTicker);
 
         var result = new SmartMoneyIndexResult
         {

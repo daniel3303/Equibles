@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Search;
 using Equibles.Search.Abstractions;
@@ -60,7 +61,7 @@ public class SearchController : BaseController
         if (string.IsNullOrWhiteSpace(q))
             return null;
 
-        return await _commonStockRepository.GetByTicker(q.Trim().ToUpperInvariant());
+        return await _commonStockRepository.GetByTicker(TickerNormalizer.Normalize(q));
     }
 
     // Results-only fragment for instant (as-you-type) search. instant-search.js fetches this

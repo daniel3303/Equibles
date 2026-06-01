@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
@@ -62,7 +63,7 @@ public class FundScoringManager
         string benchmarkTicker = DefaultBenchmark
     )
     {
-        benchmarkTicker = benchmarkTicker.Trim().ToUpperInvariant();
+        benchmarkTicker = TickerNormalizer.Normalize(benchmarkTicker);
 
         var benchmarkStock = await _stockRepository.GetByTicker(benchmarkTicker);
         if (benchmarkStock == null)
