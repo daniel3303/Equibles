@@ -31,9 +31,7 @@ public class ShortDataToolsGetShortInterestSnapshotCultureInvarianceTests : Para
     // must not fork the separators by host locale") is byte-identical output on every host.
     // de-DE swaps the separators (1,234,567 → 1.234.567), forking the response — same bug
     // class as #3013 / #3030.
-    [Fact(
-        Skip = "GH-3035 — GetShortInterestSnapshot renders Short Position / Days to Cover with host-locale separators, forking MCP output by culture"
-    )]
+    [Fact]
     public async Task GetShortInterestSnapshot_UnderNonInvariantCulture_RendersShortPositionCultureInvariantly()
     {
         var stock = new CommonStock

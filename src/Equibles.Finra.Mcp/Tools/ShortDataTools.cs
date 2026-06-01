@@ -212,8 +212,12 @@ public class ShortDataTools
                 {
                     var changeStr = FormatSignedChange(r.ChangeInShortPosition);
                     var advStr = McpFormat.OrDash(r.AverageDailyVolume, "N0");
+                    // Render with InvariantCulture so the MCP markdown does not fork the
+                    // separators by host locale (e.g. de-DE would render 1.234.567 / 12,3).
+                    var shortPositionStr = FormatWholeNumber(r.CurrentShortPosition);
+                    var dtcStr = McpFormat.OrDash(r.DaysToCover, "F1");
                     result.AppendLine(
-                        $"| {r.CommonStock.Ticker} | {r.CurrentShortPosition:N0} | {changeStr} | {advStr} | {r.DaysToCover:F1} |"
+                        $"| {r.CommonStock.Ticker} | {shortPositionStr} | {changeStr} | {advStr} | {dtcStr} |"
                     );
                 }
 
