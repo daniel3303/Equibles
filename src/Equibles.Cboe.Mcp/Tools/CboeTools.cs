@@ -60,6 +60,11 @@ public class CboeTools
                     DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3))
                 );
 
+                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
+                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
+                // so a non-positive cap yields zero rows and the existing no-data message.
+                maxResults = Math.Max(0, maxResults);
+
                 var records = await _putCallRepository
                     .GetByType(ratioType, start, end)
                     .OrderByDescending(r => r.Date)
