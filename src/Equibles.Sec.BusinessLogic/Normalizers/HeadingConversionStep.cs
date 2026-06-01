@@ -150,9 +150,27 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         // SEC EDGAR renders "Item N" with a non-breaking space (U+00A0)
         // between word and number, so accept any Unicode whitespace after
         // "ITEM" — not just the literal U+0020 that StartsWith("ITEM ") demands.
-        return upperText.StartsWith("ITEM")
-            && upperText.Length > 5
-            && char.IsWhiteSpace(upperText[4]);
+        if (upperText.StartsWith("ITEM") && upperText.Length > 5 && char.IsWhiteSpace(upperText[4]))
+        {
+            var afterItem = upperText.Substring(5).Trim();
+            if (!string.IsNullOrEmpty(afterItem))
+            {
+                // Require a real item identifier after the separator (e.g. "1",
+                // "1A"). A delimiter-only fragment like "Item -" is a visual
+                // divider, not a heading. Mirrors IsPartHeading's guard against
+                // "Part -"; items use alphanumeric identifiers rather than words.
+                var tokens = afterItem.Split(
+                    [' ', '.', '-', ':'],
+                    StringSplitOptions.RemoveEmptyEntries
+                );
+                if (tokens.Length == 0)
+                    return false;
+                var firstWord = tokens[0];
+                return !string.IsNullOrEmpty(firstWord) && firstWord.Any(char.IsLetterOrDigit);
+            }
+        }
+
+        return false;
     }
 
     private bool IsItalicSpan(IElement span) => HasInlineCss(span, "font-style", "italic");
