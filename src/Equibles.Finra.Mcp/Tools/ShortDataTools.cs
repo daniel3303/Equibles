@@ -92,7 +92,7 @@ public class ShortDataTools
                     var shortPct =
                         r.TotalVolume > 0 ? (double)r.ShortVolume / r.TotalVolume * 100 : 0;
                     result.AppendLine(
-                        $"| {r.Date:yyyy-MM-dd} | {FormatWholeNumber(r.ShortVolume)} | {FormatWholeNumber(r.ShortExemptVolume)} | {FormatWholeNumber(r.TotalVolume)} | {shortPct.ToString("F1", CultureInfo.InvariantCulture)}% |"
+                        $"| {r.Date:yyyy-MM-dd} | {McpFormat.WholeNumber(r.ShortVolume)} | {McpFormat.WholeNumber(r.ShortExemptVolume)} | {McpFormat.WholeNumber(r.TotalVolume)} | {shortPct.ToString("F1", CultureInfo.InvariantCulture)}% |"
                     );
                 }
 
@@ -159,7 +159,7 @@ public class ShortDataTools
                     var advStr = McpFormat.OrDash(r.AverageDailyVolume, "N0");
                     var dtcStr = McpFormat.OrDash(r.DaysToCover, "F1");
                     result.AppendLine(
-                        $"| {r.SettlementDate:yyyy-MM-dd} | {FormatWholeNumber(r.CurrentShortPosition)} | {changeStr} | {advStr} | {dtcStr} |"
+                        $"| {r.SettlementDate:yyyy-MM-dd} | {McpFormat.WholeNumber(r.CurrentShortPosition)} | {changeStr} | {advStr} | {dtcStr} |"
                     );
                 }
 
@@ -222,7 +222,7 @@ public class ShortDataTools
                     var advStr = McpFormat.OrDash(r.AverageDailyVolume, "N0");
                     // Render with InvariantCulture so the MCP markdown does not fork the
                     // separators by host locale (e.g. de-DE would render 1.234.567 / 12,3).
-                    var shortPositionStr = FormatWholeNumber(r.CurrentShortPosition);
+                    var shortPositionStr = McpFormat.WholeNumber(r.CurrentShortPosition);
                     var dtcStr = McpFormat.OrDash(r.DaysToCover, "F1");
                     result.AppendLine(
                         $"| {r.CommonStock.Ticker} | {shortPositionStr} | {changeStr} | {advStr} | {dtcStr} |"
@@ -290,7 +290,7 @@ public class ShortDataTools
                     // Render with InvariantCulture so the MCP markdown does not fork the
                     // separators by host locale (e.g. de-DE would render 5.000.000 / 62,5%).
                     result.AppendLine(
-                        $"| {r.CommonStock.Ticker} | {FormatWholeNumber(r.ShortVolume)} | {FormatWholeNumber(r.ShortExemptVolume)} | {FormatWholeNumber(r.TotalVolume)} | {shortPct.ToString("F1", CultureInfo.InvariantCulture)}% |"
+                        $"| {r.CommonStock.Ticker} | {McpFormat.WholeNumber(r.ShortVolume)} | {McpFormat.WholeNumber(r.ShortExemptVolume)} | {McpFormat.WholeNumber(r.TotalVolume)} | {shortPct.ToString("F1", CultureInfo.InvariantCulture)}% |"
                     );
                 }
 
@@ -301,11 +301,8 @@ public class ShortDataTools
         );
     }
 
-    private static string FormatWholeNumber(long value) =>
-        value.ToString("N0", CultureInfo.InvariantCulture);
-
     private static string FormatSignedChange(long change) =>
-        change >= 0 ? $"+{FormatWholeNumber(change)}" : FormatWholeNumber(change);
+        change >= 0 ? $"+{McpFormat.WholeNumber(change)}" : McpFormat.WholeNumber(change);
 
     // Thin forwarder so existing reflection-based normalization tests still find the method.
     private Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker) =>
