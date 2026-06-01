@@ -36,7 +36,8 @@ The background-scraper host. Plain `Host.CreateApplicationBuilder` (not `WebAppl
 
 - Entry: [`Program.cs`](../../src/Equibles.Worker.Host/Program.cs) (top-level statements, not a partial class).
 - Container: [`Dockerfile`](../../src/Equibles.Worker.Host/Dockerfile) — `dotnet/aspnet:10.0` (for shared runtime), `ENTRYPOINT ["dotnet", "Equibles.Worker.Host.dll"]`, no ports exposed.
-- `AddMessaging(builder.Configuration)` configures MassTransit on the Postgres SQL transport with the EF outbox sitting inside `EquiblesDbContext`.
+- `AddMessaging(builder.Configuration)` configures MassTransit on the Postgres SQL transport (`UsingPostgres` + `AddSqlMessageScheduler`).
+- OSS ships no transactional outbox — events publish directly via `IPublishEndpoint` after `SaveChanges`, so consumers must be idempotent.
 - The transport connection comes from `ConnectionStrings__TransportConnection`.
 - `MassTransit__RunMigration=true` makes the worker apply the transport schema on first run.
 - One scraper-options bind per source.
