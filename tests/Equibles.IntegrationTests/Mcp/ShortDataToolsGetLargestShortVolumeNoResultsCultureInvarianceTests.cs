@@ -34,9 +34,7 @@ public class ShortDataToolsGetLargestShortVolumeNoResultsCultureInvarianceTests
     // the separators by host locale") is byte-identical output on every host. de-DE swaps the
     // thousand separator (1,000,000 → 1.000.000), forking the response — same bug class as the
     // sibling data-row cells and #3013 / #3030 / #3035 / #3043 / #3047.
-    [Fact(
-        Skip = "GH-3058 — GetLargestShortVolume renders the no-results minShortVolume threshold with the culture-implicit :N0, forking MCP output by host locale"
-    )]
+    [Fact]
     public async Task GetLargestShortVolume_NoResultsUnderNonInvariantCulture_RendersThresholdCultureInvariantly()
     {
         var stock = new CommonStock

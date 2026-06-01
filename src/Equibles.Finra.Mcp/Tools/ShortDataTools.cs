@@ -272,7 +272,7 @@ public class ShortDataTools
                     .ToListAsync();
 
                 if (records.Count == 0)
-                    return $"No short volume data found for trading day {tradingDay:yyyy-MM-dd} with short volume >= {minShortVolume:N0}.";
+                    return $"No short volume data found for trading day {tradingDay:yyyy-MM-dd} with short volume >= {minShortVolume.ToString("N0", CultureInfo.InvariantCulture)}.";
 
                 var result = MarkdownTable.Start(
                     $"Largest short volume — trading day {tradingDay:yyyy-MM-dd}:",
