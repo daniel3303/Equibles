@@ -15,7 +15,7 @@ namespace Equibles.UnitTests.Sec.Normalizers;
 /// </summary>
 public class HeadingConversionStepIsItemHeadingDelimiterOnlySuffixTests
 {
-    [Fact(Skip = "GH-3129 — IsItemHeading promotes delimiter-only 'Item -' divider to a heading")]
+    [Fact]
     public void IsItemHeading_ItemFollowedByDelimiterOnlySuffix_ReturnsFalse()
     {
         var method = typeof(HeadingConversionStep).GetMethod(
