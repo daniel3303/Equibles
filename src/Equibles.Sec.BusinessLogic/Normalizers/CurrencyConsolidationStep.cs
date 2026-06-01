@@ -116,17 +116,38 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
     // A symbol immediately preceded by a letter is a different currency's
     // prefixed symbol (e.g. "C$", "A$", "HK$", "NZ$"), not this one — so a
     // Canadian/Australian/HK dollar cell is not mistaken for US Dollars,
-    // mirroring the boundary-careful currency-code match above.
+    // mirroring the boundary-careful currency-code match above. The one
+    // exception is "US$": the "US" prefix is the standard, unambiguous
+    // notation for US Dollars, so it must NOT be dropped as foreign.
     private static bool ContainsCurrencySymbol(string text, string symbol)
     {
         var index = text.IndexOf(symbol, StringComparison.Ordinal);
         while (index >= 0)
         {
-            if (index == 0 || !char.IsLetter(text[index - 1]))
+            if (
+                index == 0
+                || !char.IsLetter(text[index - 1])
+                || IsUsDollarPrefix(text, index, symbol)
+            )
                 return true;
             index = text.IndexOf(symbol, index + symbol.Length, StringComparison.Ordinal);
         }
         return false;
+    }
+
+    // "US$" denotes US Dollars, not a foreign prefixed symbol: the "$" is
+    // preceded by exactly the letters "US". Returns true only for that case.
+    private static bool IsUsDollarPrefix(string text, int symbolIndex, string symbol)
+    {
+        if (symbol != "$")
+            return false;
+
+        var start = symbolIndex;
+        while (start > 0 && char.IsLetter(text[start - 1]))
+            start--;
+
+        return text.AsSpan(start, symbolIndex - start)
+            .Equals("US", StringComparison.OrdinalIgnoreCase);
     }
 
     private void ProcessCurrencyColumnsForConsolidation(
