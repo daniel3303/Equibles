@@ -119,12 +119,12 @@ public class DocumentTextTools
 
                 if (startLine > endLine)
                 {
-                    return $"Invalid line range: {startLine} to {endLine} (document has {totalLines:N0} lines).";
+                    return $"Invalid line range: {startLine} to {endLine} (document has {McpFormat.WholeNumber(totalLines)} lines).";
                 }
 
                 var result = new StringBuilder();
                 result.AppendLine(
-                    $"{FormatDocumentHeader(document)} — lines {startLine:N0} to {endLine:N0} of {totalLines:N0}:"
+                    $"{FormatDocumentHeader(document)} — lines {McpFormat.WholeNumber(startLine)} to {McpFormat.WholeNumber(endLine)} of {McpFormat.WholeNumber(totalLines)}:"
                 );
                 result.AppendLine();
 
