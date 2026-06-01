@@ -48,7 +48,7 @@ public class SearchCftcMarketsNegativeMaxResultsTests
         }
     }
 
-    [Fact(Skip = "GH-2968 — SearchCftcMarkets negative maxResults leaks internal-error sentinel")]
+    [Fact]
     public async Task SearchCftcMarkets_NegativeMaxResults_DoesNotLeakInternalErrorSentinel()
     {
         await _fixture.ResetAndSeedAsync(async db =>
