@@ -74,20 +74,10 @@ internal static class FiscalPeriodResolver
         // The fiscal year containing periodEnd is the one whose FYE is on or
         // after periodEnd within roughly twelve months — ranks the matched
         // year correctly even when the quarter closes a few days late.
-        DateOnly endingFye = default;
-        var endingFyeFound = false;
-        foreach (var candidate in candidates)
-        {
-            if (candidate.DayNumber < periodEnd.DayNumber)
-                continue;
-            if (!endingFyeFound || candidate.DayNumber < endingFye.DayNumber)
-            {
-                endingFye = candidate;
-                endingFyeFound = true;
-            }
-        }
-        if (!endingFyeFound)
+        var matches = candidates.Where(c => c.DayNumber >= periodEnd.DayNumber).ToList();
+        if (matches.Count == 0)
             return null;
+        var endingFye = matches.MinBy(c => c.DayNumber);
         if (endingFye.DayNumber - periodEnd.DayNumber > AnnualMaxDays)
             return null;
 
