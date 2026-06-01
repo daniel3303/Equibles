@@ -1,6 +1,8 @@
 @using Equibles.Core.Extensions
 @model Equibles.Web.ViewModels.Stocks.FundOperationsTabViewModel
 
+<partial name="_TabIntro" model="@("Operational details from a fund's annual SEC Form N-CEN — its registration type, reporting period and named service providers such as the adviser, custodian, transfer agent and auditor. Only registered investment companies — mutual funds, ETFs and closed-end funds — file N-CEN, so operating companies show no data.")" />
+
 @if (Model.Filings.Count == 0) {
     <partial name="_EmptyStateCard" model='(IconName: "building-library", Heading: "No Fund Operations Data", Message: "No Form N-CEN annual reports are available for this stock yet. Only registered investment companies — mutual funds, ETFs and closed-end funds — file N-CEN.")' />
 } else {

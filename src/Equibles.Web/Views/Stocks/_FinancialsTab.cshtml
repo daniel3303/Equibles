@@ -2,6 +2,8 @@
 @using Equibles.Sec.FinancialFacts.Data.Enums
 @model Equibles.Web.ViewModels.Stocks.FinancialsTabViewModel
 
+<partial name="_TabIntro" model="@("Income-statement, balance-sheet and cash-flow figures extracted from the company's SEC filings — 10-K annual and 10-Q quarterly reports — and standardised for comparison across periods.")" />
+
 @if (!Model.HasData) {
     <partial name="_EmptyStateCard" model='(IconName: "document-text", Heading: "No Financial Data", Message: "No structured financial facts have been ingested for this stock yet.")' />
 } else {

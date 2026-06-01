@@ -1,6 +1,8 @@
 @using System.Globalization
 @model Equibles.Web.ViewModels.Stocks.FundHoldingsTabViewModel
 
+<partial name="_TabIntro" model="@("Portfolio holdings reported by registered funds to the SEC on Form N-PORT — the individual securities a fund owns. Only mutual funds, ETFs and closed-end funds file N-PORT, so operating companies show no data.")" />
+
 @if (Model.Filing == null) {
     <partial name="_EmptyStateCard" model='(IconName: "chart-bar", Heading: "No Fund Holdings Data", Message: "No Form NPORT-P portfolio reports are available for this stock yet. Only registered investment companies — mutual funds and ETFs — file NPORT-P.")' />
 } else {

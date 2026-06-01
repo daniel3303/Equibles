@@ -1,5 +1,7 @@
 @model Equibles.Web.ViewModels.Stocks.ShortInterestTabViewModel
 
+<partial name="_TabIntro" model="@("Total shares sold short and not yet covered, reported to FINRA by broker-dealers and published twice a month (bi-monthly). Days to cover divides the short position by average daily volume; a high value (above 5) can signal short-squeeze potential.")" />
+
 @if (Model.ShortInterests.Count == 0) {
     <partial name="_EmptyStateCard" model='(IconName: "chart-bar", Heading: "No Short Interest Data", Message: "No short interest data is available for this stock yet.")' />
 } else {

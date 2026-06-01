@@ -1,6 +1,8 @@
 @using Equibles.Congress.Data.Models
 @model Equibles.Web.ViewModels.Stocks.CongressionalTradesTabViewModel
 
+<partial name="_TabIntro" model="@("Stock transactions by members of the U.S. Congress, disclosed under the STOCK Act. Lawmakers must report trades within 45 days, so the filing date can lag the trade itself.")" />
+
 @if (Model.Trades.Count == 0) {
     <partial name="_EmptyStateCard" model='(IconName: "building-library", Heading: "No Congressional Trades", Message: "No congressional trading data is available for this stock yet.")' />
 } else {

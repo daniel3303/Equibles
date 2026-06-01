@@ -1,5 +1,7 @@
 @model Equibles.Web.ViewModels.Stocks.ExemptOfferingsTabViewModel
 
+<partial name="_TabIntro" model="@("Private capital raises reported to the SEC on Form D under Regulation D, showing the offering size, amount sold, minimum investment and number of investors. Public operating companies rarely raise capital this way, so this page is often empty.")" />
+
 @if (Model.Filings.Count == 0) {
     <partial name="_EmptyStateCard" model='(IconName: "building-library", Heading: "No Exempt Offerings", Message: "No Form D exempt-offering notices are available for this stock yet.")' />
 } else {

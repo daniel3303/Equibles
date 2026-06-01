@@ -1,6 +1,8 @@
 @using Equibles.Core.Extensions
 @model Equibles.Web.ViewModels.Stocks.DocumentsTabViewModel
 
+<partial name="_TabIntro" model="@("The company's filings as submitted to the SEC's EDGAR system — 10-K, 10-Q, 8-K, proxy statements and more — listed most recent first.")" />
+
 @if (Model.Documents.Count == 0) {
     <partial name="_EmptyStateCard" model='(IconName: "document-text", Heading: "No Documents Available", Message: "No SEC filings or earnings transcripts are available for this stock yet.")' />
 } else {
