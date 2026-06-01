@@ -120,9 +120,6 @@ public class EconomicDataController : BaseController
         return View(viewModel);
     }
 
-    private static StatsSummary ComputeStats(double[] values, int decimals) =>
-        values.ComputeStats(decimals);
-
     private static string ExpandFrequency(string frequency) =>
         frequency?.Trim().ToUpperInvariant() switch
         {
