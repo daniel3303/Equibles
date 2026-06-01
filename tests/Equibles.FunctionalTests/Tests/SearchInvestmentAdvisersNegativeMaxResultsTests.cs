@@ -52,9 +52,7 @@ public class SearchInvestmentAdvisersNegativeMaxResultsTests
         }
     }
 
-    [Fact(
-        Skip = "GH-2970 — SearchInvestmentAdvisers surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task SearchInvestmentAdvisers_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
