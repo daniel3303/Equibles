@@ -276,8 +276,10 @@ public class ShortDataTools
                 {
                     var shortPct =
                         r.TotalVolume > 0 ? (double)r.ShortVolume / r.TotalVolume * 100 : 0;
+                    // Render with InvariantCulture so the MCP markdown does not fork the
+                    // separators by host locale (e.g. de-DE would render 5.000.000 / 62,5%).
                     result.AppendLine(
-                        $"| {r.CommonStock.Ticker} | {r.ShortVolume:N0} | {r.ShortExemptVolume:N0} | {r.TotalVolume:N0} | {shortPct:F1}% |"
+                        $"| {r.CommonStock.Ticker} | {FormatWholeNumber(r.ShortVolume)} | {FormatWholeNumber(r.ShortExemptVolume)} | {FormatWholeNumber(r.TotalVolume)} | {shortPct.ToString("F1", CultureInfo.InvariantCulture)}% |"
                     );
                 }
 
