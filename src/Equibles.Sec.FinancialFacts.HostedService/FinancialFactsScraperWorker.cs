@@ -40,17 +40,12 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
         _configuration = configuration;
     }
 
-    protected override bool ValidateConfiguration()
-    {
-        if (string.IsNullOrWhiteSpace(_configuration["Sec:ContactEmail"]))
-        {
-            Logger.LogWarning(
-                "Financial facts scraper stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file."
-            );
-            return false;
-        }
-        return true;
-    }
+    protected override bool ValidateConfiguration() =>
+        ValidateSecContactEmail(
+            _configuration,
+            "Financial facts scraper",
+            treatWhitespaceAsAbsent: true
+        );
 
     protected override async Task DoWork(CancellationToken stoppingToken)
     {

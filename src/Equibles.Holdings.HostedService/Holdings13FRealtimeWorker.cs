@@ -52,17 +52,12 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
         _configuration = configuration;
     }
 
-    protected override bool ValidateConfiguration()
-    {
-        if (string.IsNullOrWhiteSpace(_configuration["Sec:ContactEmail"]))
-        {
-            Logger.LogWarning(
-                "13F real-time ingestion stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file."
-            );
-            return false;
-        }
-        return true;
-    }
+    protected override bool ValidateConfiguration() =>
+        ValidateSecContactEmail(
+            _configuration,
+            "13F real-time ingestion",
+            treatWhitespaceAsAbsent: true
+        );
 
     protected override async Task DoWork(CancellationToken stoppingToken)
     {

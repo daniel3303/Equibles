@@ -29,17 +29,12 @@ public class SecScraperWorker : BaseScraperWorker
         _configuration = configuration;
     }
 
-    protected override bool ValidateConfiguration()
-    {
-        if (string.IsNullOrEmpty(_configuration["Sec:ContactEmail"]))
-        {
-            Logger.LogWarning(
-                "SEC Filing Scraper stopped: SEC_CONTACT_EMAIL not configured. Set it in your .env file."
-            );
-            return false;
-        }
-        return true;
-    }
+    protected override bool ValidateConfiguration() =>
+        ValidateSecContactEmail(
+            _configuration,
+            "SEC Filing Scraper",
+            treatWhitespaceAsAbsent: false
+        );
 
     protected override async Task DoWork(CancellationToken stoppingToken)
     {
