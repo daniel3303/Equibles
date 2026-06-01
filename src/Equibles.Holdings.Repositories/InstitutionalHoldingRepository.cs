@@ -181,53 +181,17 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         var aggregated = GetAll()
             .Where(h => h.ReportDate == current || h.ReportDate == previous)
             .GroupBy(h => new { h.InstitutionalHolderId, h.CommonStockId })
-            .Select(g => new
+            .Select(g => new DoubleDownAggregate
             {
-                g.Key.InstitutionalHolderId,
-                g.Key.CommonStockId,
+                InstitutionalHolderId = g.Key.InstitutionalHolderId,
+                CommonStockId = g.Key.CommonStockId,
                 CurrentShares = g.Sum(h => h.ReportDate == current ? h.Shares : 0L),
                 PreviousShares = g.Sum(h => h.ReportDate == previous ? h.Shares : 0L),
                 CurrentValue = g.Sum(h => h.ReportDate == current ? h.Value : 0L),
                 PreviousValue = g.Sum(h => h.ReportDate == previous ? h.Value : 0L),
-            })
-            .Where(a => a.PreviousShares > 0 && a.CurrentShares > a.PreviousShares)
-            .Where(a =>
-                (double)(a.CurrentShares - a.PreviousShares) / a.PreviousShares * 100.0
-                >= minPctIncrease
-            );
+            });
 
-        return aggregated
-            .Join(
-                DbContext.Set<InstitutionalHolder>(),
-                a => a.InstitutionalHolderId,
-                h => h.Id,
-                (a, h) =>
-                    new
-                    {
-                        a,
-                        FilerName = h.Name,
-                        FilerCik = h.Cik,
-                    }
-            )
-            .Join(
-                DbContext.Set<CommonStock>(),
-                x => x.a.CommonStockId,
-                s => s.Id,
-                (x, s) =>
-                    new DoubleDownPosition
-                    {
-                        InstitutionalHolderId = x.a.InstitutionalHolderId,
-                        FilerName = x.FilerName,
-                        FilerCik = x.FilerCik,
-                        CommonStockId = x.a.CommonStockId,
-                        Ticker = s.Ticker,
-                        StockName = s.Name,
-                        CurrentShares = x.a.CurrentShares,
-                        PreviousShares = x.a.PreviousShares,
-                        CurrentValue = x.a.CurrentValue,
-                        PreviousValue = x.a.PreviousValue,
-                    }
-            );
+        return ProjectDoubleDownPositions(aggregated, minPctIncrease);
     }
 
     // Recent filings feed: groups holdings by accession number to produce one row
@@ -623,48 +587,61 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         var aggregated = GetAll()
             .Where(h => h.ReportDate == current || h.ReportDate == previous)
             .GroupBy(h => new { h.InstitutionalHolderId, h.CommonStockId })
-            .Select(g => new
+            .Select(g => new DoubleDownAggregate
             {
-                g.Key.InstitutionalHolderId,
-                g.Key.CommonStockId,
-                CurrentShares = g.Where(h =>
-                        h.ReportDate == current
-                        || (
-                            h.ReportDate == previous
-                            && !DbContext
-                                .Set<InstitutionalHolding>()
-                                .Any(c =>
-                                    c.ReportDate == current
-                                    && c.InstitutionalHolderId == h.InstitutionalHolderId
-                                )
+                InstitutionalHolderId = g.Key.InstitutionalHolderId,
+                CommonStockId = g.Key.CommonStockId,
+                CurrentShares =
+                    g.Where(h =>
+                            h.ReportDate == current
+                            || (
+                                h.ReportDate == previous
+                                && !DbContext
+                                    .Set<InstitutionalHolding>()
+                                    .Any(c =>
+                                        c.ReportDate == current
+                                        && c.InstitutionalHolderId == h.InstitutionalHolderId
+                                    )
+                            )
                         )
-                    )
-                    .Sum(h => (long?)h.Shares)
+                        .Sum(h => (long?)h.Shares)
                     ?? 0L,
                 PreviousShares = g.Sum(h => h.ReportDate == previous ? h.Shares : 0L),
-                CurrentValue = g.Where(h =>
-                        h.ReportDate == current
-                        || (
-                            h.ReportDate == previous
-                            && !DbContext
-                                .Set<InstitutionalHolding>()
-                                .Any(c =>
-                                    c.ReportDate == current
-                                    && c.InstitutionalHolderId == h.InstitutionalHolderId
-                                )
+                CurrentValue =
+                    g.Where(h =>
+                            h.ReportDate == current
+                            || (
+                                h.ReportDate == previous
+                                && !DbContext
+                                    .Set<InstitutionalHolding>()
+                                    .Any(c =>
+                                        c.ReportDate == current
+                                        && c.InstitutionalHolderId == h.InstitutionalHolderId
+                                    )
+                            )
                         )
-                    )
-                    .Sum(h => (long?)h.Value)
+                        .Sum(h => (long?)h.Value)
                     ?? 0L,
                 PreviousValue = g.Sum(h => h.ReportDate == previous ? h.Value : 0L),
-            })
+            });
+
+        return ProjectDoubleDownPositions(aggregated, minPctIncrease);
+    }
+
+    // Shared tail for both double-down queries: applies the common increase
+    // filters to the per-filer aggregate, then joins filer + stock metadata.
+    // Identical generated SQL whether the aggregate came from the single-quarter
+    // or combined-quarter projection.
+    private IQueryable<DoubleDownPosition> ProjectDoubleDownPositions(
+        IQueryable<DoubleDownAggregate> aggregated,
+        double minPctIncrease
+    ) =>
+        aggregated
             .Where(a => a.PreviousShares > 0 && a.CurrentShares > a.PreviousShares)
             .Where(a =>
                 (double)(a.CurrentShares - a.PreviousShares) / a.PreviousShares * 100.0
                 >= minPctIncrease
-            );
-
-        return aggregated
+            )
             .Join(
                 DbContext.Set<InstitutionalHolder>(),
                 a => a.InstitutionalHolderId,
@@ -696,7 +673,6 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                         PreviousValue = x.a.PreviousValue,
                     }
             );
-    }
 
     public IQueryable<MarketWideStockActivity> GetQuarterlyActivity(
         DateOnly current,
@@ -734,6 +710,19 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         combined
             ? GetDoubleDownPositionsCombined(current, previous, minPctIncrease)
             : GetDoubleDownPositions(current, previous, minPctIncrease);
+
+    // Intermediate per-filer aggregate shared by both double-down projections.
+    // Never materialized — only its members feed the EF Core SQL translation —
+    // so a member-init named type is equivalent to the former anonymous type.
+    private sealed class DoubleDownAggregate
+    {
+        public Guid InstitutionalHolderId { get; set; }
+        public Guid CommonStockId { get; set; }
+        public long CurrentShares { get; set; }
+        public long PreviousShares { get; set; }
+        public long CurrentValue { get; set; }
+        public long PreviousValue { get; set; }
+    }
 }
 
 file static class InstitutionalHoldingQueryableExtensions
