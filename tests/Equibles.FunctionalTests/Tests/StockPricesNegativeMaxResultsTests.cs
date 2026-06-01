@@ -48,9 +48,7 @@ public class StockPricesNegativeMaxResultsTests : IClassFixture<McpServerAppFixt
         }
     }
 
-    [Fact(
-        Skip = "GH-2931 — GetStockPrices surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetStockPrices_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
