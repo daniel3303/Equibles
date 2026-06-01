@@ -38,7 +38,7 @@ public class FtdScraperWorker : BaseScraperWorker
     }
 
     protected override bool ValidateConfiguration() =>
-        ValidateSecContactEmail(_configuration, "FTD Scraper", treatWhitespaceAsAbsent: false);
+        ValidateSecContactEmail(_configuration, "FTD Scraper", treatWhitespaceAsAbsent: true);
 
     protected override async Task DoWork(CancellationToken stoppingToken)
     {

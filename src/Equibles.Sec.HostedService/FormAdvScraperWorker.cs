@@ -34,7 +34,7 @@ public class FormAdvScraperWorker : BaseScraperWorker
     }
 
     protected override bool ValidateConfiguration() =>
-        ValidateSecContactEmail(_configuration, "Form ADV Scraper", treatWhitespaceAsAbsent: false);
+        ValidateSecContactEmail(_configuration, "Form ADV Scraper", treatWhitespaceAsAbsent: true);
 
     protected override Task DoWork(CancellationToken stoppingToken) =>
         RunImport<FormAdvImportService>(stoppingToken);
