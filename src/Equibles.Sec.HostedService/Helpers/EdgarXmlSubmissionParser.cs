@@ -122,8 +122,11 @@ internal static class EdgarXmlSubmissionParser
     /// </summary>
     internal static string Attr(XElement element, string name)
     {
-        var value = element?.Attributes().FirstOrDefault(a => a.Name.LocalName == name)?.Value;
-        return string.IsNullOrEmpty(value) ? null : value.Trim();
+        var value = element
+            ?.Attributes()
+            .FirstOrDefault(a => a.Name.LocalName == name)
+            ?.Value?.Trim();
+        return string.IsNullOrEmpty(value) ? null : value;
     }
 
     /// <summary>
