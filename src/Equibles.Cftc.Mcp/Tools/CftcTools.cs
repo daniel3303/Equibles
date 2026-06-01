@@ -69,7 +69,7 @@ public class CftcTools
                 var reports = await _reportRepository
                     .GetByContract(contract, start, end)
                     .OrderByDescending(r => r.ReportDate)
-                    .Take(Math.Max(0, maxResults))
+                    .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
                 if (reports.Count == 0)
@@ -197,10 +197,7 @@ public class CftcTools
         return _runner.Execute(
             async () =>
             {
-                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
-                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
-                // so a non-positive cap yields zero rows and the existing no-results message.
-                maxResults = Math.Max(0, maxResults);
+                maxResults = McpLimit.Clamp(maxResults);
 
                 var contracts = await _contractRepository
                     .Search(query)

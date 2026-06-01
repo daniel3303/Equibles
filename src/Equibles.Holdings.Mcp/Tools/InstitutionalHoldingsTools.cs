@@ -92,10 +92,7 @@ public class InstitutionalHoldingsTools
                 var totalSharesAll = await allHoldings.SumAsync(h => h.Shares);
                 var totalValueAll = await allHoldings.SumAsync(h => h.Value);
 
-                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
-                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
-                // so a non-positive cap yields zero rows and the existing no-data message.
-                maxResults = Math.Max(0, maxResults);
+                maxResults = McpLimit.Clamp(maxResults);
 
                 var holdings = await allHoldings
                     .OrderByDescending(h => h.Shares)
@@ -177,7 +174,7 @@ public class InstitutionalHoldingsTools
 
                 var reportDates = await _holdingRepository
                     .GetReportDatesByStock(stock)
-                    .Take(Math.Max(0, maxPeriods))
+                    .Take(McpLimit.Clamp(maxPeriods))
                     .ToListAsync();
 
                 if (reportDates.Count == 0)
@@ -256,7 +253,7 @@ public class InstitutionalHoldingsTools
                 var holdings = await _holdingRepository
                     .GetByHolder(holder, targetDate)
                     .OrderByDescending(h => h.Value)
-                    .Take(Math.Max(0, maxResults))
+                    .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
                 if (holdings.Count == 0)
@@ -306,10 +303,7 @@ public class InstitutionalHoldingsTools
         return _runner.Execute(
             async () =>
             {
-                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
-                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
-                // so a non-positive cap yields zero rows and the existing no-results message.
-                maxResults = Math.Max(0, maxResults);
+                maxResults = McpLimit.Clamp(maxResults);
 
                 var holders = await _holderRepository
                     .Search(query)
@@ -537,10 +531,7 @@ public class InstitutionalHoldingsTools
                 if (!ValidActivityBuckets.Contains(normalizedBucket))
                     return $"Unknown bucket. Use one of: {string.Join(", ", ValidActivityBuckets)}.";
 
-                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
-                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
-                // so a non-positive cap yields zero rows and the existing no-data message.
-                maxResults = Math.Max(0, maxResults);
+                maxResults = McpLimit.Clamp(maxResults);
 
                 var (targetDate, previousDate, error) = await ResolveMarketActivityDates(
                     reportDate
@@ -733,10 +724,7 @@ public class InstitutionalHoldingsTools
                         .OrderByDescending(a => a.CurrentFilerCount)
                         .ThenByDescending(a => a.CurrentValue),
                 };
-                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
-                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
-                // so a non-positive cap yields zero rows and the existing no-results message.
-                var rows = await ranking.Take(Math.Max(0, maxResults)).ToListAsync();
+                var rows = await ranking.Take(McpLimit.Clamp(maxResults)).ToListAsync();
                 if (rows.Count == 0)
                     return $"No stocks were held by 13F filers as of {FormatDate(targetDate)}.";
 
