@@ -53,9 +53,7 @@ public class GetMostHeldStocksNegativeMaxResultsTests
         }
     }
 
-    [Fact(
-        Skip = "GH-2982 — GetMostHeldStocks surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetMostHeldStocks_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         var stockId = Guid.NewGuid();
