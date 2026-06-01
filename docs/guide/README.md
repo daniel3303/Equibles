@@ -10,7 +10,7 @@ Walk-throughs for someone seeing Equibles for the first time.
 
 - [Install Equibles with Docker Compose](tutorial-install.md) — from `git clone` to a running stack at `http://localhost:8080`.
 - [Connect an AI assistant and ask your first question](tutorial-connect-ai-assistant.md) — point Claude Desktop, Claude Code, or ChatGPT at the MCP server and run a real query.
-- [Explore a company's data on the web portal](tutorial-explore-stock.md) — walk through a stock profile's nine data tabs: prices, holdings, short data, financials, filings, and more.
+- [Explore a company's data on the web portal](tutorial-explore-stock.md) — walk through every data tab on a stock profile: prices, holdings, short data, financials, SEC filings, fund disclosures, and trades by insiders and members of Congress.
 
 ## How-to guides
 
