@@ -38,6 +38,8 @@
 
 }
 
+<partial name="_TabIntro" model="@("Institutional ownership from SEC Form 13F filings. Investment managers with more than $100 million in U.S. equities must disclose their positions every quarter, within 45 days of quarter-end, so the holdings shown can lag the market by up to a quarter.")" />
+
 @if (Model.AvailableDates.Count == 0) {
     <partial name="_EmptyStateCard" model='(IconName: "building-office", Heading: "No Holdings Data", Message: "No institutional holdings data is available for this stock yet.")' />
 } else {

@@ -1,5 +1,7 @@
 @model Equibles.Web.ViewModels.Stocks.ShortVolumeTabViewModel
 
+<partial name="_TabIntro" model="@("Daily short-sale volume published by FINRA from its trade-reporting facilities. It measures how many shares were sold short each day as a share of total volume — a daily flow, not the total outstanding short position.")" />
+
 @if (Model.ShortVolumes.Count == 0) {
     <partial name="_EmptyStateCard" model='(IconName: "arrow-trending-down", Heading: "No Short Volume Data", Message: "No daily short volume data is available for this stock yet.")' />
 } else {

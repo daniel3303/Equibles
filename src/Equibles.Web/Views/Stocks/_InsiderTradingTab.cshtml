@@ -1,6 +1,8 @@
 @using Equibles.InsiderTrading.Data.Models
 @model Equibles.Web.ViewModels.Stocks.InsiderTradingTabViewModel
 
+<partial name="_TabIntro" model="@("Trades by corporate insiders — officers, directors and holders of more than 10% of the shares — disclosed to the SEC on Forms 3, 4 and 5. Form 4 must be filed within two business days of the trade.")" />
+
 @if (Model.Transactions.Count == 0) {
     <partial name="_EmptyStateCard" model='(IconName: "user", Heading: "No Insider Trading Data", Message: "No insider transactions are available for this stock yet.")' />
 } else {

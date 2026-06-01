@@ -1,5 +1,7 @@
 @model Equibles.Web.ViewModels.Stocks.FtdTabViewModel
 
+<partial name="_TabIntro" model="@("Fails to deliver — shares from a trade that were not delivered to the buyer by the settlement date — published by the SEC twice a month. Persistent fails can reflect settlement problems or naked short selling.")" />
+
 @if (Model.FailsToDeliver.Count == 0) {
     <partial name="_EmptyStateCard" model='(IconName: "exclamation-triangle", Heading: "No Fails to Deliver Data", Message: "No fails-to-deliver data is available for this stock yet.")' />
 } else {

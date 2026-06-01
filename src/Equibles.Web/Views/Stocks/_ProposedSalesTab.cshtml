@@ -1,5 +1,7 @@
 @model Equibles.Web.ViewModels.Stocks.ProposedSalesTabViewModel
 
+<partial name="_TabIntro" model="@("Notices of intent to sell restricted or control shares, filed with the SEC on Form 144 by insiders and affiliates. A Form 144 signals a planned sale — it does not confirm the shares were actually sold.")" />
+
 @if (Model.Filings.Count == 0) {
     <partial name="_EmptyStateCard" model='(IconName: "arrow-trending-down", Heading: "No Proposed Sales", Message: "No Form 144 proposed-sale notices are available for this stock yet.")' />
 } else {

@@ -1,6 +1,8 @@
 @using Equibles.Yahoo.Repositories
 @model Equibles.Web.ViewModels.Stocks.PriceTabViewModel
 
+<partial name="_TabIntro" model="@("Daily open, high, low and close prices with derived technical indicators (moving averages, RSI and more). Price data syncs automatically from Yahoo Finance.")" />
+
 @if (Model.Prices.Count == 0) {
     <partial name="_EmptyStateCard" model='(IconName: "chart-bar", Heading: "No Price Data", Message: "No daily price data is available for this stock yet. Data syncs automatically from Yahoo Finance.")' />
 } else {
