@@ -126,20 +126,8 @@ public class Form144FilingProcessor
 
     // Form 144 dates are US-format MM/dd/yyyy. Parse culture-independently so a non-Gregorian
     // host culture doesn't silently drop every date.
-    internal static DateOnly? ParseDate(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-        return DateOnly.TryParseExact(
-            value.Trim(),
-            DateFormats,
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.None,
-            out var parsed
-        )
-            ? parsed
-            : null;
-    }
+    internal static DateOnly? ParseDate(string value) =>
+        EdgarXmlSubmissionParser.ParseDate(value, DateFormats);
 
     internal static long ParseLong(string value)
     {
