@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Globalization;
 using Equibles.Cftc.Data.Models;
 using Equibles.Cftc.Repositories;
 using Equibles.Core.Extensions;
@@ -157,17 +156,11 @@ public class CftcTools
                     var oiStr = McpFormat.OrDash(report?.OpenInterest, "N0");
                     var commNet =
                         report != null
-                            ? (report.CommLong - report.CommShort).ToString(
-                                "N0",
-                                CultureInfo.InvariantCulture
-                            )
+                            ? McpFormat.WholeNumber(report.CommLong - report.CommShort)
                             : "—";
                     var nonCommNet =
                         report != null
-                            ? (report.NonCommLong - report.NonCommShort).ToString(
-                                "N0",
-                                CultureInfo.InvariantCulture
-                            )
+                            ? McpFormat.WholeNumber(report.NonCommLong - report.NonCommShort)
                             : "—";
 
                     result.AppendLine(

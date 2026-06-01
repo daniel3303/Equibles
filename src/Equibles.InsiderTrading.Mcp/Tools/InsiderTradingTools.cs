@@ -146,12 +146,7 @@ public class InsiderTradingTools
                 {
                     var role = GetRole(t.InsiderOwner);
                     var lastType = t.TransactionCode.ToString();
-                    // Format with InvariantCulture so the MCP markdown does not fork the
-                    // separators by host locale (e.g. de-DE would render 7.654.321).
-                    var sharesOwned = t.SharesOwnedAfter.ToString(
-                        "N0",
-                        CultureInfo.InvariantCulture
-                    );
+                    var sharesOwned = McpFormat.WholeNumber(t.SharesOwnedAfter);
                     result.AppendLine(
                         $"| {t.InsiderOwner.Name} | {role} | {sharesOwned} | {lastType} | {t.TransactionDate:yyyy-MM-dd} |"
                     );
