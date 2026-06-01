@@ -4,7 +4,7 @@ Reference for developers working inside the Equibles codebase. Pairs with [`../g
 
 ## Topics
 
-- [Architecture](architecture.md) — modular-monolith composition, the shared `EquiblesDbContext` module system, repo → manager → host data flow.
+- [Architecture](architecture.md) — modular-monolith composition, the shared `EquiblesFinancialDbContext` module system, repo → manager → host data flow.
 - [Hosts](hosts.md) — the three host apps: `Equibles.Web` (MVC portal), `Equibles.Mcp.Server` (MCP transport), `Equibles.Worker.Host` (background scrapers).
 - [Modules](modules.md) — index of the financial-domain modules (SEC, SEC Financial Facts, Holdings, Insider, Congress, FRED, Yahoo, FINRA, CFTC, CBOE) with data source, key entities, and scraper entry point per row.
 - [MCP tools](mcp-tools.md) — catalog of the tools exposed by each module's `*.Mcp` project and the wiring path through `Equibles.Mcp` → `Equibles.Mcp.Server`.
