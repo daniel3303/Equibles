@@ -17,11 +17,14 @@ public class CommonStockRepository : BaseRepository<CommonStock>
         {
             foreach (var word in search.Split(" "))
             {
+                // Escape LIKE metacharacters so a typed '_' or '%' matches literally
+                // rather than behaving as a wildcard.
+                var pattern = LikePattern.Contains(word);
                 query = query.Where(c =>
-                    EF.Functions.ILike(c.Ticker, $"%{word}%")
-                    || EF.Functions.ILike(c.Name, $"%{word}%")
-                    || EF.Functions.ILike(c.Description, $"%{word}%")
-                    || EF.Functions.ILike(c.Industry.Name, $"%{word}%")
+                    EF.Functions.ILike(c.Ticker, pattern, "\\")
+                    || EF.Functions.ILike(c.Name, pattern, "\\")
+                    || EF.Functions.ILike(c.Description, pattern, "\\")
+                    || EF.Functions.ILike(c.Industry.Name, pattern, "\\")
                 );
             }
         }
