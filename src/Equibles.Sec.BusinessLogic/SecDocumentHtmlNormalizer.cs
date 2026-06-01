@@ -105,9 +105,9 @@ public class SecDocumentHtmlNormalizer : ISecDocumentHtmlNormalizer
             if (string.IsNullOrEmpty(filename))
                 continue;
             if (
-                !filename.EndsWith(".htm")
-                && !filename.EndsWith(".html")
-                && !filename.EndsWith(".txt")
+                !filename.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)
+                && !filename.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
+                && !filename.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
             )
                 continue;
 
