@@ -52,6 +52,8 @@ public static class HolderQuarterlyActivityCalculator
     {
         if (previousShares == 0)
             return StockPositionChangeType.Initiated;
+        if (currentShares == 0)
+            return StockPositionChangeType.Exited;
         if (currentShares == previousShares)
             return StockPositionChangeType.Unchanged;
         return currentShares > previousShares
