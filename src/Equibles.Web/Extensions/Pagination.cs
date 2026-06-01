@@ -10,6 +10,12 @@ public static class Pagination
     // Skip((page-1)*pageSize), which PostgreSQL rejects (22023) and surfaces as HTTP 500.
     public static int ClampPage(int page) => page < 1 ? 1 : page;
 
-    public static IQueryable<T> Page<T>(this IQueryable<T> source, int page, int pageSize) =>
-        source.Skip((page - 1) * pageSize).Take(pageSize);
+    public static IQueryable<T> Page<T>(this IQueryable<T> source, int page, int pageSize)
+    {
+        // Compute the offset in long so a maximal client page can't overflow Int32 into a
+        // negative SQL OFFSET (PostgreSQL 22023 → HTTP 500); clamp to [0, int.MaxValue] so an
+        // absurd page simply falls past the end and renders an empty page.
+        var skip = (int)Math.Clamp((long)(page - 1) * pageSize, 0L, int.MaxValue);
+        return source.Skip(skip).Take(pageSize);
+    }
 }

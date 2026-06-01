@@ -19,7 +19,7 @@ public class AdvisersIndexPageOverflowTests
         _playwright = playwright;
     }
 
-    [Fact(Skip = "GH-2924 — max-int page overflows Page() offset to negative, 500s")]
+    [Fact]
     public async Task Index_GetWithMaxIntPage_DoesNotReturnServerError()
     {
         // Contract: Pagination.ClampPage exists precisely so a client-supplied page value can
