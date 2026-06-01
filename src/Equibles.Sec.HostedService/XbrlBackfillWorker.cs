@@ -51,7 +51,7 @@ public class XbrlBackfillWorker : BaseScraperWorker
     }
 
     protected override bool ValidateConfiguration() =>
-        ValidateSecContactEmail(_configuration, "XBRL backfill", treatWhitespaceAsAbsent: false);
+        ValidateSecContactEmail(_configuration, "XBRL backfill", treatWhitespaceAsAbsent: true);
 
     protected override async Task DoWork(CancellationToken stoppingToken)
     {

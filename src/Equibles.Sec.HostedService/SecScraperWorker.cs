@@ -33,7 +33,7 @@ public class SecScraperWorker : BaseScraperWorker
         ValidateSecContactEmail(
             _configuration,
             "SEC Filing Scraper",
-            treatWhitespaceAsAbsent: false
+            treatWhitespaceAsAbsent: true
         );
 
     protected override async Task DoWork(CancellationToken stoppingToken)
