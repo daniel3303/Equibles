@@ -70,14 +70,10 @@ public class InsiderTradingTools
                 if (transactions.Count == 0)
                     return $"No insider transactions found for {ticker}.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"Recent insider transactions for {stock.Name} ({ticker}):");
-                result.AppendLine($"Showing {transactions.Count} most recent transactions");
-                result.AppendLine();
-                result.AppendLine(
-                    "| Date | Insider | Role | Type | Shares | Price | Value | Owned After |"
-                );
-                result.AppendLine(
+                var result = StartTable(
+                    $"Recent insider transactions for {stock.Name} ({ticker}):",
+                    $"Showing {transactions.Count} most recent transactions",
+                    "| Date | Insider | Role | Type | Shares | Price | Value | Owned After |",
                     "|------|---------|------|------|--------|-------|-------|-------------|"
                 );
 
@@ -140,16 +136,12 @@ public class InsiderTradingTools
                 if (latestTransactions.Count == 0)
                     return $"No insider ownership data found for {ticker}.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"Insider ownership summary for {stock.Name} ({ticker}):");
-                result.AppendLine(
-                    $"Showing {latestTransactions.Count} insiders with most recent data"
+                var result = StartTable(
+                    $"Insider ownership summary for {stock.Name} ({ticker}):",
+                    $"Showing {latestTransactions.Count} insiders with most recent data",
+                    "| Insider | Role | Shares Owned | Last Transaction | Last Date |",
+                    "|---------|------|-------------|-----------------|-----------|"
                 );
-                result.AppendLine();
-                result.AppendLine(
-                    "| Insider | Role | Shares Owned | Last Transaction | Last Date |"
-                );
-                result.AppendLine("|---------|------|-------------|-----------------|-----------|");
 
                 foreach (var t in latestTransactions)
                 {
@@ -198,14 +190,10 @@ public class InsiderTradingTools
                 if (filings.Count == 0)
                     return $"No Form 144 proposed sales found for {ticker}.";
 
-                var result = new StringBuilder();
-                result.AppendLine($"Recent proposed sales (Form 144) for {stock.Name} ({ticker}):");
-                result.AppendLine($"Showing {filings.Count} most recent notices");
-                result.AppendLine();
-                result.AppendLine(
-                    "| Filed | Seller | Relationship | Shares | Market Value | Approx. Sale Date | Broker |"
-                );
-                result.AppendLine(
+                var result = StartTable(
+                    $"Recent proposed sales (Form 144) for {stock.Name} ({ticker}):",
+                    $"Showing {filings.Count} most recent notices",
+                    "| Filed | Seller | Relationship | Shares | Market Value | Approx. Sale Date | Broker |",
                     "|-------|--------|--------------|--------|--------------|-------------------|--------|"
                 );
 
@@ -284,6 +272,25 @@ public class InsiderTradingTools
         if (owner.IsTenPercentOwner)
             roles.Add("10% Owner");
         return roles.Count > 0 ? string.Join(", ", roles) : "Insider";
+    }
+
+    // Builds the shared title + "Showing N…" subtitle preamble these tools emit before each
+    // markdown table. The blank line between subtitle and header row is load-bearing: strict
+    // CommonMark renderers need it to recognise the following rows as a table.
+    private static StringBuilder StartTable(
+        string title,
+        string subtitle,
+        string headerRow,
+        string separatorRow
+    )
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine(title);
+        sb.AppendLine(subtitle);
+        sb.AppendLine();
+        sb.AppendLine(headerRow);
+        sb.AppendLine(separatorRow);
+        return sb;
     }
 
     // Thin forwarder so existing reflection-based normalization tests still find the method.
