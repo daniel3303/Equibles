@@ -51,9 +51,7 @@ public class SearchInstitutionsNegativeMaxResultsTests
         }
     }
 
-    [Fact(
-        Skip = "GH-2972 — SearchInstitutions surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task SearchInstitutions_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
