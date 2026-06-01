@@ -50,11 +50,14 @@ public class NCenTools
                 if (stockError != null)
                     return stockError;
 
+                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
+                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
+                // so a non-positive cap yields zero rows and the existing no-results message.
                 var filings = await _nCenRepository
                     .GetByStock(stock)
                     .Include(f => f.ServiceProviders)
                     .OrderByDescending(f => f.FilingDate)
-                    .Take(maxResults)
+                    .Take(Math.Max(0, maxResults))
                     .ToListAsync();
 
                 if (filings.Count == 0)
