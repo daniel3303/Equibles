@@ -10,6 +10,7 @@ using Equibles.InsiderTrading.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Messaging;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
@@ -310,16 +311,20 @@ public class InsiderTradingFilingProcessorTests
 
         var ownerRepo = new InsiderOwnerRepository(dbContext);
         var txRepo = new InsiderTransactionRepository(dbContext);
+        var filingRepo = new InsiderFilingRepository(dbContext);
         var errorRepo = new ErrorRepository(dbContext);
         var errorManager = new ErrorManager(errorRepo);
         var dailyStockPriceRepo = new DailyStockPriceRepository(dbContext);
         var priceValidator = new InsiderTransactionPriceValidator();
         var secClient = Substitute.For<ISecEdgarClient>();
+        var fileManager = Substitute.For<IFileManager>();
 
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(ISecEdgarClient), secClient),
             (typeof(InsiderOwnerRepository), ownerRepo),
             (typeof(InsiderTransactionRepository), txRepo),
+            (typeof(InsiderFilingRepository), filingRepo),
+            (typeof(IFileManager), fileManager),
             (typeof(ErrorManager), errorManager),
             (typeof(DailyStockPriceRepository), dailyStockPriceRepo),
             (typeof(InsiderTransactionPriceValidator), priceValidator)
