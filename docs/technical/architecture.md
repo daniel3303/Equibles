@@ -52,7 +52,7 @@ Data (entities) → Repositories (IQueryable) → Managers (write paths) → Con
 - Repositories return `IQueryable<T>`, never materialized collections. Composition happens at the caller.
 - Controllers and MCP tools may call repositories directly for **reads**.
 - All **writes** route through a manager. Managers own validation, uniqueness checks, and any cross-entity invariants.
-- HostedServices write through repositories or managers; they never construct `EquiblesDbContext` directly.
+- HostedServices write through repositories or managers; they never construct `EquiblesFinancialDbContext` directly.
 
 ## Search and global discovery
 
@@ -75,7 +75,7 @@ Data (entities) → Repositories (IQueryable) → Managers (write paths) → Con
 
 | Concern | Project |
 |---|---|
-| `EquiblesDbContext` + module builder | `Equibles.Data` |
+| `EquiblesFinancialDbContext` + module builder | `Equibles.Data` |
 | `BaseRepository<T>` | `Equibles.Data` |
 | Migrations snapshot | `Equibles.Migrations` |
 | Outbound HTTP clients (SEC, FRED, Yahoo, FINRA, CFTC, CBOE) | `Equibles.Integrations.<Source>` |
