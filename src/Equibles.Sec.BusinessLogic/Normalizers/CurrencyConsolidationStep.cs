@@ -107,10 +107,26 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
     {
         foreach (var (code, (symbol, _)) in CurrencyMap)
         {
-            if (text.Contains(symbol) || CurrencyCodeRegexes[code].IsMatch(text))
+            if (ContainsCurrencySymbol(text, symbol) || CurrencyCodeRegexes[code].IsMatch(text))
                 return code;
         }
         return null;
+    }
+
+    // A symbol immediately preceded by a letter is a different currency's
+    // prefixed symbol (e.g. "C$", "A$", "HK$", "NZ$"), not this one — so a
+    // Canadian/Australian/HK dollar cell is not mistaken for US Dollars,
+    // mirroring the boundary-careful currency-code match above.
+    private static bool ContainsCurrencySymbol(string text, string symbol)
+    {
+        var index = text.IndexOf(symbol, StringComparison.Ordinal);
+        while (index >= 0)
+        {
+            if (index == 0 || !char.IsLetter(text[index - 1]))
+                return true;
+            index = text.IndexOf(symbol, index + symbol.Length, StringComparison.Ordinal);
+        }
+        return false;
     }
 
     private void ProcessCurrencyColumnsForConsolidation(
