@@ -26,9 +26,7 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityChurnCultureInvar
     // the separators by host locale") is byte-identical output on every host. A mega-cap can have
     // 1,000+ filers initiating in a quarter; under de-DE that renders 1.000, forking the response
     // — same bug class as #3013 / #3030 / #3035 / #3043 / #3047.
-    [Fact(
-        Skip = "GH-3053 — GetMarketWide13FActivity churn leaderboard renders the filer count with host-locale separators, forking MCP output by culture"
-    )]
+    [Fact]
     public async Task GetMarketWide13FActivity_ChurnUnderNonInvariantCulture_RendersFilerCountCultureInvariantly()
     {
         var prior = new DateOnly(2024, 9, 30);
