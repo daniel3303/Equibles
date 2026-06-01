@@ -11,10 +11,10 @@ permissions:
   contents: read
   checks: write
 
-# Cancel superseded runs on the same PR / branch.
+# Cancel superseded runs on the same PR; let main pushes run to completion.
 concurrency:
   group: functional-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   functional:

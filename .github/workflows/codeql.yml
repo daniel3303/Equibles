@@ -9,10 +9,10 @@ on:
     # Weekly scan on Monday 04:17 UTC — off-peak so we don't race CI.
     - cron: "17 4 * * 1"
 
-# Cancel superseded runs on the same PR / branch.
+# Cancel superseded runs on the same PR; let main pushes run to completion.
 concurrency:
   group: codeql-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   actions: read

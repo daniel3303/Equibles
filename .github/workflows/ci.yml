@@ -11,11 +11,12 @@ permissions:
   contents: read
   checks: write
 
-# Cancel superseded runs on the same PR / branch so we don't burn CI minutes
-# on commits that have already been replaced.
+# Cancel superseded runs on the same PR so we don't burn CI minutes on commits
+# that have already been replaced. Pushes to main are never cancelled — each
+# merged commit gets its own completed run so the branch reliably shows status.
 concurrency:
   group: ci-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
