@@ -52,9 +52,7 @@ public class GetTopHoldersNegativeMaxResultsTests
         }
     }
 
-    [Fact(
-        Skip = "GH-2959 — GetTopHolders surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetTopHolders_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         var stockId = Guid.NewGuid();

@@ -92,6 +92,11 @@ public class InstitutionalHoldingsTools
                 var totalSharesAll = await allHoldings.SumAsync(h => h.Shares);
                 var totalValueAll = await allHoldings.SumAsync(h => h.Value);
 
+                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
+                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
+                // so a non-positive cap yields zero rows and the existing no-data message.
+                maxResults = Math.Max(0, maxResults);
+
                 var holdings = await allHoldings
                     .OrderByDescending(h => h.Shares)
                     .Take(maxResults)
