@@ -199,9 +199,12 @@ public class ShortDataTools
                     query = query.Where(s => s.DaysToCover >= minDaysToCover);
                 }
 
+                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
+                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
+                // so a non-positive cap yields zero rows and the existing no-results message.
                 var records = await query
                     .OrderByDescending(s => s.DaysToCover)
-                    .Take(maxResults)
+                    .Take(Math.Max(0, maxResults))
                     .ToListAsync();
 
                 if (records.Count == 0)
