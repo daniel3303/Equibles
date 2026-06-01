@@ -54,9 +54,7 @@ public class CongressionalTradesNegativeMaxResultsTests
         }
     }
 
-    [Fact(
-        Skip = "GH-2947 — GetCongressionalTrades surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetCongressionalTrades_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         var stockId = Guid.NewGuid();

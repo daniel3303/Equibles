@@ -70,6 +70,11 @@ public class CongressTools
                 var query = _tradeRepository.GetByStock(stock, start, end);
                 query = ApplyTransactionTypeFilter(query, transactionType);
 
+                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
+                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
+                // so a non-positive cap yields zero rows and the existing no-data message.
+                maxResults = Math.Max(0, maxResults);
+
                 var trades = await query
                     .Include(t => t.CongressMember)
                     .OrderByDescending(t => t.TransactionDate)
