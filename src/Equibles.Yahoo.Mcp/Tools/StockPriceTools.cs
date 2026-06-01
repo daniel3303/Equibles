@@ -220,7 +220,7 @@ public class StockPriceTools
                     {
                         var kCell = McpFormat.OrDash(k[i], "F2");
                         var dCell = McpFormat.OrDash(d[i], "F2");
-                        return $"| {records[i].Date:yyyy-MM-dd} | {records[i].Close:F2} | {kCell} | {dCell} |";
+                        return $"| {records[i].Date:yyyy-MM-dd} | {McpFormat.Invariant(records[i].Close, "F2")} | {kCell} | {dCell} |";
                     }
                 );
 
@@ -279,7 +279,7 @@ public class StockPriceTools
                     i =>
                     {
                         var atrCell = McpFormat.OrDash(atr[i], "F4");
-                        return $"| {records[i].Date:yyyy-MM-dd} | {records[i].Close:F2} | {atrCell} |";
+                        return $"| {records[i].Date:yyyy-MM-dd} | {McpFormat.Invariant(records[i].Close, "F2")} | {atrCell} |";
                     }
                 );
 
@@ -333,7 +333,7 @@ public class StockPriceTools
                     records.Count,
                     maxResults,
                     i =>
-                        $"| {records[i].Date:yyyy-MM-dd} | {records[i].Close:F2} | {records[i].Volume:N0} | {obv[i]:N0} |"
+                        $"| {records[i].Date:yyyy-MM-dd} | {McpFormat.Invariant(records[i].Close, "F2")} | {McpFormat.WholeNumber(records[i].Volume)} | {McpFormat.WholeNumber(obv[i])} |"
                 );
 
                 return result.ToString();
@@ -401,7 +401,7 @@ public class StockPriceTools
                         var lowerCell = McpFormat.OrDash(lower[i], "F2");
                         var middleCell = McpFormat.OrDash(middle[i], "F2");
                         var upperCell = McpFormat.OrDash(upper[i], "F2");
-                        return $"| {records[i].Date:yyyy-MM-dd} | {records[i].Close:F2} | {lowerCell} | {middleCell} | {upperCell} |";
+                        return $"| {records[i].Date:yyyy-MM-dd} | {McpFormat.Invariant(records[i].Close, "F2")} | {lowerCell} | {middleCell} | {upperCell} |";
                     }
                 );
 

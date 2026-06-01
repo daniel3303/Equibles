@@ -29,9 +29,7 @@ public class StockPriceToolsGetOnBalanceVolumeCultureInvarianceTests : ParadeDbM
     // (StockPriceTools.cs:337), so de-DE renders the decimal comma — forking the response by
     // host locale. Same bug class and sibling tool enumerated in GH-3103 (alongside the
     // already-pinned GetStochasticOscillator (#3104) and GetAverageTrueRange (#3108)).
-    [Fact(
-        Skip = "GH-3103 — GetOnBalanceVolume renders the Close column with a culture-implicit specifier"
-    )]
+    [Fact]
     public async Task GetOnBalanceVolume_UnderNonInvariantCulture_RendersCloseCultureInvariantly()
     {
         var stock = new CommonStock
