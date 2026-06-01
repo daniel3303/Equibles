@@ -156,10 +156,18 @@ public class CftcTools
                     var dateStr = McpFormat.OrDash(report?.ReportDate, "yyyy-MM-dd");
                     var oiStr = McpFormat.OrDash(report?.OpenInterest, "N0");
                     var commNet =
-                        report != null ? (report.CommLong - report.CommShort).ToString("N0") : "—";
+                        report != null
+                            ? (report.CommLong - report.CommShort).ToString(
+                                "N0",
+                                CultureInfo.InvariantCulture
+                            )
+                            : "—";
                     var nonCommNet =
                         report != null
-                            ? (report.NonCommLong - report.NonCommShort).ToString("N0")
+                            ? (report.NonCommLong - report.NonCommShort).ToString(
+                                "N0",
+                                CultureInfo.InvariantCulture
+                            )
                             : "—";
 
                     result.AppendLine(

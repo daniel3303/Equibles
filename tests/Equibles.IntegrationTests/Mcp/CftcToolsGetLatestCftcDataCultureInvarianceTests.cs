@@ -28,9 +28,7 @@ public class CftcToolsGetLatestCftcDataCultureInvarianceTests : ParadeDbMcpTestB
     // with a bare .ToString("N0"), which follows the thread CurrentCulture — under de-DE the
     // grouping separator becomes "." (1,460,000 → 1.460.000), forking the response. Same bug
     // class as the fixed Holdings render methods (#2628).
-    [Fact(
-        Skip = "GH-3013 — GetLatestCftcData renders Comm Net / Non-Comm Net with host-locale separators, forking MCP output by culture"
-    )]
+    [Fact]
     public async Task GetLatestCftcData_UnderNonInvariantCulture_RendersNetPositionsCultureInvariantly()
     {
         var contract = new CftcContract
