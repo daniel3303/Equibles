@@ -130,7 +130,15 @@ public static class FormAdvCsvParser
             )
         )
         {
-            return (long)Math.Round(amount, MidpointRounding.AwayFromZero);
+            var rounded = Math.Round(amount, MidpointRounding.AwayFromZero);
+
+            // A figure with more digits than long can hold is still a valid decimal, so the
+            // narrowing cast would overflow and abort the whole streaming import. Treat an
+            // out-of-range AUM as "not reported" (null), consistent with a blank cell.
+            if (rounded < long.MinValue || rounded > long.MaxValue)
+                return null;
+
+            return (long)rounded;
         }
 
         return null;
