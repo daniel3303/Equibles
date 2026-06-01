@@ -27,9 +27,7 @@ public class FredToolsGetEconomicIndicatorCultureInvarianceTests : ParadeDbMcpTe
     // "MCP markdown must not fork the separators by host locale") is that LLM-facing
     // markdown renders identically on every host. de-DE swaps the decimal separator
     // (5.25 → 5,25), forking the response — same bug class as #3013 / the VIX render.
-    [Fact(
-        Skip = "GH-3030 — GetEconomicIndicator renders observation values with host-locale separators, forking MCP output by culture"
-    )]
+    [Fact]
     public async Task GetEconomicIndicator_UnderNonInvariantCulture_RendersValueCultureInvariantly()
     {
         var series = new FredSeries

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Text;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
@@ -88,7 +89,11 @@ public class FredTools
 
                 foreach (var obs in observations.OrderBy(o => o.Date))
                 {
-                    var valueStr = obs.Value.HasValue ? obs.Value.Value.ToString("G") : "N/A";
+                    // Format with InvariantCulture so the MCP markdown does not fork the
+                    // decimal separator by host locale (e.g. de-DE would render 5,25).
+                    var valueStr = obs.Value.HasValue
+                        ? obs.Value.Value.ToString("G", CultureInfo.InvariantCulture)
+                        : "N/A";
                     result.AppendLine($"| {obs.Date:yyyy-MM-dd} | {valueStr} |");
                 }
 
