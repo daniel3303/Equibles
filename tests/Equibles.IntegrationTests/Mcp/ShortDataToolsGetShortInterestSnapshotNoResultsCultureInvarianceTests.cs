@@ -35,9 +35,7 @@ public class ShortDataToolsGetShortInterestSnapshotNoResultsCultureInvarianceTes
     )
         : base(fixture) { }
 
-    [Fact(
-        Skip = "GH-3068 — GetShortInterestSnapshot renders the no-results minDaysToCover threshold with host-locale separators, forking MCP output by culture"
-    )]
+    [Fact]
     public async Task GetShortInterestSnapshot_NoResultsUnderNonInvariantCulture_RendersThresholdCultureInvariantly()
     {
         var stock = new CommonStock

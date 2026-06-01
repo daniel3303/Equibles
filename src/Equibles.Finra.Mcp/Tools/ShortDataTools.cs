@@ -205,7 +205,7 @@ public class ShortDataTools
                     .ToListAsync();
 
                 if (records.Count == 0)
-                    return $"No short interest data found for settlement date {latestDate:yyyy-MM-dd} with days to cover >= {minDaysToCover}.";
+                    return $"No short interest data found for settlement date {latestDate:yyyy-MM-dd} with days to cover >= {minDaysToCover.ToString(CultureInfo.InvariantCulture)}.";
 
                 var result = MarkdownTable.Start(
                     $"Short interest snapshot — settlement date {latestDate:yyyy-MM-dd}:",
