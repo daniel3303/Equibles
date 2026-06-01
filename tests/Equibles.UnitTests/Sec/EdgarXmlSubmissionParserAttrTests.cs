@@ -5,7 +5,7 @@ namespace Equibles.UnitTests.Sec;
 
 public class EdgarXmlSubmissionParserAttrTests
 {
-    [Fact(Skip = "GH-3106 — Attr returns empty string instead of null for whitespace-only values")]
+    [Fact]
     public void Attr_WhitespaceOnlyValue_ReturnsNull()
     {
         // Contract (from the doc-comment): "Trimmed value of the named attribute, or null when
