@@ -17,9 +17,7 @@ public class CurrencyConsolidationStepUsDollarPrefixedSymbolTests
     // (C$, A$, HK$, NZ$) — but it also drops the legitimate "US$": the "$" is preceded
     // by the letter "S" (excluded), and the standalone "USD" code is absent, so the
     // cell falls through both detection arms and the column is never labelled.
-    [Fact(
-        Skip = "GH-3118 — CurrencyConsolidationStep does not detect the \"US$\" notation as US Dollars"
-    )]
+    [Fact]
     public void UsDollarPrefixedSymbolColumnFollowedByEmptyColumn_AddsUsDollarsNote()
     {
         var html =
