@@ -47,9 +47,7 @@ public class VixHistoryNegativeMaxResultsTests : IClassFixture<McpServerAppFixtu
         }
     }
 
-    [Fact(
-        Skip = "GH-2933 — GetVixHistory surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetVixHistory_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
