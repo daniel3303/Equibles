@@ -168,20 +168,8 @@ public class FormDFilingProcessor : IssuerFeedFilingProcessor<FormDFiling, FormD
         return (ParseLong(value), false);
     }
 
-    internal static DateOnly? ParseDate(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-        return DateOnly.TryParseExact(
-            value.Trim(),
-            DateFormats,
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.None,
-            out var parsed
-        )
-            ? parsed
-            : null;
-    }
+    internal static DateOnly? ParseDate(string value) =>
+        EdgarXmlSubmissionParser.ParseDate(value, DateFormats);
 
     internal static bool ParseBool(string value)
     {

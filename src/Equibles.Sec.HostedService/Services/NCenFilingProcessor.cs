@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Xml.Linq;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Models;
@@ -260,18 +259,6 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
         return value != null && value.Trim().Equals("Y", StringComparison.OrdinalIgnoreCase);
     }
 
-    internal static DateOnly? ParseDate(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-        return DateOnly.TryParseExact(
-            value.Trim(),
-            DateFormats,
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.None,
-            out var parsed
-        )
-            ? parsed
-            : null;
-    }
+    internal static DateOnly? ParseDate(string value) =>
+        EdgarXmlSubmissionParser.ParseDate(value, DateFormats);
 }

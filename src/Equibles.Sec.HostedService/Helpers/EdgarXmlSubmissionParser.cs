@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Equibles.Errors.BusinessLogic;
@@ -134,5 +135,25 @@ internal static class EdgarXmlSubmissionParser
             return null;
         var trimmed = value.Trim();
         return trimmed.Equals(NotApplicable, StringComparison.OrdinalIgnoreCase) ? null : trimmed;
+    }
+
+    /// <summary>
+    /// Parses a date against the supplied exact formats in invariant culture, or <c>null</c> when
+    /// blank or unparseable. Callers pass their form's accepted <paramref name="formats"/>, which
+    /// differ per submission type.
+    /// </summary>
+    internal static DateOnly? ParseDate(string value, string[] formats)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        return DateOnly.TryParseExact(
+            value.Trim(),
+            formats,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var parsed
+        )
+            ? parsed
+            : null;
     }
 }
