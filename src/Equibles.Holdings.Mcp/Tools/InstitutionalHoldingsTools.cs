@@ -680,7 +680,10 @@ public class InstitutionalHoldingsTools
             var r = rows[i];
             var (ticker, name) = ResolveStockCells(stocks, r.CommonStockId);
             var count = normalizedBucket == "new-positions" ? r.NewFilerCount : r.SoldOutFilerCount;
-            result.AppendLine($"| {i + 1} | {ticker} | {name} | {count:N0} |");
+            // Format with InvariantCulture so the MCP markdown does not fork the
+            // separators by host locale (e.g. de-DE would render 1.000).
+            var countCell = count.ToString("N0", CultureInfo.InvariantCulture);
+            result.AppendLine($"| {i + 1} | {ticker} | {name} | {countCell} |");
         }
         return result.ToString();
     }
