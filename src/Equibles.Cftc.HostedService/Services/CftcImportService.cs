@@ -321,33 +321,23 @@ public class CftcImportService : IImporter
             TradersCommShort = record.TradersCommShort,
         };
 
+    // CFTC report dates arrive as either ISO yyyy-MM-dd (modern feeds) or the
+    // legacy two-digit yyMMdd; TryParseExact tries each in order.
+    private static readonly string[] DateFormats = ["yyyy-MM-dd", "yyMMdd"];
+
     private static DateOnly? ParseDate(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return null;
 
-        if (
-            DateOnly.TryParseExact(
-                value.Trim(),
-                "yyyy-MM-dd",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out var date
-            )
+        return DateOnly.TryParseExact(
+            value.Trim(),
+            DateFormats,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var date
         )
-            return date;
-
-        if (
-            DateOnly.TryParseExact(
-                value.Trim(),
-                "yyMMdd",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out date
-            )
-        )
-            return date;
-
-        return null;
+            ? date
+            : null;
     }
 }
