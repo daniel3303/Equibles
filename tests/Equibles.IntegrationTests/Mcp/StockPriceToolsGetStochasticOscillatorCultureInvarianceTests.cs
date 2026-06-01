@@ -29,7 +29,9 @@ public class StockPriceToolsGetStochasticOscillatorCultureInvarianceTests : Para
     // the culture-implicit :F2 specifier, so de-DE renders the decimal comma — forking the
     // response and making one column disagree with the next. Same bug class as GetLatestPrices
     // (#3100) and the already-fixed GetStockPrices (#2628).
-    [Fact(Skip = "GH-3103 — GetStochasticOscillator renders the Close column with a culture-implicit specifier")]
+    [Fact(
+        Skip = "GH-3103 — GetStochasticOscillator renders the Close column with a culture-implicit specifier"
+    )]
     public async Task GetStochasticOscillator_UnderNonInvariantCulture_RendersCloseCultureInvariantly()
     {
         var stock = new CommonStock
