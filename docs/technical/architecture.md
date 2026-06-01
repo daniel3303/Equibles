@@ -4,7 +4,7 @@ Equibles is a modular monolith. Each financial domain ships as a set of layered 
 
 ## Composition
 
-- One shared `EquiblesDbContext` ([`src/Equibles.Data/EquiblesDbContext.cs`](../../src/Equibles.Data/EquiblesDbContext.cs)) — a single `DbContext` against ParadeDB (Postgres + `pgvector` + `pg_search`).
+- One shared `EquiblesFinancialDbContext` ([`src/Equibles.Data/EquiblesFinancialDbContext.cs`](../../src/Equibles.Data/EquiblesFinancialDbContext.cs)) — a single `DbContext` against ParadeDB (Postgres + `pgvector` + `pg_search`), deriving from the abstract `EquiblesDbContextBase` ([`src/Equibles.Data/EquiblesDbContextBase.cs`](../../src/Equibles.Data/EquiblesDbContextBase.cs)) that owns the module-iteration logic below.
 - The context owns no model declarations of its own. `OnModelCreating` iterates injected `IModuleConfiguration` instances and lets each one register its entities.
 - `IModuleConfiguration.ConfigureEntities(ModelBuilder)` ([`src/Equibles.Data/IModuleConfiguration.cs`](../../src/Equibles.Data/IModuleConfiguration.cs)) is the entire surface a module exposes to the context.
 - `EquiblesModuleBuilder` ([`src/Equibles.Data/EquiblesModuleBuilder.cs`](../../src/Equibles.Data/EquiblesModuleBuilder.cs)) — fluent registration API the host uses to add modules to the shared context.
