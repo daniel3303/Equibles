@@ -192,6 +192,11 @@ public class FredTools
         return _runner.Execute(
             async () =>
             {
+                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
+                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
+                // so a non-positive cap yields zero rows and the existing no-results message.
+                maxResults = Math.Max(0, maxResults);
+
                 var series = await _seriesRepository
                     .Search(query)
                     .OrderBy(s => s.Category)
