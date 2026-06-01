@@ -25,8 +25,12 @@ public class InsiderOwnerRepository : BaseRepository<InsiderOwner>
         var query = GetAll();
         foreach (var token in tokens)
         {
-            var t = token;
-            query = query.Where(o => EF.Functions.ILike(o.Name, $"%{t}%"));
+            // Escape LIKE metacharacters so '%' / '_' / '\' in a token match literally rather
+            // than as wildcards (a bare '_' would otherwise match every name, '%' the whole
+            // table). A fresh local per iteration keeps the closure capture correct.
+            var pattern =
+                $"%{token.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")}%";
+            query = query.Where(o => EF.Functions.ILike(o.Name, pattern, "\\"));
         }
 
         return query;
