@@ -50,9 +50,7 @@ public class PutCallRatiosNegativeMaxResultsTests
         }
     }
 
-    [Fact(
-        Skip = "GH-2937 — GetPutCallRatios surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetPutCallRatios_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
