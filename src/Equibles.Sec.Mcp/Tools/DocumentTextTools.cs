@@ -46,15 +46,11 @@ public class DocumentTextTools
                 if (error != null)
                     return error;
 
-                var matches = new List<int>();
-
-                for (var i = 0; i < lines.Length && matches.Count < maxResults; i++)
-                {
-                    if (lines[i].Contains(keyword, StringComparison.OrdinalIgnoreCase))
-                    {
-                        matches.Add(i);
-                    }
-                }
+                var matches = Enumerable
+                    .Range(0, lines.Length)
+                    .Where(i => lines[i].Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                    .Take(maxResults)
+                    .ToList();
 
                 if (matches.Count == 0)
                 {
