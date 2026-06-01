@@ -27,7 +27,7 @@ public class InsiderOwnerRepository : BaseRepository<InsiderOwner>
         {
             // A fresh local per iteration keeps the closure capture correct.
             var pattern = LikePattern.Contains(token);
-            query = query.Where(o => EF.Functions.ILike(o.Name, pattern, "\\"));
+            query = query.Where(o => EF.Functions.ILike(o.Name, pattern, LikePattern.EscapeChar));
         }
 
         return query;

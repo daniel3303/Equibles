@@ -99,7 +99,9 @@ public class InstitutionsController : BaseController
         {
             // "City contains"; escape so '%' / '_' / '\' in the city term match literally.
             var cityPattern = LikePattern.Contains(city.Trim());
-            holders = holders.Where(h => EF.Functions.ILike(h.City, cityPattern, "\\"));
+            holders = holders.Where(h =>
+                EF.Functions.ILike(h.City, cityPattern, LikePattern.EscapeChar)
+            );
         }
 
         var joined = holders.GroupJoin(

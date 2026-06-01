@@ -23,7 +23,7 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
     {
         // "Name contains the term"; escape so '%' / '_' / '\' match literally, matching SearchNameOrCik.
         var pattern = LikePattern.Contains(search);
-        return GetAll().Where(h => EF.Functions.ILike(h.Name, pattern, "\\"));
+        return GetAll().Where(h => EF.Functions.ILike(h.Name, pattern, LikePattern.EscapeChar));
     }
 
     // Typeahead variant: matches a CIK prefix as well as a name substring so the
@@ -37,8 +37,8 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
         var cikPrefix = $"{escaped}%";
         return GetAll()
             .Where(h =>
-                EF.Functions.ILike(h.Name, namePattern, "\\")
-                || EF.Functions.ILike(h.Cik, cikPrefix, "\\")
+                EF.Functions.ILike(h.Name, namePattern, LikePattern.EscapeChar)
+                || EF.Functions.ILike(h.Cik, cikPrefix, LikePattern.EscapeChar)
             );
     }
 
