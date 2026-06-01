@@ -50,9 +50,7 @@ public class FailsToDeliverNegativeMaxResultsTests
         }
     }
 
-    [Fact(
-        Skip = "GH-2945 — GetFailsToDeliver surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetFailsToDeliver_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
