@@ -97,7 +97,12 @@ public class InstitutionsController : BaseController
         }
         if (!string.IsNullOrWhiteSpace(city))
         {
-            holders = holders.Where(h => EF.Functions.ILike(h.City, $"%{city.Trim()}%"));
+            // Escape LIKE metacharacters so '%' / '_' / '\' in the city term match literally
+            // rather than as wildcards (a bare '_' or '%' would otherwise dump the table),
+            // matching the "city contains" intent and the escaping used elsewhere.
+            var cityPattern =
+                $"%{city.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")}%";
+            holders = holders.Where(h => EF.Functions.ILike(h.City, cityPattern, "\\"));
         }
 
         var joined = holders.GroupJoin(

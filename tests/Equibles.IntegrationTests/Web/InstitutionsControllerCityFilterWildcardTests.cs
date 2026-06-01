@@ -51,7 +51,7 @@ public class InstitutionsControllerCityFilterWildcardTests
         return Task.CompletedTask;
     }
 
-    [Fact(Skip = "GH-2913: institution city filter treats _ or % as LIKE wildcards")]
+    [Fact]
     public async Task GetInstitutions_CityIsBareUnderscore_DoesNotWildcardMatchCitiesWithoutUnderscore()
     {
         await _fixture.ResetAndSeedAsync(Seed);
