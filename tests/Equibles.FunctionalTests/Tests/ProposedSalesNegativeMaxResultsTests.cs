@@ -51,9 +51,7 @@ public class ProposedSalesNegativeMaxResultsTests
         }
     }
 
-    [Fact(
-        Skip = "GH-2980 — GetProposedSales surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetProposedSales_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
