@@ -18,10 +18,15 @@ public class ErrorRepository : BaseRepository<Error>
     {
         if (string.IsNullOrEmpty(search))
             return GetAll();
+        // Escape LIKE metacharacters so '%' / '_' / '\' in the query match literally rather
+        // than as wildcards (a bare '_' would otherwise match every row, '%' the whole table),
+        // matching the "Context or Message contains the term" contract and the escaping used
+        // elsewhere.
+        var pattern = $"%{search.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")}%";
         return GetAll()
             .Where(e =>
-                EF.Functions.ILike(e.Context, $"%{search}%")
-                || EF.Functions.ILike(e.Message, $"%{search}%")
+                EF.Functions.ILike(e.Context, pattern, "\\")
+                || EF.Functions.ILike(e.Message, pattern, "\\")
             );
     }
 
