@@ -42,7 +42,7 @@ public class StatusControllerSearchWildcardTests
         return Task.CompletedTask;
     }
 
-    [Fact(Skip = "GH-2926 — /status error search treats _ and % as LIKE wildcards")]
+    [Fact]
     public async Task GetStatus_SearchIsBareUnderscore_DoesNotWildcardMatchErrorsWithoutUnderscore()
     {
         await _fixture.ResetAndSeedAsync(Seed);
