@@ -47,9 +47,7 @@ public class InsidersGlobalSearchWildcardEscapingTests
         return Task.CompletedTask;
     }
 
-    [Fact(
-        Skip = "GH-2915 — insider search treats LIKE wildcards (_, %) as wildcards, not literals"
-    )]
+    [Fact]
     public async Task GlobalSearch_QueryIsBareUnderscore_DoesNotWildcardMatchInsiderNamesWithoutUnderscore()
     {
         await _fixture.ResetAndSeedAsync(Seed);
