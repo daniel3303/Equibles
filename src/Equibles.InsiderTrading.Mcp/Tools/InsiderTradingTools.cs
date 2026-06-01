@@ -58,6 +58,11 @@ public class InsiderTradingTools
                 if (stockError != null)
                     return stockError;
 
+                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
+                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
+                // so a non-positive cap yields zero rows and the existing no-data message.
+                maxResults = Math.Max(0, maxResults);
+
                 var transactions = await _transactionRepository
                     .GetByStock(stock)
                     .Include(t => t.InsiderOwner)

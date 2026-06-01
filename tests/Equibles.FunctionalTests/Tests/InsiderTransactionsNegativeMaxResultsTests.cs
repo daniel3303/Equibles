@@ -54,9 +54,7 @@ public class InsiderTransactionsNegativeMaxResultsTests
         }
     }
 
-    [Fact(
-        Skip = "GH-2949 — GetInsiderTransactions surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetInsiderTransactions_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         var stockId = Guid.NewGuid();
