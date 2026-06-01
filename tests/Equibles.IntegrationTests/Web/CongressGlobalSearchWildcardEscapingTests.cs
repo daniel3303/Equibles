@@ -42,9 +42,7 @@ public class CongressGlobalSearchWildcardEscapingTests
         return Task.CompletedTask;
     }
 
-    [Fact(
-        Skip = "GH-2918 — congress member search treats LIKE wildcards (_, %) as wildcards, not literals"
-    )]
+    [Fact]
     public async Task GlobalSearch_QueryIsBareUnderscore_DoesNotWildcardMatchMemberNamesWithoutUnderscore()
     {
         await _fixture.ResetAndSeedAsync(Seed);
