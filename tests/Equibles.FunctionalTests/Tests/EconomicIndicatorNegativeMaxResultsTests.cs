@@ -50,9 +50,7 @@ public class EconomicIndicatorNegativeMaxResultsTests
         }
     }
 
-    [Fact(
-        Skip = "GH-2941 — GetEconomicIndicator surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetEconomicIndicator_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
