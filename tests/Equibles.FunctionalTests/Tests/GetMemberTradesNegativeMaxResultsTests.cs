@@ -54,9 +54,7 @@ public class GetMemberTradesNegativeMaxResultsTests
         }
     }
 
-    [Fact(
-        Skip = "GH-2976 — GetMemberTrades surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetMemberTrades_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         var stockId = Guid.NewGuid();
