@@ -70,10 +70,7 @@ public class CongressTools
                 var query = _tradeRepository.GetByStock(stock, start, end);
                 query = ApplyTransactionTypeFilter(query, transactionType);
 
-                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
-                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
-                // so a non-positive cap yields zero rows and the existing no-data message.
-                maxResults = Math.Max(0, maxResults);
+                maxResults = McpLimit.Clamp(maxResults);
 
                 var trades = await query
                     .Include(t => t.CongressMember)
@@ -143,13 +140,10 @@ public class CongressTools
                     .Where(t => t.TransactionDate >= start && t.TransactionDate <= end);
                 query = ApplyTransactionTypeFilter(query, transactionType);
 
-                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
-                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
-                // so a non-positive cap yields zero rows and the existing no-results message.
                 var trades = await query
                     .Include(t => t.CommonStock)
                     .OrderByDescending(t => t.TransactionDate)
-                    .Take(Math.Max(0, maxResults))
+                    .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
                 if (trades.Count == 0)
@@ -193,10 +187,7 @@ public class CongressTools
         return _runner.Execute(
             async () =>
             {
-                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
-                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
-                // so a non-positive cap yields zero rows and the existing no-results message.
-                maxResults = Math.Max(0, maxResults);
+                maxResults = McpLimit.Clamp(maxResults);
 
                 var members = await _memberRepository
                     .Search(query.Trim())

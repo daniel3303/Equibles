@@ -63,11 +63,7 @@ public class StockPriceTools
                     DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))
                 );
 
-                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
-                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
-                // so a non-positive cap yields zero rows and the existing no-data message,
-                // matching the sibling indicator tools' graceful degradation.
-                maxResults = Math.Max(0, maxResults);
+                maxResults = McpLimit.Clamp(maxResults);
 
                 var records = await _priceRepository
                     .GetByStock(stock, start, end)

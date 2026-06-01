@@ -68,10 +68,7 @@ public class ShortDataTools
 
                 query = query.Where(d => d.Date >= start && d.Date <= end);
 
-                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
-                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
-                // so a non-positive cap yields zero rows and the existing no-data message.
-                maxResults = Math.Max(0, maxResults);
+                maxResults = McpLimit.Clamp(maxResults);
 
                 var records = await query
                     .OrderByDescending(d => d.Date)
@@ -120,10 +117,7 @@ public class ShortDataTools
         return _runner.Execute(
             async () =>
             {
-                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
-                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
-                // so a non-positive cap yields zero rows and the existing no-results message.
-                maxResults = Math.Max(0, maxResults);
+                maxResults = McpLimit.Clamp(maxResults);
 
                 var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
@@ -199,12 +193,9 @@ public class ShortDataTools
                     query = query.Where(s => s.DaysToCover >= minDaysToCover);
                 }
 
-                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
-                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
-                // so a non-positive cap yields zero rows and the existing no-results message.
                 var records = await query
                     .OrderByDescending(s => s.DaysToCover)
-                    .Take(Math.Max(0, maxResults))
+                    .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
                 if (records.Count == 0)
@@ -266,12 +257,9 @@ public class ShortDataTools
                     query = query.Where(d => d.ShortVolume >= minShortVolume);
                 }
 
-                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
-                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
-                // so a non-positive cap yields zero rows and the existing no-results message.
                 var records = await query
                     .OrderByDescending(d => d.ShortVolume)
-                    .Take(Math.Max(0, maxResults))
+                    .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
                 if (records.Count == 0)

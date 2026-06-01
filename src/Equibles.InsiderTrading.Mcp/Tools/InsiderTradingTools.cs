@@ -58,10 +58,7 @@ public class InsiderTradingTools
                 if (stockError != null)
                     return stockError;
 
-                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
-                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
-                // so a non-positive cap yields zero rows and the existing no-data message.
-                maxResults = Math.Max(0, maxResults);
+                maxResults = McpLimit.Clamp(maxResults);
 
                 var transactions = await _transactionRepository
                     .GetByStock(stock)
@@ -192,13 +189,10 @@ public class InsiderTradingTools
                 if (stockError != null)
                     return stockError;
 
-                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
-                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
-                // so a non-positive cap yields zero rows and the existing no-results message.
                 var filings = await _form144Repository
                     .GetByStock(stock)
                     .OrderByDescending(f => f.FilingDate)
-                    .Take(Math.Max(0, maxResults))
+                    .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
                 if (filings.Count == 0)
@@ -244,10 +238,7 @@ public class InsiderTradingTools
         return _runner.Execute(
             async () =>
             {
-                // A negative maxResults would flow into .Take(...) as a negative SQL LIMIT,
-                // which PostgreSQL rejects and surfaces as the internal-error sentinel. Clamp
-                // so a non-positive cap yields zero rows and the existing no-results message.
-                maxResults = Math.Max(0, maxResults);
+                maxResults = McpLimit.Clamp(maxResults);
 
                 var insiders = await _ownerRepository.Search(query).Take(maxResults).ToListAsync();
 
