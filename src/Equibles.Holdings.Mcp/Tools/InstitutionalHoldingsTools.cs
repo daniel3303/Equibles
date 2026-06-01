@@ -136,7 +136,7 @@ public class InstitutionalHoldingsTools
         );
         result.AppendLine(
             $"Showing {holdings.Count} of {totalInstitutions} institutions. Total: "
-                + $"{FormatWholeNumber(totalSharesAll)} shares, "
+                + $"{McpFormat.WholeNumber(totalSharesAll)} shares, "
                 + $"${FormatMillions(totalValueAll)}M value"
         );
         result.AppendLine();
@@ -149,7 +149,7 @@ public class InstitutionalHoldingsTools
             var pct = totalSharesAll > 0 ? (double)h.Shares / totalSharesAll * 100 : 0;
             result.AppendLine(
                 $"| {i + 1} | {h.InstitutionalHolder.Name} | "
-                    + $"{FormatWholeNumber(h.Shares)} | "
+                    + $"{McpFormat.WholeNumber(h.Shares)} | "
                     + $"{FormatMillions(h.Value)} | "
                     + $"{pct.ToString("F2", CultureInfo.InvariantCulture)}% |"
             );
@@ -216,7 +216,7 @@ public class InstitutionalHoldingsTools
                     : "—";
 
             result.AppendLine(
-                $"| {FormatDate(date)} | {FormatWholeNumber(institutionCount)} | {FormatWholeNumber(totalShares)} | {FormatMillions(totalValue)} | {change} |"
+                $"| {FormatDate(date)} | {McpFormat.WholeNumber(institutionCount)} | {McpFormat.WholeNumber(totalShares)} | {FormatMillions(totalValue)} | {change} |"
             );
 
             previousShares = totalShares;
@@ -286,7 +286,7 @@ public class InstitutionalHoldingsTools
             var h = holdings[i];
             result.AppendLine(
                 $"| {i + 1} | {h.CommonStock.Ticker} | {h.CommonStock.Name} | "
-                    + $"{FormatWholeNumber(h.Shares)} | "
+                    + $"{McpFormat.WholeNumber(h.Shares)} | "
                     + $"{FormatMillions(h.Value)} |"
             );
         }
@@ -512,7 +512,7 @@ public class InstitutionalHoldingsTools
             {
                 var m = rows[i];
                 sb.AppendLine(
-                    $"| {i + 1} | {m.Name} | {FormatSignedShares(m.DeltaShares)} | {FormatSignedMillions(m.DeltaValue)} | {FormatWholeNumber(m.PreviousShares)} → {FormatWholeNumber(m.CurrentShares)} |"
+                    $"| {i + 1} | {m.Name} | {FormatSignedShares(m.DeltaShares)} | {FormatSignedMillions(m.DeltaValue)} | {McpFormat.WholeNumber(m.PreviousShares)} → {McpFormat.WholeNumber(m.CurrentShares)} |"
                 );
             }
         }
@@ -771,7 +771,7 @@ public class InstitutionalHoldingsTools
         var result = new StringBuilder();
         result.AppendLine($"Most-held 13F stocks as of {FormatDate(targetDate)}");
         result.AppendLine(
-            $"vs prior quarter {FormatDate(previousDate)} · {FormatWholeNumber(universeFilers)} filers in the 13F universe"
+            $"vs prior quarter {FormatDate(previousDate)} · {McpFormat.WholeNumber(universeFilers)} filers in the 13F universe"
         );
         result.AppendLine($"Sorted by: {sort}");
         result.AppendLine();
@@ -788,7 +788,7 @@ public class InstitutionalHoldingsTools
             var pct = universeFilers > 0 ? (double)r.CurrentFilerCount / universeFilers * 100.0 : 0;
             var deltaFilers = r.CurrentFilerCount - r.PreviousFilerCount;
             result.AppendLine(
-                $"| {i + 1} | {ticker} | {name} | {FormatWholeNumber(r.CurrentFilerCount)} | {FormatSignedShares(deltaFilers)} | {FormatMillions(r.CurrentValue)} | {FormatSignedMillions(r.DeltaValue)} | {FormatPercent(pct)}% |"
+                $"| {i + 1} | {ticker} | {name} | {McpFormat.WholeNumber(r.CurrentFilerCount)} | {FormatSignedShares(deltaFilers)} | {FormatMillions(r.CurrentValue)} | {FormatSignedMillions(r.DeltaValue)} | {FormatPercent(pct)}% |"
             );
         }
         return result.ToString();
@@ -856,8 +856,8 @@ public class InstitutionalHoldingsTools
         result.AppendLine();
         result.AppendLine("| Metric | Value |");
         result.AppendLine("|--------|-------|");
-        result.AppendLine($"| Reported AUM | ${FormatWholeNumber(summary.ReportedAum)} |");
-        result.AppendLine($"| # Positions | {FormatWholeNumber(summary.PositionCount)} |");
+        result.AppendLine($"| Reported AUM | ${McpFormat.WholeNumber(summary.ReportedAum)} |");
+        result.AppendLine($"| # Positions | {McpFormat.WholeNumber(summary.PositionCount)} |");
         result.AppendLine(
             $"| Top 10 concentration | {FormatPercent(summary.Top10ConcentrationPercent)}% |"
         );
@@ -903,7 +903,7 @@ public class InstitutionalHoldingsTools
         {
             var s = slices[i];
             result.AppendLine(
-                $"| {i + 1} | {s.IndustryName} | {FormatWholeNumber(s.PositionCount)} | {FormatMillions(s.TotalValue)} | {FormatPercent(s.PercentOfPortfolio)}% |"
+                $"| {i + 1} | {s.IndustryName} | {McpFormat.WholeNumber(s.PositionCount)} | {FormatMillions(s.TotalValue)} | {FormatPercent(s.PercentOfPortfolio)}% |"
             );
         }
         return result.ToString();
@@ -1068,7 +1068,7 @@ public class InstitutionalHoldingsTools
         {
             var r = rows[i];
             result.AppendLine(
-                $"| {i + 1} | {r.Ticker} | {r.Name} | {FormatWholeNumber(r.PreviousShares)} | {FormatWholeNumber(r.CurrentShares)} | {FormatSignedShares(r.DeltaShares)} | {FormatSignedMillions(r.DeltaValue)} |"
+                $"| {i + 1} | {r.Ticker} | {r.Name} | {McpFormat.WholeNumber(r.PreviousShares)} | {McpFormat.WholeNumber(r.CurrentShares)} | {FormatSignedShares(r.DeltaShares)} | {FormatSignedMillions(r.DeltaValue)} |"
             );
         }
         result.AppendLine();
@@ -1159,9 +1159,11 @@ public class InstitutionalHoldingsTools
             "| Metric | Value |",
             "|--------|-------|"
         );
-        result.AppendLine($"| Union positions | {FormatWholeNumber(overlap.UnionPositionCount)} |");
         result.AppendLine(
-            $"| Shared positions | {FormatWholeNumber(overlap.IntersectionPositionCount)} |"
+            $"| Union positions | {McpFormat.WholeNumber(overlap.UnionPositionCount)} |"
+        );
+        result.AppendLine(
+            $"| Shared positions | {McpFormat.WholeNumber(overlap.IntersectionPositionCount)} |"
         );
         result.AppendLine(
             $"| Jaccard similarity | {FormatPercent(overlap.JaccardSimilarityPercent)}% |"
@@ -1190,7 +1192,7 @@ public class InstitutionalHoldingsTools
             var a = row.Slices[0];
             var b = row.Slices[1];
             result.AppendLine(
-                $"| {i + 1} | {row.Ticker} | {row.Name} | {(a.Shares > 0 ? FormatWholeNumber(a.Shares) : "—")} | {(a.Value > 0 ? FormatPercent(a.PercentOfPortfolio) + "%" : "—")} | {(b.Shares > 0 ? FormatWholeNumber(b.Shares) : "—")} | {(b.Value > 0 ? FormatPercent(b.PercentOfPortfolio) + "%" : "—")} | {FormatMillions(row.CombinedValue)} |"
+                $"| {i + 1} | {row.Ticker} | {row.Name} | {(a.Shares > 0 ? McpFormat.WholeNumber(a.Shares) : "—")} | {(a.Value > 0 ? FormatPercent(a.PercentOfPortfolio) + "%" : "—")} | {(b.Shares > 0 ? McpFormat.WholeNumber(b.Shares) : "—")} | {(b.Value > 0 ? FormatPercent(b.PercentOfPortfolio) + "%" : "—")} | {FormatMillions(row.CombinedValue)} |"
             );
         }
         return result.ToString();
@@ -1343,15 +1345,10 @@ public class InstitutionalHoldingsTools
         return (s?.Ticker ?? "—", s?.Name ?? "Unknown");
     }
 
-    // Whole numbers (share counts, position counts, whole-dollar amounts) rendered with
-    // thousands separators in invariant culture, matching the other invariant cells.
-    private static string FormatWholeNumber<T>(T value)
-        where T : INumber<T> => value.ToString("N0", CultureInfo.InvariantCulture);
-
     // Raw dollar values rendered in $millions with an explicit leading +/- sign.
     // `+` for positive deltas; N0 already emits `-` for negatives.
     private static string FormatSignedShares<T>(T value)
-        where T : INumber<T> => (value > T.Zero ? "+" : "") + FormatWholeNumber(value);
+        where T : INumber<T> => (value > T.Zero ? "+" : "") + McpFormat.WholeNumber(value);
 
     // Signed $millions with one decimal place, invariant culture (matches FormatMillions
     // and the rest of this file; MCP markdown must not fork the separators by host locale).

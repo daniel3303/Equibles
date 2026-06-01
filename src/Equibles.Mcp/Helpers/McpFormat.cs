@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 
 namespace Equibles.Mcp.Helpers;
 
@@ -11,4 +12,10 @@ public static class McpFormat
     public static string OrDash<T>(T? value, string format)
         where T : struct, IFormattable =>
         value.HasValue ? value.Value.ToString(format, CultureInfo.InvariantCulture) : Dash;
+
+    // Whole numbers (share counts, position counts, whole-dollar amounts) rendered with
+    // thousands separators in invariant culture so MCP markdown does not fork the separators
+    // by host locale.
+    public static string WholeNumber<T>(T value)
+        where T : INumber<T> => value.ToString("N0", CultureInfo.InvariantCulture);
 }

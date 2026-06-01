@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Globalization;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Errors.BusinessLogic;
@@ -70,7 +69,7 @@ public class FormDTools
                 foreach (var f in filings)
                 {
                     result.AppendLine(
-                        $"| {f.FilingDate:yyyy-MM-dd} | {(f.IsAmendment ? "Yes" : "No")} | {f.IndustryGroup ?? "-"} | {FormatAmount(f.TotalOfferingAmount, f.IsOfferingAmountIndefinite)} | ${FormatWholeNumber(f.TotalAmountSold)} | ${FormatWholeNumber(f.MinimumInvestmentAccepted)} | {FormatWholeNumber(f.TotalNumberAlreadyInvested)} | {f.FederalExemptions ?? "-"} |"
+                        $"| {f.FilingDate:yyyy-MM-dd} | {(f.IsAmendment ? "Yes" : "No")} | {f.IndustryGroup ?? "-"} | {FormatAmount(f.TotalOfferingAmount, f.IsOfferingAmountIndefinite)} | ${McpFormat.WholeNumber(f.TotalAmountSold)} | ${McpFormat.WholeNumber(f.MinimumInvestmentAccepted)} | {McpFormat.WholeNumber(f.TotalNumberAlreadyInvested)} | {f.FederalExemptions ?? "-"} |"
                     );
                 }
 
@@ -85,9 +84,6 @@ public class FormDTools
     {
         if (isIndefinite)
             return "Indefinite";
-        return amount.HasValue ? $"${FormatWholeNumber(amount.Value)}" : "-";
+        return amount.HasValue ? $"${McpFormat.WholeNumber(amount.Value)}" : "-";
     }
-
-    private static string FormatWholeNumber(long value) =>
-        value.ToString("N0", CultureInfo.InvariantCulture);
 }
