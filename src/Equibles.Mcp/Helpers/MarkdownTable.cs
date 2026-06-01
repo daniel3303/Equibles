@@ -31,4 +31,18 @@ public static class MarkdownTable
         sb.AppendLine(separatorRow);
         return sb;
     }
+
+    // Appends one markdown row per item in order, passing the 1-based rank and the item to
+    // renderRow. Centralises the ranked-table loop so call sites don't repeat the `i + 1`
+    // off-by-one and the `rows[i]` indexing.
+    public static StringBuilder AppendNumberedRows<T>(
+        this StringBuilder sb,
+        IReadOnlyList<T> rows,
+        Func<int, T, string> renderRow
+    )
+    {
+        for (var i = 0; i < rows.Count; i++)
+            sb.AppendLine(renderRow(i + 1, rows[i]));
+        return sb;
+    }
 }
