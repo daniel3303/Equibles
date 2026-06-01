@@ -12,9 +12,7 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class FormAdvCsvParserParseAumOverflowTests
 {
-    [Fact(
-        Skip = "GH-2951 — ParseAum throws OverflowException casting an out-of-long-range AUM to long, aborting the import"
-    )]
+    [Fact]
     public void Parse_TotalAumLargerThanLongRange_TreatsCellAsNotReportedInsteadOfThrowing()
     {
         // 26 digits: within decimal's range but far beyond long.MaxValue (~9.2e18).
