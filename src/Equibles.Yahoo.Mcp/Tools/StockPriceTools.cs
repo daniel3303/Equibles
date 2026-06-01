@@ -153,7 +153,7 @@ public class StockPriceTools
                     }
 
                     result.AppendLine(
-                        $"| {ticker} | {price.Date:yyyy-MM-dd} | {price.Close:F2} | {price.Volume:N0} |"
+                        $"| {ticker} | {price.Date:yyyy-MM-dd} | {McpFormat.Invariant(price.Close, "F2")} | {McpFormat.WholeNumber(price.Volume)} |"
                     );
                 }
 
