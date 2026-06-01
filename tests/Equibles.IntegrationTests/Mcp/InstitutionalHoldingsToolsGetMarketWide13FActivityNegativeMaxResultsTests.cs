@@ -19,9 +19,7 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityNegativeMaxResult
     )
         : base(fixture) { }
 
-    [Fact(
-        Skip = "GH-2999 — GetMarketWide13FActivity surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetMarketWide13FActivity_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         var prior = new DateOnly(2024, 9, 30);
