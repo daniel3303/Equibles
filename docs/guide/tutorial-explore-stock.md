@@ -51,6 +51,22 @@ Click **SEC Filings**. Here you'll find every filing the company has made with t
 
 Click **Insider Trades**. This tab lists stock transactions by company insiders (officers, directors, and large shareholders) as reported on SEC Form 4. You'll see who traded, when, how many shares, at what price, and whether it was a buy or a sell.
 
+## Proposed Sales
+
+Click **Proposed Sales**. This tab lists notices of intent to sell restricted or control shares, filed with the SEC on Form 144 by insiders and affiliates. A Form 144 signals a *planned* sale — it does not confirm the shares were actually sold.
+
+## Exempt Offerings
+
+Click **Exempt Offerings**. This tab shows private capital raises reported to the SEC on Form D under Regulation D — the offering size, amount sold, minimum investment, and number of investors. Public operating companies rarely raise money this way, so this tab is often empty.
+
+## Fund Operations
+
+Click **Fund Operations**. For registered funds (mutual funds, ETFs, and closed-end funds), this tab shows operational details from the fund's annual SEC Form N-CEN — its registration type, reporting period, and named service providers such as the adviser, custodian, transfer agent, and auditor. Operating companies don't file N-CEN, so the tab is empty for them.
+
+## Fund Holdings
+
+Click **Fund Holdings**. For registered funds, this tab lists the individual securities the fund owns, reported to the SEC on Form N-PORT. Only mutual funds, ETFs, and closed-end funds file N-PORT, so operating companies show no data here.
+
 ## Congressional Trades
 
 Click **Congressional Trades**. Members of the U.S. House of Representatives are required to disclose their stock trades. This tab shows any reported purchases or sales of this stock by members of Congress, including the estimated transaction amount and the disclosure date.
