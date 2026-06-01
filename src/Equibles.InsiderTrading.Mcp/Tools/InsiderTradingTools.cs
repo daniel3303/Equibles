@@ -94,7 +94,7 @@ public class InsiderTradingTools
 
                     var value = t.Shares * t.PricePerShare;
                     result.AppendLine(
-                        $"| {t.TransactionDate:yyyy-MM-dd} | {t.InsiderOwner.Name} | {role} | {type} | {McpFormat.WholeNumber(t.Shares)} | ${t.PricePerShare.ToString("N2", CultureInfo.InvariantCulture)} | ${McpFormat.WholeNumber(value)} | {McpFormat.WholeNumber(t.SharesOwnedAfter)} |"
+                        $"| {t.TransactionDate:yyyy-MM-dd} | {t.InsiderOwner.Name} | {role} | {type} | {McpFormat.WholeNumber(t.Shares)} | ${McpFormat.Invariant(t.PricePerShare, "N2")} | ${McpFormat.WholeNumber(value)} | {McpFormat.WholeNumber(t.SharesOwnedAfter)} |"
                     );
                 }
 

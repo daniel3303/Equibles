@@ -18,4 +18,9 @@ public static class McpFormat
     // by host locale.
     public static string WholeNumber<T>(T value)
         where T : INumber<T> => value.ToString("N0", CultureInfo.InvariantCulture);
+
+    // Non-nullable companion to OrDash: formats a value with the given format string in
+    // invariant culture so MCP markdown does not fork the separators by host locale.
+    public static string Invariant<T>(T value, string format)
+        where T : IFormattable => value.ToString(format, CultureInfo.InvariantCulture);
 }
