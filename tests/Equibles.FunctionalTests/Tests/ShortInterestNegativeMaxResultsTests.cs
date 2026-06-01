@@ -51,9 +51,7 @@ public class ShortInterestNegativeMaxResultsTests
         }
     }
 
-    [Fact(
-        Skip = "GH-2966 — GetShortInterest surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetShortInterest_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
