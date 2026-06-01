@@ -27,7 +27,7 @@ These do not own a financial-domain dataset; they support every other module.
 | `Equibles.Errors.*` | `Error` entity + `ErrorManager` + `ErrorReporter` — captures scraper/MCP/HostedService failures for the Status dashboard. |
 | `Equibles.Media.*` | `File` storage abstraction for raw documents (PDFs, HTML, ZIPs). |
 | `Equibles.Search` + `Equibles.Search.Abstractions` | `ISearchProvider` contract + assembly-scoped discovery via `AddEquiblesSearch()`. Each domain module that wants to participate ships a provider class. |
-| `Equibles.Messaging` | MassTransit configuration (Postgres SQL transport + EF outbox). |
+| `Equibles.Messaging` | MassTransit configuration on the Postgres SQL transport; OSS ships no transactional outbox — events publish directly and consumers are idempotent. |
 | `Equibles.Plugins` | Optional plugin assembly loader called as the very first startup step in every host. |
 
 ## Module nuances
