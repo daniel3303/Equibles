@@ -16,10 +16,8 @@ public class CongressMemberRepository : BaseRepository<CongressMember>
 
     public IQueryable<CongressMember> Search(string search)
     {
-        // Escape LIKE metacharacters so '%' / '_' / '\' in the query match literally rather
-        // than as wildcards (a bare '_' would otherwise match every name, '%' the whole table),
-        // matching the "name contains the term" contract and the escaping used elsewhere.
-        var pattern = $"%{search.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")}%";
+        // "Name contains the term"; escape so '%' / '_' / '\' in the query match literally.
+        var pattern = LikePattern.Contains(search);
         return GetAll().Where(m => EF.Functions.ILike(m.Name, pattern, "\\"));
     }
 }
