@@ -31,9 +31,7 @@ public class InsiderTradingToolsGetInsiderOwnershipCultureInvarianceTests : Para
     // culture pin: "MCP markdown must not fork the separators by host locale") is byte-identical
     // output on every host. de-DE swaps the thousand separator (7,654,321 → 7.654.321), forking
     // the response — same bug class as #3013 / #3030 / #3035 / #3043.
-    [Fact(
-        Skip = "GH-3047 — GetInsiderOwnership renders Shares Owned with host-locale separators, forking MCP output by culture"
-    )]
+    [Fact]
     public async Task GetInsiderOwnership_UnderNonInvariantCulture_RendersSharesOwnedCultureInvariantly()
     {
         var stock = new CommonStock
