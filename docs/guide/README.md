@@ -35,6 +35,7 @@ Task-focused recipes for someone who has Equibles running.
 - [View market-wide insider trading activity](how-to-view-insider-activity.md)
 - [Browse economic indicators](how-to-browse-economic-data.md)
 - [Browse market indicators (VIX and put/call ratios)](how-to-browse-market-indicators.md)
+- [Browse futures positioning (CFTC Commitments of Traders)](how-to-browse-futures.md)
 
 ## FAQ
 
