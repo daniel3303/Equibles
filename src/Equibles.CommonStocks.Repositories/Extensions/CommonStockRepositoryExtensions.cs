@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 
 namespace Equibles.CommonStocks.Repositories.Extensions;
@@ -9,7 +10,7 @@ public static class CommonStockRepositoryExtensions
         string ticker
     )
     {
-        var stock = await repository.GetByTicker(ticker.Trim().ToUpperInvariant());
+        var stock = await repository.GetByTicker(TickerNormalizer.Normalize(ticker));
         return stock == null ? (null, $"Stock '{ticker}' not found.") : (stock, null);
     }
 }

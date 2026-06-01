@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Holdings.Repositories;
@@ -56,7 +57,7 @@ public class HoldingsBacktestService
             Cik = cik,
             Benchmark = string.IsNullOrWhiteSpace(benchmark)
                 ? DefaultBenchmark
-                : benchmark.Trim().ToUpperInvariant(),
+                : TickerNormalizer.Normalize(benchmark),
             RequestedFrom = from,
             RequestedTo = to,
         };
