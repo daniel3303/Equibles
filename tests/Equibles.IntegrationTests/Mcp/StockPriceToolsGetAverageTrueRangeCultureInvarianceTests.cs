@@ -30,9 +30,7 @@ public class StockPriceToolsGetAverageTrueRangeCultureInvarianceTests : ParadeDb
     // response and making one column disagree with the next. Same bug class as
     // GetStochasticOscillator (#3103, which enumerates this method at StockPriceTools.cs:283)
     // and GetLatestPrices (#3100).
-    [Fact(
-        Skip = "GH-3103 — GetAverageTrueRange renders the Close column with a culture-implicit specifier"
-    )]
+    [Fact]
     public async Task GetAverageTrueRange_UnderNonInvariantCulture_RendersCloseCultureInvariantly()
     {
         var stock = new CommonStock

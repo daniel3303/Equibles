@@ -30,9 +30,7 @@ public class StockPriceToolsGetBollingerBandsCultureInvarianceTests : ParadeDbMc
     // forking the response and making the Close column disagree with the band columns. Same bug
     // class as GetStochasticOscillator / GetAverageTrueRange / GetOnBalanceVolume (#3103, the
     // "sibling indicator tools") and GetLatestPrices (#3100).
-    [Fact(
-        Skip = "GH-3103 — GetBollingerBands renders the Close column with a culture-implicit specifier"
-    )]
+    [Fact]
     public async Task GetBollingerBands_UnderNonInvariantCulture_RendersCloseCultureInvariantly()
     {
         var stock = new CommonStock
