@@ -50,9 +50,7 @@ public class GetFundOperationsNegativeMaxResultsTests
         }
     }
 
-    [Fact(
-        Skip = "GH-2986 — GetFundOperations surfaces an internal error for a negative maxResults instead of degrading gracefully"
-    )]
+    [Fact]
     public async Task GetFundOperations_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
