@@ -4,7 +4,7 @@ This guide shows you how to use the 13F Quarterly Activity page to see which sto
 
 ## Open the activity page
 
-1. Go to `http://localhost:8080` and click **Holdings** in the top navigation, then **Activity** (or go directly to `http://localhost:8080/holdings/activity`).
+1. Go to `http://localhost:8080/holdings/activity` in your browser.
 
 2. The page needs at least two quarters of 13F data to compare. If you see a "No 13F data yet" message, the worker is still backfilling — check back after the initial sync completes.
 
