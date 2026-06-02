@@ -28,7 +28,7 @@ public class InsiderFilingReprocessResult
     public int Failed { get; set; }
 
     public string Summary =>
-        $"Reprocessed {Processed:N0}/{Total:N0} filings "
-        + $"({Fetched:N0} fetched, {Reclassified:N0} rows reclassified, "
-        + $"{Repaired:N0} prices repaired, {Failed:N0} failed).";
+        FormattableString.Invariant(
+            $"Reprocessed {Processed:N0}/{Total:N0} filings ({Fetched:N0} fetched, {Reclassified:N0} rows reclassified, {Repaired:N0} prices repaired, {Failed:N0} failed)."
+        );
 }
