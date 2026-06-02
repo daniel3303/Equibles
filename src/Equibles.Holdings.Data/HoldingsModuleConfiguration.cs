@@ -60,6 +60,24 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
                 h.Shares,
             });
 
+        // Covering index for the per-stock 13F ranking pages (Most-Held Stocks,
+        // Last-Quarter Movers): WHERE ReportDate = <quarter> GROUP BY CommonStockId
+        // with COUNT(DISTINCT InstitutionalHolderId) and SUM(Shares)/SUM(Value).
+        // Leading with ReportDate lets the quarter filter seek; rows then arrive
+        // ordered by (CommonStockId, InstitutionalHolderId) so the grouped
+        // aggregate + distinct count run as an index-only scan with no sort. The
+        // per-stock covering index above leads with CommonStockId and so can't
+        // serve this ReportDate-first ranking scan over the whole quarter.
+        builder
+            .Entity<InstitutionalHolding>()
+            .HasIndex(h => new
+            {
+                h.ReportDate,
+                h.CommonStockId,
+                h.InstitutionalHolderId,
+            })
+            .IncludeProperties(h => new { h.Shares, h.Value });
+
         builder.Entity<ProcessedDataSet>();
         builder.Entity<ProcessedFiling>();
         builder.Entity<InstitutionalFiling>();
