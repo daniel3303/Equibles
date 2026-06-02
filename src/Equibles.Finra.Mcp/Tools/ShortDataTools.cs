@@ -75,25 +75,19 @@ public class ShortDataTools
                     .Take(maxResults)
                     .ToListAsync();
 
-                if (records.Count == 0)
-                    return $"No short volume data found for {stock.Ticker} in the specified date range.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    records.OrderBy(r => r.Date).ToList(),
+                    $"No short volume data found for {stock.Ticker} in the specified date range.",
                     $"Daily short volume for {stock.Ticker} ({stock.Name}):",
                     "| Date | Short Volume | Exempt | Total Volume | Short % |",
-                    "|------|-------------|--------|-------------|---------|"
+                    "|------|-------------|--------|-------------|---------|",
+                    r =>
+                    {
+                        var shortPct =
+                            r.TotalVolume > 0 ? (double)r.ShortVolume / r.TotalVolume * 100 : 0;
+                        return $"| {r.Date:yyyy-MM-dd} | {McpFormat.WholeNumber(r.ShortVolume)} | {McpFormat.WholeNumber(r.ShortExemptVolume)} | {McpFormat.WholeNumber(r.TotalVolume)} | {McpFormat.Invariant(shortPct, "F1")}% |";
+                    }
                 );
-
-                foreach (var r in records.OrderBy(r => r.Date))
-                {
-                    var shortPct =
-                        r.TotalVolume > 0 ? (double)r.ShortVolume / r.TotalVolume * 100 : 0;
-                    result.AppendLine(
-                        $"| {r.Date:yyyy-MM-dd} | {McpFormat.WholeNumber(r.ShortVolume)} | {McpFormat.WholeNumber(r.ShortExemptVolume)} | {McpFormat.WholeNumber(r.TotalVolume)} | {McpFormat.Invariant(shortPct, "F1")}% |"
-                    );
-                }
-
-                return result.ToString();
             },
             "GetShortVolume",
             $"ticker: {ticker}"
@@ -138,26 +132,20 @@ public class ShortDataTools
                     .Take(maxResults)
                     .ToListAsync();
 
-                if (records.Count == 0)
-                    return $"No short interest data found for {stock.Ticker} in the specified date range.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    records.OrderBy(r => r.SettlementDate).ToList(),
+                    $"No short interest data found for {stock.Ticker} in the specified date range.",
                     $"Short interest for {stock.Ticker} ({stock.Name}):",
                     "| Settlement Date | Short Position | Change | Avg Daily Volume | Days to Cover |",
-                    "|----------------|---------------|--------|-----------------|---------------|"
+                    "|----------------|---------------|--------|-----------------|---------------|",
+                    r =>
+                    {
+                        var changeStr = FormatSignedChange(r.ChangeInShortPosition);
+                        var advStr = McpFormat.OrDash(r.AverageDailyVolume, "N0");
+                        var dtcStr = McpFormat.OrDash(r.DaysToCover, "F1");
+                        return $"| {r.SettlementDate:yyyy-MM-dd} | {McpFormat.WholeNumber(r.CurrentShortPosition)} | {changeStr} | {advStr} | {dtcStr} |";
+                    }
                 );
-
-                foreach (var r in records.OrderBy(r => r.SettlementDate))
-                {
-                    var changeStr = FormatSignedChange(r.ChangeInShortPosition);
-                    var advStr = McpFormat.OrDash(r.AverageDailyVolume, "N0");
-                    var dtcStr = McpFormat.OrDash(r.DaysToCover, "F1");
-                    result.AppendLine(
-                        $"| {r.SettlementDate:yyyy-MM-dd} | {McpFormat.WholeNumber(r.CurrentShortPosition)} | {changeStr} | {advStr} | {dtcStr} |"
-                    );
-                }
-
-                return result.ToString();
             },
             "GetShortInterest",
             $"ticker: {ticker}"
@@ -198,29 +186,23 @@ public class ShortDataTools
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
-                if (records.Count == 0)
-                    return $"No short interest data found for settlement date {latestDate:yyyy-MM-dd} with days to cover >= {minDaysToCover.ToString(CultureInfo.InvariantCulture)}.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    records,
+                    $"No short interest data found for settlement date {latestDate:yyyy-MM-dd} with days to cover >= {minDaysToCover.ToString(CultureInfo.InvariantCulture)}.",
                     $"Short interest snapshot — settlement date {latestDate:yyyy-MM-dd}:",
                     "| Ticker | Short Position | Change | Avg Daily Volume | Days to Cover |",
-                    "|--------|---------------|--------|-----------------|---------------|"
+                    "|--------|---------------|--------|-----------------|---------------|",
+                    r =>
+                    {
+                        var changeStr = FormatSignedChange(r.ChangeInShortPosition);
+                        var advStr = McpFormat.OrDash(r.AverageDailyVolume, "N0");
+                        // Render with InvariantCulture so the MCP markdown does not fork the
+                        // separators by host locale (e.g. de-DE would render 1.234.567 / 12,3).
+                        var shortPositionStr = McpFormat.WholeNumber(r.CurrentShortPosition);
+                        var dtcStr = McpFormat.OrDash(r.DaysToCover, "F1");
+                        return $"| {r.CommonStock.Ticker} | {shortPositionStr} | {changeStr} | {advStr} | {dtcStr} |";
+                    }
                 );
-
-                foreach (var r in records)
-                {
-                    var changeStr = FormatSignedChange(r.ChangeInShortPosition);
-                    var advStr = McpFormat.OrDash(r.AverageDailyVolume, "N0");
-                    // Render with InvariantCulture so the MCP markdown does not fork the
-                    // separators by host locale (e.g. de-DE would render 1.234.567 / 12,3).
-                    var shortPositionStr = McpFormat.WholeNumber(r.CurrentShortPosition);
-                    var dtcStr = McpFormat.OrDash(r.DaysToCover, "F1");
-                    result.AppendLine(
-                        $"| {r.CommonStock.Ticker} | {shortPositionStr} | {changeStr} | {advStr} | {dtcStr} |"
-                    );
-                }
-
-                return result.ToString();
             },
             "GetShortInterestSnapshot",
             $"minDaysToCover: {minDaysToCover}"
@@ -262,27 +244,21 @@ public class ShortDataTools
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
-                if (records.Count == 0)
-                    return $"No short volume data found for trading day {tradingDay:yyyy-MM-dd} with short volume >= {McpFormat.WholeNumber(minShortVolume)}.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    records,
+                    $"No short volume data found for trading day {tradingDay:yyyy-MM-dd} with short volume >= {McpFormat.WholeNumber(minShortVolume)}.",
                     $"Largest short volume — trading day {tradingDay:yyyy-MM-dd}:",
                     "| Ticker | Short Volume | Exempt | Total Volume | Short % |",
-                    "|--------|-------------|--------|-------------|---------|"
+                    "|--------|-------------|--------|-------------|---------|",
+                    r =>
+                    {
+                        var shortPct =
+                            r.TotalVolume > 0 ? (double)r.ShortVolume / r.TotalVolume * 100 : 0;
+                        // Render with InvariantCulture so the MCP markdown does not fork the
+                        // separators by host locale (e.g. de-DE would render 5.000.000 / 62,5%).
+                        return $"| {r.CommonStock.Ticker} | {McpFormat.WholeNumber(r.ShortVolume)} | {McpFormat.WholeNumber(r.ShortExemptVolume)} | {McpFormat.WholeNumber(r.TotalVolume)} | {McpFormat.Invariant(shortPct, "F1")}% |";
+                    }
                 );
-
-                foreach (var r in records)
-                {
-                    var shortPct =
-                        r.TotalVolume > 0 ? (double)r.ShortVolume / r.TotalVolume * 100 : 0;
-                    // Render with InvariantCulture so the MCP markdown does not fork the
-                    // separators by host locale (e.g. de-DE would render 5.000.000 / 62,5%).
-                    result.AppendLine(
-                        $"| {r.CommonStock.Ticker} | {McpFormat.WholeNumber(r.ShortVolume)} | {McpFormat.WholeNumber(r.ShortExemptVolume)} | {McpFormat.WholeNumber(r.TotalVolume)} | {McpFormat.Invariant(shortPct, "F1")}% |"
-                    );
-                }
-
-                return result.ToString();
             },
             "GetLargestShortVolume",
             $"date: {date}"
