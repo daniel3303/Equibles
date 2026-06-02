@@ -17,9 +17,7 @@ public class XbrlValueParserParseDecimalsArabicCultureTests
     // and the method returns null, silently dropping the rounding-scale metadata for a
     // valid filing. Every other numeric parse in the codebase pins
     // CultureInfo.InvariantCulture; this one does not.
-    [Fact(
-        Skip = "GH-3182 — ParseDecimals uses the culture-sensitive int.TryParse overload, so a negative @decimals returns null on non-invariant-culture hosts"
-    )]
+    [Fact]
     public void ParseDecimals_NegativeValueUnderArabicCulture_PreservesTheInteger()
     {
         var original = CultureInfo.CurrentCulture;
