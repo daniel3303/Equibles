@@ -8,9 +8,7 @@ public class HoldingsBacktestCalculatorWindowBetweenTwoRebalancesTests
     private static readonly Guid StockOld = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid StockNew = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
-    [Fact(
-        Skip = "GH-3193 — Calculate skips the active prior snapshot when `from` falls between two rebalance dates"
-    )]
+    [Fact]
     public void Calculate_FromBetweenTwoRebalances_OpensAtRequestedFromWithPriorSnapshot()
     {
         // Contract: HoldingsBacktestService.SelectRelevantSnapshotDates deliberately feeds the
