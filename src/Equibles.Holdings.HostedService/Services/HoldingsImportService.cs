@@ -120,6 +120,15 @@ public class HoldingsImportService
         );
     }
 
+    // Looks up a required archive entry, warning once when it is absent so callers only branch on null.
+    private ZipArchiveEntry FindRequiredEntry(ImportContext context, string fileName)
+    {
+        var entry = FindEntry(context.Archive, fileName);
+        if (entry == null)
+            _logger.LogWarning("{FileName} not found in archive", fileName);
+        return entry;
+    }
+
     /// <summary>
     /// Returns null if SUBMISSION.tsv is missing (structural failure).
     /// Returns false if no 13F-HR submissions match filters (legitimate empty).
@@ -130,12 +139,9 @@ public class HoldingsImportService
         CancellationToken cancellationToken
     )
     {
-        var submissionEntry = FindEntry(context.Archive, "SUBMISSION.tsv");
+        var submissionEntry = FindRequiredEntry(context, "SUBMISSION.tsv");
         if (submissionEntry == null)
-        {
-            _logger.LogWarning("SUBMISSION.tsv not found in archive");
             return null;
-        }
 
         var submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase);
         await foreach (var row in context.TsvParser.ParseEntry(submissionEntry))
@@ -229,12 +235,9 @@ public class HoldingsImportService
         CancellationToken cancellationToken
     )
     {
-        var coverPageEntry = FindEntry(context.Archive, "COVERPAGE.tsv");
+        var coverPageEntry = FindRequiredEntry(context, "COVERPAGE.tsv");
         if (coverPageEntry == null)
-        {
-            _logger.LogWarning("COVERPAGE.tsv not found in archive");
             return false;
-        }
 
         var coverPages = new Dictionary<string, CoverPageRow>(StringComparer.OrdinalIgnoreCase);
         await foreach (var row in context.TsvParser.ParseEntry(coverPageEntry))
@@ -291,12 +294,9 @@ public class HoldingsImportService
         CancellationToken cancellationToken
     )
     {
-        var infoTableEntry = FindEntry(context.Archive, "INFOTABLE.tsv");
+        var infoTableEntry = FindRequiredEntry(context, "INFOTABLE.tsv");
         if (infoTableEntry == null)
-        {
-            _logger.LogWarning("INFOTABLE.tsv not found in archive");
             return CusipMappingOutcome.NoInfoTable;
-        }
 
         var uniqueCusips = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         await foreach (var row in context.TsvParser.ParseEntry(infoTableEntry))
