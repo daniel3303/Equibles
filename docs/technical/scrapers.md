@@ -123,8 +123,8 @@ The cursor pattern means re-running is cheap (a single query for `max(date)` per
 
 In-process pub/sub between modules:
 
-- [`HoldingsRescanSignal`](../../src/Equibles.Holdings.HostedService/HoldingsRescanSignal.cs) — singleton with an internal `TaskCompletionSource` queue.
-- `StockCusipChangedConsumer` (MassTransit) calls `HoldingsRescanSignal.Signal()` after invalidating processed data.
+- [`HoldingsRescanSignal`](../../src/Equibles.Holdings.HostedService/HoldingsRescanSignal.cs) — singleton wrapping a `SemaphoreSlim(0, 1)`; repeated requests coalesce to a single pending rescan.
+- `StockCusipChangedConsumer` (MassTransit) calls `HoldingsRescanSignal.RequestRescan()` after invalidating processed data.
 - `HoldingsScraperWorker.WaitForNextCycle` races the signal against its 24h timer and wakes on whichever fires first.
 - Pattern is reusable. Add a singleton with the same async-signal shape (`WaitAsync` / `Signal`) when one module's events should wake another module's worker.
 
