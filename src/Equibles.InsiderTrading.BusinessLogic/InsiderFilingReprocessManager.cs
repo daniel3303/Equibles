@@ -249,7 +249,8 @@ public class InsiderFilingReprocessManager
                 row.Shares,
                 row.SecurityKind,
                 row.SecurityTitle,
-                close
+                close,
+                row.Notes
             );
             row.PricePerShare = evaluation.EffectivePrice;
             row.IsPriceValid = evaluation.IsPriceValid;

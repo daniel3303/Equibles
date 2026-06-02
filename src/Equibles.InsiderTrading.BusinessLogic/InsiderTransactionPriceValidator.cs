@@ -85,13 +85,21 @@ public class InsiderTransactionPriceValidator
     /// Derivative classification uses the authoritative <paramref name="kind"/>
     /// (from the Form 4 table). Only when it's <see cref="InsiderSecurityKind.Unknown"/>
     /// (rows not yet reclassified) does it fall back to the title-keyword heuristic.
+    ///
+    /// <paramref name="notes"/> are the row's resolved footnotes. When they show
+    /// an ADS/ADR unit mismatch (an ordinary-share count priced per ADS), the
+    /// per-ADS price is first restated to per-ordinary via the ADS ratio so the
+    /// downstream Shares × EffectivePrice is a real value — see
+    /// <see cref="AdsRatioExtractor"/>. <paramref name="reportedPrice"/> stays the
+    /// as-filed (per-ADS) figure that the caller keeps in ReportedPricePerShare.
     /// </summary>
     public InsiderTransactionPriceEvaluation Evaluate(
         decimal reportedPrice,
         long shares,
         InsiderSecurityKind kind,
         string securityTitle,
-        decimal? unadjustedClose
+        decimal? unadjustedClose,
+        IReadOnlyList<string> notes = null
     )
     {
         // Zero/negative prices (holdings, sentinels) and derivatives need no
@@ -105,24 +113,40 @@ public class InsiderTransactionPriceValidator
             };
         }
 
+        // ADS/ADR unit normalization: when the footnotes show the price is per
+        // ADS but the share count is the underlying ordinary count, restate the
+        // price to per-ordinary so it matches the count. Everything below works
+        // on this base price; the as-filed per-ADS value is preserved by the
+        // caller in ReportedPricePerShare.
+        var basePrice = reportedPrice;
+        if (
+            AdsRatioExtractor.TryGetOrdinarySharesPerAds(
+                securityTitle,
+                notes,
+                shares,
+                out var ratio
+            )
+        )
+            basePrice = reportedPrice / ratio;
+
         // A real price we can't yet check stays pending (null), not valid.
         if (!unadjustedClose.HasValue || unadjustedClose.Value <= 0m)
         {
             return new InsiderTransactionPriceEvaluation
             {
                 IsPriceValid = null,
-                EffectivePrice = reportedPrice,
+                EffectivePrice = basePrice,
             };
         }
 
         // Plausible against the close — keep as filed. Divide rather than
         // multiply the close so a near-decimal.MaxValue close can't overflow.
-        if (reportedPrice / MaxPriceToCloseMultiplier <= unadjustedClose.Value)
+        if (basePrice / MaxPriceToCloseMultiplier <= unadjustedClose.Value)
         {
             return new InsiderTransactionPriceEvaluation
             {
                 IsPriceValid = true,
-                EffectivePrice = reportedPrice,
+                EffectivePrice = basePrice,
             };
         }
 
@@ -136,7 +160,7 @@ public class InsiderTransactionPriceValidator
             return new InsiderTransactionPriceEvaluation
             {
                 IsPriceValid = false,
-                EffectivePrice = reportedPrice,
+                EffectivePrice = basePrice,
             };
         }
 
@@ -145,7 +169,7 @@ public class InsiderTransactionPriceValidator
         return new InsiderTransactionPriceEvaluation
         {
             IsPriceValid = true,
-            EffectivePrice = reportedPrice / shares,
+            EffectivePrice = basePrice / shares,
             WasRepaired = true,
         };
     }
