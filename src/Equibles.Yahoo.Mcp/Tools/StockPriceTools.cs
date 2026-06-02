@@ -443,15 +443,11 @@ public class StockPriceTools
         return (stock, records, null);
     }
 
-    private static StringBuilder StartTable(string title, string columnsRow, string separatorRow)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine(title);
-        sb.AppendLine();
-        sb.AppendLine(columnsRow);
-        sb.AppendLine(separatorRow);
-        return sb;
-    }
+    // Thin forwarder to the shared helper so the load-bearing title/blank/header/separator
+    // sequence lives in one documented place; kept as a named method so existing
+    // reflection-based pins still resolve it.
+    private static StringBuilder StartTable(string title, string columnsRow, string separatorRow) =>
+        MarkdownTable.Start(title, columnsRow, separatorRow);
 
     private static void AppendNewestFirstRows(
         StringBuilder result,
