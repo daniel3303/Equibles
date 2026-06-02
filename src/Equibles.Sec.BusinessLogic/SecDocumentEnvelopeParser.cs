@@ -227,26 +227,6 @@ public static class SecDocumentEnvelopeParser
         return char.IsAsciiLetterOrDigit(ch) || ch == '.' || ch == '_' || ch == '-';
     }
 
-    private static bool TryExtractSgmlTagValue(string block, string tagName, out string value)
-    {
-        value = string.Empty;
-        var tagMarker = $"<{tagName}>";
-        var idx = block.IndexOf(tagMarker, StringComparison.OrdinalIgnoreCase);
-        if (idx == -1)
-            return false;
-
-        var valueStart = idx + tagMarker.Length;
-        var end = valueStart;
-        while (end < block.Length && block[end] != '\n' && block[end] != '\r' && block[end] != '<')
-        {
-            end++;
-        }
-
-        var raw = block.Substring(valueStart, end - valueStart).Trim();
-        if (raw.Length == 0)
-            return false;
-
-        value = raw.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries)[0];
-        return true;
-    }
+    private static bool TryExtractSgmlTagValue(string block, string tagName, out string value) =>
+        SecSgmlEnvelope.TryGetTagValue(block, tagName, out value);
 }
