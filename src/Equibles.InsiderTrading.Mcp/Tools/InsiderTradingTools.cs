@@ -66,34 +66,28 @@ public class InsiderTradingTools
                     .Take(maxResults)
                     .ToListAsync();
 
-                if (transactions.Count == 0)
-                    return $"No insider transactions found for {ticker}.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    transactions,
+                    $"No insider transactions found for {ticker}.",
                     $"Recent insider transactions for {stock.Name} ({ticker}):",
                     $"Showing {transactions.Count} most recent transactions",
                     "| Date | Insider | Role | Type | Shares | Price | Value | Owned After |",
-                    "|------|---------|------|------|--------|-------|-------|-------------|"
-                );
-
-                foreach (var t in transactions)
-                {
-                    var role = GetRole(t.InsiderOwner);
-                    var type = t.TransactionCode switch
+                    "|------|---------|------|------|--------|-------|-------|-------------|",
+                    t =>
                     {
-                        TransactionCode.Award => "Award",
-                        TransactionCode.Gift => "Gift",
-                        TransactionCode.Exercise => "Exercise",
-                        _ => t.AcquiredDisposed == AcquiredDisposed.Acquired ? "Buy" : "Sell",
-                    };
+                        var role = GetRole(t.InsiderOwner);
+                        var type = t.TransactionCode switch
+                        {
+                            TransactionCode.Award => "Award",
+                            TransactionCode.Gift => "Gift",
+                            TransactionCode.Exercise => "Exercise",
+                            _ => t.AcquiredDisposed == AcquiredDisposed.Acquired ? "Buy" : "Sell",
+                        };
 
-                    var value = t.Shares * t.PricePerShare;
-                    result.AppendLine(
-                        $"| {t.TransactionDate:yyyy-MM-dd} | {t.InsiderOwner.Name} | {role} | {type} | {McpFormat.WholeNumber(t.Shares)} | ${McpFormat.Invariant(t.PricePerShare, "N2")} | ${McpFormat.WholeNumber(value)} | {McpFormat.WholeNumber(t.SharesOwnedAfter)} |"
-                    );
-                }
-
-                return result.ToString();
+                        var value = t.Shares * t.PricePerShare;
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.InsiderOwner.Name} | {role} | {type} | {McpFormat.WholeNumber(t.Shares)} | ${McpFormat.Invariant(t.PricePerShare, "N2")} | ${McpFormat.WholeNumber(value)} | {McpFormat.WholeNumber(t.SharesOwnedAfter)} |";
+                    }
+                );
             },
             "GetInsiderTransactions",
             $"ticker: {ticker}"
@@ -132,27 +126,21 @@ public class InsiderTradingTools
                     .Take(30)
                     .ToListAsync();
 
-                if (latestTransactions.Count == 0)
-                    return $"No insider ownership data found for {ticker}.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    latestTransactions,
+                    $"No insider ownership data found for {ticker}.",
                     $"Insider ownership summary for {stock.Name} ({ticker}):",
                     $"Showing {latestTransactions.Count} insiders with most recent data",
                     "| Insider | Role | Shares Owned | Last Transaction | Last Date |",
-                    "|---------|------|-------------|-----------------|-----------|"
+                    "|---------|------|-------------|-----------------|-----------|",
+                    t =>
+                    {
+                        var role = GetRole(t.InsiderOwner);
+                        var lastType = t.TransactionCode.ToString();
+                        var sharesOwned = McpFormat.WholeNumber(t.SharesOwnedAfter);
+                        return $"| {t.InsiderOwner.Name} | {role} | {sharesOwned} | {lastType} | {t.TransactionDate:yyyy-MM-dd} |";
+                    }
                 );
-
-                foreach (var t in latestTransactions)
-                {
-                    var role = GetRole(t.InsiderOwner);
-                    var lastType = t.TransactionCode.ToString();
-                    var sharesOwned = McpFormat.WholeNumber(t.SharesOwnedAfter);
-                    result.AppendLine(
-                        $"| {t.InsiderOwner.Name} | {role} | {sharesOwned} | {lastType} | {t.TransactionDate:yyyy-MM-dd} |"
-                    );
-                }
-
-                return result.ToString();
             },
             "GetInsiderOwnership",
             $"ticker: {ticker}"
@@ -181,27 +169,21 @@ public class InsiderTradingTools
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
-                if (filings.Count == 0)
-                    return $"No Form 144 proposed sales found for {ticker}.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    filings,
+                    $"No Form 144 proposed sales found for {ticker}.",
                     $"Recent proposed sales (Form 144) for {stock.Name} ({ticker}):",
                     $"Showing {filings.Count} most recent notices",
                     "| Filed | Seller | Relationship | Shares | Market Value | Approx. Sale Date | Broker |",
-                    "|-------|--------|--------------|--------|--------------|-------------------|--------|"
+                    "|-------|--------|--------------|--------|--------------|-------------------|--------|",
+                    f =>
+                    {
+                        var approxSaleDate =
+                            f.ApproxSaleDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                            ?? "-";
+                        return $"| {f.FilingDate:yyyy-MM-dd} | {f.SellerName} | {f.RelationshipToIssuer} | {McpFormat.WholeNumber(f.SharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {approxSaleDate} | {f.BrokerName} |";
+                    }
                 );
-
-                foreach (var f in filings)
-                {
-                    var approxSaleDate =
-                        f.ApproxSaleDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
-                        ?? "-";
-                    result.AppendLine(
-                        $"| {f.FilingDate:yyyy-MM-dd} | {f.SellerName} | {f.RelationshipToIssuer} | {McpFormat.WholeNumber(f.SharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {approxSaleDate} | {f.BrokerName} |"
-                    );
-                }
-
-                return result.ToString();
             },
             "GetProposedSales",
             $"ticker: {ticker}"
