@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
+using Equibles.Data.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Sec.Contracts;
@@ -517,17 +518,18 @@ public class FinancialFactsImportService
     // keeping the latest-filed value.
     private static List<FinancialFact> CollapseToNaturalKey(List<FinancialFact> built) =>
         built
-            .GroupBy(f =>
-                (
-                    f.CommonStockId,
-                    f.FinancialConceptId,
-                    f.Unit,
-                    f.PeriodStart,
-                    f.PeriodEnd,
-                    f.AccessionNumber
-                )
+            .LatestPerGroup(
+                f =>
+                    (
+                        f.CommonStockId,
+                        f.FinancialConceptId,
+                        f.Unit,
+                        f.PeriodStart,
+                        f.PeriodEnd,
+                        f.AccessionNumber
+                    ),
+                f => f.FiledDate
             )
-            .Select(g => g.OrderByDescending(f => f.FiledDate).First())
             .ToList();
 
     private sealed class ParsedFact

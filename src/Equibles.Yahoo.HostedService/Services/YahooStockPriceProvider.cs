@@ -1,5 +1,6 @@
 using Equibles.Core.Contracts;
 using Equibles.Data;
+using Equibles.Data.Extensions;
 using Equibles.Yahoo.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -50,9 +51,7 @@ public class YahooStockPriceProvider : IStockPriceProvider
                 .ToListAsync(cancellationToken);
 
             // Pick the latest price per stock
-            var latestByStock = prices
-                .GroupBy(p => p.CommonStockId)
-                .Select(g => g.OrderByDescending(p => p.Date).First());
+            var latestByStock = prices.LatestPerGroup(p => p.CommonStockId, p => p.Date);
 
             foreach (var price in latestByStock)
             {
