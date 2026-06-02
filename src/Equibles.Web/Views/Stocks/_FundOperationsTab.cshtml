@@ -9,9 +9,7 @@
     var latest = Model.Filings[0];
     <div class="space-y-4">
         <!-- Annual N-CEN reports: the registrant's operational filings, newest first. -->
-        <div class="card bg-base-100 shadow-sm">
-            <div class="overflow-x-auto">
-                <table class="table table-zebra table-sm">
+        <table-card>
                     <thead>
                         <tr>
                             <th scope="col">Filed</th>
@@ -42,9 +40,7 @@
                             </tr>
                         }
                     </tbody>
-                </table>
-            </div>
-        </div>
+                </table-card>
 
         @if (latest.ServiceProviders.Count > 0) {
             <!-- Service providers named on the most recent report — who runs and services the fund. -->

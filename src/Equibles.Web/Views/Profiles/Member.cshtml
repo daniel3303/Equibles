@@ -11,9 +11,7 @@
     @if (Model.Trades.Count == 0) {
         <div class="text-base-content/60 py-8">No reported trades.</div>
     } else {
-        <div class="card bg-base-100 shadow-sm">
-            <div class="overflow-x-auto">
-                <table class="table table-zebra table-sm">
+        <table-card>
                     <thead>
                         <tr>
                             <th scope="col">Ticker</th>
@@ -36,8 +34,6 @@
                             </tr>
                         }
                     </tbody>
-                </table>
-            </div>
-        </div>
+                </table-card>
     }
 </div>
