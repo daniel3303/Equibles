@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net;
 using System.Text;
 using System.Text.Json;
 using Equibles.Integrations.Cboe.Contracts;
@@ -75,45 +74,28 @@ public class CboeClient : ICboeClient
 
     private async Task<string> DownloadWithRetry(string url)
     {
-        for (var attempt = 0; attempt <= MaxRetries; attempt++)
-        {
-            await _rateLimiter.WaitAsync();
-
-            using var response = await _httpClient.GetAsync(url);
-
-            if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < MaxRetries)
-            {
-                var delay = ExponentialBackoff(attempt);
+        using var response = await HttpRetry.Send(
+            () => _httpClient.GetAsync(url),
+            _rateLimiter,
+            MaxRetries,
+            "Max retries exceeded for CBOE download",
+            (attempt, delay) =>
                 _logger.LogWarning(
                     "CBOE rate limited (429), retrying in {Delay}s (attempt {Attempt}/{Max})",
                     delay.TotalSeconds,
                     attempt + 1,
                     MaxRetries
-                );
-                _rateLimiter.PauseFor(delay);
-                await Task.Delay(delay);
-                continue;
-            }
-
-            if ((int)response.StatusCode >= 500 && attempt < MaxRetries)
-            {
-                var delay = ExponentialBackoff(attempt);
+                ),
+            (statusCode, attempt, delay) =>
                 _logger.LogWarning(
                     "CBOE server error ({StatusCode}), retrying in {Delay}s (attempt {Attempt}/{Max})",
-                    (int)response.StatusCode,
+                    statusCode,
                     delay.TotalSeconds,
                     attempt + 1,
                     MaxRetries
-                );
-                await Task.Delay(delay);
-                continue;
-            }
-
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadAsStringAsync();
-        }
-
-        throw new HttpRequestException("Max retries exceeded for CBOE download");
+                )
+        );
+        return await response.Content.ReadAsStringAsync();
     }
 
     // Thin forwarder so existing reflection-based backoff tests still find the method.

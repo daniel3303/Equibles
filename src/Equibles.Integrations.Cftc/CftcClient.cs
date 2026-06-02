@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.IO.Compression;
-using System.Net;
 using System.Text;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Cftc.Contracts;
@@ -43,53 +42,33 @@ public class CftcClient : ICftcClient
 
     private async Task<Stream> DownloadWithRetry(string url)
     {
-        for (var attempt = 0; attempt <= MaxRetries; attempt++)
-        {
-            await RateLimiter.WaitAsync();
-
-            var response = await _httpClient.GetAsync(
-                url,
-                HttpCompletionOption.ResponseHeadersRead
-            );
-
-            if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < MaxRetries)
-            {
-                var delay = ExponentialBackoff(attempt);
+        var response = await HttpRetry.Send(
+            () => _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead),
+            RateLimiter,
+            MaxRetries,
+            "Max retries exceeded for CFTC download",
+            (attempt, delay) =>
                 _logger.LogWarning(
                     "CFTC rate limited (429), retrying in {Delay}s (attempt {Attempt}/{Max})",
                     delay.TotalSeconds,
                     attempt + 1,
                     MaxRetries
-                );
-                RateLimiter.PauseFor(delay);
-                await Task.Delay(delay);
-                continue;
-            }
-
-            if ((int)response.StatusCode >= 500 && attempt < MaxRetries)
-            {
-                var delay = ExponentialBackoff(attempt);
+                ),
+            (statusCode, attempt, delay) =>
                 _logger.LogWarning(
                     "CFTC server error ({StatusCode}), retrying in {Delay}s (attempt {Attempt}/{Max})",
-                    (int)response.StatusCode,
+                    statusCode,
                     delay.TotalSeconds,
                     attempt + 1,
                     MaxRetries
-                );
-                await Task.Delay(delay);
-                continue;
-            }
+                )
+        );
 
-            response.EnsureSuccessStatusCode();
-
-            // Copy to memory stream so we can use ZipArchive (requires seekable stream)
-            var memoryStream = new MemoryStream();
-            await response.Content.CopyToAsync(memoryStream);
-            memoryStream.Position = 0;
-            return memoryStream;
-        }
-
-        throw new HttpRequestException("Max retries exceeded for CFTC download");
+        // Copy to memory stream so we can use ZipArchive (requires seekable stream)
+        var memoryStream = new MemoryStream();
+        await response.Content.CopyToAsync(memoryStream);
+        memoryStream.Position = 0;
+        return memoryStream;
     }
 
     // Thin forwarder so existing reflection-based backoff tests still find the method.
