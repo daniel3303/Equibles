@@ -120,26 +120,8 @@ public class SecDocumentHtmlNormalizer : ISecDocumentHtmlNormalizer
         return finalHtml.ToString();
     }
 
-    private static string ExtractSgmlTagValue(string block, string tagName)
-    {
-        var tagMarker = $"<{tagName}>";
-        var idx = block.IndexOf(tagMarker, StringComparison.OrdinalIgnoreCase);
-        if (idx == -1)
-            return null;
-
-        var valueStart = idx + tagMarker.Length;
-        var end = valueStart;
-        while (end < block.Length && block[end] != '\n' && block[end] != '\r' && block[end] != '<')
-        {
-            end++;
-        }
-
-        var raw = block.Substring(valueStart, end - valueStart).Trim();
-        if (string.IsNullOrEmpty(raw))
-            return null;
-
-        return raw.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries)[0];
-    }
+    private static string ExtractSgmlTagValue(string block, string tagName) =>
+        SecSgmlEnvelope.TryGetTagValue(block, tagName, out var value) ? value : null;
 
     private static string ExtractInnerContent(string block, string tagName)
     {
