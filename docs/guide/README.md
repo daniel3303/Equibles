@@ -31,6 +31,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Browse investment advisers (SEC Form ADV)](how-to-browse-investment-advisers.md)
 - [Use the 13F holdings screener](how-to-use-holdings-screener.md)
 - [View quarterly holdings activity across the market](how-to-view-holdings-activity.md)
+- [View 13F trend charts](how-to-view-13f-trends.md)
 - [View the Double-Down Report](how-to-view-double-down-report.md)
 - [View the 13F Conviction Heat Map](how-to-view-conviction-heat-map.md)
 - [View the Smart Money Index](how-to-view-smart-money-index.md)
