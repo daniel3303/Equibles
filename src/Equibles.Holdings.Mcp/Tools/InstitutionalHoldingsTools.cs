@@ -140,7 +140,7 @@ public class InstitutionalHoldingsTools
             holdings,
             (rank, h) =>
             {
-                var pct = totalSharesAll > 0 ? (double)h.Shares / totalSharesAll * 100 : 0;
+                var pct = Percentage.Of(h.Shares, totalSharesAll);
                 return $"| {rank} | {h.InstitutionalHolder.Name} | "
                     + $"{McpFormat.WholeNumber(h.Shares)} | "
                     + $"{FormatMillions(h.Value)} | "
@@ -769,8 +769,7 @@ public class InstitutionalHoldingsTools
             (rank, r) =>
             {
                 var (ticker, name) = ResolveStockCells(stocks, r.CommonStockId);
-                var pct =
-                    universeFilers > 0 ? (double)r.CurrentFilerCount / universeFilers * 100.0 : 0;
+                var pct = Percentage.Of(r.CurrentFilerCount, universeFilers);
                 var deltaFilers = r.CurrentFilerCount - r.PreviousFilerCount;
                 return $"| {rank} | {ticker} | {name} | {McpFormat.WholeNumber(r.CurrentFilerCount)} | {FormatSignedShares(deltaFilers)} | {FormatMillions(r.CurrentValue)} | {FormatSignedMillions(r.DeltaValue)} | {FormatPercent(pct)}% |";
             }

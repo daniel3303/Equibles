@@ -285,8 +285,7 @@ public class HoldingsActivityController : BaseController
                     PreviousFilerCount = r.PreviousFilerCount,
                     CurrentValue = r.CurrentValue,
                     PreviousValue = r.PreviousValue,
-                    PercentOfUniverse =
-                        universe > 0 ? (double)r.CurrentFilerCount / universe * 100.0 : 0,
+                    PercentOfUniverse = Percentage.Of(r.CurrentFilerCount, universe),
                 };
             })
             .ToList();
@@ -455,16 +454,12 @@ public class HoldingsActivityController : BaseController
         var newFilers = churn?.NewFilerCount ?? 0;
         var soldOut = churn?.SoldOutFilerCount ?? 0;
 
-        var netConviction =
-            activity.CurrentFilerCount > 0
-                ? (double)(newFilers - soldOut) / activity.CurrentFilerCount * 100.0
-                : 0;
+        var netConviction = Percentage.Of(newFilers - soldOut, activity.CurrentFilerCount);
         var retention =
             activity.PreviousFilerCount > 0
                 ? (1.0 - (double)soldOut / activity.PreviousFilerCount) * 100.0
                 : 0;
-        var universePct =
-            totalFilers > 0 ? (double)activity.CurrentFilerCount / totalFilers * 100.0 : 0;
+        var universePct = Percentage.Of(activity.CurrentFilerCount, totalFilers);
 
         var score = netConviction + retention + universePct;
 
