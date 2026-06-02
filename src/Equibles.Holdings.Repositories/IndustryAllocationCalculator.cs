@@ -39,8 +39,7 @@ public static class IndustryAllocationCalculator
                     IndustryName = industryName,
                     PositionCount = perStock.Count,
                     TotalValue = industryValue,
-                    PercentOfPortfolio =
-                        totalValue > 0 ? (double)industryValue / totalValue * 100.0 : 0,
+                    PercentOfPortfolio = Percentage.Of(industryValue, totalValue),
                 };
             })
             // Unclassified always last, even if its value would otherwise rank it higher.

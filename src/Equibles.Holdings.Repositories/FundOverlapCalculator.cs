@@ -57,12 +57,11 @@ public static class FundOverlapCalculator
 
         result.UnionPositionCount = allStockIds.Count;
         result.IntersectionPositionCount = intersectionCount;
-        result.JaccardSimilarityPercent =
-            allStockIds.Count > 0 ? (double)intersectionCount / allStockIds.Count * 100.0 : 0;
-        result.DollarWeightedOverlapPercent =
-            dollarWeightedDenominator > 0
-                ? (double)dollarWeightedNumerator / dollarWeightedDenominator * 100.0
-                : 0;
+        result.JaccardSimilarityPercent = Percentage.Of(intersectionCount, allStockIds.Count);
+        result.DollarWeightedOverlapPercent = Percentage.Of(
+            dollarWeightedNumerator,
+            dollarWeightedDenominator
+        );
 
         result.Rows = result.Rows.OrderByDescending(r => r.CombinedValue).ToList();
         return result;
