@@ -77,27 +77,21 @@ public class CongressTools
                     .Take(maxResults)
                     .ToListAsync();
 
-                if (trades.Count == 0)
-                    return $"No congressional trades found for {stock.Ticker} in the specified date range.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    trades,
+                    $"No congressional trades found for {stock.Ticker} in the specified date range.",
                     $"Congressional trades for {stock.Ticker} ({stock.Name}):",
                     "| Date | Member | Position | Type | Amount Range | Owner |",
-                    "|------|--------|----------|------|-------------|-------|"
+                    "|------|--------|----------|------|-------------|-------|",
+                    t =>
+                    {
+                        var position = t.CongressMember.Position.NameForHumans();
+                        var type = t.TransactionType.NameForHumans();
+                        var amount =
+                            $"${McpFormat.WholeNumber(t.AmountFrom)}–${McpFormat.WholeNumber(t.AmountTo)}";
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.CongressMember.Name} | {position} | {type} | {amount} | {t.OwnerType ?? "—"} |";
+                    }
                 );
-
-                foreach (var t in trades)
-                {
-                    var position = t.CongressMember.Position.NameForHumans();
-                    var type = t.TransactionType.NameForHumans();
-                    var amount =
-                        $"${McpFormat.WholeNumber(t.AmountFrom)}–${McpFormat.WholeNumber(t.AmountTo)}";
-                    result.AppendLine(
-                        $"| {t.TransactionDate:yyyy-MM-dd} | {t.CongressMember.Name} | {position} | {type} | {amount} | {t.OwnerType ?? "—"} |"
-                    );
-                }
-
-                return result.ToString();
             },
             "GetCongressionalTrades",
             $"ticker: {ticker}"
@@ -145,28 +139,22 @@ public class CongressTools
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
-                if (trades.Count == 0)
-                    return $"No trades found for {member.Name} ({member.Position.NameForHumans()}) in the specified date range.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    trades,
+                    $"No trades found for {member.Name} ({member.Position.NameForHumans()}) in the specified date range.",
                     $"Trades by {member.Name} ({member.Position.NameForHumans()}):",
                     "| Date | Ticker | Type | Amount Range | Asset | Owner |",
-                    "|------|--------|------|-------------|-------|-------|"
+                    "|------|--------|------|-------------|-------|-------|",
+                    t =>
+                    {
+                        var type = t.TransactionType.NameForHumans();
+                        // Format with InvariantCulture so the MCP markdown does not fork the
+                        // separators by host locale (e.g. de-DE would render $1.000.000).
+                        var amount =
+                            $"${McpFormat.WholeNumber(t.AmountFrom)}–${McpFormat.WholeNumber(t.AmountTo)}";
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.CommonStock.Ticker} | {type} | {amount} | {t.AssetName} | {t.OwnerType ?? "—"} |";
+                    }
                 );
-
-                foreach (var t in trades)
-                {
-                    var type = t.TransactionType.NameForHumans();
-                    // Format with InvariantCulture so the MCP markdown does not fork the
-                    // separators by host locale (e.g. de-DE would render $1.000.000).
-                    var amount =
-                        $"${McpFormat.WholeNumber(t.AmountFrom)}–${McpFormat.WholeNumber(t.AmountTo)}";
-                    result.AppendLine(
-                        $"| {t.TransactionDate:yyyy-MM-dd} | {t.CommonStock.Ticker} | {type} | {amount} | {t.AssetName} | {t.OwnerType ?? "—"} |"
-                    );
-                }
-
-                return result.ToString();
             },
             "GetMemberTrades",
             $"memberName: {memberName}"
