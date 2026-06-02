@@ -466,7 +466,7 @@ public class InstitutionalHoldingsTools
             $"Top buyers and sellers of {stock.Name} ({ticker}) as of {FormatDate(targetDate)}"
         );
         if (previousDate.HasValue)
-            result.AppendLine($"vs prior quarter {FormatDate(previousDate.Value)}");
+            result.AppendLine(PriorQuarterSubtitle(previousDate.Value));
         result.AppendLine();
 
         AppendMoverSection(result, "## Top Buyers", "_No buyers this quarter._", topBuyers);
@@ -536,7 +536,7 @@ public class InstitutionalHoldingsTools
                 result.AppendLine(
                     $"Market-wide 13F **{normalizedBucket}** for {FormatDate(targetDate)}"
                 );
-                result.AppendLine($"vs prior quarter {FormatDate(previousDate)}");
+                result.AppendLine(PriorQuarterSubtitle(previousDate));
                 result.AppendLine();
 
                 if (normalizedBucket is "top-buys" or "top-sells")
@@ -754,7 +754,7 @@ public class InstitutionalHoldingsTools
         var result = new StringBuilder();
         result.AppendLine($"Most-held 13F stocks as of {FormatDate(targetDate)}");
         result.AppendLine(
-            $"vs prior quarter {FormatDate(previousDate)} · {McpFormat.WholeNumber(universeFilers)} filers in the 13F universe"
+            $"{PriorQuarterSubtitle(previousDate)} · {McpFormat.WholeNumber(universeFilers)} filers in the 13F universe"
         );
         result.AppendLine($"Sorted by: {sort}");
         result.AppendLine();
@@ -836,7 +836,7 @@ public class InstitutionalHoldingsTools
         var result = new StringBuilder();
         result.AppendLine($"Portfolio summary — **{holder.Name}** as of {FormatDate(targetDate)}");
         if (previousDate.HasValue)
-            result.AppendLine($"vs prior quarter {FormatDate(previousDate.Value)}");
+            result.AppendLine(PriorQuarterSubtitle(previousDate.Value));
         result.AppendLine();
         result.AppendLine("| Metric | Value |");
         result.AppendLine("|--------|-------|");
@@ -1009,7 +1009,7 @@ public class InstitutionalHoldingsTools
 
         var result = new StringBuilder();
         result.AppendLine($"Quarterly activity — **{holder.Name}** as of {FormatDate(targetDate)}");
-        result.AppendLine($"vs prior quarter {FormatDate(priorDate)}");
+        result.AppendLine(PriorQuarterSubtitle(priorDate));
         result.AppendLine();
 
         var rendered = 0;
@@ -1345,6 +1345,11 @@ public class InstitutionalHoldingsTools
     // yyyy-MM-dd dates rendered in invariant culture so the MCP markdown stays Gregorian ISO
     // regardless of the host calendar/locale (LLMs consume these dates as ISO).
     private static string FormatDate(DateOnly date) => McpFormat.Invariant(date, "yyyy-MM-dd");
+
+    // The "vs prior quarter <date>" comparison subtitle is rendered identically across the
+    // quarter-over-quarter tables; centralise the wording so the headers stay in sync.
+    private static string PriorQuarterSubtitle(DateOnly previousDate) =>
+        $"vs prior quarter {FormatDate(previousDate)}";
 
     private async Task<(
         InstitutionalHolder Holder,
