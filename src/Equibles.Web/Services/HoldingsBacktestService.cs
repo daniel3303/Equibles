@@ -90,7 +90,7 @@ public class HoldingsBacktestService
         }
 
         var resolvedTo = to ?? DateOnly.FromDateTime(DateTime.UtcNow);
-        var firstRebalance = RebalanceDateOf(reportDates[0]);
+        var firstRebalance = HoldingsBacktestCalculator.RebalanceDateOf(reportDates[0]);
         var resolvedFrom = from ?? firstRebalance;
 
         var relevant = SelectRelevantSnapshotDates(reportDates, resolvedFrom, resolvedTo);
@@ -197,15 +197,6 @@ public class HoldingsBacktestService
         return options;
     }
 
-    // Shift a 13F ReportDate forward to its rebalance date (+45 days), mirroring the clamp in
-    // HoldingsBacktestCalculator: a ReportDate within RebalanceDelayDays of DateOnly.MaxValue
-    // would overflow the calendar, so cap the shift at MaxValue instead of throwing.
-    private static DateOnly RebalanceDateOf(DateOnly reportDate) =>
-        reportDate.DayNumber
-        > DateOnly.MaxValue.DayNumber - HoldingsBacktestCalculator.RebalanceDelayDays
-            ? DateOnly.MaxValue
-            : reportDate.AddDays(HoldingsBacktestCalculator.RebalanceDelayDays);
-
     // Select all snapshots whose rebalance date falls in [resolvedFrom, resolvedTo], plus the
     // latest one whose rebalance date precedes resolvedFrom so the simulation can open with an
     // initial portfolio.
@@ -219,7 +210,7 @@ public class HoldingsBacktestService
         DateOnly? lastBeforeWindow = null;
         foreach (var date in reportDates)
         {
-            var rebalance = RebalanceDateOf(date);
+            var rebalance = HoldingsBacktestCalculator.RebalanceDateOf(date);
             if (rebalance < resolvedFrom)
                 lastBeforeWindow = date;
             else if (rebalance <= resolvedTo)

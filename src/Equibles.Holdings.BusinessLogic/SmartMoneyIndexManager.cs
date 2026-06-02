@@ -223,11 +223,7 @@ public class SmartMoneyIndexManager
                 .ToList(),
         };
 
-        var from =
-            constructionDate.DayNumber
-            > DateOnly.MaxValue.DayNumber - HoldingsBacktestCalculator.RebalanceDelayDays
-                ? DateOnly.MaxValue
-                : constructionDate.AddDays(HoldingsBacktestCalculator.RebalanceDelayDays);
+        var from = HoldingsBacktestCalculator.RebalanceDateOf(constructionDate);
 
         var stockIds = constituents.Select(c => c.CommonStockId).ToList();
 

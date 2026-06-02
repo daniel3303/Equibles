@@ -13,6 +13,14 @@ public static class HoldingsBacktestCalculator
 
     public const decimal InitialValue = 100m;
 
+    // Shift a 13F ReportDate forward to its rebalance date (+RebalanceDelayDays). A ReportDate
+    // within RebalanceDelayDays of DateOnly.MaxValue would overflow the calendar, so cap the
+    // shift at MaxValue instead of throwing — a far-future date then reads as out-of-window.
+    public static DateOnly RebalanceDateOf(DateOnly reportDate) =>
+        reportDate.DayNumber > DateOnly.MaxValue.DayNumber - RebalanceDelayDays
+            ? DateOnly.MaxValue
+            : reportDate.AddDays(RebalanceDelayDays);
+
     // `priceOf` is expected to forward-fill the last-known close so weekends, holidays, and
     // post-delisting dates still yield a non-null value. The calculator does not maintain
     // its own price cache; if priceOf returns null for a held stock on a given day, that
@@ -45,15 +53,7 @@ public static class HoldingsBacktestCalculator
         }
 
         var ordered = snapshots
-            .Select(s =>
-                (
-                    Snapshot: s,
-                    RebalanceDate: s.ReportDate.DayNumber
-                    > DateOnly.MaxValue.DayNumber - RebalanceDelayDays
-                        ? DateOnly.MaxValue
-                        : s.ReportDate.AddDays(RebalanceDelayDays)
-                )
-            )
+            .Select(s => (Snapshot: s, RebalanceDate: RebalanceDateOf(s.ReportDate)))
             .OrderBy(x => x.RebalanceDate)
             .ToList();
 
