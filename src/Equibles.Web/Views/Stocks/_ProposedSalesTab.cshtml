@@ -5,9 +5,7 @@
 @if (Model.Filings.Count == 0) {
     <partial name="_EmptyStateCard" model='(IconName: "arrow-trending-down", Heading: "No Proposed Sales", Message: "No Form 144 proposed-sale notices are available for this stock yet.")' />
 } else {
-    <div class="card bg-base-100 shadow-sm">
-        <div class="overflow-x-auto">
-            <table class="table table-zebra table-sm">
+    <table-card>
                 <thead>
                     <tr>
                         <th scope="col">Filed</th>
@@ -38,7 +36,5 @@
                         </tr>
                     }
                 </tbody>
-            </table>
-        </div>
-    </div>
+            </table-card>
 }

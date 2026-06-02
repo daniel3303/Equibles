@@ -6,9 +6,7 @@
 @if (Model.Trades.Count == 0) {
     <partial name="_EmptyStateCard" model='(IconName: "building-library", Heading: "No Congressional Trades", Message: "No congressional trading data is available for this stock yet.")' />
 } else {
-    <div class="card bg-base-100 shadow-sm">
-        <div class="overflow-x-auto">
-            <table class="table table-zebra table-sm">
+    <table-card>
                 <thead>
                     <tr>
                         <th scope="col">Date</th>
@@ -36,9 +34,7 @@
                         </tr>
                     }
                 </tbody>
-            </table>
-        </div>
-    </div>
+            </table-card>
 }
 
 @functions {

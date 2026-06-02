@@ -81,9 +81,7 @@
             </div>
         }
 
-        <div class="card bg-base-100 shadow-sm">
-            <div class="overflow-x-auto">
-                <table class="table table-zebra table-sm">
+        <table-card>
                     <thead>
                         <tr>
                             <th scope="col">Report Date</th>
@@ -132,9 +130,7 @@
                             </tr>
                         }
                     </tbody>
-                </table>
-            </div>
-        </div>
+                </table-card>
 
         @if (chartHoldings.Count >= 2) {
             <partial name="_ChartJs" />

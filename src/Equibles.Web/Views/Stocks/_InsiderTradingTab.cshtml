@@ -6,9 +6,7 @@
 @if (Model.Transactions.Count == 0) {
     <partial name="_EmptyStateCard" model='(IconName: "user", Heading: "No Insider Trading Data", Message: "No insider transactions are available for this stock yet.")' />
 } else {
-    <div class="card bg-base-100 shadow-sm">
-        <div class="overflow-x-auto">
-            <table class="table table-zebra table-sm">
+    <table-card>
                 <thead>
                     <tr>
                         <th scope="col">Date</th>
@@ -63,7 +61,5 @@
                         </tr>
                     }
                 </tbody>
-            </table>
-        </div>
-    </div>
+            </table-card>
 }
