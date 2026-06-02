@@ -317,16 +317,16 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
-        using var scope = _scopeFactory.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
-
-        var latestDate = await repo.GetAll()
-            .Where(p => p.CommonStockId == commonStockId)
-            .Select(p => p.Date)
-            .OrderByDescending(d => d)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return SyncDateResolver.Resolve(latestDate, _workerOptions);
+        return await SyncStartDate.Resolve<DailyStockPriceRepository>(
+            _scopeFactory,
+            _workerOptions,
+            repo =>
+                repo.GetAll()
+                    .Where(p => p.CommonStockId == commonStockId)
+                    .Select(p => p.Date)
+                    .OrderByDescending(d => d),
+            cancellationToken
+        );
     }
 
     private HashSet<DateOnly> WarnAndCollectOverflowDates(

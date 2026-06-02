@@ -7,7 +7,6 @@ using Equibles.Finra.Repositories;
 using Equibles.Integrations.Finra.Contracts;
 using Equibles.Integrations.Finra.Models;
 using Equibles.Worker;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace Equibles.Finra.HostedService.Services;
@@ -43,13 +42,12 @@ public class ShortVolumeImportService
 
     public async Task Import(CancellationToken cancellationToken)
     {
-        DateOnly startDate;
-        using (var scope = _scopeFactory.CreateScope())
-        {
-            var repo = scope.ServiceProvider.GetRequiredService<DailyShortVolumeRepository>();
-            var latestDate = await repo.GetLatestDate().FirstOrDefaultAsync(cancellationToken);
-            startDate = SyncDateResolver.Resolve(latestDate, _workerOptions);
-        }
+        var startDate = await SyncStartDate.Resolve<DailyShortVolumeRepository>(
+            _scopeFactory,
+            _workerOptions,
+            repo => repo.GetLatestDate(),
+            cancellationToken
+        );
 
         var endDate = DateOnly.FromDateTime(DateTime.UtcNow);
 
