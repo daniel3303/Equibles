@@ -30,9 +30,7 @@ public class InsiderFilingReprocessResultSummaryCultureInvarianceTests
     // the body): Summary renders its counts culture-invariantly - the group
     // separator is always ',' regardless of host culture. de-DE is the
     // canonical non-invariant culture used by the repo's other culture pins.
-    [Fact(
-        Skip = "GH-3164 — Summary uses :N0 (CurrentCulture); forks log group separator by host locale"
-    )]
+    [Fact]
     public void Summary_LargeCountsUnderNonInvariantCulture_RendersWithInvariantGroupSeparator()
     {
         var result = new InsiderFilingReprocessResult
