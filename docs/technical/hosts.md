@@ -62,4 +62,4 @@ Every host runs the same five steps described in [Architecture → Host composit
 4. `AutoWireServicesFrom<T>()` (once per assembly to wire)
 5. Host-specific registrations
 
-`AddMessaging()` as a *module* call must appear in the Web and MCP hosts; the Worker host pulls the same `MessagingModuleConfiguration` via `AddAllModules()` reflection because it references `Equibles.Messaging` directly. Either way the outbox tables end up in the EF model that owns the migration snapshot.
+`AddMessaging()` is a service registration from `Equibles.Messaging` (an `IServiceCollection` extension), not an `IModuleConfiguration` — so `AddAllModules()` never discovers it. The Web and Worker hosts call `builder.Services.AddMessaging(...)` directly; the MCP host does not. The MassTransit transport tables it relies on are part of the shared migration snapshot (the `AddMassTransitOutbox` migration), applied by the migrating host — `MigrateAsync` runs in the Web host.
