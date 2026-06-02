@@ -9,6 +9,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Explanatory intro on every stock data tab — each tab on the stock page (price, holdings, short interest, short volume, fails-to-deliver, financials, SEC documents, insider trading, proposed sales, fund holdings, fund operations, exempt offerings, congressional trades) now opens with a short description of what the data is and where it comes from, rendered via a shared `_TabIntro` partial. PR #3165.
 - Investment advisers (SEC Form ADV) — browse SEC-registered investment advisers at `/advisers` (name search, ranked largest-by-assets, paginated) with a per-firm profile at `/advisers/{crd}` showing regulatory assets under management (discretionary / non-discretionary / total), main office, employee count and fee structure. Data comes from the SEC's bulk Form ADV download, refreshed monthly by a background worker and keyed by Organization CRD number. Two MCP tools expose the same data to assistants: `SearchInvestmentAdvisers` (by name) and `GetInvestmentAdviser` (full profile by CRD). Issue #1866 (PRs #2867, #2868, #2869, #2870, #2871).
 - Fund portfolio holdings (SEC Form NPORT) — parses funds' monthly portfolio filings in the worker, exposes a fund's holdings via MCP, and adds a "Fund holdings" tab to the stock page listing the largest positions with value and percentage of net assets (capped, showing the largest N of M). Issue #1868 (PRs #2860, #2861, #2862, #2863).
 - Registered-fund annual operations (SEC Form N-CEN) — parses N-CEN filings in the worker, exposes them via MCP, and adds a "Fund operations" tab to the stock page surfacing each tracked fund/ETF's service providers (auditor, custodian, transfer agent, principal underwriter, etc.). Issue #1869 (PRs #2856, #2857, #2858, #2859).
@@ -41,6 +42,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - **No transactional outbox in OSS standalone.** `AddMessaging` no longer registers the EF outbox and gains a `configureBus` hook so a host can opt a context into one. OSS consumers must therefore be idempotent (no inbox/dedup ships). `CommonStockManager.SetCusip` now publishes **after** `SaveChanges` to avoid phantom events on rollback. PR #2258.
 - **Holdings snapshot rebuilds are now throttled and coalesced.** `Filings13FImportedConsumer` no longer rebuilds the AUM/sector snapshots inline — it marks the affected quarter dirty via a new `DirtyAt` timestamp on `AumQuarterlySnapshot`. A new `AumSnapshotDrainWorker` ticks every 5 minutes and rebuilds any quarter whose dirty flag has been set for more than an hour, using optimistic-concurrency clear so a consumer event landing mid-rebuild isn't lost. During 13F filing-season burst windows hundreds of imports per day for the same quarter now produce one rebuild per cooldown window instead of one per import. The daily safety-net `AumSnapshotRebuildWorker` is narrowed to the four most recent quarters (older quarters are effectively frozen — amendments trigger their own consumer event). First-boot backfill of every quarter is unchanged.
 - Holdings stats and trends pages (`/holdings/stats`, `/holdings/trends`) now read the per-quarter snapshots instead of recomputing aggregates on each request. PR #2479.
+- Per-stock quarterly 13F activity backing the conviction heat map is now materialized by the snapshot worker instead of recomputed per request, so the heat map renders from precomputed rows. PR #3238.
 
 ### Fixed
 
@@ -55,6 +57,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CBOE put/call ingestion switched to the daily-page scraper and now persists incrementally so a cold start populates. PRs #2526, #2751.
 - House congressional PTR PDFs are parsed via page geometry so Representatives land in the right columns. PR #2530.
 - SEC Form 4 transaction-code mapping corrected (I/W). PR #2469.
+- Investment-adviser name search treats LIKE wildcards (`%`, `_`) in the query as literal characters, so a search containing them no longer matches unintended advisers. Issue #2905 (PR #3010).
 
 ### Security
 
