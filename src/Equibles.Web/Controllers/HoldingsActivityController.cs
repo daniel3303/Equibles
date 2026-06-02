@@ -10,6 +10,10 @@ namespace Equibles.Web.Controllers;
 
 public class HoldingsActivityController : BaseController
 {
+    // A stock needs at least this many current 13F filers to earn a heat-map
+    // bubble — fewer than three is noise, not a conviction signal.
+    private const int MinHeatMapFilers = 3;
+
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly CommonStockRepository _commonStockRepository;
     private readonly AumQuarterlySnapshotRepository _aumSnapshotRepository;
@@ -350,29 +354,44 @@ public class HoldingsActivityController : BaseController
             .CountAsync();
         viewModel.TotalUniverseFilers = totalFilers;
 
-        var activity = await _holdingRepository
-            .GetQuarterlyActivity(selectedDate, previousDate, viewModel.IsCombinedSelected)
-            .Where(a => a.CurrentFilerCount >= 3)
-            .ToListAsync();
-
-        var churnLookup = (
-            await _holdingRepository
-                .GetQuarterlyNewSoldOutPositions(
-                    selectedDate,
-                    previousDate,
-                    viewModel.IsCombinedSelected
-                )
-                .ToListAsync()
-        ).ToDictionary(c => c.CommonStockId);
-
-        var stockIds = activity.Select(a => a.CommonStockId).ToList();
-        var stocks = await LoadStockLabels(stockIds);
-
-        var points = new List<HeatMapPoint>(activity.Count);
-        foreach (var a in activity)
+        List<HeatMapPoint> points;
+        if (viewModel.IsCombinedSelected)
         {
-            churnLookup.TryGetValue(a.CommonStockId, out var churn);
-            points.Add(BuildHeatMapPoint(a, churn, totalFilers, stocks));
+            // The combined view spans the still-open quarter plus a prior-quarter
+            // fallback for non-filers, which the per-quarter snapshot below does not
+            // materialise — derive it live for this case only.
+            var activity = await _holdingRepository
+                .GetQuarterlyActivity(selectedDate, previousDate, combined: true)
+                .Where(a => a.CurrentFilerCount >= MinHeatMapFilers)
+                .ToListAsync();
+
+            var churnLookup = (
+                await _holdingRepository
+                    .GetQuarterlyNewSoldOutPositions(selectedDate, previousDate, combined: true)
+                    .ToListAsync()
+            ).ToDictionary(c => c.CommonStockId);
+
+            var stocks = await LoadStockLabels(activity.Select(a => a.CommonStockId).ToList());
+            points = activity
+                .Select(a =>
+                {
+                    churnLookup.TryGetValue(a.CommonStockId, out var churn);
+                    return BuildHeatMapPoint(a, churn, totalFilers, stocks);
+                })
+                .ToList();
+        }
+        else
+        {
+            // Single-quarter view reads the pre-aggregated StockQuarterlyActivity
+            // snapshot — filer counts and new/sold-out churn are already
+            // materialised, so this avoids the ~30s two-quarter live scan (#1262).
+            var activity = await _holdingRepository
+                .GetStockActivitySnapshots(selectedDate)
+                .Where(a => a.CurrentFilerCount >= MinHeatMapFilers)
+                .ToListAsync();
+
+            var stocks = await LoadStockLabels(activity.Select(a => a.CommonStockId).ToList());
+            points = activity.Select(a => BuildHeatMapPoint(a, totalFilers, stocks)).ToList();
         }
 
         viewModel.Points = points
@@ -445,6 +464,7 @@ public class HoldingsActivityController : BaseController
         return (stock?.Ticker ?? "—", stock?.Name ?? "Unknown");
     }
 
+    // Live (combined-quarter) source: cross-sectional activity + a separate churn row.
     private static HeatMapPoint BuildHeatMapPoint(
         Equibles.Holdings.Repositories.Models.MarketWideStockActivity activity,
         Equibles.Holdings.Repositories.Models.MarketWideStockChurn churn,
@@ -462,6 +482,45 @@ public class HoldingsActivityController : BaseController
         var retention =
             activity.PreviousFilerCount > 0
                 ? (1.0 - (double)soldOut / activity.PreviousFilerCount) * 100.0
+                : 0;
+        var universePct =
+            totalFilers > 0 ? (double)activity.CurrentFilerCount / totalFilers * 100.0 : 0;
+
+        var score = netConviction + retention + universePct;
+
+        var (ticker, name) = ResolveStockCells(stocks, activity.CommonStockId);
+        return new HeatMapPoint
+        {
+            CommonStockId = activity.CommonStockId,
+            Ticker = ticker,
+            Name = name,
+            CurrentFilerCount = activity.CurrentFilerCount,
+            CurrentValue = activity.CurrentValue,
+            ConvictionScore = Math.Round(score, 1),
+            NetConvictionPct = Math.Round(netConviction, 1),
+            RetentionPct = Math.Round(retention, 1),
+            UniversePct = Math.Round(universePct, 2),
+        };
+    }
+
+    // Materialised single-quarter source: filer counts and new/sold-out churn are
+    // already aggregated onto one StockQuarterlyActivity row, so no separate churn
+    // lookup is needed. Same conviction-score math as the live overload above.
+    private static HeatMapPoint BuildHeatMapPoint(
+        Equibles.Holdings.Data.Models.StockQuarterlyActivity activity,
+        int totalFilers,
+        IDictionary<Guid, StockLabel> stocks
+    )
+    {
+        var netConviction =
+            activity.CurrentFilerCount > 0
+                ? (double)(activity.NewFilerCount - activity.SoldOutFilerCount)
+                    / activity.CurrentFilerCount
+                    * 100.0
+                : 0;
+        var retention =
+            activity.PreviousFilerCount > 0
+                ? (1.0 - (double)activity.SoldOutFilerCount / activity.PreviousFilerCount) * 100.0
                 : 0;
         var universePct =
             totalFilers > 0 ? (double)activity.CurrentFilerCount / totalFilers * 100.0 : 0;
