@@ -253,30 +253,19 @@ public class CftcClient : ICftcClient
         return string.IsNullOrEmpty(value) ? null : value;
     }
 
-    private static long? ParseLong(string value)
-    {
-        if (value == null)
-            return null;
-        return long.TryParse(value.Replace(",", ""), CultureInfo.InvariantCulture, out var result)
-            ? result
-            : null;
-    }
+    private static long? ParseLong(string value) => Parse<long>(value, stripCommas: true);
 
-    private static decimal? ParseDecimal(string value)
-    {
-        if (value == null)
-            return null;
-        return decimal.TryParse(value, CultureInfo.InvariantCulture, out var result)
-            ? result
-            : null;
-    }
+    // CFTC monetary columns carry no thousands separators, so commas are left intact here.
+    private static decimal? ParseDecimal(string value) => Parse<decimal>(value, stripCommas: false);
 
-    private static int? ParseInt(string value)
+    private static int? ParseInt(string value) => Parse<int>(value, stripCommas: true);
+
+    private static T? Parse<T>(string value, bool stripCommas)
+        where T : struct, IParsable<T>
     {
         if (value == null)
             return null;
-        return int.TryParse(value.Replace(",", ""), CultureInfo.InvariantCulture, out var result)
-            ? result
-            : null;
+        var text = stripCommas ? value.Replace(",", "") : value;
+        return T.TryParse(text, CultureInfo.InvariantCulture, out var result) ? result : null;
     }
 }
