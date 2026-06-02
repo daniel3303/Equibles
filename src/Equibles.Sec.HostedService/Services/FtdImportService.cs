@@ -46,13 +46,12 @@ public class FtdImportService
 
     public async Task Import(CancellationToken cancellationToken)
     {
-        DateOnly startDate;
-        using (var scope = _scopeFactory.CreateScope())
-        {
-            var repo = scope.ServiceProvider.GetRequiredService<FailToDeliverRepository>();
-            var latestDate = await repo.GetLatestDate().FirstOrDefaultAsync(cancellationToken);
-            startDate = SyncDateResolver.Resolve(latestDate, _workerOptions);
-        }
+        var startDate = await SyncStartDate.Resolve<FailToDeliverRepository>(
+            _scopeFactory,
+            _workerOptions,
+            repo => repo.GetLatestDate(),
+            cancellationToken
+        );
 
         var fileNames = GetFileNames(startDate);
 
