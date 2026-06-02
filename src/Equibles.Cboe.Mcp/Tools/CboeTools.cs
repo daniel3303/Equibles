@@ -67,27 +67,21 @@ public class CboeTools
                     .Take(maxResults)
                     .ToListAsync();
 
-                if (records.Count == 0)
-                    return $"No put/call ratio data found for {ratioType.NameForHumans()} in the specified date range.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    records.OrderBy(r => r.Date).ToList(),
+                    $"No put/call ratio data found for {ratioType.NameForHumans()} in the specified date range.",
                     $"CBOE {ratioType.NameForHumans()} Put/Call Ratios:",
                     "| Date | Call Volume | Put Volume | Total | P/C Ratio |",
-                    "|------|-----------|----------|-------|-----------|"
+                    "|------|-----------|----------|-------|-----------|",
+                    r =>
+                    {
+                        var callStr = McpFormat.OrDash(r.CallVolume, "N0");
+                        var putStr = McpFormat.OrDash(r.PutVolume, "N0");
+                        var totalStr = McpFormat.OrDash(r.TotalVolume, "N0");
+                        var ratioStr = McpFormat.OrDash(r.PutCallRatio, "F2");
+                        return $"| {r.Date:yyyy-MM-dd} | {callStr} | {putStr} | {totalStr} | {ratioStr} |";
+                    }
                 );
-
-                foreach (var r in records.OrderBy(r => r.Date))
-                {
-                    var callStr = McpFormat.OrDash(r.CallVolume, "N0");
-                    var putStr = McpFormat.OrDash(r.PutVolume, "N0");
-                    var totalStr = McpFormat.OrDash(r.TotalVolume, "N0");
-                    var ratioStr = McpFormat.OrDash(r.PutCallRatio, "F2");
-                    result.AppendLine(
-                        $"| {r.Date:yyyy-MM-dd} | {callStr} | {putStr} | {totalStr} | {ratioStr} |"
-                    );
-                }
-
-                return result.ToString();
             },
             "GetPutCallRatios",
             $"type: {type}"
@@ -124,23 +118,15 @@ public class CboeTools
                     .Take(maxResults)
                     .ToListAsync();
 
-                if (records.Count == 0)
-                    return "No VIX data found in the specified date range.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    records.OrderBy(v => v.Date).ToList(),
+                    "No VIX data found in the specified date range.",
                     "CBOE Volatility Index (VIX):",
                     "| Date | Open | High | Low | Close |",
-                    "|------|------|------|-----|-------|"
-                );
-
-                foreach (var v in records.OrderBy(v => v.Date))
-                {
-                    result.AppendLine(
+                    "|------|------|------|-----|-------|",
+                    v =>
                         $"| {v.Date:yyyy-MM-dd} | {McpFormat.Invariant(v.Open, "F2")} | {McpFormat.Invariant(v.High, "F2")} | {McpFormat.Invariant(v.Low, "F2")} | {McpFormat.Invariant(v.Close, "F2")} |"
-                    );
-                }
-
-                return result.ToString();
+                );
             },
             "GetVixHistory",
             $"startDate: {startDate}"
