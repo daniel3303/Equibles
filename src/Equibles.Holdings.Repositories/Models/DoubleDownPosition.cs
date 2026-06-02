@@ -14,6 +14,5 @@ public class DoubleDownPosition
     public long PreviousValue { get; set; }
 
     public long DeltaShares => CurrentShares - PreviousShares;
-    public double PctChange =>
-        PreviousShares > 0 ? (double)DeltaShares / PreviousShares * 100.0 : 0;
+    public double PctChange => Percentage.Of(DeltaShares, PreviousShares);
 }

@@ -78,8 +78,7 @@ public static class HolderQuarterlyActivityCalculator
             PreviousShares = previous?.Shares ?? 0,
             PreviousValue = previous?.Value ?? 0,
             ChangeType = changeType,
-            PercentOfPortfolio =
-                totalCurrentValue > 0 ? (double)current.Value / totalCurrentValue * 100.0 : 0,
+            PercentOfPortfolio = Percentage.Of(current.Value, totalCurrentValue),
         };
     }
 
