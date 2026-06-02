@@ -11,7 +11,7 @@ public class SignedFormattingToStringWithSignCultureTests
     // ToStringWithSign in a view must therefore use '.' as the decimal separator and
     // ',' as the grouping separator regardless of the host's thread culture, so the
     // figure reads the same next to its invariant-formatted neighbours.
-    [Fact(Skip = "GH-3171 — ToStringWithSign forks number formatting by host locale")]
+    [Fact]
     public void ToStringWithSign_UnderCommaDecimalCulture_UsesInvariantSeparators()
     {
         var original = CultureInfo.CurrentCulture;
