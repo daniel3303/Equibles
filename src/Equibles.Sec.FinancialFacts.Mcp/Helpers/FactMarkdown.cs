@@ -52,7 +52,11 @@ public static class FactMarkdown
             // pure / dimensionless / ratios — don't destroy the fraction.
             number = value.ToString("0.############", CultureInfo.InvariantCulture);
 
-        return isUsd ? "$" + number : number;
+        // Keep the sign outside the symbol so negatives read "-$1,234" rather
+        // than "$-1,234" (the universal convention .NET's own "C0" follows).
+        if (!isUsd)
+            return number;
+        return value < 0 ? "-$" + number.TrimStart('-') : "$" + number;
     }
 
     // A bare 3-letter currency code (USD already handled above): EUR, GBP, JPY…

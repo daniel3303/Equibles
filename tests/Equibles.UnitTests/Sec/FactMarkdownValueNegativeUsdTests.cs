@@ -16,7 +16,7 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class FactMarkdownValueNegativeUsdTests
 {
-    [Fact(Skip = "GH-3262 — negative USD renders as \"$-1,234,567\" not \"-$1,234,567\"")]
+    [Fact]
     public void Value_NegativeUsdUnit_RendersSignBeforeDollarPrefix()
     {
         var result = FactMarkdown.Value(-1234567m, "USD");
