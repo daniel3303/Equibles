@@ -54,6 +54,28 @@ public static class MarkdownTable
         return sb.ToString();
     }
 
+    // Subtitle-carrying variant of Render: same empty-check and one-row-per-item shape,
+    // but renders the title + subtitle header (with the load-bearing blank line) for the
+    // tools that show a "Showing N of M" line above the table.
+    public static string Render<T>(
+        IReadOnlyList<T> rows,
+        string emptyMessage,
+        string title,
+        string subtitle,
+        string headerRow,
+        string separatorRow,
+        Func<T, string> renderRow
+    )
+    {
+        if (rows.Count == 0)
+            return emptyMessage;
+
+        var sb = Start(title, subtitle, headerRow, separatorRow);
+        foreach (var row in rows)
+            sb.AppendLine(renderRow(row));
+        return sb.ToString();
+    }
+
     // Appends one markdown row per item in order, passing the 1-based rank and the item to
     // renderRow. Centralises the ranked-table loop so call sites don't repeat the `i + 1`
     // off-by-one and the `rows[i]` indexing.
