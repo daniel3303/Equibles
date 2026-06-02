@@ -68,24 +68,18 @@ public class FailToDeliverTools
                     .Take(maxResults)
                     .ToListAsync();
 
-                if (records.Count == 0)
-                    return $"No FTD data found for {stock.Ticker} in the specified date range.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    records.OrderBy(f => f.SettlementDate).ToList(),
+                    $"No FTD data found for {stock.Ticker} in the specified date range.",
                     $"Fails-to-deliver for {stock.Ticker} ({stock.Name}):",
                     "| Settlement Date | Quantity | Price | Value |",
-                    "|----------------|---------|-------|-------|"
+                    "|----------------|---------|-------|-------|",
+                    f =>
+                    {
+                        var value = f.Quantity * f.Price;
+                        return $"| {f.SettlementDate:yyyy-MM-dd} | {McpFormat.WholeNumber(f.Quantity)} | ${McpFormat.Invariant(f.Price, "F2")} | ${McpFormat.WholeNumber(value)} |";
+                    }
                 );
-
-                foreach (var f in records.OrderBy(f => f.SettlementDate))
-                {
-                    var value = f.Quantity * f.Price;
-                    result.AppendLine(
-                        $"| {f.SettlementDate:yyyy-MM-dd} | {McpFormat.WholeNumber(f.Quantity)} | ${McpFormat.Invariant(f.Price, "F2")} | ${McpFormat.WholeNumber(value)} |"
-                    );
-                }
-
-                return result.ToString();
             },
             "GetFailsToDeliver",
             $"ticker: {ticker}"

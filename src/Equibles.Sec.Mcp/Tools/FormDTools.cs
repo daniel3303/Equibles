@@ -54,23 +54,15 @@ public class FormDTools
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
-                if (filings.Count == 0)
-                    return $"No Form D exempt offerings found for {ticker}.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    filings,
+                    $"No Form D exempt offerings found for {ticker}.",
                     $"Recent exempt offerings (Form D) for {stock.Name} ({ticker}) — showing {filings.Count} most recent notices:",
                     "| Filed | Amendment | Industry | Offering Amount | Sold | Min. Investment | Investors | Exemptions |",
-                    "|-------|-----------|----------|-----------------|------|-----------------|-----------|------------|"
-                );
-
-                foreach (var f in filings)
-                {
-                    result.AppendLine(
+                    "|-------|-----------|----------|-----------------|------|-----------------|-----------|------------|",
+                    f =>
                         $"| {f.FilingDate:yyyy-MM-dd} | {(f.IsAmendment ? "Yes" : "No")} | {f.IndustryGroup ?? "-"} | {FormatAmount(f.TotalOfferingAmount, f.IsOfferingAmountIndefinite)} | ${McpFormat.WholeNumber(f.TotalAmountSold)} | ${McpFormat.WholeNumber(f.MinimumInvestmentAccepted)} | {McpFormat.WholeNumber(f.TotalNumberAlreadyInvested)} | {f.FederalExemptions ?? "-"} |"
-                    );
-                }
-
-                return result.ToString();
+                );
             },
             "GetExemptOfferings",
             $"ticker: {ticker}"
