@@ -4,7 +4,7 @@ The holdings screener lets you filter the full universe of U.S. stocks by instit
 
 ## Open the screener
 
-1. Go to `http://localhost:8080` and click **Holdings** in the top navigation, then **Screener** (or go directly to `http://localhost:8080/holdings/screener`).
+1. Go to `http://localhost:8080/holdings/screener` in your browser.
 
 2. The screener needs at least two 13F report dates to work. If you see a warning that data isn't available yet, the worker is still backfilling 13F filings — check back in an hour or so.
 
