@@ -24,5 +24,28 @@ public class InsiderTradingModuleConfiguration : Equibles.Data.IFinancialModule
             .Property(t => t.Notes)
             .IsRequired()
             .HasDefaultValueSql("'{}'");
+
+        // Covering index for the insider-trading dashboard's "top by dollar
+        // volume" queries (run three times per page: buys, sells, biggest).
+        // Each filters a ~90-day TransactionDate window, drops invalid-price and
+        // derivative rows, then orders by Shares * PricePerShare. The date window
+        // is the only selective filter, but the planner was choosing a full seq
+        // scan over the plain [Index(TransactionDate)] btree; the INCLUDE columns
+        // let the window resolve as an index-only scan (no heap fetch for the
+        // filter/sort fields), turning an ~805ms scan into ~90ms. Postgres-specific
+        // INCLUDE isn't expressible via the [Index] attribute, so it lives here;
+        // EF merges it with the entity's [Index(TransactionDate)] attribute into a
+        // single btree with the INCLUDE list attached.
+        builder
+            .Entity<InsiderTransaction>()
+            .HasIndex(t => t.TransactionDate)
+            .IncludeProperties(t => new
+            {
+                t.Shares,
+                t.PricePerShare,
+                t.IsPriceValid,
+                t.SecurityKind,
+                t.SecurityTitle,
+            });
     }
 }
