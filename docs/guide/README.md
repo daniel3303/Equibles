@@ -31,6 +31,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Browse investment advisers (SEC Form ADV)](how-to-browse-investment-advisers.md)
 - [Use the 13F holdings screener](how-to-use-holdings-screener.md)
 - [View quarterly holdings activity across the market](how-to-view-holdings-activity.md)
+- [View the latest 13F filings](how-to-view-latest-13f-filings.md)
 - [View 13F statistics](how-to-view-13f-statistics.md)
 - [View 13F trend charts](how-to-view-13f-trends.md)
 - [View the Double-Down Report](how-to-view-double-down-report.md)
