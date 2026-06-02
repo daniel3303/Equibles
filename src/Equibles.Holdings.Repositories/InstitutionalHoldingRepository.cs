@@ -230,58 +230,40 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             );
     }
 
-    // Recent filings feed: groups holdings by accession number to produce one row
-    // per filing, ordered by import timestamp. Joins InstitutionalHolder for filer
+    // Recent filings feed: one row per 13F filing, read straight from the
+    // InstitutionalFiling rollup (maintained at ingestion) instead of grouping the
+    // whole holdings table on every request. Joins InstitutionalHolder for filer
     // metadata and uses a NOT EXISTS subquery to flag first-time filers (no holdings
-    // from any earlier report date).
+    // from any earlier report date). Callers order by FilingDate descending.
     public IQueryable<RecentFiling> GetRecentFilings()
     {
-        var filings = GetAll()
-            .GroupBy(h => new
-            {
-                h.AccessionNumber,
-                h.InstitutionalHolderId,
-                h.FilingDate,
-                h.ReportDate,
-                h.IsAmendment,
-            })
-            .Select(g => new
-            {
-                g.Key.AccessionNumber,
-                g.Key.InstitutionalHolderId,
-                g.Key.FilingDate,
-                g.Key.ReportDate,
-                g.Key.IsAmendment,
-                PositionCount = g.Count(),
-                TotalValue = g.Sum(h => h.Value),
-                ImportedAt = g.Min(h => h.CreationTime),
-            });
-
-        return filings.Join(
-            DbContext.Set<InstitutionalHolder>(),
-            f => f.InstitutionalHolderId,
-            h => h.Id,
-            (f, h) =>
-                new RecentFiling
-                {
-                    AccessionNumber = f.AccessionNumber,
-                    InstitutionalHolderId = f.InstitutionalHolderId,
-                    FilerName = h.Name,
-                    FilerCik = h.Cik,
-                    FilingDate = f.FilingDate,
-                    ReportDate = f.ReportDate,
-                    PositionCount = f.PositionCount,
-                    TotalValue = f.TotalValue,
-                    IsAmendment = f.IsAmendment,
-                    ImportedAt = f.ImportedAt,
-                    IsNewFiler = !DbContext
-                        .Set<InstitutionalHolding>()
-                        .Any(prior =>
-                            prior.InstitutionalHolderId == f.InstitutionalHolderId
-                            && prior.ReportDate < f.ReportDate
-                        ),
-                }
-        );
+        return DbContext
+            .Set<InstitutionalFiling>()
+            .Join(
+                DbContext.Set<InstitutionalHolder>(),
+                f => f.InstitutionalHolderId,
+                h => h.Id,
+                (f, h) =>
+                    new RecentFiling
+                    {
+                        AccessionNumber = f.AccessionNumber,
+                        InstitutionalHolderId = f.InstitutionalHolderId,
+                        FilerName = h.Name,
+                        FilerCik = h.Cik,
+                        FilingDate = f.FilingDate,
+                        ReportDate = f.ReportDate,
+                        PositionCount = f.PositionCount,
+                        TotalValue = f.TotalValue,
+                        IsAmendment = f.IsAmendment,
+                        ImportedAt = f.CreationTime,
+                        IsNewFiler = !DbContext
+                            .Set<InstitutionalHolding>()
+                            .Any(prior =>
+                                prior.InstitutionalHolderId == f.InstitutionalHolderId
+                                && prior.ReportDate < f.ReportDate
+                            ),
+                    }
+            );
     }
 
     // Cross-sectional 13F screener. Aggregates per-stock filer-count / total-value /

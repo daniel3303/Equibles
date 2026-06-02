@@ -80,6 +80,7 @@ public class HoldingsImportService
         await UpsertInstitutionalHolders(context, cancellationToken);
         await HandleAmendments(context, cancellationToken);
         await StreamAndInsertHoldings(context, cancellationToken);
+        await SyncFilingSummaries(context, cancellationToken);
         await PublishAffectedQuartersAsync(context, cancellationToken);
         return new ImportResult(submissionCount, IsComplete: true);
     }
@@ -883,6 +884,134 @@ public class HoldingsImportService
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return holdings.Count;
+    }
+
+    // Recomputes the InstitutionalFiling rollup for every (holder, quarter) this
+    // import touched, straight from the resulting holdings. The latest-filings feed
+    // reads one indexed row per filing from this table instead of grouping the whole
+    // holdings table on each request.
+    //
+    // The unit of consistency is (holder, report date), not accession: every filing
+    // an import mutates — a fresh original, a restatement (delete + reinsert under a
+    // new accession), or a "new holdings" amendment that overwrites an existing
+    // position's accession — files under the submission's period, so recomputing all
+    // filings for the touched (holder, quarter) pairs covers all of them in one pass.
+    // Any accession that no longer has holdings (e.g. a restated original) is dropped
+    // so it can't ghost the feed. Aggregates count only tracked positions — the same
+    // grouping the feed used to do inline.
+    private async Task SyncFilingSummaries(
+        ImportContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        var affected = new HashSet<(Guid HolderId, DateOnly ReportDate)>();
+        foreach (var submission in context.Submissions.Values)
+        {
+            if (string.IsNullOrEmpty(submission.Cik))
+                continue;
+            if (!context.CikToHolderId.TryGetValue(submission.Cik, out var holderId))
+                continue;
+            if (!TryParseDateOnly(submission.PeriodOfReport, out var reportDate))
+                continue;
+            affected.Add((holderId, reportDate));
+        }
+        if (affected.Count == 0)
+            return;
+
+        // The two IN lists widen to a (holder × quarter) cross-product in SQL; the
+        // in-memory HashSet narrows the result back to the exact pairs we touched.
+        var holderIds = affected.Select(a => a.HolderId).Distinct().ToList();
+        var reportDates = affected.Select(a => a.ReportDate).Distinct().ToList();
+
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+
+        var rows = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h =>
+                holderIds.Contains(h.InstitutionalHolderId) && reportDates.Contains(h.ReportDate)
+            )
+            .GroupBy(h => new
+            {
+                h.AccessionNumber,
+                h.InstitutionalHolderId,
+                h.FilingDate,
+                h.ReportDate,
+                h.IsAmendment,
+            })
+            .Select(g => new
+            {
+                g.Key.AccessionNumber,
+                g.Key.InstitutionalHolderId,
+                g.Key.FilingDate,
+                g.Key.ReportDate,
+                g.Key.IsAmendment,
+                PositionCount = g.Count(),
+                TotalValue = g.Sum(h => h.Value),
+            })
+            .ToListAsync(cancellationToken);
+
+        var summaries = rows.Where(r => affected.Contains((r.InstitutionalHolderId, r.ReportDate)))
+            .Select(r => new InstitutionalFiling
+            {
+                AccessionNumber = r.AccessionNumber,
+                InstitutionalHolderId = r.InstitutionalHolderId,
+                FilingDate = r.FilingDate,
+                ReportDate = r.ReportDate,
+                IsAmendment = r.IsAmendment,
+                PositionCount = r.PositionCount,
+                TotalValue = r.TotalValue,
+            })
+            .ToList();
+
+        if (summaries.Count > 0)
+        {
+            await dbContext
+                .Set<InstitutionalFiling>()
+                .UpsertRange(summaries)
+                .On(f => f.AccessionNumber)
+                .WhenMatched(
+                    (existing, incoming) =>
+                        new InstitutionalFiling
+                        {
+                            InstitutionalHolderId = incoming.InstitutionalHolderId,
+                            FilingDate = incoming.FilingDate,
+                            ReportDate = incoming.ReportDate,
+                            IsAmendment = incoming.IsAmendment,
+                            PositionCount = incoming.PositionCount,
+                            TotalValue = incoming.TotalValue,
+                        }
+                )
+                .RunAsync(cancellationToken);
+        }
+
+        // Within the touched (holder, quarter) pairs, any existing filing row whose
+        // accession no longer has holdings (a restated original) must be removed,
+        // otherwise it ghosts the feed.
+        var present = summaries.Select(s => s.AccessionNumber).ToHashSet(StringComparer.Ordinal);
+        var existingFilings = await dbContext
+            .Set<InstitutionalFiling>()
+            .Where(f =>
+                holderIds.Contains(f.InstitutionalHolderId) && reportDates.Contains(f.ReportDate)
+            )
+            .ToListAsync(cancellationToken);
+        var orphans = existingFilings
+            .Where(f =>
+                affected.Contains((f.InstitutionalHolderId, f.ReportDate))
+                && !present.Contains(f.AccessionNumber)
+            )
+            .ToList();
+        if (orphans.Count > 0)
+        {
+            dbContext.Set<InstitutionalFiling>().RemoveRange(orphans);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        _logger.LogInformation(
+            "Synced {Count} filing summaries across {Pairs} (holder, quarter) pair(s)",
+            summaries.Count,
+            affected.Count
+        );
     }
 
     private static string BuildHoldingKey(

@@ -41,8 +41,28 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
                 h.Shares,
             });
 
+        // Covering index for the per-holder portfolio rollups on the holder page
+        // (StocksController.ShowHolder → ComputeTopPortfolioPositions /
+        // HolderPortfolioProvider.GetTrend). Both filter by holder and GROUP BY
+        // either ReportDate or CommonStockId while summing Value / Shares; without
+        // the INCLUDE list those run as a bitmap heap scan, and under crawler
+        // concurrency the slow reads drained the portal's Financial pool (#1262).
+        // Mirrors the per-stock covering index above so the rollups are
+        // index-only scans. EF merges this with the entity's
+        // `[Index(InstitutionalHolderId, ReportDate)]` attribute into one btree.
+        builder
+            .Entity<InstitutionalHolding>()
+            .HasIndex(h => new { h.InstitutionalHolderId, h.ReportDate })
+            .IncludeProperties(h => new
+            {
+                h.CommonStockId,
+                h.Value,
+                h.Shares,
+            });
+
         builder.Entity<ProcessedDataSet>();
         builder.Entity<ProcessedFiling>();
+        builder.Entity<InstitutionalFiling>();
         builder.Entity<RealtimeSweepState>();
         builder.Entity<FundScore>();
 
