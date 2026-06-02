@@ -357,11 +357,7 @@ public class InstitutionalHoldingsTools
                 if (targetDate == default)
                     return $"No institutional holdings data available for {ticker}.";
 
-                var selectedIndex = reportDates.IndexOf(targetDate);
-                var previousDate =
-                    selectedIndex >= 0 && selectedIndex < reportDates.Count - 1
-                        ? reportDates[selectedIndex + 1]
-                        : (DateOnly?)null;
+                var previousDate = GetPriorReportDate(reportDates, targetDate);
 
                 var currentHoldings = await _holdingRepository
                     .GetByStock(stock, targetDate)
@@ -798,11 +794,7 @@ public class InstitutionalHoldingsTools
                 if (error != null)
                     return error;
 
-                var targetIndex = reportDates.IndexOf(targetDate);
-                var previousDate =
-                    targetIndex < reportDates.Count - 1
-                        ? reportDates[targetIndex + 1]
-                        : (DateOnly?)null;
+                var previousDate = GetPriorReportDate(reportDates, targetDate);
 
                 var currentHoldings = await _holdingRepository
                     .GetByHolder(holder, targetDate)
@@ -963,13 +955,12 @@ public class InstitutionalHoldingsTools
                     return $"{holder.Name} has fewer than two reported quarters — no diff available.";
 
                 var targetDate = ResolveReportDate(reportDate, reportDates);
-                var targetIndex = reportDates.IndexOf(targetDate);
-                if (targetIndex >= reportDates.Count - 1)
+                var priorDate = GetPriorReportDate(reportDates, targetDate);
+                if (priorDate == null)
                     return $"{FormatDate(targetDate)} is the oldest reported quarter for {holder.Name} — no prior to compare against.";
 
-                var priorDate = reportDates[targetIndex + 1];
                 var currentHoldings = await LoadHoldingsByHolderWithStock(holder, targetDate);
-                var previousHoldings = await LoadHoldingsByHolderWithStock(holder, priorDate);
+                var previousHoldings = await LoadHoldingsByHolderWithStock(holder, priorDate.Value);
                 var grouped = HolderQuarterlyActivityCalculator.Group(
                     currentHoldings,
                     previousHoldings
@@ -978,7 +969,7 @@ public class InstitutionalHoldingsTools
                 return RenderQuarterlyActivity(
                     holder,
                     targetDate,
-                    priorDate,
+                    priorDate.Value,
                     grouped,
                     normalizedBucket,
                     maxResults
@@ -1384,6 +1375,16 @@ public class InstitutionalHoldingsTools
         TryParseReportDate(input, out var parsed) && validDates.Contains(parsed)
             ? parsed
             : validDates[0];
+
+    // Report-date lists are newest-first, so the prior quarter sits at the next index.
+    // Returns null when the target is absent from the list or is already the oldest quarter.
+    private static DateOnly? GetPriorReportDate(List<DateOnly> reportDates, DateOnly targetDate)
+    {
+        var index = reportDates.IndexOf(targetDate);
+        if (index < 0 || index >= reportDates.Count - 1)
+            return null;
+        return reportDates[index + 1];
+    }
 
     private static async Task<(DateOnly Date, bool Found)> TryResolveLatestReportDate(
         string input,
