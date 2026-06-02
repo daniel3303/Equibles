@@ -102,7 +102,10 @@ public class HoldingsActivityController : BaseController
     {
         page = Pagination.ClampPage(page);
 
-        var query = _holdingRepository.GetRecentFilings().OrderByDescending(f => f.ImportedAt);
+        var query = _holdingRepository
+            .GetRecentFilings()
+            .OrderByDescending(f => f.FilingDate)
+            .ThenByDescending(f => f.AccessionNumber);
 
         var totalCount = await query.CountAsync();
 

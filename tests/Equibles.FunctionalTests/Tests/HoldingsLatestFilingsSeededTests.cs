@@ -23,7 +23,7 @@ public class HoldingsLatestFilingsSeededTests
     [Fact]
     public async Task LatestFilings_WithNewAndReturningFilers_RendersCorrectBadges()
     {
-        // Contract: /holdings/latest-13f-filings shows filings ordered by ImportedAt descending.
+        // Contract: /holdings/latest-13f-filings shows filings ordered by FilingDate descending.
         // A filer with no holdings in a prior quarter gets a "New" badge. Amendment
         // filings get an "A" badge. Position count and total value aggregate multiple
         // holdings per filing.
@@ -123,6 +123,42 @@ public class HoldingsLatestFilingsSeededTests
                     ShareType = ShareType.Shares,
                     InvestmentDiscretion = InvestmentDiscretion.Sole,
                     AccessionNumber = "ACC-003",
+                    IsAmendment = true,
+                    CreationTime = new DateTime(2025, 2, 20, 10, 0, 0, DateTimeKind.Utc),
+                }
+            );
+
+            // The feed reads the InstitutionalFiling rollup (maintained at ingestion);
+            // seed the matching filing rows for the holdings above.
+            db.AddRange(
+                new InstitutionalFiling
+                {
+                    AccessionNumber = "ACC-001",
+                    InstitutionalHolderId = filerA.Id,
+                    ReportDate = q1,
+                    FilingDate = q1.AddDays(45),
+                    PositionCount = 1,
+                    TotalValue = 1_000_000,
+                    CreationTime = new DateTime(2024, 11, 15, 10, 0, 0, DateTimeKind.Utc),
+                },
+                new InstitutionalFiling
+                {
+                    AccessionNumber = "ACC-002",
+                    InstitutionalHolderId = filerA.Id,
+                    ReportDate = q2,
+                    FilingDate = q2.AddDays(45),
+                    PositionCount = 2,
+                    TotalValue = 5_000_000,
+                    CreationTime = new DateTime(2025, 2, 15, 10, 0, 0, DateTimeKind.Utc),
+                },
+                new InstitutionalFiling
+                {
+                    AccessionNumber = "ACC-003",
+                    InstitutionalHolderId = filerB.Id,
+                    ReportDate = q2,
+                    FilingDate = q2.AddDays(50),
+                    PositionCount = 1,
+                    TotalValue = 5_000_000,
                     IsAmendment = true,
                     CreationTime = new DateTime(2025, 2, 20, 10, 0, 0, DateTimeKind.Utc),
                 }
