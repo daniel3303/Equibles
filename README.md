@@ -20,8 +20,11 @@ See [`docs/`](docs/README.md) for the user guide and technical documentation.
 | Domain | Data Source | Description |
 |--------|------------|-------------|
 | **SEC Filings** | SEC EDGAR | 10-K, 10-Q, 8-K annual/quarterly/current reports with full-text search |
+| **Financial Statements** | SEC XBRL | Parsed income statement, balance sheet, and cash flow facts per fiscal period |
 | **Holdings** | SEC 13F-HR | Institutional ownership — who owns what, how much, and trend over time |
-| **Insider Trading** | SEC Form 3/4 | Director, officer, and 10% owner transactions |
+| **Fund Filings** | SEC NPORT / N-CEN / Form D | Fund portfolio holdings, registered-fund operations (service providers), and exempt offerings (private placements) |
+| **Investment Advisers** | SEC Form ADV | SEC-registered advisers — assets under management, main office, employee count, fee structure |
+| **Insider Trading** | SEC Form 3/4/144 | Director, officer, and 10% owner transactions, plus proposed (Form 144) sales |
 | **Congressional Trading** | House/Senate disclosures | Stock trades by members of Congress |
 | **Short Data** | SEC / FINRA | Fails-to-deliver (SEC), daily short volume and short interest (FINRA) |
 | **Economic Indicators** | FRED (Federal Reserve) | Interest rates, inflation, employment, GDP, yield spreads, and more |
@@ -152,9 +155,11 @@ Database migrations are applied automatically on startup. Review the [changelog]
 
 The web portal at `http://localhost:8080` provides a browser-based interface for exploring data:
 
-- **Stocks** — Browse and search all tracked companies, view price charts with technical indicators (SMA, EMA, RSI, MACD), institutional holdings, short data, SEC filings, insider trading, and congressional trades per stock
-- **Institutions** — Browse institutional holders (hedge funds, asset managers), view detailed profiles with portfolio breakdowns, industry allocation, quarterly activity, backtesting, and side-by-side comparisons. Includes a holdings screener with filters (filer count, value, float %, industry) and CSV export
+- **Stocks** — Browse and search all tracked companies, view price charts with technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands), golden/death-cross and price-streak badges, performance versus SPY, plus per-stock tabs for institutional holdings, short data, SEC filings, financial statements, insider trading, proposed (Form 144) sales, fund holdings (NPORT), fund operations (N-CEN), exempt offerings (Form D), and congressional trades
+- **Institutions** — Browse institutional holders (hedge funds, asset managers), view detailed profiles with portfolio breakdowns, industry allocation, quarterly activity, backtesting, and side-by-side comparisons. Filers are scored on risk-adjusted performance (alpha vs. a benchmark) and a Smart Money Index page aggregates the highest-scoring funds into a consensus signal. Includes a holdings screener with filters (filer count, value, float %, location, AUM/position-count, industry) and CSV export
+- **Advisers** — Browse SEC-registered investment advisers (`/advisers`), ranked by assets under management, with per-firm profiles (regulatory AUM, main office, employee count, fee structure)
 - **Insider Trading** — Dashboard showing the top insider buys, sells, and biggest transactions over the last 90 days
+- **Short Activity** — Most-shorted leaderboard (`/most-shorted`, ranked by FINRA short interest) and largest daily short volume (`/short-volume`), each with a date selector, server-side sort, and pagination
 - **Economy** — Browse FRED economic indicators grouped by category (interest rates, inflation, employment, GDP, etc.) with charts and statistics
 - **Futures** — CFTC Commitments of Traders positioning data for 30+ futures contracts (commodities, indices, currencies) with commercial/non-commercial position charts
 - **Market** — CBOE market indicators: VIX volatility index with OHLC charts, put/call ratios (equity, index, total, VIX, ETP)
@@ -165,14 +170,15 @@ The web portal at `http://localhost:8080` provides a browser-based interface for
 
 The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, etc.):
 
-- **Institutional Holdings** — Top holders, ownership history, institution portfolios, institution search
-- **Insider Trading** — Insider transactions, ownership summary, insider search
+- **Institutional Holdings** — Top holders, ownership history, institution portfolios and summary, sector allocation, quarterly activity, most-held stocks, consensus holdings, fund overlap, market-wide 13F activity, institution search
+- **Insider Trading** — Insider transactions, ownership summary, proposed (Form 144) sales, insider search
 - **Congressional Trading** — Trades for a ticker, trades by one member, member search
 - **SEC Documents** — Full-text search, semantic search, document browsing, keyword search within filings
 - **Financial Statements** — XBRL fact time series per ticker, cross-ticker fact comparison, full income statement / balance sheet / cash flow per fiscal period
-- **Short Data** — Daily short volume, bi-monthly short interest, and the latest short-interest snapshot across tickers
+- **Fund & Adviser Filings** — Fund portfolio holdings (NPORT), registered-fund operations (N-CEN), exempt offerings (Form D), and SEC-registered investment-adviser lookup and search (Form ADV)
+- **Short Data** — Daily short volume, market-wide largest daily short volume, bi-monthly short interest, and the latest short-interest snapshot across tickers
 - **Economic Indicators** — FRED data lookup, latest macro snapshot, indicator search across categories
-- **Stock Prices** — Daily OHLCV history with adjusted close, latest close across one or more tickers, and on-demand technical indicators (EMA, Stochastic Oscillator, Average True Range, On-Balance Volume)
+- **Stock Prices** — Daily OHLCV history with adjusted close, latest close across one or more tickers, and on-demand technical indicators (EMA, Stochastic Oscillator, Average True Range, On-Balance Volume, Bollinger Bands)
 - **Futures Positioning** — COT positioning data, latest snapshot across all contracts, contract search
 - **Market Indicators** — VIX historical data, put/call ratios by type (equity, index, total, VIX, ETP)
 
