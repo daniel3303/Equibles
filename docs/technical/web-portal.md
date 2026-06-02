@@ -69,7 +69,7 @@ Why the indirection through `ViewData` rather than a single `StockDetailViewMode
   - Custom `equibles` DaisyUI theme via `@plugin "daisyui/theme"`.
 - `src/Equibles.Web/src/css/` holds the entry CSS imported by `src/Equibles.Web/src/index.js`; `src/Equibles.Web/src/js/` holds chart wrappers and per-page JS modules.
 - The bundle lazy-imports per-page modules so the Holdings tab doesn't pull Chart.js into the Documents tab.
-- Dev cycle: `npm run start` (Vite watch) alongside the .NET app — `AddRazorRuntimeCompilation()` (Web/Program.cs:105) makes Razor edits live without rebuild; Vite handles the bundle.
+- Dev cycle: `npm run start` (Vite watch) alongside the .NET app — `AddRazorRuntimeCompilation()` (Web/Program.cs:120) makes Razor edits live without rebuild; Vite handles the bundle.
 - CI / Docker: `npm ci && npm run build` runs inside the multi-stage Dockerfile so `wwwroot/dist/` is pre-built into the image.
 
 ## Authentication
