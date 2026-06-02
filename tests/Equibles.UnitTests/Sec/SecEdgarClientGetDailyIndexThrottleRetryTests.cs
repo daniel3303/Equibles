@@ -1,5 +1,7 @@
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text;
 using Equibles.Integrations.Sec;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -7,17 +9,28 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Equibles.UnitTests.Sec;
 
 /// <summary>
-/// Pins GetDailyIndex's 403 handling (GH-2222). A daily index for a PAST date
-/// always exists, so a 403 there is SEC throttling — it must be retried
-/// regardless of the response body, and if throttling persists the day is
-/// skipped (logged) rather than crashing the whole sweep. For today/future
-/// dates a 403 means "not yet published" and must not be retried.
+/// Pins GetDailyIndex's 403 handling. SEC has no index on non-trading days
+/// (weekends and market holidays such as Memorial Day) and answers those from its
+/// S3-backed Archives with a 403 carrying an AccessDenied/NoSuchKey body — for
+/// PAST dates included. That must be skipped so the sweep advances. A 403 carrying
+/// the rolling-window throttle page must NEVER be skipped (that would silently drop
+/// a trading day's filings) — it is retried, then surfaced if it persists. Any
+/// other, unrecognized 403 is treated conservatively as a fetch failure, not "no
+/// filings".
 /// </summary>
 public class SecEdgarClientGetDailyIndexThrottleRetryTests
 {
     private const string MasterIndexBody =
         "CIK|Company Name|Form Type|Date Filed|File Name\n"
         + "933478|VANGUARD FIDUCIARY TRUST CO|13F-HR|20200102|edgar/data/933478/0000933478-20-000004.txt\n";
+
+    private const string ThrottlePageBody =
+        "<html><head><title>Request Rate Threshold Exceeded</title></head></html>";
+
+    // The S3 error body SEC returns for a date that has no index object.
+    private const string AccessDeniedBody =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>";
 
     private static SecEdgarClient BuildClient(HttpMessageHandler handler)
     {
@@ -34,11 +47,13 @@ public class SecEdgarClientGetDailyIndexThrottleRetryTests
     }
 
     [Fact]
-    public async Task GetDailyIndex_PastDateForbiddenThenSuccess_RetriesRegardlessOfBodyAndParses()
+    public async Task GetDailyIndex_ThrottlePageThenSuccess_RetriesAndParses()
     {
-        // Empty 403 body — proves the retry is driven by the past-date rule, not
-        // by recognizing the throttle page (real throttle 403s can be body-less).
-        var handler = new SequencedHandler(() => Forbidden(body: ""), () => Ok(MasterIndexBody));
+        // The rolling-window throttle page is retryable; the next attempt succeeds.
+        var handler = new SequencedHandler(
+            () => Forbidden(ThrottlePageBody),
+            () => Ok(MasterIndexBody)
+        );
         var sut = BuildClient(handler);
 
         var result = await sut.GetDailyIndex(new DateOnly(2020, 1, 2));
@@ -49,13 +64,12 @@ public class SecEdgarClientGetDailyIndexThrottleRetryTests
     }
 
     [Fact]
-    public async Task GetDailyIndex_PastDateThrottlePersists_ThrowsAfterRetries()
+    public async Task GetDailyIndex_ThrottlePagePersists_ThrowsAfterRetriesNeverSkips()
     {
-        // Every attempt is throttled. A past-date index always exists, so a
-        // persistent 403 is a real fetch failure, not "no filings": it must be
-        // retried and then surfaced (the caller catches it per day and holds the
-        // sweep watermark back), never silently returned as empty.
-        var handler = new SequencedHandler(() => Forbidden(body: ""));
+        // Every attempt is throttled. A persistent throttle is a real fetch failure,
+        // not "no filings": it must be retried and then surfaced (the caller catches
+        // it per day and holds the sweep watermark back), never silently skipped.
+        var handler = new SequencedHandler(() => Forbidden(ThrottlePageBody));
         var sut = BuildClient(handler);
 
         var act = async () => await sut.GetDailyIndex(new DateOnly(2020, 1, 2));
@@ -65,17 +79,90 @@ public class SecEdgarClientGetDailyIndexThrottleRetryTests
     }
 
     [Fact]
-    public async Task GetDailyIndex_FutureDateForbidden_ReturnsEmptyWithoutRetry()
+    public async Task GetDailyIndex_PastDateMissingIndex_ReturnsEmptyWithoutRetry()
     {
-        // A future date's index isn't published yet: 403 means "no index", not
-        // throttling, so it must not be retried.
-        var handler = new SequencedHandler(() => Forbidden(body: ""));
+        // Memorial Day 2026-05-25 (a PAST date when swept) has no index — SEC answers
+        // with an AccessDenied 403. It must be skipped, not retried as throttling.
+        var handler = new SequencedHandler(() => Forbidden(AccessDeniedBody));
         var sut = BuildClient(handler);
 
-        var result = await sut.GetDailyIndex(new DateOnly(2099, 1, 1));
+        var result = await sut.GetDailyIndex(new DateOnly(2026, 5, 25));
+
+        result.Should().BeEmpty();
+        handler.CallCount.Should().Be(1); // not retried
+    }
+
+    [Fact]
+    public async Task GetDailyIndex_GzippedMissingIndex_DecodesBodyAndReturnsEmpty()
+    {
+        // SEC gzip-compresses its S3 error bodies even without an Accept-Encoding
+        // request, so the missing-index 403 must be decoded before it can be told
+        // apart from a throttle. The raw bytes would never match either signature.
+        var handler = new SequencedHandler(() => GzippedForbidden(AccessDeniedBody));
+        var sut = BuildClient(handler);
+
+        var result = await sut.GetDailyIndex(new DateOnly(2026, 5, 25));
 
         result.Should().BeEmpty();
         handler.CallCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetDailyIndex_GzippedThrottlePagePersists_RetriesAndThrows()
+    {
+        // A throttle page must be recognized even when gzip-compressed, so it is
+        // backed off and retried — never skipped, and never thrown on the first try.
+        var handler = new SequencedHandler(() => GzippedForbidden(ThrottlePageBody));
+        var sut = BuildClient(handler);
+
+        var act = async () => await sut.GetDailyIndex(new DateOnly(2020, 1, 2));
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+        handler.CallCount.Should().BeGreaterThan(1); // retried, not skipped
+    }
+
+    [Fact]
+    public async Task GetDailyIndex_NoSuchKeyMissingIndex_ReturnsEmpty()
+    {
+        // S3 also returns NoSuchKey (not only AccessDenied) for a missing index object.
+        const string noSuchKey =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+            + "<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message></Error>";
+        var handler = new SequencedHandler(() => Forbidden(noSuchKey));
+        var sut = BuildClient(handler);
+
+        var result = await sut.GetDailyIndex(new DateOnly(2026, 5, 25));
+
+        result.Should().BeEmpty();
+        handler.CallCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetDailyIndex_NotFound_ReturnsEmpty()
+    {
+        // Weekends typically 404 — unambiguously "no index for this date".
+        var handler = new SequencedHandler(() => new HttpResponseMessage(HttpStatusCode.NotFound));
+        var sut = BuildClient(handler);
+
+        var result = await sut.GetDailyIndex(new DateOnly(2020, 1, 4));
+
+        result.Should().BeEmpty();
+        handler.CallCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetDailyIndex_UnrecognizedForbidden_ThrowsRatherThanSkip()
+    {
+        // A 403 that is neither the throttle page nor a recognizable missing-index
+        // error is ambiguous: treat it as a fetch failure rather than risk skipping a
+        // day that has filings.
+        var handler = new SequencedHandler(() => Forbidden("something unexpected"));
+        var sut = BuildClient(handler);
+
+        var act = async () => await sut.GetDailyIndex(new DateOnly(2020, 1, 2));
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+        handler.CallCount.Should().Be(1); // not the throttle page → not retried
     }
 
     private static HttpResponseMessage Ok(string body) =>
@@ -88,6 +175,23 @@ public class SecEdgarClientGetDailyIndexThrottleRetryTests
             Content = new StringContent(body),
         };
         // Retry-After: 0 keeps retrying tests fast and avoids a real backoff pause.
+        response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.Zero);
+        return response;
+    }
+
+    private static HttpResponseMessage GzippedForbidden(string body)
+    {
+        using var output = new MemoryStream();
+        using (var gzip = new GZipStream(output, CompressionMode.Compress, leaveOpen: true))
+        {
+            var bytes = Encoding.UTF8.GetBytes(body);
+            gzip.Write(bytes, 0, bytes.Length);
+        }
+
+        var content = new ByteArrayContent(output.ToArray());
+        content.Headers.ContentEncoding.Add("gzip");
+
+        var response = new HttpResponseMessage(HttpStatusCode.Forbidden) { Content = content };
         response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.Zero);
         return response;
     }
