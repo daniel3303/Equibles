@@ -78,6 +78,23 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
             })
             .IncludeProperties(h => new { h.Shares, h.Value });
 
+        // Covering index for the per-holder 13F ranking pages (AUM Movers,
+        // Top by AUM, Double-Down): WHERE ReportDate IN (<quarter>[, <prior>])
+        // GROUP BY InstitutionalHolderId with COUNT(DISTINCT CommonStockId) and
+        // SUM(Shares)/SUM(Value). Mirror of the per-stock ranking index above but
+        // with the holder as the group key, so the same quarter-filtered scan runs
+        // index-only with no sort. The InstitutionalHolderId-leading covering index
+        // higher up can't serve it — it can't seek the ReportDate filter.
+        builder
+            .Entity<InstitutionalHolding>()
+            .HasIndex(h => new
+            {
+                h.ReportDate,
+                h.InstitutionalHolderId,
+                h.CommonStockId,
+            })
+            .IncludeProperties(h => new { h.Shares, h.Value });
+
         builder.Entity<ProcessedDataSet>();
         builder.Entity<ProcessedFiling>();
         builder.Entity<InstitutionalFiling>();
