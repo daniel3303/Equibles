@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Common.RateLimiter;
+using Equibles.Integrations.Common.Retry;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.Integrations.Yahoo.Models;
 using Equibles.Integrations.Yahoo.Models.Responses;
@@ -386,8 +387,8 @@ public class YahooFinanceClient : IYahooFinanceClient
         throw new HttpRequestException("Max retries exceeded for Yahoo Finance request");
     }
 
-    private static TimeSpan ExponentialBackoff(int attempt) =>
-        TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+    // Thin forwarder so existing reflection-based backoff tests still find the method.
+    private static TimeSpan ExponentialBackoff(int attempt) => RetryBackoff.Exponential(attempt);
 
     private static async Task WaitForRetry(TimeSpan delay)
     {

@@ -2,6 +2,7 @@ using Equibles.Congress.Data.Models;
 using Equibles.Congress.HostedService.Models;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Common.RateLimiter;
+using Equibles.Integrations.Common.Retry;
 using Newtonsoft.Json;
 using static Equibles.Congress.HostedService.Services.DisclosureParsingHelper;
 
@@ -275,8 +276,8 @@ public class SenateDisclosureClient : IAsyncDisposable
         );
     }
 
-    private static TimeSpan ExponentialBackoff(int attempt) =>
-        TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+    // Thin forwarder so existing reflection-based backoff tests still find the method.
+    private static TimeSpan ExponentialBackoff(int attempt) => RetryBackoff.Exponential(attempt);
 
     public async ValueTask DisposeAsync()
     {

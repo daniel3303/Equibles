@@ -6,6 +6,7 @@ using Equibles.Congress.Data.Models;
 using Equibles.Congress.HostedService.Models;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Common.RateLimiter;
+using Equibles.Integrations.Common.Retry;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.Content;
 using static Equibles.Congress.HostedService.Services.DisclosureParsingHelper;
@@ -425,8 +426,8 @@ public partial class HouseDisclosureClient
         );
     }
 
-    private static TimeSpan ExponentialBackoff(int attempt) =>
-        TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+    // Thin forwarder so existing reflection-based backoff tests still find the method.
+    private static TimeSpan ExponentialBackoff(int attempt) => RetryBackoff.Exponential(attempt);
 
     // Owner codes that prefix the asset text: SP (Spouse), JT (Joint), DC
     // (Dependent Child). Member-owned holdings leave the column blank.

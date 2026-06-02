@@ -1,6 +1,7 @@
 using System.Net;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Common.RateLimiter;
+using Equibles.Integrations.Common.Retry;
 using Equibles.Integrations.Fred.Configuration;
 using Equibles.Integrations.Fred.Contracts;
 using Equibles.Integrations.Fred.Models;
@@ -149,6 +150,6 @@ public class FredClient : IFredClient
         throw new HttpRequestException("Max retries exceeded for FRED API request");
     }
 
-    private static TimeSpan ExponentialBackoff(int attempt) =>
-        TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+    // Thin forwarder so existing reflection-based backoff tests still find the method.
+    private static TimeSpan ExponentialBackoff(int attempt) => RetryBackoff.Exponential(attempt);
 }

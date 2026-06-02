@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Common.RateLimiter;
+using Equibles.Integrations.Common.Retry;
 using Equibles.Integrations.Finra.Configuration;
 using Equibles.Integrations.Finra.Contracts;
 using Equibles.Integrations.Finra.Models;
@@ -332,8 +333,8 @@ public class FinraClient : IFinraClient
         throw new HttpRequestException("Max retries exceeded for FINRA API request");
     }
 
-    private static TimeSpan ExponentialBackoff(int attempt) =>
-        TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+    // Thin forwarder so existing reflection-based backoff tests still find the method.
+    private static TimeSpan ExponentialBackoff(int attempt) => RetryBackoff.Exponential(attempt);
 
     // FINRA's API expects Gregorian ISO dates; InvariantCulture keeps the format
     // stable on non-Gregorian threads (e.g. ar-SA emits Hijri otherwise).

@@ -6,6 +6,7 @@ using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Cftc.Contracts;
 using Equibles.Integrations.Cftc.Models;
 using Equibles.Integrations.Common.RateLimiter;
+using Equibles.Integrations.Common.Retry;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -91,8 +92,8 @@ public class CftcClient : ICftcClient
         throw new HttpRequestException("Max retries exceeded for CFTC download");
     }
 
-    private static TimeSpan ExponentialBackoff(int attempt) =>
-        TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+    // Thin forwarder so existing reflection-based backoff tests still find the method.
+    private static TimeSpan ExponentialBackoff(int attempt) => RetryBackoff.Exponential(attempt);
 
     private async Task<List<CftcReportRecord>> ParseZipArchive(Stream zipStream)
     {
