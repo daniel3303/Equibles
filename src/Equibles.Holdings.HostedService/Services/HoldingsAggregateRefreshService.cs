@@ -202,6 +202,7 @@ public class HoldingsAggregateRefreshService
 
         await UpsertAumSnapshot(dbContext, reportDate, cancellationToken);
         await UpsertSectorSnapshots(dbContext, reportDate, cancellationToken);
+        await UpsertStockActivitySnapshots(dbContext, reportDate, cancellationToken);
     }
 
     private static async Task UpsertAumSnapshot(
@@ -354,6 +355,149 @@ public class HoldingsAggregateRefreshService
         await dbContext
             .Set<SectorQuarterlySnapshot>()
             .Where(s => s.ReportDate == reportDate && !currentSectorIds.Contains(s.SectorId))
+            .ExecuteDeleteAsync(cancellationToken);
+    }
+
+    // Per-stock cross-sectional activity for the conviction heat map: current vs
+    // prior-quarter shares/value/filer counts plus the new/sold-out filer counts.
+    // Mirrors InstitutionalHoldingRepository.GetQuarterlyActivity and
+    // GetQuarterlyNewSoldOutPositions exactly — the same numbers the heat map used
+    // to derive live (a two-quarter scan + ~millions of correlated NOT-EXISTS
+    // probes), here computed once per dirty quarter and read back per row.
+    private static async Task UpsertStockActivitySnapshots(
+        EquiblesFinancialDbContext dbContext,
+        DateOnly reportDate,
+        CancellationToken cancellationToken
+    )
+    {
+        // The prior quarter on record. default(DateOnly) when this is the
+        // earliest — no holding row carries that date, so every "previous"
+        // predicate below is simply false and all current filers count as new.
+        var previousReportDate = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h => h.ReportDate < reportDate)
+            .Select(h => h.ReportDate)
+            .OrderByDescending(d => d)
+            .FirstOrDefaultAsync(cancellationToken);
+        var hasPrevious = previousReportDate != default;
+
+        var activity = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h => h.ReportDate == reportDate || h.ReportDate == previousReportDate)
+            .GroupBy(h => h.CommonStockId)
+            .Select(g => new
+            {
+                CommonStockId = g.Key,
+                CurrentShares = g.Sum(h => h.ReportDate == reportDate ? h.Shares : 0L),
+                PreviousShares = g.Sum(h => h.ReportDate == previousReportDate ? h.Shares : 0L),
+                CurrentValue = g.Sum(h => h.ReportDate == reportDate ? h.Value : 0L),
+                PreviousValue = g.Sum(h => h.ReportDate == previousReportDate ? h.Value : 0L),
+                CurrentFilerCount = g.Where(h => h.ReportDate == reportDate)
+                    .Select(h => h.InstitutionalHolderId)
+                    .Distinct()
+                    .Count(),
+                PreviousFilerCount = g.Where(h => h.ReportDate == previousReportDate)
+                    .Select(h => h.InstitutionalHolderId)
+                    .Distinct()
+                    .Count(),
+            })
+            .ToListAsync(cancellationToken);
+
+        // Per-stock churn via two NOT-EXISTS subqueries, identical to
+        // GetQuarterlyNewSoldOutPositions. Keyed by stock so it merges with the
+        // activity rows above.
+        var churn = (
+            await dbContext
+                .Set<InstitutionalHolding>()
+                .Where(h => h.ReportDate == reportDate || h.ReportDate == previousReportDate)
+                .GroupBy(h => h.CommonStockId)
+                .Select(g => new
+                {
+                    CommonStockId = g.Key,
+                    NewFilerCount = g.Where(h =>
+                            h.ReportDate == reportDate
+                            && !dbContext
+                                .Set<InstitutionalHolding>()
+                                .Any(p =>
+                                    p.ReportDate == previousReportDate
+                                    && p.CommonStockId == h.CommonStockId
+                                    && p.InstitutionalHolderId == h.InstitutionalHolderId
+                                )
+                        )
+                        .Select(h => h.InstitutionalHolderId)
+                        .Distinct()
+                        .Count(),
+                    SoldOutFilerCount = g.Where(h =>
+                            h.ReportDate == previousReportDate
+                            && !dbContext
+                                .Set<InstitutionalHolding>()
+                                .Any(c =>
+                                    c.ReportDate == reportDate
+                                    && c.CommonStockId == h.CommonStockId
+                                    && c.InstitutionalHolderId == h.InstitutionalHolderId
+                                )
+                        )
+                        .Select(h => h.InstitutionalHolderId)
+                        .Distinct()
+                        .Count(),
+                })
+                .ToListAsync(cancellationToken)
+        ).ToDictionary(c => c.CommonStockId);
+
+        var computedAt = DateTime.UtcNow;
+        var rows = activity
+            .Select(a =>
+            {
+                churn.TryGetValue(a.CommonStockId, out var c);
+                return new StockQuarterlyActivity
+                {
+                    CommonStockId = a.CommonStockId,
+                    ReportDate = reportDate,
+                    PreviousReportDate = hasPrevious ? previousReportDate : null,
+                    CurrentShares = a.CurrentShares,
+                    PreviousShares = a.PreviousShares,
+                    CurrentValue = a.CurrentValue,
+                    PreviousValue = a.PreviousValue,
+                    CurrentFilerCount = a.CurrentFilerCount,
+                    PreviousFilerCount = a.PreviousFilerCount,
+                    NewFilerCount = c?.NewFilerCount ?? 0,
+                    SoldOutFilerCount = c?.SoldOutFilerCount ?? 0,
+                    ComputedAt = computedAt,
+                };
+            })
+            .ToList();
+
+        if (rows.Count > 0)
+        {
+            await dbContext
+                .Set<StockQuarterlyActivity>()
+                .UpsertRange(rows)
+                .On(a => new { a.CommonStockId, a.ReportDate })
+                .WhenMatched(
+                    (_, incoming) =>
+                        new StockQuarterlyActivity
+                        {
+                            PreviousReportDate = incoming.PreviousReportDate,
+                            CurrentShares = incoming.CurrentShares,
+                            PreviousShares = incoming.PreviousShares,
+                            CurrentValue = incoming.CurrentValue,
+                            PreviousValue = incoming.PreviousValue,
+                            CurrentFilerCount = incoming.CurrentFilerCount,
+                            PreviousFilerCount = incoming.PreviousFilerCount,
+                            NewFilerCount = incoming.NewFilerCount,
+                            SoldOutFilerCount = incoming.SoldOutFilerCount,
+                            ComputedAt = incoming.ComputedAt,
+                        }
+                )
+                .RunAsync(cancellationToken);
+        }
+
+        // Stocks with no exposure in either quarter — drop their stale rows for
+        // this quarter so the heat map can't render a phantom point.
+        var currentStockIds = rows.Select(r => r.CommonStockId).ToList();
+        await dbContext
+            .Set<StockQuarterlyActivity>()
+            .Where(s => s.ReportDate == reportDate && !currentStockIds.Contains(s.CommonStockId))
             .ExecuteDeleteAsync(cancellationToken);
     }
 }

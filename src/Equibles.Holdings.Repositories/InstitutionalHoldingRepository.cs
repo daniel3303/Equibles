@@ -168,6 +168,12 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             });
     }
 
+    // Precomputed per-stock activity + churn for a quarter, maintained by
+    // HoldingsAggregateRefreshService. The conviction heat map reads this instead
+    // of deriving GetQuarterlyActivity + GetQuarterlyNewSoldOutPositions live.
+    public IQueryable<StockQuarterlyActivity> GetStockActivitySnapshots(DateOnly reportDate) =>
+        DbContext.Set<StockQuarterlyActivity>().Where(s => s.ReportDate == reportDate);
+
     // Double-down report: per-(holder, stock) positions where the share-count
     // increase from the prior quarter exceeds a given percentage threshold,
     // ranked by conviction (largest % increase first). Joins holder + stock
