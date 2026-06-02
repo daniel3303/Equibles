@@ -194,23 +194,14 @@ public class FredTools
                     .Take(maxResults)
                     .ToListAsync();
 
-                if (series.Count == 0)
-                    return $"No series found matching '{query}'.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    series,
+                    $"No series found matching '{query}'.",
                     $"Economic indicators matching '{query}':",
                     "| Series ID | Title | Category | Frequency | Units |",
-                    "|-----------|-------|----------|-----------|-------|"
+                    "|-----------|-------|----------|-----------|-------|",
+                    s => $"| {s.SeriesId} | {s.Title} | {s.Category} | {s.Frequency} | {s.Units} |"
                 );
-
-                foreach (var s in series)
-                {
-                    result.AppendLine(
-                        $"| {s.SeriesId} | {s.Title} | {s.Category} | {s.Frequency} | {s.Units} |"
-                    );
-                }
-
-                return result.ToString();
             },
             "SearchEconomicIndicators",
             $"query: {query}"

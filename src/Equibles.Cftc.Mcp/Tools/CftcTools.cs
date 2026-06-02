@@ -199,23 +199,14 @@ public class CftcTools
                     .Take(maxResults)
                     .ToListAsync();
 
-                if (contracts.Count == 0)
-                    return $"No contracts found matching '{query}'.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    contracts,
+                    $"No contracts found matching '{query}'.",
                     $"CFTC contracts matching '{query}':",
                     "| Market Code | Name | Category |",
-                    "|-------------|------|----------|"
+                    "|-------------|------|----------|",
+                    c => $"| {c.MarketCode} | {c.MarketName} | {c.Category.NameForHumans()} |"
                 );
-
-                foreach (var c in contracts)
-                {
-                    result.AppendLine(
-                        $"| {c.MarketCode} | {c.MarketName} | {c.Category.NameForHumans()} |"
-                    );
-                }
-
-                return result.ToString();
             },
             "SearchCftcMarkets",
             $"query: {query}"

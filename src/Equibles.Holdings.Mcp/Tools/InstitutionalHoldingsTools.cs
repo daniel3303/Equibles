@@ -305,23 +305,14 @@ public class InstitutionalHoldingsTools
                     .Take(maxResults)
                     .ToListAsync();
 
-                if (holders.Count == 0)
-                    return $"No institutions found matching '{query}'.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    holders,
+                    $"No institutions found matching '{query}'.",
                     $"Institutions matching '{query}':",
                     "| Institution | CIK | City | State/Country |",
-                    "|------------|-----|------|--------------|"
+                    "|------------|-----|------|--------------|",
+                    h => $"| {h.Name} | {h.Cik} | {h.City ?? "—"} | {h.StateOrCountry ?? "—"} |"
                 );
-
-                foreach (var h in holders)
-                {
-                    result.AppendLine(
-                        $"| {h.Name} | {h.Cik} | {h.City ?? "—"} | {h.StateOrCountry ?? "—"} |"
-                    );
-                }
-
-                return result.ToString();
             },
             "SearchInstitutions",
             $"query: {query}"
