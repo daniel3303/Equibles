@@ -35,14 +35,14 @@
         var overlap = Model.Overlap;
         <div class="card bg-base-100 shadow-sm mb-6" data-testid="combined-summary">
             <div class="card-body p-4">
-                <div class="flex flex-wrap items-center gap-3 mb-3 text-xs text-base-content/60">
+                <badge-strip>
                     <span class="badge badge-ghost">Report date: @overlap.ReportDate.ToString("MMM dd, yyyy")</span>
                     <span class="badge badge-ghost">@overlap.Funds.Count funds combined</span>
                     <span class="badge badge-ghost">@overlap.UnionPositionCount unique stocks</span>
                     @if (overlap.IntersectionPositionCount > 0) {
                         <span class="badge badge-success">@overlap.IntersectionPositionCount held by all</span>
                     }
-                </div>
+                </badge-strip>
                 <ul class="text-sm text-base-content/70 list-disc list-inside">
                     @foreach (var fund in overlap.Funds) {
                         <li>@fund.HolderName <span class="text-xs text-base-content/50">CIK @fund.HolderCik</span> — @fund.PositionCount positions, $@fund.TotalValue.ToString("N0")</li>
