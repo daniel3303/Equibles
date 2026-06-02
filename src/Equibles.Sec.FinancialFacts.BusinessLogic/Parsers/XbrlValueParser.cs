@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Equibles.Sec.FinancialFacts.BusinessLogic.Parsers;
 
 // Engine-agnostic XBRL value-parsing primitives shared by StandaloneXbrlParser
@@ -22,6 +24,13 @@ internal static class XbrlValueParser
             return null;
         if (string.Equals(decimalsAttribute, "INF", StringComparison.OrdinalIgnoreCase))
             return int.MaxValue;
-        return int.TryParse(decimalsAttribute, out var value) ? value : null;
+        return int.TryParse(
+            decimalsAttribute,
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out var value
+        )
+            ? value
+            : null;
     }
 }
