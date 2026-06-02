@@ -194,21 +194,14 @@ public class CongressTools
                     .Take(maxResults)
                     .ToListAsync();
 
-                if (members.Count == 0)
-                    return $"No congress members found matching '{query}'.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    members,
+                    $"No congress members found matching '{query}'.",
                     $"Congress members matching '{query}':",
                     "| Name | Position |",
-                    "|------|----------|"
+                    "|------|----------|",
+                    m => $"| {m.Name} | {m.Position.NameForHumans()} |"
                 );
-
-                foreach (var m in members)
-                {
-                    result.AppendLine($"| {m.Name} | {m.Position.NameForHumans()} |");
-                }
-
-                return result.ToString();
             },
             "SearchCongressMembers",
             $"query: {query}"

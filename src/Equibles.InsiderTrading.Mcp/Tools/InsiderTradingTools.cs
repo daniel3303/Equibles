@@ -224,30 +224,24 @@ public class InsiderTradingTools
 
                 var insiders = await _ownerRepository.Search(query).Take(maxResults).ToListAsync();
 
-                if (insiders.Count == 0)
-                    return $"No insiders found matching '{query}'.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    insiders,
+                    $"No insiders found matching '{query}'.",
                     $"Insiders matching '{query}':",
                     "| Name | CIK | Role | Location |",
-                    "|------|-----|------|----------|"
+                    "|------|-----|------|----------|",
+                    insider =>
+                    {
+                        var role = GetRole(insider);
+                        var location = string.Join(
+                            ", ",
+                            new[] { insider.City, insider.StateOrCountry }.Where(s =>
+                                !string.IsNullOrEmpty(s)
+                            )
+                        );
+                        return $"| {insider.Name} | {insider.OwnerCik} | {role} | {location} |";
+                    }
                 );
-
-                foreach (var insider in insiders)
-                {
-                    var role = GetRole(insider);
-                    var location = string.Join(
-                        ", ",
-                        new[] { insider.City, insider.StateOrCountry }.Where(s =>
-                            !string.IsNullOrEmpty(s)
-                        )
-                    );
-                    result.AppendLine(
-                        $"| {insider.Name} | {insider.OwnerCik} | {role} | {location} |"
-                    );
-                }
-
-                return result.ToString();
             },
             "SearchInsiders",
             $"query: {query}"

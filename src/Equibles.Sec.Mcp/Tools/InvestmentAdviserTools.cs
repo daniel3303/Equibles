@@ -53,23 +53,15 @@ public class InvestmentAdviserTools
                     .Take(maxResults)
                     .ToListAsync();
 
-                if (advisers.Count == 0)
-                    return $"No investment advisers found matching \"{query}\".";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    advisers,
+                    $"No investment advisers found matching \"{query}\".",
                     $"Investment advisers matching \"{query}\" ({advisers.Count} shown, largest by assets first):",
                     "| CRD | Name | Location | Regulatory AUM | Employees |",
-                    "|-----|------|----------|----------------|-----------|"
-                );
-
-                foreach (var a in advisers)
-                {
-                    result.AppendLine(
+                    "|-----|------|----------|----------------|-----------|",
+                    a =>
                         $"| {a.Crd} | {a.LegalName ?? "-"} | {FormatLocation(a)} | {FormatAum(a.TotalRegulatoryAum)} | {FormatCount(a.NumberOfEmployees)} |"
-                    );
-                }
-
-                return result.ToString();
+                );
             },
             "SearchInvestmentAdvisers",
             $"query: {query}"

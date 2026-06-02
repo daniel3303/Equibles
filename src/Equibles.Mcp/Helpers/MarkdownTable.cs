@@ -32,6 +32,28 @@ public static class MarkdownTable
         return sb;
     }
 
+    // Renders rows as a markdown table, or returns emptyMessage verbatim when there are none.
+    // Centralises the search-result table shape (empty check → header → one row per item)
+    // repeated across the MCP search tools. Callers materialise the query first so this helper
+    // stays free of any data-access dependency.
+    public static string Render<T>(
+        IReadOnlyList<T> rows,
+        string emptyMessage,
+        string title,
+        string headerRow,
+        string separatorRow,
+        Func<T, string> renderRow
+    )
+    {
+        if (rows.Count == 0)
+            return emptyMessage;
+
+        var sb = Start(title, headerRow, separatorRow);
+        foreach (var row in rows)
+            sb.AppendLine(renderRow(row));
+        return sb.ToString();
+    }
+
     // Appends one markdown row per item in order, passing the 1-based rank and the item to
     // renderRow. Centralises the ranked-table loop so call sites don't repeat the `i + 1`
     // off-by-one and the `rows[i]` indexing.
