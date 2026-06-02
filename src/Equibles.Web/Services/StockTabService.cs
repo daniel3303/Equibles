@@ -4,6 +4,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Extensions;
+using Equibles.Data.Extensions;
 using Equibles.Finra.Repositories;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
@@ -553,8 +554,8 @@ public class StockTabService
         // SEC re-emits a concept across filings (restatements); the latest-filed
         // value is the currently-reported one.
         var latestByConcept = facts
-            .GroupBy(f => f.FinancialConceptId)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.FiledDate).First());
+            .LatestPerGroup(f => f.FinancialConceptId, f => f.FiledDate)
+            .ToDictionary(f => f.FinancialConceptId);
 
         return statementLines
             .Select(line =>

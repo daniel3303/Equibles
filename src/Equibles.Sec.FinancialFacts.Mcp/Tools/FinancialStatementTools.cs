@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.Extensions;
+using Equibles.Data.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
@@ -124,8 +125,8 @@ public class FinancialStatementTools
                 // Restatements re-emit the same concept; the latest-filed value
                 // is the currently-reported one.
                 var latestByConcept = facts
-                    .GroupBy(f => f.FinancialConceptId)
-                    .ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.FiledDate).First());
+                    .LatestPerGroup(f => f.FinancialConceptId, f => f.FiledDate)
+                    .ToDictionary(f => f.FinancialConceptId);
 
                 return RenderStatementTable(
                     stock,
