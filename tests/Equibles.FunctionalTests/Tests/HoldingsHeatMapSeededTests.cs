@@ -54,6 +54,27 @@ public class HoldingsHeatMapSeededTests
                 db.Add(MakeHolding(stockId, filer.Id, latest, 150, 1_500_000));
             }
 
+            // The single-quarter heat map renders from the materialised
+            // StockQuarterlyActivity snapshot (#1262), not the live holdings, so
+            // the qualifying stock has to be present there for the bubble chart
+            // and top-scorers table to populate.
+            db.Add(
+                new StockQuarterlyActivity
+                {
+                    CommonStockId = stockId,
+                    ReportDate = latest,
+                    PreviousReportDate = prior,
+                    CurrentShares = 450,
+                    PreviousShares = 300,
+                    CurrentValue = 4_500_000,
+                    PreviousValue = 3_000_000,
+                    CurrentFilerCount = 3,
+                    PreviousFilerCount = 3,
+                    NewFilerCount = 0,
+                    SoldOutFilerCount = 0,
+                }
+            );
+
             await Task.CompletedTask;
         });
 

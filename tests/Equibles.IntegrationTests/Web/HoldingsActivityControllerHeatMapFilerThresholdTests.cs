@@ -9,7 +9,11 @@ namespace Equibles.IntegrationTests.Web;
 /// Pins the conviction-heat-map's filer-count floor: the action keeps only
 /// stocks with CurrentFilerCount >= 3 (noise reduction), so a thinly-held stock
 /// with 2 filers must be excluded while a 3-filer stock appears. Exercises the
-/// otherwise-untested heat-map body (activity query + score computation + render).
+/// otherwise-untested heat-map body (snapshot query + score computation + render).
+///
+/// The single-quarter view reads the materialised StockQuarterlyActivity snapshot
+/// (#1262), so the filer counts are seeded there; the holdings rows only supply
+/// the available-report-dates list and the total-filer universe count.
 /// </summary>
 [Collection(WebHostCollection.Name)]
 public class HoldingsActivityControllerHeatMapFilerThresholdTests
@@ -54,13 +58,21 @@ public class HoldingsActivityControllerHeatMapFilerThresholdTests
                 db.Add(h);
             }
 
-            // Two distinct quarters so the heat map has a prior to compare against.
+            // Two distinct quarters so the heat map has a prior to compare against
+            // and the available-dates list clears its >= 2 minimum.
             db.Add(MakeHolding(aaplId, holders[0].Id, prior, 100, 180_000));
             // Current quarter: AAPL held by 3 filers (qualifies), MSFT by 2 (below floor).
             for (var i = 0; i < 3; i++)
                 db.Add(MakeHolding(aaplId, holders[i].Id, current, 100, 200_000));
             for (var i = 0; i < 2; i++)
                 db.Add(MakeHolding(msftId, holders[i].Id, current, 50, 100_000));
+
+            // The single-quarter heat map renders from the materialised snapshot,
+            // so the qualifying/below-floor split lives in these rows.
+            db.AddRange(
+                MakeSnapshot(aaplId, current, prior, filerCount: 3, value: 200_000),
+                MakeSnapshot(msftId, current, prior, filerCount: 2, value: 100_000)
+            );
             await Task.CompletedTask;
         });
 
@@ -71,6 +83,28 @@ public class HoldingsActivityControllerHeatMapFilerThresholdTests
         html.Should().Contain("AAPL"); // 3 filers -> kept
         html.Should().NotContain("MSFT"); // 2 filers -> below the >=3 floor, dropped
     }
+
+    private static StockQuarterlyActivity MakeSnapshot(
+        Guid stockId,
+        DateOnly reportDate,
+        DateOnly previousReportDate,
+        int filerCount,
+        long value
+    ) =>
+        new()
+        {
+            CommonStockId = stockId,
+            ReportDate = reportDate,
+            PreviousReportDate = previousReportDate,
+            CurrentShares = 100 * filerCount,
+            PreviousShares = 0,
+            CurrentValue = value,
+            PreviousValue = 0,
+            CurrentFilerCount = filerCount,
+            PreviousFilerCount = 0,
+            NewFilerCount = filerCount,
+            SoldOutFilerCount = 0,
+        };
 
     private static InstitutionalHolding MakeHolding(
         Guid stockId,
