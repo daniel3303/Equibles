@@ -206,14 +206,10 @@ public class StockPriceTools
                     dPeriod
                 );
 
-                var result = StartTable(
+                return RenderNewestFirst(
                     $"Stochastic Oscillator (%K={kPeriod}, %D={dPeriod}) for {stock.Ticker} ({stock.Name}):",
                     "| Date | Close | %K | %D |",
-                    "|------|-------|----|----|"
-                );
-
-                AppendNewestFirstRows(
-                    result,
+                    "|------|-------|----|----|",
                     records.Count,
                     maxResults,
                     i =>
@@ -223,8 +219,6 @@ public class StockPriceTools
                         return $"| {records[i].Date:yyyy-MM-dd} | {McpFormat.Invariant(records[i].Close, "F2")} | {kCell} | {dCell} |";
                     }
                 );
-
-                return result.ToString();
             },
             "GetStochasticOscillator",
             $"ticker: {ticker}"
@@ -266,14 +260,10 @@ public class StockPriceTools
                 var (highs, lows, closes) = ExtractHighLowClose(records);
                 var atr = TechnicalIndicatorService.ComputeAtr(highs, lows, closes, period);
 
-                var result = StartTable(
+                return RenderNewestFirst(
                     $"Average True Range (period={period}) for {stock.Ticker} ({stock.Name}):",
                     "| Date | Close | ATR |",
-                    "|------|-------|-----|"
-                );
-
-                AppendNewestFirstRows(
-                    result,
+                    "|------|-------|-----|",
                     records.Count,
                     maxResults,
                     i =>
@@ -282,8 +272,6 @@ public class StockPriceTools
                         return $"| {records[i].Date:yyyy-MM-dd} | {McpFormat.Invariant(records[i].Close, "F2")} | {atrCell} |";
                     }
                 );
-
-                return result.ToString();
             },
             "GetAverageTrueRange",
             $"ticker: {ticker}"
@@ -322,21 +310,15 @@ public class StockPriceTools
                 var volumes = records.Select(p => p.Volume).ToList();
                 var obv = TechnicalIndicatorService.ComputeObv(closes, volumes);
 
-                var result = StartTable(
+                return RenderNewestFirst(
                     $"On-Balance Volume for {stock.Ticker} ({stock.Name}):",
                     "| Date | Close | Volume | OBV |",
-                    "|------|-------|--------|-----|"
-                );
-
-                AppendNewestFirstRows(
-                    result,
+                    "|------|-------|--------|-----|",
                     records.Count,
                     maxResults,
                     i =>
                         $"| {records[i].Date:yyyy-MM-dd} | {McpFormat.Invariant(records[i].Close, "F2")} | {McpFormat.WholeNumber(records[i].Volume)} | {McpFormat.WholeNumber(obv[i])} |"
                 );
-
-                return result.ToString();
             },
             "GetOnBalanceVolume",
             $"ticker: {ticker}"
@@ -386,14 +368,10 @@ public class StockPriceTools
                     stdDev
                 );
 
-                var result = StartTable(
+                return RenderNewestFirst(
                     $"Bollinger Bands (period={period}, stdDev={McpFormat.Invariant(stdDev, "0.#")}) for {stock.Ticker} ({stock.Name}):",
                     "| Date | Close | Lower | Middle | Upper |",
-                    "|------|-------|-------|--------|-------|"
-                );
-
-                AppendNewestFirstRows(
-                    result,
+                    "|------|-------|-------|--------|-------|",
                     records.Count,
                     maxResults,
                     i =>
@@ -404,8 +382,6 @@ public class StockPriceTools
                         return $"| {records[i].Date:yyyy-MM-dd} | {McpFormat.Invariant(records[i].Close, "F2")} | {lowerCell} | {middleCell} | {upperCell} |";
                     }
                 );
-
-                return result.ToString();
             },
             "GetBollingerBands",
             $"ticker: {ticker}"
@@ -448,6 +424,22 @@ public class StockPriceTools
     // reflection-based pins still resolve it.
     private static StringBuilder StartTable(string title, string columnsRow, string separatorRow) =>
         MarkdownTable.Start(title, columnsRow, separatorRow);
+
+    // Renders the newest-first indicator table shared by the technical-indicator tools:
+    // the load-bearing title/header/separator start, the newest-first row loop, then ToString.
+    private static string RenderNewestFirst(
+        string title,
+        string columnsRow,
+        string separatorRow,
+        int count,
+        int maxResults,
+        Func<int, string> formatRow
+    )
+    {
+        var result = StartTable(title, columnsRow, separatorRow);
+        AppendNewestFirstRows(result, count, maxResults, formatRow);
+        return result.ToString();
+    }
 
     private static void AppendNewestFirstRows(
         StringBuilder result,
