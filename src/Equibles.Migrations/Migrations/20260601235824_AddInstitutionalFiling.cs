@@ -83,25 +83,46 @@ namespace Equibles.Migrations.Migrations
             // inline on every request. Going forward the import path keeps this
             // table current (HoldingsImportService.SyncFilingSummaries). Runs once,
             // when this migration is applied.
+            //
+            // AccessionNumber is unique on InstitutionalFiling, but a few accessions
+            // appear under more than one (holder, filing-date) group in the historical
+            // holdings (e.g. the same accession attributed to two holder ids). Grouping
+            // by those columns alone would emit several rows for one accession and
+            // violate the unique index, so DISTINCT ON keeps exactly one row per
+            // accession — the largest group, deterministically — mirroring the runtime
+            // upsert's one-row-per-accession (.On(AccessionNumber)) outcome.
             migrationBuilder.Sql(
                 """
                 INSERT INTO "InstitutionalFiling"
                     ("Id", "AccessionNumber", "InstitutionalHolderId", "FilingDate",
                      "ReportDate", "IsAmendment", "PositionCount", "TotalValue", "CreationTime")
-                SELECT
+                SELECT DISTINCT ON (grouped."AccessionNumber")
                     gen_random_uuid(),
-                    "AccessionNumber",
-                    "InstitutionalHolderId",
-                    "FilingDate",
-                    "ReportDate",
-                    "IsAmendment",
-                    COUNT(*),
-                    COALESCE(SUM("Value"), 0)::bigint,
-                    MIN("CreationTime")
-                FROM "InstitutionalHolding"
-                WHERE "AccessionNumber" IS NOT NULL
-                GROUP BY "AccessionNumber", "InstitutionalHolderId", "FilingDate",
-                         "ReportDate", "IsAmendment";
+                    grouped."AccessionNumber",
+                    grouped."InstitutionalHolderId",
+                    grouped."FilingDate",
+                    grouped."ReportDate",
+                    grouped."IsAmendment",
+                    grouped."PositionCount",
+                    grouped."TotalValue",
+                    grouped."CreationTime"
+                FROM (
+                    SELECT
+                        "AccessionNumber",
+                        "InstitutionalHolderId",
+                        "FilingDate",
+                        "ReportDate",
+                        "IsAmendment",
+                        COUNT(*) AS "PositionCount",
+                        COALESCE(SUM("Value"), 0)::bigint AS "TotalValue",
+                        MIN("CreationTime") AS "CreationTime"
+                    FROM "InstitutionalHolding"
+                    WHERE "AccessionNumber" IS NOT NULL
+                    GROUP BY "AccessionNumber", "InstitutionalHolderId", "FilingDate",
+                             "ReportDate", "IsAmendment"
+                ) AS grouped
+                ORDER BY grouped."AccessionNumber", grouped."PositionCount" DESC,
+                         grouped."InstitutionalHolderId";
                 """
             );
         }
