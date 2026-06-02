@@ -173,7 +173,15 @@ public class FundScoringManager
         DateOnly? lastBeforeWindow = null;
         foreach (var date in reportDates)
         {
-            var rebalance = date.AddDays(HoldingsBacktestCalculator.RebalanceDelayDays);
+            // Clamp the +45-day shift at the calendar's end so a far-future ReportDate
+            // (within RebalanceDelayDays of DateOnly.MaxValue) is treated as an out-of-window
+            // rebalance rather than overflowing AddDays — matching HoldingsBacktestCalculator
+            // and the HoldingsBacktestService / SmartMoneyIndexManager siblings.
+            var rebalance =
+                date.DayNumber
+                > DateOnly.MaxValue.DayNumber - HoldingsBacktestCalculator.RebalanceDelayDays
+                    ? DateOnly.MaxValue
+                    : date.AddDays(HoldingsBacktestCalculator.RebalanceDelayDays);
             if (rebalance < from)
                 lastBeforeWindow = date;
             else if (rebalance <= to)

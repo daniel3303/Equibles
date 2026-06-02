@@ -19,7 +19,7 @@ namespace Equibles.UnitTests.Holdings;
 /// </summary>
 public class FundScoringManagerSelectRelevantSnapshotDatesMaxValueReportDateTests
 {
-    [Fact(Skip = "GH-3221 — FundScoringManager.SelectRelevantSnapshotDates throws on a MaxValue ReportDate")]
+    [Fact]
     public void SelectRelevantSnapshotDates_ReportDateAtMaxValue_ExcludesItWithoutThrowing()
     {
         var method = typeof(FundScoringManager).GetMethod(
