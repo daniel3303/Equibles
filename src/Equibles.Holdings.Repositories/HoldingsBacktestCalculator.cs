@@ -57,11 +57,13 @@ public static class HoldingsBacktestCalculator
             .OrderBy(x => x.RebalanceDate)
             .ToList();
 
-        // First snapshot whose rebalance date is on or after `from`. If none — the window
-        // sits after the latest filing; fall back to the most recent prior snapshot so the
-        // simulation still has a portfolio to mark to market.
-        var firstIdx = ordered.FindIndex(x => x.RebalanceDate >= from);
-        var snapshotIdx = firstIdx < 0 ? ordered.Count - 1 : firstIdx;
+        // The snapshot active at `from`: the latest whose rebalance date is on or before
+        // `from`, so the simulation opens at `from` with the portfolio that had actually
+        // matured by then (marking it to market until the next rebalance date inside the
+        // window). If `from` precedes every rebalance date, no filing has matured yet —
+        // open at the earliest snapshot's rebalance date instead.
+        var priorIdx = ordered.FindLastIndex(x => x.RebalanceDate <= from);
+        var snapshotIdx = priorIdx < 0 ? 0 : priorIdx;
 
         var startDate = ordered[snapshotIdx].RebalanceDate;
         if (startDate < from)
