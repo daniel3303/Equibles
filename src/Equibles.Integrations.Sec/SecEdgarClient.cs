@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -282,16 +281,12 @@ public class SecEdgarClient : ISecEdgarClient
 
         foreach (var archiveFile in filings.Files)
         {
-            // Skip archive files whose date range is entirely outside the requested window
+            // Skip archive files whose date range is entirely outside the requested window.
+            // MaxValue/MinValue fallbacks make an unparseable date never trigger a skip,
+            // matching the prior behavior where a failed parse left the archive included.
             if (
                 fromDate.HasValue
-                && DateOnly.TryParse(
-                    archiveFile.FilingTo,
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.None,
-                    out var archiveTo
-                )
-                && archiveTo < fromDate.Value
+                && ParseInvariantDateOr(archiveFile.FilingTo, DateOnly.MaxValue) < fromDate.Value
             )
             {
                 _logger.LogDebug(
@@ -304,13 +299,7 @@ public class SecEdgarClient : ISecEdgarClient
 
             if (
                 toDate.HasValue
-                && DateOnly.TryParse(
-                    archiveFile.FilingFrom,
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.None,
-                    out var archiveFrom
-                )
-                && archiveFrom > toDate.Value
+                && ParseInvariantDateOr(archiveFile.FilingFrom, DateOnly.MinValue) > toDate.Value
             )
             {
                 _logger.LogDebug(
@@ -523,14 +512,7 @@ public class SecEdgarClient : ISecEdgarClient
             FormType = formType,
             CompanyName = company,
             Cik = cik,
-            DateFiled = DateOnly.TryParse(
-                dateFiled,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out var d
-            )
-                ? d
-                : fallbackDate,
+            DateFiled = ParseInvariantDateOr(dateFiled, fallbackDate),
             AccessionNumber = accession,
         };
         return true;
