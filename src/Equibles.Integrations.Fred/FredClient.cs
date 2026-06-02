@@ -1,4 +1,3 @@
-using System.Net;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Common.RateLimiter;
 using Equibles.Integrations.Common.Retry;
@@ -109,45 +108,28 @@ public class FredClient : IFredClient
 
     private async Task<string> SendWithRetry(string url)
     {
-        for (var attempt = 0; attempt <= MaxRetries; attempt++)
-        {
-            await RateLimiter.WaitAsync();
-
-            using var response = await _httpClient.GetAsync(url);
-
-            if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < MaxRetries)
-            {
-                var delay = ExponentialBackoff(attempt);
+        using var response = await HttpRetry.Send(
+            () => _httpClient.GetAsync(url),
+            RateLimiter,
+            MaxRetries,
+            "Max retries exceeded for FRED API request",
+            (attempt, delay) =>
                 _logger.LogWarning(
                     "FRED rate limited (429), retrying in {Delay}s (attempt {Attempt}/{Max})",
                     delay.TotalSeconds,
                     attempt + 1,
                     MaxRetries
-                );
-                RateLimiter.PauseFor(delay);
-                await Task.Delay(delay);
-                continue;
-            }
-
-            if ((int)response.StatusCode >= 500 && attempt < MaxRetries)
-            {
-                var delay = ExponentialBackoff(attempt);
+                ),
+            (statusCode, attempt, delay) =>
                 _logger.LogWarning(
                     "FRED server error ({StatusCode}), retrying in {Delay}s (attempt {Attempt}/{Max})",
-                    (int)response.StatusCode,
+                    statusCode,
                     delay.TotalSeconds,
                     attempt + 1,
                     MaxRetries
-                );
-                await Task.Delay(delay);
-                continue;
-            }
-
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadAsStringAsync();
-        }
-
-        throw new HttpRequestException("Max retries exceeded for FRED API request");
+                )
+        );
+        return await response.Content.ReadAsStringAsync();
     }
 
     // Thin forwarder so existing reflection-based backoff tests still find the method.
