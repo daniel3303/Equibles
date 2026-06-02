@@ -134,14 +134,23 @@ public class AumSnapshotRebuildWorker : BackgroundService
         var snapshotQuarters = await dbContext
             .Set<AumQuarterlySnapshot>()
             .CountAsync(cancellationToken);
-        if (snapshotQuarters >= holdingQuarters)
+        // RebuildQuarter also materialises StockQuarterlyActivity, so a quarter
+        // isn't fully covered until both snapshots exist for it — otherwise a
+        // newly-added activity table would never backfill once AUM is complete.
+        var activityQuarters = await dbContext
+            .Set<StockQuarterlyActivity>()
+            .Select(s => s.ReportDate)
+            .Distinct()
+            .CountAsync(cancellationToken);
+        if (snapshotQuarters >= holdingQuarters && activityQuarters >= holdingQuarters)
         {
             return;
         }
 
         _logger.LogInformation(
-            "AUM snapshot coverage incomplete ({Snapshots}/{Holdings} quarters) — running backfill with {Timeout}s command timeout",
+            "Holdings snapshot coverage incomplete (AUM {Snapshots}, activity {Activity} of {Holdings} quarters) — running backfill with {Timeout}s command timeout",
             snapshotQuarters,
+            activityQuarters,
             holdingQuarters,
             BackfillCommandTimeout.TotalSeconds
         );

@@ -101,6 +101,11 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<RealtimeSweepState>();
         builder.Entity<FundScore>();
 
+        // StockQuarterlyActivity carries its composite (CommonStockId, ReportDate)
+        // key and ReportDate index as attributes on the entity; no Fluent config
+        // is needed beyond registering it.
+        builder.Entity<StockQuarterlyActivity>();
+
         // AumQuarterlySnapshot uses ReportDate as the primary key. The [Key]
         // attribute can't be paired with [DatabaseGenerated(None)] without EF
         // also treating it as identity-by-convention on integral types, but the
