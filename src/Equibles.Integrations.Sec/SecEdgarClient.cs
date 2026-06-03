@@ -27,6 +27,15 @@ public class SecEdgarClient : ISecEdgarClient
     private const int MaxRetries = 10;
     private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(5);
 
+    // SEC blocks an IP that exceeds 10 req/s for 10 minutes, and — per its own
+    // throttle page — *continuing to request during the block extends it*. SEC sends
+    // no Retry-After, so a short exponential backoff would keep poking SEC inside the
+    // window and renew the block indefinitely. When we detect the throttle we instead
+    // idle the whole rate limiter for this full penalty so the block can auto-lift.
+    // Configurable via Sec:RateLimitPauseSeconds (default 600); tests set 0 to stay fast.
+    private static readonly TimeSpan DefaultRateLimitPause = TimeSpan.FromMinutes(10);
+    private readonly TimeSpan _rateLimitPause;
+
     private readonly HttpClient _httpClient;
     private readonly ILogger<SecEdgarClient> _logger;
     private CachedResponse _cachedContent; // Used to cache the latest fetched list of documents
@@ -59,6 +68,12 @@ public class SecEdgarClient : ISecEdgarClient
         }
 
         _httpClient.Timeout = TimeSpan.FromMinutes(2);
+
+        var pauseSeconds = configuration["Sec:RateLimitPauseSeconds"];
+        _rateLimitPause =
+            int.TryParse(pauseSeconds, out var seconds) && seconds >= 0
+                ? TimeSpan.FromSeconds(seconds)
+                : DefaultRateLimitPause;
     }
 
     public async Task<List<CompanyInfo>> GetActiveCompanies()
@@ -629,10 +644,10 @@ public class SecEdgarClient : ISecEdgarClient
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
-                var delay = GetRetryDelay(response, attempt);
+                var delay = GetRateLimitPause(response);
 
                 _logger.LogWarning(
-                    "SEC EDGAR rate limited (429) for {Url}, pausing for {Delay}s (attempt {Attempt}/{Max})",
+                    "SEC EDGAR rate limited (429) for {Url}, pausing all SEC requests for {Delay}s (attempt {Attempt}/{Max})",
                     url,
                     delay.TotalSeconds,
                     attempt + 1,
@@ -661,10 +676,10 @@ public class SecEdgarClient : ISecEdgarClient
                 var body = await ReadDecodedBody(response, cancellationToken);
                 if (IsRateLimitThresholdPage(body))
                 {
-                    var delay = GetRetryDelay(response, attempt);
+                    var delay = GetRateLimitPause(response);
 
                     _logger.LogWarning(
-                        "SEC EDGAR throttled (403 threshold page) for {Url}, pausing for {Delay}s (attempt {Attempt}/{Max})",
+                        "SEC EDGAR throttled (403 threshold page) for {Url}, pausing all SEC requests for {Delay}s (attempt {Attempt}/{Max})",
                         url,
                         delay.TotalSeconds,
                         attempt + 1,
@@ -702,6 +717,37 @@ public class SecEdgarClient : ISecEdgarClient
         throw new HttpRequestException(
             $"Max retries ({MaxRetries}) exceeded for SEC EDGAR request: {url}"
         );
+    }
+
+    // The pause applied when SEC reports its rate-limit threshold (a 429, or the 403
+    // throttle page). SEC sends no Retry-After on these, so we idle for the full
+    // configured penalty (default 10 min) — long enough for the IP block to auto-lift
+    // rather than be renewed by our own retries. This penalty deliberately exceeds
+    // MaxRetryDelay (which bounds the transient/5xx backoff): it models SEC's fixed
+    // block window, not a backoff. An explicit Retry-After is still honored when
+    // present (a future SEC change, and 0 in tests to stay fast), clamped so a
+    // pathological value can't stall a processor indefinitely.
+    private TimeSpan GetRateLimitPause(HttpResponseMessage response)
+    {
+        var ceiling = _rateLimitPause > MaxRetryDelay ? _rateLimitPause : MaxRetryDelay;
+
+        if (response.Headers.RetryAfter?.Delta is { } delta)
+        {
+            return delta > ceiling ? ceiling : delta;
+        }
+
+        if (response.Headers.RetryAfter?.Date is { } date)
+        {
+            var wait = date - DateTimeOffset.UtcNow;
+            if (wait <= TimeSpan.Zero)
+            {
+                return TimeSpan.Zero;
+            }
+
+            return wait > ceiling ? ceiling : wait;
+        }
+
+        return _rateLimitPause;
     }
 
     private TimeSpan GetRetryDelay(HttpResponseMessage response, int attempt)
