@@ -110,8 +110,10 @@ public class ShortVolumeImportService
                 async batch =>
                 {
                     using var scope = _scopeFactory.CreateScope();
-                    var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-                    var repo = scope.ServiceProvider.GetRequiredService<DailyShortVolumeRepository>();
+                    var stockRepo =
+                        scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+                    var repo =
+                        scope.ServiceProvider.GetRequiredService<DailyShortVolumeRepository>();
 
                     // tickerMap was built at the start of Import and can go stale if CompanySyncService
                     // hard-deletes/replaces a stock in parallel. Re-validate each batch against the
@@ -123,7 +125,9 @@ public class ShortVolumeImportService
                         .Select(s => s.Id)
                         .ToHashSetAsync(cancellationToken);
 
-                    var validBatch = batch.Where(b => liveStockIds.Contains(b.CommonStockId)).ToList();
+                    var validBatch = batch
+                        .Where(b => liveStockIds.Contains(b.CommonStockId))
+                        .ToList();
                     var dropped = batch.Count - validBatch.Count;
                     if (dropped > 0)
                     {
