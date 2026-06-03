@@ -48,6 +48,17 @@ public class RateLimiter : IRateLimiter
         }
     }
 
+    public bool IsThrottled
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return DateTime.UtcNow < _pauseUntil;
+            }
+        }
+    }
+
     public void PauseFor(TimeSpan duration)
     {
         lock (_lock)

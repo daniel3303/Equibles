@@ -649,7 +649,10 @@ public class SecEdgarClient : ISecEdgarClient
 
             // A successful reach proves SEC is not blocking our IP; let the
             // notifier clear a prior block (it fires the recovery edge once).
-            if (response.IsSuccessStatusCode)
+            // Skip while the limiter is still throttled: a request that was
+            // already in flight when a sibling tripped a block can return 200
+            // here, and announcing "cleared" then would be a false signal.
+            if (response.IsSuccessStatusCode && !RateLimiter.IsThrottled)
             {
                 await _rateLimitNotifier.Reachable(url);
             }
@@ -666,8 +669,11 @@ public class SecEdgarClient : ISecEdgarClient
                     MaxRetries
                 );
 
-                await _rateLimitNotifier.RateLimited(delay, url);
+                // Pause first so the limiter (the source of truth) reflects the
+                // block before we announce it — a concurrent success then sees
+                // IsThrottled and won't publish a premature "cleared".
                 RateLimiter.PauseFor(delay);
+                await _rateLimitNotifier.RateLimited(delay, url);
 
                 if (attempt < MaxRetries)
                 {
@@ -699,8 +705,8 @@ public class SecEdgarClient : ISecEdgarClient
                         MaxRetries
                     );
 
-                    await _rateLimitNotifier.RateLimited(delay, url);
                     RateLimiter.PauseFor(delay);
+                    await _rateLimitNotifier.RateLimited(delay, url);
                     response.Dispose();
                     await Task.Delay(delay, cancellationToken);
                     continue;
