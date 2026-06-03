@@ -21,9 +21,12 @@ public class InsiderTransaction
     /// re-parsed from the cached <see cref="InsiderFiling"/> XML rather than
     /// re-fetched from EDGAR. Rows ingested before versioning default to 0.
     ///
-    /// History: v1 added SecurityKind; v2 added <see cref="Notes"/> (footnotes).
+    /// History: v1 added SecurityKind; v2 added <see cref="Notes"/> (footnotes);
+    /// v3 restates per-ADS prices on ADS/ADR rows to per-ordinary so Shares ×
+    /// PricePerShare is a real value (re-evaluated from the footnotes — see
+    /// <see cref="ReportedPricePerShare"/>).
     /// </summary>
-    public const int CurrentParserVersion = 2;
+    public const int CurrentParserVersion = 3;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 

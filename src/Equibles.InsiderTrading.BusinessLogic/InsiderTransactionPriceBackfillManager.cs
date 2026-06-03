@@ -115,7 +115,8 @@ public class InsiderTransactionPriceBackfillManager
                     transaction.Shares,
                     transaction.SecurityKind,
                     transaction.SecurityTitle,
-                    close
+                    close,
+                    transaction.Notes
                 );
 
                 transaction.PricePerShare = evaluation.EffectivePrice;
