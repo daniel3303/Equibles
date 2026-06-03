@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
@@ -7,6 +8,7 @@ using Equibles.Finra.Repositories;
 using Equibles.Integrations.Finra.Contracts;
 using Equibles.Integrations.Finra.Models;
 using Equibles.Worker;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace Equibles.Finra.HostedService.Services;
@@ -79,12 +81,16 @@ public class ShortVolumeImportService
                 continue;
             }
 
-            await ImportSingleDay(currentDate, tickerMap);
+            await ImportSingleDay(currentDate, tickerMap, cancellationToken);
             currentDate = currentDate.AddDays(1);
         }
     }
 
-    private async Task ImportSingleDay(DateOnly date, IReadOnlyDictionary<string, Guid> tickerMap)
+    private async Task ImportSingleDay(
+        DateOnly date,
+        IReadOnlyDictionary<string, Guid> tickerMap,
+        CancellationToken cancellationToken
+    )
     {
         try
         {
@@ -98,10 +104,43 @@ public class ShortVolumeImportService
 
             var aggregated = AggregateVolumesByStock(records, tickerMap, date);
 
-            var totalInserted = await BatchPersister.Persist<
-                DailyShortVolume,
-                DailyShortVolumeRepository
-            >(aggregated.Values, InsertBatchSize, _scopeFactory);
+            var totalInserted = await BatchPersister.Persist(
+                aggregated.Values,
+                InsertBatchSize,
+                async batch =>
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+                    var repo = scope.ServiceProvider.GetRequiredService<DailyShortVolumeRepository>();
+
+                    // tickerMap was built at the start of Import and can go stale if CompanySyncService
+                    // hard-deletes/replaces a stock in parallel. Re-validate each batch against the
+                    // current CommonStock table so dangling-FK inserts don't poison the whole batch.
+                    var batchStockIds = batch.Select(b => b.CommonStockId).Distinct().ToList();
+                    var liveStockIds = await stockRepo
+                        .GetAll()
+                        .Where(s => batchStockIds.Contains(s.Id))
+                        .Select(s => s.Id)
+                        .ToHashSetAsync(cancellationToken);
+
+                    var validBatch = batch.Where(b => liveStockIds.Contains(b.CommonStockId)).ToList();
+                    var dropped = batch.Count - validBatch.Count;
+                    if (dropped > 0)
+                    {
+                        _logger.LogWarning(
+                            "Dropped {Dropped} short volume rows for {Date} referencing CommonStockIds no longer in the database",
+                            dropped,
+                            date
+                        );
+                    }
+
+                    if (validBatch.Count == 0)
+                        return;
+
+                    repo.AddRange(validBatch);
+                    await repo.SaveChanges();
+                }
+            );
 
             _logger.LogInformation(
                 "Imported {Count} short volume records for {Date}",

@@ -59,6 +59,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - House congressional PTR PDFs are parsed via page geometry so Representatives land in the right columns. PR #2530.
 - SEC Form 4 transaction-code mapping corrected (I/W). PR #2469.
 - Investment-adviser name search treats LIKE wildcards (`%`, `_`) in the query as literal characters, so a search containing them no longer matches unintended advisers. Issue #2905 (PR #3010).
+- The FINRA daily short-volume scraper now guards against the parent `CommonStock` disappearing between the per-cycle ticker-map read and the per-batch write — the same guard already applied to the Yahoo, FTD, and FinancialFacts scrapers. A cold-start tick alongside `CompanySyncService` could otherwise trip `FK_*_CommonStock_CommonStockId` and fail the entire insert batch (poisoning rows for surviving stocks too); stale IDs are now re-validated against the live `CommonStock` table per batch and dropped with a warning so the surviving rows still persist. Issue #3288 (follow-up to #1591).
 
 ### Security
 
