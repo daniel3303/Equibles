@@ -46,6 +46,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Insider-trading values for companies listed via American Depositary Shares (ADS/ADR) are no longer overstated. These Form 4 filings report the share count in the issuer's underlying ordinary shares but quote the price per ADS, so the dashboard's shares × price read far too high — e.g. SaverOne (SVRE) appeared as an ~$8.6B insider buy when the real value was ~$200K. The price is now restated to a per-ordinary basis (from the filing's footnotes) whenever the share count is an exact multiple of the ADS ratio, leaving the as-filed price preserved. Existing rows are corrected on the next filing reprocess.
 - XBRL financial values wrapped in parentheses **and** carrying an explicit `sign="-"` are no longer double-negated — a parenthesised negative now resolves to a single negative value. PR #2819.
 - Financial tables with merged `rowspan`/`colspan` cells are expanded to a rectangular grid before parsing, so values land in the correct row and column. PR #2820.
 - CFTC Commitments-of-Traders ingestion looks up CSV columns by the headers cftc.gov actually ships rather than by fixed position, so a column reorder no longer mismaps positioning data. PR #2478.

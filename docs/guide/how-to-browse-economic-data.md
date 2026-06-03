@@ -8,7 +8,7 @@ You need a [FRED API key](how-to-set-up-fred-api-key.md) configured. Without it,
 
 ## Open the Economy index
 
-1. Click **Economy** in the top navigation, or go to `http://localhost:8080/EconomicData`.
+1. Click **More** in the top navigation, then **Economic Data** (or go to `http://localhost:8080/EconomicData`).
 
 2. You'll see indicators organized by category (e.g., Interest Rates, Inflation, Employment, GDP). Each row shows:
 

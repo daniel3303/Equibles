@@ -1,4 +1,5 @@
 using System.IO;
+using System.IO.Compression;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Authentication;
@@ -418,34 +419,57 @@ public class SecEdgarClient : ISecEdgarClient
         var url =
             $"{FilesBaseUrl}/Archives/edgar/daily-index/{date.Year}/QTR{quarter}/master.{date.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture)}.idx";
 
-        // A 403 on a PAST date is never a missing index (those always exist) —
-        // it's SEC throttling, so retry it as transient. For today/future dates a
-        // 403 means the index isn't published yet, so don't retry those.
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var isPastDate = date < today;
+        // SEC has no index on non-trading days. SendWithRetryAsync retries only the
+        // recognizable rolling-window throttle page, so a 403 surfacing here is not a
+        // transient throttle — it is either a genuine "no index for this date" or an
+        // exhausted throttle, distinguished below. (A past date is NOT guaranteed to
+        // have an index: weekends and market holidays — e.g. Memorial Day — have none,
+        // and SEC's S3-backed Archives answer those with a 403, not a 404.)
         using var response = await SendWithRetryAsync(
             url,
             HttpCompletionOption.ResponseContentRead,
-            cancellationToken,
-            retryForbidden: isPastDate
+            cancellationToken
         );
 
-        // Weekend/holiday 404, or a 403 for a not-yet-published index (today or a
-        // future date), both mean "no index for this date" — skip it.
-        if (
-            response.StatusCode == HttpStatusCode.NotFound
-            || (response.StatusCode == HttpStatusCode.Forbidden && !isPastDate)
-        )
+        // Weekends typically 404 — unambiguously "no index for this date".
+        if (response.StatusCode == HttpStatusCode.NotFound)
         {
             _logger.LogInformation("No daily index published for {Date:yyyy-MM-dd}", date);
             return [];
         }
 
-        // A past-date 403 that survived the retries is SEC still throttling: that
-        // index always exists, so this is a real failure to fetch, not "no
-        // filings". Let it throw — the caller (DiscoverEntries) catches it per
-        // day and holds the sweep watermark back so the day is re-swept next
-        // cycle, rather than being silently skipped past.
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            // SEC compresses error bodies even without an Accept-Encoding request, so
+            // decode before inspecting; the raw bytes would be unreadable.
+            var body = await ReadDecodedBody(response, cancellationToken);
+
+            // NEVER skip a real throttle — that would silently drop a trading day's
+            // filings. The rolling-window page survived SendWithRetryAsync's retries,
+            // so SEC is still throttling: throw so the caller holds the sweep watermark
+            // and re-sweeps the day next cycle.
+            if (IsRateLimitThresholdPage(body))
+            {
+                response.EnsureSuccessStatusCode();
+            }
+
+            // ONLY skip when the body positively identifies a missing index object —
+            // the S3 AccessDenied / NoSuchKey served for a non-trading day (holiday or
+            // weekend). Skipping lets the sweep advance past it instead of looping.
+            if (IsMissingIndexError(body))
+            {
+                _logger.LogInformation(
+                    "No daily index published for {Date:yyyy-MM-dd} (non-trading day)",
+                    date
+                );
+                return [];
+            }
+
+            // Any other 403 is unrecognized: be conservative and treat it as a fetch
+            // failure rather than risk skipping a day that has filings.
+            response.EnsureSuccessStatusCode();
+        }
+
         response.EnsureSuccessStatusCode();
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
 
@@ -563,8 +587,7 @@ public class SecEdgarClient : ISecEdgarClient
     private async Task<HttpResponseMessage> SendWithRetryAsync(
         string url,
         HttpCompletionOption completionOption,
-        CancellationToken cancellationToken = default,
-        bool retryForbidden = false
+        CancellationToken cancellationToken = default
     )
     {
         for (var attempt = 0; attempt <= MaxRetries; attempt++)
@@ -626,19 +649,17 @@ public class SecEdgarClient : ISecEdgarClient
                 }
             }
 
-            // SEC serves its "Request Rate Threshold Exceeded" throttle page with
-            // a 403 (not a 429), so a burst that trips the rolling-window limit
-            // arrives as a Forbidden carrying that HTML body. Back off and retry
-            // it like a 429 — otherwise callers that read 403 as "no resource"
-            // silently discard real data. Callers that know a 403 can only mean
-            // throttling (retryForbidden: e.g. a past-dated daily index, which
-            // always exists) retry every Forbidden; otherwise we retry only when
-            // the body is the recognizable throttle page, leaving a genuine 403
-            // (not-yet-published index, access-restricted path) to fall through.
+            // SEC serves its "Request Rate Threshold Exceeded" throttle page with a
+            // 403 (not a 429), so a burst that trips the rolling-window limit arrives
+            // as a Forbidden carrying that HTML body. Back off and retry it like a 429.
+            // Decode first: SEC gzips bodies even when none was requested, so the raw
+            // bytes would not match the page. A genuine 403 (a non-trading-day index,
+            // an access-restricted path) is not the throttle page, so it falls through
+            // for the caller to classify.
             if (response.StatusCode == HttpStatusCode.Forbidden && attempt < MaxRetries)
             {
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                if (retryForbidden || IsRateLimitThresholdPage(body))
+                var body = await ReadDecodedBody(response, cancellationToken);
+                if (IsRateLimitThresholdPage(body))
                 {
                     var delay = GetRetryDelay(response, attempt);
 
@@ -720,6 +741,51 @@ public class SecEdgarClient : ISecEdgarClient
     private static bool IsRateLimitThresholdPage(string body) =>
         !string.IsNullOrEmpty(body)
         && body.Contains("Request Rate Threshold Exceeded", StringComparison.OrdinalIgnoreCase);
+
+    // The SEC Archives are served from S3, which returns these error codes in the
+    // body when the requested index object does not exist — the signature of a
+    // non-trading day (weekend or market holiday) that legitimately has no filings.
+    private static bool IsMissingIndexError(string body) =>
+        !string.IsNullOrEmpty(body)
+        && (
+            body.Contains("AccessDenied", StringComparison.OrdinalIgnoreCase)
+            || body.Contains("NoSuchKey", StringComparison.OrdinalIgnoreCase)
+        );
+
+    // Reads a response body, transparently decompressing per Content-Encoding. The
+    // SEC HttpClient does not enable automatic decompression, yet SEC's S3-backed
+    // Archives gzip error bodies even when no Accept-Encoding was requested, so the
+    // raw string would be binary garbage. Successful payloads are uncompressed and
+    // pass straight through.
+    private static async Task<string> ReadDecodedBody(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken
+    )
+    {
+        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+
+        // Content-Encoding tokens are case-insensitive per RFC 9110, and gzip is also
+        // spelled x-gzip — match loosely so a non-trading-day body never slips through
+        // undecoded and gets misread as binary garbage.
+        bool HasEncoding(string token) =>
+            response.Content.Headers.ContentEncoding.Any(e =>
+                e.Contains(token, StringComparison.OrdinalIgnoreCase)
+            );
+
+        Stream stream = new MemoryStream(bytes);
+        if (HasEncoding("gzip"))
+            stream = new GZipStream(stream, CompressionMode.Decompress);
+        else if (HasEncoding("deflate"))
+            stream = new DeflateStream(stream, CompressionMode.Decompress);
+        else if (HasEncoding("br"))
+            stream = new BrotliStream(stream, CompressionMode.Decompress);
+
+        await using (stream)
+        using (var reader = new StreamReader(stream))
+        {
+            return await reader.ReadToEndAsync(cancellationToken);
+        }
+    }
 
     private static List<CompanyInfo> ParseCompaniesFromResponse(CompanyTickersResponse response)
     {

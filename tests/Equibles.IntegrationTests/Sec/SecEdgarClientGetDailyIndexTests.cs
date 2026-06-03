@@ -63,18 +63,24 @@ public class SecEdgarClientGetDailyIndexTests
         entries.Should().NotContain(e => e.Cik == "ABCDEFG");
     }
 
-    // SEC returns 403 (Forbidden), not 404, for not-yet-published / future-dated
-    // daily-index files (e.g. "today" before the index is posted, weekends).
-    // GetDailyIndex must treat that as "no index for this day" and return empty
-    // — a throw here kills the entire near-real-time 13F sweep every cycle.
-    // The date must be today (or future) for the Forbidden arm: a *past-date*
-    // 403 is treated as SEC throttling and retried up to MaxRetries, so the
-    // stubbed-always-Forbidden handler would hang the retry budget (~18m).
+    // SEC signals "no index for this day" two ways: a weekend/future date 404s,
+    // while its S3-backed Archives answer a non-trading day with a 403 whose BODY
+    // is an AccessDenied / NoSuchKey error document. GetDailyIndex must treat both
+    // as empty — a throw here kills the near-real-time 13F sweep every cycle. A
+    // bare 403 with no recognizable body is deliberately NOT skipped (it could mask
+    // a real fetch failure on a day that has filings), so the Forbidden arm must
+    // stub the actual S3 error body, not just the status code. That body is also
+    // why this never trips the retry path: SendWithRetryAsync only re-tries a 403
+    // carrying the rolling-window throttle page, which AccessDenied is not.
     [Theory]
-    [InlineData(HttpStatusCode.Forbidden)]
-    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.NotFound, "")]
+    [InlineData(
+        HttpStatusCode.Forbidden,
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>"
+    )]
     public async Task GetDailyIndex_NoIndexForDate_ReturnsEmptyInsteadOfThrowing(
-        HttpStatusCode status
+        HttpStatusCode status,
+        string body
     )
     {
         var config = new ConfigurationBuilder()
@@ -83,7 +89,7 @@ public class SecEdgarClientGetDailyIndexTests
             )
             .Build();
         var sut = new SecEdgarClient(
-            new HttpClient(new StatusStubHandler(status)),
+            new HttpClient(new StatusStubHandler(status, body)),
             Substitute.For<ILogger<SecEdgarClient>>(),
             config
         );
@@ -111,12 +117,20 @@ public class SecEdgarClientGetDailyIndexTests
     private sealed class StatusStubHandler : HttpMessageHandler
     {
         private readonly HttpStatusCode _status;
+        private readonly string _body;
 
-        public StatusStubHandler(HttpStatusCode status) => _status = status;
+        public StatusStubHandler(HttpStatusCode status, string body)
+        {
+            _status = status;
+            _body = body;
+        }
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken
-        ) => Task.FromResult(new HttpResponseMessage(_status));
+        ) =>
+            Task.FromResult(
+                new HttpResponseMessage(_status) { Content = new StringContent(_body) }
+            );
     }
 }

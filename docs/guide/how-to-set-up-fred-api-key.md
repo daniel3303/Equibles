@@ -24,7 +24,7 @@ Get a free Federal Reserve Bank of St. Louis FRED API key and wire it into Equib
    docker compose up -d --force-recreate worker
    ```
 
-5. Within a few minutes, the FRED scraper starts. Visit `http://localhost:8080/economy` — you should begin to see categories (Interest Rates, Inflation, Employment, GDP, …) populating with series. The first full sync can take half an hour because there are several hundred series to pull.
+5. Within a few minutes, the FRED scraper starts. Visit `http://localhost:8080/EconomicData` — you should begin to see categories (Interest Rates, Inflation, Employment, GDP, …) populating with series. The first full sync can take half an hour because there are several hundred series to pull.
 
 6. To confirm the scraper is healthy, visit `http://localhost:8080/status` — the **FRED scraper** row should be `OK` and the **FRED indicators** count should be non-zero. If you see errors mentioning FRED, the most likely cause is a typo in the key; fix it and re-run step 4.
 
