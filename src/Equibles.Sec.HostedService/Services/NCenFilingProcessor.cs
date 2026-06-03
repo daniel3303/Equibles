@@ -74,7 +74,7 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
             AccessionNumber = filing.AccessionNumber,
             FilingDate = filing.FilingDate,
             IsAmendment = ParseIsAmendment(headerData, filing),
-            RegistrantName = Clean(Val(registrant, "registrantFullName")),
+            RegistrantName = Truncate(Clean(Val(registrant, "registrantFullName")), 512),
             InvestmentCompanyType = Clean(Val(filerInfo, "investmentCompanyType")),
             InvestmentCompanyFileNumber = Clean(Val(registrant, "investmentCompFileNo")),
             RegistrantLei = Clean(Val(registrant, "registrantLei")),
@@ -236,7 +236,7 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
         return new NCenServiceProvider
         {
             ProviderType = type,
-            Name = cleanName,
+            Name = Truncate(cleanName, 512),
             Country = Clean(country),
             IsAffiliated = affiliated,
         };
