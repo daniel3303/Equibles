@@ -114,6 +114,41 @@ public class Form144FilingProcessorTests
     }
 
     [Fact]
+    public async Task Process_LongAdrSecurityClassTitle_StoresFullTitle()
+    {
+        // Foreign issuers (e.g. Banco Santander) report a long ADR legal description as the
+        // securities class title — 144 chars here. The column was widened to 512 so it persists
+        // in full instead of overflowing the old 128-char limit and failing the whole INSERT.
+        var (processor, repo, secClient) = CreateProcessorWithDeps();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(LongAdrTitleSubmission);
+
+        var result = await processor.Process(MakeFiling(), MakeCompany());
+
+        result.Should().BeTrue();
+        var filing = await repo.GetAll().SingleAsync();
+        filing.SecurityClassTitle.Should().Be(LongAdrClassTitle);
+        filing.SecurityClassTitle.Length.Should().Be(144);
+    }
+
+    [Fact]
+    public async Task Process_OversizedSecurityClassTitle_TruncatesToColumnLength()
+    {
+        // Safety net: a class title longer than the 512-char column is capped on the way in so a
+        // single oversized free-text field can never fail the filing's INSERT again.
+        var oversizedTitle = new string('X', 600);
+        var (processor, repo, secClient) = CreateProcessorWithDeps();
+        secClient
+            .GetDocumentContent(Arg.Any<FilingData>())
+            .Returns(BuildSubmissionWithClassTitle(oversizedTitle));
+
+        var result = await processor.Process(MakeFiling(), MakeCompany());
+
+        result.Should().BeTrue();
+        var filing = await repo.GetAll().SingleAsync();
+        filing.SecurityClassTitle.Should().Be(new string('X', 512));
+    }
+
+    [Fact]
     public async Task Process_MultipleRelationships_JoinsWithComma()
     {
         var (processor, repo, secClient) = CreateProcessorWithDeps();
@@ -290,6 +325,39 @@ public class Form144FilingProcessorTests
         </DOCUMENT>
         </SEC-DOCUMENT>
         """;
+
+    // The exact ADR class title from Banco Santander's Form 144 (accession 0000950103-24-016159)
+    // that overflowed the original 128-char SecurityClassTitle column.
+    private const string LongAdrClassTitle =
+        "American Depositary Shares, each representing the right to receive one Share of Capital Stock of Banco Santander, S.A., par value euro 0.50 each";
+
+    private static readonly string LongAdrTitleSubmission = BuildSubmissionWithClassTitle(
+        LongAdrClassTitle
+    );
+
+    // Minimal valid Form 144 ownership submission with a caller-supplied securities class title.
+    private static string BuildSubmissionWithClassTitle(string classTitle) =>
+        $"""
+            <XML>
+            <edgarSubmission xmlns="http://www.sec.gov/edgar/ownership">
+              <formData>
+                <issuerInfo>
+                  <nameOfPersonForWhoseAccountTheSecuritiesAreToBeSold>Mahesh Chatta Aditya</nameOfPersonForWhoseAccountTheSecuritiesAreToBeSold>
+                  <relationshipsToIssuer>
+                    <relationshipToIssuer>Chief Risk Officer</relationshipToIssuer>
+                  </relationshipsToIssuer>
+                </issuerInfo>
+                <securitiesInformation>
+                  <securitiesClassTitle>{classTitle}</securitiesClassTitle>
+                  <noOfUnitsSold>10665</noOfUnitsSold>
+                  <aggregateMarketValue>50658.75</aggregateMarketValue>
+                  <approxSaleDate>11/08/2024</approxSaleDate>
+                  <securitiesExchangeName>NYSE</securitiesExchangeName>
+                </securitiesInformation>
+              </formData>
+            </edgarSubmission>
+            </XML>
+            """;
 
     private const string MultiRelationshipSubmission = """
         <XML>

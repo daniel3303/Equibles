@@ -19,7 +19,8 @@ public class Form144PriorSale
     [MaxLength(512)]
     public string SellerName { get; set; }
 
-    [MaxLength(128)]
+    // Matches Form144Filing.SecurityClassTitle — long ADR/foreign-issuer class descriptions.
+    [MaxLength(512)]
     public string SecurityClassTitle { get; set; }
 
     public DateOnly? SaleDate { get; set; }

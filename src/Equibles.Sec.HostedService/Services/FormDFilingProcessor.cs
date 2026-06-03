@@ -88,12 +88,15 @@ public class FormDFilingProcessor : IssuerFeedFilingProcessor<FormDFiling, FormD
             AccessionNumber = filing.AccessionNumber,
             FilingDate = filing.FilingDate,
             IsAmendment = ParseIsAmendment(typeOfFiling, filing),
-            EntityName = Val(issuer, "entityName"),
-            EntityType = Val(issuer, "entityType"),
-            JurisdictionOfInc = Val(issuer, "jurisdictionOfInc"),
+            EntityName = Truncate(Val(issuer, "entityName"), 512),
+            EntityType = Truncate(Val(issuer, "entityType"), 128),
+            JurisdictionOfInc = Truncate(Val(issuer, "jurisdictionOfInc"), 128),
             YearOfIncorporation = ParseNullableInt(Val(El(issuer, "yearOfInc"), "value")),
-            IndustryGroup = Val(El(offeringData, "industryGroup"), "industryGroupType"),
-            FederalExemptions = string.IsNullOrEmpty(exemptions) ? null : exemptions,
+            IndustryGroup = Truncate(
+                Val(El(offeringData, "industryGroup"), "industryGroupType"),
+                128
+            ),
+            FederalExemptions = Truncate(string.IsNullOrEmpty(exemptions) ? null : exemptions, 256),
             DateOfFirstSale = ParseDate(Val(El(typeOfFiling, "dateOfFirstSale"), "value")),
             TotalOfferingAmount = offeringAmount,
             IsOfferingAmountIndefinite = offeringIndefinite,
@@ -139,8 +142,11 @@ public class FormDFilingProcessor : IssuerFeedFilingProcessor<FormDFiling, FormD
 
         return new FormDRelatedPerson
         {
-            Name = string.IsNullOrEmpty(fullName) ? null : fullName,
-            Relationships = string.IsNullOrEmpty(relationships) ? null : relationships,
+            Name = Truncate(string.IsNullOrEmpty(fullName) ? null : fullName, 512),
+            Relationships = Truncate(
+                string.IsNullOrEmpty(relationships) ? null : relationships,
+                256
+            ),
         };
     }
 

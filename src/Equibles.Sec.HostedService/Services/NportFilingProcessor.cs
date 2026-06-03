@@ -74,8 +74,8 @@ public class NportFilingProcessor : IssuerFeedFilingProcessor<NportFiling, Nport
             AccessionNumber = filing.AccessionNumber,
             FilingDate = filing.FilingDate,
             IsAmendment = ParseIsAmendment(headerData, filing),
-            RegistrantName = Clean(Val(genInfo, "regName")),
-            SeriesName = Clean(Val(genInfo, "seriesName")),
+            RegistrantName = Truncate(Clean(Val(genInfo, "regName")), 512),
+            SeriesName = Truncate(Clean(Val(genInfo, "seriesName")), 512),
             SeriesId = Clean(Val(genInfo, "seriesId")),
             SeriesLei = Clean(Val(genInfo, "seriesLei")),
             ReportPeriodDate = ParseDate(Val(genInfo, "repPdDate")) ?? filing.ReportDate,
@@ -109,8 +109,8 @@ public class NportFilingProcessor : IssuerFeedFilingProcessor<NportFiling, Nport
 
         return new NportHolding
         {
-            Name = name,
-            Title = Clean(Val(element, "title")),
+            Name = Truncate(name, 512),
+            Title = Truncate(Clean(Val(element, "title")), 512),
             Cusip = Clean(Val(element, "cusip")),
             Isin = Clean(Attr(El(identifiers, "isin"), "value")),
             Lei = Clean(Val(element, "lei")),

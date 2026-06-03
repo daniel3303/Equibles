@@ -41,7 +41,10 @@ public class Form144Filing
     [MaxLength(256)]
     public string RelationshipToIssuer { get; set; }
 
-    [MaxLength(128)]
+    // ADR/foreign-issuer class titles are long legal descriptions (e.g. "American Depositary
+    // Shares, each representing the right to receive one Share of Capital Stock of ..."), so this
+    // is sized well beyond a plain ticker class to store them in full.
+    [MaxLength(512)]
     public string SecurityClassTitle { get; set; }
 
     [MaxLength(256)]

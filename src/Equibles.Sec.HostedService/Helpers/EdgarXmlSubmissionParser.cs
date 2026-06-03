@@ -130,6 +130,19 @@ internal static class EdgarXmlSubmissionParser
     }
 
     /// <summary>
+    /// Caps a parsed value at its destination column's length so an oversized free-text field
+    /// (e.g. a foreign issuer's long ADR class-title description) can't fail the whole filing's
+    /// INSERT with a length-overflow. Pass the column's <c>[MaxLength]</c> as
+    /// <paramref name="maxLength"/>; <c>null</c> and shorter values pass through unchanged.
+    /// </summary>
+    internal static string Truncate(string value, int maxLength)
+    {
+        if (value == null || value.Length <= maxLength)
+            return value;
+        return value[..maxLength];
+    }
+
+    /// <summary>
     /// Trimmed text with the "N/A" placeholder and blanks normalized to <c>null</c>.
     /// </summary>
     internal static string Clean(string value)

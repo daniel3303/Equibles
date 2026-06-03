@@ -78,16 +78,22 @@ public class Form144FilingProcessor
             CommonStockId = companyId,
             AccessionNumber = filing.AccessionNumber,
             FilingDate = filing.FilingDate,
-            SellerName = Val(issuerInfo, "nameOfPersonForWhoseAccountTheSecuritiesAreToBeSold"),
-            RelationshipToIssuer = string.IsNullOrEmpty(relationship) ? null : relationship,
-            SecurityClassTitle = Val(securities, "securitiesClassTitle"),
-            BrokerName = Val(El(securities, "brokerOrMarketmakerDetails"), "name"),
+            SellerName = Truncate(
+                Val(issuerInfo, "nameOfPersonForWhoseAccountTheSecuritiesAreToBeSold"),
+                512
+            ),
+            RelationshipToIssuer = Truncate(
+                string.IsNullOrEmpty(relationship) ? null : relationship,
+                256
+            ),
+            SecurityClassTitle = Truncate(Val(securities, "securitiesClassTitle"), 512),
+            BrokerName = Truncate(Val(El(securities, "brokerOrMarketmakerDetails"), "name"), 256),
             SharesToBeSold = ParseLong(Val(securities, "noOfUnitsSold")),
             AggregateMarketValue = ParseDecimal(Val(securities, "aggregateMarketValue")),
             SharesOutstanding = ParseLong(Val(securities, "noOfUnitsOutstanding")),
             ApproxSaleDate = ParseDate(Val(securities, "approxSaleDate")),
-            SecuritiesExchangeName = Val(securities, "securitiesExchangeName"),
-            Remarks = Val(formData, "remarks"),
+            SecuritiesExchangeName = Truncate(Val(securities, "securitiesExchangeName"), 64),
+            Remarks = Truncate(Val(formData, "remarks"), 2048),
         };
 
         foreach (var saleElement in Els(formData, "securitiesSoldInPast3Months"))
@@ -113,8 +119,8 @@ public class Form144FilingProcessor
 
         return new Form144PriorSale
         {
-            SellerName = Val(El(element, "sellerDetails"), "name"),
-            SecurityClassTitle = Val(element, "securitiesClassTitle"),
+            SellerName = Truncate(Val(El(element, "sellerDetails"), "name"), 512),
+            SecurityClassTitle = Truncate(Val(element, "securitiesClassTitle"), 512),
             SaleDate = saleDate,
             AmountSold = amount,
             GrossProceeds = grossProceeds,
