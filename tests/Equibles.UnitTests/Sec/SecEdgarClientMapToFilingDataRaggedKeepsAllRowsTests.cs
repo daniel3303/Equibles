@@ -6,9 +6,7 @@ namespace Equibles.UnitTests.Sec;
 
 public class SecEdgarClientMapToFilingDataRaggedKeepsAllRowsTests
 {
-    [Fact(
-        Skip = "GH-3323 — a valid filing is dropped when only its primaryDocDescription is missing"
-    )]
+    [Fact]
     public void MapToFilingData_SecondaryArrayShorter_StillEmitsEveryAnnouncedFiling()
     {
         // Contract: the loop drives off AccessionNumber.Count and positionally indexes the five

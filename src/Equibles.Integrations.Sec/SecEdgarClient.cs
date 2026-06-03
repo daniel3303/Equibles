@@ -891,14 +891,16 @@ public class SecEdgarClient : ISecEdgarClient
         filing = null;
 
         // SEC can emit a ragged payload where a secondary array is shorter
-        // than AccessionNumber. Skip rows that cannot be fully mapped rather
-        // than throw, mirroring ParseCompaniesFromResponse's short-row guard.
+        // than AccessionNumber. Skip rows missing a genuinely required field
+        // rather than throw, mirroring ParseCompaniesFromResponse's short-row
+        // guard. PrimaryDocDescription is an optional human-readable label —
+        // SEC routinely omits its trailing empties — so it must not gate
+        // ingest; it is indexed defensively below and left null when absent.
         if (
             recent.FilingDate.Count <= i
             || recent.ReportDate.Count <= i
             || recent.Form.Count <= i
             || recent.PrimaryDocument.Count <= i
-            || recent.PrimaryDocDescription.Count <= i
         )
             return false;
 
@@ -911,7 +913,8 @@ public class SecEdgarClient : ISecEdgarClient
             ReportDate = ParseInvariantDateOr(recent.ReportDate[i], DateOnly.MinValue),
             Form = recent.Form[i],
             PrimaryDocument = recent.PrimaryDocument[i],
-            Description = recent.PrimaryDocDescription[i],
+            Description =
+                i < recent.PrimaryDocDescription.Count ? recent.PrimaryDocDescription[i] : null,
             DocumentUrl = GetDocumentUrl(cik, accessionNumber),
         };
         return true;
