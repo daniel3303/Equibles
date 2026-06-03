@@ -38,18 +38,23 @@ public class SecEdgarClient : ISecEdgarClient
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<SecEdgarClient> _logger;
+    private readonly ISecRateLimitNotifier _rateLimitNotifier;
     private CachedResponse _cachedContent; // Used to cache the latest fetched list of documents
     private const string BaseUrl = "https://data.sec.gov";
     private const string FilesBaseUrl = "https://www.sec.gov";
 
+    // Optional: the worker supplies a publishing implementation so rate-limit
+    // blocks surface on the bus; everywhere else (and in tests) it stays no-op.
     public SecEdgarClient(
         HttpClient httpClient,
         ILogger<SecEdgarClient> logger,
-        IConfiguration configuration
+        IConfiguration configuration,
+        ISecRateLimitNotifier rateLimitNotifier = null
     )
     {
         _httpClient = httpClient;
         _logger = logger;
+        _rateLimitNotifier = rateLimitNotifier ?? NullSecRateLimitNotifier.Instance;
 
         var contactEmail = configuration["Sec:ContactEmail"];
         if (!string.IsNullOrWhiteSpace(contactEmail))
@@ -642,6 +647,13 @@ public class SecEdgarClient : ISecEdgarClient
                 url
             );
 
+            // A successful reach proves SEC is not blocking our IP; let the
+            // notifier clear a prior block (it fires the recovery edge once).
+            if (response.IsSuccessStatusCode)
+            {
+                await _rateLimitNotifier.Reachable(url);
+            }
+
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
                 var delay = GetRateLimitPause(response);
@@ -654,6 +666,7 @@ public class SecEdgarClient : ISecEdgarClient
                     MaxRetries
                 );
 
+                await _rateLimitNotifier.RateLimited(delay, url);
                 RateLimiter.PauseFor(delay);
 
                 if (attempt < MaxRetries)
@@ -686,6 +699,7 @@ public class SecEdgarClient : ISecEdgarClient
                         MaxRetries
                     );
 
+                    await _rateLimitNotifier.RateLimited(delay, url);
                     RateLimiter.PauseFor(delay);
                     response.Dispose();
                     await Task.Delay(delay, cancellationToken);

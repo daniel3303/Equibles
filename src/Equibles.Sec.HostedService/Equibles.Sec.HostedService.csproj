@@ -24,5 +24,6 @@
     <ProjectReference Include="..\Equibles.Media.BusinessLogic\Equibles.Media.BusinessLogic.csproj" />
     <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
     <ProjectReference Include="..\Equibles.Worker\Equibles.Worker.csproj" />
+    <ProjectReference Include="..\Equibles.Messaging\Equibles.Messaging.csproj" />
   </ItemGroup>
 </Project>
