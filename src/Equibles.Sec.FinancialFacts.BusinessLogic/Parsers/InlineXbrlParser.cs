@@ -50,6 +50,12 @@ public class InlineXbrlParser
     private const string DenominatorLocalName = "xbrli:unitdenominator";
     private const string ExplicitMemberLocalName = "xbrldi:explicitmember";
 
+    // Whitespace glyphs filers insert around figures; named because they are
+    // visually indistinguishable from a regular space in source.
+    private const char NoBreakSpace = '\u00A0';
+    private const char NarrowNoBreakSpace = '\u202F';
+    private const char ThinSpace = '\u2009';
+
     private readonly HtmlParser _parser = new(
         new HtmlParserOptions { IsAcceptingCustomElementsEverywhere = true }
     );
@@ -339,9 +345,9 @@ public class InlineXbrlParser
             switch (ch)
             {
                 case ' ':
-                case ' ':
-                case ' ':
-                case ' ':
+                case NoBreakSpace:
+                case NarrowNoBreakSpace:
+                case ThinSpace:
                 case '$':
                 case '€':
                 case '£':
