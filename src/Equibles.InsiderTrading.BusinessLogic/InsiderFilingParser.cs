@@ -124,6 +124,20 @@ public static class InsiderFilingParser
         }
     }
 
+    /// <summary>
+    /// The issuer CIK declared in the ownership document, with leading zeros stripped
+    /// so it compares against the un-padded CIK stored on the company. Returns null for
+    /// pre-XML-era filings that have no issuer block. A Form 4 surfaces in the EDGAR feed
+    /// of every CIK it references — issuer and each reporting owner — so this lets callers
+    /// confirm a filing actually belongs to the company being processed rather than to a
+    /// public-company insider that merely reported a trade in another issuer.
+    /// </summary>
+    public static string GetIssuerCik(XElement root)
+    {
+        var cik = root?.Element("issuer")?.Element("issuerCik")?.Value?.Trim();
+        return string.IsNullOrEmpty(cik) ? null : cik.TrimStart('0');
+    }
+
     internal static InsiderTransaction ParseTransaction(
         XElement txElement,
         InsiderOwner owner,

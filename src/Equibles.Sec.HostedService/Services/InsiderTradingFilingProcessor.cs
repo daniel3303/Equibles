@@ -51,6 +51,8 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         // Capture IDs from the outer-scope entity to avoid leaking untracked entities into inner scope
         var companyId = companyOutContext.Id;
         var companyTicker = companyOutContext.Ticker;
+        var companyCiks = new List<string> { companyOutContext.Cik };
+        companyCiks.AddRange(companyOutContext.SecondaryCiks);
 
         await using var scope = _scopeFactory.CreateAsyncScope();
         var secEdgarClient = scope.ServiceProvider.GetRequiredService<ISecEdgarClient>();
@@ -84,6 +86,16 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
 
         var root = await TryParseOwnershipRoot(xmlContent, filing, companyTicker);
         if (root == null)
+            return false;
+
+        // A Form 4 appears in the EDGAR submissions feed of every CIK it references —
+        // the issuer and each reporting owner. When a tracked public company (e.g.
+        // Carlyle) is itself a reporting owner on another issuer's filing (e.g. its
+        // sale of Medline stock), that filing surfaces in the company's own feed.
+        // Attributing it here would stamp the other issuer's trade onto this ticker,
+        // so skip it: the filing is imported correctly when the real issuer's feed
+        // is scraped.
+        if (!IssuerMatchesCompany(root, companyCiks, filing, companyTicker))
             return false;
 
         var owner = await TryResolveOwner(root, ownerRepository, filing, companyTicker);
@@ -258,6 +270,38 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         }
 
         return root;
+    }
+
+    // True when the filing's issuer is the company being processed (matched by primary
+    // or secondary CIK, leading zeros ignored). Pre-XML-era filings have no issuer block,
+    // so they fall back to trusting the feed that surfaced them rather than being dropped.
+    private bool IssuerMatchesCompany(
+        XElement root,
+        IReadOnlyCollection<string> companyCiks,
+        FilingData filing,
+        string companyTicker
+    )
+    {
+        var issuerCik = InsiderFilingParser.GetIssuerCik(root);
+        if (string.IsNullOrEmpty(issuerCik))
+            return true;
+
+        var matches = companyCiks.Any(c =>
+            !string.IsNullOrEmpty(c)
+            && string.Equals(c.TrimStart('0'), issuerCik, StringComparison.Ordinal)
+        );
+        if (matches)
+            return true;
+
+        _logger.LogDebug(
+            "Skipping Form {Form} {AccessionNumber} for {Ticker}: issuer CIK {IssuerCik} "
+                + "differs from the company (surfaced via a reporting-owner feed)",
+            filing.Form,
+            filing.AccessionNumber,
+            companyTicker,
+            issuerCik
+        );
+        return false;
     }
 
     private async Task<InsiderOwner> TryResolveOwner(
