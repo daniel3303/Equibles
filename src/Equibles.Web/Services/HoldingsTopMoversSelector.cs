@@ -12,19 +12,39 @@ public static class HoldingsTopMoversSelector
         if (max <= 0)
             return ([], []);
 
-        var buyers = EnumerateOrEmpty(groupedHolders, PositionChangeType.New)
-            .Concat(EnumerateOrEmpty(groupedHolders, PositionChangeType.Increased))
-            .OrderByDescending(e => e.DeltaShares)
-            .Take(max)
-            .ToList();
+        var buyers = TopBy(
+            groupedHolders,
+            max,
+            descending: true,
+            PositionChangeType.New,
+            PositionChangeType.Increased
+        );
 
-        var sellers = EnumerateOrEmpty(groupedHolders, PositionChangeType.Reduced)
-            .Concat(EnumerateOrEmpty(groupedHolders, PositionChangeType.SoldOut))
-            .OrderBy(e => e.DeltaShares)
-            .Take(max)
-            .ToList();
+        var sellers = TopBy(
+            groupedHolders,
+            max,
+            descending: false,
+            PositionChangeType.Reduced,
+            PositionChangeType.SoldOut
+        );
 
         return (buyers, sellers);
+    }
+
+    // Largest movers across the given change types, by share delta. Buyers rank
+    // descending (biggest accumulation first), sellers ascending (biggest reduction first).
+    private static List<HolderPositionChange> TopBy(
+        Dictionary<PositionChangeType, List<HolderPositionChange>> groupedHolders,
+        int max,
+        bool descending,
+        params PositionChangeType[] types
+    )
+    {
+        var combined = types.SelectMany(type => EnumerateOrEmpty(groupedHolders, type));
+        var ordered = descending
+            ? combined.OrderByDescending(e => e.DeltaShares)
+            : combined.OrderBy(e => e.DeltaShares);
+        return ordered.Take(max).ToList();
     }
 
     public static int CountBuyers(
