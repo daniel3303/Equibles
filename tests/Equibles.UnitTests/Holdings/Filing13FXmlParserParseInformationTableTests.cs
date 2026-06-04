@@ -73,4 +73,31 @@ public class Filing13FXmlParserParseInformationTableTests
         second.VotingAuthNone.Should().Be(1234567);
         second.OtherManagerNumber.Should().BeNull();
     }
+
+    // The filed <value> element is the anchor the import pipeline uses to
+    // detect filings whose share-count column duplicates the value column;
+    // a parser that silently drops it would disable that repair entirely.
+    [Fact]
+    public void ParseInformationTable_RowWithValue_ParsesFiledValue()
+    {
+        var xml =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+            + "<informationTable xmlns=\"http://www.sec.gov/edgar/document/thirteenf/informationtable\">"
+            + "  <infoTable>"
+            + "    <cusip>037833100</cusip>"
+            + "    <value>26614323</value>"
+            + "    <shrsOrPrnAmt>"
+            + "      <sshPrnamt>26614323</sshPrnamt>"
+            + "      <sshPrnamtType>SH</sshPrnamtType>"
+            + "    </shrsOrPrnAmt>"
+            + "    <investmentDiscretion>SOLE</investmentDiscretion>"
+            + "  </infoTable>"
+            + "</informationTable>";
+
+        var result = _sut.ParseInformationTable(xml);
+
+        result.Should().HaveCount(1);
+        result[0].Value.Should().Be(26614323);
+        result[0].Shares.Should().Be(26614323);
+    }
 }
