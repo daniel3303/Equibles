@@ -44,7 +44,11 @@ internal class ListConversionStep : IHtmlNormalizationStep
                 current.NodeType == NodeType.Element
                 && current is IElement el
                 && el.LocalName == "div"
-                && (el.GetAttribute("class") ?? "").Contains("item-list-element-wrapper")
+                // Match the class as a token (consistent with the div.item-list-element-wrapper
+                // start selector), not a substring — otherwise a sibling whose class merely
+                // contains the text inside a larger token (e.g. "sub-item-list-element-wrapper")
+                // would be wrongly absorbed into the list.
+                && el.ClassList.Contains("item-list-element-wrapper")
             )
             {
                 consecutiveItems.Add(el);

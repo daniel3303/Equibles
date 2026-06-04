@@ -13,7 +13,7 @@ public class ListConversionStepSiblingClassTokenTests
     // contains that text as part of a larger token (e.g. "sub-item-list-element-wrapper")
     // is a different element and must NOT be absorbed into the list. Oracle from the
     // contract: exactly one <li> (the real item); the unrelated sibling stays outside.
-    [Fact(Skip = "GH-3485 — sibling div with class containing the wrapper substring is wrongly absorbed into the list")]
+    [Fact]
     public void Execute_SiblingClassContainsWrapperAsSubstringOnly_IsNotMergedIntoList()
     {
         var doc = _parser.ParseDocument(
