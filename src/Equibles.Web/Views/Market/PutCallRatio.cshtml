@@ -73,9 +73,7 @@
             </h2>
 
             @if (Model.Records.Count == 0) {
-                <div class="text-center py-8 text-base-content/50">
-                    <p class="text-sm">No data yet</p>
-                </div>
+                <partial name="_EmptyStateInline" model='"No data yet"' />
             } else {
                 <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
                     <table class="table table-zebra table-sm" aria-label="Put / call ratio history">
