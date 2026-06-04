@@ -25,6 +25,13 @@ public static class FormAdvCsvParser
     private const string DiscretionaryAumHeader = "5F(2)(a)";
     private const string NonDiscretionaryAumHeader = "5F(2)(b)";
     private const string TotalAumHeader = "5F(2)(c)";
+    private const string ChargesPercentageOfAumHeader = "5E(1)";
+    private const string ChargesHourlyHeader = "5E(2)";
+    private const string ChargesSubscriptionHeader = "5E(3)";
+    private const string ChargesFixedHeader = "5E(4)";
+    private const string ChargesCommissionsHeader = "5E(5)";
+    private const string ChargesPerformanceBasedHeader = "5E(6)";
+    private const string ChargesOtherHeader = "5E(7)";
 
     public static IEnumerable<FormAdvAdviserData> Parse(TextReader reader)
     {
@@ -83,13 +90,15 @@ public static class FormAdvCsvParser
             DiscretionaryAum = ParseAum(Field(row, columns, DiscretionaryAumHeader)),
             NonDiscretionaryAum = ParseAum(Field(row, columns, NonDiscretionaryAumHeader)),
             TotalRegulatoryAum = ParseAum(Field(row, columns, TotalAumHeader)),
-            ChargesPercentageOfAum = ParseYesNo(Field(row, columns, "5E(1)")),
-            ChargesHourly = ParseYesNo(Field(row, columns, "5E(2)")),
-            ChargesSubscription = ParseYesNo(Field(row, columns, "5E(3)")),
-            ChargesFixed = ParseYesNo(Field(row, columns, "5E(4)")),
-            ChargesCommissions = ParseYesNo(Field(row, columns, "5E(5)")),
-            ChargesPerformanceBased = ParseYesNo(Field(row, columns, "5E(6)")),
-            ChargesOther = ParseYesNo(Field(row, columns, "5E(7)")),
+            ChargesPercentageOfAum = ParseYesNo(Field(row, columns, ChargesPercentageOfAumHeader)),
+            ChargesHourly = ParseYesNo(Field(row, columns, ChargesHourlyHeader)),
+            ChargesSubscription = ParseYesNo(Field(row, columns, ChargesSubscriptionHeader)),
+            ChargesFixed = ParseYesNo(Field(row, columns, ChargesFixedHeader)),
+            ChargesCommissions = ParseYesNo(Field(row, columns, ChargesCommissionsHeader)),
+            ChargesPerformanceBased = ParseYesNo(
+                Field(row, columns, ChargesPerformanceBasedHeader)
+            ),
+            ChargesOther = ParseYesNo(Field(row, columns, ChargesOtherHeader)),
         };
     }
 
