@@ -91,7 +91,9 @@ public class InstitutionalHoldingRepositoryDoubleDownCombinedTests : IDisposable
             ReportDate = reportDate,
             FilingDate = reportDate,
             Shares = shares,
-            Value = shares * 10,
+            // $100/share keeps the 100-share prior at MinDoubleDownPreviousValue,
+            // clearing the degenerate-prior floor on the report.
+            Value = shares * 100,
             AccessionNumber = $"{holderId:N}-{reportDate:yyyyMMdd}",
         };
 }
