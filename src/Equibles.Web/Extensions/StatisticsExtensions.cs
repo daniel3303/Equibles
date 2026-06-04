@@ -29,6 +29,13 @@ public static class StatisticsExtensions
 
     public static StatsSummary ComputeStats(this double[] values, int decimals)
     {
+        // An empty sample has no defined statistics. DescriptiveStatistics.Mean and
+        // Median() both return a finite 0.0 here, so SafeRound's non-finite guard never
+        // fires for them (unlike Min/Max/StdDev, which come back NaN) — without this guard
+        // a "no data" sample would surface a mean and median of 0. Return an all-null summary.
+        if (values.Length == 0)
+            return new StatsSummary(Mean: null, Median: null, Min: null, Max: null, StdDev: null);
+
         var stats = new DescriptiveStatistics(values);
         return new StatsSummary(
             Mean: stats.Mean.SafeRound(decimals),
