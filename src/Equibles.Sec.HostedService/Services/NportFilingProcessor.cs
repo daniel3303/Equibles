@@ -86,7 +86,8 @@ public class NportFilingProcessor : IssuerFeedFilingProcessor<NportFiling, Nport
             IsFinalFiling = ParseYesNo(Val(genInfo, "isFinalFiling")),
         };
 
-        foreach (var investment in Els(El(fundInfo, "invstOrSecs"), "invstOrSec"))
+        // invstOrSecs is a child of formData, a sibling of fundInfo — not nested inside fundInfo.
+        foreach (var investment in Els(El(formData, "invstOrSecs"), "invstOrSec"))
         {
             var holding = ParseHolding(investment);
             if (holding != null)

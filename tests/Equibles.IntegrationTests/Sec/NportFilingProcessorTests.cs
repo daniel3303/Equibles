@@ -279,7 +279,8 @@ public class NportFilingProcessorTests
               <totAssets>287467294.33</totAssets>
               <totLiabs>193875501.04</totLiabs>
               <netAssets>93591793.29</netAssets>
-              <invstOrSecs>
+            </fundInfo>
+            <invstOrSecs>
                 <invstOrSec>
                   <name>AT&amp;T Inc</name>
                   <lei>549300Z40J86GGSTL398</lei>
@@ -317,8 +318,7 @@ public class NportFilingProcessorTests
                   <issuerConditional desc="Total Return Swap" issuerCat="OTHER"/>
                   <invCountry>US</invCountry>
                 </invstOrSec>
-              </invstOrSecs>
-            </fundInfo>
+            </invstOrSecs>
           </formData>
         </edgarSubmission>
         </XML>
@@ -358,8 +358,8 @@ public class NportFilingProcessorTests
               <totAssets>287467294.33</totAssets>
               <totLiabs>193875501.04</totLiabs>
               <netAssets>93591793.29</netAssets>
-              <invstOrSecs/>
             </fundInfo>
+            <invstOrSecs/>
           </formData>
         </edgarSubmission>
         </XML>
