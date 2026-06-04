@@ -276,7 +276,7 @@ public class StockTabService
         int take
     )
     {
-        var rows = await source.OrderByDescending(orderKey).Take(take).ToListAsync();
+        var rows = await source.TakeMostRecent(orderKey, take).ToListAsync();
         return rows.OrderBy(orderKey.Compile()).ToList();
     }
 
@@ -285,7 +285,7 @@ public class StockTabService
     private static Task<List<T>> TakeMostRecent<T, TKey>(
         IQueryable<T> source,
         Expression<Func<T, TKey>> orderKey
-    ) => source.OrderByDescending(orderKey).Take(RecentRowLimit).ToListAsync();
+    ) => source.TakeMostRecent(orderKey, RecentRowLimit).ToListAsync();
 
     public async Task<DocumentsTabViewModel> LoadDocumentsTab(CommonStock stock)
     {
