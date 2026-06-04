@@ -13,7 +13,7 @@ public class ListConversionStepSpacedInlineStyleTests
     // the inline-display content div is unwrapped INTO the <li> (per the no-space pin
     // ContentFromInlineDisplayDiv_IsPreservedInLi). A spaced "display: inline" must be
     // treated identically — the wrapper div must not survive inside the list item.
-    [Fact(Skip = "GH-3435 — spaced \"display: inline\" content div is not unwrapped into the <li>")]
+    [Fact]
     public void Execute_ContentDivWithSpacedDisplayInline_UnwrapsContentIntoLi()
     {
         var doc = _parser.ParseDocument(
