@@ -54,10 +54,7 @@
     <!-- Data Table -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body p-4 lg:p-6">
-            <h2 class="card-title text-lg mb-3">
-                Reports
-                <span class="text-sm font-normal text-base-content/50">(@Model.Reports.Count total)</span>
-            </h2>
+            <partial name="_CountHeading" model='("Reports", Model.Reports.Count)' />
 
             @if (Model.Reports.Count == 0) {
                 <partial name="_EmptyStateInline" model='"No reports yet"' />
