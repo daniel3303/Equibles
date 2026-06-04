@@ -23,15 +23,28 @@ public class ProcessedDataSetRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task Exists_DifferentFileName_ReturnsFalse()
+    public async Task GetByFileName_DifferentFileName_ReturnsEmpty()
     {
         _repository.Add(
             new ProcessedDataSet { FileName = "2025q3_form13f.zip", SubmissionCount = 1234 }
         );
         await _repository.SaveChanges();
 
-        var result = await _repository.Exists("2025q4_form13f.zip");
+        var result = _repository.GetByFileName("2025q4_form13f.zip").ToList();
 
-        result.Should().BeFalse();
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetByFileName_ExactFileName_ReturnsRow()
+    {
+        _repository.Add(
+            new ProcessedDataSet { FileName = "2025q3_form13f.zip", SubmissionCount = 1234 }
+        );
+        await _repository.SaveChanges();
+
+        var result = _repository.GetByFileName("2025q3_form13f.zip").ToList();
+
+        result.Should().ContainSingle().Which.SubmissionCount.Should().Be(1234);
     }
 }

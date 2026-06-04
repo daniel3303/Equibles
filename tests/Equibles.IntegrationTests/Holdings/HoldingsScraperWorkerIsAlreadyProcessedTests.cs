@@ -33,32 +33,29 @@ public class HoldingsScraperWorkerIsAlreadyProcessedTests : ParadeDbMcpTestBase
     [Fact]
     public async Task IsAlreadyProcessed_ExactNamePresentSubstringAbsent_ReturnsTrueForExactFalseForSubstring()
     {
-        // Seed two real ProcessedDataSet rows. The substring case probes the
-        // exact-match guarantee — "2024q1" is a proper substring of the seeded
-        // "2024q1_form13f.zip", so a buggy `Contains`/`StartsWith` regression
-        // would also report true on the substring.
-        DbContext.Add(new ProcessedDataSet { FileName = "2024q1_form13f.zip" });
-        DbContext.Add(new ProcessedDataSet { FileName = "2024q2_form13f.zip" });
+        // Seed two real ProcessedDataSet rows at the current parser version.
+        // The substring case probes the exact-match guarantee — "2024q1" is a
+        // proper substring of the seeded "2024q1_form13f.zip", so a buggy
+        // `Contains`/`StartsWith` regression would also report true on the
+        // substring.
+        DbContext.Add(
+            new ProcessedDataSet
+            {
+                FileName = "2024q1_form13f.zip",
+                ParserVersion = ProcessedDataSet.CurrentParserVersion,
+            }
+        );
+        DbContext.Add(
+            new ProcessedDataSet
+            {
+                FileName = "2024q2_form13f.zip",
+                ParserVersion = ProcessedDataSet.CurrentParserVersion,
+            }
+        );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
-        var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(ProcessedDataSetRepository), new ProcessedDataSetRepository(DbContext))
-        );
-        var configuration = Substitute.For<IConfiguration>();
-        configuration["Sec:ContactEmail"].Returns("test@example.com");
-
-        var worker = new HoldingsScraperWorker(
-            Substitute.For<ILogger<HoldingsScraperWorker>>(),
-            scopeFactory,
-            new ErrorReporter(
-                Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()
-            ),
-            Options.Create(new WorkerOptions()),
-            configuration,
-            new HoldingsRescanSignal()
-        );
+        var worker = CreateWorker();
         var method = typeof(HoldingsScraperWorker).GetMethod(
             "IsAlreadyProcessed",
             BindingFlags.NonPublic | BindingFlags.Instance
@@ -71,5 +68,55 @@ public class HoldingsScraperWorkerIsAlreadyProcessedTests : ParadeDbMcpTestBase
         exactHit.Should().BeTrue();
         substringMiss.Should().BeFalse();
         unrelated.Should().BeFalse();
+    }
+
+    // The self-heal contract behind a parser-version bump: a data set imported
+    // by an older parser (including pre-versioning rows, which default to 0)
+    // must read as NOT processed so the next cycle re-imports it through the
+    // current pipeline. A regression back to a bare existence check would
+    // permanently strand stale parses (the #1535 corruption class).
+    [Fact]
+    public async Task IsAlreadyProcessed_RowStampedBelowCurrentParserVersion_ReturnsFalse()
+    {
+        DbContext.Add(
+            new ProcessedDataSet
+            {
+                FileName = "2023q4_form13f.zip",
+                ParserVersion = ProcessedDataSet.CurrentParserVersion - 1,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var worker = CreateWorker();
+        var method = typeof(HoldingsScraperWorker).GetMethod(
+            "IsAlreadyProcessed",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        );
+
+        var staleVersionHit = await (Task<bool>)method.Invoke(worker, ["2023q4_form13f.zip"]);
+
+        staleVersionHit.Should().BeFalse();
+    }
+
+    private HoldingsScraperWorker CreateWorker()
+    {
+        var scopeFactory = ServiceScopeSubstitute.Create(
+            (typeof(ProcessedDataSetRepository), new ProcessedDataSetRepository(DbContext))
+        );
+        var configuration = Substitute.For<IConfiguration>();
+        configuration["Sec:ContactEmail"].Returns("test@example.com");
+
+        return new HoldingsScraperWorker(
+            Substitute.For<ILogger<HoldingsScraperWorker>>(),
+            scopeFactory,
+            new ErrorReporter(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            Options.Create(new WorkerOptions()),
+            configuration,
+            new HoldingsRescanSignal()
+        );
     }
 }

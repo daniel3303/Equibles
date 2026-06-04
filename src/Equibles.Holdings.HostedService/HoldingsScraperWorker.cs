@@ -182,11 +182,19 @@ public class HoldingsScraperWorker : BaseScraperWorker
         if (fileNames.Count <= 1)
             return;
 
-        // Seed all except the last file name (most recent period)
+        // Seed all except the last file name (most recent period). Seeds are
+        // deliberate skips, so stamp the current parser version — a fresh
+        // install must not immediately re-import the history it just declined.
         var toSeed = fileNames.Take(fileNames.Count - 1);
         foreach (var fileName in toSeed)
         {
-            repo.Add(new Holdings.Data.Models.ProcessedDataSet { FileName = fileName });
+            repo.Add(
+                new Holdings.Data.Models.ProcessedDataSet
+                {
+                    FileName = fileName,
+                    ParserVersion = Holdings.Data.Models.ProcessedDataSet.CurrentParserVersion,
+                }
+            );
         }
 
         await repo.SaveChanges();
@@ -196,24 +204,46 @@ public class HoldingsScraperWorker : BaseScraperWorker
         );
     }
 
+    // A data set only counts as processed when it was imported at (or above)
+    // the current parser version. Bumping CurrentParserVersion therefore
+    // re-enrolls every older data set on the next cycle — the self-heal path
+    // for parser fixes that must re-apply to already-imported filings.
     private async Task<bool> IsAlreadyProcessed(string fileName)
     {
         await using var scope = ScopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
-        return await repo.Exists(fileName);
+        return await repo.GetByFileName(fileName)
+            .AnyAsync(p =>
+                p.ParserVersion >= Holdings.Data.Models.ProcessedDataSet.CurrentParserVersion
+            );
     }
 
+    // Upsert rather than insert: after a parser-version bump the row already
+    // exists at the old version (FileName is unique), so a blind Add would
+    // collide on the unique index and the data set would re-import every cycle.
     private async Task MarkAsProcessed(string fileName, int submissionCount)
     {
         await using var scope = ScopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
-        repo.Add(
-            new Holdings.Data.Models.ProcessedDataSet
-            {
-                FileName = fileName,
-                SubmissionCount = submissionCount,
-            }
-        );
+
+        var existing = await repo.GetByFileName(fileName).FirstOrDefaultAsync();
+        if (existing == null)
+        {
+            repo.Add(
+                new Holdings.Data.Models.ProcessedDataSet
+                {
+                    FileName = fileName,
+                    SubmissionCount = submissionCount,
+                    ParserVersion = Holdings.Data.Models.ProcessedDataSet.CurrentParserVersion,
+                }
+            );
+        }
+        else
+        {
+            existing.SubmissionCount = submissionCount;
+            existing.ParserVersion = Holdings.Data.Models.ProcessedDataSet.CurrentParserVersion;
+        }
+
         await repo.SaveChanges();
     }
 
