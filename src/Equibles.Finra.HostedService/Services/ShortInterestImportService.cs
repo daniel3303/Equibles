@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Repositories;
+using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
@@ -268,11 +269,7 @@ public class ShortInterestImportService
         var repo = scope.ServiceProvider.GetRequiredService<ShortInterestRepository>();
 
         var batchStockIds = batch.Select(b => b.CommonStockId).Distinct().ToList();
-        var liveStockIds = await stockRepo
-            .GetAll()
-            .Where(s => batchStockIds.Contains(s.Id))
-            .Select(s => s.Id)
-            .ToHashSetAsync(cancellationToken);
+        var liveStockIds = await stockRepo.GetExistingIds(batchStockIds, cancellationToken);
 
         var validBatch = batch.Where(b => liveStockIds.Contains(b.CommonStockId)).ToList();
         var dropped = batch.Count - validBatch.Count;
