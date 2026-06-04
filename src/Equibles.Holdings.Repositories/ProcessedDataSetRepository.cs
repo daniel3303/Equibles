@@ -1,6 +1,5 @@
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.Repositories;
 
@@ -9,8 +8,8 @@ public class ProcessedDataSetRepository : BaseRepository<ProcessedDataSet>
     public ProcessedDataSetRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
-    public async Task<bool> Exists(string fileName)
+    public IQueryable<ProcessedDataSet> GetByFileName(string fileName)
     {
-        return await GetAll().AnyAsync(p => p.FileName == fileName);
+        return GetAll().Where(p => p.FileName == fileName);
     }
 }
