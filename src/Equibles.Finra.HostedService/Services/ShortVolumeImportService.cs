@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Repositories;
+using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
@@ -119,11 +120,10 @@ public class ShortVolumeImportService
                     // hard-deletes/replaces a stock in parallel. Re-validate each batch against the
                     // current CommonStock table so dangling-FK inserts don't poison the whole batch.
                     var batchStockIds = batch.Select(b => b.CommonStockId).Distinct().ToList();
-                    var liveStockIds = await stockRepo
-                        .GetAll()
-                        .Where(s => batchStockIds.Contains(s.Id))
-                        .Select(s => s.Id)
-                        .ToHashSetAsync(cancellationToken);
+                    var liveStockIds = await stockRepo.GetExistingIds(
+                        batchStockIds,
+                        cancellationToken
+                    );
 
                     var validBatch = batch
                         .Where(b => liveStockIds.Contains(b.CommonStockId))

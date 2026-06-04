@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO.Compression;
 using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
@@ -223,9 +224,7 @@ public class FtdImportService
         // rolls back the entire UpsertRange — dropping rows for surviving
         // stocks alongside the orphan.
         var stockIds = items.Select(i => i.CommonStockId).Distinct().ToHashSet();
-        var existingIds = (
-            await stockRepo.GetByIds(stockIds).Select(s => s.Id).ToListAsync()
-        ).ToHashSet();
+        var existingIds = await stockRepo.GetExistingIds(stockIds);
 
         var safeItems = items.Where(i => existingIds.Contains(i.CommonStockId)).ToList();
         var skipped = items.Count - safeItems.Count;
