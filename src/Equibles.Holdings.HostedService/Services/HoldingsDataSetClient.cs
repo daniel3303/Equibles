@@ -11,6 +11,10 @@ public class HoldingsDataSetClient
     private const string BaseUrl =
         "https://www.sec.gov/files/structureddata/data/form-13f-data-sets";
 
+    // SEC switched the 13F data-set filename scheme from {year}q{quarter} to
+    // period ranges starting with the 2024 publications.
+    private const int FirstNewFormatYear = 2024;
+
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly ILogger<HoldingsDataSetClient> _logger;
 
@@ -76,9 +80,9 @@ public class HoldingsDataSetClient
 
         // New format: 2024+
         // Periods: Jan-Feb, Mar-May, Jun-Aug, Sep-Nov, Dec-Feb(+1)
-        if (now.Year >= 2024)
+        if (now.Year >= FirstNewFormatYear)
         {
-            var newStartYear = Math.Max(2024, startDate.Year);
+            var newStartYear = Math.Max(FirstNewFormatYear, startDate.Year);
             var periods = GetNewFormatPeriods(newStartYear, now);
             fileNames.AddRange(periods);
         }
@@ -96,13 +100,15 @@ public class HoldingsDataSetClient
         var periods = new List<(DateOnly Start, DateOnly End)>();
 
         // 2024 transition: Jan-Feb 2024
-        if (startYear <= 2024)
+        if (startYear <= FirstNewFormatYear)
         {
-            periods.Add((new DateOnly(2024, 1, 1), new DateOnly(2024, 2, 29)));
+            periods.Add(
+                (new DateOnly(FirstNewFormatYear, 1, 1), new DateOnly(FirstNewFormatYear, 2, 29))
+            );
         }
 
         // Regular cycle: for each year from 2024+, add Mar-May, Jun-Aug, Sep-Nov, Dec-Feb(+1)
-        for (var year = Math.Max(2024, startYear); year <= now.Year + 1; year++)
+        for (var year = Math.Max(FirstNewFormatYear, startYear); year <= now.Year + 1; year++)
         {
             periods.Add((new DateOnly(year, 3, 1), new DateOnly(year, 5, 31)));
             periods.Add((new DateOnly(year, 6, 1), new DateOnly(year, 8, 31)));
