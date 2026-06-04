@@ -268,6 +268,78 @@ public class InsiderTradingFilingProcessorTests
         </ownershipDocument>
         """;
 
+    // A Form 4 where the processing company (Apple, CIK 320193) is a reporting owner,
+    // not the issuer — the issuer is Medline (CIK 2046386). EDGAR lists this filing in
+    // Apple's own CIK feed, so without an issuer check the Medline trade would be stamped
+    // onto AAPL. The CIK is zero-padded in the XML to match how EDGAR emits it.
+    private static readonly string Form4OtherIssuerXml = """
+        <ownershipDocument>
+            <issuer>
+                <issuerCik>0002046386</issuerCik>
+                <issuerTradingSymbol>MDLN</issuerTradingSymbol>
+            </issuer>
+            <reportingOwner>
+                <reportingOwnerId>
+                    <rptOwnerCik>0000320193</rptOwnerCik>
+                    <rptOwnerName>Apple Inc</rptOwnerName>
+                </reportingOwnerId>
+            </reportingOwner>
+            <nonDerivativeTable>
+                <nonDerivativeTransaction>
+                    <securityTitle><value>Common Stock</value></securityTitle>
+                    <transactionDate><value>2024-03-15</value></transactionDate>
+                    <transactionCoding><transactionCode>S</transactionCode></transactionCoding>
+                    <transactionAmounts>
+                        <transactionShares><value>1000</value></transactionShares>
+                        <transactionPricePerShare><value>41</value></transactionPricePerShare>
+                        <transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>
+                    </transactionAmounts>
+                    <postTransactionAmounts>
+                        <sharesOwnedFollowingTransaction><value>5000</value></sharesOwnedFollowingTransaction>
+                    </postTransactionAmounts>
+                    <ownershipNature>
+                        <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                    </ownershipNature>
+                </nonDerivativeTransaction>
+            </nonDerivativeTable>
+        </ownershipDocument>
+        """;
+
+    // Same shape but the issuer is the processing company itself, with the CIK zero-padded
+    // in the XML and un-padded on the company — the normalized comparison must still match.
+    private static readonly string Form4OwnIssuerPaddedCikXml = """
+        <ownershipDocument>
+            <issuer>
+                <issuerCik>0000320193</issuerCik>
+                <issuerTradingSymbol>AAPL</issuerTradingSymbol>
+            </issuer>
+            <reportingOwner>
+                <reportingOwnerId>
+                    <rptOwnerCik>0001234567</rptOwnerCik>
+                    <rptOwnerName>John Doe</rptOwnerName>
+                </reportingOwnerId>
+            </reportingOwner>
+            <nonDerivativeTable>
+                <nonDerivativeTransaction>
+                    <securityTitle><value>Common Stock</value></securityTitle>
+                    <transactionDate><value>2024-03-15</value></transactionDate>
+                    <transactionCoding><transactionCode>P</transactionCode></transactionCoding>
+                    <transactionAmounts>
+                        <transactionShares><value>1000</value></transactionShares>
+                        <transactionPricePerShare><value>150.50</value></transactionPricePerShare>
+                        <transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
+                    </transactionAmounts>
+                    <postTransactionAmounts>
+                        <sharesOwnedFollowingTransaction><value>5000</value></sharesOwnedFollowingTransaction>
+                    </postTransactionAmounts>
+                    <ownershipNature>
+                        <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                    </ownershipNature>
+                </nonDerivativeTransaction>
+            </nonDerivativeTable>
+        </ownershipDocument>
+        """;
+
     private static readonly string Form3HoldingsXml = """
         <ownershipDocument>
             <reportingOwner>
@@ -389,6 +461,33 @@ public class InsiderTradingFilingProcessorTests
         owners[0].IsDirector.Should().BeTrue();
         owners[0].IsOfficer.Should().BeTrue();
         owners[0].OfficerTitle.Should().Be("CEO");
+    }
+
+    [Fact]
+    public async Task Process_IssuerCikDiffersFromCompany_SkipsAndInsertsNothing()
+    {
+        var (processor, ownerRepo, txRepo, secClient) = CreateProcessorWithDeps();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(Form4OtherIssuerXml);
+
+        // MakeCompany is Apple; the filing's issuer is Medline, so Apple is only a
+        // reporting owner here and the filing must not be attributed to AAPL.
+        var result = await processor.Process(MakeFiling(), MakeCompany());
+
+        result.Should().BeFalse();
+        txRepo.GetAll().Should().BeEmpty();
+        ownerRepo.GetAll().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Process_IssuerCikMatchesCompanyWithLeadingZeros_InsertsTransactions()
+    {
+        var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(Form4OwnIssuerPaddedCikXml);
+
+        var result = await processor.Process(MakeFiling(), MakeCompany());
+
+        result.Should().BeTrue();
+        txRepo.GetAll().Should().HaveCount(1);
     }
 
     [Fact]
