@@ -19,7 +19,8 @@ namespace Equibles.Migrations.Migrations
                 oldClrType: typeof(string),
                 oldType: "character varying(128)",
                 oldMaxLength: 128,
-                oldNullable: true);
+                oldNullable: true
+            );
 
             migrationBuilder.AlterColumn<string>(
                 name: "SecurityClassTitle",
@@ -30,7 +31,8 @@ namespace Equibles.Migrations.Migrations
                 oldClrType: typeof(string),
                 oldType: "character varying(128)",
                 oldMaxLength: 128,
-                oldNullable: true);
+                oldNullable: true
+            );
         }
 
         /// <inheritdoc />
@@ -45,7 +47,8 @@ namespace Equibles.Migrations.Migrations
                 oldClrType: typeof(string),
                 oldType: "character varying(512)",
                 oldMaxLength: 512,
-                oldNullable: true);
+                oldNullable: true
+            );
 
             migrationBuilder.AlterColumn<string>(
                 name: "SecurityClassTitle",
@@ -56,7 +59,8 @@ namespace Equibles.Migrations.Migrations
                 oldClrType: typeof(string),
                 oldType: "character varying(512)",
                 oldMaxLength: 512,
-                oldNullable: true);
+                oldNullable: true
+            );
         }
     }
 }
