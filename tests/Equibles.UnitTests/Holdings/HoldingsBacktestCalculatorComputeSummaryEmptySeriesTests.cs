@@ -32,7 +32,7 @@ public class HoldingsBacktestCalculatorComputeSummaryEmptySeriesTests
 
         act.Should().NotThrow();
         result.TotalReturnPercent.Should().Be(0m);
-        result.CagrPercent.Should().Be(0m);
+        result.CagrPercent.Should().BeNull("no series means there is nothing to annualize");
         result.MaxDrawdownPercent.Should().Be(0m);
     }
 }

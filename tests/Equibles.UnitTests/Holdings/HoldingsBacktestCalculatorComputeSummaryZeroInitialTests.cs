@@ -33,7 +33,7 @@ public class HoldingsBacktestCalculatorComputeSummaryZeroInitialTests
 
         act.Should().NotThrow();
         result.TotalReturnPercent.Should().Be(0m);
-        result.CagrPercent.Should().Be(0m);
+        result.CagrPercent.Should().BeNull("a degenerate series yields no annualizable CAGR");
         result.MaxDrawdownPercent.Should().Be(0m);
     }
 }
