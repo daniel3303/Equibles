@@ -29,13 +29,14 @@ public class NportFilingProcessorParseIssuerCategoryConditionalTests
             )
         );
 
+        // invstOrSecs is a child of formData (a sibling of fundInfo), as in real EDGAR filings.
         var root = XElement.Parse(
             "<edgarSubmission><formData>"
                 + "<genInfo><regName>Test Fund</regName></genInfo>"
-                + "<fundInfo><invstOrSecs><invstOrSec>"
+                + "<invstOrSecs><invstOrSec>"
                 + "<name>Acme Total Return Swap</name>"
                 + "<issuerConditional issuerCat=\"CORP\" />"
-                + "</invstOrSec></invstOrSecs></fundInfo>"
+                + "</invstOrSec></invstOrSecs>"
                 + "</formData></edgarSubmission>"
         );
         var filing = new FilingData
