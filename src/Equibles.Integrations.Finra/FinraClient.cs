@@ -27,6 +27,9 @@ public class FinraClient : IFinraClient
     // FINRA dataset field name; referenced as a sort/filter key and in the projected field list.
     private const string SettlementDateField = "settlementDate";
 
+    // FINRA API dataset group for OTC market data (short volume and short interest).
+    private const string OtcMarketGroup = "OTCMarket";
+
     private static readonly string[] ShortInterestFields =
     [
         SettlementDateField,
@@ -78,7 +81,7 @@ public class FinraClient : IFinraClient
 
         var results = new List<ShortVolumeRecord>();
         await PaginateQuery<ShortVolumeRecord>(
-            "OTCMarket",
+            OtcMarketGroup,
             "regShoDaily",
             offset => new
             {
@@ -137,7 +140,7 @@ public class FinraClient : IFinraClient
 
         var results = new List<ShortInterestRecord>();
         await PaginateQuery<ShortInterestRecord>(
-            "OTCMarket",
+            OtcMarketGroup,
             "consolidatedShortInterest",
             offset =>
             {
@@ -225,7 +228,7 @@ public class FinraClient : IFinraClient
     {
         var dates = new HashSet<DateOnly>();
         await PaginateQuery<ShortInterestRecord>(
-            "OTCMarket",
+            OtcMarketGroup,
             "consolidatedShortInterest",
             buildQuery,
             records =>
