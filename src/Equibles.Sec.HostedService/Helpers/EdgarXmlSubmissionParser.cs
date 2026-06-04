@@ -139,7 +139,9 @@ internal static class EdgarXmlSubmissionParser
     {
         if (value == null || value.Length <= maxLength)
             return value;
-        return value[..maxLength];
+        var end =
+            maxLength > 0 && char.IsHighSurrogate(value[maxLength - 1]) ? maxLength - 1 : maxLength;
+        return value[..end];
     }
 
     /// <summary>

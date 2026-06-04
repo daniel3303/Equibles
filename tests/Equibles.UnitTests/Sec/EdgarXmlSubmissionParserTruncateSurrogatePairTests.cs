@@ -15,7 +15,7 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class EdgarXmlSubmissionParserTruncateSurrogatePairTests
 {
-    [Fact(Skip = "GH-3408 — Truncate orphans a surrogate pair at the cut boundary")]
+    [Fact]
     public void Truncate_MaxLengthSplitsSurrogatePair_ResultContainsNoOrphanSurrogate()
     {
         // "🏛" (U+1F3DB) is a surrogate pair; placed so maxLength=10 falls between the
