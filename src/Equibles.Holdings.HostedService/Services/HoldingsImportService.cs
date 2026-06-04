@@ -22,6 +22,8 @@ namespace Equibles.Holdings.HostedService.Services;
 [Service]
 public class HoldingsImportService
 {
+    private const string AccessionNumberColumn = "ACCESSION_NUMBER";
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<HoldingsImportService> _logger;
     private readonly WorkerOptions _workerOptions;
@@ -173,7 +175,7 @@ public class HoldingsImportService
         if (formType is not ("13F-HR" or "13F-HR/A"))
             return false;
 
-        var accession = GetValue(row, "ACCESSION_NUMBER");
+        var accession = GetValue(row, AccessionNumberColumn);
         if (string.IsNullOrWhiteSpace(accession))
             return false;
 
@@ -260,7 +262,7 @@ public class HoldingsImportService
         coverPage = null;
         string Get(string field) => GetValue(row, field);
 
-        var accession = Get("ACCESSION_NUMBER");
+        var accession = Get(AccessionNumberColumn);
         if (string.IsNullOrEmpty(accession) || !submissions.ContainsKey(accession))
             return false;
 
@@ -301,7 +303,7 @@ public class HoldingsImportService
         var uniqueCusips = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         await foreach (var row in context.TsvParser.ParseEntry(infoTableEntry))
         {
-            var accession = GetValue(row, "ACCESSION_NUMBER");
+            var accession = GetValue(row, AccessionNumberColumn);
             if (!context.Submissions.ContainsKey(accession))
                 continue;
 
@@ -522,7 +524,7 @@ public class HoldingsImportService
         seq = 0;
         name = null;
 
-        accession = GetValue(row, "ACCESSION_NUMBER");
+        accession = GetValue(row, AccessionNumberColumn);
         if (string.IsNullOrEmpty(accession) || !submissions.ContainsKey(accession))
             return false;
 
@@ -645,7 +647,7 @@ public class HoldingsImportService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var accession = GetValue(row, "ACCESSION_NUMBER");
+            var accession = GetValue(row, AccessionNumberColumn);
 
             // Flush at the accession boundary, not at a fixed row count. Every
             // row sharing an upsert key inside one filing lives in that filing's
