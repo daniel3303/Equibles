@@ -6,6 +6,9 @@ namespace Equibles.Sec.BusinessLogic.Normalizers;
 
 internal class TableNormalizationStep : IHtmlNormalizationStep
 {
+    private const string ColSpanAttribute = "colspan";
+    private const string RowSpanAttribute = "rowspan";
+
     private readonly HtmlParser _parser;
 
     internal TableNormalizationStep(HtmlParser parser)
@@ -36,19 +39,19 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
 
         foreach (var cell in cellsWithColspan)
         {
-            var colspanAttr = cell.GetAttribute("colspan") ?? "1";
+            var colspanAttr = cell.GetAttribute(ColSpanAttribute) ?? "1";
             if (!int.TryParse(colspanAttr, out var colspanValue) || colspanValue <= 1)
             {
                 continue;
             }
 
-            cell.RemoveAttribute("colspan");
+            cell.RemoveAttribute(ColSpanAttribute);
 
             // A cell that also spans rows occupies a rectangular block; carry its
             // rowspan onto the new colspan cells so FixRowspan fills the full width
             // of every spanned row (otherwise those rows come out short by
             // colspan - 1 cells and the grid is ragged).
-            var rowspanAttr = cell.GetAttribute("rowspan");
+            var rowspanAttr = cell.GetAttribute(RowSpanAttribute);
 
             var currentCell = cell;
             for (int i = 1; i < colspanValue; i++)
@@ -56,7 +59,7 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
                 var newCell = doc.CreateElement("td");
                 if (rowspanAttr != null)
                 {
-                    newCell.SetAttribute("rowspan", rowspanAttr);
+                    newCell.SetAttribute(RowSpanAttribute, rowspanAttr);
                 }
                 if (currentCell.ParentElement != null)
                 {
@@ -79,7 +82,7 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
 
         foreach (var cell in cellsWithRowspan)
         {
-            var rowspanAttr = cell.GetAttribute("rowspan") ?? "1";
+            var rowspanAttr = cell.GetAttribute(RowSpanAttribute) ?? "1";
             if (!int.TryParse(rowspanAttr, out var rowspanValue) || rowspanValue <= 1)
             {
                 continue;
@@ -95,7 +98,7 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
             if (cellIndex == -1)
                 continue;
 
-            cell.RemoveAttribute("rowspan");
+            cell.RemoveAttribute(RowSpanAttribute);
 
             var nextRow = currentRow.NextElementSibling;
             for (int i = 1; i < rowspanValue; i++)
