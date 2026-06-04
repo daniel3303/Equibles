@@ -65,8 +65,7 @@ public class ProfilesController : BaseController
 
         var holdings = await _institutionalHoldingRepository
             .GetHistoryByHolder(holder)
-            .OrderByDescending(holding => holding.ReportDate)
-            .Take(RecentRowLimit)
+            .TakeMostRecent(holding => holding.ReportDate, RecentRowLimit)
             .Select(holding => new HoldingRowViewModel
             {
                 Ticker = holding.CommonStock.Ticker,
@@ -334,8 +333,7 @@ public class ProfilesController : BaseController
 
         var transactions = await _insiderTransactionRepository
             .GetByOwner(owner)
-            .OrderByDescending(transaction => transaction.TransactionDate)
-            .Take(RecentRowLimit)
+            .TakeMostRecent(transaction => transaction.TransactionDate, RecentRowLimit)
             .Select(transaction => new InsiderTradeRowViewModel
             {
                 Ticker = transaction.CommonStock.Ticker,
@@ -372,8 +370,7 @@ public class ProfilesController : BaseController
 
         var trades = await _congressionalTradeRepository
             .GetByMember(member)
-            .OrderByDescending(trade => trade.TransactionDate)
-            .Take(RecentRowLimit)
+            .TakeMostRecent(trade => trade.TransactionDate, RecentRowLimit)
             .Select(trade => new CongressTradeRowViewModel
             {
                 Ticker = trade.CommonStock.Ticker,
