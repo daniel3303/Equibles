@@ -481,21 +481,15 @@ public class HoldingsActivityController : BaseController
                 : 0;
         var universePct = Percentage.Of(activity.CurrentFilerCount, totalFilers);
 
-        var score = netConviction + retention + universePct;
-
-        var (ticker, name) = ResolveStockCells(stocks, activity.CommonStockId);
-        return new HeatMapPoint
-        {
-            CommonStockId = activity.CommonStockId,
-            Ticker = ticker,
-            Name = name,
-            CurrentFilerCount = activity.CurrentFilerCount,
-            CurrentValue = activity.CurrentValue,
-            ConvictionScore = Math.Round(score, 1),
-            NetConvictionPct = Math.Round(netConviction, 1),
-            RetentionPct = Math.Round(retention, 1),
-            UniversePct = Math.Round(universePct, 2),
-        };
+        return BuildHeatMapPoint(
+            activity.CommonStockId,
+            activity.CurrentFilerCount,
+            activity.CurrentValue,
+            netConviction,
+            retention,
+            universePct,
+            stocks
+        );
     }
 
     // Materialised single-quarter source: filer counts and new/sold-out churn are
@@ -507,29 +501,49 @@ public class HoldingsActivityController : BaseController
         IDictionary<Guid, StockLabel> stocks
     )
     {
-        var netConviction =
-            activity.CurrentFilerCount > 0
-                ? (double)(activity.NewFilerCount - activity.SoldOutFilerCount)
-                    / activity.CurrentFilerCount
-                    * 100.0
-                : 0;
+        var netConviction = Percentage.Of(
+            activity.NewFilerCount - activity.SoldOutFilerCount,
+            activity.CurrentFilerCount
+        );
         var retention =
             activity.PreviousFilerCount > 0
                 ? (1.0 - (double)activity.SoldOutFilerCount / activity.PreviousFilerCount) * 100.0
                 : 0;
-        var universePct =
-            totalFilers > 0 ? (double)activity.CurrentFilerCount / totalFilers * 100.0 : 0;
+        var universePct = Percentage.Of(activity.CurrentFilerCount, totalFilers);
 
+        return BuildHeatMapPoint(
+            activity.CommonStockId,
+            activity.CurrentFilerCount,
+            activity.CurrentValue,
+            netConviction,
+            retention,
+            universePct,
+            stocks
+        );
+    }
+
+    // Shared scoring + projection for both heat-map sources: conviction score is the
+    // sum of the three component percentages, rounded for display.
+    private static HeatMapPoint BuildHeatMapPoint(
+        Guid commonStockId,
+        int currentFilerCount,
+        long currentValue,
+        double netConviction,
+        double retention,
+        double universePct,
+        IDictionary<Guid, StockLabel> stocks
+    )
+    {
         var score = netConviction + retention + universePct;
 
-        var (ticker, name) = ResolveStockCells(stocks, activity.CommonStockId);
+        var (ticker, name) = ResolveStockCells(stocks, commonStockId);
         return new HeatMapPoint
         {
-            CommonStockId = activity.CommonStockId,
+            CommonStockId = commonStockId,
             Ticker = ticker,
             Name = name,
-            CurrentFilerCount = activity.CurrentFilerCount,
-            CurrentValue = activity.CurrentValue,
+            CurrentFilerCount = currentFilerCount,
+            CurrentValue = currentValue,
             ConvictionScore = Math.Round(score, 1),
             NetConvictionPct = Math.Round(netConviction, 1),
             RetentionPct = Math.Round(retention, 1),
