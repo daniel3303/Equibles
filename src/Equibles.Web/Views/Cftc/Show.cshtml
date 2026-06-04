@@ -48,15 +48,7 @@
     }
 
     @if (chronological.Count > 0) {
-        <!-- Chart -->
-        <div class="card bg-base-100 shadow-sm mb-6">
-            <div class="card-body p-4 lg:p-6">
-                <h2 class="font-semibold text-sm mb-3">Net Positioning</h2>
-                <div class="h-[320px]">
-                    <canvas id="cftc-chart" role="img" aria-label="CFTC net positioning over time"></canvas>
-                </div>
-            </div>
-        </div>
+        <partial name="_ChartCard" model='("Net Positioning", "cftc-chart", "CFTC net positioning over time", "h-[320px]", "mb-6")' />
     }
 
     <!-- Data Table -->
