@@ -5,6 +5,9 @@ namespace Equibles.Sec.BusinessLogic.Normalizers;
 
 internal class HeadingConversionStep : IHtmlNormalizationStep
 {
+    // Uppercase Roman-numeral letters; the text is upper-cased before the check.
+    private const string RomanNumeralLetters = "IVXLCDM";
+
     public void Execute(IHtmlDocument doc)
     {
         // Select spans that are NOT descendants of table elements
@@ -133,7 +136,11 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
                 if (tokens.Length == 0)
                     return false;
                 var firstWord = tokens[0];
-                return !string.IsNullOrEmpty(firstWord) && firstWord.All(char.IsLetter);
+                // A real Part identifier is a Roman numeral (Part I–IV). An ordinary word
+                // like "of"/"the" from a prose sentence beginning "Part of …" is all-letters
+                // too, so require the first token to be composed solely of Roman-numeral
+                // letters — that rejects the prose while still accepting "Part IV".
+                return firstWord.All(c => RomanNumeralLetters.Contains(c));
             }
         }
 
@@ -166,7 +173,11 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
                 if (tokens.Length == 0)
                     return false;
                 var firstWord = tokens[0];
-                return !string.IsNullOrEmpty(firstWord) && firstWord.Any(char.IsLetterOrDigit);
+                // A real Item identifier is number-led (Item 1, 1A, 7A). An ordinary word
+                // like "of"/"the" from a prose sentence beginning "Item of …" starts with a
+                // letter, so require the first token to start with a digit — that rejects the
+                // prose while still accepting "Item 1A".
+                return char.IsDigit(firstWord[0]);
             }
         }
 

@@ -13,7 +13,7 @@ public class HeadingConversionStepPartOfProseTests
     // begins "Part of …" is body text, not a section heading, so it must NOT be
     // promoted to a heading — doing so corrupts the document outline used by chunking.
     // The span is mixed-case and unstyled, so only the IsPartHeading branch can fire.
-    [Fact(Skip = "GH-3431 — prose beginning \"Part of …\" is promoted to an <h1> heading")]
+    [Fact]
     public void Execute_ProseSentenceBeginningWithPartOf_IsNotPromotedToHeading()
     {
         var doc = _parser.ParseDocument(

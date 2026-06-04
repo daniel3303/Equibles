@@ -13,7 +13,7 @@ public class HeadingConversionStepItemOfProseTests
     // text and must not be promoted to a heading — IsItemHeading only checks for "ITEM"
     // + whitespace + an alphanumeric first token, so an ordinary following word passes.
     // The span is mixed-case and unstyled, so only the IsItemHeading branch can fire.
-    [Fact(Skip = "GH-3431 — prose beginning \"Item of …\" is promoted to an <h2> heading")]
+    [Fact]
     public void Execute_ProseSentenceBeginningWithItemOf_IsNotPromotedToHeading()
     {
         var doc = _parser.ParseDocument(
