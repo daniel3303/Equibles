@@ -24,9 +24,12 @@ public class FinraClient : IFinraClient
     private const int MaxPageSize = 5000;
     private const int MaxRetries = 3;
 
+    // FINRA dataset field name; referenced as a sort/filter key and in the projected field list.
+    private const string SettlementDateField = "settlementDate";
+
     private static readonly string[] ShortInterestFields =
     [
-        "settlementDate",
+        SettlementDateField,
         "symbolCode",
         "issueName",
         "currentShortPositionQuantity",
@@ -145,7 +148,7 @@ public class FinraClient : IFinraClient
                     {
                         new
                         {
-                            fieldName = "settlementDate",
+                            fieldName = SettlementDateField,
                             startDate = dateStr,
                             endDate = dateStr,
                         },
@@ -178,7 +181,7 @@ public class FinraClient : IFinraClient
         // /partitions GET returns 403; the /data endpoint exposes the same dates by paging.
         var dates = await CollectSettlementDates(offset => new
         {
-            fields = new[] { "settlementDate" },
+            fields = new[] { SettlementDateField },
             limit = MaxPageSize,
             offset,
         });
@@ -196,12 +199,12 @@ public class FinraClient : IFinraClient
 
         var dates = await CollectSettlementDates(offset => new
         {
-            fields = new[] { "settlementDate" },
+            fields = new[] { SettlementDateField },
             dateRangeFilters = new[]
             {
                 new
                 {
-                    fieldName = "settlementDate",
+                    fieldName = SettlementDateField,
                     startDate = startDateStr,
                     endDate = endDateStr,
                 },
