@@ -13,7 +13,7 @@ public class PaginationRemovalStepPartOfProseTests
     // "Part" + a roman-numeral identifier). A prose paragraph that merely begins "Part of …"
     // is body content, so removing it after a page-break <hr> is real content loss and must
     // not happen. Oracle derived from the contract, not the body.
-    [Fact(Skip = "GH-3489 — prose paragraph beginning \"Part of …\" after an <hr> is deleted as a Part header")]
+    [Fact]
     public void Execute_HrFollowedByProseParagraphBeginningPartOf_PreservesParagraph()
     {
         var doc = _parser.ParseDocument(
