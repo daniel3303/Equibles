@@ -18,8 +18,16 @@ namespace Equibles.Sec.Data.Models;
 [Index(nameof(CommonStockId), nameof(FilingDate))]
 [Index(nameof(AccessionNumber), IsUnique = true)]
 [Index(nameof(FilingDate))]
+[Index(nameof(ParserVersion))]
 public class NportFiling : IStockFiling
 {
+    /// <summary>
+    /// Current holdings-parsing algorithm version. Bump this whenever the NPORT-P parse changes so
+    /// the reprocess worker re-derives every filing's <see cref="Holdings"/> from EDGAR. Version 1
+    /// is the first that reads the portfolio schedule from the correct <c>formData</c> element.
+    /// </summary>
+    public const int CurrentParserVersion = 1;
+
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -70,6 +78,21 @@ public class NportFiling : IStockFiling
 
     /// <summary>The series' schedule of portfolio investments reported on the filing.</summary>
     public virtual List<NportHolding> Holdings { get; set; } = [];
+
+    /// <summary>
+    /// Parsing-algorithm version that produced this filing's <see cref="Holdings"/>. See
+    /// <see cref="CurrentParserVersion"/>. Defaults to 0 for filings imported before versioning,
+    /// which marks them for reprocessing.
+    /// </summary>
+    public int ParserVersion { get; set; }
+
+    /// <summary>
+    /// Number of times the reprocess pass has failed to fetch or re-parse this filing. Once it
+    /// reaches the reprocess ceiling the filing is advanced to <see cref="CurrentParserVersion"/>
+    /// regardless, so a permanently-unfetchable filing (e.g. a delisted issuer's pulled submission)
+    /// can't keep the backlog from draining.
+    /// </summary>
+    public int ReprocessAttempts { get; set; }
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }

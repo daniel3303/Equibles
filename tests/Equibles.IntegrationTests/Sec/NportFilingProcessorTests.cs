@@ -100,6 +100,7 @@ public class NportFilingProcessorTests
         filing.NetAssets.Should().Be(93591793.29m);
         filing.IsFinalFiling.Should().BeFalse();
         filing.IsAmendment.Should().BeFalse();
+        filing.ParserVersion.Should().Be(NportFiling.CurrentParserVersion);
 
         filing.Holdings.Should().HaveCount(2);
 

@@ -58,7 +58,16 @@ public class NportFilingProcessor : IssuerFeedFilingProcessor<NportFiling, Nport
         );
     }
 
-    protected override NportFiling ParseFiling(XElement root, Guid companyId, FilingData filing)
+    protected override NportFiling ParseFiling(XElement root, Guid companyId, FilingData filing) =>
+        ParseEntity(root, companyId, filing);
+
+    /// <summary>
+    /// Parses an NPORT-P submission root into a <see cref="NportFiling"/> with its schedule of
+    /// holdings, stamped at <see cref="NportFiling.CurrentParserVersion"/>. Shared by the ingest
+    /// pipeline (<see cref="ParseFiling"/>) and the version-driven reprocess pass, so both derive
+    /// holdings identically. Returns null when the submission lacks the required genInfo section.
+    /// </summary>
+    internal static NportFiling ParseEntity(XElement root, Guid companyId, FilingData filing)
     {
         var headerData = El(root, "headerData");
         var formData = El(root, "formData");
@@ -84,6 +93,7 @@ public class NportFilingProcessor : IssuerFeedFilingProcessor<NportFiling, Nport
             TotalLiabilities = ParseDecimal(Val(fundInfo, "totLiabs")),
             NetAssets = ParseDecimal(Val(fundInfo, "netAssets")),
             IsFinalFiling = ParseYesNo(Val(genInfo, "isFinalFiling")),
+            ParserVersion = NportFiling.CurrentParserVersion,
         };
 
         // invstOrSecs is a child of formData, a sibling of fundInfo — not nested inside fundInfo.

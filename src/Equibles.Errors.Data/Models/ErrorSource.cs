@@ -21,6 +21,7 @@ public sealed class ErrorSource
     public static readonly ErrorSource CboeScraper = new("CboeScraper");
     public static readonly ErrorSource TranscriptScraper = new("TranscriptScraper");
     public static readonly ErrorSource InsiderTradingReprocess = new("InsiderTradingReprocess");
+    public static readonly ErrorSource NportReprocess = new("NportReprocess");
     public static readonly ErrorSource Other = new("Other");
 
     public static IEnumerable<ErrorSource> GetAll() =>
@@ -40,6 +41,7 @@ public sealed class ErrorSource
             CboeScraper,
             TranscriptScraper,
             InsiderTradingReprocess,
+            NportReprocess,
             Other,
         ];
 
