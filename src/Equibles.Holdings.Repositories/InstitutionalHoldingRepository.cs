@@ -616,6 +616,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return ProjectDoubleDownPositions(aggregated, minPctIncrease);
     }
 
+    // A double down needs a non-trivial existing position: a 1-share / near-$0 prior
+    // base turns an ordinary new position into a "+190,898,100%" share-change artifact
+    // that dominates the percentage ranking and buries genuine conviction increases.
+    public const long MinDoubleDownPreviousValue = 10_000;
+
     // Shared tail for both double-down queries: applies the common increase
     // filters to the per-filer aggregate, then joins filer + stock metadata.
     // Identical generated SQL whether the aggregate came from the single-quarter
@@ -625,7 +630,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         double minPctIncrease
     ) =>
         aggregated
-            .Where(a => a.PreviousShares > 0 && a.CurrentShares > a.PreviousShares)
+            .Where(a =>
+                a.PreviousShares > 0
+                && a.PreviousValue >= MinDoubleDownPreviousValue
+                && a.CurrentShares > a.PreviousShares
+            )
             .Where(a =>
                 (double)(a.CurrentShares - a.PreviousShares) / a.PreviousShares * 100.0
                 >= minPctIncrease
