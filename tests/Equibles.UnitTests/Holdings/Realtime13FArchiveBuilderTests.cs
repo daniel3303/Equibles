@@ -128,6 +128,38 @@ public class Realtime13FArchiveBuilderTests
         lines[1].Should().Contain("915560");
     }
 
+    // The VALUE column carries the filed market value through to the import
+    // pipeline's duplicated share-count repair; dropping it from the synthetic
+    // archive would silently disable that repair on the real-time path.
+    [Fact]
+    public void Build_WithHoldings_InfoTableWritesFiledValueColumn()
+    {
+        var filing = CreateFiling();
+        filing.Holdings.Add(
+            new Parsed13FHolding
+            {
+                Cusip = "037833100",
+                TitleOfClass = "COM",
+                ShareType = "SH",
+                Shares = 915560,
+                Value = 26614323,
+                InvestmentDiscretion = "SOLE",
+            }
+        );
+
+        using var archive = _sut.Build([filing]);
+        var content = ReadEntry(archive, "INFOTABLE.tsv");
+        var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        var headers = lines[0].Split('\t');
+        var fields = lines[1].Split('\t');
+        var valueIndex = Array.IndexOf(headers, "VALUE");
+
+        valueIndex.Should().BeGreaterThan(-1, "INFOTABLE must carry the filed VALUE column");
+        fields[valueIndex].Should().Be("26614323");
+        fields[Array.IndexOf(headers, "SSHPRNAMT")].Should().Be("915560");
+    }
+
     [Fact]
     public void Build_HoldingWithOtherManager_OtherManagerNumberWritten()
     {
@@ -149,8 +181,8 @@ public class Realtime13FArchiveBuilderTests
         var dataLine = content.Split('\n')[1];
         var fields = dataLine.Split('\t');
 
-        // OTHERMANAGER is field index 9 (0-based)
-        fields[9].Should().Be("3");
+        // OTHERMANAGER is field index 10 (0-based, after the VALUE column)
+        fields[10].Should().Be("3");
     }
 
     [Fact]
@@ -174,7 +206,7 @@ public class Realtime13FArchiveBuilderTests
         var dataLine = content.Split('\n')[1];
         var fields = dataLine.Split('\t');
 
-        fields[9].Should().BeEmpty();
+        fields[10].Should().BeEmpty();
     }
 
     [Fact]

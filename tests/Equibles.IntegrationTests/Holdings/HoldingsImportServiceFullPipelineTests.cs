@@ -213,6 +213,88 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         holder.City.Should().Be("Omaha");
     }
 
+    // ── Duplicated share-count column repair ───────────────────────────
+
+    [Fact]
+    public async Task ImportDataSet_FilingDuplicatesValueIntoShareCount_PersistsRepairedSharesFromValueDividedByPrice()
+    {
+        // Some filers' software writes each position's dollar value into
+        // SSHPRNAMT (e.g. DIAMANT ASSET MANAGEMENT 0001731124-26-000002):
+        // every row reports SSHPRNAMT == VALUE. Ingesting those counts
+        // verbatim and deriving Value = shares × price inflated portfolios
+        // ~1000×. Pin the full-pipeline repair: with ≥5 such rows the filing
+        // is flagged and each persisted holding carries shares = VALUE ÷
+        // closing price instead of the corrupt count.
+        var reportDate = new DateOnly(2026, 3, 31);
+        var stocks = new List<CommonStock>();
+        var prices = new Dictionary<(Guid, DateOnly), decimal>();
+        var infoTable = new StringBuilder(
+            "ACCESSION_NUMBER\tCUSIP\tVALUE\tSSHPRNAMT\tSSHPRNAMTTYPE\tPUTCALL\tINVESTMENTDISCRETION\tVOTING_AUTH_SOLE\tVOTING_AUTH_SHARED\tVOTING_AUTH_NONE\tTITLEOFCLASS\tOTHERMANAGER\n"
+        );
+
+        for (var i = 1; i <= 5; i++)
+        {
+            var stock = new CommonStock
+            {
+                Id = Guid.NewGuid(),
+                Ticker = $"TK{i}",
+                Name = $"Tracked Co {i}",
+                Cik = $"000000010{i}",
+                Cusip = $"11111111{i}",
+            };
+            stocks.Add(stock);
+            prices[(stock.Id, reportDate)] = 250m;
+
+            // SSHPRNAMT duplicates VALUE — the defect under test.
+            var dollarValue = i * 2_500_000L;
+            infoTable.Append(
+                $"ACC-13F\t{stock.Cusip}\t{dollarValue}\t{dollarValue}\tSH\t\tSOLE\t{i * 10_000}\t0\t0\tCOM\t\n"
+            );
+        }
+
+        using (var seed = FreshContext())
+        {
+            seed.Set<CommonStock>().AddRange(stocks);
+            await seed.SaveChangesAsync();
+        }
+
+        var submission =
+            "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
+            + "13F-HR\tACC-13F\t2026-05-15\t2026-03-31\t0001731124\n";
+        var coverPage =
+            "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\tFILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\n"
+            + "ACC-13F\tN\tDiamant Asset Management\tRidgefield\tCT\t028-99999\t54321\n";
+
+        using var archive = BuildArchive(
+            ("SUBMISSION.tsv", submission),
+            ("COVERPAGE.tsv", coverPage),
+            ("INFOTABLE.tsv", infoTable.ToString())
+        );
+
+        var sut = CreateImporter(PriceProviderReturning(prices));
+
+        var result = await sut.ImportDataSet(
+            archive,
+            new DateOnly(2026, 1, 1),
+            CancellationToken.None
+        );
+
+        result.IsComplete.Should().BeTrue();
+
+        using var verify = FreshContext();
+        var holdings = await verify.Set<InstitutionalHolding>().ToListAsync();
+        holdings.Should().HaveCount(5);
+
+        for (var i = 1; i <= 5; i++)
+        {
+            var holding = holdings.Single(h => h.Cusip == $"11111111{i}");
+            // value ÷ price: (i × 2,500,000) ÷ 250 = i × 10,000 shares.
+            holding.Shares.Should().Be(i * 10_000L);
+            holding.Value.Should().Be(i * 2_500_000L);
+            holding.ValuePending.Should().BeFalse();
+        }
+    }
+
     // ── Cold-start CUSIP race (GH-817) ─────────────────────────────────
 
     [Fact]

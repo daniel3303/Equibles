@@ -110,6 +110,7 @@ public class Filing13FXmlParser
                     TitleOfClass = Value(Child(info, "titleOfClass")),
                     ShareType = Value(Child(amount, "sshPrnamtType")),
                     Shares = ParseLong(Value(Child(amount, "sshPrnamt"))),
+                    Value = ParseLong(Value(Child(info, "value"))),
                     PutCall = Value(Child(info, "putCall")),
                     InvestmentDiscretion = Value(Child(info, "investmentDiscretion")),
                     VotingAuthSole = ParseLong(Value(Child(voting, "Sole"))),

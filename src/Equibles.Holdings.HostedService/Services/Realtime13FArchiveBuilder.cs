@@ -29,7 +29,7 @@ public class Realtime13FArchiveBuilder
                 + "CONFIDENTIALTREATMENT\n"
         );
         var infoTable = new StringBuilder(
-            "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMTTYPE\tPUTCALL\tSSHPRNAMT\tVOTING_AUTH_SOLE\t"
+            "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMTTYPE\tPUTCALL\tVALUE\tSSHPRNAMT\tVOTING_AUTH_SOLE\t"
                 + "VOTING_AUTH_SHARED\tVOTING_AUTH_NONE\tTITLEOFCLASS\tOTHERMANAGER\tINVESTMENTDISCRETION\n"
         );
         var otherManager = new StringBuilder("ACCESSION_NUMBER\tSEQUENCENUMBER\tNAME\n");
@@ -73,6 +73,7 @@ public class Realtime13FArchiveBuilder
                     Clean(holding.Cusip),
                     Clean(holding.ShareType),
                     Clean(holding.PutCall),
+                    holding.Value,
                     holding.Shares,
                     holding.VotingAuthSole,
                     holding.VotingAuthShared,

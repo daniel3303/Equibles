@@ -636,7 +636,7 @@ public class HoldingsImportService
     )
     {
         var infoTableEntry = FindEntry(context.Archive, "INFOTABLE.tsv");
-        var holdingsMap = new Dictionary<string, InstitutionalHolding>();
+        var bufferedRows = new List<BufferedHoldingRow>();
         var totalInserted = 0;
         var totalSkipped = 0;
         var totalDuplicates = 0;
@@ -658,12 +658,21 @@ public class HoldingsImportService
             // the last one's sum survives. SEC orders the bulk INFOTABLE by
             // INFOTABLE_SK and the realtime archive by XML element order, so
             // a single accession's rows are always contiguous; flushing only
-            // when the accession changes guarantees in-memory aggregation
-            // finishes before any UPSERT for that key runs.
-            if (currentAccession != null && accession != currentAccession && holdingsMap.Count > 0)
+            // when the accession changes guarantees both the per-filing
+            // share-count repair and the in-memory aggregation see the whole
+            // filing before any UPSERT for its keys runs.
+            if (currentAccession != null && accession != currentAccession && bufferedRows.Count > 0)
             {
-                totalInserted += await FlushBatch(holdingsMap.Values.ToList(), cancellationToken);
-                holdingsMap.Clear();
+                var flushed = await RepairMergeAndFlush(
+                    currentAccession,
+                    bufferedRows,
+                    context,
+                    cancellationToken
+                );
+                totalInserted += flushed.Inserted;
+                totalDuplicates += flushed.Duplicates;
+                totalPending += flushed.Pending;
+                bufferedRows.Clear();
             }
             currentAccession = accession;
 
@@ -683,7 +692,7 @@ public class HoldingsImportService
             TryParseDateOnly(submission.FilingDate, out var filingDate);
             TryParseDateOnly(submission.PeriodOfReport, out var reportDate);
 
-            var (holding, managerEntry, valuePending) = ParseHoldingRow(
+            var (holding, managerEntry, _, reportedValue) = ParseHoldingRow(
                 row,
                 accession,
                 cusip,
@@ -693,21 +702,28 @@ public class HoldingsImportService
                 reportDate,
                 context
             );
-            if (AddOrMergeHolding(holdingsMap, holding, managerEntry))
-            {
-                if (valuePending)
-                    totalPending++;
-            }
-            else
-            {
-                totalDuplicates++;
-            }
+            bufferedRows.Add(
+                new BufferedHoldingRow
+                {
+                    Holding = holding,
+                    ManagerEntry = managerEntry,
+                    ReportedValue = reportedValue,
+                }
+            );
         }
 
-        if (holdingsMap.Count > 0)
+        if (bufferedRows.Count > 0)
         {
-            totalInserted += await FlushBatch(holdingsMap.Values.ToList(), cancellationToken);
-            holdingsMap.Clear();
+            var flushed = await RepairMergeAndFlush(
+                currentAccession,
+                bufferedRows,
+                context,
+                cancellationToken
+            );
+            totalInserted += flushed.Inserted;
+            totalDuplicates += flushed.Duplicates;
+            totalPending += flushed.Pending;
+            bufferedRows.Clear();
         }
 
         _logger.LogInformation(
@@ -717,6 +733,54 @@ public class HoldingsImportService
             totalDuplicates,
             totalPending
         );
+    }
+
+    // Runs the per-filing share-count repair over one accession's buffered rows,
+    // merges them by upsert key, and flushes the batch. Repair must happen here —
+    // after the whole filing is buffered, before any row merges — because the
+    // duplicated-column signal is a property of the filing, not of a single row.
+    private async Task<(int Inserted, int Duplicates, int Pending)> RepairMergeAndFlush(
+        string accession,
+        List<BufferedHoldingRow> bufferedRows,
+        ImportContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        if (Corrupt13FShareCountRepairer.IsSuspect(bufferedRows))
+        {
+            var outcome = Corrupt13FShareCountRepairer.Repair(bufferedRows, context.StockPrices);
+            _logger.LogWarning(
+                "Filing {Accession} duplicates its value column into the share-count column; "
+                    + "recovered {Repaired} row(s) from the filed value, dropped {Dropped} unrepairable row(s)",
+                accession,
+                outcome.RepairedRows,
+                outcome.DroppedRows
+            );
+        }
+
+        var holdingsMap = new Dictionary<string, InstitutionalHolding>();
+        var duplicates = 0;
+        var pending = 0;
+
+        foreach (var row in bufferedRows)
+        {
+            if (AddOrMergeHolding(holdingsMap, row.Holding, row.ManagerEntry))
+            {
+                if (row.Holding.ValuePending)
+                    pending++;
+            }
+            else
+            {
+                duplicates++;
+            }
+        }
+
+        var inserted =
+            holdingsMap.Count > 0
+                ? await FlushBatch(holdingsMap.Values.ToList(), cancellationToken)
+                : 0;
+
+        return (inserted, duplicates, pending);
     }
 
     // Buffers a parsed row by its upsert key. A 13F holder can split one security
@@ -750,7 +814,8 @@ public class HoldingsImportService
     private static (
         InstitutionalHolding Holding,
         HoldingManagerEntry ManagerEntry,
-        bool ValuePending
+        bool ValuePending,
+        long ReportedValue
     ) ParseHoldingRow(
         Dictionary<string, string> row,
         string accession,
@@ -772,6 +837,10 @@ public class HoldingsImportService
         long ParseLongField(string field) => ParseLong(GetValue(row, field));
 
         var shares = ParseLongField("SSHPRNAMT");
+        // The filed market value is never persisted directly (Value is always
+        // derived from shares × closing price); it is carried out solely so the
+        // per-filing repair can cross-check it against the share count.
+        var reportedValue = ParseLongField("VALUE");
         var votingAuthSole = ParseLongField("VOTING_AUTH_SOLE");
         var votingAuthShared = ParseLongField("VOTING_AUTH_SHARED");
         var votingAuthNone = ParseLongField("VOTING_AUTH_NONE");
@@ -817,7 +886,7 @@ public class HoldingsImportService
             ValuePending = valuePending,
         };
 
-        return (holding, managerEntry, valuePending);
+        return (holding, managerEntry, valuePending, reportedValue);
     }
 
     private async Task<int> FlushBatch(

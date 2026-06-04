@@ -15,6 +15,13 @@ public class Parsed13FHolding
     public string ShareType { get; set; }
     public long Shares { get; set; }
 
+    /// <summary>
+    /// SEC <c>value</c>: the position's market value exactly as filed (whole
+    /// dollars for filings on/after 2023-01-03, thousands before). Carried so
+    /// the import pipeline can cross-check it against the share count.
+    /// </summary>
+    public long Value { get; set; }
+
     /// <summary>SEC <c>putCall</c>: <c>Put</c>, <c>Call</c>, or null/empty.</summary>
     public string PutCall { get; set; }
 
