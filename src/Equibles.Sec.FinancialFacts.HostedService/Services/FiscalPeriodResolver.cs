@@ -54,7 +54,7 @@ internal static class FiscalPeriodResolver
 
         var durationDays = periodEnd.DayNumber - periodStart.DayNumber;
         var isInstant = durationDays == 0;
-        var isAnnual = durationDays >= AnnualMinDays && durationDays <= AnnualMaxDays;
+        var isAnnual = IsWithinDays(durationDays, AnnualMinDays, AnnualMaxDays);
 
         if (isAnnual || isInstant)
         {
@@ -64,9 +64,9 @@ internal static class FiscalPeriodResolver
             return (closest.Year, SecFiscalPeriod.FullYear);
         }
 
-        var isQuarter = durationDays >= QuarterMinDays && durationDays <= QuarterMaxDays;
-        var isHalfYear = durationDays >= HalfYearMinDays && durationDays <= HalfYearMaxDays;
-        var isNineMonths = durationDays >= NineMonthMinDays && durationDays <= NineMonthMaxDays;
+        var isQuarter = IsWithinDays(durationDays, QuarterMinDays, QuarterMaxDays);
+        var isHalfYear = IsWithinDays(durationDays, HalfYearMinDays, HalfYearMaxDays);
+        var isNineMonths = IsWithinDays(durationDays, NineMonthMinDays, NineMonthMaxDays);
 
         if (!isQuarter && !isHalfYear && !isNineMonths)
             return null;
@@ -115,4 +115,8 @@ internal static class FiscalPeriodResolver
 
     private static DateOnly ClosestTo(DateOnly[] candidates, DateOnly target) =>
         candidates.MinBy(c => Math.Abs(c.DayNumber - target.DayNumber));
+
+    // Inclusive day-count band for a recognised period shape (annual, quarter, …).
+    private static bool IsWithinDays(int durationDays, int min, int max) =>
+        durationDays >= min && durationDays <= max;
 }
