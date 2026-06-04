@@ -86,7 +86,12 @@ public class NportFilingProcessor : IssuerFeedFilingProcessor<NportFiling, Nport
             IsFinalFiling = ParseYesNo(Val(genInfo, "isFinalFiling")),
         };
 
-        foreach (var investment in Els(El(fundInfo, "invstOrSecs"), "invstOrSec"))
+        // The schedule of investments is a sibling of <fundInfo> directly under
+        // <formData> in the NPORT-P schema; the former <fundInfo>-child lookup matched
+        // no real filing, so every report imported with zero holdings. The <fundInfo>
+        // fallback is kept defensively for any non-conforming submission.
+        var investments = El(formData, "invstOrSecs") ?? El(fundInfo, "invstOrSecs");
+        foreach (var investment in Els(investments, "invstOrSec"))
         {
             var holding = ParseHolding(investment);
             if (holding != null)
