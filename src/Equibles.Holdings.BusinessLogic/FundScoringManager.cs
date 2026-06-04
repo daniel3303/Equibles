@@ -148,12 +148,12 @@ public class FundScoringManager
 
         score.WindowStart = result.StartDate;
         score.WindowEnd = result.EndDate;
+        // IsStorable gated both CAGRs as non-null before Upsert is reached.
         score.PortfolioTotalReturnPercent = result.PortfolioSummary.TotalReturnPercent;
-        score.PortfolioCagrPercent = result.PortfolioSummary.CagrPercent;
+        score.PortfolioCagrPercent = result.PortfolioSummary.CagrPercent.Value;
         score.BenchmarkTotalReturnPercent = result.BenchmarkSummary.TotalReturnPercent;
-        score.BenchmarkCagrPercent = result.BenchmarkSummary.CagrPercent;
-        score.AlphaPercent =
-            result.PortfolioSummary.CagrPercent - result.BenchmarkSummary.CagrPercent;
+        score.BenchmarkCagrPercent = result.BenchmarkSummary.CagrPercent.Value;
+        score.AlphaPercent = score.PortfolioCagrPercent - score.BenchmarkCagrPercent;
         score.MaxDrawdownPercent = result.PortfolioSummary.MaxDrawdownPercent;
         score.CreationTime = DateTime.UtcNow;
 
@@ -204,12 +204,16 @@ public class FundScoringManager
             })
             .ToList();
 
+    // A null CAGR means the simulated window was too short to annualize
+    // (HoldingsBacktestCalculator.MinAnnualizationDays) — such a score is not meaningful.
     private static bool IsStorable(BacktestResult result) =>
-        InRange(result.PortfolioSummary.TotalReturnPercent)
-        && InRange(result.PortfolioSummary.CagrPercent)
+        result.PortfolioSummary.CagrPercent is decimal portfolioCagr
+        && result.BenchmarkSummary.CagrPercent is decimal benchmarkCagr
+        && InRange(result.PortfolioSummary.TotalReturnPercent)
+        && InRange(portfolioCagr)
         && InRange(result.PortfolioSummary.MaxDrawdownPercent)
         && InRange(result.BenchmarkSummary.TotalReturnPercent)
-        && InRange(result.BenchmarkSummary.CagrPercent);
+        && InRange(benchmarkCagr);
 
     private static bool InRange(decimal value) => Math.Abs(value) < MaxStorableMagnitude;
 

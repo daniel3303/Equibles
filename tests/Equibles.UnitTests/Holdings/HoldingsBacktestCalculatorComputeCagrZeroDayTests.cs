@@ -6,25 +6,23 @@ namespace Equibles.UnitTests.Holdings;
 public class HoldingsBacktestCalculatorComputeCagrZeroDayTests
 {
     [Fact]
-    public void ComputeCagr_ZeroDayWindow_ReturnsZero()
+    public void ComputeCagr_ZeroDayWindow_ReturnsNull()
     {
-        // Contract (HoldingsBacktestCalculator.cs:204-205): `dayCount <= 0`
-        // short-circuits to 0m. The boundary dayCount == 0 is the failure mode
-        // a regression most easily reintroduces — flipping the guard to
-        // `dayCount < 0` lets a same-day window through. Then years = 0 / 365.25
-        // = 0, and Math.Pow(ratio, 1.0 / 0) yields PositiveInfinity (ratio > 1)
-        // or NaN (ratio == 1 → Pow(1, inf) == 1; PositiveInfinity - 1.0 still
-        // overflows the decimal cast). Either way the CAGR cell saturates to
-        // decimal.MaxValue (or throws if the catch is also dropped) instead of
-        // reporting an honest "no time elapsed → no annualised rate". Pinning
-        // the exact boundary protects this guard from a one-character drift.
+        // Contract (HoldingsBacktestCalculator.ComputeCagr): windows shorter than
+        // MinAnnualizationDays — including the degenerate dayCount == 0 — report
+        // no CAGR at all (null). The boundary matters: letting a same-day window
+        // through means years = 0 / 365.25 = 0, and Math.Pow(ratio, 1.0 / 0)
+        // yields PositiveInfinity (ratio > 1), overflowing the decimal cast and
+        // saturating the cell to decimal.MaxValue instead of reporting an honest
+        // "no time elapsed → no annualised rate". Pinning the boundary protects
+        // the guard from drifting.
         var method = typeof(HoldingsBacktestCalculator).GetMethod(
             "ComputeCagr",
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-        var result = (decimal)method!.Invoke(null, [100m, 200m, 0]);
+        var result = (decimal?)method!.Invoke(null, [100m, 200m, 0]);
 
-        result.Should().Be(0m);
+        result.Should().BeNull();
     }
 }

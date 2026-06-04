@@ -13,6 +13,10 @@ public static class HoldingsBacktestCalculator
 
     public const decimal InitialValue = 100m;
 
+    // Annualizing a sub-quarter window extrapolates noise into an absurd rate (19 days of
+    // +8.75% reads as a "448% CAGR"); below this window length no CAGR is reported at all.
+    public const int MinAnnualizationDays = 90;
+
     // Shift a 13F ReportDate forward to its rebalance date (+RebalanceDelayDays). A ReportDate
     // within RebalanceDelayDays of DateOnly.MaxValue would overflow the calendar, so cap the
     // shift at MaxValue instead of throwing — a far-future date then reads as out-of-window.
@@ -196,14 +200,16 @@ public static class HoldingsBacktestCalculator
         return new BacktestStrategySummary
         {
             TotalReturnPercent = Math.Round(totalReturn, 2),
-            CagrPercent = Math.Round(cagr, 2),
+            CagrPercent = cagr is null ? null : Math.Round(cagr.Value, 2),
             MaxDrawdownPercent = Math.Round(maxDrawdown, 2),
         };
     }
 
-    private static decimal ComputeCagr(decimal initial, decimal final, int dayCount)
+    private static decimal? ComputeCagr(decimal initial, decimal final, int dayCount)
     {
-        if (dayCount <= 0 || final <= 0)
+        if (dayCount < MinAnnualizationDays)
+            return null;
+        if (final <= 0)
             return 0m;
 
         var years = dayCount / 365.25;
