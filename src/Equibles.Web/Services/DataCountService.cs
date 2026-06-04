@@ -3,6 +3,7 @@ using Equibles.Cftc.Repositories;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Repositories;
 using Equibles.Core.AutoWiring;
+using Equibles.Data;
 using Equibles.Fred.Repositories;
 using Equibles.Holdings.Repositories;
 using Equibles.InsiderTrading.Repositories;
@@ -54,34 +55,28 @@ public class DataCountService
         _cboeVixDailyRepository = cboeVixDailyRepository;
     }
 
-    public async Task<int> GetStockCount() => await _commonStockRepository.GetAll().CountAsync();
+    public Task<int> GetStockCount() => CountAll(_commonStockRepository);
 
-    public async Task<int> GetDocumentCount() => await _documentRepository.GetAll().CountAsync();
+    public Task<int> GetDocumentCount() => CountAll(_documentRepository);
 
-    public async Task<int> GetInsiderTransactionCount() =>
-        await _insiderTransactionRepository.GetAll().CountAsync();
+    public Task<int> GetInsiderTransactionCount() => CountAll(_insiderTransactionRepository);
 
-    public async Task<int> GetCongressionalTradeCount() =>
-        await _congressionalTradeRepository.GetAll().CountAsync();
+    public Task<int> GetCongressionalTradeCount() => CountAll(_congressionalTradeRepository);
 
-    public async Task<int> GetInstitutionalHoldingCount() =>
-        await _institutionalHoldingRepository.GetAll().CountAsync();
+    public Task<int> GetInstitutionalHoldingCount() => CountAll(_institutionalHoldingRepository);
 
-    public async Task<int> GetFailToDeliverCount() =>
-        await _failToDeliverRepository.GetAll().CountAsync();
+    public Task<int> GetFailToDeliverCount() => CountAll(_failToDeliverRepository);
 
-    public async Task<int> GetFredObservationCount() =>
-        await _fredObservationRepository.GetAll().CountAsync();
+    public Task<int> GetFredObservationCount() => CountAll(_fredObservationRepository);
 
-    public async Task<int> GetDailyStockPriceCount() =>
-        await _dailyStockPriceRepository.GetAll().CountAsync();
+    public Task<int> GetDailyStockPriceCount() => CountAll(_dailyStockPriceRepository);
 
-    public async Task<int> GetCftcPositionReportCount() =>
-        await _cftcPositionReportRepository.GetAll().CountAsync();
+    public Task<int> GetCftcPositionReportCount() => CountAll(_cftcPositionReportRepository);
 
-    public async Task<int> GetCboePutCallRatioCount() =>
-        await _cboePutCallRatioRepository.GetAll().CountAsync();
+    public Task<int> GetCboePutCallRatioCount() => CountAll(_cboePutCallRatioRepository);
 
-    public async Task<int> GetCboeVixDailyCount() =>
-        await _cboeVixDailyRepository.GetAll().CountAsync();
+    public Task<int> GetCboeVixDailyCount() => CountAll(_cboeVixDailyRepository);
+
+    private static Task<int> CountAll<T>(BaseRepository<T> repository)
+        where T : class => repository.GetAll().CountAsync();
 }
