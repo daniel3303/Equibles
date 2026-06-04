@@ -25,6 +25,11 @@ FROM base AS final
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/publish .
-HEALTHCHECK --interval=5s --timeout=3s --retries=10 --start-period=15s \
+# start-period must outlast the longest startup migration: web runs pending EF
+# migrations before Kestrel binds, and a heavy backfill on a populated DB can
+# take several minutes. Probe failures during start-period don't count against
+# the container, so a long window can't slow a fast start — it only prevents a
+# still-migrating upgrade from being marked unhealthy (which aborts worker/mcp).
+HEALTHCHECK --interval=5s --timeout=3s --retries=10 --start-period=10m \
     CMD curl --fail http://localhost:8080/healthz || exit 1
 ENTRYPOINT ["dotnet", "Equibles.Web.dll"]
