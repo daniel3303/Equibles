@@ -121,6 +121,22 @@ public class SmartMoneyIndexManagerTests : IDisposable
         result.Reason.Should().Contain("No stock");
     }
 
+    [Fact]
+    public async Task Build_TopFundsHaveNoHoldingsOnFile_ReturnsReasonAndZeroFundCount()
+    {
+        // A scored fund exists and resolves, but has zero 13F holdings on file,
+        // so LoadLatestPortfolio yields nothing and fundPortfolios stays empty.
+        // This is distinct from "no scores": the fund ranked, it just has no portfolio.
+        SeedBenchmark();
+        SeedFund("0000000001", alpha: 30m);
+
+        var result = await _manager.Build(AsOf, benchmarkTicker: "SPY");
+
+        result.FundCount.Should().Be(0);
+        result.Constituents.Should().BeEmpty();
+        result.Reason.Should().Contain("no holdings on file");
+    }
+
     private void SeedBenchmark()
     {
         AddStock("SPY", "S&P 500 ETF", start: 100m, end: 100m);
