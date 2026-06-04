@@ -57,6 +57,56 @@ public class NportFilingReprocessManagerTests
         await secClient.DidNotReceive().GetDocumentContent(Arg.Any<string>(), Arg.Any<string>());
     }
 
+    [Fact]
+    public async Task Run_FilingWithEmptyHoldings_StampsVersionWithNoHoldings()
+    {
+        var (manager, dbContext, secClient) = CreateManagerWithDeps();
+        var stock = SeedStock(dbContext);
+        SeedFiling(dbContext, stock, parserVersion: 0);
+        secClient
+            .GetDocumentContent(Arg.Any<string>(), Arg.Any<string>())
+            .Returns(EmptyHoldingsSubmission);
+
+        var result = await manager.Run();
+
+        result.Processed.Should().Be(1);
+        result.HoldingsAdded.Should().Be(0);
+        result.Failed.Should().Be(0);
+
+        // A legitimately empty filing still advances, so it doesn't re-select itself forever.
+        var reprocessed = await dbContext.Set<NportFiling>().Include(f => f.Holdings).SingleAsync();
+        reprocessed.ParserVersion.Should().Be(NportFiling.CurrentParserVersion);
+        reprocessed.Holdings.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Run_FetchKeepsFailing_GivesUpAfterCeilingAndStopsReselecting()
+    {
+        var (manager, dbContext, secClient) = CreateManagerWithDeps();
+        var stock = SeedStock(dbContext);
+        SeedFiling(dbContext, stock, parserVersion: 0);
+        // EDGAR returns empty content every time, so every reprocess attempt fails.
+        secClient.GetDocumentContent(Arg.Any<string>(), Arg.Any<string>()).Returns("");
+
+        // One failed attempt per run until the ceiling is reached.
+        for (var attempt = 0; attempt < NportFilingReprocessManager.MaxReprocessAttempts; attempt++)
+        {
+            var failing = await manager.Run();
+            failing.Failed.Should().Be(1);
+        }
+
+        var givenUp = await dbContext.Set<NportFiling>().Include(f => f.Holdings).SingleAsync();
+        givenUp.ReprocessAttempts.Should().Be(NportFilingReprocessManager.MaxReprocessAttempts);
+        givenUp.ParserVersion.Should().Be(NportFiling.CurrentParserVersion);
+        givenUp.Holdings.Should().BeEmpty();
+
+        // Once stamped it leaves the work-set and is never re-fetched again.
+        secClient.ClearReceivedCalls();
+        var afterGiveUp = await manager.Run();
+        afterGiveUp.Total.Should().Be(0);
+        await secClient.DidNotReceive().GetDocumentContent(Arg.Any<string>(), Arg.Any<string>());
+    }
+
     // ── Helpers ──
 
     private static (
@@ -184,6 +234,36 @@ public class NportFilingReprocessManagerTests
                 <invCountry>US</invCountry>
               </invstOrSec>
             </invstOrSecs>
+          </formData>
+        </edgarSubmission>
+        </XML>
+        </TEXT>
+        </DOCUMENT>
+        </SEC-DOCUMENT>
+        """;
+
+    // A valid NPORT-P submission that reports no portfolio investments (e.g. a final filing).
+    private const string EmptyHoldingsSubmission = """
+        <SEC-DOCUMENT>0001104659-26-000099.txt : 20260330
+        <DOCUMENT>
+        <TYPE>NPORT-P
+        <TEXT>
+        <XML>
+        <?xml version="1.0" encoding="UTF-8"?>
+        <edgarSubmission xmlns="http://www.sec.gov/edgar/nport">
+          <headerData>
+            <submissionType>NPORT-P</submissionType>
+          </headerData>
+          <formData>
+            <genInfo>
+              <regName>ETF Opportunities Trust</regName>
+              <repPdEnd>2026-08-31</repPdEnd>
+              <repPdDate>2026-02-28</repPdDate>
+            </genInfo>
+            <fundInfo>
+              <netAssets>0.00</netAssets>
+            </fundInfo>
+            <invstOrSecs/>
           </formData>
         </edgarSubmission>
         </XML>

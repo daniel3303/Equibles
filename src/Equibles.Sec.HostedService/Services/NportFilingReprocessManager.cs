@@ -32,6 +32,11 @@ public class NportFilingReprocessManager
     // interrupted run persists what it managed to fetch rather than losing a large in-flight batch.
     private const int BatchSize = 32;
 
+    // After this many failed fetch/parse attempts a filing is advanced to the current version even
+    // though it has no holdings, so a permanently-unfetchable filing (pulled submission, missing
+    // CIK) can't keep re-selecting itself every cycle.
+    internal const int MaxReprocessAttempts = 3;
+
     private readonly NportFilingRepository _filingRepository;
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly EquiblesFinancialDbContext _dbContext;
@@ -92,24 +97,41 @@ public class NportFilingReprocessManager
                 break;
 
             var processedInBatch = 0;
+            var holdingsInBatch = 0;
             foreach (var filing in batch)
             {
                 if (cancellationToken.IsCancellationRequested)
                     break;
                 try
                 {
-                    await ReprocessFiling(filing, result);
+                    holdingsInBatch += await ReprocessFiling(filing);
                     processedInBatch++;
                 }
                 catch (Exception ex)
                 {
                     // One bad filing (e.g. a transient EDGAR 429/timeout) must not abort the whole
-                    // batch. Skip it this run; it's retried on the next.
-                    _logger.LogWarning(
-                        ex,
-                        "NPORT-P reprocess failed for {AccessionNumber}; skipping this run",
-                        filing.AccessionNumber
-                    );
+                    // batch. Skip it this run; it's retried on the next, up to the attempt ceiling
+                    // after which it's stamped current so it stops re-selecting itself forever.
+                    filing.ReprocessAttempts++;
+                    if (filing.ReprocessAttempts >= MaxReprocessAttempts)
+                    {
+                        filing.ParserVersion = NportFiling.CurrentParserVersion;
+                        _logger.LogWarning(
+                            ex,
+                            "NPORT-P reprocess gave up on {AccessionNumber} after {Attempts} attempts; advancing it to the current version with no holdings",
+                            filing.AccessionNumber,
+                            filing.ReprocessAttempts
+                        );
+                    }
+                    else
+                    {
+                        _logger.LogWarning(
+                            ex,
+                            "NPORT-P reprocess failed for {AccessionNumber} (attempt {Attempts}); retrying next run",
+                            filing.AccessionNumber,
+                            filing.ReprocessAttempts
+                        );
+                    }
                     failedThisRun.Add(filing.Id);
                     result.Failed++;
                 }
@@ -119,6 +141,9 @@ public class NportFilingReprocessManager
             {
                 await _filingRepository.SaveChanges();
                 result.Processed += processedInBatch;
+                // Fold the holdings counter only after the save commits, so a rolled-back batch
+                // doesn't inflate the headline backfill metric.
+                result.HoldingsAdded += holdingsInBatch;
             }
             catch (DbUpdateException ex)
             {
@@ -145,7 +170,9 @@ public class NportFilingReprocessManager
         return result;
     }
 
-    private async Task ReprocessFiling(NportFiling filing, NportFilingReprocessResult result)
+    // Returns the number of holdings parsed onto the filing. Throws on any fetch/parse failure so
+    // the caller can record the attempt and retry the filing on a later run.
+    private async Task<int> ReprocessFiling(NportFiling filing)
     {
         var cik = filing.CommonStock?.Cik;
         if (string.IsNullOrEmpty(cik))
@@ -205,7 +232,8 @@ public class NportFilingReprocessManager
         filing.NetAssets = parsed.NetAssets;
         filing.IsFinalFiling = parsed.IsFinalFiling;
         filing.ParserVersion = NportFiling.CurrentParserVersion;
+        filing.ReprocessAttempts = 0;
 
-        result.HoldingsAdded += parsed.Holdings.Count;
+        return parsed.Holdings.Count;
     }
 }

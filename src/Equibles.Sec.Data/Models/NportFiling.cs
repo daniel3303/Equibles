@@ -86,5 +86,13 @@ public class NportFiling : IStockFiling
     /// </summary>
     public int ParserVersion { get; set; }
 
+    /// <summary>
+    /// Number of times the reprocess pass has failed to fetch or re-parse this filing. Once it
+    /// reaches the reprocess ceiling the filing is advanced to <see cref="CurrentParserVersion"/>
+    /// regardless, so a permanently-unfetchable filing (e.g. a delisted issuer's pulled submission)
+    /// can't keep the backlog from draining.
+    /// </summary>
+    public int ReprocessAttempts { get; set; }
+
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }
