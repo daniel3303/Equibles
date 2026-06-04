@@ -188,6 +188,23 @@ public class SecEdgarClient : ISecEdgarClient
         }
     }
 
+    // Returns the submissions payload for a URL from the single-entry cache when it
+    // matches, otherwise fetches it and caches it. logCacheHit preserves the cache-hit
+    // log line that GetCompanyFilings emitted before this was extracted.
+    private async Task<string> GetCachedSubmissions(string url, bool logCacheHit = false)
+    {
+        if (_cachedContent != null && _cachedContent.Url == url)
+        {
+            if (logCacheHit)
+                _logger.LogInformation("Using cached content for URL: {Url}", url);
+            return _cachedContent.Content;
+        }
+
+        var content = await FetchStringAsync(url);
+        _cachedContent = new CachedResponse(url, content);
+        return content;
+    }
+
     public async Task<List<FilingData>> GetCompanyFilings(
         string cik,
         DocumentTypeFilter? documentType = null,
@@ -200,17 +217,7 @@ public class SecEdgarClient : ISecEdgarClient
             var formattedCik = FormatCik(cik);
             var url = BuildUrl($"/submissions/CIK{formattedCik}.json");
 
-            string content;
-            if (_cachedContent != null && _cachedContent.Url == url)
-            {
-                _logger.LogInformation("Using cached content for URL: {Url}", url);
-                content = _cachedContent.Content;
-            }
-            else
-            {
-                content = await FetchStringAsync(url);
-                _cachedContent = new CachedResponse(url, content);
-            }
+            var content = await GetCachedSubmissions(url, logCacheHit: true);
 
             var apiResponse = JsonConvert.DeserializeObject<SecApiResponse>(content);
 
@@ -251,16 +258,7 @@ public class SecEdgarClient : ISecEdgarClient
             var formattedCik = FormatCik(cik);
             var url = BuildUrl($"/submissions/CIK{formattedCik}.json");
 
-            string content;
-            if (_cachedContent != null && _cachedContent.Url == url)
-            {
-                content = _cachedContent.Content;
-            }
-            else
-            {
-                content = await FetchStringAsync(url);
-                _cachedContent = new CachedResponse(url, content);
-            }
+            var content = await GetCachedSubmissions(url);
 
             var apiResponse = JsonConvert.DeserializeObject<SecApiResponse>(content);
             var recentFilings = MapToFilingData(apiResponse?.Filings?.Recent, cik);
