@@ -28,15 +28,6 @@ public class InsiderTransactionPriceValidator
     /// </summary>
     public const decimal MaxPriceToCloseMultiplier = 10m;
 
-    private static readonly string[] DerivativeTitleKeywords =
-    {
-        "option",
-        "warrant",
-        "right to buy",
-        "right to sell",
-        "convertible",
-    };
-
     public bool IsPlausible(decimal pricePerShare, string securityTitle, decimal? unadjustedClose)
     {
         // Holdings (Form 3 sentinels) and post-transaction-only rows report
@@ -53,7 +44,7 @@ public class InsiderTransactionPriceValidator
         // strike or a deeply OTM warrant). The dashboard sort weighs them
         // equally so they can produce surprising values, but the validation
         // rule (10× close) doesn't apply.
-        if (IsDerivativeSecurity(securityTitle))
+        if (InsiderSecurityClassification.IsDerivativeTitle(securityTitle))
             return true;
 
         // No close on file (delisted, brand-new IPO, foreign listing not in
@@ -183,16 +174,7 @@ public class InsiderTransactionPriceValidator
         {
             InsiderSecurityKind.Derivative => true,
             InsiderSecurityKind.NonDerivative => false,
-            _ => IsDerivativeSecurity(securityTitle),
+            _ => InsiderSecurityClassification.IsDerivativeTitle(securityTitle),
         };
-    }
-
-    private static bool IsDerivativeSecurity(string securityTitle)
-    {
-        if (string.IsNullOrWhiteSpace(securityTitle))
-            return false;
-        return DerivativeTitleKeywords.Any(keyword =>
-            securityTitle.Contains(keyword, StringComparison.OrdinalIgnoreCase)
-        );
     }
 }
