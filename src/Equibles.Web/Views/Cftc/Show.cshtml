@@ -90,44 +90,42 @@
             @if (Model.Reports.Count == 0) {
                 <partial name="_EmptyStateInline" model='"No reports yet"' />
             } else {
-                <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
-                    <table class="table table-zebra table-sm" aria-label="Position history">
-                        <thead class="sticky top-0 bg-base-100 z-10">
+                <scroll-table aria-label="Position history">
+                    <thead class="sticky top-0 bg-base-100 z-10">
+                        <tr>
+                            <th scope="col">Date</th>
+                            <th scope="col" class="text-right">Open Interest</th>
+                            <th scope="col" class="text-right hidden sm:table-cell">Comm Long</th>
+                            <th scope="col" class="text-right hidden sm:table-cell">Comm Short</th>
+                            <th scope="col" class="text-right hidden md:table-cell">Non-Comm Long</th>
+                            <th scope="col" class="text-right hidden md:table-cell">Non-Comm Short</th>
+                            <th scope="col" class="text-right hidden lg:table-cell">Spreads</th>
+                            <th scope="col" class="text-right hidden lg:table-cell">Change OI</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var report in Model.Reports) {
                             <tr>
-                                <th scope="col">Date</th>
-                                <th scope="col" class="text-right">Open Interest</th>
-                                <th scope="col" class="text-right hidden sm:table-cell">Comm Long</th>
-                                <th scope="col" class="text-right hidden sm:table-cell">Comm Short</th>
-                                <th scope="col" class="text-right hidden md:table-cell">Non-Comm Long</th>
-                                <th scope="col" class="text-right hidden md:table-cell">Non-Comm Short</th>
-                                <th scope="col" class="text-right hidden lg:table-cell">Spreads</th>
-                                <th scope="col" class="text-right hidden lg:table-cell">Change OI</th>
+                                <td class="font-mono text-sm">@report.ReportDate.ToString("yyyy-MM-dd")</td>
+                                <td class="text-right font-semibold tabular-nums">@report.OpenInterest.ToString("N0")</td>
+                                <td class="text-right tabular-nums hidden sm:table-cell">@report.CommLong.ToString("N0")</td>
+                                <td class="text-right tabular-nums hidden sm:table-cell">@report.CommShort.ToString("N0")</td>
+                                <td class="text-right tabular-nums hidden md:table-cell">@report.NonCommLong.ToString("N0")</td>
+                                <td class="text-right tabular-nums hidden md:table-cell">@report.NonCommShort.ToString("N0")</td>
+                                <td class="text-right tabular-nums hidden lg:table-cell">@report.NonCommSpreads.ToString("N0")</td>
+                                <td class="text-right tabular-nums hidden lg:table-cell">
+                                    @if (report.ChangeOpenInterest.HasValue) {
+                                        <span class="@(report.ChangeOpenInterest.Value.SignCss("text-base-content/50"))">
+                                            @report.ChangeOpenInterest.Value.ToStringWithSign("N0")
+                                        </span>
+                                    } else {
+                                        <span class="text-base-content/30">&mdash;</span>
+                                    }
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var report in Model.Reports) {
-                                <tr>
-                                    <td class="font-mono text-sm">@report.ReportDate.ToString("yyyy-MM-dd")</td>
-                                    <td class="text-right font-semibold tabular-nums">@report.OpenInterest.ToString("N0")</td>
-                                    <td class="text-right tabular-nums hidden sm:table-cell">@report.CommLong.ToString("N0")</td>
-                                    <td class="text-right tabular-nums hidden sm:table-cell">@report.CommShort.ToString("N0")</td>
-                                    <td class="text-right tabular-nums hidden md:table-cell">@report.NonCommLong.ToString("N0")</td>
-                                    <td class="text-right tabular-nums hidden md:table-cell">@report.NonCommShort.ToString("N0")</td>
-                                    <td class="text-right tabular-nums hidden lg:table-cell">@report.NonCommSpreads.ToString("N0")</td>
-                                    <td class="text-right tabular-nums hidden lg:table-cell">
-                                        @if (report.ChangeOpenInterest.HasValue) {
-                                            <span class="@(report.ChangeOpenInterest.Value.SignCss("text-base-content/50"))">
-                                                @report.ChangeOpenInterest.Value.ToStringWithSign("N0")
-                                            </span>
-                                        } else {
-                                            <span class="text-base-content/30">&mdash;</span>
-                                        }
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
+                        }
+                    </tbody>
+                </scroll-table>
             }
         </div>
     </div>

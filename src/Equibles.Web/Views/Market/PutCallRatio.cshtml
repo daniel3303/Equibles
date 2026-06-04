@@ -75,42 +75,40 @@
             @if (Model.Records.Count == 0) {
                 <partial name="_EmptyStateInline" model='"No data yet"' />
             } else {
-                <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
-                    <table class="table table-zebra table-sm" aria-label="Put / call ratio history">
-                        <thead class="sticky top-0 bg-base-100 z-10">
+                <scroll-table aria-label="Put / call ratio history">
+                    <thead class="sticky top-0 bg-base-100 z-10">
+                        <tr>
+                            <th scope="col">Date</th>
+                            <th scope="col" class="text-right">Call Vol</th>
+                            <th scope="col" class="text-right">Put Vol</th>
+                            <th scope="col" class="text-right hidden sm:table-cell">Total Vol</th>
+                            <th scope="col" class="text-right">P/C Ratio</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var record in tableRecords) {
                             <tr>
-                                <th scope="col">Date</th>
-                                <th scope="col" class="text-right">Call Vol</th>
-                                <th scope="col" class="text-right">Put Vol</th>
-                                <th scope="col" class="text-right hidden sm:table-cell">Total Vol</th>
-                                <th scope="col" class="text-right">P/C Ratio</th>
+                                <td class="font-mono text-sm">@record.Date.ToString("yyyy-MM-dd")</td>
+                                <td class="text-right tabular-nums">
+                                    @if (record.CallVolume != null) {
+                                        <compactable-number value="@((decimal)record.CallVolume)" />
+                                    }
+                                </td>
+                                <td class="text-right tabular-nums">
+                                    @if (record.PutVolume != null) {
+                                        <compactable-number value="@((decimal)record.PutVolume)" />
+                                    }
+                                </td>
+                                <td class="text-right tabular-nums hidden sm:table-cell">
+                                    @if (record.TotalVolume != null) {
+                                        <compactable-number value="@((decimal)record.TotalVolume)" />
+                                    }
+                                </td>
+                                <td class="text-right font-semibold tabular-nums">@record.PutCallRatio?.ToString("N2")</td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var record in tableRecords) {
-                                <tr>
-                                    <td class="font-mono text-sm">@record.Date.ToString("yyyy-MM-dd")</td>
-                                    <td class="text-right tabular-nums">
-                                        @if (record.CallVolume != null) {
-                                            <compactable-number value="@((decimal)record.CallVolume)" />
-                                        }
-                                    </td>
-                                    <td class="text-right tabular-nums">
-                                        @if (record.PutVolume != null) {
-                                            <compactable-number value="@((decimal)record.PutVolume)" />
-                                        }
-                                    </td>
-                                    <td class="text-right tabular-nums hidden sm:table-cell">
-                                        @if (record.TotalVolume != null) {
-                                            <compactable-number value="@((decimal)record.TotalVolume)" />
-                                        }
-                                    </td>
-                                    <td class="text-right font-semibold tabular-nums">@record.PutCallRatio?.ToString("N2")</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
+                        }
+                    </tbody>
+                </scroll-table>
             }
         </div>
     </div>
