@@ -237,6 +237,12 @@ public class StocksController : BaseController
         viewModel.FilingActivityDays = FilingActivityDays;
         viewModel.KeyMetrics = await _stockTabService.LoadKeyMetrics(stock);
 
+        var (hasFundHoldings, hasFundOperations) = await _stockTabService.LoadFundTabAvailability(
+            stock
+        );
+        viewModel.HasFundHoldings = hasFundHoldings;
+        viewModel.HasFundOperations = hasFundOperations;
+
         ViewData["TabViewModel"] = await loadTab(stock);
         return View("Show", viewModel);
     }
