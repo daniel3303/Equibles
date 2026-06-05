@@ -5,9 +5,9 @@ obj/
 ## Worktrees (transient git worktrees from the harness)
 worktrees/
 
-## Generated migrations — keep EF's exact output untouched
-**/Migrations/*.Designer.cs
-**/Migrations/*ModelSnapshot.cs
+## Generated migrations — EF's output is never hand-edited, so don't let csharpier
+## gate it. Covers the migration class, its .Designer.cs, and the model snapshot.
+**/Migrations/
 
 ## Node / front-end assets (if any sneak in)
 node_modules/
