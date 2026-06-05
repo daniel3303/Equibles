@@ -327,6 +327,18 @@ public class StockTabService
         return new ExemptOfferingsTabViewModel { Filings = filings, Ticker = stock.Ticker };
     }
 
+    // Whether the stock has any fund-only filings, used to decide if the
+    // Fund Operations (N-CEN) and Fund Holdings (NPORT) tabs are shown at all.
+    // Operating companies file neither, so both flags are false for them.
+    public async Task<(bool HasFundHoldings, bool HasFundOperations)> LoadFundTabAvailability(
+        CommonStock stock
+    )
+    {
+        var hasFundHoldings = await _nportFilingRepository.GetByStock(stock).AnyAsync();
+        var hasFundOperations = await _nCenFilingRepository.GetByStock(stock).AnyAsync();
+        return (hasFundHoldings, hasFundOperations);
+    }
+
     public async Task<FundOperationsTabViewModel> LoadFundOperationsTab(CommonStock stock)
     {
         var filings = await TakeMostRecent(

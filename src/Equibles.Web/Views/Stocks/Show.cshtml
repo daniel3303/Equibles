@@ -119,6 +119,10 @@
     <!-- Section navbar -->
     <nav class="flex flex-wrap gap-2 mb-6" aria-label="@(stock.Ticker) sections">
         @foreach (var tab in sectionTabs) {
+            @* Fund-only tabs (NPORT/N-CEN) appear only for registered funds; hide them
+               for operating companies, which file neither and would show empty tabs. *@
+            if (tab.Key == "fund-operations" && !Model.HasFundOperations) { continue; }
+            if (tab.Key == "fund-holdings" && !Model.HasFundHoldings) { continue; }
             <a class="@TabBtnClass(tab.Key)" aria-current="@TabAriaCurrent(tab.Key)" asp-action="@tab.Action" asp-route-ticker="@stock.Ticker">@tab.Label</a>
         }
     </nav>
