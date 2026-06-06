@@ -107,6 +107,16 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
             result.FilingsImported,
             newWatermark
         );
+
+        // A productive sweep bulk-inserted rows, leaving their heap pages out of the visibility
+        // map. Vacuum so the holdings dashboards' index-only scans don't fall back to a heap
+        // fetch per new row (a cold read was measured at ~66s before the visibility map was set).
+        if (result.FilingsImported > 0)
+        {
+            var maintenance =
+                scope.ServiceProvider.GetRequiredService<HoldingsTableMaintenanceService>();
+            await maintenance.VacuumInstitutionalHoldings(stoppingToken);
+        }
     }
 
     /// <summary>
