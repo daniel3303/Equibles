@@ -50,12 +50,7 @@ internal class PaginationRemovalStep : IHtmlNormalizationStep
     // bare header rather than a prose sentence that happens to open "Part <roman> …".
     private static bool IsPartHeader(string text) =>
         SecHeadingKeyword.MatchesKeywordIdentifier(text, "PART", SecHeadingKeyword.IsRomanNumeral)
-        && WordCount(text) <= MaxPartHeaderWords;
-
-    // Whitespace-delimited word count; SEC EDGAR's non-breaking space (U+00A0) counts as a
-    // separator like any other Unicode whitespace.
-    private static int WordCount(string text) =>
-        text.Split((char[])null, StringSplitOptions.RemoveEmptyEntries).Length;
+        && SecHeadingKeyword.WordCount(text) <= MaxPartHeaderWords;
 
     private static INode FindFirstMeaningfulSibling(INode node, bool forward)
     {
