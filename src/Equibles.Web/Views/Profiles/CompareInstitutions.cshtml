@@ -41,12 +41,12 @@
                         <span class="badge badge-ghost">@Model.CommonReportDates.Count common quarters</span>
                     }
                 </badge-strip>
-                <div class="stats stats-vertical lg:stats-horizontal shadow-sm bg-base-200 w-full">
+                <stats-row>
                     <stat-tile title="Union positions">@overlap.UnionPositionCount.ToString("N0")</stat-tile>
                     <stat-tile title="Shared positions">@overlap.IntersectionPositionCount.ToString("N0")</stat-tile>
                     <stat-tile title="Jaccard similarity" tooltip="|A ∩ B| / |A ∪ B|">@overlap.JaccardSimilarityPercent.ToString("F1")%</stat-tile>
                     <stat-tile title="$-weighted overlap" tooltip="Σ min(value)/Σ max(value) across shared stocks">@overlap.DollarWeightedOverlapPercent.ToString("F1")%</stat-tile>
-                </div>
+                </stats-row>
             </div>
         </div>
 
