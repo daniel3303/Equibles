@@ -2,6 +2,7 @@ using System.Xml.Linq;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.HostedService.Extensions;
 using Equibles.Sec.HostedService.Helpers;
 using Equibles.Sec.Repositories;
 using static Equibles.Sec.HostedService.Helpers.EdgarXmlSubmissionParser;
@@ -248,7 +249,7 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
         if (submissionType != null)
             return submissionType.Contains("/A", StringComparison.OrdinalIgnoreCase);
 
-        return filing.Form?.Contains("/A", StringComparison.OrdinalIgnoreCase) == true;
+        return filing.IsAmendmentForm();
     }
 
     // Pinned by processor-scoped tests; the implementation lives in the shared parser.
