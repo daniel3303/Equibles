@@ -41,4 +41,10 @@ internal static class SecHeadingKeyword
     // require every character to be a Roman-numeral letter.
     public static bool IsRomanNumeral(string token) =>
         token.All(c => RomanNumeralLetters.Contains(c));
+
+    // Whitespace-delimited word count, used to keep a short bare header apart from a prose
+    // sentence that merely opens with the same keyword + identifier. SEC EDGAR's non-breaking
+    // space (U+00A0) counts as a separator like any other Unicode whitespace.
+    public static int WordCount(string text) =>
+        text.Split((char[])null, StringSplitOptions.RemoveEmptyEntries).Length;
 }

@@ -123,12 +123,7 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
     // prose sentence that merely opens "Part <roman> …", so the candidate must also be short.
     private bool IsPartHeading(string text) =>
         SecHeadingKeyword.MatchesKeywordIdentifier(text, "PART", SecHeadingKeyword.IsRomanNumeral)
-        && WordCount(text) <= MaxPartHeadingWords;
-
-    // Whitespace-delimited word count; SEC EDGAR's non-breaking space (U+00A0) counts as a
-    // separator like any other Unicode whitespace.
-    private static int WordCount(string text) =>
-        text.Split((char[])null, StringSplitOptions.RemoveEmptyEntries).Length;
+        && SecHeadingKeyword.WordCount(text) <= MaxPartHeadingWords;
 
     // A real Item identifier is number-led (Item 1, 1A, 7A); prose beginning "Item of …"
     // starts with a letter and must not be tagged as a heading.
