@@ -21,9 +21,7 @@ public class DocumentPersistenceServiceUpdateXbrlSurrogateFileNameTests : Parade
     public DocumentPersistenceServiceUpdateXbrlSurrogateFileNameTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    [Fact(
-        Skip = "GH-3518 — XBRL file-name cap slices mid-surrogate-pair, leaving an orphan high surrogate"
-    )]
+    [Fact]
     public async Task UpdateXbrl_FileNameCapSplitsSurrogatePair_PassesNoOrphanSurrogateToFileManager()
     {
         // 255 ASCII chars + "🏛" (U+1F3DB, two UTF-16 units) = 257 units: the 256-unit cap
