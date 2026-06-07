@@ -299,7 +299,7 @@ public class StockTabService
     public async Task<InsiderTradingTabViewModel> LoadInsiderTradingTab(CommonStock stock)
     {
         var transactions = await TakeMostRecent(
-            _insiderTransactionRepository.GetByStock(stock).Include(t => t.InsiderOwner),
+            _insiderTransactionRepository.GetByStockWithOwner(stock),
             t => t.TransactionDate
         );
         return new InsiderTradingTabViewModel
