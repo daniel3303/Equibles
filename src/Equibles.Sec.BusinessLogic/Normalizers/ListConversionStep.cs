@@ -99,17 +99,14 @@ internal class ListConversionStep : IHtmlNormalizationStep
             .FirstOrDefault(s => s.TextContent.Trim() is "•" or "·" or "-");
         bulletSpan?.Remove();
 
-        // Get the content div or use the entire content. SEC EDGAR emits inline CSS with
-        // and without a space after the colon ("display:inline" and "display: inline"), as
-        // the sibling HeadingConversionStep documents; match both so the spaced form is
-        // unwrapped into the <li> instead of surviving as a raw wrapper div.
+        // Get the content div or use the entire content. The shared inline-CSS check matches
+        // both the spaced and unspaced "display: inline" forms SEC EDGAR emits, so the spaced
+        // form is unwrapped into the <li> instead of surviving as a raw wrapper div.
         var contentDiv = itemElement
             .QuerySelectorAll("div")
             .FirstOrDefault(d =>
-            {
-                var style = d.GetAttribute("style") ?? "";
-                return style.Contains("display:inline") || style.Contains("display: inline");
-            });
+                SecInlineCss.ContainsDeclaration(d.GetAttribute("style") ?? "", "display", "inline")
+            );
         if (contentDiv != null)
         {
             liElement.InnerHtml = contentDiv.InnerHtml;

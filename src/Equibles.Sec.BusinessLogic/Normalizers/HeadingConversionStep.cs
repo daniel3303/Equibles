@@ -100,8 +100,8 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         var style = node.GetAttribute("style") ?? "";
         var parentStyle = node.ParentElement?.GetAttribute("style") ?? "";
 
-        return ContainsCssDeclaration(style, "text-align", "center")
-            || ContainsCssDeclaration(parentStyle, "text-align", "center");
+        return SecInlineCss.ContainsDeclaration(style, "text-align", "center")
+            || SecInlineCss.ContainsDeclaration(parentStyle, "text-align", "center");
     }
 
     private bool IsApart(IElement node)
@@ -156,14 +156,7 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
     private static bool HasInlineCss(IElement span, string property, string value)
     {
         var style = span.GetAttribute("style") ?? "";
-        return ContainsCssDeclaration(style, property, value)
-            || ContainsCssDeclaration(span.InnerHtml, property, value);
-    }
-
-    // SEC EDGAR emits inline CSS with and without a space after the colon
-    // (e.g. "font-weight:bold" and "font-weight: bold"); both forms must match.
-    private static bool ContainsCssDeclaration(string source, string property, string value)
-    {
-        return source.Contains($"{property}:{value}") || source.Contains($"{property}: {value}");
+        return SecInlineCss.ContainsDeclaration(style, property, value)
+            || SecInlineCss.ContainsDeclaration(span.InnerHtml, property, value);
     }
 }
