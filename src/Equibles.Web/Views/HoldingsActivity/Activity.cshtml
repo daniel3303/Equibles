@@ -71,10 +71,7 @@
                                                 <td class="text-right font-mono hidden md:table-cell @deltaValueCss"><compactable-number value="@row.DeltaValue" prefix="$" sign /></td>
                                                 <td class="text-right font-mono hidden lg:table-cell text-base-content/60"><compactable-number value="@row.PreviousFilerCount" /> → <compactable-number value="@row.CurrentFilerCount" /></td>
                                                 <td class="text-right">
-                                                    <a asp-controller="Stocks" asp-action="Holdings"
-                                                       asp-route-ticker="@row.Ticker"
-                                                       asp-route-date="@Model.SelectedDate.ToString("yyyy-MM-dd")"
-                                                       class="btn btn-ghost btn-sm">View</a>
+                                                    <partial name="_HoldingsLink" model='(Ticker: row.Ticker, Date: Model.SelectedDate)' />
                                                 </td>
                                             </tr>
                                         }
@@ -117,10 +114,7 @@
                                                 <td class="max-w-xs truncate">@row.Name</td>
                                                 <td class="text-right font-mono"><compactable-number value="@board.FilerSelector(row)" /></td>
                                                 <td class="text-right">
-                                                    <a asp-controller="Stocks" asp-action="Holdings"
-                                                       asp-route-ticker="@row.Ticker"
-                                                       asp-route-date="@Model.SelectedDate.ToString("yyyy-MM-dd")"
-                                                       class="btn btn-ghost btn-sm">View</a>
+                                                    <partial name="_HoldingsLink" model='(Ticker: row.Ticker, Date: Model.SelectedDate)' />
                                                 </td>
                                             </tr>
                                         }

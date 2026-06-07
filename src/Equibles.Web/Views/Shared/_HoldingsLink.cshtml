@@ -1,0 +1,5 @@
+@model (string Ticker, DateOnly Date)
+<a asp-controller="Stocks" asp-action="Holdings"
+   asp-route-ticker="@Model.Ticker"
+   asp-route-date="@Model.Date.ToString("yyyy-MM-dd")"
+   class="btn btn-ghost btn-sm">View</a>
