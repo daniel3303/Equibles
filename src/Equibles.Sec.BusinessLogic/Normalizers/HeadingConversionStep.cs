@@ -5,9 +5,6 @@ namespace Equibles.Sec.BusinessLogic.Normalizers;
 
 internal class HeadingConversionStep : IHtmlNormalizationStep
 {
-    // Uppercase Roman-numeral letters; the text is upper-cased before the check.
-    private const string RomanNumeralLetters = "IVXLCDM";
-
     public void Execute(IHtmlDocument doc)
     {
         // Select spans that are NOT descendants of table elements
@@ -113,76 +110,19 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         return letters.Count > 0 && letters.All(char.IsUpper);
     }
 
-    private bool IsPartHeading(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return false;
+    // A real Part identifier is a Roman numeral (Part I–IV); prose beginning "Part of …"
+    // or a word like "Partnership" must not be tagged as a heading.
+    private bool IsPartHeading(string text) =>
+        SecHeadingKeyword.MatchesKeywordIdentifier(text, "PART", SecHeadingKeyword.IsRomanNumeral);
 
-        var upperText = text.ToUpperInvariant().Trim();
-
-        // SEC EDGAR renders "Part N" with a non-breaking space (U+00A0)
-        // between word and numeral, so accept any Unicode whitespace after
-        // "PART" — not just the literal U+0020 that StartsWith("PART ") demands.
-        // Mirrors the GH-975 fix applied to IsItemHeading.
-        if (upperText.StartsWith("PART") && upperText.Length > 4 && char.IsWhiteSpace(upperText[4]))
-        {
-            var afterPart = upperText.Substring(5).Trim();
-            if (!string.IsNullOrEmpty(afterPart))
-            {
-                var tokens = afterPart.Split(
-                    [' ', '.', '-', ':'],
-                    StringSplitOptions.RemoveEmptyEntries
-                );
-                if (tokens.Length == 0)
-                    return false;
-                var firstWord = tokens[0];
-                // A real Part identifier is a Roman numeral (Part I–IV). An ordinary word
-                // like "of"/"the" from a prose sentence beginning "Part of …" is all-letters
-                // too, so require the first token to be composed solely of Roman-numeral
-                // letters — that rejects the prose while still accepting "Part IV".
-                return firstWord.All(c => RomanNumeralLetters.Contains(c));
-            }
-        }
-
-        return false;
-    }
-
-    private bool IsItemHeading(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return false;
-
-        var upperText = text.ToUpperInvariant().Trim();
-
-        // SEC EDGAR renders "Item N" with a non-breaking space (U+00A0)
-        // between word and number, so accept any Unicode whitespace after
-        // "ITEM" — not just the literal U+0020 that StartsWith("ITEM ") demands.
-        if (upperText.StartsWith("ITEM") && upperText.Length > 5 && char.IsWhiteSpace(upperText[4]))
-        {
-            var afterItem = upperText.Substring(5).Trim();
-            if (!string.IsNullOrEmpty(afterItem))
-            {
-                // Require a real item identifier after the separator (e.g. "1",
-                // "1A"). A delimiter-only fragment like "Item -" is a visual
-                // divider, not a heading. Mirrors IsPartHeading's guard against
-                // "Part -"; items use alphanumeric identifiers rather than words.
-                var tokens = afterItem.Split(
-                    [' ', '.', '-', ':'],
-                    StringSplitOptions.RemoveEmptyEntries
-                );
-                if (tokens.Length == 0)
-                    return false;
-                var firstWord = tokens[0];
-                // A real Item identifier is number-led (Item 1, 1A, 7A). An ordinary word
-                // like "of"/"the" from a prose sentence beginning "Item of …" starts with a
-                // letter, so require the first token to start with a digit — that rejects the
-                // prose while still accepting "Item 1A".
-                return char.IsDigit(firstWord[0]);
-            }
-        }
-
-        return false;
-    }
+    // A real Item identifier is number-led (Item 1, 1A, 7A); prose beginning "Item of …"
+    // starts with a letter and must not be tagged as a heading.
+    private bool IsItemHeading(string text) =>
+        SecHeadingKeyword.MatchesKeywordIdentifier(
+            text,
+            "ITEM",
+            firstWord => char.IsDigit(firstWord[0])
+        );
 
     private bool IsItalicSpan(IElement span) => HasInlineCss(span, "font-style", "italic");
 

@@ -5,9 +5,6 @@ namespace Equibles.Sec.BusinessLogic.Normalizers;
 
 internal class PaginationRemovalStep : IHtmlNormalizationStep
 {
-    // Uppercase Roman-numeral letters; the text is upper-cased before the check.
-    private const string RomanNumeralLetters = "IVXLCDM";
-
     public void Execute(IHtmlDocument doc)
     {
         var hrElements = doc.Body?.QuerySelectorAll(":scope > hr")?.ToList();
@@ -39,29 +36,12 @@ internal class PaginationRemovalStep : IHtmlNormalizationStep
         }
     }
 
-    // Mirrors HeadingConversionStep.IsPartHeading: treat the after-HR sibling as a Part
-    // header only when "Part" is followed by a whitespace boundary AND a roman-numeral
-    // identifier — so ordinary words that merely start with "Part" (Partnership, …) and
-    // prose sentences beginning "Part of …" are not mistaken for a header and deleted.
-    private static bool IsPartHeader(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return false;
-
-        var upperText = text.ToUpperInvariant().Trim();
-        if (
-            !upperText.StartsWith("PART")
-            || upperText.Length <= 4
-            || !char.IsWhiteSpace(upperText[4])
-        )
-            return false;
-
-        var afterPart = upperText.Substring(5).Trim();
-        var tokens = afterPart.Split([' ', '.', '-', ':'], StringSplitOptions.RemoveEmptyEntries);
-        if (tokens.Length == 0)
-            return false;
-        return tokens[0].All(c => RomanNumeralLetters.Contains(c));
-    }
+    // Treat the after-HR sibling as a Part header only when "Part" is followed by a
+    // whitespace boundary AND a roman-numeral identifier — so ordinary words that merely
+    // start with "Part" (Partnership, …) and prose sentences beginning "Part of …" are not
+    // mistaken for a header and deleted.
+    private static bool IsPartHeader(string text) =>
+        SecHeadingKeyword.MatchesKeywordIdentifier(text, "PART", SecHeadingKeyword.IsRomanNumeral);
 
     private static INode FindFirstMeaningfulSibling(INode node, bool forward)
     {
