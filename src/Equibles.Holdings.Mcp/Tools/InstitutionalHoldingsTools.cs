@@ -1286,11 +1286,7 @@ public class InstitutionalHoldingsTools
     private Task<List<InstitutionalHolding>> LoadHoldingsByHolderWithStock(
         InstitutionalHolder holder,
         DateOnly reportDate
-    ) =>
-        _holdingRepository
-            .GetByHolder(holder, reportDate)
-            .Include(h => h.CommonStock)
-            .ToListAsync();
+    ) => _holdingRepository.GetByHolderWithStock(holder, reportDate).ToListAsync();
 
     private Task<Dictionary<Guid, CommonStock>> LoadStocksByIds(List<Guid> stockIds) =>
         _commonStockRepository.GetByIds(stockIds).ToDictionaryAsync(s => s.Id);

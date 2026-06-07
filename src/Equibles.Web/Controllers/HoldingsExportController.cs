@@ -114,8 +114,7 @@ public class HoldingsExportController : BaseController
         var selectedDate = reportDates.ResolveSelectedDateOrFirst(date);
 
         var rowsRaw = await _holdingRepository
-            .GetByHolder(holder, selectedDate)
-            .Include(h => h.CommonStock)
+            .GetByHolderWithStock(holder, selectedDate)
             .OrderByDescending(h => h.Value)
             .Select(h => new
             {
