@@ -5,6 +5,7 @@ using Equibles.Data;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories.Extensions;
 using Equibles.Holdings.Repositories.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.Repositories;
 
@@ -25,6 +26,16 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     {
         return GetAll()
             .Where(h => h.InstitutionalHolderId == holder.Id && h.ReportDate == reportDate);
+    }
+
+    // Same holder/date filter as GetByHolder, with the CommonStock navigation eagerly loaded
+    // for callers that read stock fields (ticker/name) while projecting or rendering rows.
+    public IQueryable<InstitutionalHolding> GetByHolderWithStock(
+        InstitutionalHolder holder,
+        DateOnly reportDate
+    )
+    {
+        return GetByHolder(holder, reportDate).Include(h => h.CommonStock);
     }
 
     public IQueryable<InstitutionalHolding> GetLatestByStock(CommonStock stock)
