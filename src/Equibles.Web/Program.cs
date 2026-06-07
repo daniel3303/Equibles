@@ -6,6 +6,7 @@ using Equibles.Data.Extensions;
 using Equibles.Messaging.Extensions;
 using Equibles.Search.Extensions;
 using Equibles.Web.Authentication;
+using Equibles.Web.Extensions;
 using Equibles.Web.FlashMessage;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -208,8 +209,10 @@ public partial class Program
         if (!app.Environment.IsDevelopment())
         {
             app.UseExceptionHandler("/Home/Error");
+            app.UseHsts();
         }
 
+        app.UseSecurityHeaders();
         app.UseResponseCompression();
 
         app.UseStaticFiles(
