@@ -5,6 +5,13 @@ namespace Equibles.Sec.BusinessLogic.Normalizers;
 
 internal class PaginationRemovalStep : IHtmlNormalizationStep
 {
+    // A page-break Part header is a short bare fragment — "PART II", at most followed by a
+    // brief standardized title ("PART II — OTHER INFORMATION"). A prose cross-reference like
+    // "Part II of this Annual Report …" merely starts with the same keyword + roman numeral
+    // but runs on much longer; deleting it as pagination cruft would lose body content, so
+    // only a short fragment qualifies for removal.
+    private const int MaxPartHeaderWords = 6;
+
     public void Execute(IHtmlDocument doc)
     {
         var hrElements = doc.Body?.QuerySelectorAll(":scope > hr")?.ToList();
@@ -39,9 +46,16 @@ internal class PaginationRemovalStep : IHtmlNormalizationStep
     // Treat the after-HR sibling as a Part header only when "Part" is followed by a
     // whitespace boundary AND a roman-numeral identifier — so ordinary words that merely
     // start with "Part" (Partnership, …) and prose sentences beginning "Part of …" are not
-    // mistaken for a header and deleted.
+    // mistaken for a header and deleted — and only when the fragment is short enough to be a
+    // bare header rather than a prose sentence that happens to open "Part <roman> …".
     private static bool IsPartHeader(string text) =>
-        SecHeadingKeyword.MatchesKeywordIdentifier(text, "PART", SecHeadingKeyword.IsRomanNumeral);
+        SecHeadingKeyword.MatchesKeywordIdentifier(text, "PART", SecHeadingKeyword.IsRomanNumeral)
+        && WordCount(text) <= MaxPartHeaderWords;
+
+    // Whitespace-delimited word count; SEC EDGAR's non-breaking space (U+00A0) counts as a
+    // separator like any other Unicode whitespace.
+    private static int WordCount(string text) =>
+        text.Split((char[])null, StringSplitOptions.RemoveEmptyEntries).Length;
 
     private static INode FindFirstMeaningfulSibling(INode node, bool forward)
     {
