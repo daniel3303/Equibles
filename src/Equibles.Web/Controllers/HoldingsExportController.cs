@@ -2,6 +2,7 @@ using System.Text;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
+using Equibles.Holdings.Repositories.Extensions;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.Extensions;
 using Equibles.Web.Services;
@@ -178,27 +179,15 @@ public class HoldingsExportController : BaseController
             .GetQuarterlyActivity(selectedDate, previousDate)
             .Where(a => a.CurrentShares != a.PreviousShares)
             .ToListAsync();
-        var topBuys = activity
-            .Where(a => a.CurrentShares > a.PreviousShares)
-            .OrderByDescending(a => a.CurrentValue - a.PreviousValue)
-            .ToList();
-        var topSells = activity
-            .Where(a => a.CurrentShares < a.PreviousShares)
-            .OrderBy(a => a.CurrentValue - a.PreviousValue)
-            .ToList();
+        var topBuys = activity.TopBuyers().ToList();
+        var topSells = activity.TopSellers().ToList();
 
         var churn = await _holdingRepository
             .GetQuarterlyNewSoldOutPositions(selectedDate, previousDate)
             .Where(c => c.NewFilerCount > 0 || c.SoldOutFilerCount > 0)
             .ToListAsync();
-        var newPositions = churn
-            .Where(c => c.NewFilerCount > 0)
-            .OrderByDescending(c => c.NewFilerCount)
-            .ToList();
-        var soldOut = churn
-            .Where(c => c.SoldOutFilerCount > 0)
-            .OrderByDescending(c => c.SoldOutFilerCount)
-            .ToList();
+        var newPositions = churn.NewPositions().ToList();
+        var soldOut = churn.SoldOutPositions().ToList();
 
         var stockIds = topBuys
             .Concat(topSells)

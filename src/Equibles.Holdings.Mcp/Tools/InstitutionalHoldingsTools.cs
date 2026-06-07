@@ -10,6 +10,7 @@ using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
+using Equibles.Holdings.Repositories.Extensions;
 using Equibles.Holdings.Repositories.Models;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
@@ -593,16 +594,8 @@ public class InstitutionalHoldingsTools
         var movers = activity.Where(a => a.CurrentShares != a.PreviousShares);
         var rows =
             normalizedBucket == "top-buys"
-                ? await movers
-                    .Where(a => a.CurrentShares > a.PreviousShares)
-                    .OrderByDescending(a => a.CurrentValue - a.PreviousValue)
-                    .Take(maxResults)
-                    .ToListAsync()
-                : await movers
-                    .Where(a => a.CurrentShares < a.PreviousShares)
-                    .OrderBy(a => a.CurrentValue - a.PreviousValue)
-                    .Take(maxResults)
-                    .ToListAsync();
+                ? await movers.TopBuyers().Take(maxResults).ToListAsync()
+                : await movers.TopSellers().Take(maxResults).ToListAsync();
         if (rows.Count == 0)
             return result + "_No stocks moved in this direction this quarter._";
 
@@ -632,16 +625,8 @@ public class InstitutionalHoldingsTools
         var churn = _holdingRepository.GetQuarterlyNewSoldOutPositions(targetDate, previousDate);
         var rows =
             normalizedBucket == "new-positions"
-                ? await churn
-                    .Where(c => c.NewFilerCount > 0)
-                    .OrderByDescending(c => c.NewFilerCount)
-                    .Take(maxResults)
-                    .ToListAsync()
-                : await churn
-                    .Where(c => c.SoldOutFilerCount > 0)
-                    .OrderByDescending(c => c.SoldOutFilerCount)
-                    .Take(maxResults)
-                    .ToListAsync();
+                ? await churn.NewPositions().Take(maxResults).ToListAsync()
+                : await churn.SoldOutPositions().Take(maxResults).ToListAsync();
         if (rows.Count == 0)
             return result + "_No stocks in this bucket this quarter._";
 

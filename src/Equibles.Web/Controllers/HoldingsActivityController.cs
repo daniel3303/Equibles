@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Repositories;
+using Equibles.Holdings.Repositories.Extensions;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.Extensions;
 using Equibles.Web.ViewModels.Holdings;
@@ -56,13 +57,11 @@ public class HoldingsActivityController : BaseController
             .Where(a => a.CurrentShares != a.PreviousShares);
 
         var topBuysAgg = await movers
-            .Where(a => a.CurrentShares > a.PreviousShares)
-            .OrderByDescending(a => a.CurrentValue - a.PreviousValue)
+            .TopBuyers()
             .Take(HoldingsActivityViewModel.RowCap)
             .ToListAsync();
         var topSellsAgg = await movers
-            .Where(a => a.CurrentShares < a.PreviousShares)
-            .OrderBy(a => a.CurrentValue - a.PreviousValue)
+            .TopSellers()
             .Take(HoldingsActivityViewModel.RowCap)
             .ToListAsync();
 
@@ -72,13 +71,11 @@ public class HoldingsActivityController : BaseController
             viewModel.IsCombinedSelected
         );
         var newPositionsAgg = await churn
-            .Where(c => c.NewFilerCount > 0)
-            .OrderByDescending(c => c.NewFilerCount)
+            .NewPositions()
             .Take(HoldingsActivityViewModel.RowCap)
             .ToListAsync();
         var soldOutPositionsAgg = await churn
-            .Where(c => c.SoldOutFilerCount > 0)
-            .OrderByDescending(c => c.SoldOutFilerCount)
+            .SoldOutPositions()
             .Take(HoldingsActivityViewModel.RowCap)
             .ToListAsync();
 
