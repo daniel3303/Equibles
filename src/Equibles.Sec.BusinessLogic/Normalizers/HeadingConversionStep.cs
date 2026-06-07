@@ -5,6 +5,14 @@ namespace Equibles.Sec.BusinessLogic.Normalizers;
 
 internal class HeadingConversionStep : IHtmlNormalizationStep
 {
+    // A real SEC "Part" heading is short — "PART II", at most followed by a brief title
+    // ("PART II — INFORMATION NOT REQUIRED IN PROSPECTUS" is ~8 words). A prose
+    // cross-reference like "Part II of this Annual Report on Form 10-K contains …" opens with
+    // the same keyword + roman numeral but runs on much longer, so only a short candidate
+    // qualifies as a heading. The threshold clears every standard Part title with margin while
+    // rejecting full sentences.
+    private const int MaxPartHeadingWords = 12;
+
     public void Execute(IHtmlDocument doc)
     {
         // Select spans that are NOT descendants of table elements
@@ -111,9 +119,16 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
     }
 
     // A real Part identifier is a Roman numeral (Part I–IV); prose beginning "Part of …"
-    // or a word like "Partnership" must not be tagged as a heading.
+    // or a word like "Partnership" must not be tagged as a heading — and neither must a long
+    // prose sentence that merely opens "Part <roman> …", so the candidate must also be short.
     private bool IsPartHeading(string text) =>
-        SecHeadingKeyword.MatchesKeywordIdentifier(text, "PART", SecHeadingKeyword.IsRomanNumeral);
+        SecHeadingKeyword.MatchesKeywordIdentifier(text, "PART", SecHeadingKeyword.IsRomanNumeral)
+        && WordCount(text) <= MaxPartHeadingWords;
+
+    // Whitespace-delimited word count; SEC EDGAR's non-breaking space (U+00A0) counts as a
+    // separator like any other Unicode whitespace.
+    private static int WordCount(string text) =>
+        text.Split((char[])null, StringSplitOptions.RemoveEmptyEntries).Length;
 
     // A real Item identifier is number-led (Item 1, 1A, 7A); prose beginning "Item of …"
     // starts with a letter and must not be tagged as a heading.

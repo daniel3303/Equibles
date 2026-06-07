@@ -12,9 +12,7 @@ public class HeadingConversionStepPartRomanProseTests
     // never be promoted (the GH-3488 rationale). A cross-reference sentence "Part II of this
     // Annual Report …" is body text even though "II" is a roman numeral.
     // The span is mixed-case and unstyled, so only the IsPartHeading branch can fire.
-    [Fact(
-        Skip = "GH-3512 — prose sentence beginning \"Part II of …\" is promoted to an h1 heading"
-    )]
+    [Fact]
     public void Execute_ProseSentenceBeginningPartRoman_IsNotPromotedToHeading()
     {
         var doc = _parser.ParseDocument(
