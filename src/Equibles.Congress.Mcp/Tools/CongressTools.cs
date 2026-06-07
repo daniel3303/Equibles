@@ -87,8 +87,7 @@ public class CongressTools
                     {
                         var position = t.CongressMember.Position.NameForHumans();
                         var type = t.TransactionType.NameForHumans();
-                        var amount =
-                            $"${McpFormat.WholeNumber(t.AmountFrom)}–${McpFormat.WholeNumber(t.AmountTo)}";
+                        var amount = FormatAmountRange(t);
                         return $"| {t.TransactionDate:yyyy-MM-dd} | {t.CongressMember.Name} | {position} | {type} | {amount} | {t.OwnerType ?? "—"} |";
                     }
                 );
@@ -148,10 +147,7 @@ public class CongressTools
                     t =>
                     {
                         var type = t.TransactionType.NameForHumans();
-                        // Format with InvariantCulture so the MCP markdown does not fork the
-                        // separators by host locale (e.g. de-DE would render $1.000.000).
-                        var amount =
-                            $"${McpFormat.WholeNumber(t.AmountFrom)}–${McpFormat.WholeNumber(t.AmountTo)}";
+                        var amount = FormatAmountRange(t);
                         return $"| {t.TransactionDate:yyyy-MM-dd} | {t.CommonStock.Ticker} | {type} | {amount} | {t.AssetName} | {t.OwnerType ?? "—"} |";
                     }
                 );
@@ -195,6 +191,11 @@ public class CongressTools
             $"query: {query}"
         );
     }
+
+    // Format with InvariantCulture so the MCP markdown does not fork the separators by host
+    // locale (e.g. de-DE would render $1.000.000).
+    private static string FormatAmountRange(CongressionalTrade t) =>
+        $"${McpFormat.WholeNumber(t.AmountFrom)}–${McpFormat.WholeNumber(t.AmountTo)}";
 
     private static IQueryable<CongressionalTrade> ApplyTransactionTypeFilter(
         IQueryable<CongressionalTrade> query,
