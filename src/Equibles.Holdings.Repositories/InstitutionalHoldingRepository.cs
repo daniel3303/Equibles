@@ -19,6 +19,16 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return GetAll().Where(h => h.CommonStockId == stock.Id && h.ReportDate == reportDate);
     }
 
+    // Same stock/date filter as GetByStock, with the InstitutionalHolder navigation eagerly
+    // loaded for callers that read holder fields (name) while aggregating or rendering rows.
+    public IQueryable<InstitutionalHolding> GetByStockWithHolder(
+        CommonStock stock,
+        DateOnly reportDate
+    )
+    {
+        return GetByStock(stock, reportDate).Include(h => h.InstitutionalHolder);
+    }
+
     public IQueryable<InstitutionalHolding> GetByHolder(
         InstitutionalHolder holder,
         DateOnly reportDate
