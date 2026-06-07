@@ -25,9 +25,7 @@ public class InsiderFilingReprocessManagerCancellationTests : ParadeDbMcpTestBas
     public InsiderFilingReprocessManagerCancellationTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    [Fact(
-        Skip = "GH-3507 — Run credits the whole batch to Processed when cancellation skips filings mid-batch"
-    )]
+    [Fact]
     public async Task Run_CancelledMidBatch_CountsOnlyAttemptedFilingsAsProcessed()
     {
         var date = new DateOnly(2024, 6, 14);

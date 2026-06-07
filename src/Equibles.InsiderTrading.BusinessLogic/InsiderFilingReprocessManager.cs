@@ -116,10 +116,12 @@ public class InsiderFilingReprocessManager
             if (accessions.Count == 0)
                 break;
 
+            var attempted = 0;
             foreach (var accession in accessions)
             {
                 if (cancellationToken.IsCancellationRequested)
                     break;
+                attempted++;
                 try
                 {
                     await ReprocessFiling(accession, result);
@@ -141,7 +143,10 @@ public class InsiderFilingReprocessManager
             try
             {
                 await _transactionRepository.SaveChanges();
-                result.Processed += accessions.Count - accessions.Count(failedThisRun.Contains);
+                // Count only filings actually attempted this batch (successes + failures).
+                // Cancellation can break the loop early, so the remaining accessions were
+                // never tried and must not be credited as processed.
+                result.Processed += attempted;
             }
             catch (DbUpdateException ex)
             {
