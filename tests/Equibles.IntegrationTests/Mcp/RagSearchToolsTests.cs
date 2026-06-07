@@ -220,6 +220,27 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
         result.Should().NotContain("AAPL");
     }
 
+    [Fact]
+    public async Task SearchDocuments_NegativeMaxResults_DoesNotSurfaceInternalError()
+    {
+        await SeedDocumentWithChunks(
+            chunkContents: new[]
+            {
+                "Apple's services segment grew 15% year-over-year, driven by App Store revenue.",
+            }
+        );
+
+        // Contract: maxResults comes straight from an untrusted MCP client. Unclamped it flows
+        // into ChunkRepository.HybridSearch's .Take(maxResults), so a negative value reaches
+        // PostgreSQL as a negative LIMIT, which the engine rejects. The tool must clamp it and
+        // degrade gracefully rather than leak the executor's internal-error sentinel.
+        var result = await Sut().SearchDocuments("services segment revenue", maxResults: -1);
+
+        result.Should().NotContain("An error occurred while executing");
+        // Clamped to zero rows → the standard empty-result message.
+        result.Should().Be("No relevant financial documents found.");
+    }
+
     // ── SearchCompanyDocuments ──────────────────────────────────────────
 
     [Fact]
