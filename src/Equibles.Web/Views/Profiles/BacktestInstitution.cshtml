@@ -62,12 +62,12 @@
                 <div class="card bg-base-100 shadow-sm" data-testid="@row.TestId">
                     <div class="card-body p-4">
                         <h2 class="text-base font-medium mb-2">@row.Label</h2>
-                        <div class="stats stats-vertical sm:stats-horizontal shadow-sm bg-base-200 w-full">
+                        <stats-row breakpoint="sm">
                             <stat-tile title="Total return">@row.Summary.TotalReturnPercent.ToString("F2")%</stat-tile>
                             @* CAGR is null when the window is too short to annualize meaningfully. *@
                             <stat-tile title="CAGR">@(row.Summary.CagrPercent is decimal cagr ? cagr.ToString("F2") + "%" : "—")</stat-tile>
                             <stat-tile title="Max drawdown">@row.Summary.MaxDrawdownPercent.ToString("F2")%</stat-tile>
-                        </div>
+                        </stats-row>
                     </div>
                 </div>
             }
