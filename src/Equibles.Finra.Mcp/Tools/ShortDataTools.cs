@@ -134,13 +134,7 @@ public class ShortDataTools
                     $"Short interest for {stock.Ticker} ({stock.Name}):",
                     "| Settlement Date | Short Position | Change | Avg Daily Volume | Days to Cover |",
                     "|----------------|---------------|--------|-----------------|---------------|",
-                    r =>
-                    {
-                        var changeStr = FormatSignedChange(r.ChangeInShortPosition);
-                        var advStr = McpFormat.OrDash(r.AverageDailyVolume, "N0");
-                        var dtcStr = McpFormat.OrDash(r.DaysToCover, "F1");
-                        return $"| {r.SettlementDate:yyyy-MM-dd} | {McpFormat.WholeNumber(r.CurrentShortPosition)} | {changeStr} | {advStr} | {dtcStr} |";
-                    }
+                    r => RenderShortInterestRow($"{r.SettlementDate:yyyy-MM-dd}", r)
                 );
             },
             "GetShortInterest",
@@ -188,16 +182,7 @@ public class ShortDataTools
                     $"Short interest snapshot — settlement date {latestDate:yyyy-MM-dd}:",
                     "| Ticker | Short Position | Change | Avg Daily Volume | Days to Cover |",
                     "|--------|---------------|--------|-----------------|---------------|",
-                    r =>
-                    {
-                        var changeStr = FormatSignedChange(r.ChangeInShortPosition);
-                        var advStr = McpFormat.OrDash(r.AverageDailyVolume, "N0");
-                        // Render with InvariantCulture so the MCP markdown does not fork the
-                        // separators by host locale (e.g. de-DE would render 1.234.567 / 12,3).
-                        var shortPositionStr = McpFormat.WholeNumber(r.CurrentShortPosition);
-                        var dtcStr = McpFormat.OrDash(r.DaysToCover, "F1");
-                        return $"| {r.CommonStock.Ticker} | {shortPositionStr} | {changeStr} | {advStr} | {dtcStr} |";
-                    }
+                    r => RenderShortInterestRow(r.CommonStock.Ticker, r)
                 );
             },
             "GetShortInterestSnapshot",
@@ -260,6 +245,16 @@ public class ShortDataTools
     {
         var shortPct = r.TotalVolume > 0 ? (double)r.ShortVolume / r.TotalVolume * 100 : 0;
         return $"| {leadCell} | {McpFormat.WholeNumber(r.ShortVolume)} | {McpFormat.WholeNumber(r.ShortExemptVolume)} | {McpFormat.WholeNumber(r.TotalVolume)} | {McpFormat.Invariant(shortPct, "F1")}% |";
+    }
+
+    // Render with InvariantCulture so the MCP markdown does not fork the separators by host
+    // locale (e.g. de-DE would render 1.234.567 / 12,3).
+    private static string RenderShortInterestRow(string leadCell, ShortInterest r)
+    {
+        var changeStr = FormatSignedChange(r.ChangeInShortPosition);
+        var advStr = McpFormat.OrDash(r.AverageDailyVolume, "N0");
+        var dtcStr = McpFormat.OrDash(r.DaysToCover, "F1");
+        return $"| {leadCell} | {McpFormat.WholeNumber(r.CurrentShortPosition)} | {changeStr} | {advStr} | {dtcStr} |";
     }
 
     private static string FormatSignedChange(long change) =>
