@@ -3,6 +3,7 @@ using System.Xml.Linq;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.HostedService.Extensions;
 using Equibles.Sec.HostedService.Helpers;
 using Equibles.Sec.Repositories;
 using static Equibles.Sec.HostedService.Helpers.EdgarXmlSubmissionParser;
@@ -157,7 +158,7 @@ public class FormDFilingProcessor : IssuerFeedFilingProcessor<FormDFiling, FormD
             return ParseBool(flag);
 
         // Fall back to the submission form string ("D/A") when the flag is absent.
-        return filing.Form?.Contains("/A", StringComparison.OrdinalIgnoreCase) == true;
+        return filing.IsAmendmentForm();
     }
 
     // Pinned by processor-scoped tests; the implementation lives in the shared parser.
