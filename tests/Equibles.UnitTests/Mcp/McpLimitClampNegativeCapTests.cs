@@ -17,4 +17,27 @@ public class McpLimitClampNegativeCapTests
 
         result.Should().Be(0);
     }
+
+    // Contract: an oversized cap (e.g. int.MaxValue) must be bounded so it never flows
+    // into .Take(...) and pulls an enormous result set, exhausting memory and DB time.
+    // Clamp caps at McpLimit.MaxResults.
+    [Fact]
+    public void Clamp_IntMaxValue_ReturnsMaxResultsCap()
+    {
+        var result = McpLimit.Clamp(int.MaxValue);
+
+        result.Should().Be(McpLimit.MaxResults);
+    }
+
+    // Values within [0, MaxResults] must pass through unchanged.
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(10, 10)]
+    [InlineData(McpLimit.MaxResults, McpLimit.MaxResults)]
+    public void Clamp_WithinRange_ReturnsInput(int input, int expected)
+    {
+        var result = McpLimit.Clamp(input);
+
+        result.Should().Be(expected);
+    }
 }
