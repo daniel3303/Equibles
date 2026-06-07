@@ -11,9 +11,7 @@ public class PaginationRemovalStepPartRomanProseTests
     // Contract: only a SEC "Part" SECTION HEADER after a page-break <hr> is pagination cruft;
     // body prose must never be deleted (content loss — the GH-3489 rationale). A cross-reference
     // sentence "Part II of this Annual Report …" is prose even though "II" is a roman numeral.
-    [Fact(
-        Skip = "GH-3510 — prose paragraph beginning \"Part II of …\" after an <hr> is deleted as a Part header"
-    )]
+    [Fact]
     public void Execute_HrFollowedByProseSentenceBeginningPartRoman_PreservesParagraph()
     {
         var doc = _parser.ParseDocument(
