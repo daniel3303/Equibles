@@ -334,6 +334,8 @@ public class InstitutionalHoldingsTools
         return _runner.Execute(
             async () =>
             {
+                maxResults = McpLimit.Clamp(maxResults);
+
                 var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
                     return stockError;
