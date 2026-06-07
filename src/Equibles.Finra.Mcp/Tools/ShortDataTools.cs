@@ -6,6 +6,7 @@ using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
+using Equibles.Finra.Data.Models;
 using Equibles.Finra.Repositories;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
@@ -81,12 +82,7 @@ public class ShortDataTools
                     $"Daily short volume for {stock.Ticker} ({stock.Name}):",
                     "| Date | Short Volume | Exempt | Total Volume | Short % |",
                     "|------|-------------|--------|-------------|---------|",
-                    r =>
-                    {
-                        var shortPct =
-                            r.TotalVolume > 0 ? (double)r.ShortVolume / r.TotalVolume * 100 : 0;
-                        return $"| {r.Date:yyyy-MM-dd} | {McpFormat.WholeNumber(r.ShortVolume)} | {McpFormat.WholeNumber(r.ShortExemptVolume)} | {McpFormat.WholeNumber(r.TotalVolume)} | {McpFormat.Invariant(shortPct, "F1")}% |";
-                    }
+                    r => RenderShortVolumeRow($"{r.Date:yyyy-MM-dd}", r)
                 );
             },
             "GetShortVolume",
@@ -250,19 +246,20 @@ public class ShortDataTools
                     $"Largest short volume — trading day {tradingDay:yyyy-MM-dd}:",
                     "| Ticker | Short Volume | Exempt | Total Volume | Short % |",
                     "|--------|-------------|--------|-------------|---------|",
-                    r =>
-                    {
-                        var shortPct =
-                            r.TotalVolume > 0 ? (double)r.ShortVolume / r.TotalVolume * 100 : 0;
-                        // Render with InvariantCulture so the MCP markdown does not fork the
-                        // separators by host locale (e.g. de-DE would render 5.000.000 / 62,5%).
-                        return $"| {r.CommonStock.Ticker} | {McpFormat.WholeNumber(r.ShortVolume)} | {McpFormat.WholeNumber(r.ShortExemptVolume)} | {McpFormat.WholeNumber(r.TotalVolume)} | {McpFormat.Invariant(shortPct, "F1")}% |";
-                    }
+                    r => RenderShortVolumeRow(r.CommonStock.Ticker, r)
                 );
             },
             "GetLargestShortVolume",
             $"date: {date}"
         );
+    }
+
+    // Render with InvariantCulture so the MCP markdown does not fork the separators by host
+    // locale (e.g. de-DE would render 5.000.000 / 62,5%).
+    private static string RenderShortVolumeRow(string leadCell, DailyShortVolume r)
+    {
+        var shortPct = r.TotalVolume > 0 ? (double)r.ShortVolume / r.TotalVolume * 100 : 0;
+        return $"| {leadCell} | {McpFormat.WholeNumber(r.ShortVolume)} | {McpFormat.WholeNumber(r.ShortExemptVolume)} | {McpFormat.WholeNumber(r.TotalVolume)} | {McpFormat.Invariant(shortPct, "F1")}% |";
     }
 
     private static string FormatSignedChange(long change) =>
