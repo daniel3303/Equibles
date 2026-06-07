@@ -683,11 +683,7 @@ public class StockTabService
     private Task<List<InstitutionalHolding>> LoadHoldingsByStockWithHolder(
         CommonStock stock,
         DateOnly reportDate
-    ) =>
-        _institutionalHoldingRepository
-            .GetByStock(stock, reportDate)
-            .Include(h => h.InstitutionalHolder)
-            .ToListAsync();
+    ) => _institutionalHoldingRepository.GetByStockWithHolder(stock, reportDate).ToListAsync();
 
     // Narrow the Sold-Out filter to only holders who were in the previous
     // quarter but are absent from the current quarter for this stock. The

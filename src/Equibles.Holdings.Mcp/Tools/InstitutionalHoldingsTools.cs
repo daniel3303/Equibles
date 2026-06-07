@@ -351,13 +351,11 @@ public class InstitutionalHoldingsTools
                 var previousDate = GetPriorReportDate(reportDates, targetDate);
 
                 var currentHoldings = await _holdingRepository
-                    .GetByStock(stock, targetDate)
-                    .Include(h => h.InstitutionalHolder)
+                    .GetByStockWithHolder(stock, targetDate)
                     .ToListAsync();
                 var previousHoldings = previousDate.HasValue
                     ? await _holdingRepository
-                        .GetByStock(stock, previousDate.Value)
-                        .Include(h => h.InstitutionalHolder)
+                        .GetByStockWithHolder(stock, previousDate.Value)
                         .ToListAsync()
                     : [];
 
