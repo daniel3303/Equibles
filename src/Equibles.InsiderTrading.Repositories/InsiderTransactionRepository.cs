@@ -15,6 +15,13 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
         return GetAll().Where(t => t.CommonStockId == stock.Id);
     }
 
+    // Same stock filter as GetByStock, with the InsiderOwner navigation eagerly loaded for
+    // callers that read insider fields (name/role) while ordering or rendering rows.
+    public IQueryable<InsiderTransaction> GetByStockWithOwner(CommonStock stock)
+    {
+        return GetByStock(stock).Include(t => t.InsiderOwner);
+    }
+
     public IQueryable<InsiderTransaction> GetByStock(CommonStock stock, DateOnly from, DateOnly to)
     {
         return GetAll()

@@ -60,8 +60,7 @@ public class InsiderTradingTools
                 maxResults = McpLimit.Clamp(maxResults);
 
                 var transactions = await _transactionRepository
-                    .GetByStock(stock)
-                    .Include(t => t.InsiderOwner)
+                    .GetByStockWithOwner(stock)
                     .OrderByDescending(t => t.TransactionDate)
                     .Take(maxResults)
                     .ToListAsync();
@@ -111,7 +110,8 @@ public class InsiderTradingTools
 
                 var byStock = _transactionRepository.GetByStock(stock);
 
-                var latestTransactions = await byStock
+                var latestTransactions = await _transactionRepository
+                    .GetByStockWithOwner(stock)
                     .Where(t =>
                         t.Id
                         == byStock
@@ -121,7 +121,6 @@ public class InsiderTradingTools
                             .Select(t2 => t2.Id)
                             .First()
                     )
-                    .Include(t => t.InsiderOwner)
                     .OrderByDescending(t => t.SharesOwnedAfter)
                     .Take(30)
                     .ToListAsync();
