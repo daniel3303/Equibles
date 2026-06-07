@@ -50,6 +50,7 @@ public class RagSearchTools
         return _runner.Execute(
             async () =>
             {
+                maxResults = McpLimit.Clamp(maxResults);
                 var parsedType = ParseDocumentType(documentType);
                 var chunks = await _ragManager.SearchRelevantChunks(
                     query,
@@ -81,6 +82,7 @@ public class RagSearchTools
         return _runner.Execute(
             async () =>
             {
+                maxResults = McpLimit.Clamp(maxResults);
                 var parsedType = ParseDocumentType(documentType);
                 var chunks = await _ragManager.SearchRelevantChunksByCompany(
                     query,
@@ -110,6 +112,7 @@ public class RagSearchTools
         return _runner.Execute(
             async () =>
             {
+                maxResults = McpLimit.Clamp(maxResults);
                 var chunks = await _ragManager.SearchRelevantChunksByDocument(
                     query,
                     documentId,
