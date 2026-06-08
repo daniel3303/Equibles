@@ -93,6 +93,12 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return GetAll().Where(h => h.AccessionNumber == accessionNumber);
     }
 
+    // The two-quarter comparison window shared by every per-stock activity / churn /
+    // double-down aggregate: both report dates are pulled in a single round trip and
+    // each caller applies its own GROUP BY downstream.
+    private IQueryable<InstitutionalHolding> BothQuarters(DateOnly current, DateOnly previous) =>
+        GetAll().Where(h => h.ReportDate == current || h.ReportDate == previous);
+
     // Per-stock aggregation of 13F activity across two quarters: totals, filer counts,
     // and the derived deltas drive the Top Buys / Top Sells leaderboards. New /
     // Sold-out filer-count metrics live in GetQuarterlyNewSoldOutPositions — they need
@@ -105,8 +111,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         DateOnly previous
     )
     {
-        return GetAll()
-            .Where(h => h.ReportDate == current || h.ReportDate == previous)
+        return BothQuarters(current, previous)
             .GroupBy(h => h.CommonStockId)
             .Select(g => new MarketWideStockActivity
             {
@@ -154,8 +159,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         DateOnly previous
     )
     {
-        return GetAll()
-            .Where(h => h.ReportDate == current || h.ReportDate == previous)
+        return BothQuarters(current, previous)
             .GroupBy(h => h.CommonStockId)
             .Select(g => new MarketWideStockChurn
             {
@@ -205,8 +209,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         double minPctIncrease
     )
     {
-        var aggregated = GetAll()
-            .Where(h => h.ReportDate == current || h.ReportDate == previous)
+        var aggregated = BothQuarters(current, previous)
             .GroupBy(h => new { h.InstitutionalHolderId, h.CommonStockId })
             .Select(g => new DoubleDownAggregate
             {
@@ -268,8 +271,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         DateOnly previous
     )
     {
-        var aggregated = GetAll()
-            .Where(h => h.ReportDate == current || h.ReportDate == previous)
+        var aggregated = BothQuarters(current, previous)
             .GroupBy(h => h.CommonStockId)
             .Select(g => new
             {
@@ -461,8 +463,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         DateOnly previous
     )
     {
-        return GetAll()
-            .Where(h => h.ReportDate == current || h.ReportDate == previous)
+        return BothQuarters(current, previous)
             .GroupBy(h => h.CommonStockId)
             .Select(g => new MarketWideStockActivity
             {
@@ -541,8 +542,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         DateOnly previous
     )
     {
-        return GetAll()
-            .Where(h => h.ReportDate == current || h.ReportDate == previous)
+        return BothQuarters(current, previous)
             .GroupBy(h => h.CommonStockId)
             .Select(g => new MarketWideStockChurn
             {
@@ -593,8 +593,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         double minPctIncrease
     )
     {
-        var aggregated = GetAll()
-            .Where(h => h.ReportDate == current || h.ReportDate == previous)
+        var aggregated = BothQuarters(current, previous)
             .GroupBy(h => new { h.InstitutionalHolderId, h.CommonStockId })
             .Select(g => new DoubleDownAggregate
             {
