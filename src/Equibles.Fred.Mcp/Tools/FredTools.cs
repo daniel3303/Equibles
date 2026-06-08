@@ -70,27 +70,23 @@ public class FredTools
                     .Take(maxResults)
                     .ToListAsync();
 
-                if (observations.Count == 0)
-                    return $"No observations found for {series.SeriesId} ({series.Title}) in the specified date range.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    observations.OrderBy(o => o.Date).ToList(),
+                    $"No observations found for {series.SeriesId} ({series.Title}) in the specified date range.",
                     $"{series.Title} ({series.SeriesId})",
                     $"Units: {series.Units} | Frequency: {series.Frequency} | Seasonal Adj: {series.SeasonalAdjustment}",
                     "| Date | Value |",
-                    "|------|-------|"
+                    "|------|-------|",
+                    obs =>
+                    {
+                        // Format with InvariantCulture so the MCP markdown does not fork the
+                        // decimal separator by host locale (e.g. de-DE would render 5,25).
+                        var valueStr = obs.Value.HasValue
+                            ? McpFormat.Invariant(obs.Value.Value, "G")
+                            : "N/A";
+                        return $"| {obs.Date:yyyy-MM-dd} | {valueStr} |";
+                    }
                 );
-
-                foreach (var obs in observations.OrderBy(o => o.Date))
-                {
-                    // Format with InvariantCulture so the MCP markdown does not fork the
-                    // decimal separator by host locale (e.g. de-DE would render 5,25).
-                    var valueStr = obs.Value.HasValue
-                        ? McpFormat.Invariant(obs.Value.Value, "G")
-                        : "N/A";
-                    result.AppendLine($"| {obs.Date:yyyy-MM-dd} | {valueStr} |");
-                }
-
-                return result.ToString();
             },
             "GetEconomicIndicator",
             $"seriesId: {seriesId}"
