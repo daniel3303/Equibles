@@ -116,18 +116,11 @@ public class ShortVolumeImportService
                     var repo =
                         scope.ServiceProvider.GetRequiredService<DailyShortVolumeRepository>();
 
-                    // tickerMap was built at the start of Import and can go stale if CompanySyncService
-                    // hard-deletes/replaces a stock in parallel. Re-validate each batch against the
-                    // current CommonStock table so dangling-FK inserts don't poison the whole batch.
-                    var batchStockIds = batch.Select(b => b.CommonStockId).Distinct().ToList();
-                    var liveStockIds = await stockRepo.GetExistingIds(
-                        batchStockIds,
+                    var validBatch = await stockRepo.FilterByExistingStocks(
+                        batch,
+                        b => b.CommonStockId,
                         cancellationToken
                     );
-
-                    var validBatch = batch
-                        .Where(b => liveStockIds.Contains(b.CommonStockId))
-                        .ToList();
                     var dropped = batch.Count - validBatch.Count;
                     if (dropped > 0)
                     {

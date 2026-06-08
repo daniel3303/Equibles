@@ -218,15 +218,11 @@ public class FtdImportService
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
 
-        // Guards GH-1591: CompanySync can delete a CommonStock between
-        // BuildTickerMap and this flush. Without filtering, one stale
-        // CommonStockId trips FK_FailToDeliver_CommonStock_CommonStockId and
-        // rolls back the entire UpsertRange — dropping rows for surviving
-        // stocks alongside the orphan.
-        var stockIds = items.Select(i => i.CommonStockId).Distinct().ToHashSet();
-        var existingIds = await stockRepo.GetExistingIds(stockIds);
-
-        var safeItems = items.Where(i => existingIds.Contains(i.CommonStockId)).ToList();
+        // Guards GH-1591: CompanySync can delete a CommonStock between BuildTickerMap and
+        // this flush. Without filtering, one stale CommonStockId trips
+        // FK_FailToDeliver_CommonStock_CommonStockId and rolls back the entire UpsertRange —
+        // dropping rows for surviving stocks alongside the orphan.
+        var safeItems = await stockRepo.FilterByExistingStocks(items, i => i.CommonStockId);
         var skipped = items.Count - safeItems.Count;
         if (skipped > 0)
         {

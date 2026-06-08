@@ -268,10 +268,11 @@ public class ShortInterestImportService
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var repo = scope.ServiceProvider.GetRequiredService<ShortInterestRepository>();
 
-        var batchStockIds = batch.Select(b => b.CommonStockId).Distinct().ToList();
-        var liveStockIds = await stockRepo.GetExistingIds(batchStockIds, cancellationToken);
-
-        var validBatch = batch.Where(b => liveStockIds.Contains(b.CommonStockId)).ToList();
+        var validBatch = await stockRepo.FilterByExistingStocks(
+            batch,
+            b => b.CommonStockId,
+            cancellationToken
+        );
         var dropped = batch.Count - validBatch.Count;
         if (dropped > 0)
         {
