@@ -42,6 +42,11 @@ public class InstitutionalHolding
     public long VotingAuthShared { get; set; }
     public long VotingAuthNone { get; set; }
 
+    // Percent of the class beneficially owned. Reported on Schedule 13D/13G cover
+    // pages; null for Form 13F (which has no percent-of-class concept).
+    [Column(TypeName = "numeric(7,4)")]
+    public decimal? PercentOfClass { get; set; }
+
     [MaxLength(128)]
     public string TitleOfClass { get; set; }
 
