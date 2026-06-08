@@ -171,12 +171,11 @@ public class RagSearchTools
                     "---|------|-------|---------------|------"
                 );
 
-                foreach (var doc in documents)
-                {
-                    result.AppendLine(
+                result.AppendRows(
+                    documents,
+                    doc =>
                         $"{doc.Id} | {doc.DocumentType} | {doc.ReportingDate:yyyy-MM-dd} | {doc.ReportingForDate:yyyy-MM-dd} | {McpFormat.WholeNumber(doc.LineCount)}"
-                    );
-                }
+                );
 
                 return result.ToString();
             },

@@ -76,6 +76,20 @@ public static class MarkdownTable
         return sb.ToString();
     }
 
+    // Appends one markdown row per item in order. Unnumbered sibling of AppendNumberedRows,
+    // for tables whose rows carry no rank. Centralises the per-item AppendLine loop that
+    // follows MarkdownTable.Start across the MCP tools.
+    public static StringBuilder AppendRows<T>(
+        this StringBuilder sb,
+        IEnumerable<T> rows,
+        Func<T, string> renderRow
+    )
+    {
+        foreach (var row in rows)
+            sb.AppendLine(renderRow(row));
+        return sb;
+    }
+
     // Appends one markdown row per item in order, passing the 1-based rank and the item to
     // renderRow. Centralises the ranked-table loop so call sites don't repeat the `i + 1`
     // off-by-one and the `rows[i]` indexing.

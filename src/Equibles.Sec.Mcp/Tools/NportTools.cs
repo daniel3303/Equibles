@@ -71,12 +71,11 @@ public class NportTools
                     "|---------|-------|---------|-------|-------------|--------------|----------|---------|"
                 );
 
-                foreach (var h in holdings)
-                {
-                    result.AppendLine(
+                result.AppendRows(
+                    holdings,
+                    h =>
                         $"| {h.Name ?? "-"} | {h.Cusip ?? "-"} | {FormatAmount(h.Balance)} | {h.Units ?? "-"} | ${FormatAmount(h.ValueUsd)} | {FormatPercent(h.PercentValue)} | {h.AssetCategory ?? "-"} | {h.InvestmentCountry ?? "-"} |"
-                    );
-                }
+                );
 
                 return result.ToString();
             },

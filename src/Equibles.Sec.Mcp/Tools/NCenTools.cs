@@ -66,12 +66,11 @@ public class NCenTools
                     "|-------|------------|------|-------------|-----------|--------------|-------------|"
                 );
 
-                foreach (var f in filings)
-                {
-                    result.AppendLine(
+                result.AppendRows(
+                    filings,
+                    f =>
                         $"| {f.FilingDate:yyyy-MM-dd} | {f.ReportEndingPeriod:yyyy-MM-dd} | {f.InvestmentCompanyType ?? "-"} | {f.InvestmentCompanyFileNumber ?? "-"} | {(f.IsAmendment ? "Yes" : "No")} | {(f.IsFirstFiling ? "Yes" : "No")} | {(f.IsLastFiling ? "Yes" : "No")} |"
-                    );
-                }
+                );
 
                 AppendServiceProviders(result, filings[0]);
 
@@ -95,13 +94,10 @@ public class NCenTools
         result.AppendLine("| Role | Firm | Country | Affiliated |");
         result.AppendLine("|------|------|---------|------------|");
 
-        foreach (
-            var provider in latest.ServiceProviders.OrderBy(p => p.ProviderType).ThenBy(p => p.Name)
-        )
-        {
-            result.AppendLine(
+        result.AppendRows(
+            latest.ServiceProviders.OrderBy(p => p.ProviderType).ThenBy(p => p.Name),
+            provider =>
                 $"| {provider.ProviderType.NameForHumans()} | {provider.Name} | {provider.Country ?? "-"} | {(provider.IsAffiliated ? "Yes" : "No")} |"
-            );
-        }
+        );
     }
 }
