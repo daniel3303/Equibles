@@ -79,12 +79,11 @@ public class StockPriceTools
                     "|------|------|------|-----|-------|--------|"
                 );
 
-                foreach (var p in records.OrderBy(p => p.Date))
-                {
-                    result.AppendLine(
+                result.AppendRows(
+                    records.OrderBy(p => p.Date),
+                    p =>
                         $"| {p.Date:yyyy-MM-dd} | {McpFormat.Invariant(p.Open, "F2")} | {McpFormat.Invariant(p.High, "F2")} | {McpFormat.Invariant(p.Low, "F2")} | {McpFormat.Invariant(p.Close, "F2")} | {McpFormat.WholeNumber(p.Volume)} |"
-                    );
-                }
+                );
 
                 return result.ToString();
             },

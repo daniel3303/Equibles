@@ -252,18 +252,17 @@ public class FinancialFactsTools
             "| Period End | FY | Period | Value | Unit | Form | Filed | Accession |",
             "|-----------|---:|--------|------:|------|------|-------|-----------|"
         );
-        foreach (var f in perPeriod)
-        {
-            result.AppendLine(
+        result.AppendRows(
+            perPeriod,
+            f =>
                 $"| {f.PeriodEnd:yyyy-MM-dd} | {f.FiscalYear} | "
-                    + $"{f.FiscalPeriod.NameForHumans()} | "
-                    + $"{FactMarkdown.Value(f.Value, f.Unit)} | "
-                    + $"{FactMarkdown.Cell(f.Unit)} | "
-                    + $"{FactMarkdown.Cell(f.Form?.DisplayName)} | "
-                    + $"{f.FiledDate:yyyy-MM-dd} | "
-                    + $"{FactMarkdown.Cell(f.AccessionNumber)} |"
-            );
-        }
+                + $"{f.FiscalPeriod.NameForHumans()} | "
+                + $"{FactMarkdown.Value(f.Value, f.Unit)} | "
+                + $"{FactMarkdown.Cell(f.Unit)} | "
+                + $"{FactMarkdown.Cell(f.Form?.DisplayName)} | "
+                + $"{f.FiledDate:yyyy-MM-dd} | "
+                + $"{FactMarkdown.Cell(f.AccessionNumber)} |"
+        );
 
         return result.ToString();
     }
@@ -309,16 +308,15 @@ public class FinancialFactsTools
             "| Ticker | Company | Value | Unit | Form | Filed |",
             "|--------|---------|------:|------|------|-------|"
         );
-        foreach (var (ticker, name, fact) in rows)
-        {
-            result.AppendLine(
-                $"| {FactMarkdown.Cell(ticker)} | {FactMarkdown.Cell(name)} | "
-                    + $"{FactMarkdown.Value(fact.Value, fact.Unit)} | "
-                    + $"{FactMarkdown.Cell(fact.Unit)} | "
-                    + $"{FactMarkdown.Cell(fact.Form?.DisplayName)} | "
-                    + $"{fact.FiledDate:yyyy-MM-dd} |"
-            );
-        }
+        result.AppendRows(
+            rows,
+            r =>
+                $"| {FactMarkdown.Cell(r.Ticker)} | {FactMarkdown.Cell(r.Name)} | "
+                + $"{FactMarkdown.Value(r.Fact.Value, r.Fact.Unit)} | "
+                + $"{FactMarkdown.Cell(r.Fact.Unit)} | "
+                + $"{FactMarkdown.Cell(r.Fact.Form?.DisplayName)} | "
+                + $"{r.Fact.FiledDate:yyyy-MM-dd} |"
+        );
 
         if (rows.Count == 0)
             result.AppendLine(
