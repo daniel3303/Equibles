@@ -27,4 +27,22 @@ public static class CommonStockRepositoryExtensions
     {
         return repository.GetByIds(ids).Select(s => s.Id).ToHashSetAsync(cancellationToken);
     }
+
+    // Returns the subset of items whose CommonStockId still exists, preserving order.
+    // Importers filter each batch through this before insert because a parallel CompanySync
+    // can hard-delete a stock after a ticker map is built, and a single dangling FK rolls
+    // back the whole batch.
+    public static async Task<List<T>> FilterByExistingStocks<T>(
+        this CommonStockRepository repository,
+        List<T> items,
+        Func<T, Guid> stockIdSelector,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var liveStockIds = await repository.GetExistingIds(
+            items.Select(stockIdSelector).Distinct(),
+            cancellationToken
+        );
+        return items.Where(i => liveStockIds.Contains(stockIdSelector(i))).ToList();
+    }
 }
