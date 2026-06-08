@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
@@ -85,6 +86,18 @@ internal static class HoldingsParsingHelper
     internal static int? ParseNullableInt(string value)
     {
         return int.TryParse(value, out var result) ? result : null;
+    }
+
+    internal static decimal? ParseNullableDecimal(string value)
+    {
+        return decimal.TryParse(
+            value,
+            NumberStyles.Number,
+            CultureInfo.InvariantCulture,
+            out var result
+        )
+            ? result
+            : null;
     }
 
     internal static string ResolveManagerName(

@@ -423,9 +423,37 @@ public class SecEdgarClient : ISecEdgarClient
         return await response.Content.ReadAsStreamAsync();
     }
 
+    // 13F-HR and 13F-HR/A both start with this; the default form set for the
+    // back-compatible GetDailyIndex.
+    private static readonly string[] ThirteenFFormPrefixes = ["13F-HR"];
+
     public async Task<List<EdgarDailyIndexEntry>> GetDailyIndex(
         DateOnly date,
         CancellationToken cancellationToken = default
+    )
+    {
+        var content = await FetchMasterIndexContent(date, cancellationToken);
+        return content == null ? [] : ParseMasterIndex(content, date);
+    }
+
+    public async Task<List<EdgarDailyIndexEntry>> GetDailyIndexForForms(
+        DateOnly date,
+        IReadOnlyCollection<string> formPrefixes,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var content = await FetchMasterIndexContent(date, cancellationToken);
+        return content == null ? [] : ParseMasterIndexForForms(content, date, formPrefixes);
+    }
+
+    /// <summary>
+    /// Fetches the raw pipe-delimited <c>master.idx</c> body for a day, or null
+    /// when SEC published no index for that date (weekend/holiday). Throws when
+    /// SEC is still throttling after retries so the caller holds its watermark.
+    /// </summary>
+    private async Task<string> FetchMasterIndexContent(
+        DateOnly date,
+        CancellationToken cancellationToken
     )
     {
         var quarter = (date.Month - 1) / 3 + 1;
@@ -453,7 +481,7 @@ public class SecEdgarClient : ISecEdgarClient
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             _logger.LogInformation("No daily index published for {Date:yyyy-MM-dd}", date);
-            return [];
+            return null;
         }
 
         if (response.StatusCode == HttpStatusCode.Forbidden)
@@ -480,7 +508,7 @@ public class SecEdgarClient : ISecEdgarClient
                     "No daily index published for {Date:yyyy-MM-dd} (non-trading day)",
                     date
                 );
-                return [];
+                return null;
             }
 
             // Any other 403 is unrecognized: be conservative and treat it as a fetch
@@ -489,9 +517,7 @@ public class SecEdgarClient : ISecEdgarClient
         }
 
         response.EnsureSuccessStatusCode();
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        return ParseMasterIndex(content, date);
+        return await response.Content.ReadAsStringAsync(cancellationToken);
     }
 
     /// <summary>
@@ -515,9 +541,38 @@ public class SecEdgarClient : ISecEdgarClient
         return entries;
     }
 
+    /// <summary>
+    /// Like <see cref="ParseMasterIndex"/> but keeps rows whose form type starts
+    /// with any of <paramref name="formPrefixes"/> (e.g. "SCHEDULE 13D",
+    /// "SCHEDULE 13G"), so non-13F sweeps share the same parsing.
+    /// </summary>
+    private static List<EdgarDailyIndexEntry> ParseMasterIndexForForms(
+        string content,
+        DateOnly fallbackDate,
+        IReadOnlyCollection<string> formPrefixes
+    )
+    {
+        var entries = new List<EdgarDailyIndexEntry>();
+
+        foreach (var rawLine in content.Split('\n'))
+        {
+            if (TryParseMasterIndexLineForForms(rawLine, fallbackDate, formPrefixes, out var entry))
+                entries.Add(entry);
+        }
+
+        return entries;
+    }
+
     private static bool TryParseMasterIndexLine(
         string rawLine,
         DateOnly fallbackDate,
+        out EdgarDailyIndexEntry entry
+    ) => TryParseMasterIndexLineForForms(rawLine, fallbackDate, ThirteenFFormPrefixes, out entry);
+
+    private static bool TryParseMasterIndexLineForForms(
+        string rawLine,
+        DateOnly fallbackDate,
+        IReadOnlyCollection<string> formPrefixes,
         out EdgarDailyIndexEntry entry
     )
     {
@@ -537,7 +592,11 @@ public class SecEdgarClient : ISecEdgarClient
         var dateFiled = fields[3].Trim();
         var fileName = fields[4].Trim();
 
-        if (!formType.StartsWith("13F-HR", StringComparison.OrdinalIgnoreCase))
+        if (
+            !formPrefixes.Any(prefix =>
+                formType.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            )
+        )
             return false;
 
         // Header/preamble rows ("CIK", "Company Name", dashes) fail this.
