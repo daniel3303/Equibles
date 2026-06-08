@@ -71,23 +71,15 @@ public class CftcTools
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
-                if (reports.Count == 0)
-                    return $"No COT reports found for {contract.MarketName} ({contract.MarketCode}) in the specified date range.";
-
-                var result = MarkdownTable.Start(
+                return MarkdownTable.Render(
+                    reports.OrderBy(r => r.ReportDate).ToList(),
+                    $"No COT reports found for {contract.MarketName} ({contract.MarketCode}) in the specified date range.",
                     $"{contract.MarketName} ({contract.MarketCode}) — {contract.Category.NameForHumans()}",
                     "| Date | Open Interest | Comm Long | Comm Short | Non-Comm Long | Non-Comm Short | Non-Comm Spread |",
-                    "|------|--------------|-----------|------------|---------------|----------------|-----------------|"
-                );
-
-                foreach (var r in reports.OrderBy(r => r.ReportDate))
-                {
-                    result.AppendLine(
+                    "|------|--------------|-----------|------------|---------------|----------------|-----------------|",
+                    r =>
                         $"| {r.ReportDate:yyyy-MM-dd} | {McpFormat.WholeNumber(r.OpenInterest)} | {McpFormat.WholeNumber(r.CommLong)} | {McpFormat.WholeNumber(r.CommShort)} | {McpFormat.WholeNumber(r.NonCommLong)} | {McpFormat.WholeNumber(r.NonCommShort)} | {McpFormat.WholeNumber(r.NonCommSpreads)} |"
-                    );
-                }
-
-                return result.ToString();
+                );
             },
             "GetCftcPositioning",
             $"marketCode: {marketCode}"
