@@ -13,6 +13,12 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
     // rejecting full sentences.
     private const int MaxPartHeadingWords = 12;
 
+    // A real SEC "Item" heading is short too — "Item 1. Business" through the longest standard
+    // title "Item 7A. Quantitative and Qualitative Disclosures About Market Risk" (~9 words). A
+    // prose cross-reference like "Item 1 of this Annual Report contains …" opens with the same
+    // keyword + digit but runs on much longer, so only a short candidate qualifies as a heading.
+    private const int MaxItemHeadingWords = 12;
+
     public void Execute(IHtmlDocument doc)
     {
         // Select spans that are NOT descendants of table elements
@@ -126,13 +132,15 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         && SecHeadingKeyword.WordCount(text) <= MaxPartHeadingWords;
 
     // A real Item identifier is number-led (Item 1, 1A, 7A); prose beginning "Item of …"
-    // starts with a letter and must not be tagged as a heading.
+    // starts with a letter and must not be tagged as a heading — and neither must a long prose
+    // sentence that merely opens "Item <n> …", so the candidate must also be short.
     private bool IsItemHeading(string text) =>
         SecHeadingKeyword.MatchesKeywordIdentifier(
             text,
             "ITEM",
             firstWord => char.IsDigit(firstWord[0])
-        );
+        )
+        && SecHeadingKeyword.WordCount(text) <= MaxItemHeadingWords;
 
     private bool IsItalicSpan(IElement span) => HasInlineCss(span, "font-style", "italic");
 

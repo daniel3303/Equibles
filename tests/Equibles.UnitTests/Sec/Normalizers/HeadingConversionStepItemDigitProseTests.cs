@@ -12,7 +12,7 @@ public class HeadingConversionStepItemDigitProseTests
     // never be promoted. A cross-reference sentence "Item 1 of this Annual Report …" is body
     // text even though "1" is a valid item identifier (digit sibling of GH-3512's roman case).
     // The span is mixed-case and unstyled, so only the IsItemHeading branch can fire.
-    [Fact(Skip = "GH-3514 — prose sentence beginning \"Item 1 of …\" is promoted to an h2 heading")]
+    [Fact]
     public void Execute_ProseSentenceBeginningItemDigit_IsNotPromotedToHeading()
     {
         var doc = _parser.ParseDocument(
