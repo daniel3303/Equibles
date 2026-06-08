@@ -1,3 +1,4 @@
+@using Equibles.Holdings.Data.Models
 @using Equibles.Web.ViewModels.Institutions
 @model InstitutionBrowserViewModel
 
@@ -27,6 +28,9 @@
     }
     if (Model.MaxPositions.HasValue) {
         filterRoute["maxPositions"] = Model.MaxPositions.Value.ToString();
+    }
+    if (Model.FilingType.HasValue) {
+        filterRoute["filingType"] = Model.FilingType.Value.ToString();
     }
     if (Model.Sort != InstitutionSort.Name) {
         filterRoute["sort"] = Model.Sort.ToString();
@@ -61,6 +65,15 @@
                     @foreach (var st in Model.States) {
                         <option value="@st" selected="@(st == Model.State)">@st</option>
                     }
+                </select>
+            </label>
+            <label class="form-control">
+                <span class="label-text text-sm mb-1">Filing type</span>
+                <select name="filingType" class="select select-bordered" aria-label="Filter institutions by SEC filing type">
+                    <option value="">All filing types</option>
+                    <option value="@FilingType.Form13F" selected="@(Model.FilingType == FilingType.Form13F)">Form 13F</option>
+                    <option value="@FilingType.Schedule13D" selected="@(Model.FilingType == FilingType.Schedule13D)">Schedule 13D</option>
+                    <option value="@FilingType.Schedule13G" selected="@(Model.FilingType == FilingType.Schedule13G)">Schedule 13G</option>
                 </select>
             </label>
             <label class="form-control">
