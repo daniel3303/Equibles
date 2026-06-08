@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?><edgarSubmission xmlns="http://www.sec.gov/edgar/schedule13D" xmlns:com="http://www.sec.gov/edgar/common">
+<headerData>
+<submissionType>SCHEDULE 13D/A</submissionType>
+<previousAccessionNumber>0001011438-24-000307</previousAccessionNumber>
+<filerInfo>
+<filer>
+<filerCredentials>
+<cik>0001362558</cik>
+<ccc>XXXXXXXX</ccc>
+</filerCredentials>
+</filer>
+<liveTestFlag>LIVE</liveTestFlag>
+
+
+
+</filerInfo>
+</headerData>
+<formData>
+<coverPageHeader>
+<amendmentNo>3</amendmentNo>
+<securitiesClassTitle>Common Shares of Beneficial Interest, par value $0.001 per share</securitiesClassTitle>
+<dateOfEvent>05/02/2025</dateOfEvent>
+<previouslyFiledFlag>false</previouslyFiledFlag>
+<issuerInfo>
+<issuerCIK>0001965934</issuerCIK>
+<issuerCUSIP>000000000</issuerCUSIP>
+<issuerName>Overland Advantage</issuerName>
+<address>
+<com:street1>375 Park Avenue, 11th Floor</com:street1>
+<com:city>New York</com:city>
+<com:stateOrCountry>NY</com:stateOrCountry>
+<com:zipCode>10152</com:zipCode>
+</address>
+</issuerInfo>
+<authorizedPersons>
+<notificationInfo>
+<personName>Turner Herbert</personName>
+<personPhoneNum>971 2 4150000</personPhoneNum>
+<personAddress>
+<com:street1>211 Corniche, PO Box 3600</com:street1>
+<com:city>Abu Dhabi</com:city>
+<com:stateOrCountry>C0</com:stateOrCountry>
+<com:zipCode>00000</com:zipCode>
+</personAddress>
+</notificationInfo>
+</authorizedPersons>
+</coverPageHeader>
+<reportingPersons>
+<reportingPersonInfo>
+<reportingPersonCIK>0001362558</reportingPersonCIK>
+<reportingPersonName>Abu Dhabi Investment Authority</reportingPersonName>
+<fundType>OO</fundType>
+<citizenshipOrOrganization>C0</citizenshipOrOrganization>
+<soleVotingPower>942779.94</soleVotingPower>
+<sharedVotingPower>0</sharedVotingPower>
+<soleDispositivePower>11615772.8</soleDispositivePower>
+<sharedDispositivePower>0</sharedDispositivePower>
+<aggregateAmountOwned>11615772.8</aggregateAmountOwned>
+<isAggregateExcludeShares>N</isAggregateExcludeShares>
+<percentOfClass>60.4</percentOfClass>
+<typeOfReportingPerson>OO</typeOfReportingPerson>
+<commentContent>Abu Dhabi Investment Authority (ADIA) is a public institution established in 1976 by the Government of the Emirate of Abu Dhabi (the Government) as an independent investment institution. ADIA is wholly owned and subject to constitutional supervision by the Government. ADIA has an independent legal identity with full capacity to act in fulfilling its statutory mandate and objectives.</commentContent>
+</reportingPersonInfo>
+<reportingPersonInfo>
+<reportingPersonCIK>0001790748</reportingPersonCIK>
+<reportingPersonName>Platinum International Investment Holdings RSC Limited</reportingPersonName>
+<fundType>OO</fundType>
+<citizenshipOrOrganization>C0</citizenshipOrOrganization>
+<soleVotingPower>942779.94</soleVotingPower>
+<sharedVotingPower>0</sharedVotingPower>
+<soleDispositivePower>11615772.8</soleDispositivePower>
+<sharedDispositivePower>0</sharedDispositivePower>
+<aggregateAmountOwned>11615772.8</aggregateAmountOwned>
+<isAggregateExcludeShares>N</isAggregateExcludeShares>
+<percentOfClass>60.4</percentOfClass>
+<typeOfReportingPerson>CO</typeOfReportingPerson>
+</reportingPersonInfo>
+<reportingPersonInfo>
+<reportingPersonCIK>0001790749</reportingPersonCIK>
+<reportingPersonName>Platinum Falcon B 2018 RSC Limited</reportingPersonName>
+<fundType>WC</fundType>
+<citizenshipOrOrganization>C0</citizenshipOrOrganization>
+<soleVotingPower>942779.94</soleVotingPower>
+<sharedVotingPower>0</sharedVotingPower>
+<soleDispositivePower>11615772.8</soleDispositivePower>
+<sharedDispositivePower>0</sharedDispositivePower>
+<aggregateAmountOwned>11615772.8</aggregateAmountOwned>
+<isAggregateExcludeShares>N</isAggregateExcludeShares>
+<percentOfClass>60.4</percentOfClass>
+<typeOfReportingPerson>CO</typeOfReportingPerson>
+</reportingPersonInfo>
+</reportingPersons>
+<items1To7>
+<item1>
+<securityTitle>Common Shares of Beneficial Interest, par value $0.001 per share</securityTitle>
+<issuerName>Overland Advantage</issuerName>
+<issuerPrincipalAddress>
+<com:street1>375 Park Avenue, 11th Floor</com:street1>
+<com:city>New York</com:city>
+<com:stateOrCountry>NY</com:stateOrCountry>
+<com:zipCode>10152</com:zipCode>
+</issuerPrincipalAddress>
+<commentText>The following constitutes Amendment No. 3 ("Amendment No. 3") to the Schedule 13D filed with the Securities and Exchange Commission ("SEC") by Abu Dhabi Investment Authority ("ADIA"), Platinum Investment Holdings RSC Limited ("Platinum Holdings") and Platinum Falcon B 2018 RSC Limited ("Platinum Falcon", and together with Platinum Holdings and ADIA, the "Reporting Persons") on April 30, 2024, as amended by Amendment No. 1 filed on October 31, 2024, and Amendment No. 2 filed on February 11, 2025. This Amendment No. 3 amends and supplements the Schedule 13D as specifically set forth herein.&#13;
+&#13;
+All capitalized terms contained herein but not otherwise defined shall have the meanings ascribed to such terms in the Schedule 13D, as amended. Information given in response to each item shall be deemed incorporated by reference in all other items, as applicable.</commentText>
+</item1>
+<item3>
+<fundsSource>Item 3 of this Schedule 13D is supplemented and superseded, as the case may be, as follows:&#13;
+&#13;
+The information in Item 4 is incorporated herein by reference. The Common Shares of the Issuer were purchased by Platinum Falcon with the working capital of Platinum Falcon.</fundsSource>
+</item3>
+<item4>
+<transactionPurpose>Item 4 of this Schedule 13D is supplemented and superseded, as the case may be, as follows:&#13;
+&#13;
+On March 17, 2025, the Issuer delivered a Drawdown Notice to Platinum Falcon to purchase Common Shares in an aggregate amount equal to $30,339,807 (the "Fourth Purchase Amount").  Platinum Falcon paid the Fourth Purchase Amount to the Issuer to purchase 1,226,521.435 Common Shares at a per share purchase price of $24.736467, with such number of shares and purchase price being determined by the Issuer on May 2, 2025.</transactionPurpose>
+</item4>
+<item5>
+<percentageOfClassSecurities>Each of ADIA, Platinum Holdings and Platinum Falcon may be deemed to beneficially own 11,615,772.799 Common Shares of the Issuer, which represents approximately 60.4% of the Common Shares outstanding, based on 19,240,406.894 Common Shares outstanding as of May 2, 2025, based on information received from the Issuer.  The Common Shares reported herein are directly held and beneficially owned by Platinum Falcon. Platinum Holdings, the sole owner of Platinum Falcon, may be deemed to beneficially own the Common Shares directly held by Platinum Falcon.  ADIA, the sole owner of Platinum Holdings, may be deemed the beneficial owner of the Common Shares directly held by Platinum Falcon.</percentageOfClassSecurities>
+<numberOfShares>Items 7 through 10 of each of the cover pages of this Schedule 13D are incorporated herein by reference.  Each of the Reporting Persons may be deemed to have sole voting power over 942,779.937806 Common Shares and sole dispositive power over 11,615,772.799 Common Shares.  The information in Item 4 regarding voting power over the Common Shares reported herein under the Voting Trust Agreement and the termination provisions of the Voting Trust Agreement are incorporated herein by reference.</numberOfShares>
+<transactionDesc>The information in Items 3 and 4 are incorporated herein by reference. Except as disclosed in this Schedule 13D, as amended, there have been no transactions by the Reporting Persons or the Scheduled Persons in the securities of the Issuer during the past sixty days.</transactionDesc>
+<listOfShareholders>The disclosure regarding the relationship between the Reporting Persons in Item 2(c) of this Schedule 13D is incorporated by reference herein.</listOfShareholders>
+<date5PercentOwnership>Not applicable.</date5PercentOwnership>
+</item5>
+<item6>
+<contractDescription>Item 6 of this Schedule 13D is supplemented and superseded, as the case may be, as follows:&#13;
+&#13;
+The information in Item 4 is incorporated herein by reference.</contractDescription>
+</item6>
+</items1To7>
+<signatureInfo>
+<signaturePerson>
+<signatureReportingPerson>Abu Dhabi Investment Authority</signatureReportingPerson>
+<signatureDetails>
+<signature>/s/ Hamad Shahwan AlDhaheri</signature>
+<title>Hamad Shahwan AlDhaheri/ Authorized Signatory</title>
+<date>05/06/2025</date>
+</signatureDetails>
+<signatureDetails>
+<signature>/s/ Saif Surour AlMashghouni</signature>
+<title>Saif Surour AlMashghouni/Authorized Signatory</title>
+<date>05/06/2025</date>
+</signatureDetails>
+</signaturePerson>
+<signaturePerson>
+<signatureReportingPerson>Platinum International Investment Holdings RSC Limited</signatureReportingPerson>
+<signatureDetails>
+<signature>/s/ Ahmed Salem Abdulla AlNeyadi</signature>
+<title>Ahmed Salem Abdulla AlNeyadi/Authorized Signatory</title>
+<date>05/06/2025</date>
+</signatureDetails>
+<signatureDetails>
+<signature>/s/ Mubarak Awad Qanazel AlAmeri</signature>
+<title>Mubarak Awad Qanazel AlAmeri/Authorized Signatory</title>
+<date>05/06/2025</date>
+</signatureDetails>
+</signaturePerson>
+<signaturePerson>
+<signatureReportingPerson>Platinum Falcon B 2018 RSC Limited</signatureReportingPerson>
+<signatureDetails>
+<signature>/s/ Ahmed Salem Abdulla AlNeyadi</signature>
+<title>Ahmed Salem Abdulla AlNeyadi/Authorized Signatory</title>
+<date>05/06/2025</date>
+</signatureDetails>
+<signatureDetails>
+<signature>/s/ Mubarak Awad Qanazel AlAmeri</signature>
+<title>Mubarak Awad Qanazel AlAmeri/Authorized Signatory</title>
+<date>05/06/2025</date>
+</signatureDetails>
+</signaturePerson>
+</signatureInfo>
+</formData>
+</edgarSubmission>
