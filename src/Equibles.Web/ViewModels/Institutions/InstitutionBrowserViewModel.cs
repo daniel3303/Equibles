@@ -1,3 +1,4 @@
+using Equibles.Holdings.Data.Models;
 using Equibles.Web.Extensions;
 
 namespace Equibles.Web.ViewModels.Institutions;
@@ -24,6 +25,10 @@ public class InstitutionBrowserViewModel
     public long? MaxValue { get; set; }
     public int? MinPositions { get; set; }
     public int? MaxPositions { get; set; }
+
+    // Active SEC filing-type filter (13F vs Schedule 13D/13G). Null means all
+    // types; when set, the listed filers and their aggregates are scoped to it.
+    public FilingType? FilingType { get; set; }
 
     // Latest universe-wide 13F report date — drives the per-filer aggregates
     // and the page subtitle. Null when no holdings have been ingested yet.

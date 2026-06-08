@@ -43,6 +43,7 @@ public class InstitutionsController : BaseController
         long? maxValue,
         int? minPositions,
         int? maxPositions,
+        FilingType? filingType = null,
         InstitutionSort sort = InstitutionSort.Name,
         int page = 1
     )
@@ -53,10 +54,17 @@ public class InstitutionsController : BaseController
 
         const int pageSize = 50;
 
-        var latestReportDate = await _dbContext
-            .Set<InstitutionalHolding>()
-            .Select(h => (DateOnly?)h.ReportDate)
-            .MaxAsync();
+        // When a filing type is selected, every per-filer aggregate (latest
+        // report date, position count, book value) is computed from only that
+        // type's holdings, so the table reflects e.g. a filer's 13D book rather
+        // than its 13F book.
+        var holdingsBase = _dbContext.Set<InstitutionalHolding>().AsQueryable();
+        if (filingType.HasValue)
+        {
+            holdingsBase = holdingsBase.Where(h => h.FilingType == filingType.Value);
+        }
+
+        var latestReportDate = await holdingsBase.Select(h => (DateOnly?)h.ReportDate).MaxAsync();
 
         // Per-filer aggregate at each filer's OWN most-recent 13F report. The
         // universe-latest approach drops historical filers (e.g. Scion's 2022
@@ -64,13 +72,11 @@ public class InstitutionsController : BaseController
         // would mis-report active book sizes as zero. The two-stage shape (max
         // date per holder + join + group) translates to a single Postgres
         // query with a self-join.
-        var perFilerLatest = _dbContext
-            .Set<InstitutionalHolding>()
+        var perFilerLatest = holdingsBase
             .GroupBy(h => h.InstitutionalHolderId)
             .Select(g => new { HolderId = g.Key, LatestDate = g.Max(h => h.ReportDate) });
 
-        var aggByHolder = _dbContext
-            .Set<InstitutionalHolding>()
+        var aggByHolder = holdingsBase
             .Join(
                 perFilerLatest,
                 h => new { Holder = h.InstitutionalHolderId, Date = h.ReportDate },
@@ -110,6 +116,13 @@ public class InstitutionsController : BaseController
             a => a.HolderId,
             (h, aggs) => new { h, agg = aggs.FirstOrDefault() }
         );
+
+        // With a filing-type filter active, list only filers that actually filed
+        // that type — drop holders whose aggregate is null (no such holdings).
+        if (filingType.HasValue)
+        {
+            joined = joined.Where(x => x.agg != null);
+        }
 
         // AUM ($ value) and position-count range filters apply to each filer's
         // most-recent 13F aggregate. A filer with no holdings is treated as zero
@@ -201,6 +214,7 @@ public class InstitutionsController : BaseController
             MaxValue = maxValue,
             MinPositions = minPositions,
             MaxPositions = maxPositions,
+            FilingType = filingType,
             Sort = sort,
             LatestReportDate = latestReportDate,
             Page = page,
