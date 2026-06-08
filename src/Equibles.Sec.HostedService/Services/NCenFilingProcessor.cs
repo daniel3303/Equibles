@@ -247,7 +247,7 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
     {
         var submissionType = Val(headerData, "submissionType");
         if (submissionType != null)
-            return submissionType.Contains("/A", StringComparison.OrdinalIgnoreCase);
+            return submissionType.IsAmendmentFormType();
 
         return filing.IsAmendmentForm();
     }
