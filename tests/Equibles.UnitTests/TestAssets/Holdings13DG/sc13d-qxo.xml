@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="UTF-8"?><edgarSubmission xmlns="http://www.sec.gov/edgar/schedule13D" xmlns:com="http://www.sec.gov/edgar/common">
+<headerData>
+<submissionType>SCHEDULE 13D</submissionType>
+<filerInfo>
+<filer>
+<filerCredentials>
+<cik>0002059583</cik>
+<ccc>XXXXXXXX</ccc>
+</filerCredentials>
+</filer>
+<liveTestFlag>LIVE</liveTestFlag>
+
+
+
+</filerInfo>
+</headerData>
+<formData>
+<coverPageHeader>
+<securitiesClassTitle>Common Stock, par value $0.00001 per share</securitiesClassTitle>
+<dateOfEvent>04/29/2025</dateOfEvent>
+<previouslyFiledFlag>false</previouslyFiledFlag>
+<issuerInfo>
+<issuerCIK>0001236275</issuerCIK>
+<issuerCUSIP>82846H405</issuerCUSIP>
+<issuerName>QXO, Inc.</issuerName>
+<address>
+<com:street1>Five American Lane</com:street1>
+<com:city>Greenwich</com:city>
+<com:stateOrCountry>CT</com:stateOrCountry>
+<com:zipCode>06831</com:zipCode>
+</address>
+</issuerInfo>
+<authorizedPersons>
+<notificationInfo>
+<personName>Ian Brekke</personName>
+<personPhoneNum>786-815-9041</personPhoneNum>
+<personAddress>
+<com:street1>Affinity Partners GP LP</com:street1>
+<com:street2>16690 Collins Avenue</com:street2>
+<com:city>Sunny Isles Beach</com:city>
+<com:stateOrCountry>FL</com:stateOrCountry>
+<com:zipCode>33160</com:zipCode>
+</personAddress>
+</notificationInfo>
+</authorizedPersons>
+</coverPageHeader>
+<reportingPersons>
+<reportingPersonInfo>
+<reportingPersonNoCIK>Y</reportingPersonNoCIK>
+<reportingPersonName>Affinity Partners Fund I LP</reportingPersonName>
+<fundType>AF</fundType>
+<citizenshipOrOrganization>DE</citizenshipOrOrganization>
+<soleVotingPower>0</soleVotingPower>
+<sharedVotingPower>164310</sharedVotingPower>
+<soleDispositivePower>0</soleDispositivePower>
+<sharedDispositivePower>164310</sharedDispositivePower>
+<aggregateAmountOwned>164310</aggregateAmountOwned>
+<isAggregateExcludeShares>N</isAggregateExcludeShares>
+<percentOfClass>0.03</percentOfClass>
+<typeOfReportingPerson>PN</typeOfReportingPerson>
+<commentContent>* Based on 514,694,504 shares outstanding of QXO, Inc. as of April 29, 2025.</commentContent>
+</reportingPersonInfo>
+<reportingPersonInfo>
+<reportingPersonNoCIK>Y</reportingPersonNoCIK>
+<reportingPersonName>Affinity Partners Parallel Fund I LP</reportingPersonName>
+<fundType>AF</fundType>
+<citizenshipOrOrganization>E9</citizenshipOrOrganization>
+<soleVotingPower>0</soleVotingPower>
+<sharedVotingPower>16247069</sharedVotingPower>
+<soleDispositivePower>0</soleDispositivePower>
+<sharedDispositivePower>16247069</sharedDispositivePower>
+<aggregateAmountOwned>16247069</aggregateAmountOwned>
+<isAggregateExcludeShares>N</isAggregateExcludeShares>
+<percentOfClass>3.2</percentOfClass>
+<typeOfReportingPerson>PN</typeOfReportingPerson>
+<commentContent>* Based on 514,694,504 shares outstanding of QXO, Inc. as of April 29, 2025.</commentContent>
+</reportingPersonInfo>
+<reportingPersonInfo>
+<reportingPersonCIK>0002059583</reportingPersonCIK>
+<reportingPersonName>Affinity Partners GP LP</reportingPersonName>
+<fundType>AF</fundType>
+<citizenshipOrOrganization>DE</citizenshipOrOrganization>
+<soleVotingPower>0</soleVotingPower>
+<sharedVotingPower>32671542</sharedVotingPower>
+<soleDispositivePower>0</soleDispositivePower>
+<sharedDispositivePower>32671542</sharedDispositivePower>
+<aggregateAmountOwned>32671542</aggregateAmountOwned>
+<isAggregateExcludeShares>N</isAggregateExcludeShares>
+<percentOfClass>6.3</percentOfClass>
+<typeOfReportingPerson>PN</typeOfReportingPerson>
+<commentContent>* Based on 514,694,504 shares outstanding of QXO, Inc. as of April 29, 2025.</commentContent>
+</reportingPersonInfo>
+<reportingPersonInfo>
+<reportingPersonNoCIK>Y</reportingPersonNoCIK>
+<reportingPersonName>Affinity QXO 1 LLC</reportingPersonName>
+<fundType>AF</fundType>
+<citizenshipOrOrganization>DE</citizenshipOrOrganization>
+<soleVotingPower>0</soleVotingPower>
+<sharedVotingPower>16260163</sharedVotingPower>
+<soleDispositivePower>0</soleDispositivePower>
+<sharedDispositivePower>16260163</sharedDispositivePower>
+<aggregateAmountOwned>16260163</aggregateAmountOwned>
+<isAggregateExcludeShares>N</isAggregateExcludeShares>
+<percentOfClass>3.2</percentOfClass>
+<typeOfReportingPerson>OO</typeOfReportingPerson>
+<commentContent>* Based on 514,694,504 shares outstanding of QXO, Inc. as of April 29, 2025.</commentContent>
+</reportingPersonInfo>
+<reportingPersonInfo>
+<reportingPersonNoCIK>Y</reportingPersonNoCIK>
+<reportingPersonName>Affinity Partners???Fund I Co-Invest???GP LP</reportingPersonName>
+<fundType>AF</fundType>
+<citizenshipOrOrganization>DE</citizenshipOrOrganization>
+<soleVotingPower>0</soleVotingPower>
+<sharedVotingPower>16260163</sharedVotingPower>
+<soleDispositivePower>0</soleDispositivePower>
+<sharedDispositivePower>16260163</sharedDispositivePower>
+<aggregateAmountOwned>16260163</aggregateAmountOwned>
+<isAggregateExcludeShares>N</isAggregateExcludeShares>
+<percentOfClass>3.2</percentOfClass>
+<typeOfReportingPerson>PN</typeOfReportingPerson>
+<commentContent>* Based on 514,694,504 shares outstanding of QXO, Inc. as of April 29, 2025.</commentContent>
+</reportingPersonInfo>
+<reportingPersonInfo>
+<reportingPersonNoCIK>Y</reportingPersonNoCIK>
+<reportingPersonName>Jared Kushner</reportingPersonName>
+<fundType>AF</fundType>
+<citizenshipOrOrganization>X1</citizenshipOrOrganization>
+<soleVotingPower>0</soleVotingPower>
+<sharedVotingPower>32671542</sharedVotingPower>
+<soleDispositivePower>0</soleDispositivePower>
+<sharedDispositivePower>32671542</sharedDispositivePower>
+<aggregateAmountOwned>32671542</aggregateAmountOwned>
+<isAggregateExcludeShares>N</isAggregateExcludeShares>
+<percentOfClass>6.3</percentOfClass>
+<typeOfReportingPerson>IN</typeOfReportingPerson>
+<commentContent>* Based on 514,694,504 shares outstanding of QXO, Inc. as of April 29, 2025.</commentContent>
+</reportingPersonInfo>
+</reportingPersons>
+<items1To7>
+<item1>
+<securityTitle>Common Stock, par value $0.00001 per share</securityTitle>
+<issuerName>QXO, Inc.</issuerName>
+<issuerPrincipalAddress>
+<com:street1>Five American Lane</com:street1>
+<com:city>Greenwich</com:city>
+<com:stateOrCountry>CT</com:stateOrCountry>
+<com:zipCode>06831</com:zipCode>
+</issuerPrincipalAddress>
+<commentText>This Statement on Schedule 13D (this "Schedule 13D") relates to the shares of common stock, par value $0.00001 per share (the "Common Stock"), of QXO, Inc. (the "Issuer"). The Issuer's principal executive offices are located at Five American Lane, Greenwich, CT 06831. Shares of the Common Stock are listed on the New York Stock Exchange and trade under the symbol "QXO."</commentText>
+</item1>
+<item2>
+<filingPersonName>The persons filing this statement are Affinity Partners Fund I LP ("Affinity LP"), Affinity Partners Parallel Fund I LP ("Affinity Parallel LP"), Affinity QXO 1 LLC ("Affinity QXO"), Affinity Partners GP LP ("Affinity GP"), Affinity Partners Fund I Co-Invest GP LP ("Co-Invest GP") and Jared Kushner, a citizen of the United States of America (collectively, the "Reporting Persons"). The agreement among the Reporting Persons to file this Schedule 13D jointly in accordance with Rule 13d-1(k) of the Exchange Act is attached hereto as Exhibit 99.1.  Except as expressly otherwise set forth in this Schedule 13D, each Reporting Person disclaims beneficial ownership of the shares of Common Stock beneficially owned by each other Reporting Person or any other person.</filingPersonName>
+<principalBusinessAddress>The principal business address of each of the Reporting Persons is 16690 Collins Avenue, Sunny Isles Beach, Florida 33160.</principalBusinessAddress>
+<principalJob>Affinity GP is the general partner of Affinity LP and Affinity Parallel LP. Affinity GP and Co-Invest GP share voting and investment power with respect to Affinity QXO. Mr. Kushner controls a majority of the ownership of Affinity GP and Co-Invest GP and, as such, has shared voting power and dispositive power with respect to the Common Stock held by Affinity LP, Affinity Parallel LP and Affinity QXO. Mr. Kushner disclaims beneficial ownership of all shares of Common Stock beneficially held or deemed to be held by Affinity LP, Affinity Parallel LP, Affinity QXO, Affinity GP and Co-Invest GP, except to the extent of his pecuniary interest therein. Each of Affinity LP, Affinity Parallel LP and Affinity QXO is an investment vehicle formed to make equity investments in companies. Affinity GP is primarily engaged in the business of serving as the general partner of Affinity LP and Affinity Parallel LP. Co-Invest GP is primarily engaged in the business of serving as the general partner of certain investment vehicles that are members of Affinity QXO.</principalJob>
+<hasBeenConvicted>None of the Reporting Persons nor any manager or executive officer of the Reporting Persons, has, during the past five years, been convicted in a criminal proceeding (excluding traffic violations or similar misdemeanors).</hasBeenConvicted>
+<convictionDescription>None of the Reporting Persons nor any manager or executive officer of the Reporting Persons, has, during the past five years, been a party to a civil proceeding of a judicial or administrative body of competent jurisdiction and as a result of such proceeding was or is subject to a judgment, decree or final order enjoining future violations of, or prohibiting, or mandating activities subject to, Federal or State securities laws or a finding of any violation with respect to such laws.</convictionDescription>
+<citizenship>See row 6 of each cover page of this Schedule 13D.</citizenship>
+</item2>
+<item3>
+<fundsSource>On July 22, 2024, the Issuer entered into a Purchase Agreement with Affinity LP and Affinity Parallel LP, pursuant to which the Issuer agreed to issue and sell in a private placement ("Private Placement I") (i) 16,247,069 shares of Common Stock to Affinity Parallel LP at an offering price of $9.14 per share for an aggregate purchase price of $148,498,210.66, and (ii) 164,310 shares of Common Stock to Affinity LP at an offering price of $9.14 per share for an aggregate purchase price of $1,501,793.40. On July 25, 2024, Private Placement I closed. &#13;
+&#13;
+On March 17, 2025, the Issuer entered into a Purchase Agreement with Affinity QXO, pursuant to which, subject to certain closing conditions, the Issuer agreed to issue and sell in a private placement ("Private Placement II") 16,260,163 shares of Common Stock to Affinity QXO at an offering price of $12.30 per share for an aggregate purchase price of $200,000,004.90. On April 29, 2025, Private Placement II closed. &#13;
+&#13;
+Private Placement I and Private Placement II were funded with the respective capital of Affinity LP, Parallel LP and Affinity QXO.</fundsSource>
+</item3>
+<item4>
+<transactionPurpose>The responses set forth in Items 3 and 6 hereof are incorporated by reference in their entirety. &#13;
+&#13;
+The Reporting Persons acquired the Common Stock for investment purposes. The Reporting Persons review their investment in the Issuer on a continuing basis, and may determine to (i) acquire additional securities of the Issuer through open market purchases, private agreements or otherwise, (ii) dispose of all or a portion of the securities of the Issuer owned by them through public offerings (including pursuant to a resale registration statement filed by the Issuer), private transactions or otherwise, or (iii) take any other available course of action.&#13;
+&#13;
+From time to time, the Reporting Persons, including Mr. Kushner, as a director of the Issuer, intend to engage in discussions with the Board of Directors of the Issuer and/or members of the Issuer's management team concerning a broad range of operational and strategic matters, including, without limitation, the Issuer's business, operations, capital structure, governance, management, and strategy as well as potential financings, business combinations, strategic alternatives, and other matters concerning the Issuer, including transactions in which the Reporting Persons may seek to participate and potentially engage. The Reporting Persons may communicate with other stockholders or third parties regarding the foregoing.&#13;
+&#13;
+Notwithstanding anything contained herein, the Reporting Persons specifically reserve the right to change their intention with respect to any or all of such matters. In reaching any decision as to their course of action (as well as to the specific elements thereof), the Reporting Persons currently expect that they would take into consideration a variety of factors, including the following: the Issuer's business and prospects; other developments concerning the Issuer and its businesses generally; other business opportunities available to the Reporting Persons; developments with respect to the business of the Reporting Persons; changes in law and government regulations; general economic conditions; and money and stock market conditions, including the market price of the securities of the Issuer.&#13;
+&#13;
+Except as set forth in this Item 4 of this Schedule 13D, the Reporting Persons do not have any present plans or proposals that relate to or would result in any of the actions specified in clauses (a) through (j) of the instructions to Item 4 of this Schedule 13D.</transactionPurpose>
+</item4>
+<item5>
+<percentageOfClassSecurities>The information set forth in or incorporated by reference in Items 2, 3 and 4 and on the cover pages of this Schedule 13D is incorporated by reference in its entirety into this Item 5.&#13;
+&#13;
+As of the date hereof, (i) Affinity LP may be deemed to be the beneficial owner of 164,310 shares of Common Stock, representing less than 0.1% of the outstanding shares of Common Stock, (ii) Affinity Parallel LP may be deemed to be the beneficial owner of 16,247,069 shares of Common Stock, representing approximately 3.2% of the outstanding shares of Common Stock, (iii) Affinity QXO may be deemed to be the beneficial owner of 16,260,163 shares of Common Stock, representing approximately 3.2% of the outstanding shares of Common Stock, (iv) Affinity GP may be deemed to be the beneficial owner of 32,671,542 shares of Common Stock, representing approximately 6.3% of the outstanding shares of Common Stock, (v) Co-Invest GP may be deemed to be the beneficial owner of 16,260,163 shares of Common Stock, representing approximately 3.2% of the outstanding shares of Common Stock and (vi) Mr. Kushner may be deemed to be the beneficial owner of 32,671,542 shares of Common Stock, representing approximately 6.3% of the outstanding shares of Common Stock, in each case of this, based on 514,694,504 shares of Common Stock outstanding as of April 29, 2025.</percentageOfClassSecurities>
+<numberOfShares>See Item 5(a) above.</numberOfShares>
+<transactionDesc>Except as set forth in this Schedule 13D, no transactions in the shares of Common Stock were effected by the Reporting Persons, or, to the knowledge of the Reporting Persons, by any of the persons listed on Schedule A hereto in the 60 days preceding the date hereof.</transactionDesc>
+<listOfShareholders>Except as set forth herein, to the knowledge of the Reporting Persons, no other person has the right to receive or the power to direct the receipt of dividends from, or the proceeds from the sale of, any Common Stock beneficially owned by the Reporting Persons as described in this Item 5.</listOfShareholders>
+<date5PercentOwnership>Not applicable.</date5PercentOwnership>
+</item5>
+<item6>
+<contractDescription>The information set forth in Item 3 and Item 4 of this Schedule 13D is incorporated by reference in its entirety into this Item 6. While no contractual right exists on the part of any of the Reporting Persons to appoint a director to the board of directors of the Issuer, on July 25, 2024, Mr. Kushner was appointed to the board of directors of the Issuer.</contractDescription>
+</item6>
+<item7>
+<filedExhibits>99.1        Joint Filing Agreement&#13;
+&#13;
+99.2        Purchase Agreement, dated July 22, 2024, by and among QXO, Inc., Affinity Partners Fund I LP and Affinity Partners Parallel Fund I LP. &#13;
+&#13;
+99.3        Purchase Agreement, dated March 17, 2025, by and between QXO, Inc. and Affinity QXO 1 LLC.</filedExhibits>
+</item7>
+</items1To7>
+<signatureInfo>
+<signaturePerson>
+<signatureReportingPerson>Affinity Partners Fund I LP</signatureReportingPerson>
+<signatureDetails>
+<signature>/s/ Ian Brekke</signature>
+<title>Ian Brekke / Authorized Signatory, Affinity Partners GP LP, its general partner</title>
+<date>05/06/2025</date>
+</signatureDetails>
+</signaturePerson>
+<signaturePerson>
+<signatureReportingPerson>Affinity Partners Parallel Fund I LP</signatureReportingPerson>
+<signatureDetails>
+<signature>/s/ Ian Brekke</signature>
+<title>Ian Brekke / Authorized Signatory, Affinity Partners GP LP, its general partner</title>
+<date>05/06/2025</date>
+</signatureDetails>
+</signaturePerson>
+<signaturePerson>
+<signatureReportingPerson>Affinity Partners GP LP</signatureReportingPerson>
+<signatureDetails>
+<signature>/s/ Ian Brekke</signature>
+<title>Ian Brekke / Authorized Signatory</title>
+<date>05/06/2025</date>
+</signatureDetails>
+</signaturePerson>
+<signaturePerson>
+<signatureReportingPerson>Affinity QXO 1 LLC</signatureReportingPerson>
+<signatureDetails>
+<signature>/s/ Ian Brekke</signature>
+<title>Ian Brekke / Secretary</title>
+<date>05/06/2025</date>
+</signatureDetails>
+</signaturePerson>
+<signaturePerson>
+<signatureReportingPerson>Affinity Partners???Fund I Co-Invest???GP LP</signatureReportingPerson>
+<signatureDetails>
+<signature>/s/ Ian Brekke</signature>
+<title>Ian Brekke / Authorized Signatory</title>
+<date>05/06/2025</date>
+</signatureDetails>
+</signaturePerson>
+<signaturePerson>
+<signatureReportingPerson>Jared Kushner</signatureReportingPerson>
+<signatureDetails>
+<signature>/s/ Jared Kushner</signature>
+<title>Jared Kushner</title>
+<date>05/06/2025</date>
+</signatureDetails>
+</signaturePerson>
+</signatureInfo>
+</formData>
+
+</edgarSubmission>
