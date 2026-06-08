@@ -89,4 +89,20 @@ public static class MarkdownTable
             sb.AppendLine(renderRow(i + 1, rows[i]));
         return sb;
     }
+
+    // Appends a ranked sub-table (header row, separator row, then one numbered row per item)
+    // to an existing builder. Centralises the header/separator/AppendNumberedRows triple
+    // repeated across the secondary tables in the holdings tools.
+    public static StringBuilder AppendNumberedTable<T>(
+        this StringBuilder sb,
+        string headerRow,
+        string separatorRow,
+        IReadOnlyList<T> rows,
+        Func<int, T, string> renderRow
+    )
+    {
+        sb.AppendLine(headerRow);
+        sb.AppendLine(separatorRow);
+        return sb.AppendNumberedRows(rows, renderRow);
+    }
 }

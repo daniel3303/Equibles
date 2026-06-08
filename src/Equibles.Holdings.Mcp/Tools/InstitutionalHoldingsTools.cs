@@ -482,9 +482,9 @@ public class InstitutionalHoldingsTools
                 sb.AppendLine(emptyMessage);
                 return;
             }
-            sb.AppendLine("| # | Institution | Δ Shares | Δ Value ($M) | Prior → New Shares |");
-            sb.AppendLine("|---|-------------|---------|-------------|------------------|");
-            sb.AppendNumberedRows(
+            sb.AppendNumberedTable(
+                "| # | Institution | Δ Shares | Δ Value ($M) | Prior → New Shares |",
+                "|---|-------------|---------|-------------|------------------|",
                 rows,
                 (rank, m) =>
                     $"| {rank} | {m.Name} | {FormatSignedShares(m.DeltaShares)} | {FormatSignedMillions(m.DeltaValue)} | {McpFormat.WholeNumber(m.PreviousShares)} → {McpFormat.WholeNumber(m.CurrentShares)} |"
@@ -601,9 +601,9 @@ public class InstitutionalHoldingsTools
 
         var stocks = await LoadStocksByIds(rows.Select(r => r.CommonStockId).ToList());
 
-        result.AppendLine("| # | Ticker | Company | Δ Shares | Δ Value ($M) |");
-        result.AppendLine("|---|--------|---------|---------|-------------|");
-        result.AppendNumberedRows(
+        result.AppendNumberedTable(
+            "| # | Ticker | Company | Δ Shares | Δ Value ($M) |",
+            "|---|--------|---------|---------|-------------|",
             rows,
             (rank, r) =>
             {
@@ -633,9 +633,9 @@ public class InstitutionalHoldingsTools
         var stocks = await LoadStocksByIds(rows.Select(r => r.CommonStockId).ToList());
 
         var label = normalizedBucket == "new-positions" ? "# Filers Initiated" : "# Filers Exited";
-        result.AppendLine($"| # | Ticker | Company | {label} |");
-        result.AppendLine("|---|--------|---------|-------------|");
-        result.AppendNumberedRows(
+        result.AppendNumberedTable(
+            $"| # | Ticker | Company | {label} |",
+            "|---|--------|---------|-------------|",
             rows,
             (rank, r) =>
             {
@@ -730,13 +730,9 @@ public class InstitutionalHoldingsTools
         );
         result.AppendLine($"Sorted by: {sort}");
         result.AppendLine();
-        result.AppendLine(
-            "| # | Ticker | Company | # Filers | Δ Filers (QoQ) | Total $ Value ($M) | Δ $ Value ($M) | % of 13F Universe |"
-        );
-        result.AppendLine(
-            "|---|--------|---------|----------|----------------|--------------------|----------------|-------------------|"
-        );
-        result.AppendNumberedRows(
+        result.AppendNumberedTable(
+            "| # | Ticker | Company | # Filers | Δ Filers (QoQ) | Total $ Value ($M) | Δ $ Value ($M) | % of 13F Universe |",
+            "|---|--------|---------|----------|----------------|--------------------|----------------|-------------------|",
             rows,
             (rank, r) =>
             {
@@ -848,9 +844,9 @@ public class InstitutionalHoldingsTools
             return result.ToString();
         }
 
-        result.AppendLine("| # | Industry | # Positions | Value ($M) | % of Portfolio |");
-        result.AppendLine("|---|----------|-------------|------------|----------------|");
-        result.AppendNumberedRows(
+        result.AppendNumberedTable(
+            "| # | Industry | # Positions | Value ($M) | % of Portfolio |",
+            "|---|----------|-------------|------------|----------------|",
             slices,
             (rank, s) =>
                 $"| {rank} | {s.IndustryName} | {McpFormat.WholeNumber(s.PositionCount)} | {FormatMillions(s.TotalValue)} | {FormatPercent(s.PercentOfPortfolio)}% |"
@@ -1010,9 +1006,9 @@ public class InstitutionalHoldingsTools
             result.AppendLine();
             return false;
         }
-        result.AppendLine("| # | Ticker | Company | Prior | New | Δ Shares | Δ Value ($M) |");
-        result.AppendLine("|---|--------|---------|-------|-----|---------|-------------|");
-        result.AppendNumberedRows(
+        result.AppendNumberedTable(
+            "| # | Ticker | Company | Prior | New | Δ Shares | Δ Value ($M) |",
+            "|---|--------|---------|-------|-----|---------|-------------|",
             rows,
             (rank, r) =>
                 $"| {rank} | {r.Ticker} | {r.Name} | {McpFormat.WholeNumber(r.PreviousShares)} | {McpFormat.WholeNumber(r.CurrentShares)} | {FormatSignedShares(r.DeltaShares)} | {FormatSignedMillions(r.DeltaValue)} |"
@@ -1125,14 +1121,10 @@ public class InstitutionalHoldingsTools
             return result.ToString();
         }
 
-        result.AppendLine(
-            "| # | Ticker | Company | A Shares | A % | B Shares | B % | Combined ($M) |"
-        );
-        result.AppendLine(
-            "|---|--------|---------|---------|-----|---------|-----|---------------|"
-        );
         var rendered = overlap.Rows.Take(maxResults).ToList();
-        result.AppendNumberedRows(
+        result.AppendNumberedTable(
+            "| # | Ticker | Company | A Shares | A % | B Shares | B % | Combined ($M) |",
+            "|---|--------|---------|---------|-----|---------|-----|---------------|",
             rendered,
             (rank, row) =>
             {
@@ -1243,9 +1235,9 @@ public class InstitutionalHoldingsTools
         if (rowsWithConsensus.Count == 0)
             return result + "_No stocks meet the minFunds threshold._";
 
-        result.AppendLine("| # | Ticker | Company | # Funds | Combined ($M) |");
-        result.AppendLine("|---|--------|---------|---------|---------------|");
-        result.AppendNumberedRows(
+        result.AppendNumberedTable(
+            "| # | Ticker | Company | # Funds | Combined ($M) |",
+            "|---|--------|---------|---------|---------------|",
             rowsWithConsensus,
             (rank, x) =>
                 $"| {rank} | {x.Row.Ticker} | {x.Row.Name} | {x.HeldBy}/{holders.Count} | {McpFormat.Invariant(x.Row.CombinedValue / 1_000_000m, "N1")} |"
