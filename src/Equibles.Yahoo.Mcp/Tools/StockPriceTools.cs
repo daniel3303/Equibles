@@ -216,7 +216,7 @@ public class StockPriceTools
                     {
                         var kCell = McpFormat.OrDash(k[i], "F2");
                         var dCell = McpFormat.OrDash(d[i], "F2");
-                        return $"| {records[i].Date:yyyy-MM-dd} | {McpFormat.Invariant(records[i].Close, "F2")} | {kCell} | {dCell} |";
+                        return $"| {DateAndCloseCells(records[i])} | {kCell} | {dCell} |";
                     }
                 );
             },
@@ -269,7 +269,7 @@ public class StockPriceTools
                     i =>
                     {
                         var atrCell = McpFormat.OrDash(atr[i], "F4");
-                        return $"| {records[i].Date:yyyy-MM-dd} | {McpFormat.Invariant(records[i].Close, "F2")} | {atrCell} |";
+                        return $"| {DateAndCloseCells(records[i])} | {atrCell} |";
                     }
                 );
             },
@@ -317,7 +317,7 @@ public class StockPriceTools
                     records.Count,
                     maxResults,
                     i =>
-                        $"| {records[i].Date:yyyy-MM-dd} | {McpFormat.Invariant(records[i].Close, "F2")} | {McpFormat.WholeNumber(records[i].Volume)} | {McpFormat.WholeNumber(obv[i])} |"
+                        $"| {DateAndCloseCells(records[i])} | {McpFormat.WholeNumber(records[i].Volume)} | {McpFormat.WholeNumber(obv[i])} |"
                 );
             },
             "GetOnBalanceVolume",
@@ -379,7 +379,7 @@ public class StockPriceTools
                         var lowerCell = McpFormat.OrDash(lower[i], "F2");
                         var middleCell = McpFormat.OrDash(middle[i], "F2");
                         var upperCell = McpFormat.OrDash(upper[i], "F2");
-                        return $"| {records[i].Date:yyyy-MM-dd} | {McpFormat.Invariant(records[i].Close, "F2")} | {lowerCell} | {middleCell} | {upperCell} |";
+                        return $"| {DateAndCloseCells(records[i])} | {lowerCell} | {middleCell} | {upperCell} |";
                     }
                 );
             },
@@ -455,6 +455,11 @@ public class StockPriceTools
             emitted++;
         }
     }
+
+    // Leading "Date | Close" cells shared by every technical-indicator table row;
+    // keeps the date format and close precision in sync across the four tables.
+    private static string DateAndCloseCells(DailyStockPrice record) =>
+        $"{record.Date:yyyy-MM-dd} | {McpFormat.Invariant(record.Close, "F2")}";
 
     private static (
         List<decimal> Highs,
