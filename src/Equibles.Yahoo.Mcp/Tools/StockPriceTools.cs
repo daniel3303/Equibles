@@ -130,7 +130,7 @@ public class StockPriceTools
                     var stock = await _commonStockRepository.GetByTicker(ticker);
                     if (stock == null)
                     {
-                        result.AppendLine($"| {ticker} | — | Not found | — |");
+                        result.AppendLine(PlaceholderRow(ticker, "Not found"));
                         continue;
                     }
 
@@ -139,7 +139,7 @@ public class StockPriceTools
                         .FirstOrDefaultAsync();
                     if (latestDate == default)
                     {
-                        result.AppendLine($"| {ticker} | — | No data | — |");
+                        result.AppendLine(PlaceholderRow(ticker, "No data"));
                         continue;
                     }
 
@@ -148,7 +148,7 @@ public class StockPriceTools
                         .FirstOrDefaultAsync();
                     if (price == null)
                     {
-                        result.AppendLine($"| {ticker} | — | No data | — |");
+                        result.AppendLine(PlaceholderRow(ticker, "No data"));
                         continue;
                     }
 
@@ -455,6 +455,11 @@ public class StockPriceTools
             emitted++;
         }
     }
+
+    // Placeholder row for a ticker with no price to show (unknown symbol or no data),
+    // keeping the em-dash columns identical across the per-ticker fallback branches.
+    private static string PlaceholderRow(string ticker, string status) =>
+        $"| {ticker} | — | {status} | — |";
 
     // Leading "Date | Close" cells shared by every technical-indicator table row;
     // keeps the date format and close precision in sync across the four tables.
