@@ -53,6 +53,18 @@ public interface ISecEdgarClient
     );
 
     /// <summary>
+    /// Like <see cref="GetDailyIndex"/> but keeps every submission whose form
+    /// type starts with any of <paramref name="formPrefixes"/> (e.g.
+    /// "SCHEDULE 13D", "SCHEDULE 13G"), letting non-13F sweeps reuse the same
+    /// fetch, throttle handling and parsing.
+    /// </summary>
+    Task<List<EdgarDailyIndexEntry>> GetDailyIndexForForms(
+        DateOnly date,
+        IReadOnlyCollection<string> formPrefixes,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Lists the artifact file names inside a single filing via its
     /// <c>index.json</c>. Used to locate <c>primary_doc.xml</c> and the
     /// information-table XML of a 13F-HR submission.

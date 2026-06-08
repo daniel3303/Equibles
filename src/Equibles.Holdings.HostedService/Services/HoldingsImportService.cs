@@ -8,6 +8,7 @@ using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.HostedService.Extensions;
 using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Messaging.Contracts.Holdings;
@@ -154,11 +155,11 @@ public class HoldingsImportService
 
         if (submissions.Count == 0)
         {
-            _logger.LogInformation("No 13F-HR submissions found in data set");
+            _logger.LogInformation("No supported submissions found in data set");
             return false;
         }
 
-        _logger.LogInformation("Found {Count} 13F-HR submissions", submissions.Count);
+        _logger.LogInformation("Found {Count} submissions", submissions.Count);
         context.Submissions = submissions;
         return true;
     }
@@ -172,7 +173,9 @@ public class HoldingsImportService
         submission = null;
 
         var formType = GetValue(row, "SUBMISSIONTYPE");
-        if (formType is not ("13F-HR" or "13F-HR/A"))
+        // Accept every form the holdings pipeline ingests (13F-HR, and the
+        // beneficial-ownership Schedules 13D/13G), keyed off the shared map.
+        if (formType.ToHoldingsFilingType() is null)
             return false;
 
         var accession = GetValue(row, AccessionNumberColumn);
@@ -855,6 +858,17 @@ public class HoldingsImportService
         var otherManagerNumber = ParseNullableInt(GetValue(row, "OTHERMANAGER"));
         var discretion = ParseInvestmentDiscretion(GetValue(row, "INVESTMENTDISCRETION"));
 
+        // The filing type follows the submission's form (13F-HR vs Schedule
+        // 13D/13G); fall back to 13F if the submission is somehow missing. The
+        // percent-of-class column is only present on the 13D/13G archive — it is
+        // absent (null) for 13F INFOTABLE rows.
+        var filingType =
+            context.Submissions != null
+            && context.Submissions.TryGetValue(accession, out var submission)
+                ? submission.FormType.ToHoldingsFilingType() ?? FilingType.Form13F
+                : FilingType.Form13F;
+        var percentOfClass = ParseNullableDecimal(GetValue(row, "PERCENTOFCLASS"));
+
         var managerEntry = new HoldingManagerEntry
         {
             ManagerNumber = otherManagerNumber,
@@ -875,7 +889,8 @@ public class HoldingsImportService
             ShareType = shareType,
             OptionType = optionType,
             InvestmentDiscretion = discretion,
-            FilingType = FilingType.Form13F,
+            FilingType = filingType,
+            PercentOfClass = percentOfClass,
             VotingAuthSole = votingAuthSole,
             VotingAuthShared = votingAuthShared,
             VotingAuthNone = votingAuthNone,
@@ -928,6 +943,7 @@ public class HoldingsImportService
                         VotingAuthSole = incoming.VotingAuthSole,
                         VotingAuthShared = incoming.VotingAuthShared,
                         VotingAuthNone = incoming.VotingAuthNone,
+                        PercentOfClass = incoming.PercentOfClass,
                         TitleOfClass = incoming.TitleOfClass,
                         Cusip = incoming.Cusip,
                         IsAmendment = incoming.IsAmendment,
