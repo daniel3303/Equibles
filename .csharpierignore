@@ -11,3 +11,7 @@ worktrees/
 
 ## Node / front-end assets (if any sneak in)
 node_modules/
+
+## Captured test payloads (cassettes) — real upstream responses committed verbatim.
+## Reformatting them churns golden files, so never gate them on formatting.
+**/TestAssets/
