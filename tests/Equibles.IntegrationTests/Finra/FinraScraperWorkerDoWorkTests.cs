@@ -20,11 +20,11 @@ namespace Equibles.IntegrationTests.Finra;
 /// <summary>
 /// <see cref="FinraScraperWorker.DoWork"/> was entirely uncovered. Against the
 /// real scope/DB harness with an empty database and a far-future MinSyncDate,
-/// the short-volume import early-returns (start date past today) and the
-/// short-interest import early-returns (no tracked tickers), so the worker's
-/// two-phase orchestration runs end-to-end through real services without
-/// touching the FINRA API — exercising both phase logs and both scoped
-/// resolutions.
+/// the short-volume and off-exchange-volume imports early-return (start date
+/// past today) and the short-interest import early-returns (no tracked
+/// tickers), so the worker's three-phase orchestration runs end-to-end through
+/// real services without touching the FINRA API — exercising every phase log
+/// and every scoped resolution.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class FinraScraperWorkerDoWorkTests : ParadeDbMcpTestBase
@@ -33,7 +33,7 @@ public class FinraScraperWorkerDoWorkTests : ParadeDbMcpTestBase
         : base(fixture) { }
 
     [Fact]
-    public async Task DoWork_EmptyDbAndFutureMinSyncDate_RunsBothImportsViaEarlyReturn()
+    public async Task DoWork_EmptyDbAndFutureMinSyncDate_RunsAllImportsViaEarlyReturn()
     {
         var workerOptions = Options.Create(
             new WorkerOptions { MinSyncDate = new DateTime(2099, 1, 1), TickersToSync = [] }
@@ -45,11 +45,12 @@ public class FinraScraperWorkerDoWorkTests : ParadeDbMcpTestBase
         );
 
         // One substitute scope provides every type resolved anywhere in the
-        // call graph: the worker's two services, plus the repositories the
+        // call graph: the worker's three services, plus the repositories the
         // services and TickerMapService resolve from their own nested scopes.
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
-            (typeof(DailyShortVolumeRepository), new DailyShortVolumeRepository(DbContext))
+            (typeof(DailyShortVolumeRepository), new DailyShortVolumeRepository(DbContext)),
+            (typeof(OffExchangeVolumeRepository), new OffExchangeVolumeRepository(DbContext))
         );
         var tickerMapService = new TickerMapService(scopeFactory);
 
@@ -70,9 +71,19 @@ public class FinraScraperWorkerDoWorkTests : ParadeDbMcpTestBase
             workerOptions
         );
 
+        var offExchangeVolume = new OffExchangeVolumeImportService(
+            scopeFactory,
+            Substitute.For<ILogger<OffExchangeVolumeImportService>>(),
+            finraClient,
+            tickerMapService,
+            errorReporter,
+            workerOptions
+        );
+
         var workerScopeFactory = ServiceScopeSubstitute.Create(
             (typeof(ShortVolumeImportService), shortVolume),
-            (typeof(ShortInterestImportService), shortInterest)
+            (typeof(ShortInterestImportService), shortInterest),
+            (typeof(OffExchangeVolumeImportService), offExchangeVolume)
         );
 
         var worker = new FinraScraperWorker(
