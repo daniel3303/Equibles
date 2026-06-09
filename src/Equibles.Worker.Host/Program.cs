@@ -3,6 +3,8 @@ using Equibles.Cboe.HostedService.Extensions;
 using Equibles.Cftc.Data.Extensions;
 using Equibles.Cftc.HostedService.Extensions;
 using Equibles.CommonStocks.Data.Extensions;
+using Equibles.CommonStocks.HostedService.Configuration;
+using Equibles.CommonStocks.HostedService.Extensions;
 using Equibles.Congress.Data.Extensions;
 using Equibles.Congress.HostedService.Extensions;
 using Equibles.Core.AutoWiring;
@@ -95,6 +97,9 @@ builder.Services.Configure<Equibles.Cftc.HostedService.Configuration.CftcScraper
 builder.Services.Configure<Equibles.Cboe.HostedService.Configuration.CboeScraperOptions>(
     builder.Configuration.GetSection("CboeScraper")
 );
+builder.Services.Configure<InvestorRelationsDiscoveryOptions>(
+    builder.Configuration.GetSection("InvestorRelationsDiscovery")
+);
 
 // Without this bind, IOptions<EmbeddingConfig> is always default (Enabled=false),
 // so GenerateEmbeddingBatch short-circuits and no embeddings are ever produced —
@@ -123,6 +128,7 @@ builder.Services.AddCftcWorker();
 builder.Services.AddCboeWorker();
 builder.Services.AddCongressWorker();
 builder.Services.AddHoldingsWorker();
+builder.Services.AddCommonStocksWorker();
 
 var host = builder.Build();
 host.Run();
