@@ -36,6 +36,14 @@ public class CommonStock
     [MaxLength(256)]
     public string InvestorRelationsUrl { get; set; }
 
+    /// <summary>
+    /// Platform/CMS the company's investor-relations website runs on, detected from
+    /// the <see cref="InvestorRelationsUrl"/> page HTML. <see cref="IrPlatformType.Unknown"/>
+    /// until an IR page is discovered and classified. Determines which IR scraper
+    /// handles the company.
+    /// </summary>
+    public IrPlatformType IrPlatformType { get; set; }
+
     public double MarketCapitalization { get; set; }
     public long SharesOutStanding { get; set; }
 
