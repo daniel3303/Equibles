@@ -122,6 +122,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetShortVolume` — daily short-volume time series (FINRA).
 - `GetShortInterest` — bi-monthly short-interest reports for a ticker.
 - `GetShortInterestSnapshot` — latest short-interest snapshot across tickers.
+- `GetLargestShortVolume` — stocks with the largest daily short volume for a single trading day (defaults to the latest available), sorted by short volume descending.
 
 `OffExchangeVolumeTools`:
 
