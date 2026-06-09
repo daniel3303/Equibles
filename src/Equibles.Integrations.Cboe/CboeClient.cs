@@ -142,8 +142,17 @@ public class CboeClient : ICboeClient
     // `"` is escaped to `\"`. We locate the `"optionsData\":` marker, walk
     // balanced braces (escape-aware), then JSON-unescape the captured slice
     // so it can be parsed as normal JSON.
+    private const string RscChunkBoundary = "\"])</script><script>self.__next_f.push([1,\"";
+
     private static string ExtractOptionsDataJson(string html)
     {
+        // Next.js streams the RSC payload as consecutive self.__next_f.push([1,"…"])
+        // script chunks, and a chunk boundary can fall anywhere — including inside
+        // the optionsData JSON (it does since 2026-06-08, when the page grew new
+        // products). Stitch the chunks back together before extracting, otherwise
+        // the brace walk drags the literal boundary markup into the slice.
+        html = html.Replace(RscChunkBoundary, "", StringComparison.Ordinal);
+
         const string marker = "\"optionsData\\\":";
         var markerIndex = html.IndexOf(marker, StringComparison.Ordinal);
         if (markerIndex < 0)
