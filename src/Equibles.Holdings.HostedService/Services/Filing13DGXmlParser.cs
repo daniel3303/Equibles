@@ -190,6 +190,11 @@ public class Filing13DGXmlParser
             CultureInfo.InvariantCulture,
             out var value
         )
+        // A value that parses but exceeds Int64 (corrupt/typo'd field) must degrade
+        // to 0 like every other field-parser here; the decimal->long cast is always
+        // range-checked and would otherwise throw, crashing the whole filing parse.
+        && value >= long.MinValue
+        && value <= long.MaxValue
             ? (long)value
             : 0;
 
