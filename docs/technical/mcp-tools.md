@@ -59,6 +59,23 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 - `GetFailsToDeliver` — FTD records for a ticker over a date range.
 
+`FormDTools`:
+
+- `GetExemptOfferings` — recent exempt offerings (Regulation D private placements) for a company from SEC Form D notices: offering amount, amount sold (dollar figure or `Indefinite`), minimum investment, investor count, claimed exemptions, and amendment flag.
+
+`NportTools`:
+
+- `GetFundHoldings` — portfolio holdings of a fund or ETF from its latest SEC Form NPORT-P monthly report: series, reporting period, net assets, and largest positions (issuer, CUSIP, position size, USD value, share of net assets, asset category). Only registered funds file NPORT-P.
+
+`NCenTools`:
+
+- `GetFundOperations` — operational data for a fund, ETF or closed-end fund from SEC Form N-CEN annual reports: registrant classification, Investment Company Act file number, reporting period, first/last-filing flags, and named service providers (advisers, sub-advisers, custodians, transfer agents, administrators, auditors, underwriters). Only registered funds file N-CEN.
+
+`InvestmentAdviserTools`:
+
+- `SearchInvestmentAdvisers` — search SEC-registered investment advisers (Form ADV) by firm name; returns CRD number, main office, regulatory assets under management and employee count, largest by assets first.
+- `GetInvestmentAdviser` — full Form ADV profile for one adviser by Organization CRD number: legal and business names, SEC file number, main office, website, regulatory AUM (discretionary, non-discretionary, total), employee count, and fee structure.
+
 ### `mcp.AddFinancialFacts()` — XBRL facts
 
 `FinancialFactsTools`:
