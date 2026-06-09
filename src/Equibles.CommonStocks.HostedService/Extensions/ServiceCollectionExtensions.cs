@@ -38,6 +38,19 @@ public static class ServiceCollectionExtensions
 
         services.AddHostedService<NasdaqIrInsightScraperWorker>();
 
+        // Typed client for the Q4 Inc RSS feeds, configured the same way as the
+        // Nasdaq IR Insight client above.
+        services.AddHttpClient<Q4IncFeedClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(10);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                "EquiblesBot/1.0 (+https://equibles.com)"
+            );
+            client.MaxResponseContentBufferSize = 4 * 1024 * 1024;
+        });
+
+        services.AddHostedService<Q4IncScraperWorker>();
+
         return services;
     }
 }
