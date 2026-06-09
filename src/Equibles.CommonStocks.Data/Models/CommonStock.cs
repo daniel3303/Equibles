@@ -27,6 +27,15 @@ public class CommonStock
     [MaxLength(256)]
     public string Website { get; set; }
 
+    /// <summary>
+    /// Absolute URL of the company's investor-relations page, discovered by
+    /// probing common IR paths and subdomains of <see cref="Website"/>. Null
+    /// until discovered (or when no IR page could be validated). Foundation for
+    /// downstream IR scraping (press releases, earnings calendars, transcripts).
+    /// </summary>
+    [MaxLength(256)]
+    public string InvestorRelationsUrl { get; set; }
+
     public double MarketCapitalization { get; set; }
     public long SharesOutStanding { get; set; }
 
