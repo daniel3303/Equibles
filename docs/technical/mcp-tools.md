@@ -104,6 +104,10 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetShortInterest` — bi-monthly short-interest reports for a ticker.
 - `GetShortInterestSnapshot` — latest short-interest snapshot across tickers.
 
+`OffExchangeVolumeTools`:
+
+- `GetOffExchangeVolume` — weekly off-exchange (dark-pool / OTC) volume per ticker from FINRA OTC/ATS Transparency data: ATS volume and trade count, non-ATS OTC volume and trade count, and the ATS + non-ATS OTC total.
+
 ### `mcp.AddCftc()` — CFTC Commitments of Traders
 
 `CftcTools`:
