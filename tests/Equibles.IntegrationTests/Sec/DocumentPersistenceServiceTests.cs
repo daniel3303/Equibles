@@ -9,6 +9,7 @@ using Equibles.Media.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using NSubstitute;
@@ -97,7 +98,7 @@ public class DocumentPersistenceServiceTests : IDisposable
             .Returns(savedFile);
 
         var documentRepo = new DocumentRepository(_dbContext);
-        var sut = new DocumentPersistenceService(documentRepo, fileManager);
+        var sut = new DocumentPersistenceService(documentRepo, fileManager, Substitute.For<IBus>());
 
         var content = Encoding.UTF8.GetBytes("First line\nSecond line\nThird line");
 

@@ -49,6 +49,15 @@ public class Document
     public string AccessionNumber { get; set; }
 
     /// <summary>
+    /// Comma-joined SEC item numbers reported by this filing, e.g. <c>"2.02,9.01"</c> on an
+    /// 8-K. Lets a consumer pick out earnings-release 8-Ks (Item 2.02 "Results of Operations
+    /// and Financial Condition") without re-parsing. Null for forms that carry no items and
+    /// for legacy rows ingested before capture.
+    /// </summary>
+    [MaxLength(256)]
+    public string Items { get; set; }
+
+    /// <summary>
     /// Tracks whether the filing's raw XBRL envelope has been captured. Defaults to
     /// <see cref="XbrlCaptureStatus.NotChecked"/> so existing rows and freshly-ingested
     /// documents are picked up by the backfill until examined.

@@ -4,6 +4,7 @@ using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Models;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
+using MassTransit;
 using NSubstitute;
 using Xunit;
 
@@ -43,7 +44,11 @@ public class DocumentPersistenceServiceUpdateXbrlSurrogateFileNameTests : Parade
             });
 
         await using var ctx = Fixture.CreateDbContext();
-        var service = new DocumentPersistenceService(new DocumentRepository(ctx), fileManager);
+        var service = new DocumentPersistenceService(
+            new DocumentRepository(ctx),
+            fileManager,
+            Substitute.For<IBus>()
+        );
 
         await service.UpdateXbrl(
             new Document(),

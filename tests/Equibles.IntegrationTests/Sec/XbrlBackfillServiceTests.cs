@@ -7,6 +7,7 @@ using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -83,7 +84,8 @@ public class XbrlBackfillServiceTests : ParadeDbMcpTestBase
         var repo = new DocumentRepository(DbContext);
         var persistence = new DocumentPersistenceService(
             repo,
-            new FileManager(new FileRepository(DbContext))
+            new FileManager(new FileRepository(DbContext)),
+            Substitute.For<IBus>()
         );
         var capture = new XbrlEnvelopeCaptureService(
             Options.Create(new XbrlCaptureOptions { Enabled = true }),
@@ -197,7 +199,8 @@ public class XbrlBackfillServiceTests : ParadeDbMcpTestBase
         var repo = new DocumentRepository(DbContext);
         var persistence = new DocumentPersistenceService(
             repo,
-            new FileManager(new FileRepository(DbContext))
+            new FileManager(new FileRepository(DbContext)),
+            Substitute.For<IBus>()
         );
         // Capture disabled => every fetched submission resolves to NotChecked (the Skipped branch).
         var capture = new XbrlEnvelopeCaptureService(

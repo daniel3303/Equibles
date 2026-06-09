@@ -1039,6 +1039,12 @@ public class SecEdgarClient : ISecEdgarClient
             Description =
                 i < recent.PrimaryDocDescription.Count ? recent.PrimaryDocDescription[i] : null,
             DocumentUrl = GetDocumentUrl(cik, accessionNumber),
+            // Items is a parallel optional array — SEC populates it only for 8-Ks and omits
+            // trailing empties — so index defensively and normalise blanks to null.
+            Items =
+                i < recent.Items.Count && !string.IsNullOrWhiteSpace(recent.Items[i])
+                    ? recent.Items[i]
+                    : null,
         };
         return true;
     }

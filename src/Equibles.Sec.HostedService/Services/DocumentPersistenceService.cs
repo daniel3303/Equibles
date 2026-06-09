@@ -2,9 +2,11 @@ using System.Data;
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Media.BusinessLogic;
+using Equibles.Messaging.Contracts.Sec;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Models;
 using Equibles.Sec.Repositories;
+using MassTransit;
 
 namespace Equibles.Sec.HostedService.Services;
 
@@ -14,14 +16,17 @@ public class DocumentPersistenceService : IDocumentPersistenceService
 
     private readonly DocumentRepository _documentRepository;
     private readonly IFileManager _fileManager;
+    private readonly IBus _bus;
 
     public DocumentPersistenceService(
         DocumentRepository documentRepository,
-        IFileManager fileManager
+        IFileManager fileManager,
+        IBus bus
     )
     {
         _documentRepository = documentRepository;
         _fileManager = fileManager;
+        _bus = bus;
     }
 
     public Task<bool> Exists(
@@ -43,6 +48,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         DateOnly reportingForDate,
         string sourceUrl,
         string accessionNumber = null,
+        string items = null,
         XbrlCaptureResult xbrl = null,
         CancellationToken cancellationToken = default
     )
@@ -64,6 +70,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             ReportingForDate = reportingForDate,
             SourceUrl = sourceUrl,
             AccessionNumber = accessionNumber,
+            Items = items,
             LineCount = lineCount,
         };
 
@@ -72,6 +79,23 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         _documentRepository.Add(document);
         await _documentRepository.SaveChanges();
         await transaction.CommitAsync(cancellationToken);
+
+        // Announce the save after the insert commits — OSS has no transactional outbox, so a
+        // pre-commit publish could fire on a rolled-back insert. A consumer that misses this
+        // event (process crash between commit and publish) is reconciled by the backfill.
+        await _bus.Publish(
+            new DocumentSaved(
+                document.Id,
+                company.Id,
+                company.Ticker,
+                documentType.Value,
+                reportingDate,
+                reportingForDate,
+                accessionNumber,
+                items
+            ),
+            cancellationToken
+        );
     }
 
     public async Task UpdateXbrl(Document document, XbrlCaptureResult xbrl)

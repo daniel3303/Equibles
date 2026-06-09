@@ -4,9 +4,11 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data.Models;
+using Equibles.Messaging.Contracts.Sec;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Xunit;
@@ -81,18 +83,24 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase
             .SaveFile(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<bool>())
             .Returns(_ => Task.FromResult(savedFile));
 
-        var sut = new DocumentPersistenceService(new DocumentRepository(DbContext), fileManager);
+        var bus = Substitute.For<IBus>();
+        var sut = new DocumentPersistenceService(
+            new DocumentRepository(DbContext),
+            fileManager,
+            bus
+        );
 
         var body = "<html>line1\nline2\nline3</html>"u8.ToArray();
         await sut.Save(
             company: apple,
             content: body,
-            fileName: "AAPL-2024-10K.html",
-            documentType: DocumentType.TenK,
+            fileName: "AAPL-2024-8K.html",
+            documentType: DocumentType.EightK,
             reportingDate: new DateOnly(2024, 3, 15),
-            reportingForDate: new DateOnly(2023, 12, 31),
+            reportingForDate: new DateOnly(2024, 3, 15),
             sourceUrl: "https://example.test/filing",
-            accessionNumber: "0000320193-24-000123"
+            accessionNumber: "0000320193-24-000123",
+            items: "2.02,9.01"
         );
 
         await using var verify = Fixture.CreateDbContext();
@@ -105,10 +113,28 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase
         // SingleAsync throws; mishandle Content and ContentId stays Guid.Empty; mis-encode
         // and LineCount drifts.
         saved.ContentId.Should().Be(savedFile.Id);
-        saved.DocumentType.Should().Be(DocumentType.TenK);
+        saved.DocumentType.Should().Be(DocumentType.EightK);
         saved.ReportingDate.Should().Be(new DateOnly(2024, 3, 15));
         saved.LineCount.Should().Be(3, "the LF-split line count for 3 \\n-separated segments is 3");
         saved.SourceUrl.Should().Be("https://example.test/filing");
         saved.AccessionNumber.Should().Be("0000320193-24-000123");
+        // The item list must round-trip onto the row so a consumer can pick out Item 2.02.
+        saved.Items.Should().Be("2.02,9.01");
+
+        // Save announces the persisted document on the bus after the commit, carrying the
+        // assigned id and the metadata a consumer needs — the earnings-call linker keys off
+        // DocumentType + Items without re-querying the financial database.
+        await bus.Received(1)
+            .Publish(
+                Arg.Is<DocumentSaved>(e =>
+                    e.DocumentId == saved.Id
+                    && e.CommonStockId == apple.Id
+                    && e.Ticker == apple.Ticker
+                    && e.DocumentType == DocumentType.EightK.Value
+                    && e.AccessionNumber == "0000320193-24-000123"
+                    && e.Items == "2.02,9.01"
+                ),
+                Arg.Any<CancellationToken>()
+            );
     }
 }

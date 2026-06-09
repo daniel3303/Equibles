@@ -17,4 +17,11 @@ public class FilingData
     public string PrimaryDocument { get; set; }
     public string Description { get; set; }
     public string DocumentUrl { get; set; }
+
+    /// <summary>
+    /// Comma-joined SEC item numbers reported by this filing, e.g. <c>"2.02,9.01"</c> on
+    /// an 8-K earnings release. Null/empty for forms that don't carry items. Sourced from
+    /// the submissions feed's parallel <c>items</c> array, so it costs no extra request.
+    /// </summary>
+    public string Items { get; set; }
 }

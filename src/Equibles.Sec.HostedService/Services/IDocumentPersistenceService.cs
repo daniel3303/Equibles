@@ -22,6 +22,7 @@ public interface IDocumentPersistenceService
         DateOnly reportingForDate,
         string sourceUrl,
         string accessionNumber = null,
+        string items = null,
         XbrlCaptureResult xbrl = null,
         CancellationToken cancellationToken = default
     );
