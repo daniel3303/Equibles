@@ -52,7 +52,10 @@ public class DocumentRepository : BaseRepository<Document>
 
     public async Task<Document> GetWithContent(Guid id)
     {
-        return await GetAll().FirstOrDefaultAsync(d => d.Id == id);
+        return await GetAll()
+            .Include(d => d.Content)
+            .Include(d => d.CommonStock)
+            .FirstOrDefaultAsync(d => d.Id == id);
     }
 
     public IQueryable<Document> GetByDateRange(DateOnly? fromDate = null, DateOnly? toDate = null)
