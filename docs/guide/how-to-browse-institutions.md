@@ -10,6 +10,17 @@ This guide shows you how to search for an institutional holder (hedge fund, mutu
 
 3. Click an institution to open its profile page.
 
+## Narrow the list by filing type
+
+By default the Institutions page lists every filer regardless of how they report to the SEC. Use the **Filing type** dropdown to focus on one kind of disclosure:
+
+- **All filing types** — the default; show every filer.
+- **Form 13F** — quarterly portfolio reports from institutional managers with at least $100 million under management.
+- **Schedule 13D** — activist stakes above 5% of a company, filed by investors who intend to influence the company.
+- **Schedule 13G** — passive stakes above 5%, filed by investors who do not intend to seek control.
+
+When you pick a type, the list narrows to filers who actually filed it, and each filer's figures — position count, book value, and latest report date — reflect only that type's holdings. For example, choosing **Schedule 13D** shows a filer's activist positions rather than its broader 13F book. Switch back to **All filing types** to clear the filter.
+
 ## Explore the portfolio
 
 The institution profile shows:
