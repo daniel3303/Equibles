@@ -8,6 +8,7 @@ public class FinraModuleConfiguration : Equibles.Data.IFinancialModule
     public void ConfigureEntities(ModelBuilder builder)
     {
         builder.Entity<DailyShortVolume>();
+        builder.Entity<OffExchangeVolume>();
         builder.Entity<ShortInterest>();
     }
 }
