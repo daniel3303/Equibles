@@ -8,7 +8,9 @@ using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Models;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
 using Xunit;
 using File = Equibles.Media.Data.Models.File;
 
@@ -49,7 +51,11 @@ public class DocumentPersistenceServiceXbrlTests : ParadeDbMcpTestBase
     }
 
     private DocumentPersistenceService BuildSut() =>
-        new(new DocumentRepository(DbContext), new FileManager(new FileRepository(DbContext)));
+        new(
+            new DocumentRepository(DbContext),
+            new FileManager(new FileRepository(DbContext)),
+            Substitute.For<IBus>()
+        );
 
     [Fact]
     public async Task Save_WithCapturedInlineXbrl_StoresGzipFileAndRecordsXbrlFields()

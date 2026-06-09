@@ -53,4 +53,37 @@ public class SecEdgarClientMapToFilingDataTests
 
         result[1].Form.Should().Be("8-K");
     }
+
+    // Items is the parallel column the earnings-call linker reads to spot Item 2.02
+    // earnings-release 8-Ks. SEC populates it only for 8-Ks and routinely drops the
+    // trailing empties, so the mapper must index defensively and normalise a blank
+    // (the 10-K row) to null while preserving the 8-K's comma-joined item list.
+    [Fact]
+    public void MapToFilingData_ItemsColumn_MapsEightKItemsAndNullsBlanks()
+    {
+        var asm = typeof(SecEdgarClient).Assembly;
+        var recentType = asm.GetType("Equibles.Integrations.Sec.Models.Responses.RecentFilings")!;
+        var recent = Activator.CreateInstance(recentType)!;
+
+        void Set(string prop, List<string> values) =>
+            recentType.GetProperty(prop)!.SetValue(recent, values);
+
+        Set("AccessionNumber", ["0000320193-24-000010", "0000320193-24-000020"]);
+        Set("FilingDate", ["2024-02-01", "2024-03-15"]);
+        Set("ReportDate", ["2023-12-30", "2024-01-31"]);
+        Set("Form", ["10-K", "8-K"]);
+        Set("PrimaryDocument", ["aapl-20231230.htm", "ex991.htm"]);
+        Set("PrimaryDocDescription", ["Annual report", "Press release"]);
+        Set("Items", ["", "2.02,9.01"]);
+
+        var map = typeof(SecEdgarClient).GetMethod(
+            "MapToFilingData",
+            BindingFlags.NonPublic | BindingFlags.Static
+        )!;
+
+        var result = (List<FilingData>)map.Invoke(null, [recent, "320193"])!;
+
+        result[0].Items.Should().BeNull("a blank items cell maps to null");
+        result[1].Items.Should().Be("2.02,9.01");
+    }
 }

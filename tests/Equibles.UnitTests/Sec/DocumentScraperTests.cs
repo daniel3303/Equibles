@@ -80,6 +80,7 @@ public class DocumentScraperTests
                 default,
                 default,
                 default,
+                default,
                 default
             );
     }
@@ -151,6 +152,7 @@ public class DocumentScraperTests
                 ReportDateAlpha,
                 "https://sec.gov/acme-10k.htm",
                 "0000123456-25-000001",
+                Arg.Any<string>(),
                 Arg.Any<XbrlCaptureResult>(),
                 Arg.Any<CancellationToken>()
             );
@@ -205,6 +207,7 @@ public class DocumentScraperTests
         await harness
             .Persistence.DidNotReceiveWithAnyArgs()
             .Save(
+                default,
                 default,
                 default,
                 default,
@@ -280,6 +283,7 @@ public class DocumentScraperTests
                 Arg.Any<DateOnly>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
+                Arg.Any<string>(),
                 Arg.Any<XbrlCaptureResult>(),
                 Arg.Any<CancellationToken>()
             );
@@ -294,6 +298,7 @@ public class DocumentScraperTests
                 Arg.Any<DateOnly>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
+                Arg.Any<string>(),
                 Arg.Any<XbrlCaptureResult>(),
                 Arg.Any<CancellationToken>()
             );
@@ -306,6 +311,7 @@ public class DocumentScraperTests
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
+                Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<XbrlCaptureResult>(),
@@ -338,6 +344,7 @@ public class DocumentScraperTests
         await harness
             .Persistence.DidNotReceiveWithAnyArgs()
             .Save(
+                default,
                 default,
                 default,
                 default,
