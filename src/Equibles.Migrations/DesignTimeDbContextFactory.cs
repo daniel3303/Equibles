@@ -8,6 +8,7 @@ using Equibles.Finra.Data;
 using Equibles.Fred.Data;
 using Equibles.Holdings.Data;
 using Equibles.InsiderTrading.Data;
+using Equibles.InvestorRelations.Data;
 using Equibles.Media.Data;
 using Equibles.ParadeDB.EntityFrameworkCore;
 using Equibles.Sec.Data;
@@ -57,6 +58,7 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<EquiblesFi
             new YahooModuleConfiguration(),
             new CftcModuleConfiguration(),
             new CboeModuleConfiguration(),
+            new InvestorRelationsModuleConfiguration(),
             new SecModuleConfiguration(),
             new FinancialFactsModuleConfiguration(),
             new MediaModuleConfiguration(),
