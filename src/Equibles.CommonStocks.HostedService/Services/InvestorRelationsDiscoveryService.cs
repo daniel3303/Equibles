@@ -59,7 +59,7 @@ public class InvestorRelationsDiscoveryService : IImporter
 
             try
             {
-                var url = await _probeClient.Discover(
+                var result = await _probeClient.Discover(
                     candidate.Website,
                     _options.CandidatePaths,
                     _options.CandidateSubdomains,
@@ -68,16 +68,17 @@ public class InvestorRelationsDiscoveryService : IImporter
                 // No IR page found this cycle. The stock stays null and is re-probed
                 // next cycle. TODO(#581 follow-up): record a last-attempted timestamp
                 // so persistent misses aren't re-probed every cycle.
-                if (url == null)
+                if (result == null)
                     continue;
 
-                if (await Persist(candidate.Id, url))
+                if (await Persist(candidate.Id, result))
                 {
                     discovered++;
                     _logger.LogDebug(
-                        "Discovered investor relations page for {Ticker}: {Url}",
+                        "Discovered investor relations page for {Ticker}: {Url} ({Platform})",
                         candidate.Ticker,
-                        url
+                        result.Url,
+                        result.Platform
                     );
                 }
             }
@@ -127,7 +128,7 @@ public class InvestorRelationsDiscoveryService : IImporter
         return rows.Select(r => new CandidateStock(r.Id, r.Ticker, r.Website)).ToList();
     }
 
-    private async Task<bool> Persist(Guid commonStockId, string investorRelationsUrl)
+    private async Task<bool> Persist(Guid commonStockId, IrDiscoveryResult result)
     {
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
@@ -138,7 +139,8 @@ public class InvestorRelationsDiscoveryService : IImporter
         if (stock == null || stock.InvestorRelationsUrl != null)
             return false;
 
-        stock.InvestorRelationsUrl = investorRelationsUrl;
+        stock.InvestorRelationsUrl = result.Url;
+        stock.IrPlatformType = result.Platform;
         await repo.SaveChanges();
         return true;
     }

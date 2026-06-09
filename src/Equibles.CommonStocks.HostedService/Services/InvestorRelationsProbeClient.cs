@@ -32,10 +32,11 @@ public class InvestorRelationsProbeClient
     }
 
     /// <summary>
-    /// Returns the validated investor-relations URL for <paramref name="website"/>,
-    /// or null when no candidate resolves to a recognisable IR page.
+    /// Returns the validated investor-relations URL for <paramref name="website"/>
+    /// together with the platform classified from its page, or null when no
+    /// candidate resolves to a recognisable IR page.
     /// </summary>
-    public async Task<string> Discover(
+    public async Task<IrDiscoveryResult> Discover(
         string website,
         IEnumerable<string> paths,
         IEnumerable<string> subdomains,
@@ -56,7 +57,10 @@ public class InvestorRelationsProbeClient
         return null;
     }
 
-    private async Task<string> TryResolve(string url, CancellationToken cancellationToken)
+    private async Task<IrDiscoveryResult> TryResolve(
+        string url,
+        CancellationToken cancellationToken
+    )
     {
         try
         {
@@ -81,7 +85,12 @@ public class InvestorRelationsProbeClient
             var finalUrl = response.RequestMessage?.RequestUri?.ToString() ?? url;
             if (finalUrl.Length > MaxUrlLength)
                 finalUrl = url;
-            return finalUrl.Length > MaxUrlLength ? null : finalUrl;
+            if (finalUrl.Length > MaxUrlLength)
+                return null;
+
+            // Classify the platform from the page we already fetched — no second request.
+            var platform = IrPlatformClassifier.Classify(html);
+            return new IrDiscoveryResult(finalUrl, platform);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

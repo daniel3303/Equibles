@@ -48,7 +48,7 @@ public class InvestorRelationsProbeClientTests
 
         var result = await client.Discover("https://acme.com", ["ir"], [], CancellationToken.None);
 
-        result.Should().Be("https://acme.com/ir");
-        result!.Length.Should().BeLessThanOrEqualTo(256);
+        result!.Url.Should().Be("https://acme.com/ir");
+        result.Url.Length.Should().BeLessThanOrEqualTo(256);
     }
 }
