@@ -113,6 +113,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetStochasticOscillator` — Stochastic Oscillator (%K and %D) for a ticker over a date range.
 - `GetAverageTrueRange` — Wilder's Average True Range (ATR) volatility measure for a ticker over a date range.
 - `GetOnBalanceVolume` — On-Balance Volume (OBV) cumulative-flow indicator for a ticker over a date range.
+- `GetBollingerBands` — Bollinger Bands for a ticker over a date range: a middle SMA of close with upper and lower bands set a number of standard deviations above and below it; bands widen as volatility rises.
 
 ### `mcp.AddShortData()` — FINRA + SEC FTD
 
