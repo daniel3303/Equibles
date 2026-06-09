@@ -1,7 +1,3 @@
-using System.Globalization;
-using System.Xml.Linq;
-using Equibles.CommonStocks.Data.Models;
-
 namespace Equibles.CommonStocks.HostedService.Services;
 
 /// <summary>
@@ -13,24 +9,21 @@ namespace Equibles.CommonStocks.HostedService.Services;
 /// </summary>
 public static class NasdaqIrInsightFeedParser
 {
-    // Column ceilings on IrNewsItem / IrEvent. Defensive truncation so an unusually
-    // long source value can't fail the insert.
-    private const int MaxTitle = 512;
-    private const int MaxUrl = 1024;
-    private const int MaxSummary = 4000;
-
     public static IReadOnlyList<ParsedIrNewsItem> ParseNews(string xml)
     {
         var items = new List<ParsedIrNewsItem>();
-        foreach (var item in Items(xml))
+        foreach (var item in IrRssFeed.Items(xml))
         {
-            var title = Trim(Value(item, "title"), MaxTitle);
-            var url = Trim(Value(item, "link"), MaxUrl);
-            var published = ParseDate(Value(item, "pubDate"));
+            var title = IrRssFeed.Trim(IrRssFeed.Value(item, "title"), IrRssFeed.MaxTitle);
+            var url = IrRssFeed.Trim(IrRssFeed.Value(item, "link"), IrRssFeed.MaxUrl);
+            var published = IrRssFeed.ParseDate(IrRssFeed.Value(item, "pubDate"));
             if (title == null || url == null || published == null)
                 continue;
 
-            var summary = Trim(Value(item, "description"), MaxSummary);
+            var summary = IrRssFeed.Trim(
+                IrRssFeed.Value(item, "description"),
+                IrRssFeed.MaxSummary
+            );
             items.Add(new ParsedIrNewsItem(title, url, summary, published.Value));
         }
 
@@ -40,43 +33,21 @@ public static class NasdaqIrInsightFeedParser
     public static IReadOnlyList<ParsedIrEvent> ParseEvents(string xml)
     {
         var events = new List<ParsedIrEvent>();
-        foreach (var item in Items(xml))
+        foreach (var item in IrRssFeed.Items(xml))
         {
-            var rawTitle = Value(item, "title");
-            var url = Trim(Value(item, "link"), MaxUrl);
-            var start = ParseDate(Value(item, "pubDate"));
-            var title = Trim(CleanEventTitle(rawTitle), MaxTitle);
+            var rawTitle = IrRssFeed.Value(item, "title");
+            var url = IrRssFeed.Trim(IrRssFeed.Value(item, "link"), IrRssFeed.MaxUrl);
+            var start = IrRssFeed.ParseDate(IrRssFeed.Value(item, "pubDate"));
+            var title = IrRssFeed.Trim(CleanEventTitle(rawTitle), IrRssFeed.MaxTitle);
             if (title == null || url == null || start == null)
                 continue;
 
-            events.Add(new ParsedIrEvent(title, url, start.Value, ClassifyEventType(title)));
+            events.Add(
+                new ParsedIrEvent(title, url, start.Value, IrEventClassifier.Classify(title))
+            );
         }
 
         return events;
-    }
-
-    private static IEnumerable<XElement> Items(string xml)
-    {
-        if (string.IsNullOrWhiteSpace(xml))
-            return [];
-
-        XDocument document;
-        try
-        {
-            document = XDocument.Parse(xml);
-        }
-        catch (System.Xml.XmlException)
-        {
-            return [];
-        }
-
-        return document.Descendants("item");
-    }
-
-    private static string Value(XElement item, string name)
-    {
-        var text = item.Element(name)?.Value;
-        return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
     }
 
     // Event titles arrive prefixed with the date, e.g.
@@ -92,51 +63,5 @@ public static class NasdaqIrInsightFeedParser
         var label = separator >= 0 ? rawTitle[(separator + 3)..] : rawTitle;
         label = label.Trim();
         return label.Length == 0 ? null : label;
-    }
-
-    // Maps the event's own label to a normalised kind. Unknown when no label
-    // matches — never a guess. (See IrEventType.)
-    private static IrEventType ClassifyEventType(string title)
-    {
-        var t = title.ToLowerInvariant();
-        if (t.Contains("earnings"))
-            return IrEventType.EarningsCall;
-        if (t.Contains("annual meeting") || t.Contains("shareholder") || t.Contains("stockholder"))
-            return IrEventType.ShareholderMeeting;
-        if (t.Contains("conference"))
-            return IrEventType.Conference;
-        if (t.Contains("investor day") || t.Contains("analyst day") || t.Contains("presentation"))
-            return IrEventType.Presentation;
-        if (t.Contains("webcast"))
-            return IrEventType.Webcast;
-        return IrEventType.Unknown;
-    }
-
-    private static DateTime? ParseDate(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-
-        if (
-            DateTimeOffset.TryParse(
-                value,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                out var parsed
-            )
-        )
-        {
-            return parsed.UtcDateTime;
-        }
-
-        return null;
-    }
-
-    private static string Trim(string value, int max)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-        value = value.Trim();
-        return value.Length <= max ? value : value[..max];
     }
 }
