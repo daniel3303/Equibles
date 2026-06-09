@@ -417,6 +417,10 @@ public class McpModuleToolDiscoveryTests
                 new[] { "GetCongressionalTrades", "GetMemberTrades", "SearchCongressMembers" }
             },
             {
+                // ShortDataTools is the marker for the whole Equibles.Finra.Mcp
+                // assembly scan, so this set must list every [McpServerTool] in
+                // that assembly — including GetOffExchangeVolume on the sibling
+                // OffExchangeVolumeTools class.
                 typeof(ShortDataTools),
                 new[]
                 {
@@ -424,6 +428,7 @@ public class McpModuleToolDiscoveryTests
                     "GetShortInterest",
                     "GetShortInterestSnapshot",
                     "GetLargestShortVolume",
+                    "GetOffExchangeVolume",
                 }
             },
             {
