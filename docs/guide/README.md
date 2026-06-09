@@ -29,6 +29,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Change the log level for troubleshooting](how-to-change-log-level.md)
 - [Browse institutional portfolios and run a backtest](how-to-browse-institutions.md)
 - [Browse investment advisers (SEC Form ADV)](how-to-browse-investment-advisers.md)
+- [View a fund's portfolio holdings (SEC Form N-PORT)](how-to-view-fund-holdings.md)
 - [Use the 13F holdings screener](how-to-use-holdings-screener.md)
 - [View quarterly holdings activity across the market](how-to-view-holdings-activity.md)
 - [View the latest 13F filings](how-to-view-latest-13f-filings.md)
