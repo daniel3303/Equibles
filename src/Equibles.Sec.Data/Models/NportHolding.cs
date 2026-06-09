@@ -12,6 +12,7 @@ namespace Equibles.Sec.Data.Models;
 /// "DE" derivative; issuer "CORP" corporate, "RF" registered fund).
 /// </summary>
 [Index(nameof(NportFilingId))]
+[Index(nameof(Cusip))]
 public class NportHolding
 {
     [DatabaseGenerated(DatabaseGeneratedOption.None)]

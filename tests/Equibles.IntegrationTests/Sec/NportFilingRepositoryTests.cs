@@ -187,4 +187,86 @@ public class NportFilingRepositoryTests : IDisposable
                 h.Name == "AT&T Inc" && h.Cusip == "00206R102" && h.AssetCategory == "EC"
             );
     }
+
+    [Fact]
+    public async Task GetLatestPerSeries_ReturnsTheNewestReportPerSeries()
+    {
+        var stock = CreateStock();
+        _dbContext.Set<CommonStock>().Add(stock);
+        await _dbContext.SaveChangesAsync();
+
+        var older = CreateFiling(stock.Id, "0000036405-24-000001", new DateOnly(2024, 11, 20));
+        older.ReportPeriodDate = new DateOnly(2024, 10, 31);
+        var newest = CreateFiling(stock.Id, "0000036405-25-000002", new DateOnly(2025, 1, 15));
+        newest.ReportPeriodDate = new DateOnly(2024, 12, 31);
+        var otherSeries = CreateFiling(
+            stock.Id,
+            "0000036405-25-000003",
+            new DateOnly(2025, 1, 15),
+            "Vanguard Growth Index Fund"
+        );
+        otherSeries.ReportPeriodDate = new DateOnly(2024, 12, 31);
+        var belowFloor = CreateFiling(
+            stock.Id,
+            "0000036405-23-000004",
+            new DateOnly(2023, 1, 15),
+            "Vanguard Stale Fund"
+        );
+        belowFloor.ReportPeriodDate = new DateOnly(2022, 12, 31);
+        _repository.Add(older);
+        _repository.Add(newest);
+        _repository.Add(otherSeries);
+        _repository.Add(belowFloor);
+        await _repository.SaveChanges();
+
+        var result = await _repository.GetLatestPerSeries(new DateOnly(2024, 1, 1)).ToListAsync();
+
+        result.Should().HaveCount(2);
+        result.Select(f => f.Id).Should().BeEquivalentTo([newest.Id, otherSeries.Id]);
+    }
+
+    [Fact]
+    public async Task GetHoldingsByCusip_ReturnsOnlyRowsCarryingThatCusip()
+    {
+        var stock = CreateStock();
+        _dbContext.Set<CommonStock>().Add(stock);
+        await _dbContext.SaveChangesAsync();
+        var filing = CreateFiling(stock.Id);
+        filing.Holdings.Add(
+            new NportHolding
+            {
+                Name = "APPLE INC",
+                Cusip = "037833100",
+                Balance = 100m,
+                Units = "NS",
+                Currency = "USD",
+                ValueUsd = 25_000m,
+                PercentValue = 2.17m,
+                PayoffProfile = "Long",
+                AssetCategory = "EC",
+                IssuerCategory = "CORP",
+            }
+        );
+        filing.Holdings.Add(
+            new NportHolding
+            {
+                Name = "MICROSOFT CORP",
+                Cusip = "594918104",
+                Balance = 50m,
+                Units = "NS",
+                Currency = "USD",
+                ValueUsd = 21_000m,
+                PercentValue = 1.83m,
+                PayoffProfile = "Long",
+                AssetCategory = "EC",
+                IssuerCategory = "CORP",
+            }
+        );
+        _repository.Add(filing);
+        await _repository.SaveChanges();
+
+        var result = await _repository.GetHoldingsByCusip("037833100").ToListAsync();
+
+        result.Should().ContainSingle().Which.Name.Should().Be("APPLE INC");
+    }
 }
