@@ -25,6 +25,7 @@ public sealed class ErrorSource
     public static readonly ErrorSource InvestorRelationsDiscovery = new(
         "InvestorRelationsDiscovery"
     );
+    public static readonly ErrorSource InvestorRelationsScraper = new("InvestorRelationsScraper");
     public static readonly ErrorSource Other = new("Other");
 
     public static IEnumerable<ErrorSource> GetAll() =>
@@ -46,6 +47,7 @@ public sealed class ErrorSource
             InsiderTradingReprocess,
             NportReprocess,
             InvestorRelationsDiscovery,
+            InvestorRelationsScraper,
             Other,
         ];
 
