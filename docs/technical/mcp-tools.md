@@ -41,6 +41,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetInsiderTransactions` — recent transactions for a ticker, filterable by transaction code.
 - `GetInsiderOwnership` — current insider ownership summary for a ticker.
 - `SearchInsiders` — search insiders by name / company / role.
+- `GetProposedSales` — recent proposed insider sales for a ticker from SEC Form 144 notices: seller, relationship to the company, shares and aggregate market value to be sold, approximate sale date, and broker.
 
 ### `mcp.AddSec()` — SEC filings
 
