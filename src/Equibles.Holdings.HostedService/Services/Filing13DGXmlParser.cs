@@ -183,15 +183,26 @@ public class Filing13DGXmlParser
     /// 13D as plain integers; both may carry thousands separators. Parsed as a
     /// decimal and truncated to whole shares.
     /// </summary>
-    private static long ParseShares(string raw) =>
-        decimal.TryParse(
-            raw?.Replace(",", string.Empty),
-            NumberStyles.Number,
-            CultureInfo.InvariantCulture,
-            out var value
+    private static long ParseShares(string raw)
+    {
+        if (
+            !decimal.TryParse(
+                raw?.Replace(",", string.Empty),
+                NumberStyles.Number,
+                CultureInfo.InvariantCulture,
+                out var value
+            )
         )
-            ? (long)value
-            : 0;
+            return 0;
+
+        // The decimal->long cast is range-checked and throws on values above
+        // long.MaxValue (a corrupted or concatenated share count); degrade to 0
+        // like every other field rather than crash the whole filing parse.
+        if (value < long.MinValue || value > long.MaxValue)
+            return 0;
+
+        return (long)value;
+    }
 
     private static decimal? ParsePercent(string raw) =>
         decimal.TryParse(

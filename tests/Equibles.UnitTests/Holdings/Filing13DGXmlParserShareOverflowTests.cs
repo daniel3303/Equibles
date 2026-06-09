@@ -35,7 +35,7 @@ public class Filing13DGXmlParserShareOverflowTests
             </edgarSubmission>
             """;
 
-    [Fact(Skip = "GH-3578 — ParseShares throws OverflowException on share counts above long.MaxValue instead of degrading to 0")]
+    [Fact]
     public void ParseFiling_ShareCountAboveInt64Max_DegradesToZeroRatherThanThrowing()
     {
         var xml = MinimalFilingWithSoleVotingPower(OverflowingShareCount);
