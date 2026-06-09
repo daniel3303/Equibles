@@ -13,4 +13,5 @@ public interface IFinraClient
     );
     Task<List<DateOnly>> GetShortInterestSettlementDates();
     Task<List<DateOnly>> GetShortInterestSettlementDatesAfter(DateOnly afterDate);
+    Task<List<OffExchangeWeeklyRecord>> GetWeeklyOffExchangeVolume(DateOnly weekStartDate);
 }

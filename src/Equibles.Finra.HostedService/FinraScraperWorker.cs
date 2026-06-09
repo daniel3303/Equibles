@@ -54,5 +54,13 @@ public class FinraScraperWorker : BaseScraperWorker
                 scope.ServiceProvider.GetRequiredService<ShortInterestImportService>();
             await shortInterestService.Import(stoppingToken);
         }
+
+        Logger.LogInformation("Starting off-exchange volume import");
+        await using (var scope = ScopeFactory.CreateAsyncScope())
+        {
+            var offExchangeService =
+                scope.ServiceProvider.GetRequiredService<OffExchangeVolumeImportService>();
+            await offExchangeService.Import(stoppingToken);
+        }
     }
 }

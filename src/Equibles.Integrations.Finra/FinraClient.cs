@@ -30,6 +30,19 @@ public class FinraClient : IFinraClient
     // FINRA API dataset group for OTC market data (short volume and short interest).
     private const string OtcMarketGroup = "OTCMarket";
 
+    // FINRA API dataset group for the OTC/ATS Transparency weekly summary feed.
+    // Note this is distinct from OtcMarketGroup ("OTCMarket"): the weekly dataset
+    // lives under the lower-cased "otcMarket" group.
+    private const string OtcMarketWeeklyGroup = "otcMarket";
+
+    // FINRA weekly OTC/ATS Transparency dataset field name; the Monday partition key.
+    private const string WeekStartDateField = "weekStartDate";
+
+    // summaryTypeCode values for per-security weekly aggregates:
+    //   ATS_W_SMBL → ATS (dark-pool) volume aggregated by symbol
+    //   OTC_W_SMBL → non-ATS OTC volume aggregated by symbol
+    private static readonly string[] OffExchangeSummaryTypeCodes = ["ATS_W_SMBL", "OTC_W_SMBL"];
+
     private static readonly string[] ShortInterestFields =
     [
         SettlementDateField,
@@ -222,6 +235,55 @@ public class FinraClient : IFinraClient
             afterDate
         );
         return dates.OrderBy(d => d).ToList();
+    }
+
+    public async Task<List<OffExchangeWeeklyRecord>> GetWeeklyOffExchangeVolume(
+        DateOnly weekStartDate
+    )
+    {
+        var dateStr = FormatDate(weekStartDate);
+        _logger.LogDebug("Fetching weekly off-exchange volume for week starting {Date}", dateStr);
+
+        var results = new List<OffExchangeWeeklyRecord>();
+        await PaginateQuery<OffExchangeWeeklyRecord>(
+            OtcMarketWeeklyGroup,
+            "weeklySummary",
+            offset => new
+            {
+                fields = new[]
+                {
+                    "issueSymbolIdentifier",
+                    WeekStartDateField,
+                    "totalWeeklyShareQuantity",
+                    "totalWeeklyTradeCount",
+                    "tierIdentifier",
+                    "summaryTypeCode",
+                },
+                dateRangeFilters = new[]
+                {
+                    new
+                    {
+                        fieldName = WeekStartDateField,
+                        startDate = dateStr,
+                        endDate = dateStr,
+                    },
+                },
+                domainFilters = new[]
+                {
+                    new { fieldName = "summaryTypeCode", values = OffExchangeSummaryTypeCodes },
+                },
+                limit = MaxPageSize,
+                offset,
+            },
+            results.AddRange
+        );
+
+        _logger.LogDebug(
+            "Fetched {Count} weekly off-exchange volume records for week starting {Date}",
+            results.Count,
+            dateStr
+        );
+        return results;
     }
 
     private async Task<HashSet<DateOnly>> CollectSettlementDates(Func<int, object> buildQuery)
