@@ -1,0 +1,147 @@
+using Equibles.CommonStocks.HostedService.Configuration;
+using Equibles.CommonStocks.Repositories;
+using Equibles.Core.AutoWiring;
+using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.Data.Models;
+using Equibles.Worker;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+namespace Equibles.CommonStocks.HostedService.Services;
+
+/// <summary>
+/// Fills in <c>CommonStock.InvestorRelationsUrl</c> for stocks that have a known
+/// website but no discovered IR page yet, one bounded batch per cycle.
+/// </summary>
+[Service]
+public class InvestorRelationsDiscoveryService : IImporter
+{
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly InvestorRelationsProbeClient _probeClient;
+    private readonly ErrorReporter _errorReporter;
+    private readonly ILogger<InvestorRelationsDiscoveryService> _logger;
+    private readonly InvestorRelationsDiscoveryOptions _options;
+
+    public InvestorRelationsDiscoveryService(
+        IServiceScopeFactory scopeFactory,
+        InvestorRelationsProbeClient probeClient,
+        ErrorReporter errorReporter,
+        ILogger<InvestorRelationsDiscoveryService> logger,
+        IOptions<InvestorRelationsDiscoveryOptions> options
+    )
+    {
+        _scopeFactory = scopeFactory;
+        _probeClient = probeClient;
+        _errorReporter = errorReporter;
+        _logger = logger;
+        _options = options.Value;
+    }
+
+    public async Task Import(CancellationToken cancellationToken)
+    {
+        var batch = await LoadCandidates(cancellationToken);
+        if (batch.Count == 0)
+        {
+            _logger.LogInformation(
+                "Investor relations discovery: no stocks with a website pending discovery"
+            );
+            return;
+        }
+
+        _logger.LogInformation("Investor relations discovery: probing {Count} stocks", batch.Count);
+
+        var discovered = 0;
+        foreach (var candidate in batch)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                var url = await _probeClient.Discover(
+                    candidate.Website,
+                    _options.CandidatePaths,
+                    _options.CandidateSubdomains,
+                    cancellationToken
+                );
+                // No IR page found this cycle. The stock stays null and is re-probed
+                // next cycle. TODO(#581 follow-up): record a last-attempted timestamp
+                // so persistent misses aren't re-probed every cycle.
+                if (url == null)
+                    continue;
+
+                if (await Persist(candidate.Id, url))
+                {
+                    discovered++;
+                    _logger.LogDebug(
+                        "Discovered investor relations page for {Ticker}: {Url}",
+                        candidate.Ticker,
+                        url
+                    );
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Error discovering investor relations page for {Ticker}",
+                    candidate.Ticker
+                );
+                await _errorReporter.Report(
+                    ErrorSource.InvestorRelationsDiscovery,
+                    $"Discover({candidate.Ticker})",
+                    ex.Message,
+                    ex.StackTrace
+                );
+            }
+        }
+
+        _logger.LogInformation(
+            "Investor relations discovery complete. Discovered {Count} new IR pages",
+            discovered
+        );
+    }
+
+    private async Task<List<CandidateStock>> LoadCandidates(CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+
+        var rows = await repo.GetAll()
+            .Where(s => s.Website != null && s.Website != "" && s.InvestorRelationsUrl == null)
+            .OrderBy(s => s.Ticker)
+            .Take(_options.BatchSize)
+            .Select(s => new
+            {
+                s.Id,
+                s.Ticker,
+                s.Website,
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(r => new CandidateStock(r.Id, r.Ticker, r.Website)).ToList();
+    }
+
+    private async Task<bool> Persist(Guid commonStockId, string investorRelationsUrl)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+
+        var stock = await repo.Get(commonStockId);
+        // The stock may have been deleted, or filled in by an overlapping run,
+        // between loading the batch and persisting — leave an existing value alone.
+        if (stock == null || stock.InvestorRelationsUrl != null)
+            return false;
+
+        stock.InvestorRelationsUrl = investorRelationsUrl;
+        await repo.SaveChanges();
+        return true;
+    }
+
+    private sealed record CandidateStock(Guid Id, string Ticker, string Website);
+}
