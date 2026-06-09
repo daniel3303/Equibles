@@ -44,6 +44,14 @@ public class CommonStock
     /// </summary>
     public IrPlatformType IrPlatformType { get; set; }
 
+    /// <summary>
+    /// When IR discovery last probed this stock's website (UTC), stamped on every
+    /// definitive outcome — an IR page found, or every candidate validated as a miss.
+    /// Null until first probed. Stocks probed within the configured cooldown are
+    /// skipped, so persistent misses back off instead of being re-probed every cycle.
+    /// </summary>
+    public DateTime? InvestorRelationsCheckedAt { get; set; }
+
     public double MarketCapitalization { get; set; }
     public long SharesOutStanding { get; set; }
 
