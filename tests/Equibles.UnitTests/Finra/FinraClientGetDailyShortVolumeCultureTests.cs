@@ -15,7 +15,7 @@ namespace Equibles.UnitTests.Finra;
 public class FinraClientGetDailyShortVolumeCultureTests
 {
     [Fact]
-    public async Task GetDailyShortVolume_HijriCultureThread_SendsGregorianDateInRequest()
+    public void GetDailyShortVolume_HijriCultureThread_SendsGregorianDateInRequest()
     {
         string capturedBody = null;
         var handler = new CaptureBodyHandler(body =>
@@ -30,16 +30,20 @@ public class FinraClientGetDailyShortVolumeCultureTests
             options
         );
 
-        var prev = CultureInfo.CurrentCulture;
-        try
+        // Run the culture-sensitive call on a dedicated thread that owns and
+        // restores its own culture. The original form set CurrentCulture on the
+        // xUnit thread-pool thread, then awaited: the await continuation could
+        // resume on a different thread, so the finally restored the culture on the
+        // continuation thread while the original pooled thread stayed ar-SA. A
+        // sibling Finra test reusing that pooled thread then inherited Hijri
+        // formatting and failed intermittently. A dedicated thread removes the race.
+        var worker = new Thread(() =>
         {
             CultureInfo.CurrentCulture = new CultureInfo("ar-SA");
-            await sut.GetDailyShortVolume(new DateOnly(2024, 3, 15));
-        }
-        finally
-        {
-            CultureInfo.CurrentCulture = prev;
-        }
+            sut.GetDailyShortVolume(new DateOnly(2024, 3, 15)).GetAwaiter().GetResult();
+        });
+        worker.Start();
+        worker.Join();
 
         capturedBody.Should().Contain("2024-03-15", "date filter must be Gregorian, not Hijri");
     }
@@ -47,7 +51,6 @@ public class FinraClientGetDailyShortVolumeCultureTests
     private class CaptureBodyHandler : HttpMessageHandler
     {
         private readonly Func<string, HttpResponseMessage> _onData;
-        private bool _tokenReturned;
 
         public CaptureBodyHandler(Func<string, HttpResponseMessage> onData) => _onData = onData;
 
@@ -56,9 +59,15 @@ public class FinraClientGetDailyShortVolumeCultureTests
             CancellationToken cancellationToken
         )
         {
-            if (!_tokenReturned || request.RequestUri!.AbsoluteUri.Contains("oauth2/access_token"))
+            // Route purely by URL, not by call order. FinraClient caches the OAuth
+            // token in static fields shared across the whole test process, so a
+            // parallel test can warm the cache and make this client skip the token
+            // request entirely — the data POST then arrives first. An order-based
+            // ("first request is the token") handler would answer that data POST
+            // with the token object, which fails to deserialize into a record list
+            // and crashes the test host. URL-based routing is order-independent.
+            if (request.RequestUri!.AbsoluteUri.Contains("oauth2/access_token"))
             {
-                _tokenReturned = true;
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent("{\"access_token\":\"test\",\"expires_in\":3600}"),
