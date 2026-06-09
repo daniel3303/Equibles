@@ -24,4 +24,12 @@ public class InvestorRelationsDiscoveryOptions : ScraperOptions
     /// <c>https://ir.acme.com</c>). Tried after the path candidates.
     /// </summary>
     public List<string> CandidateSubdomains { get; set; } = ["ir", "investors", "investor"];
+
+    /// <summary>
+    /// Days to wait before re-probing a stock whose last discovery attempt found no
+    /// IR page. Definitive misses are stamped on the stock, so persistent misses back
+    /// off for this window; transient probe errors are not stamped and retry on the
+    /// next cycle.
+    /// </summary>
+    public int ProbeCooldownDays { get; set; } = 30;
 }

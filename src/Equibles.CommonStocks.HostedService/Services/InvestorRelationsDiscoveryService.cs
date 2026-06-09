@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.HostedService.Configuration;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
@@ -65,11 +67,15 @@ public class InvestorRelationsDiscoveryService : IImporter
                     _options.CandidateSubdomains,
                     cancellationToken
                 );
-                // No IR page found this cycle. The stock stays null and is re-probed
-                // next cycle. TODO(#581 follow-up): record a last-attempted timestamp
-                // so persistent misses aren't re-probed every cycle.
+                // Definitive miss — every candidate was probed and none validated. Stamp
+                // the attempt so the stock backs off for the cooldown window instead of
+                // re-occupying a batch slot (and starving the rest of the universe) every
+                // cycle. Transient errors below deliberately skip the stamp.
                 if (result == null)
+                {
+                    await MarkChecked(candidate.Id);
                     continue;
+                }
 
                 if (await Persist(candidate.Id, result))
                 {
@@ -113,8 +119,9 @@ public class InvestorRelationsDiscoveryService : IImporter
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
 
+        var cutoff = DateTime.UtcNow.AddDays(-_options.ProbeCooldownDays);
         var rows = await repo.GetAll()
-            .Where(s => s.Website != null && s.Website != "" && s.InvestorRelationsUrl == null)
+            .Where(PendingDiscovery(cutoff))
             .OrderBy(s => s.Ticker)
             .Take(_options.BatchSize)
             .Select(s => new
@@ -141,8 +148,36 @@ public class InvestorRelationsDiscoveryService : IImporter
 
         stock.InvestorRelationsUrl = result.Url;
         stock.IrPlatformType = result.Platform;
+        stock.InvestorRelationsCheckedAt = DateTime.UtcNow;
         await repo.SaveChanges();
         return true;
+    }
+
+    private async Task MarkChecked(Guid commonStockId)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+
+        var stock = await repo.Get(commonStockId);
+        if (stock == null)
+            return;
+
+        stock.InvestorRelationsCheckedAt = DateTime.UtcNow;
+        await repo.SaveChanges();
+    }
+
+    /// <summary>
+    /// Stocks eligible for an IR discovery probe: a known website, no discovered IR
+    /// page yet, and no probe since <paramref name="cutoff"/> (never-probed stocks are
+    /// always eligible).
+    /// </summary>
+    public static Expression<Func<CommonStock, bool>> PendingDiscovery(DateTime cutoff)
+    {
+        return s =>
+            s.Website != null
+            && s.Website != ""
+            && s.InvestorRelationsUrl == null
+            && (s.InvestorRelationsCheckedAt == null || s.InvestorRelationsCheckedAt < cutoff);
     }
 
     private sealed record CandidateStock(Guid Id, string Ticker, string Website);
