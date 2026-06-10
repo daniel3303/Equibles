@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
+using System.Xml;
 using System.Xml.Linq;
 using Equibles.Core.AutoWiring;
 using Equibles.Holdings.Data.Models;
@@ -36,7 +38,7 @@ public class Filing13DGXmlParser
         DateOnly filingDate
     )
     {
-        var root = XDocument.Parse(primaryDocXml).Root;
+        var root = ParseDocument(primaryDocXml).Root;
         if (root == null)
             throw new FormatException("primary_doc.xml has no root element");
 
@@ -77,6 +79,31 @@ public class Filing13DGXmlParser
             filing.ReportingPersons.Add(ParseReportingPerson(person));
 
         return filing;
+    }
+
+    // Matches an end tag whose closing '>' was dropped by the filer software — `</name`
+    // followed (after optional whitespace) by the next tag's '<'. In well-formed XML a
+    // literal `</` can never start unescaped text content, so the match is unambiguous.
+    private static readonly Regex TruncatedEndTag = new(
+        @"</([A-Za-z_][A-Za-z0-9._:-]*)(?=\s*<)",
+        RegexOptions.Compiled
+    );
+
+    /// <summary>
+    /// Strict parse with one repair retry: some EDGAR-accepted filings carry end tags
+    /// missing their closing '>' (e.g. <c>&lt;/fundsSource</c> at a line end). The repair
+    /// runs only after a strict parse failed, so well-formed documents are never touched.
+    /// </summary>
+    private static XDocument ParseDocument(string primaryDocXml)
+    {
+        try
+        {
+            return XDocument.Parse(primaryDocXml);
+        }
+        catch (XmlException)
+        {
+            return XDocument.Parse(TruncatedEndTag.Replace(primaryDocXml, "</$1>"));
+        }
     }
 
     private static Parsed13DGReportingPerson ParseReportingPerson(XElement person)
