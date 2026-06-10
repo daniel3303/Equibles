@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Repositories;
 using Equibles.Core.AutoWiring;
+using Equibles.Core.Configuration;
 using Equibles.Core.Extensions;
 using Equibles.Data.Extensions;
 using Equibles.Finra.Repositories;
@@ -18,6 +19,7 @@ using Equibles.Web.ViewModels.Stocks;
 using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Equibles.Web.Services;
 
@@ -43,6 +45,11 @@ public class StockTabService
     private readonly FinancialConceptRepository _financialConceptRepository;
     private readonly CommonStockRepository _commonStockRepository;
 
+    // Data before the configured sync floor is partial — the scrapers only
+    // backfill from it — so historical series clamp to it rather than render
+    // misleading low/zero readings. Null = no floor configured, no clamp.
+    private readonly DateOnly? _minSyncDate;
+
     // Benchmark the Price tab compares each stock's returns against.
     private const string BenchmarkTicker = "SPY";
 
@@ -67,9 +74,13 @@ public class StockTabService
         DailyStockPriceRepository dailyStockPriceRepository,
         FinancialFactRepository financialFactRepository,
         FinancialConceptRepository financialConceptRepository,
-        CommonStockRepository commonStockRepository
+        CommonStockRepository commonStockRepository,
+        IOptions<WorkerOptions> workerOptions = null
     )
     {
+        _minSyncDate = workerOptions?.Value.MinSyncDate is { } floor
+            ? DateOnly.FromDateTime(floor)
+            : null;
         _institutionalHoldingRepository = institutionalHoldingRepository;
         _institutionalHolderRepository = institutionalHolderRepository;
         _dailyShortVolumeRepository = dailyShortVolumeRepository;
@@ -389,10 +400,14 @@ public class StockTabService
 
     public async Task<PriceTabViewModel> LoadPriceTab(CommonStock stock)
     {
-        var prices = await _dailyStockPriceRepository
-            .GetByStock(stock)
-            .OrderBy(p => p.Date)
-            .ToListAsync();
+        var priceQuery = _dailyStockPriceRepository.GetByStock(stock);
+        if (_minSyncDate is { } minDate)
+        {
+            // Clamp the indicators too: derived series (SMA, RSI, MACD) over
+            // partial pre-floor data would be just as misleading as the chart.
+            priceQuery = priceQuery.Where(p => p.Date >= minDate);
+        }
+        var prices = await priceQuery.OrderBy(p => p.Date).ToListAsync();
 
         var closePrices = prices.Select(p => p.Close).ToList();
         var (macdLine, macdSignal, macdHistogram) = TechnicalIndicatorService.ComputeMacd(

@@ -82,6 +82,12 @@ public partial class Program
             builder.Configuration.GetSection("Auth").Get<AuthSettings>() ?? new AuthSettings();
         builder.Services.Configure<AuthSettings>(builder.Configuration.GetSection("Auth"));
 
+        // Worker:MinSyncDate marks the scrapers' backfill floor; historical views
+        // clamp their series to it so partial pre-floor data never renders.
+        builder.Services.Configure<Equibles.Core.Configuration.WorkerOptions>(
+            builder.Configuration.GetSection("Worker")
+        );
+
         builder
             .Services.AddAuthentication(EnvAuthHandler.SchemeName)
             .AddScheme<AuthenticationSchemeOptions, EnvAuthHandler>(
