@@ -90,6 +90,10 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 - `GetFinancialStatement` — full income statement / balance sheet / cash flow for a ticker + fiscal period.
 
+`RevenueBreakdownTools`:
+
+- `GetRevenueBreakdown` — revenue disaggregated by business segment, geography, and product/service from the dimensional XBRL facts the issuer tags in its own filings: annual fiscal years only, latest restated values, one table per axis the company reports; as-reported, never estimated.
+
 ### `mcp.AddCongress()` — congressional trading
 
 `CongressTools`:
