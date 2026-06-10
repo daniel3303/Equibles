@@ -84,6 +84,75 @@ public class NportTools
         );
     }
 
+    [McpServerTool(Name = "GetFundsHoldingStock")]
+    [Description(
+        "Get the registered investment companies (mutual funds and ETFs) holding a given stock, from SEC Form NPORT-P portfolio reports. The stock's CUSIP is matched against the holding rows on each fund series' most recent report, so an exited position never shows as current. Returns the fund's registrant and series, the reporting period, the position size, its U.S.-dollar value, its share of the fund's net assets and the payoff profile (Long/Short), largest positions first. Use this to see which funds and ETFs own a stock and how concentrated each position is."
+    )]
+    public Task<string> GetFundsHoldingStock(
+        [Description("Stock ticker symbol (e.g., AAPL, MSFT)")] string ticker,
+        [Description("Maximum number of fund positions to return, largest first (default: 20)")]
+            int maxResults = 20
+    )
+    {
+        return _runner.Execute(
+            async () =>
+            {
+                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                if (stockError != null)
+                    return stockError;
+
+                if (string.IsNullOrEmpty(stock.Cusip))
+                    return $"No CUSIP is on record for {ticker}, so its fund ownership cannot be resolved from Form NPORT-P reports.";
+
+                var currentPositions = _nportRepository
+                    .GetHoldingsByCusip(stock.Cusip)
+                    .Join(
+                        _nportRepository.GetLatestPerSeries(DateOnly.MinValue),
+                        h => h.NportFilingId,
+                        f => f.Id,
+                        (h, f) =>
+                            new
+                            {
+                                f.RegistrantName,
+                                f.SeriesName,
+                                f.ReportPeriodDate,
+                                h.Balance,
+                                h.Units,
+                                h.ValueUsd,
+                                h.PercentValue,
+                                h.PayoffProfile,
+                            }
+                    );
+
+                var totalCount = await currentPositions.CountAsync();
+                if (totalCount == 0)
+                    return $"No fund reports a position in {ticker} on its most recent Form NPORT-P.";
+
+                var positions = await currentPositions
+                    .OrderByDescending(p => p.ValueUsd)
+                    .Take(maxResults)
+                    .ToListAsync();
+
+                var result = MarkdownTable.Start(
+                    $"Funds holding {stock.Name} ({ticker}) on each series' most recent Form NPORT-P — "
+                        + $"{totalCount} current fund positions, showing the largest {positions.Count}:",
+                    "| Registrant | Series | Report Date | Balance | Units | Value (USD) | % Net Assets | Long/Short |",
+                    "|------------|--------|-------------|---------|-------|-------------|--------------|------------|"
+                );
+
+                result.AppendRows(
+                    positions,
+                    p =>
+                        $"| {p.RegistrantName ?? "-"} | {p.SeriesName ?? "-"} | {p.ReportPeriodDate:yyyy-MM-dd} | {FormatAmount(p.Balance)} | {p.Units ?? "-"} | ${FormatAmount(p.ValueUsd)} | {FormatPercent(p.PercentValue)} | {p.PayoffProfile ?? "-"} |"
+                );
+
+                return result.ToString();
+            },
+            "GetFundsHoldingStock",
+            $"ticker: {ticker}"
+        );
+    }
+
     private static string FormatAmount(decimal value) => McpFormat.Invariant(value, "N2");
 
     private static string FormatPercent(decimal value) => McpFormat.Invariant(value, "N2") + "%";
