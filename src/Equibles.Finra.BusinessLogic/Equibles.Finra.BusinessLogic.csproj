@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Equibles.Core.AutoWiring" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.Finra.Repositories\Equibles.Finra.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
+  </ItemGroup>
+</Project>
