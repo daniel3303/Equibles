@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?><edgarSubmission xmlns="http://www.sec.gov/edgar/schedule13D" xmlns:com="http://www.sec.gov/edgar/common">
+  <headerData>
+    <submissionType>SCHEDULE 13D/A</submissionType>
+    <previousAccessionNumber>0001174947-17-001120</previousAccessionNumber>
+    <filerInfo>
+      <filer>
+        <filerCredentials>
+          <!-- Field: Pseudo-Tag; ID: Name; Data: STROME MEZZANINE FUND, LP -->
+          <cik>0001713153</cik>
+          <ccc>XXXXXXXX</ccc>
+        </filerCredentials>
+      </filer>
+      <liveTestFlag>LIVE</liveTestFlag>
+
+
+
+    </filerInfo>
+  </headerData>
+  <formData>
+    <coverPageHeader>
+      <amendmentNo>8</amendmentNo>
+      <securitiesClassTitle>Common Stock, par value $.001 per share</securitiesClassTitle>
+      <dateOfEvent>12/26/2024</dateOfEvent>
+      <previouslyFiledFlag>false</previouslyFiledFlag>
+      <issuerInfo>
+        <issuerCIK>0001101026</issuerCIK>
+        <issuerCUSIP>98978N101</issuerCUSIP>
+        <issuerName>Zivo Bioscience, Inc.</issuerName>
+        <address>
+          <com:street1>21 E. Long Lake Road</com:street1>
+          <com:street2>Suite 100</com:street2>
+          <com:city>Bloomfield Hills</com:city>
+          <com:stateOrCountry>MI</com:stateOrCountry>
+          <com:zipCode>48304</com:zipCode>
+        </address>
+      </issuerInfo>
+      <authorizedPersons>
+        <notificationInfo>
+          <personName>Strome Group, Inc.</personName>
+          <personPhoneNum>3108509700</personPhoneNum>
+          <personAddress>
+            <com:street1>Attn: Mark E. Strome 13535 Ventura Boule</com:street1>
+            <com:street2>Suite C-525</com:street2>
+            <com:city>Sherman Oaks</com:city>
+            <com:stateOrCountry>CA</com:stateOrCountry>
+            <com:zipCode>91423</com:zipCode>
+          </personAddress>
+        </notificationInfo>
+      </authorizedPersons>
+    </coverPageHeader>
+    <reportingPersons>
+      <reportingPersonInfo>
+        <reportingPersonCIK>0000919484</reportingPersonCIK>
+        <reportingPersonNoCIK>N</reportingPersonNoCIK>
+        <reportingPersonName>Mark E. Strome</reportingPersonName>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>X1</citizenshipOrOrganization>
+        <soleVotingPower>220349.00</soleVotingPower>
+        <sharedVotingPower>222505.00</sharedVotingPower>
+        <soleDispositivePower>220349.00</soleDispositivePower>
+        <sharedDispositivePower>222505.00</sharedDispositivePower>
+        <aggregateAmountOwned>442854.00</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>12.20</percentOfClass>
+        <typeOfReportingPerson>IN</typeOfReportingPerson>
+        <typeOfReportingPerson>HC</typeOfReportingPerson>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>Strome Group, Inc.</reportingPersonName>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+        <soleVotingPower>0.00</soleVotingPower>
+        <sharedVotingPower>222505.00</sharedVotingPower>
+        <soleDispositivePower>0.00</soleDispositivePower>
+        <sharedDispositivePower>222505.00</sharedDispositivePower>
+        <aggregateAmountOwned>222505.00</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>6.13</percentOfClass>
+        <typeOfReportingPerson>CO</typeOfReportingPerson>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>Strome Investment Management, LP</reportingPersonName>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+        <soleVotingPower>0.00</soleVotingPower>
+        <sharedVotingPower>222505.00</sharedVotingPower>
+        <soleDispositivePower>0.00</soleDispositivePower>
+        <sharedDispositivePower>222505.00</sharedDispositivePower>
+        <aggregateAmountOwned>222505.00</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>6.13</percentOfClass>
+        <typeOfReportingPerson>IA</typeOfReportingPerson>
+        <typeOfReportingPerson>PN</typeOfReportingPerson>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonCIK>0001713153</reportingPersonCIK>
+        <reportingPersonNoCIK>N</reportingPersonNoCIK>
+        <reportingPersonName>Strome Mezzanine Fund, LP</reportingPersonName>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+        <soleVotingPower>0.00</soleVotingPower>
+        <sharedVotingPower>45064.00</sharedVotingPower>
+        <soleDispositivePower>0.00</soleDispositivePower>
+        <sharedDispositivePower>45064.00</sharedDispositivePower>
+        <aggregateAmountOwned>45064.00</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>1.24</percentOfClass>
+        <typeOfReportingPerson>PN</typeOfReportingPerson>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>Strome Mezzanine Fund II, LP</reportingPersonName>
+        <fundType>WC</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+        <soleVotingPower>0.00</soleVotingPower>
+        <sharedVotingPower>165000.00</sharedVotingPower>
+        <soleDispositivePower>0.00</soleDispositivePower>
+        <sharedDispositivePower>165000.00</sharedDispositivePower>
+        <aggregateAmountOwned>165000.00</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>4.55</percentOfClass>
+        <typeOfReportingPerson>PN</typeOfReportingPerson>
+      </reportingPersonInfo>
+    </reportingPersons>
+    <items1To7>
+      <item1>
+        <securityTitle>Common Stock, par value $.001 per share</securityTitle>
+        <issuerName>Zivo Bioscience, Inc.</issuerName>
+        <issuerPrincipalAddress>
+          <com:street1>21 E. Long Lake Road</com:street1>
+          <com:street2>Suite 100</com:street2>
+          <com:city>Bloomfield Hills</com:city>
+          <com:stateOrCountry>MI</com:stateOrCountry>
+          <com:zipCode>48304</com:zipCode>
+        </issuerPrincipalAddress>
+        <commentText>This statement on Schedule 13D/A (the "Amendment") relates to the common stock, $0.001 par value (the "Common Stock"), of Zivo Bioscience, Inc., a Michigan corporation (the "Issuer"). The Issuer's principal offices are located at 21 E. Long Lake Road, Suite 100, Bloomfield Hills, Michigan 48304.</commentText>
+      </item1>
+      <item2>
+        <filingPersonName>Mark E. Strome; Strome Group, Inc.; Strome Investment Management, LP (the "Manager"); Strome Mezzanine Fund, LP and Strome Mezzanine Fund II, LP (the "Fund," and together with the Strome Mezzanine Fund, LP, the "Funds").</filingPersonName>
+        <principalBusinessAddress>The principal business address for Mr. Strome, Strome Group, Inc. and the Manager is 13535 Ventura Blvd., Ste C-525, Sherman Oaks, CA 91423, and the principal business address for the Funds is 1688 Meridian Ave., Suite 727, Miami Beach, Florida 33139.</principalBusinessAddress>
+        <principalJob>The principal occupation of Mr. Strome is serving as the President of the Strome Group, Inc. The principal business of Strome Group, Inc. is to act as a holding company for business investments. The principal business of the Manager is to serve as a general partner and investment manager of the Funds. The principal business of each of the Funds is to make investments.</principalJob>
+        <hasBeenConvicted>During the last five years, none of the Reporting Persons has been convicted in a criminal proceeding (excluding traffic violations or similar misdemeanors).</hasBeenConvicted>
+        <convictionDescription>During the last five years, none of the Reporting Persons has been a party to a civil proceeding of a judicial or administrative body of competent jurisdiction and, as a result of such proceeding, was or is subject to a judgment, decree or final order enjoining future violations of, or prohibiting or mandating activities subject to, federal or state securities laws or finding any violation with respect to such laws.</convictionDescription>
+        <citizenship>Mark E. Strome is a United States citizen; Strome Group, Inc.is a Delaware corporation; and the Manager and the Funds are each a Delaware limited partnership.</citizenship>
+      </item2>
+      <item3>
+        <fundsSource>On December 26, 2024, pursuant to the Issuer's private offering of Common Stock, the Fund purchased, from its working capital, 75,000 shares of Common Stock from the Issuer at $20.19 per share and in connection with such purchase, the Issuer issued to the Fund, for no additional consideration, Common Stock purchase warrants ("Warrants") exercisable for 7,500 shares of Common Stock. Prior to the date of this Amendment, the Fund also acquired shares of Common Stock and Warrants from the Issuer as follows: (i) in July 2024, 20,000 shares of Common Stock at $7.84 per share and Warrants exercisable for 2,000 shares of Common Stock for no additional consideration; (ii) in July 2024, 25,000 shares of Common Stock at $8.05 per share and Warrants exercisable for 2,500 shares of Common Stock for no additional consideration; and (iii) in August 2024, 30,000 shares of Common Stock at $8.444 per share and Warrants exercisable for 3,000 shares of Common Stock for no additional consideration.  As a result, the Fund holds 150,000 shares of Common Stock and Warrants exercisable for 15,000 shares of Common Stock as of the date of this Amendment.</fundsSource
+      </item3>
+      <item4>
+        <transactionPurpose>The Reporting Persons acquired the securities covered by this Amendment for investment purposes, in the ordinary course of business, and has no present plans or proposals with respect to any of the matters set forth in subparagraphs (a)-(j) of Item 4 of Schedule 13D.
+
+The Reporting Persons intend to assess their investment in the Issuer on a continuing basis. Depending on various factors, including without limitation their perception of the Issuer's actual and prospective financial condition, results of operations, cash flows, liquidity, capital resources and other attributes, the respective price levels of the Common Stock, conditions in the securities markets, and general economic and industry conditions, the Reporting Persons may in the future take such actions with respect to their investment in the Issuer as they may deem appropriate, including without limitation purchasing additional shares of Common Stock or other securities of the Issuer or selling or otherwise disposing some or all of their shares of Common Stock or other securities of the Issuer.</transactionPurpose>
+      </item4>
+      <item5>
+        <percentageOfClassSecurities>The aggregate number and percentage of the shares of Common Stock outstanding beneficially owned by each Reporting Person set forth below and on pages 2-5 hereof are based on 3,546,335 shares of Common Stock outstanding as of November 8, 2024.</percentageOfClassSecurities>
+        <numberOfShares>Mark E. Strome: (1) Sole Voting Power: 220,349 (2) Shared Voting Power: 222,505 (3) Sole Dispositive Power: 220,349 (4) Shared Dispositive Power: 222,505 Strome Group, Inc.: (1) Sole Voting Power: 0 (2) Shared Voting Power: 222,505 (3) Sole Dispositive Power: 0 (4) Shared Dispositive Power: 222,505 Strome Investment Management, LP: (1) Sole Voting Power: 0 (2) Shared Voting Power: 222,505 (3) Sole Dispositive Power: 0 (4) Shared Dispositive Power: 222,505 Strome Mezzanine Fund, LP: (1) Sole Voting Power: 0 (2) Shared Voting Power: 45,064 (3) Sole Dispositive Power: 0 (4) Shared Dispositive Power: 45,064  Strome Mezzanine Fund II, LP: (1) Sole Voting Power: 0 (2) Shared Voting Power: 165,000 (3) Sole Dispositive Power: 0 (4) Shared Dispositive Power: 165,000</numberOfShares>
+        <transactionDesc>Except as disclosed in this Amendment, none of the Reporting Persons has effected any transactions in shares of Common Stock during the past sixty days.</transactionDesc>
+        <listOfShareholders>Not applicable.</listOfShareholders>
+        <date5PercentOwnership>Not applicable.</date5PercentOwnership>
+      </item5>
+      <item6>
+        <contractDescription>Except as provided herein, no Reporting Person is a party to any contract, arrangement, understanding or relationship with respect to any securities of the Issuer.</contractDescription>
+      </item6>
+      <item7>
+        <filedExhibits>1. Joint Filing Agreement dated December 31, 2024, by and among Mark E. Strome, Strome Group, Inc., Strome Investment Management, LP, Strome Mezzanine Fund, LP and Strome Mezzanine Fund II, LP</filedExhibits>
+      </item7>
+    </items1To7>
+    <signatureInfo>
+      <signaturePerson>
+        <signatureReportingPerson>Mark E. Strome</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Mark E. Strome</signature>
+          <title>Mark E. Strome</title>
+          <date>12/31/2024</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>Strome Group, Inc.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Mark E. Strome</signature>
+          <title>Mark E. Strome/President</title>
+          <date>12/31/2024</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>Strome Investment Management, LP</signatureReportingPerson>
+        <signatureDetails>
+          <signature>Strome Group, Inc.</signature>
+          <title>General Partner</title>
+          <date>12/31/2024</date>
+        </signatureDetails>
+        <signatureDetails>
+          <signature>/s/ Mark E. Strome</signature>
+          <title>Mark E. Strome/President</title>
+          <date>12/31/2024</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>Strome Mezzanine Fund, LP</signatureReportingPerson>
+        <signatureDetails>
+          <signature>Strome Investment Management, LP</signature>
+          <title>General Partner</title>
+          <date>12/31/2024</date>
+        </signatureDetails>
+        <signatureDetails>
+          <signature>Strome Group, Inc.</signature>
+          <title>General Partner</title>
+          <date>12/31/2024</date>
+        </signatureDetails>
+        <signatureDetails>
+          <signature>/s/ Mark E. Strome</signature>
+          <title>Mark E. Strome/President</title>
+          <date>12/31/2024</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>Strome Mezzanine Fund II, LP</signatureReportingPerson>
+        <signatureDetails>
+          <signature>Strome Investment Management, LP</signature>
+          <title>General Partner</title>
+          <date>12/31/2024</date>
+        </signatureDetails>
+        <signatureDetails>
+          <signature>Strome Group, Inc.</signature>
+          <title>General Partner</title>
+          <date>12/31/2024</date>
+        </signatureDetails>
+        <signatureDetails>
+          <signature>/s/ Mark E. Strome</signature>
+          <title>Mark E. Strome/President</title>
+          <date>12/31/2024</date>
+        </signatureDetails>
+      </signaturePerson>
+    </signatureInfo>
+  </formData>
+
+</edgarSubmission>
