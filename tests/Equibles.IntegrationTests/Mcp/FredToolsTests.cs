@@ -20,6 +20,7 @@ public class FredToolsTests : ParadeDbMcpTestBase
         new(
             new FredSeriesRepository(DbContext),
             new FredObservationRepository(DbContext),
+            new FredReleaseDateRepository(DbContext),
             ErrorManager,
             NullLogger<FredTools>()
         );

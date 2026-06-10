@@ -17,17 +17,20 @@ public class FredTools
 {
     private readonly FredSeriesRepository _seriesRepository;
     private readonly FredObservationRepository _observationRepository;
+    private readonly FredReleaseDateRepository _releaseDateRepository;
     private readonly McpToolRunner _runner;
 
     public FredTools(
         FredSeriesRepository seriesRepository,
         FredObservationRepository observationRepository,
+        FredReleaseDateRepository releaseDateRepository,
         ErrorManager errorManager,
         ILogger<FredTools> logger
     )
     {
         _seriesRepository = seriesRepository;
         _observationRepository = observationRepository;
+        _releaseDateRepository = releaseDateRepository;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -201,6 +204,59 @@ public class FredTools
             },
             "SearchEconomicIndicators",
             $"query: {query}"
+        );
+    }
+
+    [McpServerTool(Name = "GetEconomicCalendar")]
+    [Description(
+        "Get the economic release calendar — scheduled (upcoming) and recent publication dates of US macro data releases (CPI, Employment Situation, GDP, and the other tracked indicators), with the FRED series each release updates. Defaults to the next 30 days. Use GetEconomicIndicator to fetch a series' data after it prints."
+    )]
+    public Task<string> GetEconomicCalendar(
+        [Description("Start date in YYYY-MM-DD format (defaults to today, UTC)")]
+            string startDate = null,
+        [Description("End date in YYYY-MM-DD format (defaults to 30 days after the start date)")]
+            string endDate = null,
+        [Description("Maximum number of release dates to return (default: 100, chronological)")]
+            int maxResults = 100
+    )
+    {
+        return _runner.Execute(
+            async () =>
+            {
+                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                var start = McpToolExecutor.ParseDateOr(startDate, today);
+                var end = McpToolExecutor.ParseDateOr(endDate, start.AddDays(30));
+
+                maxResults = McpLimit.Clamp(maxResults);
+
+                var entries = await _releaseDateRepository
+                    .GetInRange(start, end)
+                    .OrderBy(d => d.Date)
+                    .ThenBy(d => d.FredRelease.Name)
+                    .Take(maxResults)
+                    .Select(d => new
+                    {
+                        d.Date,
+                        ReleaseName = d.FredRelease.Name,
+                        Series = d
+                            .FredRelease.Series.OrderBy(s => s.SeriesId)
+                            .Select(s => s.SeriesId)
+                            .ToList(),
+                    })
+                    .ToListAsync();
+
+                return MarkdownTable.Render(
+                    entries,
+                    $"No economic releases between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
+                    $"Economic release calendar ({start:yyyy-MM-dd} to {end:yyyy-MM-dd}):",
+                    "| Date | Release | Series Updated |",
+                    "|------|---------|----------------|",
+                    e =>
+                        $"| {e.Date:yyyy-MM-dd} | {e.ReleaseName} | {string.Join(", ", e.Series)} |"
+                );
+            },
+            "GetEconomicCalendar",
+            $"startDate: {startDate}, endDate: {endDate}"
         );
     }
 }
