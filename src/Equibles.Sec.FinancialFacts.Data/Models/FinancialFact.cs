@@ -24,6 +24,7 @@ namespace Equibles.Sec.FinancialFacts.Data.Models;
     nameof(PeriodStart),
     nameof(PeriodEnd),
     nameof(AccessionNumber),
+    nameof(DimensionsKey),
     IsUnique = true
 )]
 public class FinancialFact
@@ -88,6 +89,20 @@ public class FinancialFact
     /// <summary>SEC standardized frame label, e.g. <c>CY2024Q1I</c>; null if absent.</summary>
     [MaxLength(32)]
     public string Frame { get; set; }
+
+    /// <summary>
+    /// Canonical fingerprint of this fact's explicit XBRL dimensions: the empty
+    /// string for the consolidated (no-dimension) context — every API-sourced
+    /// fact — and a lowercase hex SHA-256 of the ordinal-sorted
+    /// <c>axis=member|axis=member</c> QName pairs for dimensional facts. Part of
+    /// the natural-key unique index so a segment/product/geography cut never
+    /// collides with its consolidated sibling on the same concept, period and
+    /// accession. Defaulted (not null) because the index must stay NULL-free —
+    /// Postgres treats NULLs as distinct in unique indexes.
+    /// </summary>
+    [Required(AllowEmptyStrings = true)]
+    [MaxLength(64)]
+    public string DimensionsKey { get; set; } = string.Empty;
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 

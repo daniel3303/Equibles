@@ -12,6 +12,7 @@ namespace Equibles.Sec.Data.Models;
 [Index(nameof(ReportingForDate), IsUnique = false)]
 [Index(nameof(AccessionNumber), IsUnique = false)]
 [Index(nameof(XbrlStatus), IsUnique = false)]
+[Index(nameof(XbrlStatus), nameof(XbrlFactsVersion))]
 public class Document
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -90,6 +91,23 @@ public class Document
     /// <see cref="XbrlCaptureStatus.NotChecked"/>.
     /// </summary>
     public int XbrlCaptureAttempts { get; set; }
+
+    /// <summary>
+    /// Version of the dimensional-fact extractor that last processed this document's
+    /// captured XBRL envelope. 0 = never extracted; the extraction sweep selects
+    /// <see cref="XbrlCaptureStatus.Captured"/> documents whose version is below the
+    /// extractor's current one, so bumping the extractor version reprocesses the corpus
+    /// (same pattern as the N-PORT / insider ParserVersion reprocess).
+    /// </summary>
+    public int XbrlFactsVersion { get; set; }
+
+    /// <summary>
+    /// How many times the dimensional-fact extraction has failed on this document. The
+    /// sweep stops selecting a document at its retry ceiling so one unparseable envelope
+    /// can't starve the queue. Only meaningful while <see cref="XbrlFactsVersion"/> is
+    /// below the extractor's current version.
+    /// </summary>
+    public int XbrlFactsAttempts { get; set; }
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }
