@@ -101,9 +101,7 @@ public class StockTabService
 
     public async Task<HoldingsTabViewModel> LoadHoldingsTab(CommonStock stock, DateOnly? date)
     {
-        var reportDates = await _institutionalHoldingRepository
-            .GetReportDatesByStock(stock)
-            .ToListAsync();
+        var reportDates = await LoadClampedReportDates(stock);
 
         var isCombinedAvailable =
             reportDates.Count >= 2 && CombinedQuarterHelper.IsFilingWindowOpen(reportDates[0]);
@@ -175,9 +173,7 @@ public class StockTabService
 
     public async Task<HoldingsTabViewModel> LoadHoldingsCombinedTab(CommonStock stock)
     {
-        var reportDates = await _institutionalHoldingRepository
-            .GetReportDatesByStock(stock)
-            .ToListAsync();
+        var reportDates = await LoadClampedReportDates(stock);
 
         if (reportDates.Count < 2)
         {
@@ -319,10 +315,12 @@ public class StockTabService
 
     public async Task<InsiderTradingTabViewModel> LoadInsiderTradingTab(CommonStock stock)
     {
-        var transactions = await TakeMostRecent(
-            _insiderTransactionRepository.GetByStockWithOwner(stock),
-            t => t.TransactionDate
-        );
+        var transactionQuery = _insiderTransactionRepository.GetByStockWithOwner(stock);
+        if (_minSyncDate is { } minDate)
+        {
+            transactionQuery = transactionQuery.Where(t => t.TransactionDate >= minDate);
+        }
+        var transactions = await TakeMostRecent(transactionQuery, t => t.TransactionDate);
         return new InsiderTradingTabViewModel
         {
             Transactions = transactions,
@@ -399,10 +397,13 @@ public class StockTabService
 
     public async Task<CongressionalTradesTabViewModel> LoadCongressionalTradesTab(CommonStock stock)
     {
-        var trades = await TakeMostRecent(
-            _congressionalTradeRepository.GetByStock(stock).Include(t => t.CongressMember),
-            t => t.TransactionDate
-        );
+        IQueryable<Congress.Data.Models.CongressionalTrade> tradeQuery =
+            _congressionalTradeRepository.GetByStock(stock).Include(t => t.CongressMember);
+        if (_minSyncDate is { } minDate)
+        {
+            tradeQuery = tradeQuery.Where(t => t.TransactionDate >= minDate);
+        }
+        var trades = await TakeMostRecent(tradeQuery, t => t.TransactionDate);
         return new CongressionalTradesTabViewModel { Trades = trades, Ticker = stock.Ticker };
     }
 
@@ -710,13 +711,30 @@ public class StockTabService
         DateOnly reportDate
     ) => _institutionalHoldingRepository.GetByStockWithHolder(stock, reportDate).ToListAsync();
 
+    // Report dates for the holdings tab, newest first, clamped to the sync
+    // floor: quarters before it hold partial filings, so their dates must not
+    // appear in the selector, the stats, or the combined view's quarter pair.
+    private Task<List<DateOnly>> LoadClampedReportDates(CommonStock stock)
+    {
+        var datesQuery = _institutionalHoldingRepository.GetReportDatesByStock(stock);
+        if (_minSyncDate is { } minDate)
+        {
+            datesQuery = datesQuery.Where(d => d >= minDate);
+        }
+        return datesQuery.ToListAsync();
+    }
+
     // Mirrors the header-stat semantics per report date: Shares summed over every
     // row (share classes included), holders counted distinct — so the trend's
     // latest point matches the stats shown for the latest quarter.
     private async Task<List<OwnershipTrendPoint>> LoadOwnershipTrend(CommonStock stock)
     {
-        var points = await _institutionalHoldingRepository
-            .GetHistoryByStock(stock)
+        var holdingsQuery = _institutionalHoldingRepository.GetHistoryByStock(stock);
+        if (_minSyncDate is { } trendFloor)
+        {
+            holdingsQuery = holdingsQuery.Where(h => h.ReportDate >= trendFloor);
+        }
+        var points = await holdingsQuery
             .GroupBy(h => h.ReportDate)
             .Select(g => new
             {
