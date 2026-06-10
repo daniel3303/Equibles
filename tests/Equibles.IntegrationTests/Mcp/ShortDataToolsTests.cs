@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.Finra.BusinessLogic;
 using Equibles.Finra.Data.Models;
 using Equibles.Finra.Mcp.Tools;
 using Equibles.Finra.Repositories;
@@ -16,6 +17,11 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
             new DailyShortVolumeRepository(DbContext),
             new ShortInterestRepository(DbContext),
             new CommonStockRepository(DbContext),
+            new ShortSqueezeScoreManager(
+                new ShortInterestRepository(DbContext),
+                new DailyShortVolumeRepository(DbContext),
+                new CommonStockRepository(DbContext)
+            ),
             ErrorManager,
             NullLogger<ShortDataTools>()
         );
