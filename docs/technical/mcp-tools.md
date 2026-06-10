@@ -124,6 +124,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetShortInterest` — bi-monthly short-interest reports for a ticker.
 - `GetShortInterestSnapshot` — latest short-interest snapshot across tickers.
 - `GetLargestShortVolume` — stocks with the largest daily short volume for a single trading day (defaults to the latest available), sorted by short volume descending.
+- `GetShortSqueezeScores` — stocks ranked by a composite short-squeeze score (0–100, highest first): the equal-weight mean of peer-relative percentiles for short interest as a percent of shares outstanding, days to cover, and the recent change in the short share of total volume, computed across every stock reporting short interest at the latest FINRA settlement date (`ShortSqueezeScoreManager.Compute`).
 
 `OffExchangeVolumeTools`:
 
