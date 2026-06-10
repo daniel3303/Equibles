@@ -301,23 +301,23 @@ public class ShortDataTools
                 sb.AppendLine(
                     "|---|--------|-------|-------------------|---------------|--------------------|"
                 );
-                var rank = 1;
-                foreach (var score in scores.Take(take))
-                {
-                    var trend =
-                        score.ShortVolumeShareTrend == null
-                            ? "-"
-                            : (score.ShortVolumeShareTrend > 0 ? "+" : "")
-                                + score.ShortVolumeShareTrend.Value.ToString(
-                                    "P1",
-                                    CultureInfo.InvariantCulture
-                                );
-                    sb.AppendLine(
-                        $"| {rank++} | {score.Ticker} | {score.Score.ToString("0", CultureInfo.InvariantCulture)} | "
+                sb.AppendNumberedRows(
+                    scores.Take(take).ToList(),
+                    (rank, score) =>
+                    {
+                        var trend =
+                            score.ShortVolumeShareTrend == null
+                                ? "-"
+                                : (score.ShortVolumeShareTrend > 0 ? "+" : "")
+                                    + score.ShortVolumeShareTrend.Value.ToString(
+                                        "P1",
+                                        CultureInfo.InvariantCulture
+                                    );
+                        return $"| {rank} | {score.Ticker} | {score.Score.ToString("0", CultureInfo.InvariantCulture)} | "
                             + $"{score.ShortInterestPercentOfShares.ToString("P1", CultureInfo.InvariantCulture)} | "
-                            + $"{score.DaysToCover?.ToString("0.0", CultureInfo.InvariantCulture) ?? "-"} | {trend} |"
-                    );
-                }
+                            + $"{score.DaysToCover?.ToString("0.0", CultureInfo.InvariantCulture) ?? "-"} | {trend} |";
+                    }
+                );
 
                 if (scores.Count > take)
                     sb.AppendLine($"\n({scores.Count - take} more scored stocks not shown.)");
