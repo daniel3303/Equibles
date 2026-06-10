@@ -151,6 +151,7 @@ public class StockTabService
             TotalShares = allCurrent.Sum(h => h.Shares),
             HolderCount = allCurrent.Select(h => h.InstitutionalHolderId).Distinct().Count(),
             SharesOutstanding = stock.SharesOutStanding,
+            OwnershipTrend = await LoadOwnershipTrend(stock),
             GroupedHolders = grouped,
             BucketCounts = bucketCounts,
             TopBuyers = topBuyers,
@@ -225,6 +226,7 @@ public class StockTabService
             TotalShares = allCombined.Sum(h => h.Shares),
             HolderCount = holders.Count,
             SharesOutstanding = stock.SharesOutStanding,
+            OwnershipTrend = await LoadOwnershipTrend(stock),
             GroupedHolders = grouped,
             BucketCounts = grouped.ToDictionary(g => g.Key, g => g.Value.Count),
             IsCombinedView = true,
@@ -684,6 +686,33 @@ public class StockTabService
         CommonStock stock,
         DateOnly reportDate
     ) => _institutionalHoldingRepository.GetByStockWithHolder(stock, reportDate).ToListAsync();
+
+    // Mirrors the header-stat semantics per report date: Shares summed over every
+    // row (share classes included), holders counted distinct — so the trend's
+    // latest point matches the stats shown for the latest quarter.
+    private async Task<List<OwnershipTrendPoint>> LoadOwnershipTrend(CommonStock stock)
+    {
+        var points = await _institutionalHoldingRepository
+            .GetHistoryByStock(stock)
+            .GroupBy(h => h.ReportDate)
+            .Select(g => new
+            {
+                ReportDate = g.Key,
+                TotalShares = g.Sum(h => h.Shares),
+                HolderCount = g.Select(h => h.InstitutionalHolderId).Distinct().Count(),
+            })
+            .OrderBy(p => p.ReportDate)
+            .ToListAsync();
+
+        return points
+            .Select(p => new OwnershipTrendPoint
+            {
+                ReportDate = p.ReportDate,
+                TotalShares = p.TotalShares,
+                HolderCount = p.HolderCount,
+            })
+            .ToList();
+    }
 
     // Narrow the Sold-Out filter to only holders who were in the previous
     // quarter but are absent from the current quarter for this stock. The
