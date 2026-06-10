@@ -510,7 +510,7 @@ public class StockTabService
         // covered by the [CommonStockId, FiscalYear, FiscalPeriod] index, and
         // keeping them separate avoids loading every fact just to list periods.
         var periodKeys = await _financialFactRepository
-            .GetByStock(stock)
+            .GetConsolidatedByStock(stock)
             .Select(f => new { f.FiscalYear, f.FiscalPeriod })
             .Distinct()
             .ToListAsync();
@@ -555,7 +555,7 @@ public class StockTabService
         var conceptIds = concepts.Select(c => c.Id).ToHashSet();
 
         var facts = await _financialFactRepository
-            .GetByStock(stock)
+            .GetConsolidatedByStock(stock)
             .Where(f =>
                 f.FiscalYear == fiscalYear
                 && f.FiscalPeriod == fiscalPeriod
@@ -627,7 +627,7 @@ public class StockTabService
         if (epsConcept != Guid.Empty)
         {
             var epsFact = await _financialFactRepository
-                .GetByStock(stock)
+                .GetConsolidatedByStock(stock)
                 .Where(f =>
                     f.FinancialConceptId == epsConcept && f.FiscalPeriod == SecFiscalPeriod.FullYear
                 )
