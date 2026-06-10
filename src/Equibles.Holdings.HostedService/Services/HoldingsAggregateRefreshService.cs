@@ -203,6 +203,83 @@ public class HoldingsAggregateRefreshService
         await UpsertAumSnapshot(dbContext, reportDate, cancellationToken);
         await UpsertSectorSnapshots(dbContext, reportDate, cancellationToken);
         await UpsertStockActivitySnapshots(dbContext, reportDate, cancellationToken);
+        await UpsertHolderSnapshots(dbContext, reportDate, cancellationToken);
+    }
+
+    // Per-(holder, quarter) AUM aggregates for the institutions browse ranking
+    // and per-holder snapshot lookups. Form 13F rows only — Schedule 13D/G rows
+    // share the holdings table but carry event dates and single positions, and
+    // would otherwise corrupt the per-holder totals. The same quarter-bounded
+    // shape as the other steps: the ReportDate-leading covering index narrows
+    // the scan to one quarter's slice before the per-holder GROUP BY runs.
+    private static async Task UpsertHolderSnapshots(
+        EquiblesFinancialDbContext dbContext,
+        DateOnly reportDate,
+        CancellationToken cancellationToken
+    )
+    {
+        var aggregates = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h => h.ReportDate == reportDate && h.FilingType == FilingType.Form13F)
+            .GroupBy(h => h.InstitutionalHolderId)
+            .Select(g => new
+            {
+                InstitutionalHolderId = g.Key,
+                FilingDate = g.Max(h => h.FilingDate),
+                Aum = g.Sum(h => h.Value),
+                PositionCount = g.Count(),
+                StockCount = g.Select(h => h.CommonStockId).Distinct().Count(),
+            })
+            .ToListAsync(cancellationToken);
+
+        var computedAt = DateTime.UtcNow;
+        var snapshots = aggregates
+            .Select(a => new HolderQuarterlySnapshot
+            {
+                InstitutionalHolderId = a.InstitutionalHolderId,
+                ReportDate = reportDate,
+                FilingDate = a.FilingDate,
+                Aum = a.Aum,
+                PositionCount = a.PositionCount,
+                StockCount = a.StockCount,
+                ComputedAt = computedAt,
+            })
+            .ToList();
+
+        if (snapshots.Count > 0)
+        {
+            // Single INSERT … ON CONFLICT (InstitutionalHolderId, ReportDate)
+            // DO UPDATE … for the whole batch. Race-free against a parallel
+            // rebuild of the same quarter.
+            await dbContext
+                .Set<HolderQuarterlySnapshot>()
+                .UpsertRange(snapshots)
+                .On(s => new { s.InstitutionalHolderId, s.ReportDate })
+                .WhenMatched(
+                    (_, incoming) =>
+                        new HolderQuarterlySnapshot
+                        {
+                            FilingDate = incoming.FilingDate,
+                            Aum = incoming.Aum,
+                            PositionCount = incoming.PositionCount,
+                            StockCount = incoming.StockCount,
+                            ComputedAt = incoming.ComputedAt,
+                        }
+                )
+                .RunAsync(cancellationToken);
+        }
+
+        // Holders with no remaining 13F rows for this quarter (amendment wiped
+        // the filing, or the rows were 13D/G all along) — drop their stale rows
+        // so the ranking can't surface a phantom filer. When `snapshots` is
+        // empty this collapses to "delete every holder row for this quarter".
+        var currentHolderIds = snapshots.Select(s => s.InstitutionalHolderId).ToList();
+        await dbContext
+            .Set<HolderQuarterlySnapshot>()
+            .Where(s =>
+                s.ReportDate == reportDate && !currentHolderIds.Contains(s.InstitutionalHolderId)
+            )
+            .ExecuteDeleteAsync(cancellationToken);
     }
 
     private static async Task UpsertAumSnapshot(
