@@ -116,6 +116,13 @@
         }
     </div>
 
+    <!-- Ownership trend — shares held isolates accumulation/distribution from
+         price moves, which a USD total would conflate. Needs two points to draw
+         a line, hence the >= 2 guard. -->
+    @if (Model.OwnershipTrend.Count >= 2) {
+        <partial name="_ChartCard" model='("Institutional Ownership Trend", "ownership-trend-chart", "Total shares held and holder count per quarter", "h-[220px]", "mb-4")' />
+    }
+
     <!-- Top movers — most actionable quarterly signal at a glance.
          Buyers = New + Increased ranked by Δ shares desc; Sellers = Reduced + Sold out, ranked by Δ shares asc.
          Each card's "View all" jumps to the corresponding bucket panel below. -->
@@ -337,5 +344,47 @@
                 }
             </div>
         </div>
+    }
+
+    @if (Model.OwnershipTrend.Count >= 2) {
+        <partial name="_ChartJs" />
+        <script>
+        // Render the institutional ownership trend chart (waits for Chart.js bundle):
+        // total shares held per quarter on the left axis, distinct holder count on the right.
+        document.addEventListener('DOMContentLoaded', function() {
+            const ctx = document.getElementById('ownership-trend-chart');
+            if (!ctx || typeof Chart === 'undefined') return;
+
+            const labels = @Html.Json(Model.OwnershipTrend.Select(p => p.ReportDate.ToString("yyyy-MM-dd")).ToList());
+            const shares = @Html.Json(Model.OwnershipTrend.Select(p => p.TotalShares).ToList());
+            const holders = @Html.Json(Model.OwnershipTrend.Select(p => p.HolderCount).ToList());
+
+            // Compact tick labels for the shares axis (e.g. 1.2B, 350M, 40K)
+            const compact = v => v >= 1e9 ? (v/1e9).toFixed(1)+'B' : v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v;
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Total Shares Held', data: shares, borderColor: 'oklch(35% 0.12 195)', backgroundColor: 'oklch(35% 0.12 195 / 0.1)', fill: true, tension: 0.3, pointRadius: 3, yAxisID: 'y' },
+                        { label: 'Holders', data: holders, borderColor: 'oklch(60% 0.22 25)', backgroundColor: 'oklch(60% 0.22 25)', tension: 0.3, pointRadius: 2, borderWidth: 2, yAxisID: 'y1' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { ticks: { callback: compact, font: { size: 10 } } },
+                        y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { font: { size: 10 } } }
+                    },
+                    plugins: {
+                        legend: { display: true, labels: { boxWidth: 12, font: { size: 10 } } },
+                        tooltip: { callbacks: { label: c => c.dataset.yAxisID === 'y1' ? c.dataset.label + ': ' + c.parsed.y.toLocaleString() : c.dataset.label + ': ' + c.parsed.y.toLocaleString() + ' shares' } }
+                    }
+                }
+            });
+        });
+        </script>
     }
 }
