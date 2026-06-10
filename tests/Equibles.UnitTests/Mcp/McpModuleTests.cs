@@ -403,6 +403,7 @@ public class McpModuleToolDiscoveryTests
                     "GetExemptOfferings",
                     "GetFundOperations",
                     "GetFundHoldings",
+                    "GetFundsHoldingStock",
                     "SearchInvestmentAdvisers",
                     "GetInvestmentAdviser",
                 }
@@ -429,6 +430,7 @@ public class McpModuleToolDiscoveryTests
                     "GetShortInterestSnapshot",
                     "GetLargestShortVolume",
                     "GetOffExchangeVolume",
+                    "GetShortSqueezeScores",
                 }
             },
             {
