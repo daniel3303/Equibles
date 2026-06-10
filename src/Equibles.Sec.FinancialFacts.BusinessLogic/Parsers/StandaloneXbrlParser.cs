@@ -15,12 +15,10 @@ namespace Equibles.Sec.FinancialFacts.BusinessLogic.Parsers;
 /// element under the root <c>xbrli:xbrl</c>.
 ///
 /// <para>
-/// <strong>Not wired into the worker pipeline yet.</strong> Persisting raw
-/// standalone-XBRL artifacts at ingest time is tracked in GH-1118; until that
-/// lands, running this parser at scale would require re-downloading every
-/// historical filing on each cycle. The parser ships now as reusable
-/// infrastructure with full unit-test coverage; the hosted-service wiring
-/// follows GH-1118.
+/// Fed by the dimensional-fact extraction sweep
+/// (<c>XbrlFactsExtractionWorker</c>) from the raw standalone-XBRL artifacts
+/// captured on each document at ingest/backfill time (GH-1118) — no filing is
+/// re-downloaded to parse it.
 /// </para>
 ///
 /// <para>
