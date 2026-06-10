@@ -9,5 +9,7 @@ public class FredModuleConfiguration : Equibles.Data.IFinancialModule
     {
         builder.Entity<FredSeries>();
         builder.Entity<FredObservation>();
+        builder.Entity<FredRelease>();
+        builder.Entity<FredReleaseDate>();
     }
 }
