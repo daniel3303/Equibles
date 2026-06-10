@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Equibles.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    partial class EquiblesDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260610013258_AddFinancialFactDimensionsKeyAndXbrlFactsTracking")]
+    partial class AddFinancialFactDimensionsKeyAndXbrlFactsTracking
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1017,8 +1020,8 @@ namespace Equibles.Migrations.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<string>("TitleOfClass")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
 
                     b.Property<long>("Value")
                         .HasColumnType("bigint");

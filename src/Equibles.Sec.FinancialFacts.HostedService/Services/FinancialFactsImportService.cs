@@ -396,6 +396,8 @@ public class FinancialFactsImportService
         await dbContext
             .Set<FinancialFact>()
             .UpsertRange(items)
+            // Must name the unique index's full column list (including
+            // DimensionsKey) or Postgres can't infer the ON CONFLICT target.
             .On(f => new
             {
                 f.CommonStockId,
@@ -404,6 +406,7 @@ public class FinancialFactsImportService
                 f.PeriodStart,
                 f.PeriodEnd,
                 f.AccessionNumber,
+                f.DimensionsKey,
             })
             .WhenMatched(
                 (existing, incoming) =>
@@ -526,7 +529,8 @@ public class FinancialFactsImportService
                         f.Unit,
                         f.PeriodStart,
                         f.PeriodEnd,
-                        f.AccessionNumber
+                        f.AccessionNumber,
+                        f.DimensionsKey
                     ),
                 f => f.FiledDate
             )
