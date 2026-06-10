@@ -168,6 +168,91 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ExecuteAsync_HolderSnapshotsMissing_BackfillsDespiteFullAumCoverage()
+    {
+        // Deploy scenario for the holder snapshot table: AUM and activity
+        // snapshots already cover every quarter, the newly-added holder table
+        // is empty. The coverage gate must still trigger the full backfill —
+        // the daily safety-net alone only reaches the 4 most recent quarters,
+        // so without the gate the oldest quarter would never materialise.
+        // Five quarters seeded so the oldest lies beyond the safety-net.
+        var quarters = Enumerable
+            .Range(0, 5)
+            .Select(i => new DateOnly(2023, 12, 31).AddMonths(3 * i))
+            .ToList();
+        InstitutionalHolder holder;
+        CommonStock aapl;
+        await using (var seed = FreshContext())
+        {
+            var tech = new Sector { Name = "Technology" };
+            seed.Add(tech);
+            await seed.SaveChangesAsync();
+            var industry = new Industry { Name = "Software", SectorId = tech.Id };
+            seed.Add(industry);
+            await seed.SaveChangesAsync();
+            aapl = new CommonStock
+            {
+                Ticker = "AAPL",
+                Name = "Apple",
+                Cik = "C0000320193",
+                IndustryId = industry.Id,
+            };
+            seed.Add(aapl);
+            holder = new InstitutionalHolder { Cik = "H001", Name = "Holder H001" };
+            seed.Add(holder);
+            await seed.SaveChangesAsync();
+            foreach (var quarter in quarters)
+            {
+                seed.Add(MakeHolding(aapl, holder, quarter, 100_000, $"acc-{quarter}"));
+                seed.Add(
+                    new AumQuarterlySnapshot
+                    {
+                        ReportDate = quarter,
+                        TotalValue = 100_000,
+                        FilerCount = 1,
+                        PositionCount = 1,
+                        StockCount = 1,
+                        FilingCount = 1,
+                    }
+                );
+                seed.Add(
+                    new StockQuarterlyActivity
+                    {
+                        CommonStockId = aapl.Id,
+                        ReportDate = quarter,
+                        CurrentShares = 1_000,
+                        CurrentValue = 100_000,
+                        CurrentFilerCount = 1,
+                    }
+                );
+            }
+            await seed.SaveChangesAsync();
+        }
+
+        var scopeFactory = ScopeFactory();
+        var refreshService = new HoldingsAggregateRefreshService(
+            scopeFactory,
+            NullLogger<HoldingsAggregateRefreshService>.Instance
+        );
+        var worker = new InstantTickWorker(scopeFactory, refreshService);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await worker.StartAsync(cts.Token);
+        await Task.Delay(TimeSpan.FromMilliseconds(500), cts.Token);
+        await worker.StopAsync(CancellationToken.None);
+
+        await using var read = FreshContext();
+        var holderQuarters = await read.Set<HolderQuarterlySnapshot>()
+            .Where(s => s.InstitutionalHolderId == holder.Id)
+            .Select(s => s.ReportDate)
+            .OrderBy(d => d)
+            .ToListAsync();
+        holderQuarters
+            .Should()
+            .Equal(quarters, "the backfill covers every quarter, not just the safety-net window");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_NoHoldings_DoesNotCreatePhantomSnapshotRows()
     {
         // No holdings seeded — the worker should not invent rows out of nothing.
