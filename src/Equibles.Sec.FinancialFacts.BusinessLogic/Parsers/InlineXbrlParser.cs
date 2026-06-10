@@ -17,14 +17,12 @@ namespace Equibles.Sec.FinancialFacts.BusinessLogic.Parsers;
 /// iXBRL <c>scale</c> / <c>sign</c> attributes.
 ///
 /// <para>
-/// <strong>Not wired into the worker pipeline yet.</strong> The contexts /
-/// units / fact elements live inside <c>ix:header</c>, which
+/// Fed by the dimensional-fact extraction sweep
+/// (<c>XbrlFactsExtractionWorker</c>): the contexts / units / fact elements
+/// live inside <c>ix:header</c>, which
 /// <see cref="Equibles.Sec.BusinessLogic.Normalizers.XbrlStripStep"/> deletes
-/// before normalisation reaches downstream consumers. The wiring requires
-/// either (a) running this parser on the raw envelope <em>before</em>
-/// stripping, or (b) persisting the raw envelope for later extraction —
-/// see GH-1118. Until that lands, this parser ships as library-only
-/// infrastructure with unit-test coverage.
+/// during normalisation, so the sweep parses the raw envelope captured on the
+/// document at ingest/backfill time (GH-1118) instead of the normalised HTML.
 /// </para>
 ///
 /// <para>
