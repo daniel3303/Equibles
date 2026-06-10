@@ -113,6 +113,39 @@ public class ShortSqueezeScoreManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task Compute_ZeroAverageDailyVolume_DropsDaysToCoverFactor()
+    {
+        // FINRA publishes days-to-cover as a 1000.0 sentinel when a listing has zero
+        // average daily volume — a division-by-zero placeholder, not a measurement.
+        // The factor must drop out (like a missing trend) so an untradeable shell
+        // can't outrank genuinely squeezed stocks on the sentinel alone.
+        var shell = SeedStock("SHEL", sharesOutstanding: 2_000_000);
+        var real = SeedStock("REAL", sharesOutstanding: 1_000_000);
+        _dbContext
+            .Set<ShortInterest>()
+            .Add(
+                new ShortInterest
+                {
+                    CommonStockId = shell.Id,
+                    SettlementDate = SettlementDate,
+                    CurrentShortPosition = 200_000,
+                    AverageDailyVolume = 0,
+                    DaysToCover = 1000m,
+                }
+            );
+        SeedShortInterest(real, shortPosition: 300_000, daysToCover: 12m);
+        await _dbContext.SaveChangesAsync();
+
+        var scores = await _manager.Compute();
+
+        var sentinel = scores.Single(s => s.Ticker == "SHEL");
+        sentinel.DaysToCover.Should().BeNull("a zero-volume sentinel is not a measurement");
+        sentinel.DaysToCoverPercentile.Should().BeNull();
+        // REAL leads on every remaining factor, so it must outrank the shell.
+        scores.Select(s => s.Ticker).Should().Equal("REAL", "SHEL");
+    }
+
+    [Fact]
     public async Task Compute_NoShortInterestData_ReturnsEmpty()
     {
         var scores = await _manager.Compute();
