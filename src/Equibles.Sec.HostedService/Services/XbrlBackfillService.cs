@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.Data.Models;
@@ -21,6 +22,14 @@ public class XbrlBackfillService
     // unfetchable filing (deleted/superseded on EDGAR, unparseable) can't sit at the head of
     // the newest-first queue and starve every older document behind it.
     private const int MaxAttempts = 5;
+
+    // Rows ingested before AccessionNumber existed carry it only inside the stored EDGAR
+    // full-submission URL (https://www.sec.gov/Archives/edgar/data/{cik}/{accession}.txt).
+    // The accession is the file name; recovering it makes those rows backfillable.
+    private static readonly Regex EdgarSourceUrlAccession = new(
+        @"/Archives/edgar/data/\d+/(\d{10}-\d{2}-\d{6})\.txt$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase
+    );
 
     private readonly DocumentRepository _documentRepository;
     private readonly ISecEdgarClient _secEdgarClient;
@@ -55,14 +64,19 @@ public class XbrlBackfillService
             return result;
         }
 
-        // Only documents that came from a filing (an accession to re-fetch) and whose issuer
-        // has a CIK qualify; legacy/paper rows have neither. Documents that have exhausted
-        // their retry ceiling are dropped from the working set so they can't block the queue.
-        // Newest first so recent filings fill in soonest.
+        // Only documents that came from a filing and whose issuer has a CIK qualify: either
+        // they carry the accession directly, or it can be recovered from the stored EDGAR
+        // submission URL (rows ingested before AccessionNumber existed). Non-EDGAR documents
+        // (e.g. earnings-call transcripts) have neither and are never selected. Documents
+        // that have exhausted their retry ceiling are dropped from the working set so they
+        // can't block the queue. Newest first so recent filings fill in soonest.
         var query = _documentRepository
             .GetByXbrlStatus(XbrlCaptureStatus.NotChecked)
             .Where(d =>
-                d.AccessionNumber != null
+                (
+                    d.AccessionNumber != null
+                    || (d.SourceUrl != null && d.SourceUrl.Contains("/Archives/edgar/data/"))
+                )
                 && d.CommonStock.Cik != null
                 && d.XbrlCaptureAttempts < MaxAttempts
             );
@@ -85,6 +99,24 @@ public class XbrlBackfillService
             // Count the attempt up front so a fetch/parse failure still advances the retry
             // ceiling and the document eventually drops out of the working set.
             document.XbrlCaptureAttempts++;
+
+            // Recover the accession for legacy rows and persist it (UpdateXbrl /
+            // PersistAttempt save it alongside the outcome) so later consumers can link the
+            // filing without re-deriving. A URL that matched the broad SQL filter but not
+            // the strict accession shape can never be fetched — record the failure and let
+            // the attempt ceiling walk it out of the working set.
+            document.AccessionNumber ??= DeriveAccessionNumber(document.SourceUrl);
+            if (document.AccessionNumber == null)
+            {
+                result.Failed++;
+                _logger.LogWarning(
+                    "XBRL backfill cannot derive an accession number from SourceUrl {SourceUrl} for document {DocumentId}.",
+                    document.SourceUrl,
+                    document.Id
+                );
+                await PersistAttempt();
+                continue;
+            }
 
             try
             {
@@ -133,6 +165,17 @@ public class XbrlBackfillService
         }
 
         return result;
+    }
+
+    private static string DeriveAccessionNumber(string sourceUrl)
+    {
+        if (string.IsNullOrEmpty(sourceUrl))
+        {
+            return null;
+        }
+
+        var match = EdgarSourceUrlAccession.Match(sourceUrl);
+        return match.Success ? match.Groups[1].Value : null;
     }
 
     // Saves the bumped attempt count after a fetch failure. Best-effort: a save failure here
