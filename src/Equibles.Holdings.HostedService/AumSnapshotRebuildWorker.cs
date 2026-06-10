@@ -142,16 +142,38 @@ public class AumSnapshotRebuildWorker : BackgroundService
             .Select(s => s.ReportDate)
             .Distinct()
             .CountAsync(cancellationToken);
-        if (snapshotQuarters >= holdingQuarters && activityQuarters >= holdingQuarters)
+        // HolderQuarterlySnapshot is Form-13F-only, so its coverage is measured
+        // against distinct 13F quarters — Schedule 13D/G event dates inflate
+        // holdingQuarters but can never produce a holder snapshot row, and
+        // comparing against the all-types count would re-trigger the backfill
+        // on every boot.
+        var holder13FQuarters = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h => h.FilingType == FilingType.Form13F)
+            .Select(h => h.ReportDate)
+            .Distinct()
+            .CountAsync(cancellationToken);
+        var holderQuarters = await dbContext
+            .Set<HolderQuarterlySnapshot>()
+            .Select(s => s.ReportDate)
+            .Distinct()
+            .CountAsync(cancellationToken);
+        if (
+            snapshotQuarters >= holdingQuarters
+            && activityQuarters >= holdingQuarters
+            && holderQuarters >= holder13FQuarters
+        )
         {
             return;
         }
 
         _logger.LogInformation(
-            "Holdings snapshot coverage incomplete (AUM {Snapshots}, activity {Activity} of {Holdings} quarters) — running backfill with {Timeout}s command timeout",
+            "Holdings snapshot coverage incomplete (AUM {Snapshots}, activity {Activity} of {Holdings} quarters; holder {HolderQuarters} of {Holder13FQuarters} 13F quarters) — running backfill with {Timeout}s command timeout",
             snapshotQuarters,
             activityQuarters,
             holdingQuarters,
+            holderQuarters,
+            holder13FQuarters,
             BackfillCommandTimeout.TotalSeconds
         );
 

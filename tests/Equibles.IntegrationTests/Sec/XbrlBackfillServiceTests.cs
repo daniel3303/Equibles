@@ -49,7 +49,12 @@ public class XbrlBackfillServiceTests : ParadeDbMcpTestBase
         return apple;
     }
 
-    private async Task SeedDocument(Guid companyId, string accessionNumber, DateOnly reportingDate)
+    private async Task SeedDocument(
+        Guid companyId,
+        string accessionNumber,
+        DateOnly reportingDate,
+        string sourceUrl = null
+    )
     {
         await using var seed = Fixture.CreateDbContext();
         var content = new File
@@ -73,6 +78,7 @@ public class XbrlBackfillServiceTests : ParadeDbMcpTestBase
                     ReportingDate = reportingDate,
                     ReportingForDate = reportingDate,
                     AccessionNumber = accessionNumber,
+                    SourceUrl = sourceUrl,
                     XbrlStatus = XbrlCaptureStatus.NotChecked,
                 }
             );
@@ -242,5 +248,82 @@ public class XbrlBackfillServiceTests : ParadeDbMcpTestBase
         var result = await BuildSut(StubClient(InlineSubmission)).Backfill(batchSize: 10, null);
 
         result.Processed.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Backfill_DerivesAccessionFromEdgarSourceUrl()
+    {
+        // Rows ingested before AccessionNumber existed carry it only inside the stored EDGAR
+        // submission URL — the backfill must recover it, fetch the filing, and persist the
+        // derived accession alongside the capture outcome.
+        var company = await SeedCompany();
+        await SeedDocument(
+            company.Id,
+            accessionNumber: null,
+            new DateOnly(2024, 2, 1),
+            sourceUrl: "https://www.sec.gov/Archives/edgar/data/0000320193/0000320193-24-000123.txt"
+        );
+        DbContext.ChangeTracker.Clear();
+
+        var client = StubClient(InlineSubmission);
+        var result = await BuildSut(client).Backfill(batchSize: 10, null);
+
+        result.Captured.Should().Be(1);
+        await client.Received(1).GetDocumentContent("0000320193-24-000123", "0000320193");
+
+        await using var verify = Fixture.CreateDbContext();
+        var doc = await verify.Set<Document>().SingleAsync(d => d.CommonStockId == company.Id);
+        doc.AccessionNumber.Should().Be("0000320193-24-000123");
+        doc.XbrlStatus.Should().Be(XbrlCaptureStatus.Captured);
+    }
+
+    [Fact]
+    public async Task Backfill_NeverSelectsNonEdgarSourceUrl()
+    {
+        // Documents from other providers (e.g. earnings-call transcripts) have no filing to
+        // re-fetch — they must not be selected, so they can't burn cycles or EDGAR budget.
+        var company = await SeedCompany();
+        await SeedDocument(
+            company.Id,
+            accessionNumber: null,
+            new DateOnly(2024, 2, 1),
+            sourceUrl: "https://www.alphavantage.co/query?function=EARNINGS_CALL_TRANSCRIPT&symbol=AAPL&quarter=2024Q1"
+        );
+        DbContext.ChangeTracker.Clear();
+
+        var result = await BuildSut(StubClient(InlineSubmission)).Backfill(batchSize: 10, null);
+
+        result.Processed.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Backfill_UnparseableEdgarSourceUrl_DropsOutAfterRetryCeiling()
+    {
+        // An EDGAR-looking URL that doesn't carry a well-formed accession can never be
+        // fetched; each cycle records a failure and bumps the attempt count so the document
+        // leaves the working set at the ceiling instead of being reselected forever.
+        var company = await SeedCompany();
+        await SeedDocument(
+            company.Id,
+            accessionNumber: null,
+            new DateOnly(2024, 2, 1),
+            sourceUrl: "https://www.sec.gov/Archives/edgar/data/0000320193/index.json"
+        );
+        DbContext.ChangeTracker.Clear();
+
+        var sut = BuildSut(StubClient(InlineSubmission));
+        for (var cycle = 0; cycle < 5; cycle++)
+        {
+            var cycleResult = await sut.Backfill(batchSize: 1, null);
+            cycleResult.Failed.Should().Be(1);
+        }
+
+        var afterCeiling = await sut.Backfill(batchSize: 1, null);
+        afterCeiling.Processed.Should().Be(0);
+
+        await using var verify = Fixture.CreateDbContext();
+        var doc = await verify.Set<Document>().SingleAsync(d => d.CommonStockId == company.Id);
+        doc.AccessionNumber.Should().BeNull();
+        doc.XbrlCaptureAttempts.Should().Be(5);
     }
 }

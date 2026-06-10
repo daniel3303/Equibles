@@ -106,6 +106,11 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         // is needed beyond registering it.
         builder.Entity<StockQuarterlyActivity>();
 
+        // HolderQuarterlySnapshot likewise declares its composite
+        // (InstitutionalHolderId, ReportDate) key and ReportDate index as
+        // attributes.
+        builder.Entity<HolderQuarterlySnapshot>();
+
         // AumQuarterlySnapshot uses ReportDate as the primary key. The [Key]
         // attribute can't be paired with [DatabaseGenerated(None)] without EF
         // also treating it as identity-by-convention on integral types, but the
