@@ -102,9 +102,29 @@ public class Realtime13DGIngestionService
                 filing.DateOfEvent
             );
 
-            using (var archive = _archiveBuilder.Build([filing]))
+            try
             {
+                using var archive = _archiveBuilder.Build([filing]);
                 await _importService.ImportDataSet(archive, minReportDate, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // A poisoned filing must cost only its own rows, never the sweep:
+                // skip it and leave it unrecorded so a later cycle retries it
+                // (e.g. once a fix for its defect deploys). Mirrors the per-entry
+                // isolation TryParseAndValidateEntry gives parse failures.
+                _logger.LogError(
+                    ex,
+                    "Failed to import {Form} {Accession} (CIK {Cik}); skipping filing",
+                    filing.SubmissionType,
+                    entry.AccessionNumber,
+                    entry.Cik
+                );
+                continue;
             }
 
             await RecordProcessed([entry.AccessionNumber], cancellationToken);
