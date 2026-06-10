@@ -18,6 +18,9 @@ public class FredClient : IFredClient
     private const int MaxRetries = 3;
     private const int MaxObservationsPerRequest = 100000;
 
+    // The /fred/releases/dates endpoint caps its page size at 1000.
+    private const int MaxReleaseDatesPerRequest = 1000;
+
     // FRED allows 120 requests/minute — use 100 to stay safely under
     private static readonly IRateLimiter RateLimiter = new Common.RateLimiter.RateLimiter(
         maxRequests: 100,
@@ -104,6 +107,60 @@ public class FredClient : IFredClient
             seriesId
         );
         return allObservations;
+    }
+
+    public async Task<FredReleaseRecord> GetSeriesRelease(string seriesId)
+    {
+        _logger.LogDebug("Fetching FRED release for series {SeriesId}", seriesId);
+
+        var url =
+            $"{ApiBaseUrl}/fred/series/release?series_id={seriesId}&api_key={_options.ApiKey}&file_type=json";
+        var content = await SendWithRetry(url);
+        var response = JsonConvert.DeserializeObject<FredReleasesResponse>(content);
+
+        return response?.Releases?.FirstOrDefault();
+    }
+
+    public async Task<List<FredReleaseDateRecord>> GetReleaseDates(DateOnly? realtimeStart = null)
+    {
+        _logger.LogDebug("Fetching FRED release dates from {RealtimeStart}", realtimeStart);
+
+        var allReleaseDates = new List<FredReleaseDateRecord>();
+        var offset = 0;
+
+        while (true)
+        {
+            // include_release_dates_with_no_data=true is what surfaces future scheduled
+            // dates from the FRED release calendar — without it only realized dates return.
+            var url =
+                $"{ApiBaseUrl}/fred/releases/dates"
+                + $"?api_key={_options.ApiKey}"
+                + $"&file_type=json"
+                + $"&include_release_dates_with_no_data=true"
+                + $"&sort_order=asc"
+                + $"&limit={MaxReleaseDatesPerRequest}"
+                + $"&offset={offset}";
+
+            if (realtimeStart.HasValue)
+            {
+                url += $"&realtime_start={realtimeStart.Value:yyyy-MM-dd}";
+            }
+
+            var content = await SendWithRetry(url);
+            var response = JsonConvert.DeserializeObject<FredReleasesDatesResponse>(content);
+
+            if (response?.ReleaseDates == null || response.ReleaseDates.Count == 0)
+                break;
+
+            allReleaseDates.AddRange(response.ReleaseDates);
+
+            if (allReleaseDates.Count >= response.Count)
+                break;
+            offset += response.ReleaseDates.Count;
+        }
+
+        _logger.LogDebug("Fetched {Count} FRED release dates", allReleaseDates.Count);
+        return allReleaseDates;
     }
 
     private async Task<string> SendWithRetry(string url)

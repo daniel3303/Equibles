@@ -33,6 +33,9 @@ public class FredSeries
 
     public DateTime? LastUpdated { get; set; }
 
+    public Guid? FredReleaseId { get; set; }
+    public virtual FredRelease FredRelease { get; set; }
+
     public virtual ICollection<FredObservation> Observations { get; set; } = [];
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
