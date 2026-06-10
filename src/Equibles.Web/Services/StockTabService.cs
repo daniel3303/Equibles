@@ -283,12 +283,20 @@ public class StockTabService
     // ascending in memory so chart consumers downstream get chronological data.
     // OrderBy(orderKey.Compile()) — not List<T>.Reverse() — so ties on the
     // order key keep deterministic ordering matching the EF-side sort.
-    private static async Task<List<T>> FetchMostRecentAscending<T>(
+    private async Task<List<T>> FetchMostRecentAscending<T>(
         IQueryable<T> source,
         Expression<Func<T, DateOnly>> orderKey,
         int take
     )
     {
+        if (_minSyncDate is { } minDate)
+        {
+            var atOrAfterFloor = Expression.Lambda<Func<T, bool>>(
+                Expression.GreaterThanOrEqual(orderKey.Body, Expression.Constant(minDate)),
+                orderKey.Parameters
+            );
+            source = source.Where(atOrAfterFloor);
+        }
         var rows = await source.TakeMostRecent(orderKey, take).ToListAsync();
         return rows.OrderBy(orderKey.Compile()).ToList();
     }
