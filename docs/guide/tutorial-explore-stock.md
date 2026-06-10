@@ -25,6 +25,7 @@ Click **Institutional Holders**. This tab shows every institution that reported 
 - The institution's name (click it to see that institution's full portfolio).
 - Number of shares held, dollar value, and what percentage of the company's float they own.
 - A date picker to view holdings from previous quarters.
+- An **Institutional Ownership Trend** chart plotting total shares held per quarter (left axis) and the number of holders (right axis) — shares isolate real accumulation, unlike a dollar total that also moves with the price.
 - A **Download CSV** button to export the full holder list.
 
 ## Short Volume
