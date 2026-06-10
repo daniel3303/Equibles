@@ -81,7 +81,15 @@ public class ShortSqueezeScoreManager
             }
 
             var daysToCover = shortInterest.DaysToCover;
-            if (daysToCover == null && shortInterest.AverageDailyVolume > 0)
+            if (shortInterest.AverageDailyVolume == 0)
+            {
+                // FINRA reports days-to-cover as a 1000.0 sentinel when a listing has
+                // zero average daily volume — a division-by-zero placeholder, not a
+                // measurement. Drop the factor so untradeable shells aren't ranked as
+                // top squeeze risk on the sentinel alone.
+                daysToCover = null;
+            }
+            else if (daysToCover == null && shortInterest.AverageDailyVolume > 0)
             {
                 daysToCover =
                     shortInterest.CurrentShortPosition
