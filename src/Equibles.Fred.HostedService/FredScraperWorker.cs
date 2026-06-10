@@ -39,6 +39,9 @@ public class FredScraperWorker : BaseScraperWorker
         return true;
     }
 
-    protected override Task DoWork(CancellationToken stoppingToken) =>
-        RunImport<FredImportService>(stoppingToken);
+    protected override async Task DoWork(CancellationToken stoppingToken)
+    {
+        await RunImport<FredImportService>(stoppingToken);
+        await RunImport<FredReleaseCalendarImportService>(stoppingToken);
+    }
 }
