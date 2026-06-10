@@ -9,6 +9,9 @@ public class HoldingsTabViewModel : StockTabViewModel
     public int HolderCount { get; set; }
     public long SharesOutstanding { get; set; }
 
+    // Oldest first, so the chart's x-axis reads left to right chronologically.
+    public List<OwnershipTrendPoint> OwnershipTrend { get; set; } = [];
+
     public Dictionary<PositionChangeType, List<HolderPositionChange>> GroupedHolders { get; set; } =
     [];
     public Dictionary<PositionChangeType, int> BucketCounts { get; set; } = [];
