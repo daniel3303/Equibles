@@ -6,6 +6,7 @@ using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
+using Equibles.Finra.BusinessLogic;
 using Equibles.Finra.Data.Models;
 using Equibles.Finra.Repositories;
 using Equibles.Mcp;
@@ -22,12 +23,14 @@ public class ShortDataTools
     private readonly DailyShortVolumeRepository _shortVolumeRepository;
     private readonly ShortInterestRepository _shortInterestRepository;
     private readonly CommonStockRepository _commonStockRepository;
+    private readonly ShortSqueezeScoreManager _shortSqueezeScoreManager;
     private readonly McpToolRunner _runner;
 
     public ShortDataTools(
         DailyShortVolumeRepository shortVolumeRepository,
         ShortInterestRepository shortInterestRepository,
         CommonStockRepository commonStockRepository,
+        ShortSqueezeScoreManager shortSqueezeScoreManager,
         ErrorManager errorManager,
         ILogger<ShortDataTools> logger
     )
@@ -35,6 +38,7 @@ public class ShortDataTools
         _shortVolumeRepository = shortVolumeRepository;
         _shortInterestRepository = shortInterestRepository;
         _commonStockRepository = commonStockRepository;
+        _shortSqueezeScoreManager = shortSqueezeScoreManager;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -263,4 +267,65 @@ public class ShortDataTools
     // Thin forwarder so existing reflection-based normalization tests still find the method.
     private Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker) =>
         _commonStockRepository.ResolveByTicker(ticker);
+
+    [McpServerTool(Name = "GetShortSqueezeScores")]
+    [Description(
+        "Get the stocks with the highest composite short-squeeze score — a peer-relative 0-100 rank built from short interest as a percent of shares outstanding, days to cover, and the recent change in the short share of total volume, each as a percentile across every stock reporting short interest at the latest FINRA settlement date. Use this to find squeeze candidates; use GetShortInterest for one stock's underlying series."
+    )]
+    public Task<string> GetShortSqueezeScores(
+        [Description("Maximum number of stocks to return (default: 25, highest score first)")]
+            int maxResults = 25
+    )
+    {
+        return _runner.Execute(
+            async () =>
+            {
+                var scores = await _shortSqueezeScoreManager.Compute();
+                if (scores.Count == 0)
+                    return "No short-squeeze scores available — no short interest data on file.";
+
+                var settlementDate = scores[0].SettlementDate;
+                var take = Math.Clamp(maxResults, 1, 200);
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine(
+                    $"# Highest short-squeeze scores — settlement {settlementDate:yyyy-MM-dd}"
+                );
+                sb.AppendLine();
+                sb.AppendLine(
+                    "Score = equal-weight mean of the available factor percentiles (0-100, peer-relative)."
+                );
+                sb.AppendLine();
+                sb.AppendLine(
+                    "| # | Ticker | Score | Short % of Shares | Days to Cover | Short-Volume Trend |"
+                );
+                sb.AppendLine(
+                    "|---|--------|-------|-------------------|---------------|--------------------|"
+                );
+                var rank = 1;
+                foreach (var score in scores.Take(take))
+                {
+                    var trend =
+                        score.ShortVolumeShareTrend == null
+                            ? "-"
+                            : (score.ShortVolumeShareTrend > 0 ? "+" : "")
+                                + score.ShortVolumeShareTrend.Value.ToString(
+                                    "P1",
+                                    CultureInfo.InvariantCulture
+                                );
+                    sb.AppendLine(
+                        $"| {rank++} | {score.Ticker} | {score.Score.ToString("0", CultureInfo.InvariantCulture)} | "
+                            + $"{score.ShortInterestPercentOfShares.ToString("P1", CultureInfo.InvariantCulture)} | "
+                            + $"{score.DaysToCover?.ToString("0.0", CultureInfo.InvariantCulture) ?? "-"} | {trend} |"
+                    );
+                }
+
+                if (scores.Count > take)
+                    sb.AppendLine($"\n({scores.Count - take} more scored stocks not shown.)");
+
+                return sb.ToString();
+            },
+            "GetShortSqueezeScores",
+            $"maxResults: {maxResults}"
+        );
+    }
 }
