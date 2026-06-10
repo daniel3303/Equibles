@@ -52,8 +52,13 @@ public class DocumentRepository : BaseRepository<Document>
 
     public async Task<Document> GetWithContent(Guid id)
     {
+        // The content bytes ride along eagerly: leaving File.FileContent to a lazy load
+        // lets an aborted or transient load mid-request corrupt the navigation's loaded
+        // state (the reference is non-null by construction) and crash the page instead
+        // of rendering the document.
         return await GetAll()
             .Include(d => d.Content)
+                .ThenInclude(f => f.FileContent)
             .Include(d => d.CommonStock)
             .FirstOrDefaultAsync(d => d.Id == id);
     }
