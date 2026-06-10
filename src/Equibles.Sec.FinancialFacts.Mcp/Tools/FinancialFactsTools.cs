@@ -110,7 +110,7 @@ public class FinancialFactsTools
                     return $"No '{concept}' data has been ingested for {stock.Ticker}.";
 
                 var facts = await _financialFactRepository
-                    .GetByStock(stock)
+                    .GetConsolidatedByStock(stock)
                     .Where(f => conceptPriority.Keys.Contains(f.FinancialConceptId))
                     .ToListAsync();
 
@@ -213,7 +213,7 @@ public class FinancialFactsTools
 
                 var stockIds = stocks.Select(s => s.Id).ToList();
                 var facts = await _financialFactRepository
-                    .GetByStocks(stockIds)
+                    .GetConsolidatedByStocks(stockIds)
                     .Where(f =>
                         f.FiscalYear == fiscalYear
                         && f.FiscalPeriod == period

@@ -114,7 +114,7 @@ public class FinancialStatementTools
                 var conceptIds = concepts.Select(c => c.Id).ToHashSet();
 
                 var facts = await _financialFactRepository
-                    .GetByStock(stock)
+                    .GetConsolidatedByStock(stock)
                     .Where(f =>
                         f.FiscalYear == selectedYear
                         && f.FiscalPeriod == selectedPeriod
@@ -198,7 +198,7 @@ public class FinancialStatementTools
     )> ResolveStatementPeriod(CommonStock stock, int? year, SecFiscalPeriod? requestedPeriod)
     {
         var availablePeriods = await _financialFactRepository
-            .GetByStock(stock)
+            .GetConsolidatedByStock(stock)
             .Select(f => new { f.FiscalYear, f.FiscalPeriod })
             .Distinct()
             .ToListAsync();

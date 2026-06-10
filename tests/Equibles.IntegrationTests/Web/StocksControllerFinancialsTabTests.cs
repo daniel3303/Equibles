@@ -268,4 +268,106 @@ public class StocksControllerFinancialsTabTests : IDisposable
         tab.SelectedYear.Should().Be(2023);
         tab.SelectedPeriod.Should().Be(SecFiscalPeriod.FullYear);
     }
+
+    [Fact]
+    public async Task Financials_DimensionalSegmentFactForSameConcept_ExcludedSoConsolidatedTotalWins()
+    {
+        // The XBRL extractor persists dimensional (segment/geography/product) facts
+        // that share a concept, period and accession with their consolidated
+        // sibling, discriminated only by a non-empty DimensionsKey. The statement
+        // must render the consolidated total, never a segment. Here the dimensional
+        // row (iPhone revenue, 39bn) is filed LATER than the consolidated total
+        // (400bn): a per-concept "latest filed" collapse that forgot to exclude
+        // dimensional rows would surface 39bn, so this pins that they are filtered
+        // out at the query (GetConsolidatedByStock), not merely out-sorted.
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            Cik = "0000320193",
+        };
+        var revenueConcept = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "Revenues",
+            Label = "Revenues",
+        };
+        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<FinancialConcept>().Add(revenueConcept);
+
+        FinancialFact Revenue(decimal value, DateOnly filed, string accn, string dimensionsKey) =>
+            new()
+            {
+                Id = Guid.NewGuid(),
+                CommonStockId = stock.Id,
+                FinancialConceptId = revenueConcept.Id,
+                Unit = "USD",
+                PeriodType = FactPeriodType.Duration,
+                PeriodStart = new DateOnly(2023, 1, 1),
+                PeriodEnd = new DateOnly(2023, 12, 31),
+                Value = value,
+                FiscalYear = 2023,
+                FiscalPeriod = SecFiscalPeriod.FullYear,
+                Form = DocumentType.TenK,
+                FiledDate = filed,
+                AccessionNumber = accn,
+                DimensionsKey = dimensionsKey,
+            };
+
+        _dbContext
+            .Set<FinancialFact>()
+            .AddRange(
+                // Consolidated total — empty DimensionsKey, the only context the
+                // Company Facts API reports.
+                Revenue(400_000_000_000m, new DateOnly(2024, 1, 15), "0000320193-24-000001", ""),
+                // iPhone segment cut — non-empty DimensionsKey, filed later so it
+                // would win a naive latest-filed pick.
+                Revenue(
+                    39_000_000_000m,
+                    new DateOnly(2024, 6, 1),
+                    "0000320193-24-000001",
+                    "e3b0c44298fc1c149afbf4c8996fb924"
+                )
+            );
+        await _dbContext.SaveChangesAsync();
+
+        var stockTabService = new StockTabService(
+            new InstitutionalHoldingRepository(_dbContext),
+            new InstitutionalHolderRepository(_dbContext),
+            new DailyShortVolumeRepository(_dbContext),
+            new ShortInterestRepository(_dbContext),
+            new FailToDeliverRepository(_dbContext),
+            new DocumentRepository(_dbContext),
+            new InsiderTransactionRepository(_dbContext),
+            new Form144FilingRepository(_dbContext),
+            new FormDFilingRepository(_dbContext),
+            new NCenFilingRepository(_dbContext),
+            new NportFilingRepository(_dbContext),
+            new CongressionalTradeRepository(_dbContext),
+            new DailyStockPriceRepository(_dbContext),
+            new FinancialFactRepository(_dbContext),
+            new FinancialConceptRepository(_dbContext),
+            new CommonStockRepository(_dbContext)
+        );
+
+        var tab = await stockTabService.LoadFinancialsTab(
+            stock,
+            FinancialStatementType.IncomeStatement,
+            year: null,
+            period: null
+        );
+
+        var revenueLine = tab.Lines.Should().Contain(l => l.Label == "Revenue").Subject;
+        revenueLine.HasValue.Should().BeTrue();
+        revenueLine
+            .Value.Should()
+            .Be(
+                400_000_000_000m,
+                "the consolidated total wins; the later-filed segment cut is excluded"
+            );
+        // The dimensional row shares the period, so it must not add a phantom option.
+        tab.AvailablePeriods.Should().ContainSingle();
+    }
 }
