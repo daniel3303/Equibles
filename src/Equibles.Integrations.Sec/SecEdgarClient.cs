@@ -919,6 +919,7 @@ public class SecEdgarClient : ISecEdgarClient
         var cikIndex = response.Fields.IndexOf("cik");
         var nameIndex = response.Fields.IndexOf("name");
         var tickerIndex = response.Fields.IndexOf("ticker");
+        var exchangeIndex = response.Fields.IndexOf("exchange");
 
         if (cikIndex == -1 || nameIndex == -1 || tickerIndex == -1)
             return [];
@@ -939,6 +940,20 @@ public class SecEdgarClient : ISecEdgarClient
                     out var cik,
                     out var name,
                     out var ticker
+                )
+            )
+                continue;
+
+            // EDGAR lists private/pre-listing registrants with exchange-null
+            // ticker rows (e.g. SpaceX as "SPCX"). Those symbols are recycled
+            // by real instruments, so creating a company from such a row lets
+            // price enrichment attach another instrument's data. Skip the row;
+            // a registrant with no exchange-listed row is not a listed company.
+            if (
+                exchangeIndex != -1
+                && (
+                    row.Count <= exchangeIndex
+                    || string.IsNullOrWhiteSpace(row[exchangeIndex]?.ToString())
                 )
             )
                 continue;
