@@ -29,6 +29,10 @@ You need to set this **before** the first `docker compose up` (or before any dat
 
 4. **Confirm the setting took effect.** Open the [Status page](http://localhost:8080/status) and watch the data counts. The further back the date, the longer the initial backfill — SEC filings and 13F holdings from 2000 can take hours.
 
+## What the web portal shows
+
+Historical charts and tables (prices, short data, holdings, insider and congressional trades) respect `Worker__MinSyncDate` too: dates before it are partial — the scrapers never revisit them — so the portal hides them instead of plotting misleading low values. Leave the setting unset and everything stored is shown.
+
 ## Already running with data?
 
 If scrapers have already stored data, changing `Worker__MinSyncDate` has no effect — they will pick up from `max(date) + 1` per scraper. To re-pull older history you need to drop and reseed the affected tables first (see [Back up and restore your database](how-to-back-up-and-restore.md) for the safe order of operations).
