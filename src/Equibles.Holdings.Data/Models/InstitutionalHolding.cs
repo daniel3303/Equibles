@@ -47,7 +47,10 @@ public class InstitutionalHolding
     [Column(TypeName = "numeric(7,4)")]
     public decimal? PercentOfClass { get; set; }
 
-    [MaxLength(128)]
+    // 13D/G cover pages report fully spelled-out class descriptions that can far
+    // exceed the short titles 13F info tables carry, so the column is wider than
+    // the other identifier fields.
+    [MaxLength(512)]
     public string TitleOfClass { get; set; }
 
     [MaxLength(9)]
