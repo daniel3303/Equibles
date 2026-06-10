@@ -141,14 +141,15 @@ public class FtdImportService
         CancellationToken cancellationToken
     )
     {
+        var strippedAliases = BuildStrippedTickerAliases(tickerMap);
         var tickerToCusip = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var record in records)
         {
             if (string.IsNullOrEmpty(record.Cusip) || string.IsNullOrEmpty(record.Symbol))
                 continue;
-            if (!tickerMap.ContainsKey(record.Symbol))
+            if (!TryResolveSymbol(record.Symbol, tickerMap, strippedAliases, out var ticker))
                 continue;
-            tickerToCusip.TryAdd(record.Symbol, record.Cusip);
+            tickerToCusip.TryAdd(ticker, record.Cusip);
         }
 
         if (tickerToCusip.Count == 0)
@@ -180,6 +181,56 @@ public class FtdImportService
         return seeded;
     }
 
+    /// <summary>
+    /// The CNS fails feed strips the share-class separator from symbols ("BRKB",
+    /// "MOGA") while EDGAR tickers keep it ("BRK-B", "MOG-A"), so exact matching
+    /// permanently skips class-share issuers. Alias each stored ticker by its
+    /// separator-stripped form — but never shadow a real ticker, and drop a
+    /// stripped form two tickers collapse onto rather than guess.
+    /// </summary>
+    private static Dictionary<string, string> BuildStrippedTickerAliases(
+        Dictionary<string, Guid> tickerMap
+    )
+    {
+        var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var ambiguous = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var ticker in tickerMap.Keys)
+        {
+            var stripped = string.Concat(ticker.Where(char.IsLetterOrDigit));
+            if (
+                stripped.Length == 0
+                || string.Equals(stripped, ticker, StringComparison.OrdinalIgnoreCase)
+            )
+                continue;
+            if (tickerMap.ContainsKey(stripped))
+                continue;
+            if (!aliases.TryAdd(stripped, ticker))
+                ambiguous.Add(stripped);
+        }
+
+        foreach (var key in ambiguous)
+            aliases.Remove(key);
+
+        return aliases;
+    }
+
+    private static bool TryResolveSymbol(
+        string symbol,
+        Dictionary<string, Guid> tickerMap,
+        Dictionary<string, string> strippedAliases,
+        out string ticker
+    )
+    {
+        if (tickerMap.ContainsKey(symbol))
+        {
+            ticker = symbol;
+            return true;
+        }
+
+        return strippedAliases.TryGetValue(symbol, out ticker);
+    }
+
     private async Task<int> ImportRecords(
         List<FtdRecord> records,
         Dictionary<string, Guid> tickerMap,
@@ -189,11 +240,13 @@ public class FtdImportService
         // Group by stock+date, keeping the latest record per day (FTD is cumulative)
         var grouped = new Dictionary<(Guid StockId, DateOnly Date), FailToDeliver>();
 
+        var strippedAliases = BuildStrippedTickerAliases(tickerMap);
         foreach (var record in records)
         {
             if (
                 string.IsNullOrEmpty(record.Symbol)
-                || !tickerMap.TryGetValue(record.Symbol, out var stockId)
+                || !TryResolveSymbol(record.Symbol, tickerMap, strippedAliases, out var ticker)
+                || !tickerMap.TryGetValue(ticker, out var stockId)
             )
             {
                 continue;
