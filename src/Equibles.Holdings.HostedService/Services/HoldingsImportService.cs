@@ -439,7 +439,7 @@ public class HoldingsImportService
 
     // Submissions whose CIK has no holder row yet become new InstitutionalHolder
     // records populated from the cover page where available.
-    private void CreateMissingHolders(
+    internal void CreateMissingHolders(
         ImportContext context,
         List<InstitutionalHolder> existingHolders,
         InstitutionalHolderRepository holderRepo,
@@ -457,14 +457,17 @@ public class HoldingsImportService
 
             context.CoverPages.TryGetValue(submission.AccessionNumber, out var coverPage);
 
+            // Cover-page strings are unbounded in the source TSV/XML; one over-length
+            // value rejects the whole batch flush (22001) and discards the filing's
+            // rows, so each is clamped to its column bound.
             var holder = new InstitutionalHolder
             {
                 Cik = submission.Cik,
-                Name = coverPage?.CompanyName,
-                City = coverPage?.City,
-                StateOrCountry = coverPage?.StateOrCountry,
-                Form13FFileNumber = coverPage?.Form13FFileNumber,
-                CrdNumber = coverPage?.CrdNumber,
+                Name = ClampLength(coverPage?.CompanyName, 512),
+                City = ClampLength(coverPage?.City, 128),
+                StateOrCountry = ClampLength(coverPage?.StateOrCountry, 64),
+                Form13FFileNumber = ClampLength(coverPage?.Form13FFileNumber, 32),
+                CrdNumber = ClampLength(coverPage?.CrdNumber, 32),
                 Classification = FundClassifierService.Classify(coverPage?.CompanyName),
                 ConfidentialTreatmentRequested = IsYes(coverPage?.ConfidentialTreatment),
             };
@@ -473,6 +476,14 @@ public class HoldingsImportService
             cikToHolderId[submission.Cik] = holder.Id;
             existingCiks.Add(submission.Cik);
         }
+    }
+
+    // Truncates a parsed string to its destination column bound. The cover page is
+    // free text; a value past the bound is malformed, and storing the prefix beats
+    // losing the filer's whole batch to a 22001 abort.
+    internal static string ClampLength(string value, int maxLength)
+    {
+        return value != null && value.Length > maxLength ? value[..maxLength] : value;
     }
 
     private async Task ParseOtherManagers(
