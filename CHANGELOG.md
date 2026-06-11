@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-06-11
+
 ### Added
 
 - Explanatory intro on every stock data tab — each tab on the stock page (price, holdings, short interest, short volume, fails-to-deliver, financials, SEC documents, insider trading, proposed sales, fund holdings, fund operations, exempt offerings, congressional trades) now opens with a short description of what the data is and where it comes from, rendered via a shared `_TabIntro` partial. PR #3165.
@@ -35,6 +37,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Exact-ticker search submissions now redirect straight to the stock page. PR #2529.
 - `Cmd`/`Ctrl`+`K` global search shortcut (replacing `/`) to match the commercial portal. PR #2510.
 - Insider-trading per-share prices are cross-checked against Yahoo and flagged when implausible.
+- Schedule 13D/13G beneficial-ownership filings — parses 13D/13G XML, ingests filings from the EDGAR daily index plus a realtime sweep, and adds a filing-type filter to the institutional holders table so activist/passive stakes can be isolated. PRs #3566, #3567, #3568, with parser robustness follow-ups (PRs #3580, #3611, #3617, #3626, #3678, #3679).
+- Off-exchange (OTC/ATS) volume — scrapes FINRA's OTC Transparency weekly volume data and exposes it via the `GetOffExchangeVolume` MCP tool. PRs #3569, #3570, #3571.
+- Investor relations news and events — the worker discovers each stock's IR page URL, classifies the IR platform, and scrapes news, events, and the earnings calendar from Nasdaq IR Insight and Q4 Inc sites (with a per-stock discovery cooldown); `GetInvestorRelationsNews` and `GetInvestorRelationsEvents` MCP tools expose the data. PRs #3572, #3574, #3595, #3596, #3598, #3600, #3601, #3604, #3608.
+- Dimensional XBRL facts — financial facts now carry a dimensions key, an extraction service sweeps captured XBRL envelopes into dimensional facts, and the `GetRevenueBreakdown` MCP tool surfaces segment/product/geography revenue splits. PRs #3613, #3614, #3615, #3621, #3629.
+- Composite short-squeeze score — rates stocks from stored short data (short interest, days to cover, short-volume ratio, fails-to-deliver), exposed via the `GetShortSqueezeScores` MCP tool. PRs #3623, #3624.
+- Reverse fund-ownership lookup — the `GetFundsHoldingStock` MCP tool lists the funds holding a given stock from NPORT portfolio data, backed by a new CUSIP index and reverse-lookup queries. PRs #3610, #3625.
+- Per-holder quarterly AUM snapshots materialised by the snapshot worker, backing faster institution history reads. PR #3628.
+- Institutional ownership trend chart on the stock holdings tab — per-quarter holder count and aggregate position trend. PRs #3634, #3635.
+- FRED economic release calendar — imported during the scraper cycle and exposed via the `GetEconomicCalendar` MCP tool. PRs #3647, #3648, #3649.
+- Congressional annual financial disclosures — parses House Clerk annual reports (Form A) with column-aware schedule extraction and Senate eFD annual reports, rolls assets and liabilities up into net-worth bands, and exposes them via the `GetMemberNetWorth` MCP tool. PRs #3653, #3655, #3658, #3662, #3663.
+- DEF 14A proxy statements — new document type included in the scraper form set, with multi-word form types accepted by the HTML normalizer. PRs #3671, #3672.
+- 8-K item numbers are captured on ingest and saved documents are announced on the bus. PR #3575.
+- Percent-of-class on institutional holdings, parsed from 13D/G cover pages. PR #3565.
+- NPORT-P filings are reprocessed to backfill fund holdings ingested before the parser landed. PR #3498.
 
 ### Changed
 
@@ -43,6 +59,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - **Holdings snapshot rebuilds are now throttled and coalesced.** `Filings13FImportedConsumer` no longer rebuilds the AUM/sector snapshots inline — it marks the affected quarter dirty via a new `DirtyAt` timestamp on `AumQuarterlySnapshot`. A new `AumSnapshotDrainWorker` ticks every 5 minutes and rebuilds any quarter whose dirty flag has been set for more than an hour, using optimistic-concurrency clear so a consumer event landing mid-rebuild isn't lost. During 13F filing-season burst windows hundreds of imports per day for the same quarter now produce one rebuild per cooldown window instead of one per import. The daily safety-net `AumSnapshotRebuildWorker` is narrowed to the four most recent quarters (older quarters are effectively frozen — amendments trigger their own consumer event). First-boot backfill of every quarter is unchanged.
 - Holdings stats and trends pages (`/holdings/stats`, `/holdings/trends`) now read the per-quarter snapshots instead of recomputing aggregates on each request. PR #2479.
 - Per-stock quarterly 13F activity backing the conviction heat map is now materialized by the snapshot worker instead of recomputed per request, so the heat map renders from precomputed rows. PR #3238.
+- Stock data tabs clamp their history to the configured minimum sync date (`Worker__MinSyncDate`), so price, short-data, holdings, insider, and congressional views never show partially-backfilled periods. PRs #3638, #3639, #3640.
+- 13F and NPORT data-set processing is version-stamped, so rows imported by an older parser are reprocessed automatically after a parser fix instead of staying wrong until a manual backfill.
+- SEC rate-limit handling — a 429 now pauses all SEC requests for the full block window, in-flight successes no longer produce a false "cleared" signal, and block/clear transitions publish bus events for observability.
+- The historical XBRL backfill worker now defaults off — the one-time sweep of legacy documents has drained; new filings capture their XBRL on ingest. PR #3622.
 
 ### Fixed
 
@@ -60,10 +80,25 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - SEC Form 4 transaction-code mapping corrected (I/W). PR #2469.
 - Investment-adviser name search treats LIKE wildcards (`%`, `_`) in the query as literal characters, so a search containing them no longer matches unintended advisers. Issue #2905 (PR #3010).
 - The FINRA daily short-volume scraper now guards against the parent `CommonStock` disappearing between the per-cycle ticker-map read and the per-batch write — the same guard already applied to the Yahoo, FTD, and FinancialFacts scrapers. A cold-start tick alongside `CompanySyncService` could otherwise trip `FK_*_CommonStock_CommonStockId` and fail the entire insert batch (poisoning rows for surviving stocks too); stale IDs are now re-validated against the live `CommonStock` table per batch and dropped with a warning so the surviving rows still persist. Issue #3288 (follow-up to #1591).
+- Form 4 insider trades are attributed to the issuer of the traded security instead of the reporting owner's own ticker, and the insider dashboard no longer inflates totals with derivative prices or chain-duplicated filings. PRs #3500, #3502.
+- 13F filings that duplicate the position value into the share-count column are repaired on import. PR #3499.
+- SEC document normalizer no longer promotes "Part … of …" / "Item … of …" prose sentences to headings (including after page breaks), unwraps spaced inline content divs, and matches list-item wrapper classes as whole tokens. PRs #3484, #3487, #3488, #3491, #3531, #3532, #3553.
+- MCP tools clamp client-supplied `maxResults` so out-of-range values can no longer produce a negative SQL `LIMIT` or oversized result sets. PRs #3540, #3541, #3544.
+- MCP tool calls with a missing or wrongly-typed required argument return a structured "Invalid parameters" result naming the tool instead of an opaque internal error. PRs #3609, #3680.
+- Fund Operations and Fund Holdings tabs are shown only for funds/ETFs. PR #3503.
+- Backtest CAGR is no longer annualized for windows under 90 days, and the Double-Down Report excludes degenerate prior bases. PRs #3494, #3495.
+- CBOE put/call ingestion stitches the chunked Next.js RSC payload back together before extracting the JSON, fixing empty imports after CBOE's site change. PR #3607.
+- Senate eFD search and row dates are parsed culture-pinned, so congressional ingestion works on non-English-locale servers. Issues #3659, #3660 (PRs #3665, #3668).
+- FTD feed symbols are resolved to class-share tickers when seeding CUSIPs, and EDGAR ticker rows without an exchange are skipped when parsing active companies. PRs #3616, #3618.
+- Field truncation no longer splits UTF-16 surrogate pairs (filing fields and XBRL file names). PRs #3481, #3529.
+- 13F filing summaries collapse to one row per accession before upsert, and FINRA's zero-volume days-to-cover sentinel is dropped from the squeeze score. PRs #3650, #3651.
+- Filings whose `primaryDocDescription` is missing are kept instead of skipped. PR #3354.
+- Container healthchecks give startup migrations time to complete before failing. PR #3492.
 
 ### Security
 
 - Neutralized the `javascript:` scheme in Markdown autolinks. PR #2633.
+- Baseline security response headers and HSTS on the web portal. PR #3542.
 
 ## [1.2.0] — 2026-05-26
 
@@ -563,7 +598,8 @@ First tagged release.
 - Background worker — scrapers and document processor.
 - Docker Compose stack (ParadeDB + web + MCP + worker), with an optional vector-embedding profile.
 
-[Unreleased]: https://github.com/daniel3303/Equibles/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/daniel3303/Equibles/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/daniel3303/Equibles/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/daniel3303/Equibles/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/daniel3303/Equibles/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/daniel3303/Equibles/compare/v1.0.0...v1.1.0
