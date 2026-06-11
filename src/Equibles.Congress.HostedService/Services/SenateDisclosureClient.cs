@@ -286,22 +286,4 @@ public class SenateDisclosureClient : IAsyncDisposable
     }
 
     private record SenateReport(string MemberName, string ReportUrl, DateOnly DateSubmitted);
-
-    private class SenateSearchResponse
-    {
-        [JsonProperty("draw")]
-        public int Draw { get; set; }
-
-        [JsonProperty("recordsTotal")]
-        public int RecordsTotal { get; set; }
-
-        [JsonProperty("recordsFiltered")]
-        public int RecordsFiltered { get; set; }
-
-        [JsonProperty("data")]
-        public List<List<string>> Data { get; set; } = [];
-
-        [JsonProperty("result")]
-        public string Result { get; set; }
-    }
 }
