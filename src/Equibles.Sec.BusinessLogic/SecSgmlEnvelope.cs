@@ -31,4 +31,32 @@ internal static class SecSgmlEnvelope
         value = raw.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries)[0];
         return true;
     }
+
+    // Reads the full single-line value of an SGML header tag, whitespace-normalized but with
+    // every token kept. Multi-word form types ("DEF 14A") need the whole line — the caller
+    // decides how much of it is the value versus a descriptive trailer.
+    public static bool TryGetTagLine(string block, string tagName, out string value)
+    {
+        value = string.Empty;
+        var tagMarker = $"<{tagName}>";
+        var idx = block.IndexOf(tagMarker, StringComparison.OrdinalIgnoreCase);
+        if (idx == -1)
+            return false;
+
+        var valueStart = idx + tagMarker.Length;
+        var end = valueStart;
+        while (end < block.Length && block[end] != '\n' && block[end] != '\r' && block[end] != '<')
+        {
+            end++;
+        }
+
+        var tokens = block
+            .Substring(valueStart, end - valueStart)
+            .Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length == 0)
+            return false;
+
+        value = string.Join(' ', tokens);
+        return true;
+    }
 }

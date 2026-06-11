@@ -52,13 +52,22 @@ public class SecDocumentHtmlNormalizer : ISecDocumentHtmlNormalizer
         return tempDoc.Body?.InnerHtml ?? string.Empty;
     }
 
-    private bool IsAllowedDocumentType(string documentType)
+    // The TYPE line may carry a descriptive trailer after the bare form name
+    // ("10-K   Annual Report") AND the form name itself may contain spaces
+    // ("DEF 14A"), so match the longest token prefix that is a registered display
+    // name before falling back to the exhibit check on the first token.
+    private bool IsAllowedDocumentType(string documentTypeLine)
     {
-        if (DocumentType.FromDisplayName(documentType) != null)
+        var tokens = documentTypeLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        for (var take = tokens.Length; take >= 1; take--)
         {
-            return true;
+            if (DocumentType.FromDisplayName(string.Join(' ', tokens[..take])) != null)
+            {
+                return true;
+            }
         }
 
+        var documentType = tokens.Length > 0 ? tokens[0] : documentTypeLine;
         if (documentType.StartsWith("EX-"))
         {
             var exNumberPart = documentType.Substring(3);
@@ -97,7 +106,9 @@ public class SecDocumentHtmlNormalizer : ISecDocumentHtmlNormalizer
             var block = searchText.Substring(blockStart, blockEnd - blockStart + endTag.Length);
             pos = blockEnd + endTag.Length;
 
-            var typeText = ExtractSgmlTagValue(block, "TYPE");
+            var typeText = SecSgmlEnvelope.TryGetTagLine(block, "TYPE", out var typeLine)
+                ? typeLine
+                : null;
             if (string.IsNullOrEmpty(typeText) || !IsAllowedDocumentType(typeText))
                 continue;
 
