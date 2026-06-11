@@ -102,10 +102,15 @@ public class Realtime13DGIngestionService
                 filing.DateOfEvent
             );
 
+            ImportResult importResult;
             try
             {
                 using var archive = _archiveBuilder.Build([filing]);
-                await _importService.ImportDataSet(archive, minReportDate, cancellationToken);
+                importResult = await _importService.ImportDataSet(
+                    archive,
+                    minReportDate,
+                    cancellationToken
+                );
             }
             catch (OperationCanceledException)
             {
@@ -126,6 +131,12 @@ public class Realtime13DGIngestionService
                 );
                 continue;
             }
+
+            // IsComplete=false is the import service's "retry later" contract (e.g.
+            // NoTrackedStocks until CUSIPs seed) — recording it here would consume
+            // the filing forever (EquiblesCommercial#2850).
+            if (!importResult.IsComplete)
+                continue;
 
             await RecordProcessed([entry.AccessionNumber], cancellationToken);
             totalImported++;
