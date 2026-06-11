@@ -7,9 +7,7 @@ namespace Equibles.UnitTests.Congress;
 
 public class SenateAnnualReportClientSearchDateCultureTests
 {
-    [Fact(
-        Skip = "GH-3660 — search dates are posted with the host culture's date separator instead of US format"
-    )]
+    [Fact]
     public async Task GetAnnualReports_NonUsHostCulture_SendsUsFormattedSubmittedDates()
     {
         // eFD only understands US MM/dd/yyyy dates. The "MM/dd/yyyy" custom
