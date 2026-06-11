@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?><edgarSubmission xmlns="http://www.sec.gov/edgar/schedule13g" xmlns:com="http://www.sec.gov/edgar/common">
+  <schemaVersion>X0202</schemaVersion>
+<headerData>
+    <submissionType>SCHEDULE 13G</submissionType>
+    <filerInfo>
+      <filer>
+        <filerCredentials>
+          <cik>0001831942</cik>
+          <ccc>XXXXXXXX</ccc>
+        </filerCredentials>
+      </filer>
+      <liveTestFlag>LIVE</liveTestFlag>
+
+
+
+    </filerInfo>
+  </headerData>
+  <formData>
+    <coverPageHeader>
+      <securitiesClassTitle>Common Stock, par value $0.00001 per share</securitiesClassTitle>
+      <eventDateRequiresFilingThisStatement>03/09/2026</eventDateRequiresFilingThisStatement>
+      <issuerInfo>
+        <issuerCik>0001880438</issuerCik>
+        <issuerName>AN2 Therapeutics, Inc.</issuerName>
+        <issuerCusips>
+          <issuerCusipNumber>037326105</issuerCusipNumber>
+        </issuerCusips>
+        <issuerPrincipalExecutiveOfficeAddress>
+          <com:street1>1300 El Camino Real</com:street1>
+          <com:street2>Suite 100</com:street2>
+          <com:city>Menlo Park</com:city>
+          <com:stateOrCountry>CA</com:stateOrCountry>
+          <com:zipCode>94025</com:zipCode>
+        </issuerPrincipalExecutiveOfficeAddress>
+      </issuerInfo>
+      <designateRulesPursuantThisScheduleFiled>
+        <designateRulePursuantThisScheduleFiled>Rule 13d-1(c)</designateRulePursuantThisScheduleFiled>
+      </designateRulesPursuantThisScheduleFiled>
+    </coverPageHeader>
+    <coverPageHeaderReportingPersonDetails>
+
+      <reportingPersonName>Commodore Capital LP</reportingPersonName>
+      <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+      <reportingPersonBeneficiallyOwnedNumberOfShares>
+        <soleVotingPower>0.00</soleVotingPower>
+        <sharedVotingPower>3697435.00</sharedVotingPower>
+        <soleDispositivePower>0.00</soleDispositivePower>
+        <sharedDispositivePower>3697435.00</sharedDispositivePower>
+      </reportingPersonBeneficiallyOwnedNumberOfShares>
+      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>3697435.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>
+      <classPercent>9.9</classPercent>
+      <typeOfReportingPerson>IA</typeOfReportingPerson>
+      <typeOfReportingPerson>PN</typeOfReportingPerson>
+    </coverPageHeaderReportingPersonDetails>
+    <coverPageHeaderReportingPersonDetails>
+
+      <reportingPersonName>Commodore Capital Master LP</reportingPersonName>
+      <citizenshipOrOrganization>E9</citizenshipOrOrganization>
+      <reportingPersonBeneficiallyOwnedNumberOfShares>
+        <soleVotingPower>0.00</soleVotingPower>
+        <sharedVotingPower>3697435.00</sharedVotingPower>
+        <soleDispositivePower>0.00</soleDispositivePower>
+        <sharedDispositivePower>3697435.00</sharedDispositivePower>
+      </reportingPersonBeneficiallyOwnedNumberOfShares>
+      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>3697435.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>
+      <classPercent>9.9</classPercent>
+      <typeOfReportingPerson>PN</typeOfReportingPerson>
+    </coverPageHeaderReportingPersonDetails>
+    <coverPageHeaderReportingPersonDetails>
+
+      <reportingPersonName>Robert Egen Atkinson</reportingPersonName>
+      <citizenshipOrOrganization>X1</citizenshipOrOrganization>
+      <reportingPersonBeneficiallyOwnedNumberOfShares>
+        <soleVotingPower>0.00</soleVotingPower>
+        <sharedVotingPower>3697435.00</sharedVotingPower>
+        <soleDispositivePower>0.00</soleDispositivePower>
+        <sharedDispositivePower>3697435.00</sharedDispositivePower>
+      </reportingPersonBeneficiallyOwnedNumberOfShares>
+      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>3697435.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>
+      <classPercent>9.9</classPercent>
+      <typeOfReportingPerson>IN</typeOfReportingPerson>
+      <typeOfReportingPerson>HC</typeOfReportingPerson>
+    </coverPageHeaderReportingPersonDetails>
+    <coverPageHeaderReportingPersonDetails>
+
+      <reportingPersonName>Michael Kramarz</reportingPersonName>
+      <citizenshipOrOrganization>X1</citizenshipOrOrganization>
+      <reportingPersonBeneficiallyOwnedNumberOfShares>
+        <soleVotingPower>0.00</soleVotingPower>
+        <sharedVotingPower>3697435.00</sharedVotingPower>
+        <soleDispositivePower>0.00</soleDispositivePower>
+        <sharedDispositivePower>3697435.00</sharedDispositivePower>
+      </reportingPersonBeneficiallyOwnedNumberOfShares>
+      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>3697435.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>
+      <classPercent>9.9</classPercent>
+      <typeOfReportingPerson>HC</typeOfReportingPerson>
+      <typeOfReportingPerson>IN</typeOfReportingPerson>
+    </coverPageHeaderReportingPersonDetails>
+    <items>
+      <item1>
+        <issuerName>AN2 Therapeutics, Inc.</issuerName>
+        <issuerPrincipalExecutiveOfficeAddress>1300 El Camino Real, Suite 100, Menlo Park, CALIFORNIA, 94025.</issuerPrincipalExecutiveOfficeAddress>
+      </item1>
+      <item2>
+        <filingPersonName>Name of the person filing
+
+Commodore Capital LP
+Commodore Capital Master LP
+Robert Egen Atkinson
+Michael Kramarz
+
+Each a "Filer."
+</filingPersonName>
+        <principalBusinessOfficeOrResidenceAddress>The address for Commodore Capital LP, Robert Egen Atkinson, and Michael Kramarz is 444 Madison Avenue, Floor 35, New York, NY 10022.
+
+The address for Commodore Capital Master LP is c/o Maples Corporate Services Limited, Ugland House, South Church Street, PO Box 309, Grand Cayman KY1-1104, Cayman Islands.
+</principalBusinessOfficeOrResidenceAddress>
+        <citizenship>See Item 4 of the cover page for each Filer.</citizenship>
+      </item2>
+      <item3>
+        <notApplicableFlag>Y</notApplicableFlag>
+      </item3>
+      <item4>
+        <amountBeneficiallyOwned>See Item 9 of the cover page for each Filer.
+
+This report on Schedule 13G is being filed by Commodore Capital LP (the "Firm"), Commodore Capital Master LP ("Commodore Master"), Michael Kramarz, and Robert Egen Atkinson. The Firm is the investment manager to Commodore Master. As of March 9, 2026, the Firm may be deemed to beneficially own an aggregate of 3,697,435 shares Common Stock, $0.00001 par value (the "Common Stock"), consisting of (i) 2,333,713 shares of Common Stock (ii) 1,363,722 shares of Common Stock each Filer has the right to acquire through the exercise of a Pre-Funded Warrant (the "Pre-Funded Warrant")  of AN2 Therapeutics, Inc. (the "Issuer"). The Pre-Funded Warrant is subject to a beneficial ownership limitation of 9.99% (the "Beneficial Ownership Limitation"). The foregoing excludes 916,987 shares of Common Stock underlying the Pre-Funded Warrant, which is subject to the Beneficial Ownership Limitation. The Firm, as the investment manager to Commodore Master, may be deemed to beneficially own these securities. Michael Kramarz and Robert Egen Atkinson are the managing partners of the Firm and exercise investment discretion with respect to these securities. Ownership percentages are based on 37,011,357 shares of Common Stock outstanding, which is the sum of (i) 27,402,024 shares of Common Stock outstanding as of November 3, 2025, as reported in the issuer's Form 10-Q filed with the SEC on November 12, 2025, (ii) 8,245,611 shares of Common Stock issued in connection with a private placement that closed on or about March 10, 2026, as reported in the issuer's Form 8-K filed with the SEC on March 10, 2026, and (iii) 1,363,722 shares of Common Stock of which the Filers may acquire upon the exercise of the Pre-Funded Warrant.
+ </amountBeneficiallyOwned>
+        <classPercent>See item 11 of the cover page for each Filer.</classPercent>
+        <numberOfSharesPersonHas>
+          <solePowerOrDirectToVote>See item 5 of the cover page for each Filer.</solePowerOrDirectToVote>
+          <sharedPowerOrDirectToVote>See item 6 of the cover page for each Filer.</sharedPowerOrDirectToVote>
+          <solePowerOrDirectToDispose>See item 7 of the cover page for each Filer.</solePowerOrDirectToDispose>
+          <sharedPowerOrDirectToDispose>See item 8 of the cover page for each Filer.</sharedPowerOrDirectToDispose>
+        </numberOfSharesPersonHas>
+      </item4>
+      <item5>
+        <notApplicableFlag>Y</notApplicableFlag>
+        <classOwnership5PercentOrLess>N</classOwnership5PercentOrLess>
+      </item5>
+      <item6>
+        <notApplicableFlag>Y</notApplicableFlag>
+      </item6>
+      <item7>
+        <notApplicableFlag>Y</notApplicableFlag>
+      </item7>
+      <item8>
+        <notApplicableFlag>Y</notApplicableFlag>
+      </item8>
+      <item9>
+        <notApplicableFlag>Y</notApplicableFlag>
+      </item9>
+      <item10>
+        <notApplicableFlag>N</notApplicableFlag>
+        <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under &amp;#167; 240.14a-11.
+
+</certifications>
+      </item10>
+    </items>
+    <exhibitInfo>Exhibit 1: Joint Filing Agreement</exhibitInfo>
+    <signatureInformation>
+      <reportingPersonName>Commodore Capital LP</reportingPersonName>
+      <signatureDetails>
+        <signature>Michael Kramarz</signature>
+        <title>Managing Partner</title>
+        <date>03/16/2026</date>
+      </signatureDetails>
+    </signatureInformation>
+    <signatureInformation>
+      <reportingPersonName>Commodore Capital Master LP</reportingPersonName>
+      <signatureDetails>
+        <signature>Michael Kramarz</signature>
+        <title>Authorized Signatory</title>
+        <date>03/16/2026</date>
+      </signatureDetails>
+    </signatureInformation>
+    <signatureInformation>
+      <reportingPersonName>Robert Egen Atkinson</reportingPersonName>
+      <signatureDetails>
+        <signature>Robert Egen Atkinson</signature>
+        <title>Authorized Signatory</title>
+        <date>03/16/2026</date>
+      </signatureDetails>
+    </signatureInformation>
+    <signatureInformation>
+      <reportingPersonName>Michael Kramarz</reportingPersonName>
+      <signatureDetails>
+        <signature>Michael Kramarz</signature>
+        <title>Authorized Signatory</title>
+        <date>03/16/2026</date>
+      </signatureDetails>
+    </signatureInformation>
+  </formData>
+
+</edgarSubmission>

@@ -65,7 +65,10 @@ public class Filing13DGXmlParser
                 FirstValue(coverPage, "dateOfEvent", "eventDateRequiresFilingThisStatement")
             ),
             IssuerCik = FirstValue(issuerInfo, "issuerCIK", "issuerCik")?.TrimStart('0'),
-            IssuerCusip = FirstValue(issuerInfo, "issuerCUSIP", "issuerCusip"),
+            // Schema X0202 (~2026-03-16) wraps the CUSIP in a list:
+            // <issuerCusips><issuerCusipNumber>…</issuerCusipNumber></issuerCusips>;
+            // the descendant probe takes the first entry.
+            IssuerCusip = FirstValue(issuerInfo, "issuerCUSIP", "issuerCusip", "issuerCusipNumber"),
             IssuerName = Value(Descendant(issuerInfo, "issuerName")),
             SecuritiesClassTitle = Value(Descendant(coverPage, "securitiesClassTitle")),
         };
