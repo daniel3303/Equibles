@@ -9,6 +9,7 @@ public class DocumentTypeTests
     [InlineData("TenQ")]
     [InlineData("EightK")]
     [InlineData("FormFour")]
+    [InlineData("Def14A")]
     public void FromValue_ReturnsCorrectType(string value)
     {
         var result = DocumentType.FromValue(value);
@@ -50,6 +51,7 @@ public class DocumentTypeTests
     [InlineData("N-CEN/A", "NCenA")]
     [InlineData("NPORT-P", "NportP")]
     [InlineData("NPORT-P/A", "NportPa")]
+    [InlineData("DEF 14A", "Def14A")]
     public void FromDisplayName_ReturnsCorrectType(string displayName, string expectedValue)
     {
         var result = DocumentType.FromDisplayName(displayName);

@@ -57,4 +57,7 @@ public enum DocumentTypeFilter
 
     [Display(Name = "NPORT-P/A")]
     NportPa,
+
+    [Display(Name = "DEF 14A")]
+    Def14A,
 }

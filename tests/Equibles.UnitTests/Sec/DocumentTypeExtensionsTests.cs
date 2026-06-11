@@ -25,6 +25,7 @@ public class DocumentTypeExtensionsTests
     [InlineData("NCenA", DocumentTypeFilter.NCenA)]
     [InlineData("NportP", DocumentTypeFilter.NportP)]
     [InlineData("NportPa", DocumentTypeFilter.NportPa)]
+    [InlineData("Def14A", DocumentTypeFilter.Def14A)]
     public void ToSecEdgarFilter_MappedType_ReturnsCorrectFilter(
         string documentTypeValue,
         DocumentTypeFilter expectedFilter
