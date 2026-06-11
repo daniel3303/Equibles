@@ -23,6 +23,7 @@ public class CongressToolsGetMemberTradesUnknownTransactionTypeTests : ParadeDbM
         new(
             new CongressionalTradeRepository(DbContext),
             new CongressMemberRepository(DbContext),
+            new CongressionalAnnualDisclosureRepository(DbContext),
             new CommonStockRepository(DbContext),
             ErrorManager,
             NullLogger<CongressTools>()
@@ -61,6 +62,7 @@ public class CongressToolsGetMemberTradesUnknownTransactionTypeTests : ParadeDbM
         var sut = new CongressTools(
             new CongressionalTradeRepository(verify),
             new CongressMemberRepository(verify),
+            new CongressionalAnnualDisclosureRepository(verify),
             new CommonStockRepository(verify),
             ErrorManager,
             NullLogger<CongressTools>()

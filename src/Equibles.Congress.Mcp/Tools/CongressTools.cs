@@ -20,12 +20,14 @@ public class CongressTools
 {
     private readonly CongressionalTradeRepository _tradeRepository;
     private readonly CongressMemberRepository _memberRepository;
+    private readonly CongressionalAnnualDisclosureRepository _disclosureRepository;
     private readonly CommonStockRepository _commonStockRepository;
     private readonly McpToolRunner _runner;
 
     public CongressTools(
         CongressionalTradeRepository tradeRepository,
         CongressMemberRepository memberRepository,
+        CongressionalAnnualDisclosureRepository disclosureRepository,
         CommonStockRepository commonStockRepository,
         ErrorManager errorManager,
         ILogger<CongressTools> logger
@@ -33,6 +35,7 @@ public class CongressTools
     {
         _tradeRepository = tradeRepository;
         _memberRepository = memberRepository;
+        _disclosureRepository = disclosureRepository;
         _commonStockRepository = commonStockRepository;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
@@ -156,6 +159,62 @@ public class CongressTools
             $"memberName: {memberName}"
         );
     }
+
+    [McpServerTool(Name = "GetMemberNetWorth")]
+    [Description(
+        "Get a congress member's net worth history from their annual financial disclosures. Disclosed values are ranges, so every year is a band (minimum-maximum), never a point estimate. Only electronically filed reports are read: a missing year means no electronic filing, not zero net worth."
+    )]
+    public Task<string> GetMemberNetWorth(
+        [Description("Congress member name (e.g., 'Nancy Pelosi', 'Marsha Blackburn')")]
+            string memberName,
+        [Description("Maximum number of years to return (default: 20, newest first)")]
+            int maxResults = 20
+    )
+    {
+        return _runner.Execute(
+            async () =>
+            {
+                var member = await _memberRepository.GetByName(memberName.Trim());
+                if (member == null)
+                    return $"Member '{memberName}' not found. Use SearchCongressMembers to find the exact name.";
+
+                var disclosures = await _disclosureRepository
+                    .GetByMember(member)
+                    .OrderByDescending(d => d.Year)
+                    .Take(McpLimit.Clamp(maxResults))
+                    .Select(d => new
+                    {
+                        d.Year,
+                        d.FiledDate,
+                        d.NetWorthMinimum,
+                        d.NetWorthMaximum,
+                        AssetCount = d.Lines.Count(l =>
+                            l.Kind == CongressionalDisclosureLineKind.Asset
+                        ),
+                        LiabilityCount = d.Lines.Count(l =>
+                            l.Kind == CongressionalDisclosureLineKind.Liability
+                        ),
+                    })
+                    .ToListAsync();
+
+                return MarkdownTable.Render(
+                    disclosures,
+                    $"No electronically filed annual disclosure found for {member.Name} ({member.Position.NameForHumans()}). Paper filings are not read, so this does not mean zero net worth.",
+                    $"Net worth of {member.Name} ({member.Position.NameForHumans()}), as disclosed in annual financial reports (band = sum of disclosed asset minimums minus liability maximums, through asset maximums minus liability minimums):",
+                    "| Year | Filed | Net Worth Minimum | Net Worth Maximum | Assets | Liabilities |",
+                    "|------|-------|-------------------|-------------------|--------|-------------|",
+                    d =>
+                        $"| {d.Year} | {d.FiledDate:yyyy-MM-dd} | {FormatSignedAmount(d.NetWorthMinimum)} | {FormatSignedAmount(d.NetWorthMaximum)} | {d.AssetCount} | {d.LiabilityCount} |"
+                );
+            },
+            "GetMemberNetWorth",
+            $"memberName: {memberName}"
+        );
+    }
+
+    // Net worth bands can be negative (liabilities exceeding assets).
+    private static string FormatSignedAmount(long value) =>
+        value < 0 ? $"-${McpFormat.WholeNumber(-value)}" : $"${McpFormat.WholeNumber(value)}";
 
     [McpServerTool(Name = "SearchCongressMembers")]
     [Description(

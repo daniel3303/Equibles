@@ -16,6 +16,7 @@ public class CongressToolsGetMemberTradesCultureInvarianceTests : ParadeDbMcpTes
         new(
             new CongressionalTradeRepository(DbContext),
             new CongressMemberRepository(DbContext),
+            new CongressionalAnnualDisclosureRepository(DbContext),
             new CommonStockRepository(DbContext),
             ErrorManager,
             NullLogger<CongressTools>()

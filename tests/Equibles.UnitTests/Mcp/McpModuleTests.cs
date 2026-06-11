@@ -415,7 +415,13 @@ public class McpModuleToolDiscoveryTests
             },
             {
                 typeof(CongressTools),
-                new[] { "GetCongressionalTrades", "GetMemberTrades", "SearchCongressMembers" }
+                new[]
+                {
+                    "GetCongressionalTrades",
+                    "GetMemberNetWorth",
+                    "GetMemberTrades",
+                    "SearchCongressMembers",
+                }
             },
             {
                 // ShortDataTools is the marker for the whole Equibles.Finra.Mcp
