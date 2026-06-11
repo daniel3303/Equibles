@@ -1049,7 +1049,20 @@ public class HoldingsImportService
             })
             .ToListAsync(cancellationToken);
 
+        // The upsert conflicts on AccessionNumber alone, and Postgres rejects a
+        // statement that touches the same conflict key twice (21000). An accession
+        // whose holdings rows disagree on grouping metadata (mixed amendment flag,
+        // inconsistent dates) yields several groups, so collapse to the dominant
+        // variant per accession instead of aborting the whole data set.
         var summaries = rows.Where(r => affected.Contains((r.InstitutionalHolderId, r.ReportDate)))
+            .GroupBy(r => r.AccessionNumber, StringComparer.Ordinal)
+            .Select(g =>
+                g.OrderByDescending(r => r.PositionCount)
+                    .ThenByDescending(r => r.FilingDate)
+                    .ThenByDescending(r => r.ReportDate)
+                    .ThenByDescending(r => r.IsAmendment)
+                    .First()
+            )
             .Select(r => new InstitutionalFiling
             {
                 AccessionNumber = r.AccessionNumber,
