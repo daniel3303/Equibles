@@ -1,0 +1,695 @@
+<!DOCTYPE HTML>
+    <html lang="en">
+        <head>
+            <title>eFD: 
+	Annual Report for 2024 -
+	
+		Slotkin,
+	
+	
+		Elissa
+	
+
+	
+</title>
+            <meta name="robots" content="noindex">
+            <meta charset="utf-8">
+            <meta content="IE=edge" http-equiv="X-UA-Compatible">
+            <meta content="width=device-width, initial-scale=1" name="viewport">
+
+            
+	<style type="text/css">
+		.txtLogo {
+			display: none;
+		}
+	</style>
+
+
+
+            
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="shortcut icon" href="/static/images/favicon.ico" type="image/x-icon" />
+
+
+<link type="text/css" rel="stylesheet" media="all" href="/static/bootstrap-custom/theme-starter-site.css" />
+<link type="text/css" rel="stylesheet" media="all" href="/static/fontawesome/css/font-awesome.min.css" />
+<link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/smoothness/jquery-ui.css">
+
+<link type="text/css" rel="stylesheet" media="all" href="/static/css/main.css" />
+<link type="text/css" rel="stylesheet" media="all" href="/static/css/carousel.css" />
+<link type="text/css" rel="stylesheet" media="print" href="/static/css/print.css" />
+<script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha384-1H217gwSVyLSIfaLxHbE7dRb3v4mYCKbpQvzx0cegeju1MVsGrX5xXxAvs/HgeFs" crossorigin="anonymous"></script>
+<script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js" integrity="sha256-lSjKY0/srUM9BE3dPm+c4fBo1dky2v27Gdjm2uoZaL0=" crossorigin="anonymous"></script>
+
+<script src="https://cdn.datatables.net/1.10.15/js/jquery.dataTables.min.js"
+        integrity="sha384-NHtbx1Hf6ctHNdZmU28YfhGjB63gcU1YU64ttM+c0RxMKNBj67j+N/axpqTfdffo"
+        crossorigin="anonymous"></script>
+
+<script src="/static/scripts/popper.min.js" type="text/javascript"></script>
+<script src="/static/bootstrap/js/bootstrap.min.js"></script>
+
+
+
+
+<script src="/static/scripts/jquery/jquery.placeholder.js"></script>
+<script src="/static/scripts/jquery/jquery.dPassword.js"></script>
+<script src="/static/scripts/jquery/modernizr.js"></script>
+<script src="/static/scripts/jquery/jquery.cooke.js"></script>
+<script src="/static/browser-detect.js"></script>
+
+<!-- PDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfobject/2.1.1/pdfobject.js"
+        integrity="sha512-X6sgTijRHjRCltheFlgnf5Lm4NzCXVgfSNAHjHq4G8R03SBUTUVqFllStaiZflC4mEOtaPGRSWvcd3zFSl7eYg==" crossorigin="anonymous"></script>
+
+<script>
+    $(document).ready(function () {
+        if (!Modernizr.input.placeholder) {
+            $('[placeholder]').focus(function () {
+                var input = $(this);
+                if (input.val() == input.attr('placeholder')) {
+                    input.val('');
+                    input.removeClass('placeholder');
+                }
+            }).blur(function () {
+                var input = $(this);
+                if (input.val() == '' || input.val() == input.attr('placeholder')) {
+                    input.addClass('placeholder');
+                    input.val(input.attr('placeholder'));
+                }
+            }).blur();
+            $('[placeholder]').parents('form').submit(function () {
+                $(this).find('[placeholder]').each(function () {
+                    var input = $(this);
+                    if (input.val() == input.attr('placeholder')) {
+                        input.val('');
+                    }
+                })
+            });
+        }
+
+
+        //Popovers
+
+        //Initializes popovers and provides target containers
+        var i = 0;
+        $(document).find('[data-toggle="popover"]').each(function () {
+            ;
+            var popoverCount = 'popover' + i;
+            i++;
+            $(this).parent().addClass(popoverCount);
+            var popoverContainer = '.' + popoverCount;
+            $(this).popover({ container: popoverContainer });
+        });
+
+        //Hides popover if you click/touch away from it
+        $(document).on('click touchstart', function (e) {
+            $('[data-toggle="popover"],[data-original-title]').each(function () {
+                if (!$(this).is(e.target) && $(this).has(e.target).length === 0 && $('.popover').has(e.target).length === 0) {
+                    (($(this).popover('hide').data('bs.popover') || {}).inState || {}).click = false;
+                }
+            });
+        });
+
+        //Hides popover if press Esc
+        $(document).keydown(function (e) {
+            if (e.which === 27 && $(this).has('.popover')) {
+                $('.popover').popover('hide');
+            }
+        });
+
+        //Hides popover if you press close
+        $(document).click(function () {
+            $('button.close').click(function () {
+                $('.popover').popover('hide');
+            });
+        });
+    });
+
+
+</script>
+
+<script>
+    if (window.location.pathname != '/incompatible-browser/') {
+        if (BrowserDetect.browser == "Explorer" && parseInt(BrowserDetect.version, 10) < 11 ||
+            BrowserDetect.browser == "Chrome" && parseInt(BrowserDetect.version, 10) < 36 ||
+            BrowserDetect.browser == "Safari" && parseInt(BrowserDetect.version, 10) < 7 ||
+            BrowserDetect.browser == "Firefox" && parseInt(BrowserDetect.version, 10) < 31) {
+            window.location.replace("/incompatible-browser/");
+        }
+    }
+</script>
+
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        </head>
+
+        <body>
+            <div class="container-wrap" id="top">
+                <header class="container-fluid d-print-block txtLogo ">
+                    <small>United States Senate</small><br />
+                    Financial Disclosures
+                </header>
+                <nav class="navbar navbar-expand-lg navbar-light fixed-top d-print-none">
+                    <a href="#content" class="sr-only sr-only-focusable" tabindex="0">Skip to main content</a>
+
+                    <div class="navbar-brand" id="x"><img src="/static/images/logo.svg" alt="U.S. Senate Financial Disclosure logo"></div>
+                    <button class="navbar-toggler mr-2" type="button" data-toggle="collapse" data-target="#navbarContent" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
+                        <span class="navbar-toggler-icon"></span>
+                    </button>
+
+                    <div class="collapse navbar-collapse justify-content-between" id="navbarContent">
+                        
+                            <ul class="navbar-nav" role="navigation">
+                                <li class="nav-item ">
+                                    <a class="nav-link" href="/search/">
+                                        <i class="fa fa-search fa-fw fa-lg" aria-hidden="true"></i>
+                                        Find Reports
+                                    </a>
+                                </li>
+                                
+                            </ul>
+                        
+                        <ul class="navbar-nav justify-content-end accountNav" role="navigation">
+                            
+                        </ul>
+                    </div>
+                </nav>
+                <main class="container-fluid pgContent" id="content">
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <!--Message Block-->
+                            
+    
+    
+    <div class="alert alert-danger" id="genericErrorMessageDiv" role="alert" aria-live="assertive" aria-relevant="all" style="display:none;">
+       <i class="fa fa-warning" title="Warning" aria-label="Warning"></i> <span id="genericErrorMessage"></span>
+    </div>
+
+                            <!--End Message Block-->
+
+                            
+	<style type="text/css">
+		.navbar-nav {
+			display: none;
+		}
+	</style>
+	<strong class="d-print-none return-search">
+		Return to the search tab to select another report.
+	</strong>
+	<div class="justify-content-between">
+		<div>
+			<h1 class="mb-2">
+				
+					Annual
+				
+					Report for
+				
+				Calendar 2024 
+				
+				
+					(Amendment 1)
+				
+			</h1>
+			<h2 class="filedReport">
+				
+					Ms.
+				
+
+				
+					Elissa
+				
+
+				
+
+				
+					Slotkin
+				
+
+				
+
+				
+					
+						(Slotkin, Elissa)
+					
+				
+			</h2>
+			
+			<p class="muted font-weight-bold">
+				<i class="fa fa-folder-open"></i>
+				Filed 10/10/2025 @ 12:11 PM
+			</p>
+		</div>
+		<div>
+            <span class="d-print-none">
+                <a href="javascript:window.print()" class="btn btn-primary"><i class="fa fa-print mr-1" aria-hidden="true"></i> Print Report</a>
+            </span>
+		</div>
+	</div>
+
+	<hr>
+
+	<p>The following statements were checked before filing:</p>
+
+	<div class="mb-4">
+		<label class="form-check-label">
+			<input type="checkbox" name="filing_certified" disabled="disabled"
+					 checked="checked" class="form-check-input"/>
+			I certify that the statements I have made on this form are true, complete and correct to the best of my knowledge and belief.
+		</label>
+		<label class="form-check-label">
+			<input type="checkbox" name="filing_cannot_be_edited" disabled="disabled"
+					 checked="checked" class="form-check-input"/>
+			I understand that reports cannot be edited once filed. To make corrections, I will submit an
+			<em>electronic</em> amendment to this report.
+		</label>
+		<hr>
+		<label class="form-check-label">
+			<input type="checkbox" name="filing_omitted_assets" disabled="disabled"
+					 class="form-check-input"/>
+			I
+			<em>omitted</em> assets because they meet the three-part test for exemption.
+		</label>
+	</div>
+
+
+	<section class="card mb-2">
+		<div class="card-body">
+			<h3 class="h4">
+				Part 1. Honoraria Payments or Payments to Charity in Lieu of Honoraria
+			</h3>
+			<p>
+				Did any individual or organization pay you or your spouse more than $200, or donate any amount to a charity on your or your spouse’s behalf, for an article, speech, or appearance?
+				<strong>
+					
+						No
+					
+				</strong>
+			</p>
+		</div>
+		
+	</section>
+
+	<section class="card mb-2">
+		<div class="card-body">
+			<h3 class="h4">Part 2. Earned and Non-Investment Income</h3>
+			<p>
+				Did you or your spouse have reportable earned income or non-investment income?
+				<strong>
+					
+						No
+					
+				</strong>
+			</p>
+		</div>
+		
+	</section>
+
+	<section class="card mb-2">
+		<div class="card-body">
+			<h3 class="h4">Part 3. Assets</h3>
+			<p>
+				Did you, your spouse, or dependent child own any asset that had a value of more than $1,000 or generated income of more than $200?
+				<strong>
+					
+						Yes
+					
+				</strong>
+			</p>
+		</div>
+		
+			<div class="table-responsive">
+				<table id="grid_items" class="table dataTable">
+					<caption class="sr-only">List of assets added to this report</caption>
+					<thead>
+					<tr class="header">
+						<th scope="col"></th>
+						<th scope="col">Asset</th>
+						<th scope="col">Asset Type</th>
+						<th scope="col">Owner</th>
+						<th scope="col">Value</th>
+						<th scope="col">Income Type</th>
+						<th scope="col">Income</th>
+					</tr>
+					</thead>
+					<tbody>
+					
+						<tr class="nowrap">
+							<td>1</td>
+							<td class="span4">
+								<strong>Comerica Bank</strong><div class="muted noWrap">(Dallas, Texas)</div><div class="muted"><div class="muted"><em>Type: </em>Checking</div></div>
+							</td>
+							<td>Bank Deposit</td>
+							<td>Self</td>
+							<td>$250,001 - $500,000</td>
+							<td>
+								Interest
+							</td>
+							<td>None (or less than $201)</td>
+						</tr>
+					
+						<tr class="nowrap">
+							<td>2</td>
+							<td class="span4">
+								<strong>Comerica Bank</strong><div class="muted noWrap">(Dallas, Texas)</div><div class="muted"><div class="muted"><em>Type: </em>Savings</div></div>
+							</td>
+							<td>Bank Deposit</td>
+							<td>Self</td>
+							<td>$1,001 - $15,000</td>
+							<td>
+								Interest
+							</td>
+							<td>None (or less than $201)</td>
+						</tr>
+					
+						<tr class="nowrap">
+							<td>3</td>
+							<td class="span4">
+								<strong class="marginit-right">International Business Machines Corporation (IBM)</strong><div class="muted"></div>
+							</td>
+							<td>Corporate Securities<div class="muted">Stock</div></td>
+							<td>Self</td>
+							<td>$15,001 - $50,000</td>
+							<td>
+								Dividends
+							</td>
+							<td>$1,001 - $2,500</td>
+						</tr>
+					
+						<tr class="nowrap">
+							<td>4</td>
+							<td class="span4">
+								<strong>PNC Bank</strong><div class="muted noWrap">(Pittsburgh, Pennsylvania)</div><div class="muted"><div class="muted"><em>Type: </em>Checking</div></div>
+							</td>
+							<td>Bank Deposit</td>
+							<td>Self</td>
+							<td>$15,001 - $50,000</td>
+							<td>
+								Interest
+							</td>
+							<td>None (or less than $201)</td>
+						</tr>
+					
+						<tr class="nowrap">
+							<td>5</td>
+							<td class="span4">
+								<strong class="marginit-right"><a href="http://finance.yahoo.com/q?s=KD" target="_blank">KD</a> - Kyndryl Holdings, Inc. Common Stock</strong><div class="muted"><em>Filer comment:  </em>I never purchased this stock. IBM split shares in 2021 and the value exceeded $1000 in 2024.</div>
+							</td>
+							<td>Corporate Securities<div class="muted">Stock</div></td>
+							<td>Self</td>
+							<td>$1,001 - $15,000</td>
+							<td>
+								Interest
+							</td>
+							<td>$201 - $1,000</td>
+						</tr>
+					
+						<tr class="nowrap">
+							<td>6</td>
+							<td class="span4">
+								<strong>PNC Bank</strong><div class="muted noWrap">(Pittsburgh, Pennsylvania)</div><div class="muted"><div class="muted"><em>Type: </em>Money Market Account</div></div>
+							</td>
+							<td>Bank Deposit</td>
+							<td>Self</td>
+							<td>$1,001 - $15,000</td>
+							<td>
+								None
+							</td>
+							<td>None (or less than $201)</td>
+						</tr>
+					
+					</tbody>
+				</table>
+			</div>
+		
+	</section>
+
+	<section class="card mb-2">
+		<div class="card-body">
+			<h3 class="h4">Part 4a. Periodic Transaction Report Summary</h3>
+			<p>
+				In this section, electronically filed periodic transaction report (PTR) transactions are displayed for you.
+			</p>
+		</div>
+		
+	</section>
+
+	<section class="card mb-2">
+		<div class="card-body">
+			<h3 class="h4">Part 4b. Transactions</h3>
+			<p>
+				Did you, your spouse, or dependent child buy, sell, or exchange an asset where the transaction exceeded $1,000 and was not reported on Part 4a?
+				<strong>
+					
+						No
+					
+				</strong>
+			</p>
+		</div>
+		
+	</section>
+
+	<section class="card mb-2">
+		<div class="card-body">
+			<h3 class="h4">Part 5. Gifts</h3>
+			<p>
+				Did you, your spouse, or dependent child receive any reportable gift during the reporting period?
+				<strong>
+					
+						No
+					
+				</strong>
+			</p>
+		</div>
+		
+	</section>
+
+	<section class="card mb-2">
+		<div class="card-body">
+			<h3 class="h4">Part 6. Travel</h3>
+			<p>
+				Did you, your spouse, or dependent child receive any <button data-toggle="popover" type="button" aria-haspopup="true" data-html="true" data-title="When is travel reportable? <button type='button' tabindex='0' id='jsPopoverClose' aria-label='close' class='close'><i class='fa fa-times' aria-hidden='true'><span class='sr-only'>Close</span></i></button>"data-template='<div class="popover popover__fixMedium" role="tooltip"><div class="arrow"></div><h3 class="popover-header"></h3><div class="popover-body"></div></div>'class="btn btn-link popover--textButton font-weight-bold" data-placement="auto" data-content="<p>If you are reimbursed for more than one trip from the same sponsor, and the trips added together are worth more than $480, then you must report each trip individually, even if the reimbursement for each separate trip does not equal more than $480.</p>">reportable travel</button>?
+				<strong>
+					
+						No
+					
+				</strong>
+			</p>
+		</div>
+		
+	</section>
+
+	<section class="card mb-2">
+		<div class="card-body">
+			<h3 class="h4">Part 7. Liabilities</h3>
+			<p>
+				Did you, your spouse, or dependent child have a reportable, non-revolving charge account liability worth more than $10,000 at any time or a revolving charge account whose value exceeded $10,000 as of the last day of the reporting period?
+				<strong>
+					
+						Yes
+					
+				</strong>
+			</p>
+		</div>
+		
+			<div class="table-responsive">
+				<table class="table table-striped">
+					<caption class="sr-only">List of liabilities added to this report</caption>
+					<thead>
+					<tr class="header">
+						<th scope="col"></th>
+						<th scope="col">&#35;</th>
+						<th scope="col">Incurred</th>
+						<th scope="col">Debtor</th>
+						<th scope="col">Type</th>
+						<th scope="col">Points</th>
+						<th scope="col">Rate<br>(Term)</th>
+						<th scope="col">Amount</th>
+						<th scope="col">Creditor</th>
+						<th scope="col" width="350">Comments</th>
+					</tr>
+					</thead>
+					<tbody>
+					
+						<tr class="nowrap">
+							<td>
+							</td>
+							<td>
+								1</td>
+							<td>
+								2011
+							</td>
+							<td>Self</td>
+							<td>Mortgage
+								</td>
+							<td>
+								0</td>
+							<td>
+								4.875%<br>
+								
+														(30 year fixed)
+								
+							</td>
+							<td>$100,001 - $250,000</td>
+							<td>
+								Bank of America
+								<div class="muted">Charlotte, North Carolina</div>
+							</td>
+              <td>
+                <div class="mb-2">
+                  <small>
+                    
+                      <span class="text-muted">n/a</span>
+                    
+                  </small>
+                </div>
+              </td>
+						</tr>
+					
+					</tbody>
+				</table>
+			</div>
+		
+	</section>
+
+	<section class="card mb-2">
+		<div class="card-body">
+			<h3 class="h4">Part 8. Positions</h3>
+			<p>
+				Did you hold any reportable outside positions during the reporting period?
+				<strong>
+					
+						Yes
+					
+				</strong>
+			</p>
+		</div>
+		
+			<div class="table-responsive">
+				<table class="table table-striped">
+					<caption class="sr-only">List of outside employment added to this report</caption>
+					<thead>
+					<tr class="header">
+						<th scope="col"></th>
+						<th scope="col">&#35;</th>
+						<th scope="col">Position Dates</th>
+						<th scope="col">Position Held</th>
+						<th scope="col">Entity</th>
+						<th scope="col">Entity Type</th>
+						<th scope="col" width="350">Comments</th>
+					</tr>
+					</thead>
+					<tbody>
+					
+						<tr class="nowrap">
+							<td>
+							</td>
+							<td>
+								1</td>
+							<td>
+								Feb 2017 to
+								May 2025
+							</td>
+							<td>
+								Officer
+								
+							</td>
+							<td>
+								Pin Point Consultants
+								<div class="muted">
+									Holly, Michigan
+								</div>
+							</td>
+							<td>
+								Company
+								
+							</td>
+							<td>
+                <div class="mb-2">
+                  <small>
+                    
+                      Business has been inactive since 2017 and never generated any income or revenue. Business was permanently closed in May 2025.
+                    
+                  </small>
+                </div>
+              </td>
+						</tr>
+					
+					</tbody>
+				</table>
+			</div>
+		
+	</section>
+
+	<section class="card mb-2">
+		<div class="card-body">
+			<h3 class="h4">Part 9. Agreements</h3>
+			<p>
+				Did you have any reportable agreement or arrangement with an outside entity?
+				<strong>
+					
+						No
+					
+				</strong>
+			</p>
+		</div>
+		
+	</section>
+
+	<section class="card mb-2">
+		<div class="card-body">
+			<h3 class="h4">Part 10. Compensation</h3>
+			<p>
+				<em>Only required if you are a candidate or this is your first report</em>: Did any person or entity pay more than $5,000 to you or for services provided by you?
+				<strong>
+					
+						This is not my first report.
+					
+				</strong>
+			</p>
+		</div>
+		
+	</section>
+
+	<section class="card mb-2">
+		<div class="card-body">
+			<h3 class="h4">Attachments & Comments</h3>
+
+			
+				<em class="muted">No attachments added.</em>
+			
+
+			
+				<br/>
+				<em class="text-muted">No comments added.</em>
+			
+		</div>
+	</section>
+
+                        </div>
+                    </div>
+                </main>
+
+               <footer id="footer" class="footer d-print-none">
+
+                </footer>
+            </div><!-- end #wrap -->
+        </body>
+    </html>
