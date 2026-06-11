@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -7,10 +8,12 @@ namespace Equibles.Mcp;
 /// <summary>
 /// Decorates a registered <see cref="McpServerTool"/> so that a missing or malformed
 /// required argument — which the SDK's binder surfaces as an
-/// <see cref="ArgumentException"/> before the tool body ever runs — comes back to the
-/// client as a structured invalid-parameters tool result naming the tool, instead of
-/// an opaque "an error occurred" message. A client's input mistake is not a server
-/// fault, so it is logged at information level rather than error.
+/// <see cref="ArgumentException"/> (missing argument) or a
+/// <see cref="JsonException"/> (argument of the wrong JSON type, e.g. an array where
+/// a string is declared) before the tool body ever runs — comes back to the client as
+/// a structured invalid-parameters tool result naming the tool, instead of an opaque
+/// "an error occurred" message. A client's input mistake is not a server fault, so it
+/// is logged at information level rather than error.
 /// </summary>
 public class InvalidParamsTranslatingTool : McpServerTool
 {
@@ -39,7 +42,7 @@ public class InvalidParamsTranslatingTool : McpServerTool
         {
             return await _inner.InvokeAsync(request, cancellationToken);
         }
-        catch (ArgumentException ex)
+        catch (Exception ex) when (ex is ArgumentException or JsonException)
         {
             _logger.LogInformation(
                 "Rejected call to {ToolName} with invalid arguments: {Reason}",
