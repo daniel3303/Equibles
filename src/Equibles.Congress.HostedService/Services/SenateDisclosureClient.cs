@@ -169,13 +169,16 @@ public class SenateDisclosureClient : IAsyncDisposable
         if (reportUrl.Contains("/view/paper/", StringComparison.OrdinalIgnoreCase))
             return null;
 
-        if (!DateOnly.TryParse(row[4]?.Trim(), out var dateSubmitted))
+        // eFD dates are US MM/dd/yyyy — parse culture-pinned, not with the
+        // host culture (GH-3659).
+        var dateSubmitted = ParseDate(row[4]?.Trim());
+        if (dateSubmitted == null)
         {
             _logger.LogDebug("Skipping Senate report with unparseable date: {Date}", row[4]);
             return null;
         }
 
-        return new SenateReport(memberName, reportUrl, dateSubmitted);
+        return new SenateReport(memberName, reportUrl, dateSubmitted.Value);
     }
 
     private async Task<List<DisclosureTransaction>> FetchAndParseReport(
