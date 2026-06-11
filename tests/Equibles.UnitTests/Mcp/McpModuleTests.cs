@@ -356,6 +356,7 @@ public class McpModuleToolDiscoveryTests
                 typeof(FredTools),
                 new[]
                 {
+                    "GetEconomicCalendar",
                     "GetEconomicIndicator",
                     "GetLatestEconomicData",
                     "SearchEconomicIndicators",
