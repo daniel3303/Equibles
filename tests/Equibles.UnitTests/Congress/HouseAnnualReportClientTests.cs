@@ -32,9 +32,11 @@ public class HouseAnnualReportClientTests
         // crossing a page break without a repeated column header.
         var bytes = File.ReadAllBytes(FixturePath("house-annual-pelosi-2024.pdf"));
 
-        var lines = HouseAnnualReportClient.ParseAnnualReportPdf(bytes);
+        var content = HouseAnnualReportClient.ParseAnnualReportPdf(bytes);
 
-        lines.Should().NotBeNull();
+        content.Should().NotBeNull();
+        content.FilerStatus.Should().Be("Member");
+        var lines = content.Lines;
         lines.Count(l => l.Kind == CongressionalDisclosureLineKind.Asset).Should().Be(59);
         lines.Count(l => l.Kind == CongressionalDisclosureLineKind.Liability).Should().Be(9);
 
@@ -87,11 +89,12 @@ public class HouseAnnualReportClientTests
         // description, and the creditor must fold in.
         var bytes = File.ReadAllBytes(FixturePath("house-annual-aoc-2024.pdf"));
 
-        var lines = HouseAnnualReportClient.ParseAnnualReportPdf(bytes);
+        var content = HouseAnnualReportClient.ParseAnnualReportPdf(bytes);
 
-        lines.Should().NotBeNull();
-        lines
-            .Select(l => (l.Kind, l.Description, l.RangeMinimum, l.RangeMaximum))
+        content.Should().NotBeNull();
+        content.FilerStatus.Should().Be("Member");
+        content
+            .Lines.Select(l => (l.Kind, l.Description, l.RangeMinimum, l.RangeMaximum))
             .Should()
             .BeEquivalentTo([
                 (
@@ -128,9 +131,9 @@ public class HouseAnnualReportClientTests
         // Scanned paper filings are image-only: no extractable words, so no
         // Schedule A header — the electronic-only policy reports them as null,
         // never as an empty (zero net worth) report.
-        var lines = HouseAnnualReportClient.ParseAnnualReportPdf(BuildTextlessPdf());
+        var content = HouseAnnualReportClient.ParseAnnualReportPdf(BuildTextlessPdf());
 
-        lines.Should().BeNull();
+        content.Should().BeNull();
     }
 
     // ---- token-level schedule parsing ----

@@ -198,10 +198,10 @@ public partial class HouseAnnualReportClient
 
         var pdfBytes = await response.Content.ReadAsByteArrayAsync(ct);
 
-        List<AnnualDisclosureLineItem> lines;
+        HouseAnnualReportContent content;
         try
         {
-            lines = ParseAnnualReportPdf(pdfBytes);
+            content = ParseAnnualReportPdf(pdfBytes);
         }
         catch (Exception ex)
         {
@@ -214,7 +214,7 @@ public partial class HouseAnnualReportClient
             return null;
         }
 
-        if (lines == null)
+        if (content == null)
         {
             // No Schedule A header in the extracted text: a scanned paper
             // filing (image-only pages) — the electronic-only policy skips it.
@@ -222,6 +222,20 @@ public partial class HouseAnnualReportClient
                 "House annual report DocID {DocId} for {Member} has no extractable schedules; skipping as non-electronic",
                 filing.DocId,
                 filing.MemberName
+            );
+            return null;
+        }
+
+        if (!IsMemberFilerStatus(content.FilerStatus))
+        {
+            // The preamble's own "Status:" field is authoritative: candidate
+            // reports ("Congressional Candidate") are not member disclosures
+            // and must never enter the member net-worth data.
+            _logger.LogDebug(
+                "House annual report DocID {DocId} for {Member} has filer status '{Status}'; skipping non-member report",
+                filing.DocId,
+                filing.MemberName,
+                content.FilerStatus
             );
             return null;
         }
@@ -235,22 +249,50 @@ public partial class HouseAnnualReportClient
             FiledDate = filing.FilingDate,
             ReportId = filing.DocId,
             IsAmendment = filing.IsAmendment,
-            Lines = lines,
+            Lines = content.Lines,
         };
     }
 
+    // Member and member-elect reports stay; anything else ("Congressional
+    // Candidate", "Officer or Employee") is not a member disclosure. A missing
+    // status keeps the report — the index only lists annual filing types and
+    // dropping data on a preamble-format drift would be worse.
+    internal static bool IsMemberFilerStatus(string filerStatus) =>
+        filerStatus == null || filerStatus.Contains("Member", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
-    /// Parses Schedule A (assets) and Schedule D (liabilities) rows out of an
-    /// annual report PDF. Returns null when the document carries no Schedule A
-    /// header — the signature of a scanned (non-electronic) filing.
+    /// Parses the preamble filer status plus the Schedule A (assets) and
+    /// Schedule D (liabilities) rows out of an annual report PDF. Returns null
+    /// when the document carries no Schedule A header — the signature of a
+    /// scanned (non-electronic) filing.
     /// </summary>
-    internal static List<AnnualDisclosureLineItem> ParseAnnualReportPdf(byte[] pdfBytes)
+    internal static HouseAnnualReportContent ParseAnnualReportPdf(byte[] pdfBytes)
     {
         using var document = PdfDocument.Open(pdfBytes);
         var lines = new List<List<ScheduleToken>>();
         foreach (var page in document.GetPages())
             lines.AddRange(ExtractTokenLines(page));
-        return ParseScheduleLines(lines);
+
+        var items = ParseScheduleLines(lines);
+        return items == null
+            ? null
+            : new HouseAnnualReportContent(ExtractFilerStatus(lines), items);
+    }
+
+    // The preamble renders "Status: Member" / "Status: Congressional
+    // Candidate" before the first schedule header.
+    internal static string ExtractFilerStatus(IReadOnlyList<List<ScheduleToken>> lines)
+    {
+        foreach (var line in lines)
+        {
+            if (line.Count == 0)
+                continue;
+            if (MatchScheduleHeader(line) != '\0')
+                return null;
+            if (line[0].Text == "Status:" && line.Count > 1)
+                return string.Join(" ", line.Skip(1).Select(t => t.Text));
+        }
+        return null;
     }
 
     // Cluster words by their vertical position into visual lines, then order
@@ -592,6 +634,16 @@ public partial class HouseAnnualReportClient
     private static partial Regex RepeatedWhitespaceRegex();
 
     internal sealed record ScheduleToken(string Text, double Left);
+
+    /// <summary>
+    /// An e-filed annual report's extracted content: the preamble's filer
+    /// status ("Member", "Congressional Candidate", …) and the asset/liability
+    /// line items.
+    /// </summary>
+    internal sealed record HouseAnnualReportContent(
+        string FilerStatus,
+        List<AnnualDisclosureLineItem> Lines
+    );
 
     private sealed record AnnualFiling(
         string MemberName,

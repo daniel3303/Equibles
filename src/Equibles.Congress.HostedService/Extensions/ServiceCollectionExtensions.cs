@@ -11,6 +11,7 @@ public static class ServiceCollectionExtensions
         services.AutoWireServicesFrom<CongressionalTradeSyncService>();
 
         services.AddHostedService<CongressionalTradeScraperWorker>();
+        services.AddHostedService<CongressionalAnnualDisclosureScraperWorker>();
 
         return services;
     }
