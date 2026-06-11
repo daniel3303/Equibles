@@ -17,5 +17,7 @@ public class CongressMember
 
     public virtual List<CongressionalTrade> Trades { get; set; } = [];
 
+    public virtual List<CongressionalAnnualDisclosure> AnnualDisclosures { get; set; } = [];
+
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }

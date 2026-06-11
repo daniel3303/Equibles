@@ -9,5 +9,7 @@ public class CongressModuleConfiguration : Equibles.Data.IFinancialModule
     {
         builder.Entity<CongressMember>();
         builder.Entity<CongressionalTrade>();
+        builder.Entity<CongressionalAnnualDisclosure>();
+        builder.Entity<CongressionalDisclosureLine>();
     }
 }
