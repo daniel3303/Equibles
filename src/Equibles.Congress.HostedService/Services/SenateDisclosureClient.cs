@@ -1,3 +1,4 @@
+using System.Globalization;
 using Equibles.Congress.Data.Models;
 using Equibles.Congress.HostedService.Models;
 using Equibles.Core.AutoWiring;
@@ -100,8 +101,13 @@ public class SenateDisclosureClient : IAsyncDisposable
             {
                 ["report_types"] = PtrReportTypeFilter,
                 ["filer_types"] = "[]",
-                ["submitted_start_date"] = $"{from:MM/dd/yyyy} 00:00:00",
-                ["submitted_end_date"] = $"{to:MM/dd/yyyy} 23:59:59",
+                // eFD expects US-format dates; "/" in a custom format is the
+                // culture date-separator placeholder, so pin the invariant
+                // culture or a de-DE host posts "01.01.2025" (GH-3660).
+                ["submitted_start_date"] =
+                    $"{from.ToString("MM/dd/yyyy", CultureInfo.InvariantCulture)} 00:00:00",
+                ["submitted_end_date"] =
+                    $"{to.ToString("MM/dd/yyyy", CultureInfo.InvariantCulture)} 23:59:59",
                 ["first_name"] = "",
                 ["last_name"] = "",
                 ["senator_state"] = "",
