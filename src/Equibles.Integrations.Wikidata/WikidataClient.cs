@@ -28,10 +28,15 @@ public class WikidataClient : IWikidataClient
 
     private const int PaddedCikLength = 10;
 
-    // Polite shared throttle: WDQS is a shared public service.
+    // Half of the documented WDQS allowance, by construction: the service grants
+    // each client (user agent + IP) 60 seconds of query processing time per
+    // 60-second window (https://www.mediawiki.org/wiki/Wikidata_Query_Service/User_Manual,
+    // "Query limits"). Our bounded VALUES queries cost well under 1 second of
+    // processing each and run sequentially, so 30 requests per 60 seconds consumes
+    // at most 30 of the allowed 60 processing-seconds.
     private static readonly IRateLimiter RateLimiter = new RateLimiter(
-        maxRequests: 1,
-        timeWindow: TimeSpan.FromSeconds(1)
+        maxRequests: 30,
+        timeWindow: TimeSpan.FromSeconds(60)
     );
 
     private readonly HttpClient _httpClient;
