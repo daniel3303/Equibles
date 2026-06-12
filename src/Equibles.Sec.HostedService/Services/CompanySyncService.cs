@@ -174,7 +174,9 @@ public class CompanySyncService : ICompanySyncService
     {
         var existingStock = state.ExistingStocks.First(cs => cs.Cik == secCompany.Cik);
         var normalizedName = NormalizeCompanyName(secCompany.Name);
-        var missingWebsite = existingStock.Website == null;
+        // Empty string counts as missing: the SEC metadata website field is blank for most
+        // companies, and rows that captured that blank must stay eligible for a refill.
+        var missingWebsite = string.IsNullOrEmpty(existingStock.Website);
         var needsUpdate =
             existingStock.Ticker != primaryTicker
             || existingStock.Name != normalizedName
@@ -670,7 +672,10 @@ public class CompanySyncService : ICompanySyncService
         try
         {
             var metadata = await _secEdgarClient.GetCompanyMetadata(cik);
-            return metadata?.Website?.Trim();
+            var website = metadata?.Website?.Trim();
+            // Normalise the SEC's usual blank answer to null so it is stored as "still
+            // missing" rather than masquerading as a captured website.
+            return string.IsNullOrEmpty(website) ? null : website;
         }
         catch (HttpRequestException ex)
         {
