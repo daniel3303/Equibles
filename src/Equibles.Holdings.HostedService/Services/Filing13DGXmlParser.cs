@@ -228,6 +228,12 @@ public class Filing13DGXmlParser
             ? (long)value
             : 0;
 
+    // The storage cap of the holdings percent columns (numeric(7,4)). The form reports
+    // 0-100, so a value past the cap is filer garbage (a fat-fingered "5,000" parses as
+    // 5000) — it degrades to null like any unparseable field rather than aborting the
+    // whole batch flush with a numeric-overflow error.
+    private const decimal MaxStorablePercent = 999.9999m;
+
     private static decimal? ParsePercent(string raw) =>
         decimal.TryParse(
             raw?.Replace(",", string.Empty),
@@ -235,6 +241,7 @@ public class Filing13DGXmlParser
             CultureInfo.InvariantCulture,
             out var value
         )
+        && Math.Abs(value) <= MaxStorablePercent
             ? value
             : null;
 }
