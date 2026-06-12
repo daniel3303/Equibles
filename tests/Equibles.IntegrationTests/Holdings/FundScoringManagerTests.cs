@@ -142,6 +142,62 @@ public class FundScoringManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task ScoreHolder_BenchmarkPricesMissing_ReturnsNullButKeepsExistingScore()
+    {
+        // Benchmark stock exists but has no prices in the window — a transient data gap, not
+        // a structural "nothing to score". The previous score must survive the failed cycle;
+        // pruning here would wipe the whole leaderboard whenever the price feed lags.
+        var benchmark = new CommonStock { Ticker = "SPY", Name = "S&P 500 ETF" };
+        _dbContext.Set<CommonStock>().Add(benchmark);
+
+        var held = new CommonStock { Ticker = "AAA", Name = "Alpha Co" };
+        _dbContext.Set<CommonStock>().Add(held);
+        AddPrice(held, new DateOnly(2022, 12, 20), 100m);
+        AddPrice(held, AsOf, 200m);
+
+        var holder = new InstitutionalHolder { Cik = "0001234567", Name = "Doubler Capital" };
+        _dbContext.Set<InstitutionalHolder>().Add(holder);
+        _dbContext
+            .Set<InstitutionalHolding>()
+            .Add(
+                new InstitutionalHolding
+                {
+                    InstitutionalHolderId = holder.Id,
+                    CommonStockId = held.Id,
+                    ReportDate = new DateOnly(2022, 9, 30),
+                    FilingDate = new DateOnly(2022, 11, 10),
+                    Shares = 1000,
+                    Value = 100_000,
+                }
+            );
+
+        _dbContext
+            .Set<FundScore>()
+            .Add(
+                new FundScore
+                {
+                    InstitutionalHolderId = holder.Id,
+                    WindowYears = 3,
+                    BenchmarkTicker = "SPY",
+                    WindowStart = WindowStart,
+                    WindowEnd = AsOf,
+                    AlphaPercent = 42m,
+                }
+            );
+        _dbContext.SaveChanges();
+
+        var score = await _manager.ScoreHolder(
+            holder,
+            AsOf,
+            windowYears: 3,
+            benchmarkTicker: "SPY"
+        );
+
+        score.Should().BeNull();
+        _fundScoreRepository.GetByHolder(holder).Should().ContainSingle(s => s.AlphaPercent == 42m);
+    }
+
+    [Fact]
     public async Task ScoreHolder_FilerWithOnly13DGStakes_ReturnsNullAndDeletesStaleScore()
     {
         SeedBenchmark();

@@ -54,8 +54,9 @@ public class FundScoringManager
     /// <paramref name="benchmarkTicker"/>. Returns the saved score, or null when there isn't
     /// enough data to simulate (unknown benchmark, no 13F snapshots in range, missing benchmark
     /// prices, or a non-finite result). Recomputes in place — an existing score for the same
-    /// (holder, window, benchmark) is updated rather than duplicated, and a stored score whose
-    /// simulation can no longer be run is deleted so the leaderboard never ranks stale data.
+    /// (holder, window, benchmark) is updated rather than duplicated. A stored score is deleted
+    /// only when the filer has no 13F snapshots left to score (e.g. a Schedule 13D/G-only
+    /// filer); transient failures keep the previous score in place.
     /// </summary>
     public async Task<FundScore> ScoreHolder(
         InstitutionalHolder holder,
@@ -70,20 +71,29 @@ public class FundScoringManager
         if (benchmarkStock == null)
             return null;
 
-        var result = await RunBacktest(holder, asOf, windowYears, benchmarkStock);
+        var (result, has13FSnapshots) = await RunBacktest(
+            holder,
+            asOf,
+            windowYears,
+            benchmarkStock
+        );
         if (result == null || result.Points.Count == 0 || !IsStorable(result))
         {
-            // A filer that stops being scoreable (e.g. only Schedule 13D/G filings on file)
-            // must also lose any previously stored score, or the alpha leaderboard keeps
-            // ranking it on a result that can never be recomputed.
-            await DeleteExistingScore(holder, windowYears, benchmarkTicker);
+            // Prune the stored score only when the filer structurally has nothing to score
+            // (no 13F snapshots for the window — e.g. a Schedule 13D/G-only filer), or the
+            // alpha leaderboard keeps ranking it on a result that can never be recomputed.
+            // Transient failures (a benchmark price gap, a non-finite simulation) keep the
+            // previous score: deleting on those would wipe the whole leaderboard over a
+            // one-cycle data hiccup.
+            if (!has13FSnapshots)
+                await DeleteExistingScore(holder, windowYears, benchmarkTicker);
             return null;
         }
 
         return await Upsert(holder, windowYears, benchmarkTicker, result);
     }
 
-    private async Task<BacktestResult> RunBacktest(
+    private async Task<(BacktestResult Result, bool Has13FSnapshots)> RunBacktest(
         InstitutionalHolder holder,
         DateOnly asOf,
         int windowYears,
@@ -92,7 +102,7 @@ public class FundScoringManager
     {
         var reportDates = await _holdingRepository.Get13FReportDatesByHolder(holder).ToListAsync();
         if (reportDates.Count == 0)
-            return null;
+            return (null, false);
         // Get13FReportDatesByHolder returns latest-first; SelectRelevantSnapshotDates needs
         // earliest-first so the "last snapshot before the window" lands on the most recent one.
         reportDates.Sort();
@@ -102,7 +112,7 @@ public class FundScoringManager
 
         var relevant = SelectRelevantSnapshotDates(reportDates, from, to);
         if (relevant.Count == 0)
-            return null;
+            return (null, false);
 
         var holdings = await _holdingRepository
             .Get13FHistoryByHolder(holder)
@@ -124,7 +134,7 @@ public class FundScoringManager
             .Distinct()
             .ToList();
 
-        return await BacktestPriceLoader.RunBacktest(
+        var backtest = await BacktestPriceLoader.RunBacktest(
             _priceRepository,
             snapshots,
             stockIds,
@@ -132,6 +142,7 @@ public class FundScoringManager
             from,
             to
         );
+        return (backtest, true);
     }
 
     private async Task<FundScore> Upsert(
