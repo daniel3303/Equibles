@@ -22,6 +22,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICompanySyncService, CompanySyncService>();
         services.AddScoped<XbrlEnvelopeCaptureService>();
         services.AddScoped<XbrlBackfillService>();
+        services.AddScoped<FilingItemsBackfillService>();
         services.AddScoped<IDocumentScraper, DocumentScraper>();
         // Primary IWebsiteSource (consumed by the CommonStocks website discovery
         // worker): the website disclosure mandated in the stocks' own stored filings.
@@ -32,6 +33,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<FtdScraperWorker>();
         services.AddHostedService<FormAdvScraperWorker>();
         services.AddHostedService<XbrlBackfillWorker>();
+        services.AddHostedService<FilingItemsBackfillWorker>();
         services.AddHostedService<InsiderFilingReprocessWorker>();
         services.AddHostedService<NportFilingReprocessWorker>();
 

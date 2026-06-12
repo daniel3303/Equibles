@@ -79,6 +79,9 @@ builder.Services.Configure<Equibles.Sec.HostedService.Configuration.FormAdvScrap
 builder.Services.Configure<Equibles.Sec.HostedService.Configuration.XbrlCaptureOptions>(
     builder.Configuration.GetSection("XbrlCapture")
 );
+builder.Services.Configure<Equibles.Sec.HostedService.Configuration.FilingItemsBackfillOptions>(
+    builder.Configuration.GetSection("FilingItemsBackfill")
+);
 builder.Services.Configure<FinancialFactsScraperOptions>(
     builder.Configuration.GetSection("FinancialFactsScraper")
 );
