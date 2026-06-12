@@ -10,6 +10,22 @@ public static class ServiceCollectionExtensions
     {
         services.AutoWireServicesFrom<InvestorRelationsDiscoveryService>();
 
+        // Typed client for website reachability probes: short timeout, contact
+        // User-Agent, capped response size (the body is discarded; only the status
+        // matters).
+        services.AddHttpClient<WebsiteProbeClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(10);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                "EquiblesBot/1.0 (+https://equibles.com)"
+            );
+            client.MaxResponseContentBufferSize = 2 * 1024 * 1024;
+        });
+
+        // Runs upstream of IR discovery: fills CommonStock.Website from the
+        // registered IWebsiteSource implementations (filings, Wikidata, Yahoo, ...).
+        services.AddHostedService<WebsiteDiscoveryWorker>();
+
         // Typed client: short timeout and a contact User-Agent, following many
         // redirects to land on the real IR page. Response size is capped so a
         // misbehaving host can't stream an unbounded body into memory.
