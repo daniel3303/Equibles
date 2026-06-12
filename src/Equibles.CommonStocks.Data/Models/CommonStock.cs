@@ -28,6 +28,15 @@ public class CommonStock
     public string Website { get; set; }
 
     /// <summary>
+    /// When website discovery last tried to fill <see cref="Website"/> (UTC), stamped
+    /// when every source definitively missed. Null until first attempted. Stocks
+    /// attempted within the configured cooldown are skipped, so persistent misses back
+    /// off instead of re-occupying a batch slot every cycle. Transient source errors
+    /// are not stamped and retry on the next cycle.
+    /// </summary>
+    public DateTime? WebsiteCheckedAt { get; set; }
+
+    /// <summary>
     /// Absolute URL of the company's investor-relations page, discovered by
     /// probing common IR paths and subdomains of <see cref="Website"/>. Null
     /// until discovered (or when no IR page could be validated). Foundation for

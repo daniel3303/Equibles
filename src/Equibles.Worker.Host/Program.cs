@@ -100,6 +100,9 @@ builder.Services.Configure<Equibles.Cftc.HostedService.Configuration.CftcScraper
 builder.Services.Configure<Equibles.Cboe.HostedService.Configuration.CboeScraperOptions>(
     builder.Configuration.GetSection("CboeScraper")
 );
+builder.Services.Configure<WebsiteDiscoveryOptions>(
+    builder.Configuration.GetSection("WebsiteDiscovery")
+);
 builder.Services.Configure<InvestorRelationsDiscoveryOptions>(
     builder.Configuration.GetSection("InvestorRelationsDiscovery")
 );

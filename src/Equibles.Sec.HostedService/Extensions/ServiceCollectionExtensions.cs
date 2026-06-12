@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.BusinessLogic.Websites;
 using Equibles.Core.AutoWiring;
 using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Services;
@@ -22,6 +23,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<XbrlEnvelopeCaptureService>();
         services.AddScoped<XbrlBackfillService>();
         services.AddScoped<IDocumentScraper, DocumentScraper>();
+        // Primary IWebsiteSource (consumed by the CommonStocks website discovery
+        // worker): the website disclosure mandated in the stocks' own stored filings.
+        services.AddScoped<IWebsiteSource, FilingsWebsiteSource>();
 
         services.AddHostedService<SecScraperWorker>();
         services.AddHostedService<DocumentProcessorWorker>();
