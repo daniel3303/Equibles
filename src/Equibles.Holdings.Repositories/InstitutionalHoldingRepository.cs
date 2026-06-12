@@ -76,6 +76,15 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return GetAll().Where(h => h.InstitutionalHolderId == holder.Id);
     }
 
+    // 13F-only view of one holder's history. Schedule 13D/G rows share this table but
+    // describe a single stake at an event date, not a portfolio at a quarter end, so
+    // portfolio reconstruction (fund scoring, backtests, the smart-money index) must
+    // exclude them or a later 13D/G filing replaces the fund's real portfolio.
+    public IQueryable<InstitutionalHolding> Get13FHistoryByHolder(InstitutionalHolder holder)
+    {
+        return GetHistoryByHolder(holder).Where(h => h.FilingType == FilingType.Form13F);
+    }
+
     // Latest dates first — callers consistently treat index 0 as the newest filing window.
     public IQueryable<DateOnly> GetAvailableReportDates() =>
         GetAll().DistinctReportDatesDescending();
@@ -87,6 +96,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // Latest dates first — see GetAvailableReportDates for the ordering contract.
     public IQueryable<DateOnly> GetReportDatesByHolder(InstitutionalHolder holder) =>
         GetHistoryByHolder(holder).DistinctReportDatesDescending();
+
+    // Latest 13F quarter-end dates first — see Get13FHistoryByHolder for why 13D/G
+    // event dates are excluded.
+    public IQueryable<DateOnly> Get13FReportDatesByHolder(InstitutionalHolder holder) =>
+        Get13FHistoryByHolder(holder).DistinctReportDatesDescending();
 
     public IQueryable<InstitutionalHolding> GetByAccessionNumber(string accessionNumber)
     {

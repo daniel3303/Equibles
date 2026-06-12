@@ -115,6 +115,93 @@ public class FundScoringManagerTests : IDisposable
         score.Should().BeNull();
     }
 
+    [Fact]
+    public async Task ScoreHolder_Later13DGStakeOnMooningStock_ScoresThe13FPortfolioOnly()
+    {
+        var holder = SeedDoublingPortfolioAgainstFlatBenchmark();
+
+        // A Schedule 13D stake filed after the last 13F quarter, on a stock that then 50x's.
+        // Treated as a portfolio snapshot it would rotate the whole simulation into that stock;
+        // it must be ignored because a 13D/G describes a single stake, not the fund's portfolio.
+        var moon = new CommonStock { Ticker = "MOON", Name = "Mooning Co" };
+        _dbContext.Set<CommonStock>().Add(moon);
+        AddPrice(moon, new DateOnly(2025, 6, 1), 1m);
+        AddPrice(moon, AsOf, 50m);
+        Add13DStake(holder, moon, eventDate: new DateOnly(2025, 6, 1));
+
+        var score = await _manager.ScoreHolder(
+            holder,
+            AsOf,
+            windowYears: 3,
+            benchmarkTicker: "SPY"
+        );
+
+        score.Should().NotBeNull();
+        // Same result as without the 13D row: the 13F portfolio doubles => ~+100% total return.
+        score.PortfolioTotalReturnPercent.Should().BeApproximately(100m, 0.5m);
+    }
+
+    [Fact]
+    public async Task ScoreHolder_FilerWithOnly13DGStakes_ReturnsNullAndDeletesStaleScore()
+    {
+        SeedBenchmark();
+        var moon = new CommonStock { Ticker = "MOON", Name = "Mooning Co" };
+        _dbContext.Set<CommonStock>().Add(moon);
+        AddPrice(moon, new DateOnly(2025, 6, 1), 1m);
+        AddPrice(moon, AsOf, 50m);
+
+        var activist = new InstitutionalHolder { Cik = "0007654321", Name = "Activist Person" };
+        _dbContext.Set<InstitutionalHolder>().Add(activist);
+        _dbContext.SaveChanges();
+        Add13DStake(activist, moon, eventDate: new DateOnly(2025, 6, 1));
+
+        // A score persisted before 13D/G rows were excluded from scoring.
+        _dbContext
+            .Set<FundScore>()
+            .Add(
+                new FundScore
+                {
+                    InstitutionalHolderId = activist.Id,
+                    WindowYears = 3,
+                    BenchmarkTicker = "SPY",
+                    WindowStart = WindowStart,
+                    WindowEnd = AsOf,
+                    AlphaPercent = 444_167m,
+                }
+            );
+        _dbContext.SaveChanges();
+
+        var score = await _manager.ScoreHolder(
+            activist,
+            AsOf,
+            windowYears: 3,
+            benchmarkTicker: "SPY"
+        );
+
+        score.Should().BeNull();
+        // The stale score is pruned, not just skipped — otherwise the leaderboard keeps it.
+        _fundScoreRepository.GetByHolder(activist).Should().BeEmpty();
+    }
+
+    private void Add13DStake(InstitutionalHolder holder, CommonStock stock, DateOnly eventDate)
+    {
+        _dbContext
+            .Set<InstitutionalHolding>()
+            .Add(
+                new InstitutionalHolding
+                {
+                    InstitutionalHolderId = holder.Id,
+                    CommonStockId = stock.Id,
+                    ReportDate = eventDate,
+                    FilingDate = eventDate.AddDays(5),
+                    FilingType = FilingType.Schedule13D,
+                    Shares = 1_000_000,
+                    Value = 1_000_000,
+                }
+            );
+        _dbContext.SaveChanges();
+    }
+
     private InstitutionalHolder SeedDoublingPortfolioAgainstFlatBenchmark()
     {
         SeedBenchmark();

@@ -54,7 +54,8 @@ public class FundScoringManager
     /// <paramref name="benchmarkTicker"/>. Returns the saved score, or null when there isn't
     /// enough data to simulate (unknown benchmark, no 13F snapshots in range, missing benchmark
     /// prices, or a non-finite result). Recomputes in place — an existing score for the same
-    /// (holder, window, benchmark) is updated rather than duplicated.
+    /// (holder, window, benchmark) is updated rather than duplicated, and a stored score whose
+    /// simulation can no longer be run is deleted so the leaderboard never ranks stale data.
     /// </summary>
     public async Task<FundScore> ScoreHolder(
         InstitutionalHolder holder,
@@ -71,7 +72,13 @@ public class FundScoringManager
 
         var result = await RunBacktest(holder, asOf, windowYears, benchmarkStock);
         if (result == null || result.Points.Count == 0 || !IsStorable(result))
+        {
+            // A filer that stops being scoreable (e.g. only Schedule 13D/G filings on file)
+            // must also lose any previously stored score, or the alpha leaderboard keeps
+            // ranking it on a result that can never be recomputed.
+            await DeleteExistingScore(holder, windowYears, benchmarkTicker);
             return null;
+        }
 
         return await Upsert(holder, windowYears, benchmarkTicker, result);
     }
@@ -83,10 +90,10 @@ public class FundScoringManager
         CommonStock benchmarkStock
     )
     {
-        var reportDates = await _holdingRepository.GetReportDatesByHolder(holder).ToListAsync();
+        var reportDates = await _holdingRepository.Get13FReportDatesByHolder(holder).ToListAsync();
         if (reportDates.Count == 0)
             return null;
-        // GetReportDatesByHolder returns latest-first; SelectRelevantSnapshotDates needs
+        // Get13FReportDatesByHolder returns latest-first; SelectRelevantSnapshotDates needs
         // earliest-first so the "last snapshot before the window" lands on the most recent one.
         reportDates.Sort();
 
@@ -98,7 +105,7 @@ public class FundScoringManager
             return null;
 
         var holdings = await _holdingRepository
-            .GetHistoryByHolder(holder)
+            .Get13FHistoryByHolder(holder)
             .Where(h => relevant.Contains(h.ReportDate))
             .Select(h => new HoldingRow(
                 h.ReportDate,
@@ -159,6 +166,20 @@ public class FundScoringManager
 
         await _fundScoreRepository.SaveChanges();
         return score;
+    }
+
+    private async Task DeleteExistingScore(
+        InstitutionalHolder holder,
+        int windowYears,
+        string benchmarkTicker
+    )
+    {
+        var existing = await _fundScoreRepository.GetByHolder(holder, windowYears, benchmarkTicker);
+        if (existing == null)
+            return;
+
+        _fundScoreRepository.Delete(existing);
+        await _fundScoreRepository.SaveChanges();
     }
 
     // All snapshots whose rebalance date falls in [from, to], plus the latest one whose rebalance

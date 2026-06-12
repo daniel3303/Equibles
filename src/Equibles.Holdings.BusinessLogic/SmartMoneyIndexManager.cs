@@ -147,16 +147,18 @@ public class SmartMoneyIndexManager
 
     private async Task<BacktestQuarterSnapshot> LoadLatestPortfolio(InstitutionalHolder holder)
     {
-        var reportDates = await _holdingRepository.GetReportDatesByHolder(holder).ToListAsync();
+        // 13F dates only: a fund's latest filing can be a Schedule 13D/G event date, whose single
+        // disclosed stake would otherwise replace the real portfolio as a 100%-weight "holding".
+        var reportDates = await _holdingRepository.Get13FReportDatesByHolder(holder).ToListAsync();
         if (reportDates.Count == 0)
             return null;
 
-        // GetReportDatesByHolder returns latest-first; the index reflects each fund's freshest 13F.
+        // Get13FReportDatesByHolder returns latest-first; the index reflects each fund's freshest 13F.
         var latest = reportDates[0];
 
         var positions = await _holdingRepository
-            .GetByHolder(holder, latest)
-            .Where(h => h.OptionType == null && h.Value > 0)
+            .Get13FHistoryByHolder(holder)
+            .Where(h => h.ReportDate == latest && h.OptionType == null && h.Value > 0)
             .GroupBy(h => h.CommonStockId)
             .Select(g => new { StockId = g.Key, Value = g.Sum(h => h.Value) })
             .ToListAsync();

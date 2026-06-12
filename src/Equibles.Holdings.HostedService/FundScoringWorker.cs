@@ -7,10 +7,12 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.HostedService;
 
 /// <summary>
-/// Periodically (re)computes the fund score for every filer that has 13F holdings, so the
+/// Periodically (re)computes the fund score for every filer that has holdings on file, so the
 /// institutions leaderboard can rank the universe by alpha vs the benchmark. A score depends on
 /// daily prices as well as quarterly 13F filings, so the job refreshes daily even though the
-/// underlying portfolio only changes each quarter.
+/// underlying portfolio only changes each quarter. Filers without 13F snapshots (Schedule
+/// 13D/G-only) are still visited: scoring them yields nothing, which prunes any stale score
+/// they may have accumulated.
 /// <para>
 /// Each filer is scored in its own DI scope: the backtest can load thousands of price rows, so a
 /// single shared context's change tracker would balloon across the run, and a fault scoring one
@@ -79,8 +81,8 @@ public class FundScoringWorker : BackgroundService
     }
 
     /// <summary>
-    /// Scores every filer with 13F holdings as of today, returning how many produced a score.
-    /// Internal so the worker's batch behaviour can be driven directly in tests.
+    /// Scores every filer with holdings on file as of today, returning how many produced a
+    /// score. Internal so the worker's batch behaviour can be driven directly in tests.
     /// </summary>
     internal async Task<int> ScoreAllHolders(CancellationToken cancellationToken)
     {
