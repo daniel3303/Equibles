@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.BusinessLogic.Websites;
 using Equibles.CommonStocks.HostedService.Services;
 using Equibles.Core.AutoWiring;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,6 +10,11 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddCommonStocksWorker(this IServiceCollection services)
     {
         services.AutoWireServicesFrom<InvestorRelationsDiscoveryService>();
+        services.AutoWireServicesFrom<Equibles.Integrations.Wikidata.WikidataClient>();
+
+        // Secondary IWebsiteSource: Wikidata's official-website fact joined on the
+        // SEC CIK (the filings source registered by the Sec module is the primary).
+        services.AddScoped<IWebsiteSource, WikidataWebsiteSource>();
 
         // Typed client for website reachability probes: short timeout, contact
         // User-Agent, capped response size (the body is discarded; only the status
