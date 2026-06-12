@@ -137,6 +137,54 @@ public class SmartMoneyIndexManagerTests : IDisposable
         result.Reason.Should().Contain("no holdings on file");
     }
 
+    [Fact]
+    public async Task Build_FundWithLater13DGStake_BuildsFromItsLatest13FPortfolio()
+    {
+        SeedBenchmark();
+        var doubler = AddStock("AAA", "Alpha Co", start: 100m, end: 200m);
+        var flat = AddStock("BBB", "Beta Co", start: 100m, end: 100m);
+        var stake = AddStock("MOON", "Mooning Co", start: 100m, end: 100m);
+
+        var first = SeedFund("0000000001", alpha: 30m, (doubler, 60), (flat, 40));
+        SeedFund("0000000002", alpha: 20m, (doubler, 50), (flat, 50));
+        SeedFund("0000000003", alpha: 10m, (doubler, 70), (flat, 30));
+
+        // The top fund files a Schedule 13D after its latest 13F quarter. The event-date row is
+        // a single stake, not a portfolio — it must not become the fund's "latest portfolio"
+        // (a 100%-weight single holding) nor shift the construction date to the event date.
+        _dbContext
+            .Set<InstitutionalHolding>()
+            .Add(
+                new InstitutionalHolding
+                {
+                    InstitutionalHolderId = first.Id,
+                    CommonStockId = stake.Id,
+                    ReportDate = new DateOnly(2025, 12, 1),
+                    FilingDate = new DateOnly(2025, 12, 6),
+                    FilingType = FilingType.Schedule13D,
+                    Shares = 1_000_000,
+                    Value = 1_000_000,
+                }
+            );
+        _dbContext.SaveChanges();
+
+        var result = await _manager.Build(
+            AsOf,
+            topFunds: 10,
+            maxConstituents: 25,
+            minConsensus: 2,
+            windowYears: 3,
+            benchmarkTicker: "SPY"
+        );
+
+        result.Reason.Should().BeNull();
+        result.FundCount.Should().Be(3);
+        result.ConstructionDate.Should().Be(ReportDate);
+        result.Constituents.Select(c => c.Ticker).Should().BeEquivalentTo(["AAA", "BBB"]);
+        result.Constituents.Single(c => c.Ticker == "AAA").HeldByCount.Should().Be(3);
+        result.Constituents.Single(c => c.Ticker == "BBB").HeldByCount.Should().Be(3);
+    }
+
     private void SeedBenchmark()
     {
         AddStock("SPY", "S&P 500 ETF", start: 100m, end: 100m);
