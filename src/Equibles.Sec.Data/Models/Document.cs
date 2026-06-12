@@ -53,7 +53,9 @@ public class Document
     /// Comma-joined SEC item numbers reported by this filing, e.g. <c>"2.02,9.01"</c> on an
     /// 8-K. Lets a consumer pick out earnings-release 8-Ks (Item 2.02 "Results of Operations
     /// and Financial Condition") without re-parsing. Null for forms that carry no items and
-    /// for legacy rows ingested before capture.
+    /// for legacy rows ingested before capture; the empty string is the backfill's terminal
+    /// "checked, nothing found in the feed" marker (consumers treat both as no items, but
+    /// only null rows are still pending backfill).
     /// </summary>
     [MaxLength(256)]
     public string Items { get; set; }
