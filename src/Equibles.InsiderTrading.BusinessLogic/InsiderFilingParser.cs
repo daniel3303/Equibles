@@ -97,8 +97,44 @@ public static class InsiderFilingParser
             InsiderSecurityKind.Derivative
         );
 
+        // A Form 3 with <noSecuritiesOwned>1</noSecuritiesOwned> reports that the owner
+        // holds none of the issuer's securities — a legitimate filing whose tables are
+        // empty by design. Emit a single 0-shares sentinel so this parse (the shared
+        // source of truth) yields the same one row the ingest pipeline stores. Without
+        // it the reprocess pipeline, which replays this parse, re-derives zero rows and
+        // logs a phantom "stored 1 but re-parsed 0" divergence for every such filing.
+        if (transactions.Count == 0 && DeclaresNoSecuritiesOwned(root))
+            AddParsed(BuildNoSecuritiesOwnedSentinel(owner, companyId, filing));
+
         return transactions;
     }
+
+    // Form 3 initial statements set <noSecuritiesOwned> to 1 when the reporting owner
+    // holds none of the issuer's securities; both ownership tables are then empty.
+    internal static bool DeclaresNoSecuritiesOwned(XElement root) =>
+        ParseBool(root.Element("noSecuritiesOwned")?.Value);
+
+    // The 0-shares row recorded for a noSecuritiesOwned Form 3 — the owner's zero
+    // baseline. No security exists to classify, so SecurityKind stays Unknown; the
+    // 0 price is valid by design (nothing to validate or repair). Mirrors the row the
+    // ingest pipeline persists so a re-parse reproduces it exactly.
+    internal static InsiderTransaction BuildNoSecuritiesOwnedSentinel(
+        InsiderOwner owner,
+        Guid companyId,
+        FilingData filing
+    ) =>
+        new()
+        {
+            InsiderOwnerId = owner.Id,
+            CommonStockId = companyId,
+            FilingDate = filing.FilingDate,
+            TransactionDate = filing.ReportDate,
+            TransactionCode = TransactionCode.Other,
+            AccessionNumber = filing.AccessionNumber,
+            SecurityTitle = "No Securities Owned",
+            IsPriceValid = true,
+            ParserVersion = InsiderTransaction.CurrentParserVersion,
+        };
 
     /// <summary>
     /// Sanitize and parse an ownership filing payload into its <c>ownershipDocument</c>
