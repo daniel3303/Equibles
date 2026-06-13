@@ -37,11 +37,17 @@ public static class InsiderFilingParser
         var transactions = new List<InsiderTransaction>();
         var footnotes = BuildFootnotes(root);
 
+        // The Rule 10b5-1 affirmative-defense checkbox is a single document-level
+        // element, so it applies to every row this filing contributes — stamp it
+        // on each as they are added.
+        var rule10b5One = ParseRule10b5One(root);
+
         void AddParsed(InsiderTransaction tx)
         {
             if (tx == null)
                 return;
             tx.TransactionOrder = transactions.Count;
+            tx.IsRule10b5One = rule10b5One;
             transactions.Add(tx);
         }
 
@@ -113,6 +119,17 @@ public static class InsiderFilingParser
     // holds none of the issuer's securities; both ownership tables are then empty.
     internal static bool DeclaresNoSecuritiesOwned(XElement root) =>
         ParseBool(root.Element("noSecuritiesOwned")?.Value);
+
+    // The Rule 10b5-1(c) affirmative-defense checkbox (<aff10b5One>), added to the
+    // ownership schema in EDGAR 23.1 (2023). A direct value element on the document
+    // root — not wrapped in <value> like the transaction fields. Tri-state: absent
+    // (pre-2023 schema) returns null so "unknown" stays distinct from an explicit
+    // unchecked box (0 → false).
+    internal static bool? ParseRule10b5One(XElement root)
+    {
+        var element = root.Element("aff10b5One");
+        return element == null ? null : ParseBool(element.Value);
+    }
 
     // The 0-shares row recorded for a noSecuritiesOwned Form 3 — the owner's zero
     // baseline. No security exists to classify, so SecurityKind stays Unknown; the

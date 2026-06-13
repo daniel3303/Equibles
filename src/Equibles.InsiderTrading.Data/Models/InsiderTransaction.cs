@@ -24,9 +24,10 @@ public class InsiderTransaction
     /// History: v1 added SecurityKind; v2 added <see cref="Notes"/> (footnotes);
     /// v3 restates per-ADS prices on ADS/ADR rows to per-ordinary so Shares ×
     /// PricePerShare is a real value (re-evaluated from the footnotes — see
-    /// <see cref="ReportedPricePerShare"/>).
+    /// <see cref="ReportedPricePerShare"/>); v4 captures the Rule 10b5-1
+    /// affirmative-defense checkbox into <see cref="IsRule10b5One"/>.
     /// </summary>
-    public const int CurrentParserVersion = 3;
+    public const int CurrentParserVersion = 4;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -101,6 +102,24 @@ public class InsiderTransaction
     /// Empty when the filing annotated nothing. Stored as a Postgres array.
     /// </summary>
     public List<string> Notes { get; set; } = [];
+
+    /// <summary>
+    /// Whether this transaction was made pursuant to a Rule 10b5-1(c) trading
+    /// plan, from the affirmative-defense checkbox the SEC added to Form 4/5 in
+    /// 2023 (the <c>aff10b5One</c> element). The checkbox is a single
+    /// document-level flag — one Form 4 can report several transactions, and the
+    /// box asserts the affirmative defense for the filing as a whole — so every
+    /// row parsed from the same filing carries the same value; the per-trade
+    /// detail lives in the footnotes, which are not machine-classified.
+    /// <list type="bullet">
+    /// <item><c>true</c> — the box is checked: a pre-planned, automatic trade.</item>
+    /// <item><c>false</c> — the box is present and unchecked.</item>
+    /// <item><c>null</c> — the filing predates the checkbox (schema older than
+    /// EDGAR 23.1) or otherwise omits the element, so pre-planned status is
+    /// unknown rather than negative.</item>
+    /// </list>
+    /// </summary>
+    public bool? IsRule10b5One { get; set; }
 
     /// <summary>
     /// Tri-state price-plausibility flag, cross-checked against the Yahoo
