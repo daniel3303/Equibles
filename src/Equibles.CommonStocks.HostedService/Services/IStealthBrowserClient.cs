@@ -24,4 +24,13 @@ public interface IStealthBrowserClient
     /// single walled host never fails the whole discovery batch.
     /// </summary>
     Task<string> FetchHtml(string url, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Clears the host's bot challenge in the stealth browser, then fetches
+    /// <paramref name="url"/> from within that cleared page context and returns the
+    /// raw response body. Unlike <see cref="FetchHtml"/> this returns the bytes the
+    /// server sent rather than the rendered DOM, so a feed (RSS/XML) parser sees the
+    /// real document. Returns null when the engine is disabled or the fetch fails.
+    /// </summary>
+    Task<string> FetchRaw(string url, CancellationToken cancellationToken);
 }

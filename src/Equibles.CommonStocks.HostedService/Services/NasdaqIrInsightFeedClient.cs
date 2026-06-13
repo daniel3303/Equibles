@@ -22,20 +22,25 @@ public class NasdaqIrInsightFeedClient
     );
 
     private readonly HttpClient _httpClient;
+    private readonly IStealthBrowserClient _stealthClient;
     private readonly ILogger<NasdaqIrInsightFeedClient> _logger;
 
     public NasdaqIrInsightFeedClient(
         HttpClient httpClient,
+        IStealthBrowserClient stealthClient,
         ILogger<NasdaqIrInsightFeedClient> logger
     )
     {
         _httpClient = httpClient;
+        _stealthClient = stealthClient;
         _logger = logger;
     }
 
     /// <summary>
     /// Combines an IR base URL with a feed path and returns the feed body, or null
-    /// when the feed is missing, errors, or is not XML.
+    /// when the feed is missing, errors, or is not XML. When a bot-protected host
+    /// answers with a challenge instead of the feed and the stealth path is enabled,
+    /// the feed is pulled through the cleared stealth session instead.
     /// </summary>
     public async Task<string> Fetch(
         string irBaseUrl,
@@ -51,14 +56,26 @@ public class NasdaqIrInsightFeedClient
             await RateLimiter.WaitAsync();
 
             using var response = await _httpClient.GetAsync(feedUrl, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-                return null;
 
             var mediaType = response.Content.Headers.ContentType?.MediaType;
-            if (mediaType == null || !mediaType.Contains("xml", StringComparison.OrdinalIgnoreCase))
-                return null;
+            var isXml =
+                mediaType != null && mediaType.Contains("xml", StringComparison.OrdinalIgnoreCase);
 
-            return await response.Content.ReadAsStringAsync(cancellationToken);
+            if (response.IsSuccessStatusCode && isXml)
+                return await response.Content.ReadAsStringAsync(cancellationToken);
+
+            // A bot wall answers the feed with an HTML challenge stub (or a hard
+            // block) rather than XML. When the stealth path is on and the body
+            // carries a challenge signature, pull the feed through the cleared
+            // stealth session; otherwise this is a genuine miss.
+            if (_stealthClient.IsEnabled)
+            {
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                if (StealthChallengeDetector.IsChallenge(body))
+                    return await _stealthClient.FetchRaw(feedUrl, cancellationToken);
+            }
+
+            return null;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
