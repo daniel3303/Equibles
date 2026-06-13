@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.FdaCatalysts.Data\Equibles.FdaCatalysts.Data.csproj" />
+  </ItemGroup>
+</Project>
