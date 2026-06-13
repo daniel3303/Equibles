@@ -378,6 +378,7 @@ public class McpModuleToolDiscoveryTests
                     "GetInstitutionQuarterlyActivity",
                     "GetFundOverlap",
                     "GetConsensusHoldings",
+                    "GetFundCloneBacktest",
                 }
             },
             {
