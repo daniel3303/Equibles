@@ -1,13 +1,13 @@
 using System.Reflection;
+using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Repositories;
-using Equibles.Web.Services;
 
 namespace Equibles.UnitTests.Web;
 
-public class HoldingsBacktestServiceSelectRelevantSnapshotsBoundaryTests
+public class HoldingsCloneBacktestProviderSelectRelevantSnapshotsBoundaryTests
 {
     private static readonly MethodInfo SelectRelevantSnapshotDatesMethod =
-        typeof(HoldingsBacktestService).GetMethod(
+        typeof(HoldingsCloneBacktestProvider).GetMethod(
             "SelectRelevantSnapshotDates",
             BindingFlags.NonPublic | BindingFlags.Static
         );

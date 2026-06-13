@@ -1,5 +1,5 @@
 using System.Reflection;
-using Equibles.Web.Services;
+using Equibles.Holdings.BusinessLogic;
 
 namespace Equibles.UnitTests.Web;
 
@@ -11,10 +11,10 @@ namespace Equibles.UnitTests.Web;
 /// throw — so the page can render a "no data" result. With a normal requested window, the
 /// clamped rebalance date (MaxValue) sits past resolvedTo and the snapshot is simply dropped.
 /// </summary>
-public class HoldingsBacktestServiceSelectRelevantSnapshotsMaxValueReportDateTests
+public class HoldingsCloneBacktestProviderSelectRelevantSnapshotsMaxValueReportDateTests
 {
     private static readonly MethodInfo SelectRelevantSnapshotDatesMethod =
-        typeof(HoldingsBacktestService).GetMethod(
+        typeof(HoldingsCloneBacktestProvider).GetMethod(
             "SelectRelevantSnapshotDates",
             BindingFlags.NonPublic | BindingFlags.Static
         );

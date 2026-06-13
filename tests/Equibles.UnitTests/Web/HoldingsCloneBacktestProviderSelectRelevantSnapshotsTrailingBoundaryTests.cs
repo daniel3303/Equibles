@@ -1,6 +1,6 @@
 using System.Reflection;
+using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Repositories;
-using Equibles.Web.Services;
 
 namespace Equibles.UnitTests.Web;
 
@@ -17,10 +17,10 @@ namespace Equibles.UnitTests.Web;
 /// the rebalance signal at the simulation window's trailing edge while
 /// passing every existing pin.
 /// </summary>
-public class HoldingsBacktestServiceSelectRelevantSnapshotsTrailingBoundaryTests
+public class HoldingsCloneBacktestProviderSelectRelevantSnapshotsTrailingBoundaryTests
 {
     private static readonly MethodInfo SelectRelevantSnapshotDatesMethod =
-        typeof(HoldingsBacktestService).GetMethod(
+        typeof(HoldingsCloneBacktestProvider).GetMethod(
             "SelectRelevantSnapshotDates",
             BindingFlags.NonPublic | BindingFlags.Static
         );

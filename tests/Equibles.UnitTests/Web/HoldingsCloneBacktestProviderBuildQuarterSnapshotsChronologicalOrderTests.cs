@@ -1,19 +1,19 @@
 using System.Collections;
 using System.Reflection;
+using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Repositories.Models;
-using Equibles.Web.Services;
 
 namespace Equibles.UnitTests.Web;
 
-public class HoldingsBacktestServiceBuildQuarterSnapshotsChronologicalOrderTests
+public class HoldingsCloneBacktestProviderBuildQuarterSnapshotsChronologicalOrderTests
 {
-    private static readonly Type RowType = typeof(HoldingsBacktestService).GetNestedType(
+    private static readonly Type RowType = typeof(HoldingsCloneBacktestProvider).GetNestedType(
         "BacktestHoldingRow",
         BindingFlags.NonPublic
     );
 
     private static readonly MethodInfo BuildQuarterSnapshotsMethod =
-        typeof(HoldingsBacktestService).GetMethod(
+        typeof(HoldingsCloneBacktestProvider).GetMethod(
             "BuildQuarterSnapshots",
             BindingFlags.NonPublic | BindingFlags.Static
         );
