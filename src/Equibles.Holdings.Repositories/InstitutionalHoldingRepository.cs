@@ -241,8 +241,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // Recent filings feed: one row per 13F filing, read straight from the
     // InstitutionalFiling rollup (maintained at ingestion) instead of grouping the
     // whole holdings table on every request. Joins InstitutionalHolder for filer
-    // metadata and uses a NOT EXISTS subquery to flag first-time filers (no holdings
-    // from any earlier report date). Callers order by FilingDate descending.
+    // metadata. The first-time-filer flag is deliberately NOT computed here: a per-row
+    // correlated NOT EXISTS over the whole InstitutionalHolding table is evaluated far
+    // beyond the page the caller keeps and times the request out (#3474). Callers order
+    // by FilingDate descending, take their page, then call MarkNewFilers to set
+    // IsNewFiler for just that page's filers.
     public IQueryable<RecentFiling> GetRecentFilings()
     {
         return DbContext
@@ -264,14 +267,47 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                         TotalValue = f.TotalValue,
                         IsAmendment = f.IsAmendment,
                         ImportedAt = f.CreationTime,
-                        IsNewFiler = !DbContext
-                            .Set<InstitutionalHolding>()
-                            .Any(prior =>
-                                prior.InstitutionalHolderId == f.InstitutionalHolderId
-                                && prior.ReportDate < f.ReportDate
-                            ),
                     }
             );
+    }
+
+    // Sets IsNewFiler on a materialised page of recent filings (from GetRecentFilings).
+    // A filer is "new" when no holding was reported before the filing's report date —
+    // equivalently, the filing's report date is at or before the filer's earliest holding
+    // report date. Computed with a single grouped lookup bounded to the page's filers
+    // (served by the (InstitutionalHolderId, ReportDate) index), replacing the per-row
+    // correlated NOT EXISTS over the full holdings table that timed the page out (#3474).
+    public async Task MarkNewFilers(
+        IReadOnlyCollection<RecentFiling> filings,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (filings.Count == 0)
+        {
+            return;
+        }
+
+        var holderIds = filings.Select(f => f.InstitutionalHolderId).Distinct().ToList();
+
+        var earliestReportDateByFiler = await DbContext
+            .Set<InstitutionalHolding>()
+            .Where(h => holderIds.Contains(h.InstitutionalHolderId))
+            .GroupBy(h => h.InstitutionalHolderId)
+            .Select(g => new { HolderId = g.Key, Earliest = g.Min(h => h.ReportDate) })
+            .ToDictionaryAsync(x => x.HolderId, x => x.Earliest, cancellationToken);
+
+        foreach (var filing in filings)
+        {
+            // A filer with no holdings on record (absent from the lookup) has nothing
+            // earlier, so it is new; otherwise it is new only when this filing is at or
+            // before its earliest reported holding.
+            filing.IsNewFiler =
+                !earliestReportDateByFiler.TryGetValue(
+                    filing.InstitutionalHolderId,
+                    out var earliest
+                )
+                || filing.ReportDate <= earliest;
+        }
     }
 
     // Cross-sectional 13F screener. Aggregates per-stock filer-count / total-value /

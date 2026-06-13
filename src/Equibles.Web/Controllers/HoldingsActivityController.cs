@@ -112,6 +112,10 @@ public class HoldingsActivityController : BaseController
 
         var filings = await query.Page(page, LatestFilingsViewModel.PageSize).ToListAsync();
 
+        // Flag first-time filers for just this page, off the holdings table's
+        // (InstitutionalHolderId, ReportDate) index — see MarkNewFilers (#3474).
+        await _holdingRepository.MarkNewFilers(filings);
+
         return View(
             new LatestFilingsViewModel
             {
