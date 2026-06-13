@@ -19,6 +19,9 @@ public sealed class ErrorSource
     public static readonly ErrorSource YahooPriceScraper = new("YahooPriceScraper");
     public static readonly ErrorSource CftcScraper = new("CftcScraper");
     public static readonly ErrorSource CboeScraper = new("CboeScraper");
+    public static readonly ErrorSource GovernmentContractsScraper = new(
+        "GovernmentContractsScraper"
+    );
     public static readonly ErrorSource TranscriptScraper = new("TranscriptScraper");
     public static readonly ErrorSource InsiderTradingReprocess = new("InsiderTradingReprocess");
     public static readonly ErrorSource NportReprocess = new("NportReprocess");
@@ -46,6 +49,7 @@ public sealed class ErrorSource
             YahooPriceScraper,
             CftcScraper,
             CboeScraper,
+            GovernmentContractsScraper,
             TranscriptScraper,
             InsiderTradingReprocess,
             NportReprocess,
