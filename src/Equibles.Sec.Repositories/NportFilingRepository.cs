@@ -21,10 +21,15 @@ public class NportFilingRepository : SecFilingRepositoryBase<NportFiling>
 
     /// <summary>
     /// Each fund series' most recent NPORT report whose portfolio is as of the floor date or
-    /// later. Series are keyed by registrant + series name — <see cref="NportFiling.SeriesId"/>
-    /// is absent on almost every filing. The latest report is the one with the greatest report
-    /// period, breaking ties by filing date and then accession number so amendments and
-    /// re-filings of the same period win.
+    /// later. Series identity never compares name text — the same fund's name varies across
+    /// filings ("and"/"&amp;", "Inc"/"Inc.", stray spaces, legal renames), which would freeze a
+    /// stale "latest" report under every spelling. Within a stock, filings carrying the same
+    /// non-empty <see cref="NportFiling.SeriesId"/> are the same series; filings carrying
+    /// different non-empty ids are genuinely different series and never supersede each other;
+    /// and an id-less filing belongs to the registrant's single fund (listed closed-end funds
+    /// file with no series id at all), so it shares identity with every filing of its stock.
+    /// The latest report is the one with the greatest report period, breaking ties by filing
+    /// date and then accession number so amendments and re-filings of the same period win.
     /// </summary>
     public IQueryable<NportFiling> GetLatestPerSeries(DateOnly floor)
     {
@@ -32,7 +37,11 @@ public class NportFilingRepository : SecFilingRepositoryBase<NportFiling>
         return filings.Where(f =>
             !filings.Any(f2 =>
                 f2.CommonStockId == f.CommonStockId
-                && f2.SeriesName == f.SeriesName
+                && (
+                    f2.SeriesId == f.SeriesId
+                    || string.IsNullOrEmpty(f.SeriesId)
+                    || string.IsNullOrEmpty(f2.SeriesId)
+                )
                 && (
                     f2.ReportPeriodDate > f.ReportPeriodDate
                     || (f2.ReportPeriodDate == f.ReportPeriodDate && f2.FilingDate > f.FilingDate)
