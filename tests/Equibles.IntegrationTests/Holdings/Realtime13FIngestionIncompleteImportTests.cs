@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Core.Contracts;
@@ -21,26 +20,26 @@ using Xunit;
 namespace Equibles.IntegrationTests.Holdings;
 
 /// <summary>
-/// Crash-safety invariant of Realtime13FIngestionService: record the ledger
-/// only after the import succeeded — a failure inside ImportDataSet must NOT
-/// write the accession to the ProcessedFiling ledger, otherwise the next sweep
-/// treats it as done and the filing is lost forever. The failing filing costs
-/// only its own rows (the sweep survives, EquiblesCommercial#2510) and its
-/// filing date holds the watermark back so it stays re-discoverable even past
-/// the trailing re-sweep window (EquiblesCommercial#2850). The next healthy
-/// sweep must re-ingest it.
+/// 13F twin of the 13D/G incomplete-import pin (EquiblesCommercial#2850): the
+/// import service returns IsComplete=false for the NoTrackedStocks outcome —
+/// its own contract says "leave the data set unprocessed so a later cycle
+/// backfills it once CUSIPs exist" — but the 13F realtime sweep recorded the
+/// accession in ProcessedFiling anyway, consuming the filing forever. Pin: an
+/// incomplete import stays unrecorded and uncounted, keeping the filing
+/// retryable, and does not hold the watermark back (the quarterly bulk import
+/// reconciles it regardless).
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
+public class Realtime13FIngestionIncompleteImportTests : IAsyncLifetime
 {
-    private const string Cik = "1067983";
-    private const string Cusip = "037833100";
+    private const string Accession = "0004000000-26-000001";
+    private const string UntrackedCusip = "999999999";
 
     private readonly ParadeDbFixture _fixture;
     private readonly List<EquiblesFinancialDbContext> _contexts = [];
     private readonly CultureInfo _previousCulture;
 
-    public Realtime13FIngestionCrashSafetyTests(ParadeDbFixture fixture)
+    public Realtime13FIngestionIncompleteImportTests(ParadeDbFixture fixture)
     {
         _fixture = fixture;
         _previousCulture = CultureInfo.CurrentCulture;
@@ -92,22 +91,22 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
     private static string PrimaryDoc() =>
         """
             <edgarSubmission xmlns="http://www.sec.gov/edgar/thirteenffiler">
-              <headerData><filerInfo><filer><credentials><cik>0001067983</cik></credentials></filer></filerInfo></headerData>
+              <headerData><filerInfo><filer><credentials><cik>0001067984</cik></credentials></filer></filerInfo></headerData>
               <formData><coverPage>
                 <reportCalendarOrQuarter>09-30-2024</reportCalendarOrQuarter>
                 <isAmendment>false</isAmendment>
-                <filingManager><name>BIG FUND</name></filingManager>
-                <form13FFileNumber>028-1</form13FFileNumber>
+                <filingManager><name>UNSEEDED FUND</name></filingManager>
+                <form13FFileNumber>028-2</form13FFileNumber>
               </coverPage></formData>
             </edgarSubmission>
             """;
 
     private static string InfoTable() =>
-        """
+        $"""
             <informationTable xmlns="http://www.sec.gov/edgar/document/thirteenf/informationtable">
               <infoTable>
-                <nameOfIssuer>APPLE INC</nameOfIssuer><titleOfClass>COM</titleOfClass>
-                <cusip>037833100</cusip><value>1</value>
+                <nameOfIssuer>UNSEEDED ISSUER INC</nameOfIssuer><titleOfClass>COM</titleOfClass>
+                <cusip>{UntrackedCusip}</cusip><value>1</value>
                 <shrsOrPrnAmt><sshPrnamt>1000</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt>
                 <investmentDiscretion>SOLE</investmentDiscretion>
                 <votingAuthority><Sole>1000</Sole><Shared>0</Shared><None>0</None></votingAuthority>
@@ -115,39 +114,24 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
             </informationTable>
             """;
 
-    private static EdgarDailyIndexEntry Entry() =>
-        new()
+    [Fact]
+    public async Task IngestRecentFilings_ImportReportsIncomplete_LeavesAccessionUnrecordedForRetry()
+    {
+        // No CommonStock is seeded for the filing's CUSIP, so the import maps no
+        // tracked stock and returns IsComplete=false ("retry once CUSIPs exist").
+        var entry = new EdgarDailyIndexEntry
         {
             FormType = "13F-HR",
-            CompanyName = "BIG FUND",
-            Cik = Cik,
+            CompanyName = "UNSEEDED FUND",
+            Cik = "1067984",
             DateFiled = new DateOnly(2024, 11, 20),
-            AccessionNumber = "ACC-ORIG",
+            AccessionNumber = Accession,
         };
-
-    [Fact]
-    public async Task IngestRecentFilings_ImportFailsMidSweep_DoesNotRecordLedgerSoNextSweepRetries()
-    {
-        using (var seed = FreshContext())
-        {
-            seed.Set<CommonStock>()
-                .Add(
-                    new CommonStock
-                    {
-                        Id = Guid.NewGuid(),
-                        Ticker = "AAPL",
-                        Name = "Apple Inc",
-                        Cik = "0000320193",
-                        Cusip = Cusip,
-                    }
-                );
-            await seed.SaveChangesAsync();
-        }
 
         var edgar = Substitute.For<ISecEdgarClient>();
         edgar
             .GetDailyIndex(Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
-            .Returns(_ => [Entry()]);
+            .Returns(_ => [entry]);
         edgar
             .GetFilingArtifactNames(
                 Arg.Any<string>(),
@@ -173,25 +157,13 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
 
         var scopeFactory = CreateScopeFactory();
 
-        // The import path resolves closing prices; throw on the FIRST sweep so
-        // ImportDataSet fails mid-flight, then succeed on every later call.
         var prices = Substitute.For<IStockPriceProvider>();
-        var priceCalls = 0;
         prices
             .GetClosingPrices(
                 Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(ci =>
-            {
-                if (Interlocked.Increment(ref priceCalls) == 1)
-                    throw new InvalidOperationException("price service unavailable");
-
-                var dict = new Dictionary<(Guid, DateOnly), decimal>();
-                foreach (var (id, date) in ci.ArgAt<IEnumerable<(Guid, DateOnly)>>(0))
-                    dict[(id, date)] = 100m;
-                return Task.FromResult(dict);
-            });
+            .Returns(Task.FromResult(new Dictionary<(Guid, DateOnly), decimal>()));
 
         var importService = new HoldingsImportService(
             scopeFactory,
@@ -209,53 +181,30 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
             Substitute.For<ILogger<Realtime13FIngestionService>>()
         );
 
-        var today = new DateOnly(2024, 11, 25);
-        var minReportDate = new DateOnly(2024, 1, 1);
-
-        // Sweep 1 — the import blows up. The sweep survives, the ledger MUST stay
-        // empty, and the failed filing's date must hold the watermark back.
-        var firstSweep = await ingestion.IngestRecentFilings(
-            today,
-            1,
-            minReportDate,
+        var result = await ingestion.IngestRecentFilings(
+            today: new DateOnly(2024, 11, 25),
+            lookbackDays: 1,
+            minReportDate: new DateOnly(2024, 1, 1),
             CancellationToken.None
         );
-        firstSweep.FilingsImported.Should().Be(0, "the only filing in the window failed to import");
-        firstSweep
+
+        result.FilingsImported.Should().Be(0, "an incomplete import is not an import");
+        result
             .EarliestFailedDate.Should()
-            .Be(
-                new DateOnly(2024, 11, 20),
-                "a failed import must hold the watermark back so the filing is re-swept even after the trailing window passes"
+            .BeNull(
+                "an incomplete import must not hold the watermark back — the quarterly bulk import reconciles it"
             );
 
-        using (var afterFailure = FreshContext())
-        {
-            var recorded = await afterFailure
-                .Set<ProcessedFiling>()
-                .AnyAsync(p => p.AccessionNumber == "ACC-ORIG");
-            recorded.Should().BeFalse("a crash before import completes must not record the ledger");
-        }
-
-        // Sweep 2 — prices now resolve; the filing must be re-ingested, not skipped.
-        var imported = await ingestion.IngestRecentFilings(
-            today,
-            1,
-            minReportDate,
-            CancellationToken.None
-        );
-
-        imported.FilingsImported.Should().Be(1);
-
         using var verify = FreshContext();
-        var holdings = await verify
-            .Set<InstitutionalHolding>()
-            .Where(h => h.Cusip == Cusip)
+        var processed = await verify
+            .Set<ProcessedFiling>()
+            .Select(p => p.AccessionNumber)
             .ToListAsync();
-
-        holdings
+        processed
             .Should()
-            .ContainSingle("the retried sweep must land the holdings the failed sweep dropped");
-        holdings[0].Shares.Should().Be(1000);
-        holdings[0].AccessionNumber.Should().Be("ACC-ORIG");
+            .NotContain(
+                Accession,
+                "an incomplete import must stay unrecorded so a later cycle retries it"
+            );
     }
 }

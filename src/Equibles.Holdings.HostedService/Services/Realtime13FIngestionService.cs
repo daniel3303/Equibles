@@ -80,6 +80,10 @@ public class Realtime13FIngestionService
             .ThenBy(e => e.AccessionNumber, StringComparer.Ordinal)
             .ToList();
 
+        // Seeded with the discovery-phase failure; per-filing import failures
+        // below pull it further back so the watermark re-covers them too.
+        var earliestRetryDate = earliestFailedDate;
+
         var totalImported = 0;
         foreach (var entry in sorted)
         {
@@ -105,10 +109,46 @@ public class Realtime13FIngestionService
                 filing.PeriodOfReport
             );
 
-            using (var archive = _archiveBuilder.Build([filing]))
+            ImportResult importResult;
+            try
             {
-                await _importService.ImportDataSet(archive, minReportDate, cancellationToken);
+                using var archive = _archiveBuilder.Build([filing]);
+                importResult = await _importService.ImportDataSet(
+                    archive,
+                    minReportDate,
+                    cancellationToken
+                );
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // A poisoned filing must cost only its own rows, never the sweep
+                // (EquiblesCommercial#2510): skip it and leave it unrecorded so a
+                // later cycle retries it. Holding the watermark back keeps the
+                // filing re-discoverable even after it ages out of the trailing
+                // window (EquiblesCommercial#2850).
+                _logger.LogError(
+                    ex,
+                    "Failed to import 13F-HR {Accession} (CIK {Cik}); skipping filing",
+                    entry.AccessionNumber,
+                    entry.Cik
+                );
+                if (earliestRetryDate == null || entry.DateFiled < earliestRetryDate)
+                    earliestRetryDate = entry.DateFiled;
+                continue;
+            }
+
+            // IsComplete=false is the import service's "retry later" contract (e.g.
+            // NoTrackedStocks until CUSIPs seed) — recording it here would consume
+            // the filing forever (EquiblesCommercial#2850). It deliberately does
+            // NOT hold the watermark back: a filing whose issuers never seed a
+            // CUSIP would wedge the sweep, so its retry is bounded by the trailing
+            // window instead — and the quarterly bulk import reconciles it anyway.
+            if (!importResult.IsComplete)
+                continue;
 
             await RecordProcessed([entry.AccessionNumber], cancellationToken);
             totalImported++;
@@ -119,7 +159,7 @@ public class Realtime13FIngestionService
             totalImported
         );
 
-        return new RealtimeIngestionResult(totalImported, earliestFailedDate);
+        return new RealtimeIngestionResult(totalImported, earliestRetryDate);
     }
 
     private async Task<Parsed13FFiling> TryParseAndValidateEntry(

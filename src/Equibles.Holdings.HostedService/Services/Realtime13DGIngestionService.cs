@@ -82,6 +82,10 @@ public class Realtime13DGIngestionService
             .ThenBy(e => e.AccessionNumber, StringComparer.Ordinal)
             .ToList();
 
+        // Seeded with the discovery-phase failure; per-filing import failures
+        // below pull it further back so the watermark re-covers them too.
+        var earliestRetryDate = earliestFailedDate;
+
         var totalImported = 0;
         foreach (var entry in sorted)
         {
@@ -121,7 +125,9 @@ public class Realtime13DGIngestionService
                 // A poisoned filing must cost only its own rows, never the sweep:
                 // skip it and leave it unrecorded so a later cycle retries it
                 // (e.g. once a fix for its defect deploys). Mirrors the per-entry
-                // isolation TryParseAndValidateEntry gives parse failures.
+                // isolation TryParseAndValidateEntry gives parse failures. Holding
+                // the watermark back keeps the filing re-discoverable even after
+                // it ages out of the trailing window (EquiblesCommercial#2850).
                 _logger.LogError(
                     ex,
                     "Failed to import {Form} {Accession} (CIK {Cik}); skipping filing",
@@ -129,12 +135,17 @@ public class Realtime13DGIngestionService
                     entry.AccessionNumber,
                     entry.Cik
                 );
+                if (earliestRetryDate == null || entry.DateFiled < earliestRetryDate)
+                    earliestRetryDate = entry.DateFiled;
                 continue;
             }
 
             // IsComplete=false is the import service's "retry later" contract (e.g.
             // NoTrackedStocks until CUSIPs seed) — recording it here would consume
-            // the filing forever (EquiblesCommercial#2850).
+            // the filing forever (EquiblesCommercial#2850). It deliberately does
+            // NOT hold the watermark back: an issuer that never seeds a CUSIP
+            // would wedge the sweep, so its retry is bounded by the trailing
+            // window instead.
             if (!importResult.IsComplete)
                 continue;
 
@@ -147,7 +158,7 @@ public class Realtime13DGIngestionService
             totalImported
         );
 
-        return new RealtimeIngestionResult(totalImported, earliestFailedDate);
+        return new RealtimeIngestionResult(totalImported, earliestRetryDate);
     }
 
     private async Task<Parsed13DGFiling> TryParseAndValidateEntry(
