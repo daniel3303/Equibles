@@ -198,8 +198,9 @@ public class HoldingsLatestFilingsSeededTests
             .Expect(row1.Locator(".badge").Filter(new() { HasTextString = "New" }))
             .ToHaveCountAsync(0);
 
-        // Row 2: Filer A Q1 — oldest import. Still not new (Q1 is their first quarter,
-        // but IsNewFiler checks prior.ReportDate < f.ReportDate — Q1 has no prior)
+        // Row 2: Filer A Q1 — oldest import. The row asserts only the filer name, not the
+        // new-filer badge; IsNewFiler is now set by MarkNewFilers from each filer's earliest
+        // holding report date (#3474) rather than a per-row NOT EXISTS subquery.
         var row2 = rows.Nth(2);
         await Assertions.Expect(row2).ToContainTextAsync("Alpha Capital");
     }

@@ -8,9 +8,10 @@ namespace Equibles.IntegrationTests.Holdings;
 
 /// <summary>
 /// Coverage for <c>GetRecentFilings()</c>, which reads one row per filing from the
-/// <see cref="InstitutionalFiling"/> rollup (not a live GROUP BY over holdings):
-/// the NOT EXISTS <c>IsNewFiler</c> subquery must still correlate to the right
-/// holder, the projection must surface the rollup's counts/values, and the
+/// <see cref="InstitutionalFiling"/> rollup (not a live GROUP BY over holdings): the
+/// projection must surface the rollup's counts/values, <c>MarkNewFilers</c> must flag
+/// first-time filers from each filer's earliest holding report date (the bounded
+/// replacement for the per-row NOT EXISTS that timed the page out, #3474), and the
 /// migration's one-time backfill SQL must collapse holdings into that rollup.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
@@ -49,9 +50,10 @@ public class InstitutionalHoldingRepositoryRecentFilingsTests : IAsyncLifetime
         // Contract: IsNewFiler is true when no holdings exist for the filer at
         // any ReportDate strictly earlier than this filing's ReportDate. A
         // returning filer (Q3 + Q4) must be false; a first-time filer (Q4 only)
-        // must be true. The NOT EXISTS subquery inside the Join result selector
-        // must correlate with the correct InstitutionalHolderId — a broken
-        // correlation would flag both or neither.
+        // must be true. GetRecentFilings no longer computes the flag (the per-row
+        // NOT EXISTS timed the page out, #3474); MarkNewFilers sets it for the
+        // materialised page from each filer's earliest holding report date, keyed
+        // on the correct InstitutionalHolderId — a broken key would flag both or neither.
         await using var seed = FreshContext();
         var stock = await SeedStock(seed, "AAPL");
         var returningFiler = await SeedHolder(seed, "returning");
@@ -70,6 +72,7 @@ public class InstitutionalHoldingRepositoryRecentFilingsTests : IAsyncLifetime
         var sut = new InstitutionalHoldingRepository(read);
 
         var filings = await sut.GetRecentFilings().ToListAsync();
+        await sut.MarkNewFilers(filings);
 
         var returningFiling = filings.Single(f => f.FilerCik == "returning" && f.ReportDate == Q4);
         var newFiling = filings.Single(f => f.FilerCik == "firsttime");
@@ -89,9 +92,9 @@ public class InstitutionalHoldingRepositoryRecentFilingsTests : IAsyncLifetime
         var stock = await SeedStock(seed, "MSFT");
         var holder = await SeedHolder(seed, "rollup");
 
-        // One holding exists so the IsNewFiler subquery has something to resolve...
+        // A holding exists for this accession, but the rollup independently claims 3
+        // positions worth 900k — the read path must surface the rollup, not the holdings.
         seed.Add(MakeHolding(stock, holder, Q4, accession: "acc-roll"));
-        // ...but the rollup independently claims 3 positions worth 900k.
         seed.Add(MakeFiling(holder, Q4, "acc-roll", positionCount: 3, totalValue: 900_000));
         await seed.SaveChangesAsync();
 
@@ -104,7 +107,6 @@ public class InstitutionalHoldingRepositoryRecentFilingsTests : IAsyncLifetime
         filing.PositionCount.Should().Be(3);
         filing.TotalValue.Should().Be(900_000);
         filing.FilerCik.Should().Be("rollup");
-        filing.IsNewFiler.Should().BeTrue();
     }
 
     [Fact]
