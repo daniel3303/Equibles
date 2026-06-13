@@ -190,6 +190,11 @@ public class Realtime13DGIngestionIncompleteImportTests : IAsyncLifetime
         );
 
         result.FilingsImported.Should().Be(0, "an incomplete import is not an import");
+        result
+            .EarliestFailedDate.Should()
+            .BeNull(
+                "an incomplete import must not hold the watermark back — an issuer that never seeds a CUSIP would wedge the sweep"
+            );
 
         using var verify = FreshContext();
         var processed = await verify

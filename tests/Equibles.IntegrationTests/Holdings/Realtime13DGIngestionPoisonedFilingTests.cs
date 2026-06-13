@@ -26,7 +26,10 @@ namespace Equibles.IntegrationTests.Holdings;
 /// processed, so every later cycle replayed the sweep and died at the same
 /// filing — coverage froze at its date. Pin: a poisoned filing costs only its
 /// own rows; the sweep continues, later filings import, and the poisoned
-/// accession stays unrecorded so a later cycle can retry it after a fix.
+/// accession stays unrecorded so a later cycle can retry it after a fix. The
+/// sweep result also reports the failed filing's date so the worker holds the
+/// watermark back — without that, the filing falls out of the trailing
+/// re-sweep window after 14 days and is lost forever (EquiblesCommercial#2850).
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class Realtime13DGIngestionPoisonedFilingTests : IAsyncLifetime
@@ -241,6 +244,12 @@ public class Realtime13DGIngestionPoisonedFilingTests : IAsyncLifetime
         );
 
         result.FilingsImported.Should().Be(1, "the clean filing must survive the poisoned one");
+        result
+            .EarliestFailedDate.Should()
+            .Be(
+                new DateOnly(2025, 5, 6),
+                "a failed import must hold the watermark back so the filing is re-swept even after the trailing window passes"
+            );
 
         using var verify = FreshContext();
         var cleanHoldings = await verify
