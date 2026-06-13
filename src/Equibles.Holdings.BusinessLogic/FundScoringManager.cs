@@ -79,13 +79,14 @@ public class FundScoringManager
         );
         if (result == null || result.Points.Count == 0 || !IsStorable(result))
         {
-            // Prune the stored score only when the filer structurally has nothing to score
-            // (no 13F snapshots for the window — e.g. a Schedule 13D/G-only filer), or the
-            // alpha leaderboard keeps ranking it on a result that can never be recomputed.
-            // Transient failures (a benchmark price gap, a non-finite simulation) keep the
-            // previous score: deleting on those would wipe the whole leaderboard over a
-            // one-cycle data hiccup.
-            if (!has13FSnapshots)
+            // Prune the stored score when the filer structurally can't be scored: it has no
+            // 13F snapshots for the window (e.g. a Schedule 13D/G-only filer), or its window
+            // is below the annualization floor so CAGR is null — leaving that stale row lets a
+            // pre-floor artifact (a ~19-day window annualized to +96,699%) dominate the alpha
+            // leaderboard (#3407). Transient failures (a benchmark price gap, a non-finite /
+            // out-of-range simulation) keep the previous score: deleting on those would wipe
+            // the whole leaderboard over a one-cycle data hiccup.
+            if (ShouldDeleteStaleScore(result, has13FSnapshots))
                 await DeleteExistingScore(holder, windowYears, benchmarkTicker);
             return null;
         }
@@ -235,6 +236,21 @@ public class FundScoringManager
                     .ToList(),
             })
             .ToList();
+
+    // Whether an unstorable result should also evict the existing stored score. Prune when
+    // the filer has no 13F snapshots to score, OR the window is too short to annualize (CAGR
+    // null) — both are structural and won't recompute into a real score, so a stale annualized
+    // artifact must not linger on the leaderboard (#3407). A merely out-of-range / non-finite
+    // result is treated as transient and keeps the previous score.
+    private static bool ShouldDeleteStaleScore(BacktestResult result, bool has13FSnapshots) =>
+        !has13FSnapshots || IsTooShortToAnnualize(result);
+
+    // The backtest ran (produced points) but the scored portfolio's own series was below
+    // HoldingsBacktestCalculator.MinAnnualizationDays, so its CAGR could not be computed.
+    // Keyed on the PORTFOLIO CAGR only: a null benchmark CAGR with a real portfolio CAGR is a
+    // benchmark price gap (transient), which must keep the previous score, not prune it.
+    private static bool IsTooShortToAnnualize(BacktestResult result) =>
+        result is { Points.Count: > 0 } && result.PortfolioSummary.CagrPercent is null;
 
     // A null CAGR means the simulated window was too short to annualize
     // (HoldingsBacktestCalculator.MinAnnualizationDays) — such a score is not meaningful.
