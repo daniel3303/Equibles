@@ -13,6 +13,7 @@ namespace Equibles.Sec.Data.Models;
 [Index(nameof(AccessionNumber), IsUnique = false)]
 [Index(nameof(XbrlStatus), IsUnique = false)]
 [Index(nameof(XbrlStatus), nameof(XbrlFactsVersion))]
+[Index(nameof(CreationTime), IsUnique = false)]
 public class Document
 {
     public Guid Id { get; set; } = Guid.NewGuid();
