@@ -9,8 +9,8 @@ namespace Equibles.CommonStocks.HostedService.Services;
 
 /// <summary>
 /// <see cref="IStealthBrowserClient"/> backed by a CloakBrowser <c>cloakserve</c>
-/// sidecar. Connects to the sidecar's Chrome DevTools Protocol endpoint, renders
-/// the page in the stealth Chromium, and returns the final HTML. The sidecar is an
+/// sidecar. Connects to the sidecar's Chrome DevTools Protocol endpoint and renders
+/// the page (or fetches a resource) through the stealth Chromium. The sidecar is an
 /// opt-in, digest-pinned container (compose <c>--profile stealth</c>); when it is
 /// not configured this client reports <see cref="IsEnabled"/> false and never runs,
 /// so the default build neither talks to nor depends on the third-party binary.
@@ -18,6 +18,17 @@ namespace Equibles.CommonStocks.HostedService.Services;
 [Service(ServiceLifetime.Singleton, typeof(IStealthBrowserClient))]
 public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
 {
+    // Pulls a resource from within the cleared page context, returning the raw bytes
+    // the server sent (e.g. an RSS feed) rather than the rendered DOM. Runs after the
+    // page has navigated to the origin and cleared its bot challenge, so the request
+    // rides the clearance cookie.
+    private const string InPageFetchScript = """
+        async (url) => {
+            const response = await fetch(url, { credentials: 'include' });
+            return response.ok ? await response.text() : null;
+        }
+        """;
+
     private readonly StealthFetchOptions _options;
     private readonly ILogger<CloakBrowserStealthClient> _logger;
 
@@ -43,7 +54,46 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
 
     public bool IsEnabled => _options.Enabled && !string.IsNullOrWhiteSpace(_options.SidecarUrl);
 
-    public async Task<string> FetchHtml(string url, CancellationToken cancellationToken)
+    public Task<string> FetchHtml(string url, CancellationToken cancellationToken) =>
+        RunInStealthPage(
+            url,
+            async page =>
+            {
+                await Navigate(page, url);
+                return await page.ContentAsync();
+            },
+            cancellationToken
+        );
+
+    public Task<string> FetchRaw(string url, CancellationToken cancellationToken)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return Task.FromResult<string>(null);
+
+        return RunInStealthPage(
+            url,
+            async page =>
+            {
+                // Land on the origin first so the bot challenge clears and its
+                // clearance cookie is set; the in-page fetch then rides that cleared
+                // session and returns the raw document the parser needs.
+                await Navigate(page, uri.GetLeftPart(UriPartial.Authority));
+                return await page.EvaluateAsync<string>(InPageFetchScript, url);
+            },
+            cancellationToken
+        );
+    }
+
+    /// <summary>
+    /// Connects to the sidecar, runs <paramref name="action"/> against a fresh page
+    /// in an isolated context, and disconnects. Returns null (degrading to a miss)
+    /// when the engine is disabled or the connection/navigation/render fails.
+    /// </summary>
+    private async Task<string> RunInStealthPage(
+        string url,
+        Func<IPage, Task<string>> action,
+        CancellationToken cancellationToken
+    )
     {
         if (!IsEnabled)
             return null;
@@ -53,7 +103,7 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
         {
             var playwright = await EnsureDriver(cancellationToken);
 
-            // cloakserve speaks CDP over WebSocket; connect, render, disconnect.
+            // cloakserve speaks CDP over WebSocket; connect, work, disconnect.
             await using var browser = await playwright.Chromium.ConnectOverCDPAsync(
                 _options.SidecarUrl
             );
@@ -61,15 +111,7 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
             try
             {
                 var page = await context.NewPageAsync();
-                await page.GotoAsync(
-                    url,
-                    new PageGotoOptions
-                    {
-                        WaitUntil = WaitUntilState.NetworkIdle,
-                        Timeout = _options.RenderTimeoutSeconds * 1000,
-                    }
-                );
-                return await page.ContentAsync();
+                return await action(page);
             }
             finally
             {
@@ -89,6 +131,16 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
             return null;
         }
     }
+
+    private Task Navigate(IPage page, string url) =>
+        page.GotoAsync(
+            url,
+            new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.NetworkIdle,
+                Timeout = _options.RenderTimeoutSeconds * 1000,
+            }
+        );
 
     private async Task<IPlaywright> EnsureDriver(CancellationToken cancellationToken)
     {
