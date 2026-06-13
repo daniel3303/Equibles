@@ -54,8 +54,24 @@ public class ShortSqueezeScoreManager
             return [];
         }
 
+        // Guard DaysToCover with a server-side range check so a single FINRA-feed artifact whose
+        // stored value falls outside System.Decimal can't throw OverflowException while the batch
+        // is materialized and take down every page that builds the squeeze universe (the screener,
+        // the squeeze board). The comparison runs in Postgres numeric space, so an out-of-range
+        // figure never reaches the System.Decimal reader; it is treated as missing and the factor
+        // is recomputed from the short position and average daily volume below, exactly as when
+        // FINRA omits days-to-cover.
         var shortInterests = await _shortInterestRepository
             .GetBySettlementDate(settlementDate)
+            .Select(s => new
+            {
+                s.CommonStockId,
+                s.CurrentShortPosition,
+                s.AverageDailyVolume,
+                DaysToCover = s.DaysToCover >= decimal.MinValue && s.DaysToCover <= decimal.MaxValue
+                    ? s.DaysToCover
+                    : null,
+            })
             .ToListAsync(cancellationToken);
 
         var stockIds = shortInterests.Select(s => s.CommonStockId).Distinct().ToList();
