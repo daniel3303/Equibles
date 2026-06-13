@@ -109,6 +109,9 @@ builder.Services.Configure<WebsiteDiscoveryOptions>(
 builder.Services.Configure<InvestorRelationsDiscoveryOptions>(
     builder.Configuration.GetSection("InvestorRelationsDiscovery")
 );
+builder.Services.Configure<Equibles.CommonStocks.HostedService.Configuration.StealthFetchOptions>(
+    builder.Configuration.GetSection("InvestorRelationsDiscovery:StealthFetch")
+);
 
 // Without this bind, IOptions<EmbeddingConfig> is always default (Enabled=false),
 // so GenerateEmbeddingBatch short-circuits and no embeddings are ever produced —
