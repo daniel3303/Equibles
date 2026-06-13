@@ -319,13 +319,41 @@ public partial class HouseDisclosureClient
     }
 
     // Lines that continue the current row's asset name or amount: not the next
-    // transaction, not a field-label line, not the footer note.
+    // transaction, not a field-label line, not the footer note, not a reprinted header.
     private static bool IsContinuationLine(string line)
     {
-        if (string.IsNullOrWhiteSpace(line) || line.Contains(':') || line.StartsWith('*'))
+        if (
+            string.IsNullOrWhiteSpace(line)
+            || line.Contains(':')
+            || line.StartsWith('*')
+            || IsTableHeaderFragment(line)
+        )
             return false;
         return !TransactionAnchorRegex().IsMatch(line);
     }
+
+    // Distinctive PTR column labels. A real asset/amount continuation line never carries
+    // several of them together, so their co-occurrence flags a reprinted header.
+    private static readonly string[] PtrHeaderTokens =
+    [
+        "Owner",
+        "Asset",
+        "Transaction",
+        "Notification",
+        "Amount",
+        "Gains",
+    ];
+
+    // At a page break the House PTR reprints its column-header block ("ID Owner Asset
+    // Transaction Date Notification Amount Cap. Gains > $200? ..."). PdfPig's geometry turns
+    // that into a line with no colon, asterisk or transaction anchor, so it would otherwise be
+    // mistaken for a continuation and spliced into the preceding trade — appending the header
+    // words to the asset name and pulling the "$200" cap-gains threshold into the amount,
+    // yielding inverted ranges like "$50,001-$200" (#3378). Skip any line carrying several of
+    // the column labels.
+    private static bool IsTableHeaderFragment(string line) =>
+        PtrHeaderTokens.Count(token => line.Contains(token, StringComparison.OrdinalIgnoreCase))
+        >= 3;
 
     // A continuation line holds asset text, a wrapped amount ("$5,000,000"), or
     // both; the amount is always the trailing "$…" run.
