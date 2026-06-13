@@ -44,6 +44,26 @@ public class WebsiteProbeClient
         if (normalized == null)
             return null;
 
+        if (await Probe(normalized, cancellationToken))
+            return normalized;
+
+        // A "www."-prefixed investor-relations host (e.g. "www.investor.acme.com",
+        // exactly as some filings disclose it) usually publishes no "www" CNAME even
+        // though the bare host serves the site, so a failed "www." probe retries the
+        // bare host instead of discarding a company that does have a reachable site.
+        var bareHost = WithoutWww(normalized);
+        if (bareHost != null && await Probe(bareHost, cancellationToken))
+            return bareHost;
+
+        return null;
+    }
+
+    /// <summary>
+    /// Reachability-probes one absolute URL, returning true when the host serves a
+    /// success response and false on any miss (dead host, TLS error, timeout).
+    /// </summary>
+    private async Task<bool> Probe(string url, CancellationToken cancellationToken)
+    {
         try
         {
             await RateLimiter.WaitAsync();
@@ -51,11 +71,11 @@ public class WebsiteProbeClient
             // Headers-read: only the status matters, so don't download the body.
             // (HEAD would be cheaper still, but enough hosts mishandle it.)
             using var response = await _httpClient.GetAsync(
-                normalized,
+                url,
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken
             );
-            return response.IsSuccessStatusCode ? normalized : null;
+            return response.IsSuccessStatusCode;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -65,8 +85,8 @@ public class WebsiteProbeClient
         {
             // A dead host, TLS error, or timeout is a definitive miss for this
             // candidate, not worth reporting — the next source gets its turn.
-            _logger.LogDebug(ex, "Website probe failed for {Url}", normalized);
-            return null;
+            _logger.LogDebug(ex, "Website probe failed for {Url}", url);
+            return false;
         }
     }
 
@@ -97,5 +117,32 @@ public class WebsiteProbeClient
             return null;
 
         return normalized.Length > MaxUrlLength ? null : normalized;
+    }
+
+    /// <summary>
+    /// The same absolute URL with a leading "www." stripped from its host, or null
+    /// when the host doesn't start with "www." or stripping it would leave nothing
+    /// host-shaped (e.g. "www.com"). Backs the probe fallback: an over-qualified
+    /// host such as "www.investor.acme.com" resolves at its bare form
+    /// "investor.acme.com" when the "www." variant has no DNS record. The scheme and
+    /// any path are preserved unchanged.
+    /// </summary>
+    public static string WithoutWww(string normalizedUrl)
+    {
+        if (string.IsNullOrEmpty(normalizedUrl))
+            return null;
+
+        var schemeIndex = normalizedUrl.IndexOf("://", StringComparison.Ordinal);
+        if (schemeIndex < 0)
+            return null;
+
+        var hostStart = schemeIndex + 3;
+        if (!normalizedUrl.AsSpan(hostStart).StartsWith("www.", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var stripped = normalizedUrl.Remove(hostStart, 4);
+        var hostEnd = stripped.IndexOfAny(['/', ':', '?', '#'], hostStart);
+        var bareHost = hostEnd < 0 ? stripped[hostStart..] : stripped[hostStart..hostEnd];
+        return bareHost.Contains('.') ? stripped : null;
     }
 }
