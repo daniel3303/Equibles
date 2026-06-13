@@ -26,6 +26,13 @@ public class StealthChallengeDetectorTests
     [InlineData("<html><head><title>Access Denied</title></head><body></body></html>")]
     [InlineData("<html><body>You don't have permission to access this resource.</body></html>")]
     [InlineData("<html><body>Access denied, Code 1011</body></html>")]
+    [InlineData(
+        "<html><body><div>Request unsuccessful.</div><footer>Powered by Incapsula</footer></body></html>"
+    )]
+    [InlineData(
+        "<html><body><h1>Pardon the interruption</h1>"
+            + "<p>As you were browsing, something about your browser made us think you were a bot.</p></body></html>"
+    )]
     public void IsChallenge_VendorChallengeMarker_ReturnsTrue(string body)
     {
         // A bot-protection stub carries a vendor marker and none of the real page, so
