@@ -4,6 +4,7 @@ using Equibles.CommonStocks.Data;
 using Equibles.Congress.Data;
 using Equibles.Data;
 using Equibles.Errors.Data;
+using Equibles.FdaCatalysts.Data;
 using Equibles.Finra.Data;
 using Equibles.Fred.Data;
 using Equibles.Holdings.Data;
@@ -127,6 +128,7 @@ public class ParadeDbFixture : IAsyncLifetime
             new YahooModuleConfiguration(),
             new CftcModuleConfiguration(),
             new CboeModuleConfiguration(),
+            new FdaCatalystsModuleConfiguration(),
             new SecModuleConfiguration(),
             new FinancialFactsModuleConfiguration(),
             new MediaModuleConfiguration(),

@@ -19,6 +19,7 @@
     <ProjectReference Include="..\Equibles.Yahoo.Data\Equibles.Yahoo.Data.csproj" />
     <ProjectReference Include="..\Equibles.Cftc.Data\Equibles.Cftc.Data.csproj" />
     <ProjectReference Include="..\Equibles.Cboe.Data\Equibles.Cboe.Data.csproj" />
+    <ProjectReference Include="..\Equibles.FdaCatalysts.Data\Equibles.FdaCatalysts.Data.csproj" />
     <ProjectReference Include="..\Equibles.Messaging\Equibles.Messaging.csproj" />
     <ProjectReference Include="..\Equibles.Sec.FinancialFacts.Data\Equibles.Sec.FinancialFacts.Data.csproj" />
   </ItemGroup>
