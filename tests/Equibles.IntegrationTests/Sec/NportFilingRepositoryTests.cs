@@ -42,7 +42,8 @@ public class NportFilingRepositoryTests : IDisposable
         Guid commonStockId,
         string accessionNumber = "0000036405-24-000002",
         DateOnly? filingDate = null,
-        string seriesName = "Vanguard 500 Index Fund"
+        string seriesName = "Vanguard 500 Index Fund",
+        string seriesId = "S000002277"
     )
     {
         return new NportFiling
@@ -54,7 +55,7 @@ public class NportFilingRepositoryTests : IDisposable
             IsAmendment = false,
             RegistrantName = "VANGUARD INDEX FUNDS",
             SeriesName = seriesName,
-            SeriesId = "S000002277",
+            SeriesId = seriesId,
             SeriesLei = "5493007GHODQRGNTGS28",
             ReportPeriodDate = new DateOnly(2024, 12, 31),
             ReportPeriodEnd = new DateOnly(2025, 12, 31),
@@ -203,14 +204,16 @@ public class NportFilingRepositoryTests : IDisposable
             stock.Id,
             "0000036405-25-000003",
             new DateOnly(2025, 1, 15),
-            "Vanguard Growth Index Fund"
+            "Vanguard Growth Index Fund",
+            "S000002278"
         );
         otherSeries.ReportPeriodDate = new DateOnly(2024, 12, 31);
         var belowFloor = CreateFiling(
             stock.Id,
             "0000036405-23-000004",
             new DateOnly(2023, 1, 15),
-            "Vanguard Stale Fund"
+            "Vanguard Stale Fund",
+            "S000002279"
         );
         belowFloor.ReportPeriodDate = new DateOnly(2022, 12, 31);
         _repository.Add(older);
@@ -223,6 +226,121 @@ public class NportFilingRepositoryTests : IDisposable
 
         result.Should().HaveCount(2);
         result.Select(f => f.Id).Should().BeEquivalentTo([newest.Id, otherSeries.Id]);
+    }
+
+    // A listed closed-end fund files with no series id, and its name text drifts across filings
+    // ("Inc" vs "Inc.", stray spaces, a legal rename). All such filings are the registrant's
+    // single fund, so only the newest report may surface — name variants must never each freeze
+    // their own stale "latest".
+    [Fact]
+    public async Task GetLatestPerSeries_IdlessNameVariants_CollapseToTheNewestReport()
+    {
+        var stock = CreateStock("CLM", "0000814083");
+        _dbContext.Set<CommonStock>().Add(stock);
+        await _dbContext.SaveChangesAsync();
+
+        var renamed = CreateFiling(
+            stock.Id,
+            "0001752724-21-000001",
+            new DateOnly(2021, 8, 20),
+            "Cornerstone Strategic Value Fund, Inc.",
+            seriesId: null
+        );
+        renamed.ReportPeriodDate = new DateOnly(2021, 6, 30);
+        var straySpace = CreateFiling(
+            stock.Id,
+            "0001752724-25-000002",
+            new DateOnly(2025, 8, 22),
+            "Cornerstone Strategic Investment Fund , Inc",
+            seriesId: null
+        );
+        straySpace.ReportPeriodDate = new DateOnly(2025, 6, 30);
+        var newest = CreateFiling(
+            stock.Id,
+            "0000910472-26-000003",
+            new DateOnly(2026, 5, 21),
+            "Cornerstone Strategic Investment Fund, Inc.",
+            seriesId: null
+        );
+        newest.ReportPeriodDate = new DateOnly(2026, 3, 31);
+        _repository.Add(renamed);
+        _repository.Add(straySpace);
+        _repository.Add(newest);
+        await _repository.SaveChanges();
+
+        var result = await _repository.GetLatestPerSeries(DateOnly.MinValue).ToListAsync();
+
+        result.Should().ContainSingle().Which.Id.Should().Be(newest.Id);
+    }
+
+    // Some funds report their series id only on part of their filings. An id-less report is the
+    // registrant's single fund, so a newer id-carrying report of the same stock supersedes it —
+    // otherwise the fund's pre-id era would survive as a second, stale "series".
+    [Fact]
+    public async Task GetLatestPerSeries_IdlessOlderReport_SupersededByNewerIdCarryingReport()
+    {
+        var stock = CreateStock("FMN", "0001212422");
+        _dbContext.Set<CommonStock>().Add(stock);
+        await _dbContext.SaveChangesAsync();
+
+        var idless = CreateFiling(
+            stock.Id,
+            "0001623632-21-000001",
+            new DateOnly(2021, 7, 28),
+            "Federated Premier Municipal Income Fund",
+            seriesId: null
+        );
+        idless.ReportPeriodDate = new DateOnly(2021, 5, 31);
+        var idCarrying = CreateFiling(
+            stock.Id,
+            "0001623632-26-000002",
+            new DateOnly(2026, 1, 28),
+            "Federated Hermes Premier Municipal Income Fund",
+            "S000011351"
+        );
+        idCarrying.ReportPeriodDate = new DateOnly(2025, 11, 30);
+        _repository.Add(idless);
+        _repository.Add(idCarrying);
+        await _repository.SaveChanges();
+
+        var result = await _repository.GetLatestPerSeries(DateOnly.MinValue).ToListAsync();
+
+        result.Should().ContainSingle().Which.Id.Should().Be(idCarrying.Id);
+    }
+
+    // Two filings carrying different non-empty series ids are genuinely different series of the
+    // same registrant — a shared or similar name must not collapse them.
+    [Fact]
+    public async Task GetLatestPerSeries_DistinctSeriesIdsWithSameName_BothSurvive()
+    {
+        var stock = CreateStock();
+        _dbContext.Set<CommonStock>().Add(stock);
+        await _dbContext.SaveChangesAsync();
+
+        var seriesA = CreateFiling(
+            stock.Id,
+            "0000036405-26-000001",
+            new DateOnly(2026, 1, 15),
+            "Vanguard Index Fund",
+            "S000002277"
+        );
+        seriesA.ReportPeriodDate = new DateOnly(2025, 12, 31);
+        var seriesB = CreateFiling(
+            stock.Id,
+            "0000036405-26-000002",
+            new DateOnly(2026, 2, 15),
+            "Vanguard Index Fund",
+            "S000002278"
+        );
+        seriesB.ReportPeriodDate = new DateOnly(2026, 1, 31);
+        _repository.Add(seriesA);
+        _repository.Add(seriesB);
+        await _repository.SaveChanges();
+
+        var result = await _repository.GetLatestPerSeries(DateOnly.MinValue).ToListAsync();
+
+        result.Should().HaveCount(2);
+        result.Select(f => f.Id).Should().BeEquivalentTo([seriesA.Id, seriesB.Id]);
     }
 
     [Fact]
