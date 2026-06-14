@@ -69,16 +69,41 @@ public class ShortInterestImportService
             knownDates = dates.ToHashSet();
         }
 
+        var minKnownDate = knownDates.Count > 0 ? knownDates.Min() : default;
         var maxKnownDate = knownDates.Count > 0 ? knownDates.Max() : default;
         var minDate = SyncDateResolver.Resolve(default, _workerOptions);
 
         List<DateOnly> newDates;
         try
         {
-            newDates =
-                maxKnownDate != default
-                    ? await _finraClient.GetShortInterestSettlementDatesAfter(maxKnownDate)
-                    : await _finraClient.GetShortInterestSettlementDates();
+            if (knownDates.Count == 0)
+            {
+                // Empty store: discover every settlement date; the floor filter below bounds it.
+                newDates = await _finraClient.GetShortInterestSettlementDates();
+            }
+            else
+            {
+                // Forward: settlement dates published since the newest stored one.
+                newDates = await _finraClient.GetShortInterestSettlementDatesAfter(maxKnownDate);
+
+                // Backfill: settlement dates between the floor and the oldest stored one. A
+                // fresh deployment starts with only recent data, so without this the years of
+                // FINRA history below the earliest stored date could never be filled. Each
+                // cycle the window shrinks as older dates import; once it bottoms out at
+                // FINRA's earliest available date this is a single empty discovery call
+                // (the date-range filter matches no rows, so paging stops on the first page).
+                if (minKnownDate > minDate)
+                {
+                    var backfillDates = await _finraClient.GetShortInterestSettlementDatesBetween(
+                        minDate,
+                        minKnownDate.AddDays(-1)
+                    );
+                    if (backfillDates is { Count: > 0 })
+                    {
+                        newDates.AddRange(backfillDates);
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {

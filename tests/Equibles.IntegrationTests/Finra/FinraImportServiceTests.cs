@@ -226,16 +226,18 @@ public class ShortVolumeImportServiceTests : IDisposable
         volume[0].TotalVolume.Should().Be(2_000_000);
     }
 
-    // ── Skips duplicates ─────────────────────────────────────────────
+    // ── Skips stored days, backfills the rest ────────────────────────
 
     [Fact]
-    public async Task Import_DataAlreadyUpToDate_SkipsWithoutCallingApi()
+    public async Task Import_StoredSpanCoversWholeWindow_SkipsWithoutCallingApi()
     {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
-        // Seed a volume for today so startDate > today
+        // Floor == today and today's row is already stored, so the only day in the
+        // [floor, today] window is already covered and nothing is fetched.
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        _workerOptions.MinSyncDate = today.ToDateTime(TimeOnly.MinValue);
         await SeedVolume(apple, today);
 
         await _service.Import(CancellationToken.None);
@@ -244,27 +246,42 @@ public class ShortVolumeImportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Import_ExistingData_FetchesOnlyFromDayAfterLatest()
+    public async Task Import_ExistingData_BackfillsBeforeEarliestAndFetchesForward()
     {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
-        // Seed data for a recent weekday
         var existingDate = new DateOnly(2026, 3, 25); // Wednesday
         await SeedVolume(apple, existingDate);
 
-        var nextDay = existingDate.AddDays(1); // Thursday
-        var records = CreateVolumeRecords(("AAPL", 100_000, 1_000, 500_000));
-        _finraClient.GetDailyShortVolume(nextDay).Returns(records);
+        // Floor two weekdays before the stored row, so the loop must backfill the gap
+        // below the earliest stored day as well as fetch forward past the latest.
+        _workerOptions.MinSyncDate = new DateTime(2026, 3, 23); // Monday
+
+        var backfillDay = new DateOnly(2026, 3, 24); // Tuesday, below the stored row
+        var forwardDay = existingDate.AddDays(1); // Thursday, above the stored row
+
         _finraClient
-            .GetDailyShortVolume(Arg.Is<DateOnly>(d => d > nextDay))
+            .GetDailyShortVolume(Arg.Any<DateOnly>())
             .Returns(new List<ShortVolumeRecord>());
+        _finraClient
+            .GetDailyShortVolume(backfillDay)
+            .Returns(CreateVolumeRecords(("AAPL", 100_000, 1_000, 500_000)));
+        _finraClient
+            .GetDailyShortVolume(forwardDay)
+            .Returns(CreateVolumeRecords(("AAPL", 200_000, 2_000, 800_000)));
 
         await _service.Import(CancellationToken.None);
 
-        // Should have fetched starting from the day after the existing date, not before
+        // The already-stored day is never re-fetched...
         await _finraClient.DidNotReceive().GetDailyShortVolume(existingDate);
-        await _finraClient.Received().GetDailyShortVolume(nextDay);
+        // ...but both the earlier (backfill) and later (forward) days are.
+        await _finraClient.Received().GetDailyShortVolume(backfillDay);
+        await _finraClient.Received().GetDailyShortVolume(forwardDay);
+
+        var volumes = _volumeRepo.GetAll().ToList();
+        volumes.Should().Contain(v => v.Date == backfillDay && v.ShortVolume == 100_000);
+        volumes.Should().Contain(v => v.Date == forwardDay && v.ShortVolume == 200_000);
     }
 
     // ── Handles empty API response ───────────────────────────────────
@@ -815,6 +832,42 @@ public class ShortInterestImportServiceTests : IDisposable
         await _service.Import(CancellationToken.None);
 
         await _finraClient.DidNotReceive().GetShortInterest(Arg.Any<DateOnly>());
+    }
+
+    [Fact]
+    public async Task Import_StoredDatesAboveFloor_DiscoversAndBackfillsEarlierDates()
+    {
+        var apple = CreateStock("AAPL", "Apple Inc.");
+        await SeedStocks(apple);
+
+        var existingDate = new DateOnly(2026, 3, 15);
+        await SeedInterest(apple, existingDate);
+
+        _workerOptions.MinSyncDate = new DateTime(2026, 1, 1);
+
+        // Nothing new published after the stored date...
+        _finraClient
+            .GetShortInterestSettlementDatesAfter(existingDate)
+            .Returns(new List<DateOnly>());
+        // ...but an earlier settlement date exists in the backfill window below it. Without
+        // the backfill discovery this date could never be found, since the forward-only
+        // "after the newest stored date" query never looks earlier.
+        var backfillDate = new DateOnly(2026, 2, 1);
+        _finraClient
+            .GetShortInterestSettlementDatesBetween(
+                new DateOnly(2026, 1, 1),
+                existingDate.AddDays(-1)
+            )
+            .Returns(new List<DateOnly> { backfillDate });
+        _finraClient
+            .GetShortInterest(backfillDate)
+            .Returns(CreateInterestRecords(("AAPL", 9_000_000, 8_000_000, 1_000_000, null, null)));
+
+        await _service.Import(CancellationToken.None);
+
+        await _finraClient.Received().GetShortInterest(backfillDate);
+        var interests = _interestRepo.GetAll().ToList();
+        interests.Should().Contain(i => i.SettlementDate == backfillDate);
     }
 
     // ── Handles empty API response ───────────────────────────────────

@@ -45,38 +45,59 @@ public class ShortVolumeImportService
 
     public async Task Import(CancellationToken cancellationToken)
     {
-        var startDate = await SyncStartDate.Resolve<DailyShortVolumeRepository>(
-            _scopeFactory,
-            _workerOptions,
-            repo => repo.GetLatestDate(),
-            cancellationToken
-        );
-
+        // Resolve the backfill floor (Worker:MinSyncDate or 2020-01-01) by passing `default`:
+        // we want the floor itself, not "latest stored + 1". The loop below re-derives the
+        // forward edge from the stored span, so the full window is reconsidered every cycle.
+        var floor = SyncDateResolver.Resolve(default, _workerOptions);
         var endDate = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        if (startDate > endDate)
+        if (floor > endDate)
         {
             _logger.LogInformation(
-                "Short volume data is up to date (latest: {Date})",
-                startDate.AddDays(-1)
+                "Short volume sync floor {Floor} is in the future; nothing to import",
+                floor
             );
             return;
         }
 
-        _logger.LogInformation("Importing short volume from {Start} to {End}", startDate, endDate);
+        // The span already stored is [earliest, latest]; the loop skips it and imports the
+        // days outside it. That fills the history below the earliest row (a fresh deployment
+        // starts with only recent FINRA data) AND keeps importing forward past the latest
+        // row, without ever re-fetching a finished day. The previous implementation only
+        // moved forward from the latest row, so the pre-collection history could never load.
+        DateOnly earliest;
+        DateOnly latest;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var repo = scope.ServiceProvider.GetRequiredService<DailyShortVolumeRepository>();
+            earliest = await repo.GetEarliestDate().FirstOrDefaultAsync(cancellationToken);
+            latest = await repo.GetLatestDate().FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var hasStored = earliest != default;
+
+        _logger.LogInformation(
+            "Importing short volume from {Start} to {End}{Skip}",
+            floor,
+            endDate,
+            hasStored ? $" (skipping already-stored {earliest}..{latest})" : null
+        );
 
         var tickerMap = await _tickerMapService.Build(
             _workerOptions.TickersToSync,
             cancellationToken
         );
 
-        var currentDate = startDate;
+        var currentDate = floor;
         while (currentDate <= endDate)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Skip weekends
-            if (currentDate.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+            // Skip weekends and any day already inside the stored span.
+            if (
+                currentDate.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday
+                || (hasStored && currentDate >= earliest && currentDate <= latest)
+            )
             {
                 currentDate = currentDate.AddDays(1);
                 continue;
