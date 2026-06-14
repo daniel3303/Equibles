@@ -7,30 +7,30 @@ using NSubstitute;
 namespace Equibles.UnitTests.CommonStocks;
 
 /// <summary>
-/// Pins NasdaqIrInsightFeedClient.Fetch's bot-challenge fallback: a host that
-/// answers the feed with a challenge stub instead of XML is pulled through the
-/// cleared stealth session when it is enabled, and is a plain miss when it is not.
+/// Pins NasdaqIrInsightFeedClient.Fetch's contract: when a stealth sidecar is configured
+/// the feed is pulled through the cleared stealth session (no plain HTTP); when none is
+/// configured it falls back to plain HTTP and returns null for a non-XML response.
 /// </summary>
 public class NasdaqIrInsightFeedClientFetchTests
 {
+    private const string FeedXml =
+        "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>Events</title></channel></rss>";
+
     private const string AkamaiBlock =
         "<html><head><title>Access Denied</title></head>"
         + "<body>You don't have permission to access this resource.</body></html>";
 
-    private const string FeedXml =
-        "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>Events</title></channel></rss>";
-
     [Fact]
-    public async Task Fetch_BotChallenge_StealthEnabled_PullsFeedThroughStealth()
+    public async Task Fetch_Sidecar_PullsFeedThroughStealth_WithoutPlainHttp()
     {
+        // With a sidecar configured the feed is pulled through the stealth session; the
+        // plain HttpClient must never be touched (its handler throws if it is).
         var stealth = Substitute.For<IStealthBrowserClient>();
         stealth.IsEnabled.Returns(true);
         stealth.FetchRaw(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(FeedXml);
 
-        // Akamai serves its block as HTML with a 403; the body still carries the
-        // vendor signature, so the stealth session clears it and returns the feed.
         var client = new NasdaqIrInsightFeedClient(
-            new HttpClient(new StubHandler(HttpStatusCode.Forbidden, "text/html", AkamaiBlock)),
+            new HttpClient(new ThrowingHandler()),
             stealth,
             NullLogger<NasdaqIrInsightFeedClient>.Instance
         );
@@ -48,36 +48,12 @@ public class NasdaqIrInsightFeedClientFetchTests
     }
 
     [Fact]
-    public async Task Fetch_BotChallenge_StealthDisabled_ReturnsNull()
+    public async Task Fetch_NoSidecar_XmlFeed_ReturnsBodyViaPlainHttp()
     {
-        var stealth = Substitute.For<IStealthBrowserClient>();
-        stealth.IsEnabled.Returns(false);
-
-        var client = new NasdaqIrInsightFeedClient(
-            new HttpClient(new StubHandler(HttpStatusCode.Forbidden, "text/html", AkamaiBlock)),
-            stealth,
-            NullLogger<NasdaqIrInsightFeedClient>.Instance
-        );
-
-        var result = await client.Fetch(
-            "https://investors.example.com/",
-            NasdaqIrInsightFeedClient.EventsFeedPath,
-            CancellationToken.None
-        );
-
-        result.Should().BeNull();
-        await stealth.DidNotReceive().FetchRaw(Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Fetch_XmlFeed_ReturnsBodyWithoutStealth()
-    {
-        var stealth = Substitute.For<IStealthBrowserClient>();
-        stealth.IsEnabled.Returns(true);
-
+        // Standalone build with no sidecar: an XML feed is returned over plain HTTP.
         var client = new NasdaqIrInsightFeedClient(
             new HttpClient(new StubHandler(HttpStatusCode.OK, "application/rss+xml", FeedXml)),
-            stealth,
+            DisabledStealth(),
             NullLogger<NasdaqIrInsightFeedClient>.Instance
         );
 
@@ -88,7 +64,45 @@ public class NasdaqIrInsightFeedClientFetchTests
         );
 
         result.Should().Be(FeedXml);
-        await stealth.DidNotReceive().FetchRaw(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Fetch_NoSidecar_BotWall_ReturnsNull()
+    {
+        // No sidecar: an Akamai HTML block is not XML, so it is a plain miss.
+        var client = new NasdaqIrInsightFeedClient(
+            new HttpClient(new StubHandler(HttpStatusCode.Forbidden, "text/html", AkamaiBlock)),
+            DisabledStealth(),
+            NullLogger<NasdaqIrInsightFeedClient>.Instance
+        );
+
+        var result = await client.Fetch(
+            "https://investors.example.com/",
+            NasdaqIrInsightFeedClient.EventsFeedPath,
+            CancellationToken.None
+        );
+
+        result.Should().BeNull();
+    }
+
+    private static IStealthBrowserClient DisabledStealth()
+    {
+        var stealth = Substitute.For<IStealthBrowserClient>();
+        stealth.IsEnabled.Returns(false);
+        return stealth;
+    }
+
+    // Fails the test if plain HTTP is used — proves the sidecar path never falls through
+    // to the HttpClient when a sidecar is configured.
+    private sealed class ThrowingHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        ) =>
+            throw new InvalidOperationException(
+                "plain HTTP must not be used when a sidecar is configured"
+            );
     }
 
     private sealed class StubHandler : HttpMessageHandler

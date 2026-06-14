@@ -1,24 +1,20 @@
 namespace Equibles.CommonStocks.HostedService.Configuration;
 
 /// <summary>
-/// Configuration for the optional stealth-browser fetch fallback, used when an IR
-/// host answers a plain HTTP request with a bot-protection challenge instead of the
-/// page. Bound from the <c>InvestorRelationsDiscovery:StealthFetch</c> section.
-/// Disabled by default, so the stock build behaves exactly as before and carries no
-/// dependency on the sidecar.
+/// Configuration for the stealth-browser fetch path. Company websites and IR pages
+/// are fetched through the sidecar rather than plain HTTP, because most are bot-
+/// protected; plain HTTP is only the fallback when no sidecar is configured. Bound
+/// from the <c>InvestorRelationsDiscovery:StealthFetch</c> section. The stealth path
+/// is active whenever <see cref="SidecarUrl"/> is set — there is no separate on/off
+/// flag — so an empty value (the default for a standalone build) keeps it off and
+/// discovery falls back to plain HTTP.
 /// </summary>
 public class StealthFetchOptions
 {
     /// <summary>
-    /// Whether the stealth fallback is active. When false (the default), a bot-
-    /// challenge response is recorded as a miss, exactly as before.
-    /// </summary>
-    public bool Enabled { get; set; }
-
-    /// <summary>
     /// Chrome DevTools Protocol endpoint of the stealth-browser sidecar (e.g.
-    /// <c>http://cloakbrowser:9222</c>). Required when <see cref="Enabled"/> is true;
-    /// an empty value keeps the fallback inert.
+    /// <c>http://cloakbrowser:9222</c>). When set, company/IR fetches go through the
+    /// sidecar; when empty, the stealth path is off and discovery uses plain HTTP.
     /// </summary>
     public string SidecarUrl { get; set; }
 
@@ -30,9 +26,10 @@ public class StealthFetchOptions
     public int RenderTimeoutSeconds { get; set; } = 45;
 
     /// <summary>
-    /// Maximum number of concurrent stealth renders. Stealth fetches are expensive
-    /// and politeness-sensitive, so they are bounded well below the plain-HTTP rate
-    /// to avoid escalating a solvable challenge into a hard block.
+    /// Maximum number of concurrent stealth renders. Stealth renders are expensive and
+    /// memory-heavy, so this caps how many run at once; raise it (with the sidecar's
+    /// memory) to keep a full-universe discovery sweep feasible now that every company/
+    /// IR fetch goes through the sidecar.
     /// </summary>
-    public int MaxConcurrency { get; set; } = 2;
+    public int MaxConcurrency { get; set; } = 6;
 }

@@ -9,44 +9,26 @@ namespace Equibles.UnitTests.CommonStocks;
 
 public class InvestorRelationsProbeClientTests
 {
-    private const string IncapsulaStub =
-        "<html><head><script src=\"/_Incapsula_Resource?SWJIYLWA=719d\"></script>"
-        + "</head><body>Request unsuccessful.</body></html>";
-
     private const string RenderedIrPage =
         "<html><head><title>Investor Relations - Emergent</title></head>"
         + "<body><h1>Quarterly results</h1></body></html>";
 
-    [Fact]
-    public async Task Discover_RedirectLandsOnUrlAboveColumnCeiling_FallsBackToProbedCandidate()
-    {
-        // Contract: the returned URL must stay within CommonStock.InvestorRelationsUrl's
-        // 256-char ceiling. When a probe lands (after redirects) on a longer URL, the
-        // short probed candidate must be returned instead of the over-long final URL.
-        var overLongFinalUrl = "https://acme.com/" + new string('a', 300);
-        var client = new InvestorRelationsProbeClient(
-            new HttpClient(new LongFinalUrlHandler(overLongFinalUrl)),
-            DisabledStealth(),
-            NullLogger<InvestorRelationsProbeClient>.Instance
-        );
-
-        var result = await client.Discover("https://acme.com", ["ir"], [], CancellationToken.None);
-
-        result!.Url.Should().Be("https://acme.com/ir");
-        result.Url.Length.Should().BeLessThanOrEqualTo(256);
-    }
+    private const string IncapsulaStub =
+        "<html><head><script src=\"/_Incapsula_Resource?SWJIYLWA=719d\"></script>"
+        + "</head><body>Request unsuccessful.</body></html>";
 
     [Fact]
-    public async Task Discover_BotChallenge_StealthEnabled_ResolvesRenderedPage()
+    public async Task Discover_Sidecar_RendersCandidate_WithoutAnyPlainHttp()
     {
-        // The plain probe sees only the challenge stub; the stealth fetch renders the
-        // real IR page, which validates — the candidate URL becomes the result.
+        // With a sidecar configured, every candidate is rendered through the stealth
+        // browser (most IR hosts are bot-protected). The plain HttpClient must never be
+        // touched — its handler throws if it is.
         var stealth = Substitute.For<IStealthBrowserClient>();
         stealth.IsEnabled.Returns(true);
         stealth.FetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(RenderedIrPage);
 
         var client = new InvestorRelationsProbeClient(
-            new HttpClient(new ConstantHandler(HttpStatusCode.OK, "text/html", IncapsulaStub)),
+            new HttpClient(new ThrowingHandler()),
             stealth,
             NullLogger<InvestorRelationsProbeClient>.Instance
         );
@@ -65,36 +47,11 @@ public class InvestorRelationsProbeClientTests
     }
 
     [Fact]
-    public async Task Discover_BotChallenge_StealthDisabled_RecordsMissAndNeverRenders()
+    public async Task Discover_NoSidecar_DirectIrPage_ResolvesViaPlainHttp()
     {
-        // With the sidecar off, behaviour is unchanged: the challenge is an
-        // unvalidated miss and the stealth path is never touched.
+        // Standalone build with no sidecar: a reachable IR page resolves over plain HTTP
+        // and the stealth path is never touched.
         var stealth = DisabledStealth();
-
-        var client = new InvestorRelationsProbeClient(
-            new HttpClient(new ConstantHandler(HttpStatusCode.OK, "text/html", IncapsulaStub)),
-            stealth,
-            NullLogger<InvestorRelationsProbeClient>.Instance
-        );
-
-        var result = await client.Discover(
-            "emergentbiosolutions.com",
-            ["investors"],
-            [],
-            CancellationToken.None
-        );
-
-        result.Should().BeNull();
-        await stealth.DidNotReceive().FetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Discover_DirectIrPage_ResolvesWithoutStealth()
-    {
-        // A reachable IR page resolves on the plain path even when stealth is enabled —
-        // the fallback only fires on a recognised challenge, not on every fetch.
-        var stealth = Substitute.For<IStealthBrowserClient>();
-        stealth.IsEnabled.Returns(true);
 
         var client = new InvestorRelationsProbeClient(
             new HttpClient(
@@ -115,11 +72,67 @@ public class InvestorRelationsProbeClientTests
         await stealth.DidNotReceive().FetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Discover_NoSidecar_BotWall_IsMiss()
+    {
+        // No sidecar: a bot-wall challenge stub is not a valid IR page, so it is a miss
+        // and the stealth path is never touched.
+        var stealth = DisabledStealth();
+
+        var client = new InvestorRelationsProbeClient(
+            new HttpClient(new ConstantHandler(HttpStatusCode.OK, "text/html", IncapsulaStub)),
+            stealth,
+            NullLogger<InvestorRelationsProbeClient>.Instance
+        );
+
+        var result = await client.Discover(
+            "emergentbiosolutions.com",
+            ["investors"],
+            [],
+            CancellationToken.None
+        );
+
+        result.Should().BeNull();
+        await stealth.DidNotReceive().FetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Discover_NoSidecar_RedirectAboveColumnCeiling_FallsBackToProbedCandidate()
+    {
+        // Plain path (no sidecar): the returned URL must stay within
+        // CommonStock.InvestorRelationsUrl's 256-char ceiling. When a probe lands (after
+        // redirects) on a longer URL, the short probed candidate is returned instead.
+        var overLongFinalUrl = "https://acme.com/" + new string('a', 300);
+        var client = new InvestorRelationsProbeClient(
+            new HttpClient(new LongFinalUrlHandler(overLongFinalUrl)),
+            DisabledStealth(),
+            NullLogger<InvestorRelationsProbeClient>.Instance
+        );
+
+        var result = await client.Discover("https://acme.com", ["ir"], [], CancellationToken.None);
+
+        result!.Url.Should().Be("https://acme.com/ir");
+        result.Url.Length.Should().BeLessThanOrEqualTo(256);
+    }
+
     private static IStealthBrowserClient DisabledStealth()
     {
         var stealth = Substitute.For<IStealthBrowserClient>();
         stealth.IsEnabled.Returns(false);
         return stealth;
+    }
+
+    // Fails the test if plain HTTP is used — proves the sidecar path never falls through
+    // to the HttpClient when a sidecar is configured.
+    private sealed class ThrowingHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        ) =>
+            throw new InvalidOperationException(
+                "plain HTTP must not be used when a sidecar is configured"
+            );
     }
 
     // Returns a valid IR page (title alone satisfies the validator) but reports a

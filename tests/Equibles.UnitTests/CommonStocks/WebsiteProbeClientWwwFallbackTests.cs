@@ -82,8 +82,42 @@ public class WebsiteProbeClientWwwFallbackTests
         result.Should().BeNull();
     }
 
-    private static WebsiteProbeClient Build(HttpMessageHandler handler) =>
-        new(new HttpClient(handler), Substitute.For<ILogger<WebsiteProbeClient>>());
+    [Fact]
+    public async Task Validate_Sidecar_RendersHost_ReturnsNormalizedUrl_WithoutPlainHttp()
+    {
+        // With a sidecar, reachability is a successful stealth render — a Cloudflare 403
+        // to a plain client no longer discards a live company site. The plain HttpClient
+        // must not be touched.
+        var stealth = Substitute.For<IStealthBrowserClient>();
+        stealth.IsEnabled.Returns(true);
+        stealth
+            .FetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns("<html><body>Acme</body></html>");
+        var handler = new ScriptedHandler(_ => HttpStatusCode.OK);
+
+        var result = await Build(handler, stealth).Validate("acme.com", CancellationToken.None);
+
+        result.Should().Be("https://acme.com");
+        handler.Requested.Should().BeEmpty();
+        await stealth.Received(1).FetchHtml("https://acme.com", Arg.Any<CancellationToken>());
+    }
+
+    private static WebsiteProbeClient Build(
+        HttpMessageHandler handler,
+        IStealthBrowserClient stealth = null
+    ) =>
+        new(
+            new HttpClient(handler),
+            stealth ?? DisabledStealth(),
+            Substitute.For<ILogger<WebsiteProbeClient>>()
+        );
+
+    private static IStealthBrowserClient DisabledStealth()
+    {
+        var stealth = Substitute.For<IStealthBrowserClient>();
+        stealth.IsEnabled.Returns(false);
+        return stealth;
+    }
 
     // Returns the scripted status for each probed URL; a null status throws, mimicking
     // the DNS failure (NXDOMAIN) a missing "www" CNAME produces for HttpClient.

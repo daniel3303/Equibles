@@ -4,12 +4,12 @@ using Microsoft.Extensions.Logging;
 namespace Equibles.CommonStocks.HostedService.Services;
 
 /// <summary>
-/// Probes a company's candidate investor-relations URLs over HTTP and returns the
-/// first one that resolves to a validated IR page. Registered as a typed
-/// <see cref="HttpClient"/> client (see <c>AddCommonStocksWorker</c>). When a host
-/// answers with a bot-protection challenge instead of the page and the stealth
-/// fetch path is enabled, the candidate is re-fetched through
-/// <see cref="IStealthBrowserClient"/> and the rendered page is validated instead.
+/// Probes a company's candidate investor-relations URLs and returns the first one
+/// that resolves to a validated IR page. When a stealth sidecar is configured (the
+/// commercial deployment), every candidate is rendered through
+/// <see cref="IStealthBrowserClient"/> — most IR hosts are bot-protected, so plain
+/// HTTP would just be walled. Plain HTTP (the typed <see cref="HttpClient"/> from
+/// <c>AddCommonStocksWorker</c>) is used only as the fallback when no sidecar is set.
 /// </summary>
 public class InvestorRelationsProbeClient
 {
@@ -68,41 +68,31 @@ public class InvestorRelationsProbeClient
         CancellationToken cancellationToken
     )
     {
+        // Company/IR hosts are mostly bot-protected, so render every candidate through
+        // the stealth sidecar when one is configured. Plain HTTP is only the fallback
+        // for a standalone build with no sidecar.
+        if (_stealthClient.IsEnabled)
+            return await ResolveViaStealth(url, cancellationToken);
+
         try
         {
             await RateLimiter.WaitAsync();
 
-            string body;
-            using (var response = await _httpClient.GetAsync(url, cancellationToken))
+            using var response = await _httpClient.GetAsync(url, cancellationToken);
+
+            // Only HTML is worth reading: it can be keyword-validated. PDFs, JSON login
+            // walls, etc. carry nothing useful — skip the body entirely.
+            var mediaType = response.Content.Headers.ContentType?.MediaType;
+            var isHtml = string.Equals(mediaType, "text/html", StringComparison.OrdinalIgnoreCase);
+            var body = isHtml ? await response.Content.ReadAsStringAsync(cancellationToken) : null;
+
+            if (response.IsSuccessStatusCode && body != null)
             {
-                // Only HTML is worth reading: it can be keyword-validated, and a bot
-                // wall serves its challenge as HTML too. PDFs, JSON login walls, etc.
-                // carry nothing useful — skip the body entirely.
-                var mediaType = response.Content.Headers.ContentType?.MediaType;
-                var isHtml = string.Equals(
-                    mediaType,
-                    "text/html",
-                    StringComparison.OrdinalIgnoreCase
-                );
-                body = isHtml ? await response.Content.ReadAsStringAsync(cancellationToken) : null;
-
-                if (response.IsSuccessStatusCode && body != null)
-                {
-                    // Prefer where the request actually landed after redirects, falling
-                    // back to the probed URL when that overruns the column ceiling.
-                    var finalUrl = response.RequestMessage?.RequestUri?.ToString() ?? url;
-                    var direct = BuildResult(body, finalUrl, url);
-                    if (direct != null)
-                        return direct;
-                }
+                // Prefer where the request actually landed after redirects, falling
+                // back to the probed URL when that overruns the column ceiling.
+                var finalUrl = response.RequestMessage?.RequestUri?.ToString() ?? url;
+                return BuildResult(body, finalUrl, url);
             }
-
-            // Bot wall: a 2xx challenge stub that didn't validate, or a hard block
-            // (e.g. Akamai 403 "Access Denied") whose body still carries the vendor
-            // signature. When the stealth path is configured, render the candidate
-            // and validate that instead — the only way a walled host ever resolves.
-            if (_stealthClient.IsEnabled && StealthChallengeDetector.IsChallenge(body))
-                return await ResolveViaStealth(url, cancellationToken);
 
             return null;
         }

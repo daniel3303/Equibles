@@ -38,9 +38,9 @@ public class NasdaqIrInsightFeedClient
 
     /// <summary>
     /// Combines an IR base URL with a feed path and returns the feed body, or null
-    /// when the feed is missing, errors, or is not XML. When a bot-protected host
-    /// answers with a challenge instead of the feed and the stealth path is enabled,
-    /// the feed is pulled through the cleared stealth session instead.
+    /// when the feed is missing or errors. When a stealth sidecar is configured the
+    /// feed is pulled through the cleared stealth session (the Nasdaq-IR-Insight host
+    /// is usually bot-protected); plain HTTP is only the fallback when no sidecar is set.
     /// </summary>
     public async Task<string> Fetch(
         string irBaseUrl,
@@ -50,6 +50,11 @@ public class NasdaqIrInsightFeedClient
     {
         if (!TryBuildFeedUrl(irBaseUrl, feedPath, out var feedUrl))
             return null;
+
+        // Pull the feed through the cleared stealth session when a sidecar is
+        // configured; the parser sees the raw XML the server sent, not a rendered DOM.
+        if (_stealthClient.IsEnabled)
+            return await _stealthClient.FetchRaw(feedUrl, cancellationToken);
 
         try
         {
@@ -63,17 +68,6 @@ public class NasdaqIrInsightFeedClient
 
             if (response.IsSuccessStatusCode && isXml)
                 return await response.Content.ReadAsStringAsync(cancellationToken);
-
-            // A bot wall answers the feed with an HTML challenge stub (or a hard
-            // block) rather than XML. When the stealth path is on and the body
-            // carries a challenge signature, pull the feed through the cleared
-            // stealth session; otherwise this is a genuine miss.
-            if (_stealthClient.IsEnabled)
-            {
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                if (StealthChallengeDetector.IsChallenge(body))
-                    return await _stealthClient.FetchRaw(feedUrl, cancellationToken);
-            }
 
             return null;
         }
