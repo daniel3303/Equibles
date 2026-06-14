@@ -60,8 +60,11 @@ public class WebsiteDiscoveryServiceTests
         HttpStatusCode probeStatus = HttpStatusCode.OK
     )
     {
+        var stealth = Substitute.For<IStealthBrowserClient>();
+        stealth.IsEnabled.Returns(false);
         var probe = new WebsiteProbeClient(
             new HttpClient(new FixedStatusHandler(probeStatus)),
+            stealth,
             Substitute.For<ILogger<WebsiteProbeClient>>()
         );
         return new WebsiteDiscoveryService(

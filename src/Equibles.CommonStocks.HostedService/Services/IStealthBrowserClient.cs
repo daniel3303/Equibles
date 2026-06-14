@@ -1,19 +1,19 @@
 namespace Equibles.CommonStocks.HostedService.Services;
 
 /// <summary>
-/// Renders a URL through a stealth browser and returns the final HTML. Used as a
-/// fallback when a plain <see cref="HttpClient"/> fetch is answered by a bot-
-/// protection challenge (Imperva Incapsula, Akamai) instead of the real page. The
-/// backing engine — a containerised stealth Chromium, a hosted unblocker, or any
-/// future replacement — sits behind this interface so the discovery and feed code
-/// is never hard-coupled to one binary.
+/// Renders a URL through a stealth browser and returns the final HTML. This is the
+/// primary fetch path for company websites and IR pages — most are bot-protected
+/// (Imperva Incapsula, Akamai, Cloudflare), so a plain <see cref="HttpClient"/> would
+/// just be walled. The backing engine — a containerised stealth Chromium, a hosted
+/// unblocker, or any future replacement — sits behind this interface so the discovery
+/// and feed code is never hard-coupled to one binary.
 /// </summary>
 public interface IStealthBrowserClient
 {
     /// <summary>
-    /// True when a stealth engine is configured and enabled. Callers check this
-    /// before attempting a stealth re-fetch, so behaviour is unchanged when the
-    /// sidecar is absent (the default).
+    /// True when a stealth engine is configured (a sidecar URL is set). Callers route
+    /// company/IR fetches through the sidecar when this is true and fall back to plain
+    /// HTTP when it is false (the default for a standalone build with no sidecar).
     /// </summary>
     bool IsEnabled { get; }
 

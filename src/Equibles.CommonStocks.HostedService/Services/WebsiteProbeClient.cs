@@ -8,8 +8,10 @@ namespace Equibles.CommonStocks.HostedService.Services;
 /// normalised form when the host answers, or null when it doesn't. The probe is
 /// the gate between what an <c>IWebsiteSource</c> claims and what gets persisted
 /// to <c>CommonStock.Website</c>, so a stale or mis-extracted URL fails closed.
-/// Registered as a typed <see cref="HttpClient"/> client (see
-/// <c>AddCommonStocksWorker</c>).
+/// When a stealth sidecar is configured the host is rendered through it — a bot
+/// wall (Cloudflare 403) is a live company site, not a dead host, so a plain probe
+/// would wrongly discard it. Plain HTTP (the typed <see cref="HttpClient"/> from
+/// <c>AddCommonStocksWorker</c>) is only the fallback when no sidecar is set.
 /// </summary>
 public class WebsiteProbeClient
 {
@@ -23,11 +25,17 @@ public class WebsiteProbeClient
     );
 
     private readonly HttpClient _httpClient;
+    private readonly IStealthBrowserClient _stealthClient;
     private readonly ILogger<WebsiteProbeClient> _logger;
 
-    public WebsiteProbeClient(HttpClient httpClient, ILogger<WebsiteProbeClient> logger)
+    public WebsiteProbeClient(
+        HttpClient httpClient,
+        IStealthBrowserClient stealthClient,
+        ILogger<WebsiteProbeClient> logger
+    )
     {
         _httpClient = httpClient;
+        _stealthClient = stealthClient;
         _logger = logger;
     }
 
@@ -64,6 +72,12 @@ public class WebsiteProbeClient
     /// </summary>
     private async Task<bool> Probe(string url, CancellationToken cancellationToken)
     {
+        // Render through the stealth sidecar when one is configured: it clears a bot
+        // wall and returns the page, so a walled-but-live company site reads as
+        // reachable instead of being discarded. A dead host fails to render -> null.
+        if (_stealthClient.IsEnabled)
+            return await _stealthClient.FetchHtml(url, cancellationToken) != null;
+
         try
         {
             await RateLimiter.WaitAsync();

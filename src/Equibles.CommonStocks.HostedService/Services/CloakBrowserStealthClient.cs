@@ -10,10 +10,10 @@ namespace Equibles.CommonStocks.HostedService.Services;
 /// <summary>
 /// <see cref="IStealthBrowserClient"/> backed by a CloakBrowser <c>cloakserve</c>
 /// sidecar. Connects to the sidecar's Chrome DevTools Protocol endpoint and renders
-/// the page (or fetches a resource) through the stealth Chromium. The sidecar is an
-/// opt-in, digest-pinned container (compose <c>--profile stealth</c>); when it is
-/// not configured this client reports <see cref="IsEnabled"/> false and never runs,
-/// so the default build neither talks to nor depends on the third-party binary.
+/// the page (or fetches a resource) through the stealth Chromium. The client is active
+/// whenever a sidecar URL is configured; when none is set it reports
+/// <see cref="IsEnabled"/> false and never runs, so a standalone build neither talks
+/// to nor depends on the third-party binary (discovery falls back to plain HTTP).
 /// </summary>
 [Service(ServiceLifetime.Singleton, typeof(IStealthBrowserClient))]
 public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
@@ -52,7 +52,7 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
         _concurrencyLimiter = new SemaphoreSlim(Math.Max(1, _options.MaxConcurrency));
     }
 
-    public bool IsEnabled => _options.Enabled && !string.IsNullOrWhiteSpace(_options.SidecarUrl);
+    public bool IsEnabled => !string.IsNullOrWhiteSpace(_options.SidecarUrl);
 
     public Task<string> FetchHtml(string url, CancellationToken cancellationToken) =>
         RunInStealthPage(
