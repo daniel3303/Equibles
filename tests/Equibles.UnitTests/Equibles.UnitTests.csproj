@@ -96,5 +96,7 @@
     <ProjectReference Include="..\..\src\Equibles.Cboe.HostedService\Equibles.Cboe.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Messaging\Equibles.Messaging.csproj" />
     <ProjectReference Include="..\..\src\Equibles.FdaCatalysts.BusinessLogic\Equibles.FdaCatalysts.BusinessLogic.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.FdaCatalysts.Repositories\Equibles.FdaCatalysts.Repositories.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.FdaCatalysts.HostedService\Equibles.FdaCatalysts.HostedService.csproj" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Equibles.Core.AutoWiring" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
+    <ProjectReference Include="..\Equibles.FdaCatalysts.Repositories\Equibles.FdaCatalysts.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.FdaCatalysts.BusinessLogic\Equibles.FdaCatalysts.BusinessLogic.csproj" />
+    <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
+    <ProjectReference Include="..\Equibles.Worker\Equibles.Worker.csproj" />
+    <!-- IStealthBrowserClient lives here: the FDA.gov calendar is client-rendered, so it
+         is fetched through the same headless stealth browser the IR discovery uses. -->
+    <ProjectReference Include="..\Equibles.CommonStocks.HostedService\Equibles.CommonStocks.HostedService.csproj" />
+  </ItemGroup>
+</Project>
