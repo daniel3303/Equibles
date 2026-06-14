@@ -9,6 +9,7 @@ using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Data.Extensions;
 using Equibles.Errors.Data.Extensions;
+using Equibles.FdaCatalysts.Mcp.Extensions;
 using Equibles.Finra.Data.Extensions;
 using Equibles.Finra.Mcp.Extensions;
 using Equibles.Fred.Data.Extensions;
@@ -88,6 +89,7 @@ public partial class Program
             mcp.AddFinancialFacts();
             mcp.AddCftc();
             mcp.AddCboe();
+            mcp.AddFdaCatalysts();
             mcp.AddCongress();
             mcp.AddShortData();
             mcp.AddStockPrices();

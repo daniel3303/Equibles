@@ -2,6 +2,7 @@ using System.Reflection;
 using Equibles.Cboe.Mcp.Tools;
 using Equibles.Cftc.Mcp.Tools;
 using Equibles.Congress.Mcp.Tools;
+using Equibles.FdaCatalysts.Mcp.Tools;
 using Equibles.Finra.Mcp.Tools;
 using Equibles.Fred.Mcp.Tools;
 using Equibles.Holdings.Mcp.Tools;
@@ -138,6 +139,7 @@ public class McpModuleInterfaceTests
             typeof(AssemblyMcpModule<RagSearchTools>),
             typeof(AssemblyMcpModule<CboeTools>),
             typeof(AssemblyMcpModule<CftcTools>),
+            typeof(AssemblyMcpModule<FdaCatalystTools>),
             typeof(AssemblyMcpModule<CongressTools>),
             typeof(AssemblyMcpModule<ShortDataTools>),
             typeof(AssemblyMcpModule<StockPriceTools>),
@@ -323,6 +325,7 @@ public class McpModuleToolDiscoveryTests
             typeof(RagSearchTools),
             typeof(CboeTools),
             typeof(CftcTools),
+            typeof(FdaCatalystTools),
             typeof(CongressTools),
             typeof(ShortDataTools),
             typeof(StockPriceTools),
@@ -415,6 +418,7 @@ public class McpModuleToolDiscoveryTests
                 typeof(CftcTools),
                 new[] { "GetCftcPositioning", "GetLatestCftcData", "SearchCftcMarkets" }
             },
+            { typeof(FdaCatalystTools), new[] { "GetFdaCatalysts" } },
             {
                 typeof(CongressTools),
                 new[]
@@ -464,6 +468,7 @@ public class McpModuleToolDiscoveryTests
             typeof(RagSearchTools),
             typeof(CboeTools),
             typeof(CftcTools),
+            typeof(FdaCatalystTools),
             typeof(CongressTools),
             typeof(ShortDataTools),
             typeof(StockPriceTools),
