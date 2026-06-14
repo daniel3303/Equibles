@@ -86,11 +86,13 @@ public class FinraScraperWorkerDoWorkTests : ParadeDbMcpTestBase
             (typeof(OffExchangeVolumeImportService), offExchangeVolume)
         );
 
+        // EveningPollEnabled off so DoWork deterministically runs all three imports (the
+        // orchestration under test) rather than taking the time-of-day-dependent poll path.
         var worker = new FinraScraperWorker(
             Substitute.For<ILogger<FinraScraperWorker>>(),
             workerScopeFactory,
             errorReporter,
-            Options.Create(new FinraScraperOptions())
+            Options.Create(new FinraScraperOptions { EveningPollEnabled = false })
         );
 
         var doWork = typeof(FinraScraperWorker).GetMethod(
