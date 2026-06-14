@@ -176,4 +176,52 @@ public class FdaAdvisoryCommitteeCalendarImportServiceTests
 
         (await AllRows(options)).Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task Import_RefreshingARow_PreservesIdResolvedStockAndCreationTime()
+    {
+        var options = NewDbOptions();
+        var html = FixtureHtml();
+
+        // Contract: Apply refreshes only the calendar-sourced fields, preserving the stored
+        // Id, the resolved CommonStockId, and the original CreationTime. A parsed row always
+        // carries a null CommonStockId and a fresh timestamp, so a refresh must never clobber
+        // a previously resolved ticker link or reset the audit timestamp.
+        var parsed = Equibles
+            .FdaCatalysts.BusinessLogic.FdaAdvisoryCommitteeCalendarParser.Parse(html)
+            .First();
+        var seededId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var resolvedStockId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var createdAt = new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        using (var ctx = NewContext(options))
+        {
+            ctx.Set<FdaCatalyst>()
+                .Add(
+                    new FdaCatalyst
+                    {
+                        Id = seededId,
+                        CommonStockId = resolvedStockId,
+                        CreationTime = createdAt,
+                        CatalystType = FdaCatalystType.AdvisoryCommittee,
+                        MeetingDate = new DateOnly(2000, 1, 1),
+                        Center = "stale center",
+                        Title = "stale title",
+                        SourceReference = parsed.SourceReference,
+                    }
+                );
+            await ctx.SaveChangesAsync();
+        }
+
+        await BuildSut(options, html).Import(CancellationToken.None);
+
+        var refreshed = (await AllRows(options)).Single(c =>
+            c.SourceReference == parsed.SourceReference
+        );
+        // The mutable field was refreshed, proving Apply ran...
+        refreshed.Title.Should().Be(parsed.Title);
+        // ...yet the identity, resolved-stock link, and creation timestamp survived intact.
+        refreshed.Id.Should().Be(seededId);
+        refreshed.CommonStockId.Should().Be(resolvedStockId);
+        refreshed.CreationTime.Should().Be(createdAt);
+    }
 }
