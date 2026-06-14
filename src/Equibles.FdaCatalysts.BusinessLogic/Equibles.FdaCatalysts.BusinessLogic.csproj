@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="HtmlAgilityPack" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.FdaCatalysts.Data\Equibles.FdaCatalysts.Data.csproj" />
+  </ItemGroup>
+</Project>
