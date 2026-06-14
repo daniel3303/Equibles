@@ -22,5 +22,13 @@ public class XbrlCaptureOptions
     public bool BackfillEnabled { get; set; } = false;
 
     /// <summary>How many pending documents the backfill processes per cycle.</summary>
-    public int BackfillBatchSize { get; set; } = 32;
+    public int BackfillBatchSize { get; set; } = 128;
+
+    /// <summary>
+    /// Seconds to wait between back-to-back cycles while a backlog is still draining (a
+    /// cycle that filled its batch). Short so a large historical sweep clears in days, not
+    /// weeks; the gap still yields the shared EDGAR budget to the live scrapers between
+    /// bursts. Once the queue is drained a cycle falls back to the full 5-minute idle.
+    /// </summary>
+    public int BackfillDrainIntervalSeconds { get; set; } = 30;
 }
