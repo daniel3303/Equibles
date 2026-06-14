@@ -27,6 +27,7 @@ public sealed class ErrorSource
         "InvestorRelationsDiscovery"
     );
     public static readonly ErrorSource InvestorRelationsScraper = new("InvestorRelationsScraper");
+    public static readonly ErrorSource FdaCatalystScraper = new("FdaCatalystScraper");
     public static readonly ErrorSource Other = new("Other");
 
     public static IEnumerable<ErrorSource> GetAll() =>
@@ -50,6 +51,7 @@ public sealed class ErrorSource
             WebsiteDiscovery,
             InvestorRelationsDiscovery,
             InvestorRelationsScraper,
+            FdaCatalystScraper,
             Other,
         ];
 
