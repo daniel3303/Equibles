@@ -82,6 +82,7 @@
     <ProjectReference Include="..\..\src\Equibles.Finra.Mcp\Equibles.Finra.Mcp.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Yahoo.Mcp\Equibles.Yahoo.Mcp.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Cboe.Mcp\Equibles.Cboe.Mcp.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.FdaCatalysts.Mcp\Equibles.FdaCatalysts.Mcp.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Cftc.Mcp\Equibles.Cftc.Mcp.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Cftc.Data\Equibles.Cftc.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Cftc.Repositories\Equibles.Cftc.Repositories.csproj" />
