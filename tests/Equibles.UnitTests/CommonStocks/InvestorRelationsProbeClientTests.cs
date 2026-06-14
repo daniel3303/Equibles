@@ -115,11 +115,75 @@ public class InvestorRelationsProbeClientTests
         result.Url.Length.Should().BeLessThanOrEqualTo(256);
     }
 
+    [Theory]
+    [InlineData("https://acme.com")]
+    [InlineData("acme.com")] // EDGAR data often omits the scheme; the crawl must still run.
+    public async Task Discover_NoSidecar_GuessedPathsMiss_FollowsHomepageIrLink(string website)
+    {
+        // The guessed paths/subdomains don't validate, but the homepage links to the real IR
+        // page at a non-guessed location (/en-us/investors) — the homepage crawl follows it.
+        const string homepage =
+            "<html><head><title>Acme Corp</title></head><body>"
+            + "<a href=\"/en-us/investors\">Investors</a></body></html>";
+        const string irPage =
+            "<html><head><title>Investor Relations - Acme</title></head>"
+            + "<body><h1>Quarterly results</h1></body></html>";
+        const string notIr =
+            "<html><head><title>Page not found</title></head><body>404</body></html>";
+
+        var handler = new RoutingHandler(uri =>
+        {
+            var key = uri.Host + uri.AbsolutePath;
+            return key == "acme.com/" ? homepage
+                : key == "acme.com/en-us/investors" ? irPage
+                : notIr;
+        });
+        var client = new InvestorRelationsProbeClient(
+            new HttpClient(handler),
+            DisabledStealth(),
+            NullLogger<InvestorRelationsProbeClient>.Instance
+        );
+
+        var result = await client.Discover(
+            website,
+            ["investors", "ir"],
+            ["ir"],
+            CancellationToken.None
+        );
+
+        result.Should().NotBeNull();
+        result!.Url.Should().Be("https://acme.com/en-us/investors");
+    }
+
     private static IStealthBrowserClient DisabledStealth()
     {
         var stealth = Substitute.For<IStealthBrowserClient>();
         stealth.IsEnabled.Returns(false);
         return stealth;
+    }
+
+    // Serves a body chosen per request URL, echoing the request as the final URL.
+    private sealed class RoutingHandler : HttpMessageHandler
+    {
+        private readonly Func<Uri, string> _bodyFor;
+
+        public RoutingHandler(Func<Uri, string> bodyFor) => _bodyFor = bodyFor;
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        ) =>
+            Task.FromResult(
+                new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        _bodyFor(request.RequestUri!),
+                        Encoding.UTF8,
+                        "text/html"
+                    ),
+                    RequestMessage = request,
+                }
+            );
     }
 
     // Fails the test if plain HTTP is used — proves the sidecar path never falls through
