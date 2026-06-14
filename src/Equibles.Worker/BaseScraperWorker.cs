@@ -17,6 +17,7 @@ public abstract class BaseScraperWorker : BackgroundService
     protected readonly ErrorReporter ErrorReporter;
 
     private bool _retrySoonRequested;
+    private bool _continuationRequested;
 
     protected abstract string WorkerName { get; }
     protected abstract TimeSpan SleepInterval { get; }
@@ -86,6 +87,23 @@ public abstract class BaseScraperWorker : BackgroundService
     /// </summary>
     protected void RequestRetrySoon() => _retrySoonRequested = true;
 
+    /// <summary>
+    /// Wait used after a cycle that called <see cref="RequestImmediateContinuation"/> —
+    /// e.g. a backfill that filled its batch and still has a backlog queued. Short by
+    /// design so a large backlog drains in successive bursts instead of one batch every
+    /// <see cref="SleepInterval"/>, while a brief gap between cycles still yields the
+    /// shared upstream budget to latency-sensitive workers.
+    /// </summary>
+    protected virtual TimeSpan ContinuationInterval => TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Marks the just-finished cycle as having more work immediately available, so the
+    /// loop waits <see cref="ContinuationInterval"/> instead of <see cref="SleepInterval"/>.
+    /// Reset at the start of each cycle, and outranked by <see cref="RequestRetrySoon"/> —
+    /// a not-yet-ready dependency is a reason to back off, not to press on.
+    /// </summary>
+    protected void RequestImmediateContinuation() => _continuationRequested = true;
+
     protected BaseScraperWorker(
         ILogger logger,
         IServiceScopeFactory scopeFactory,
@@ -134,6 +152,7 @@ public abstract class BaseScraperWorker : BackgroundService
         {
             Logger.LogInformation("{Worker} running at: {Time}", WorkerName, DateTimeOffset.Now);
             _retrySoonRequested = false;
+            _continuationRequested = false;
 
             await PublishActivity(ScraperActivitySeverity.Info, "cycle started", stoppingToken);
 
@@ -177,6 +196,20 @@ public abstract class BaseScraperWorker : BackgroundService
                 await PublishActivity(
                     ScraperActivitySeverity.Warn,
                     $"not ready, retrying in {FormatInterval(interval)}",
+                    stoppingToken
+                );
+            }
+            else if (_continuationRequested)
+            {
+                interval = ContinuationInterval;
+                Logger.LogInformation(
+                    "{Worker} has more work queued; continuing in {Interval}",
+                    WorkerName,
+                    interval
+                );
+                await PublishActivity(
+                    ScraperActivitySeverity.Info,
+                    $"more work queued, continuing in {FormatInterval(interval)}",
                     stoppingToken
                 );
             }

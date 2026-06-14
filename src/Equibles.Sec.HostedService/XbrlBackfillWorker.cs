@@ -29,6 +29,13 @@ public class XbrlBackfillWorker : BaseScraperWorker
     // re-querying and re-spending the shared EDGAR budget when the queue is drained or stuck
     // on exhausted documents.
     protected override TimeSpan SleepInterval => TimeSpan.FromMinutes(5);
+
+    // While a backlog is still draining (a cycle that filled its batch) the loop uses this
+    // shorter interval instead of SleepInterval, so a large historical sweep clears in days
+    // rather than ~50 days of one batch every 5 minutes.
+    protected override TimeSpan ContinuationInterval =>
+        TimeSpan.FromSeconds(_captureOptions.BackfillDrainIntervalSeconds);
+
     protected override ErrorSource ErrorSource => ErrorSource.DocumentScraper;
 
     // Yield to the live SEC scrapers at deploy time before spending the shared EDGAR budget
@@ -65,13 +72,22 @@ public class XbrlBackfillWorker : BaseScraperWorker
             ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
             : (DateOnly?)null;
 
+        var batchSize = _captureOptions.BackfillBatchSize;
         await using var scope = ScopeFactory.CreateAsyncScope();
         var backfillService = scope.ServiceProvider.GetRequiredService<XbrlBackfillService>();
-        var result = await backfillService.Backfill(
-            _captureOptions.BackfillBatchSize,
-            minReportingDate,
-            stoppingToken
-        );
+        var result = await backfillService.Backfill(batchSize, minReportingDate, stoppingToken);
+
+        // A full batch that made forward progress means the newest-first queue still has
+        // selectable documents, so drain the next batch after the short ContinuationInterval
+        // instead of the full SleepInterval. Fall back to the 5-minute idle when the batch came
+        // up short (backlog drained, or only retry-exhausted rows remain) OR when every document
+        // failed — an all-failed full batch signals an EDGAR outage or an unfetchable head block,
+        // exactly when bursting requests faster would hurt rather than help.
+        var madeProgress = result.Failed < result.Processed;
+        if (batchSize > 0 && result.Processed >= batchSize && madeProgress)
+        {
+            RequestImmediateContinuation();
+        }
 
         Logger.LogInformation(
             "XBRL backfill cycle complete. Processed: {Processed}, Captured: {Captured}, "
