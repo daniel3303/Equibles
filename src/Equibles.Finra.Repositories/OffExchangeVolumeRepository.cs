@@ -25,6 +25,11 @@ public class OffExchangeVolumeRepository : BaseRepository<OffExchangeVolume>
         return GetAll().LatestValue(d => d.WeekStartDate, distinct: true);
     }
 
+    public IQueryable<DateOnly> GetEarliestWeek()
+    {
+        return GetAll().Select(d => d.WeekStartDate).Distinct().OrderBy(d => d).Take(1);
+    }
+
     public IQueryable<OffExchangeVolume> GetByWeek(DateOnly weekStartDate)
     {
         return GetAll().Where(d => d.WeekStartDate == weekStartDate);

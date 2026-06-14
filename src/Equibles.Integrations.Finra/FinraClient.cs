@@ -206,12 +206,41 @@ public class FinraClient : IFinraClient
         return dates.OrderBy(d => d).ToList();
     }
 
-    public async Task<List<DateOnly>> GetShortInterestSettlementDatesAfter(DateOnly afterDate)
+    public Task<List<DateOnly>> GetShortInterestSettlementDatesAfter(DateOnly afterDate)
     {
-        var startDateStr = FormatDate(afterDate.AddDays(1));
-        var endDateStr = FormatDate(DateOnly.FromDateTime(DateTime.UtcNow));
-
         _logger.LogDebug("Discovering settlement dates after {Date}", afterDate);
+        return DiscoverSettlementDatesInRange(
+            afterDate.AddDays(1),
+            DateOnly.FromDateTime(DateTime.UtcNow)
+        );
+    }
+
+    public Task<List<DateOnly>> GetShortInterestSettlementDatesBetween(
+        DateOnly startDate,
+        DateOnly endDate
+    )
+    {
+        _logger.LogDebug(
+            "Discovering settlement dates between {Start} and {End}",
+            startDate,
+            endDate
+        );
+        return DiscoverSettlementDatesInRange(startDate, endDate);
+    }
+
+    // Page the consolidatedShortInterest dataset over a settlement-date window and return
+    // the deduped, ascending set of distinct settlement dates it contains. An empty window
+    // (startDate after endDate) short-circuits without an API call.
+    private async Task<List<DateOnly>> DiscoverSettlementDatesInRange(
+        DateOnly startDate,
+        DateOnly endDate
+    )
+    {
+        if (startDate > endDate)
+            return [];
+
+        var startDateStr = FormatDate(startDate);
+        var endDateStr = FormatDate(endDate);
 
         var dates = await CollectSettlementDates(offset => new
         {
@@ -230,9 +259,10 @@ public class FinraClient : IFinraClient
         });
 
         _logger.LogDebug(
-            "Discovered {Count} new settlement dates after {Date}",
+            "Discovered {Count} settlement dates in {Start}..{End}",
             dates.Count,
-            afterDate
+            startDate,
+            endDate
         );
         return dates.OrderBy(d => d).ToList();
     }

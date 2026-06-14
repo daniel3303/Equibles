@@ -47,31 +47,46 @@ public class OffExchangeVolumeImportService
 
     public async Task Import(CancellationToken cancellationToken)
     {
-        var startDate = await SyncStartDate.Resolve<OffExchangeVolumeRepository>(
-            _scopeFactory,
-            _workerOptions,
-            repo => repo.GetLatestWeek(),
-            cancellationToken
-        );
+        // Resolve the backfill floor (Worker:MinSyncDate or 2020-01-01) by passing `default`:
+        // the loop below re-derives the forward edge from the stored span, so the full
+        // window is reconsidered every cycle rather than only moving past the latest week.
+        var floor = SyncDateResolver.Resolve(default, _workerOptions);
 
         // FINRA partitions the OTC/ATS Transparency feed by the Monday that starts
         // each reporting week, so iterate Monday-by-Monday rather than day-by-day.
-        var startWeek = ToWeekStart(startDate);
+        var startWeek = ToWeekStart(floor);
         var endWeek = ToWeekStart(DateOnly.FromDateTime(DateTime.UtcNow));
 
         if (startWeek > endWeek)
         {
             _logger.LogInformation(
-                "Off-exchange volume data is up to date (latest week: {Week})",
-                startWeek.AddDays(-7)
+                "Off-exchange volume sync floor {Week} is in the future; nothing to import",
+                startWeek
             );
             return;
         }
 
+        // The weeks already stored span [earliestWeek, latestWeek]; the loop skips that span
+        // and imports the weeks outside it, backfilling history below the earliest stored
+        // week and importing forward past the latest, without re-fetching finished weeks.
+        // The previous implementation only moved forward from the latest stored week, so the
+        // pre-collection history could never load.
+        DateOnly earliestWeek;
+        DateOnly latestWeek;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var repo = scope.ServiceProvider.GetRequiredService<OffExchangeVolumeRepository>();
+            earliestWeek = await repo.GetEarliestWeek().FirstOrDefaultAsync(cancellationToken);
+            latestWeek = await repo.GetLatestWeek().FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var hasStored = earliestWeek != default;
+
         _logger.LogInformation(
-            "Importing off-exchange volume from week {Start} to week {End}",
+            "Importing off-exchange volume from week {Start} to week {End}{Skip}",
             startWeek,
-            endWeek
+            endWeek,
+            hasStored ? $" (skipping already-stored {earliestWeek}..{latestWeek})" : null
         );
 
         var tickerMap = await _tickerMapService.Build(
@@ -83,6 +98,14 @@ public class OffExchangeVolumeImportService
         while (currentWeek <= endWeek)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            // Skip any week already inside the stored span.
+            if (hasStored && currentWeek >= earliestWeek && currentWeek <= latestWeek)
+            {
+                currentWeek = currentWeek.AddDays(7);
+                continue;
+            }
+
             await ImportWeek(currentWeek, tickerMap, cancellationToken);
             currentWeek = currentWeek.AddDays(7);
         }

@@ -72,7 +72,12 @@ public class ShortVolumeImportServicePipelineTests : ParadeDbMcpTestBase
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
-            Options.Create(new WorkerOptions { TickersToSync = [] })
+            // Floor a week back so the backfill window stays tiny: the seeded "latest" row
+            // is 3 days old, so the loop only fills the few days around it rather than every
+            // weekday since the default 2020 floor.
+            Options.Create(
+                new WorkerOptions { TickersToSync = [], MinSyncDate = DateTime.UtcNow.AddDays(-7) }
+            )
         );
     }
 
