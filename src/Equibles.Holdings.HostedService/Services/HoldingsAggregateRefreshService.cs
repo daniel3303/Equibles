@@ -450,9 +450,13 @@ public class HoldingsAggregateRefreshService
         // The prior quarter on record. default(DateOnly) when this is the
         // earliest — no holding row carries that date, so every "previous"
         // predicate below is simply false and all current filers count as new.
+        // Form 13F only: Schedule 13D/G rows carry event-driven report dates
+        // clustered around quarter-ends, and would otherwise resolve the prior
+        // quarter to a sparse non-quarter date where almost no stock has a
+        // holding, collapsing every PreviousFilerCount to zero.
         var previousReportDate = await dbContext
             .Set<InstitutionalHolding>()
-            .Where(h => h.ReportDate < reportDate)
+            .Where(h => h.ReportDate < reportDate && h.FilingType == FilingType.Form13F)
             .Select(h => h.ReportDate)
             .OrderByDescending(d => d)
             .FirstOrDefaultAsync(cancellationToken);
@@ -460,7 +464,10 @@ public class HoldingsAggregateRefreshService
 
         var activity = await dbContext
             .Set<InstitutionalHolding>()
-            .Where(h => h.ReportDate == reportDate || h.ReportDate == previousReportDate)
+            .Where(h =>
+                (h.ReportDate == reportDate || h.ReportDate == previousReportDate)
+                && h.FilingType == FilingType.Form13F
+            )
             .GroupBy(h => h.CommonStockId)
             .Select(g => new
             {
@@ -486,7 +493,10 @@ public class HoldingsAggregateRefreshService
         var churn = (
             await dbContext
                 .Set<InstitutionalHolding>()
-                .Where(h => h.ReportDate == reportDate || h.ReportDate == previousReportDate)
+                .Where(h =>
+                    (h.ReportDate == reportDate || h.ReportDate == previousReportDate)
+                    && h.FilingType == FilingType.Form13F
+                )
                 .GroupBy(h => h.CommonStockId)
                 .Select(g => new
                 {
@@ -497,6 +507,7 @@ public class HoldingsAggregateRefreshService
                                 .Set<InstitutionalHolding>()
                                 .Any(p =>
                                     p.ReportDate == previousReportDate
+                                    && p.FilingType == FilingType.Form13F
                                     && p.CommonStockId == h.CommonStockId
                                     && p.InstitutionalHolderId == h.InstitutionalHolderId
                                 )
@@ -510,6 +521,7 @@ public class HoldingsAggregateRefreshService
                                 .Set<InstitutionalHolding>()
                                 .Any(c =>
                                     c.ReportDate == reportDate
+                                    && c.FilingType == FilingType.Form13F
                                     && c.CommonStockId == h.CommonStockId
                                     && c.InstitutionalHolderId == h.InstitutionalHolderId
                                 )
