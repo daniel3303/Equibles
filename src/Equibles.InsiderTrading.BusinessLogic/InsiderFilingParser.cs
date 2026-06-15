@@ -261,7 +261,9 @@ public static class InsiderFilingParser
             CommonStockId = companyId,
             FilingDate = filing.FilingDate,
             TransactionDate = filing.ReportDate,
-            TransactionCode = TransactionCode.Other,
+            // A holding element reports a position, not a trade: tag it Holding so
+            // transaction lists can drop it while ownership summaries keep it.
+            TransactionCode = TransactionCode.Holding,
             Shares = ParseLong(sharesStr),
             PricePerShare = 0,
             AcquiredDisposed = AcquiredDisposed.Acquired,

@@ -11,9 +11,9 @@ public class InsiderFilingParserParseHoldingTests
     public void ParseTransactions_NonDerivativeHolding_ProducesHoldingSnapshotRow()
     {
         // Contract: a Form 3/4/5 *holding* (a position reported with no transaction) parses into an
-        // InsiderTransaction snapshot — TransactionCode.Other, no price, Acquired, and
-        // Shares == SharesOwnedAfter == the post-transaction holding amount. Only transaction rows
-        // are covered today; the holding path (nonDerivativeHolding) was entirely untested.
+        // InsiderTransaction snapshot — TransactionCode.Holding (a position, not a trade), no price,
+        // Acquired, and Shares == SharesOwnedAfter == the post-transaction holding amount. The
+        // Holding tag is what lets transaction lists drop these while ownership summaries keep them.
         var root = XElement.Parse(
             """
             <ownershipDocument>
@@ -44,7 +44,7 @@ public class InsiderFilingParserParseHoldingTests
         );
 
         var holding = result.Should().ContainSingle().Subject;
-        holding.TransactionCode.Should().Be(TransactionCode.Other);
+        holding.TransactionCode.Should().Be(TransactionCode.Holding);
         holding.PricePerShare.Should().Be(0);
         holding.AcquiredDisposed.Should().Be(AcquiredDisposed.Acquired);
         holding.Shares.Should().Be(5000);

@@ -3,6 +3,7 @@ using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
+using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.Extensions;
@@ -333,6 +334,7 @@ public class ProfilesController : BaseController
 
         var transactions = await _insiderTransactionRepository
             .GetByOwner(owner)
+            .ExcludeHoldings()
             .TakeMostRecent(transaction => transaction.TransactionDate, RecentRowLimit)
             .Select(transaction => new InsiderTradeRowViewModel
             {

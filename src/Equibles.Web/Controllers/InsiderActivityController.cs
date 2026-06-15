@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Web.Controllers.Abstract;
@@ -75,7 +76,7 @@ public class InsiderActivityController : BaseController
         );
 
         var biggest = await LoadTopRows(
-            _transactionRepository.GetRecent(since),
+            _transactionRepository.GetRecent(since).ExcludeHoldings(),
             t => new InsiderDashboardRow
             {
                 OwnerName = t.InsiderOwner.Name,
