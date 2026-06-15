@@ -54,7 +54,25 @@ public class NasdaqIrInsightFeedClient
         // Pull the feed through the cleared stealth session when a sidecar is
         // configured; the parser sees the raw XML the server sent, not a rendered DOM.
         if (_stealthClient.IsEnabled)
-            return await _stealthClient.FetchRaw(feedUrl, cancellationToken);
+        {
+            try
+            {
+                return await _stealthClient.FetchRaw(feedUrl, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // FetchRaw is contracted to degrade to null, but a sidecar navigation
+                // timeout/error can still surface as an exception. Return null the same way the
+                // plain-HTTP path below does so one feed that throws never bubbles out of the
+                // content scrape and starves the rest of the cohort's news/events.
+                _logger.LogDebug(ex, "Investor relations feed fetch failed for {Url}", feedUrl);
+                return null;
+            }
+        }
 
         try
         {

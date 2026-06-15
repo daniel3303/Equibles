@@ -48,6 +48,36 @@ public class NasdaqIrInsightFeedClientFetchTests
     }
 
     [Fact]
+    public async Task Fetch_Sidecar_FetchRawThrows_DegradesToNull()
+    {
+        // A sidecar fetch can fail with an exception (e.g. a navigation timeout) instead of the
+        // contractual null. Fetch must degrade that to null, not let it bubble out — otherwise one
+        // throwing feed aborts the content scrape and starves the rest of the cohort's news/events.
+        var stealth = Substitute.For<IStealthBrowserClient>();
+        stealth.IsEnabled.Returns(true);
+        stealth
+            .FetchRaw(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<string>(new TimeoutException("navigation timeout")));
+
+        var client = new NasdaqIrInsightFeedClient(
+            new HttpClient(new ThrowingHandler()),
+            stealth,
+            NullLogger<NasdaqIrInsightFeedClient>.Instance
+        );
+
+        string result = null;
+        var act = async () =>
+            result = await client.Fetch(
+                "https://investors.example.com/",
+                NasdaqIrInsightFeedClient.EventsFeedPath,
+                CancellationToken.None
+            );
+
+        await act.Should().NotThrowAsync();
+        result.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Fetch_NoSidecar_XmlFeed_ReturnsBodyViaPlainHttp()
     {
         // Standalone build with no sidecar: an XML feed is returned over plain HTTP.
