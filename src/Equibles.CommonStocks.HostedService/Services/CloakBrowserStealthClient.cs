@@ -133,14 +133,51 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
     }
 
     private Task Navigate(IPage page, string url) =>
-        page.GotoAsync(
-            url,
-            new PageGotoOptions
-            {
-                WaitUntil = WaitUntilState.NetworkIdle,
-                Timeout = _options.RenderTimeoutSeconds * 1000,
-            }
-        );
+        NavigateWaitingForNetworkIdle(page, url, _options.RenderTimeoutSeconds * 1000, _logger);
+
+    /// <summary>
+    /// Navigates to <paramref name="url"/> waiting for the network to fall idle, but
+    /// treats an idle-wait timeout as non-fatal. Some hosts (e.g. the FDA advisory-
+    /// committee calendar) stream background telemetry that never lets the network go
+    /// idle, so <see cref="WaitUntilState.NetworkIdle"/> times out even though the
+    /// document has fully rendered within the budget. On that timeout the already-loaded
+    /// DOM is kept rather than discarding an otherwise successful render. A genuine
+    /// navigation failure — refused connection, DNS, protocol error — is a different
+    /// exception that still propagates, so the fetch degrades to a miss as before.
+    /// </summary>
+    internal static async Task NavigateWaitingForNetworkIdle(
+        IPage page,
+        string url,
+        int timeoutMilliseconds,
+        ILogger logger
+    )
+    {
+        try
+        {
+            await page.GotoAsync(
+                url,
+                new PageGotoOptions
+                {
+                    WaitUntil = WaitUntilState.NetworkIdle,
+                    Timeout = timeoutMilliseconds,
+                }
+            );
+        }
+        catch (PlaywrightException ex) when (IsNetworkIdleTimeout(ex))
+        {
+            logger.LogDebug("NetworkIdle wait timed out for {Url}; using the loaded DOM.", url);
+        }
+    }
+
+    /// <summary>
+    /// A navigation that loads but never reaches network-idle throws a
+    /// <see cref="PlaywrightException"/> whose message is the idle-wait timeout
+    /// ("Timeout &lt;n&gt;ms exceeded"). This Playwright version has no dedicated timeout
+    /// type, so the timeout is matched by message; every other navigation failure
+    /// (refused connection, DNS, protocol error) does not match and still propagates.
+    /// </summary>
+    private static bool IsNetworkIdleTimeout(PlaywrightException ex) =>
+        ex.Message.Contains("Timeout", StringComparison.OrdinalIgnoreCase);
 
     private async Task<IPlaywright> EnsureDriver(CancellationToken cancellationToken)
     {
