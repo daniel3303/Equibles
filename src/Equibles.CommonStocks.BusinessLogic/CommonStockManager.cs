@@ -94,6 +94,32 @@ public class CommonStockManager
         await _commonStockRepository.SaveChanges();
     }
 
+    /// <summary>
+    /// Sets the company's SEC classification — the submissions <c>sic</c> code and
+    /// <c>entityType</c> — used to tell operating companies apart from pooled
+    /// investment vehicles. Blank values are normalised to null so a missing SIC
+    /// stays eligible for a later refill rather than masquerading as classified. A
+    /// no-op change persists nothing. Saves directly via the repository — like
+    /// <see cref="SetFiscalYearEnd"/>, this mutates non-key fields and must not
+    /// re-run the full ticker/CIK uniqueness validation.
+    /// </summary>
+    public async Task SetSecClassification(CommonStock commonStock, string sic, string entityType)
+    {
+        ArgumentNullException.ThrowIfNull(commonStock);
+
+        var normalizedSic = string.IsNullOrWhiteSpace(sic) ? null : sic.Trim();
+        var normalizedEntityType = string.IsNullOrWhiteSpace(entityType) ? null : entityType.Trim();
+
+        if (commonStock.Sic == normalizedSic && commonStock.EntityType == normalizedEntityType)
+        {
+            return;
+        }
+
+        commonStock.Sic = normalizedSic;
+        commonStock.EntityType = normalizedEntityType;
+        await _commonStockRepository.SaveChanges();
+    }
+
     public async Task<CommonStock> Create(CommonStock commonStock)
     {
         await ValidateCommonStock(commonStock, true);
