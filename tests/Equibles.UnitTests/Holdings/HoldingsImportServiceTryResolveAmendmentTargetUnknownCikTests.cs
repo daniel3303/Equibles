@@ -42,7 +42,8 @@ public class HoldingsImportServiceTryResolveAmendmentTargetUnknownCikTests
                 ["0001067983"] = Guid.NewGuid(),
             },
         };
-        var args = new object[] { accession, submission, context, null, null };
+        // Out params: holderId, reportDate, filingType.
+        var args = new object[] { accession, submission, context, null, null, null };
 
         bool resolved = false;
         var act = () => resolved = (bool)TryResolveAmendmentTargetMethod.Invoke(null, args);
