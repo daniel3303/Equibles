@@ -61,6 +61,16 @@ public class CommonStock
     /// </summary>
     public DateTime? InvestorRelationsCheckedAt { get; set; }
 
+    /// <summary>
+    /// When an IR content scraper (news/events) last worked through this stock (UTC),
+    /// stamped on every cycle the stock is scraped — whether or not new rows were
+    /// found. Null until first scraped. Scrapers order their cohort least-recently
+    /// -scraped first (never-scraped stocks lead), so each bounded cycle advances
+    /// through the whole platform cohort and then refreshes it oldest-first, instead
+    /// of re-scraping the same alphabetical head every cycle.
+    /// </summary>
+    public DateTime? IrContentScrapedAt { get; set; }
+
     public double MarketCapitalization { get; set; }
     public long SharesOutStanding { get; set; }
 

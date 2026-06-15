@@ -88,8 +88,6 @@ public class NasdaqIrInsightScraperService : IImporter
         CancellationToken cancellationToken
     )
     {
-        var stock = new CommonStock { Id = candidate.Id };
-
         var newsXml = await _feedClient.Fetch(
             candidate.IrUrl,
             NasdaqIrInsightFeedClient.NewsFeedPath,
@@ -103,12 +101,16 @@ public class NasdaqIrInsightScraperService : IImporter
 
         var news = newsXml == null ? [] : NasdaqIrInsightFeedParser.ParseNews(newsXml);
         var events = eventsXml == null ? [] : NasdaqIrInsightFeedParser.ParseEvents(eventsXml);
-        if (news.Count == 0 && events.Count == 0)
-            return 0;
 
         using var scope = _scopeFactory.CreateScope();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var newsRepo = scope.ServiceProvider.GetRequiredService<IrNewsItemRepository>();
         var eventRepo = scope.ServiceProvider.GetRequiredService<IrEventRepository>();
+
+        var stock = await stockRepo.Get(candidate.Id);
+        // The stock may have been deleted between loading the batch and scraping.
+        if (stock == null)
+            return 0;
 
         var existingUrls = (
             await newsRepo.GetByStock(stock).Select(n => n.Url).ToListAsync(cancellationToken)
@@ -159,8 +161,10 @@ public class NasdaqIrInsightScraperService : IImporter
             added++;
         }
 
-        if (added > 0)
-            await newsRepo.SaveChanges();
+        // Stamp the scrape on every cycle — new rows or not — so the next cycle
+        // advances past this stock instead of re-scraping the same head forever.
+        stock.IrContentScrapedAt = DateTime.UtcNow;
+        await stockRepo.SaveChanges();
 
         return added;
     }
@@ -170,11 +174,8 @@ public class NasdaqIrInsightScraperService : IImporter
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
 
-        var rows = await repo.GetAll()
-            .Where(s =>
-                s.IrPlatformType == IrPlatformType.NasdaqIrInsight && s.InvestorRelationsUrl != null
-            )
-            .OrderBy(s => s.Ticker)
+        var rows = await IrContentScrapeCandidates
+            .ForPlatform(repo.GetAll(), IrPlatformType.NasdaqIrInsight)
             .Take(_options.BatchSize)
             .Select(s => new
             {
