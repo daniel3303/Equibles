@@ -20,8 +20,11 @@ public class ProcessedDataSet
     /// it on the next cycle (oldest first, so amendments re-apply after their
     /// originals). Mirrors <c>NportFiling.CurrentParserVersion</c>.
     /// Version 1: duplicated share-count column repair (#3499).
+    /// Version 2: scope restatement-amendment deletes to the amendment's own
+    /// filing type (#3738) — re-import all 13F history so a Schedule 13D/G
+    /// amendment that previously wiped a same-quarter 13F-HR portfolio is healed.
     /// </summary>
-    public const int CurrentParserVersion = 1;
+    public const int CurrentParserVersion = 2;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
