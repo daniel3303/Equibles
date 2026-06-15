@@ -98,56 +98,17 @@ public class Realtime13FIngestionService
                 continue;
             }
 
-            var filing = await TryParseAndValidateEntry(entry, minReportDate, cancellationToken);
-            if (filing == null)
-                continue;
-
-            _logger.LogInformation(
-                "Importing 13F-HR {Accession} (CIK {Cik}, period {Period})",
-                entry.AccessionNumber,
-                entry.Cik,
-                filing.PeriodOfReport
-            );
-
-            ImportResult importResult;
-            try
+            var outcome = await ImportEntry(entry, minReportDate, cancellationToken);
+            if (outcome == EntryImportOutcome.Failed)
             {
-                using var archive = _archiveBuilder.Build([filing]);
-                importResult = await _importService.ImportDataSet(
-                    archive,
-                    minReportDate,
-                    cancellationToken
-                );
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // A poisoned filing must cost only its own rows, never the sweep
-                // (EquiblesCommercial#2510): skip it and leave it unrecorded so a
-                // later cycle retries it. Holding the watermark back keeps the
-                // filing re-discoverable even after it ages out of the trailing
-                // window (EquiblesCommercial#2850).
-                _logger.LogError(
-                    ex,
-                    "Failed to import 13F-HR {Accession} (CIK {Cik}); skipping filing",
-                    entry.AccessionNumber,
-                    entry.Cik
-                );
+                // Hold the watermark back to this day so the filing is re-swept
+                // next cycle even after it ages out of the trailing window
+                // (EquiblesCommercial#2850).
                 if (earliestRetryDate == null || entry.DateFiled < earliestRetryDate)
                     earliestRetryDate = entry.DateFiled;
                 continue;
             }
-
-            // IsComplete=false is the import service's "retry later" contract (e.g.
-            // NoTrackedStocks until CUSIPs seed) — recording it here would consume
-            // the filing forever (EquiblesCommercial#2850). It deliberately does
-            // NOT hold the watermark back: a filing whose issuers never seed a
-            // CUSIP would wedge the sweep, so its retry is bounded by the trailing
-            // window instead — and the quarterly bulk import reconciles it anyway.
-            if (!importResult.IsComplete)
+            if (outcome != EntryImportOutcome.Imported)
                 continue;
 
             await RecordProcessed([entry.AccessionNumber], cancellationToken);
@@ -160,6 +121,140 @@ public class Realtime13FIngestionService
         );
 
         return new RealtimeIngestionResult(totalImported, earliestRetryDate);
+    }
+
+    /// <summary>
+    /// Force-imports a specific set of filings discovered out of band — the
+    /// reconciliation worker re-feeding 13F-HRs that EDGAR lists but our holdings
+    /// are missing. Unlike <see cref="IngestRecentFilings"/> this does NOT consult
+    /// the processed-accession set: a filing recorded "processed" yet holding no
+    /// rows (e.g. one a cross-type amendment wiped) must stay re-importable. The
+    /// shared import path is idempotent on its upsert key, so re-importing a
+    /// filing whose rows are already present is a no-op. Returns the number of
+    /// filings that imported with holdings.
+    /// </summary>
+    public async Task<int> IngestSpecificFilings(
+        IReadOnlyCollection<EdgarDailyIndexEntry> entries,
+        DateOnly minReportDate,
+        CancellationToken cancellationToken
+    )
+    {
+        // Originals before amendments — same ordering contract as the sweep.
+        var sorted = entries
+            .OrderBy(e => e.DateFiled)
+            .ThenBy(e => e.AccessionNumber, StringComparer.Ordinal)
+            .ToList();
+
+        var imported = 0;
+        foreach (var entry in sorted)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var outcome = await ImportEntry(entry, minReportDate, cancellationToken);
+            if (outcome != EntryImportOutcome.Imported)
+                continue;
+
+            await RecordProcessed([entry.AccessionNumber], cancellationToken);
+            imported++;
+        }
+
+        return imported;
+    }
+
+    private enum EntryImportOutcome
+    {
+        // Parse/validation rejected it (wrong period, no parseable holdings) —
+        // nothing to record and nothing to retry.
+        Skipped,
+
+        // Imported but the service flagged it incomplete (retry-later, e.g. CUSIPs
+        // not seeded). Bounded by the trailing re-sweep window; not watermark-held.
+        Incomplete,
+
+        // The import threw, or a non-amendment original imported "complete" yet
+        // inserted zero holdings — treat as transient and retry.
+        Failed,
+
+        // Imported successfully with holdings (or a holdings-removing amendment).
+        Imported,
+    }
+
+    /// <summary>
+    /// Parses, validates and imports one daily-index entry through the shared
+    /// bulk-dataset pipeline, free of the caller's bookkeeping (processed-set,
+    /// watermark) so the sweep and the reconciliation re-feed share one path.
+    /// </summary>
+    private async Task<EntryImportOutcome> ImportEntry(
+        EdgarDailyIndexEntry entry,
+        DateOnly minReportDate,
+        CancellationToken cancellationToken
+    )
+    {
+        var filing = await TryParseAndValidateEntry(entry, minReportDate, cancellationToken);
+        if (filing == null)
+            return EntryImportOutcome.Skipped;
+
+        _logger.LogInformation(
+            "Importing 13F-HR {Accession} (CIK {Cik}, period {Period})",
+            entry.AccessionNumber,
+            entry.Cik,
+            filing.PeriodOfReport
+        );
+
+        ImportResult importResult;
+        try
+        {
+            using var archive = _archiveBuilder.Build([filing]);
+            importResult = await _importService.ImportDataSet(
+                archive,
+                minReportDate,
+                cancellationToken
+            );
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // A poisoned filing must cost only its own rows, never the sweep
+            // (EquiblesCommercial#2510): skip it and leave it unrecorded so a
+            // later cycle retries it.
+            _logger.LogError(
+                ex,
+                "Failed to import 13F-HR {Accession} (CIK {Cik}); skipping filing",
+                entry.AccessionNumber,
+                entry.Cik
+            );
+            return EntryImportOutcome.Failed;
+        }
+
+        // IsComplete=false is the import service's "retry later" contract (e.g.
+        // NoTrackedStocks until CUSIPs seed) — recording it here would consume
+        // the filing forever (EquiblesCommercial#2850). It deliberately does
+        // NOT hold the watermark back: a filing whose issuers never seed a
+        // CUSIP would wedge the sweep, so its retry is bounded by the trailing
+        // window instead — and the quarterly bulk import reconciles it anyway.
+        if (!importResult.IsComplete)
+            return EntryImportOutcome.Incomplete;
+
+        // A non-amendment original that imported "complete" yet inserted zero
+        // holdings is suspect: recording it would consume the filing forever even
+        // though we hold none of its positions (the silent permanent loss behind
+        // the missing-BlackRock gap). Treat it as transient so the sweep retries
+        // and holds the watermark back. Amendments legitimately remove holdings,
+        // so they are exempt.
+        if (!filing.IsAmendment && importResult.InsertedHoldings == 0)
+        {
+            _logger.LogWarning(
+                "13F-HR {Accession} (CIK {Cik}) imported as complete but inserted no holdings; not recording so a later cycle retries",
+                entry.AccessionNumber,
+                entry.Cik
+            );
+            return EntryImportOutcome.Failed;
+        }
+
+        return EntryImportOutcome.Imported;
     }
 
     private async Task<Parsed13FFiling> TryParseAndValidateEntry(

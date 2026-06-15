@@ -40,7 +40,8 @@ public class HoldingsImportServiceTryResolveAmendmentTargetMissingCoverPageTests
             CoverPages = new Dictionary<string, CoverPageRow>(), // accession NOT here
             CikToHolderId = new Dictionary<string, Guid> { ["1067983"] = Guid.NewGuid() },
         };
-        var args = new object[] { accession, submission, context, null, null };
+        // Out params: holderId, reportDate, filingType.
+        var args = new object[] { accession, submission, context, null, null, null };
 
         var resolved = (bool)TryResolveAmendmentTargetMethod!.Invoke(null, args);
 

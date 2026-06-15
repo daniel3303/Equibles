@@ -41,7 +41,8 @@ public class HoldingsImportServiceTryResolveAmendmentTargetLowercaseYTests
             },
             CikToHolderId = new Dictionary<string, Guid> { [cik] = holderGuid },
         };
-        var args = new object[] { accession, submission, context, null, null };
+        // Out params: holderId, reportDate, filingType.
+        var args = new object[] { accession, submission, context, null, null, null };
 
         var resolved = (bool)TryResolveAmendmentTargetMethod.Invoke(null, args);
 

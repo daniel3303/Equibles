@@ -40,7 +40,8 @@ public class HoldingsImportServiceTryResolveAmendmentTargetNullCikTests
             },
             CikToHolderId = new Dictionary<string, Guid>(),
         };
-        var args = new object[] { accession, submission, context, null, null };
+        // Out params: holderId, reportDate, filingType.
+        var args = new object[] { accession, submission, context, null, null, null };
 
         // MethodInfo.Invoke wraps a thrown inner exception in
         // TargetInvocationException, so `.NotThrow()` catches the NRE case.

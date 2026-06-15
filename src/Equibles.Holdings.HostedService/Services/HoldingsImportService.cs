@@ -82,10 +82,14 @@ public class HoldingsImportService
         await ParseOtherManagers(context, cancellationToken);
         await UpsertInstitutionalHolders(context, cancellationToken);
         await HandleAmendments(context, cancellationToken);
-        await StreamAndInsertHoldings(context, cancellationToken);
+        var insertedHoldings = await StreamAndInsertHoldings(context, cancellationToken);
         await SyncFilingSummaries(context, cancellationToken);
         await PublishAffectedQuartersAsync(context, cancellationToken);
-        return new ImportResult(submissionCount, IsComplete: true);
+        return new ImportResult(
+            submissionCount,
+            IsComplete: true,
+            InsertedHoldings: insertedHoldings
+        );
     }
 
     // Bulk data sets routinely import many quarters at once, so group submissions
@@ -573,7 +577,8 @@ public class HoldingsImportService
                     submission,
                     context,
                     out var holderId,
-                    out var reportDate
+                    out var reportDate,
+                    out var filingType
                 )
             )
                 continue;
@@ -590,17 +595,30 @@ public class HoldingsImportService
                 continue;
             }
 
+            // Scope the delete to the amendment's OWN filing type. A holder can
+            // file a 13F-HR and a Schedule 13D/G whose report dates collide on the
+            // same quarter end (BlackRock's monthly 13G/A amendments land on
+            // 31 Mar / 31 Dec — exactly the 13F quarter ends), and the upsert key
+            // keeps them as distinct rows. Deleting by (holder, reportDate) alone
+            // let a 13G/A restatement wipe the entire 13F-HR portfolio at that
+            // quarter (#3738), so a $5T filer vanished from the AUM rankings.
+            // Restatements only ever replace their own form's rows.
             var existingHoldings = await holdingRepo
                 .GetAll()
-                .Where(h => h.InstitutionalHolderId == holderId && h.ReportDate == reportDate)
+                .Where(h =>
+                    h.InstitutionalHolderId == holderId
+                    && h.ReportDate == reportDate
+                    && h.FilingType == filingType
+                )
                 .ToListAsync(cancellationToken);
 
             if (existingHoldings.Count > 0)
             {
                 holdingRepo.Delete(existingHoldings);
                 _logger.LogInformation(
-                    "Deleted {Count} holdings for RESTATEMENT amendment {Accession}",
+                    "Deleted {Count} {FilingType} holdings for RESTATEMENT amendment {Accession}",
                     existingHoldings.Count,
+                    filingType,
                     accession
                 );
             }
@@ -624,11 +642,17 @@ public class HoldingsImportService
         SubmissionRow submission,
         ImportContext context,
         out Guid holderId,
-        out DateOnly reportDate
+        out DateOnly reportDate,
+        out FilingType filingType
     )
     {
         holderId = default;
         reportDate = default;
+        // The form the amendment restates — the delete is scoped to this so a
+        // Schedule 13D/G amendment never deletes a 13F-HR portfolio (or vice
+        // versa) sharing the same (holder, quarter). Defaults to 13F for an
+        // unrecognised form so behaviour matches the historical 13F-only path.
+        filingType = FilingType.Form13F;
 
         if (!context.CoverPages.TryGetValue(accession, out var coverPage))
             return false;
@@ -641,10 +665,11 @@ public class HoldingsImportService
         if (!TryParseDateOnly(submission.PeriodOfReport, out reportDate))
             return false;
 
+        filingType = submission.FormType.ToHoldingsFilingType() ?? FilingType.Form13F;
         return true;
     }
 
-    private async Task StreamAndInsertHoldings(
+    private async Task<int> StreamAndInsertHoldings(
         ImportContext context,
         CancellationToken cancellationToken
     )
@@ -747,6 +772,8 @@ public class HoldingsImportService
             totalDuplicates,
             totalPending
         );
+
+        return totalInserted;
     }
 
     // Runs the per-filing share-count repair over one accession's buffered rows,
