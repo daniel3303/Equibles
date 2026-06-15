@@ -76,7 +76,26 @@ public class WebsiteProbeClient
         // wall and returns the page, so a walled-but-live company site reads as
         // reachable instead of being discarded. A dead host fails to render -> null.
         if (_stealthClient.IsEnabled)
-            return await _stealthClient.FetchHtml(url, cancellationToken) != null;
+        {
+            try
+            {
+                return await _stealthClient.FetchHtml(url, cancellationToken) != null;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // FetchHtml is contracted to degrade to null, but a sidecar navigation
+                // timeout/error can still surface as an exception. Treat it as a reachability
+                // miss the same way the plain-HTTP path below does: a host that throws must not
+                // bubble out of the discovery cycle and skip the definitive-miss back-off, which
+                // would re-occupy the batch and starve the rest of the universe.
+                _logger.LogDebug(ex, "Website stealth probe failed for {Url}", url);
+                return false;
+            }
+        }
 
         try
         {
