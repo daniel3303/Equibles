@@ -25,14 +25,14 @@ namespace Equibles.UnitTests.Sec;
 /// <summary>
 /// Adversarial sibling to <see cref="DocumentScraperTests"/>, which only pins
 /// the fiscal happy path (SEC returns a value / returns nothing). The
-/// UpdateFiscalYearEnd docstring is explicit: it is best-effort — a metadata
+/// UpdateCompanyMetadata docstring is explicit: it is best-effort — a metadata
 /// failure "is logged and reported but never blocks document scraping". So a
 /// throwing GetCompanyMetadata must be isolated: the company is still
 /// processed and the fault must NOT count as a scraping error (it is reported
 /// out-of-band). If the catch were mis-scoped the exception would reach the
 /// per-company catch and increment result.Errors.
 /// </summary>
-public class DocumentScraperUpdateFiscalYearEndErrorIsolationTests
+public class DocumentScraperUpdateCompanyMetadataErrorIsolationTests
 {
     [Fact]
     public async Task ScrapeDocuments_GetCompanyMetadataThrows_IsolatedAndDoesNotCountAsError()

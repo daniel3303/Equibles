@@ -156,10 +156,11 @@ public class DocumentScraper : IDocumentScraper
                 company.Name
             );
 
-            // Detect the fiscal year-end before fetching filings: the metadata
-            // call primes the SEC client's submissions cache so the first
-            // GetCompanyFilings hits the same URL and adds no extra request.
-            await UpdateFiscalYearEnd(
+            // Capture SEC submissions metadata (fiscal year-end, SIC, entity type)
+            // before fetching filings: the metadata call primes the SEC client's
+            // submissions cache so the first GetCompanyFilings hits the same URL and
+            // adds no extra request.
+            await UpdateCompanyMetadata(
                 company,
                 secEdgarClient,
                 commonStockManager,
@@ -208,13 +209,15 @@ public class DocumentScraper : IDocumentScraper
     }
 
     /// <summary>
-    /// Reads SEC EDGAR's submissions <c>fiscalYearEnd</c> for the company and
-    /// persists it when it changed. Fallback chain when the metadata API returns
-    /// null: most recent 10-K period-end → 20-F report date → 40-F report date.
-    /// Best-effort: a failure is logged and reported but never blocks document
-    /// scraping, since fiscal-year metadata is a nice-to-have enrichment.
+    /// Reads SEC EDGAR's submissions metadata for the company and persists the
+    /// fields it derives: the SIC code and entity type (which tell operating
+    /// companies apart from pooled investment vehicles), and the fiscal year-end.
+    /// Fallback chain when the metadata API has no fiscal year-end: most recent
+    /// 10-K period-end → 20-F report date → 40-F report date. Best-effort: a
+    /// failure is logged and reported but never blocks document scraping, since
+    /// this metadata is a nice-to-have enrichment.
     /// </summary>
-    private async Task UpdateFiscalYearEnd(
+    private async Task UpdateCompanyMetadata(
         CommonStock company,
         ISecEdgarClient secEdgarClient,
         CommonStockManager commonStockManager,
@@ -224,6 +227,16 @@ public class DocumentScraper : IDocumentScraper
         try
         {
             var metadata = await secEdgarClient.GetCompanyMetadata(company.Cik);
+
+            // Persist the SEC classification first — unlike the fiscal year-end it
+            // has no fallback chain, so it must not be skipped by the early returns
+            // below. Blank values normalise to null and stay eligible for a refill.
+            await commonStockManager.SetSecClassification(
+                company,
+                metadata?.Sic,
+                metadata?.EntityType
+            );
+
             if (metadata?.FiscalYearEndMonth is { } month)
             {
                 await commonStockManager.SetFiscalYearEnd(
@@ -290,13 +303,13 @@ public class DocumentScraper : IDocumentScraper
         {
             _logger.LogWarning(
                 ex,
-                "Could not update fiscal year-end for {Ticker} (CIK: {Cik}): {Message}",
+                "Could not update SEC metadata for {Ticker} (CIK: {Cik}): {Message}",
                 company.Ticker,
                 company.Cik,
                 ex.Message
             );
             await ReportError(
-                "UpdateFiscalYearEnd",
+                "UpdateCompanyMetadata",
                 ex,
                 $"ticker: {company.Ticker}, cik: {company.Cik}"
             );

@@ -136,6 +136,7 @@ public class SecEdgarClient : ISecEdgarClient
             {
                 Cik = cik,
                 EntityType = apiResponse.EntityType,
+                Sic = apiResponse.Sic,
                 Exchanges = apiResponse.Exchanges ?? [],
                 FiscalYearEnd = apiResponse.FiscalYearEnd,
                 Website = apiResponse.Website,

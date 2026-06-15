@@ -105,6 +105,26 @@ public class CommonStock
     /// </summary>
     public int? FiscalYearEndDay { get; set; }
 
+    /// <summary>
+    /// SEC EDGAR's 4-digit Standard Industrial Classification code from the
+    /// submissions metadata, or null until detected. Identifies pooled
+    /// investment vehicles (e.g. 6221 commodity pools, 6722/6726 investment
+    /// offices, 6189 asset-backed) authoritatively, so they can be told apart
+    /// from operating companies without relying on ticker or name patterns.
+    /// </summary>
+    [MaxLength(8)]
+    public string Sic { get; set; }
+
+    /// <summary>
+    /// SEC EDGAR's <c>entityType</c> from the submissions metadata — "operating"
+    /// for operating companies, "other" for non-operating registrants such as
+    /// unit investment trusts that carry no SIC code. Null until detected.
+    /// Complements <see cref="Sic"/> when distinguishing operating companies
+    /// from investment vehicles.
+    /// </summary>
+    [MaxLength(32)]
+    public string EntityType { get; set; }
+
     public Guid? IndustryId { get; set; }
     public virtual Industry Industry { get; set; }
 }

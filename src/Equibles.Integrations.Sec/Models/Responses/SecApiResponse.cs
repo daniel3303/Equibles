@@ -13,6 +13,14 @@ internal class SecApiResponse
     [JsonProperty("entityType")]
     public string EntityType { get; set; }
 
+    /// <summary>
+    /// SEC's 4-digit Standard Industrial Classification code (e.g. "3571" for
+    /// Apple, "6221" for commodity-pool ETPs, "6726" for investment offices).
+    /// Null/blank for filers SEC never classified.
+    /// </summary>
+    [JsonProperty("sic")]
+    public string Sic { get; set; }
+
     [JsonProperty("exchanges")]
     public List<string> Exchanges { get; set; } = [];
 

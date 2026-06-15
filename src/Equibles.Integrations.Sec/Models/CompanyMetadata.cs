@@ -6,6 +6,15 @@ public class CompanyMetadata
 {
     public string Cik { get; set; }
     public string EntityType { get; set; }
+
+    /// <summary>
+    /// SEC's 4-digit Standard Industrial Classification code, or null/blank for
+    /// filers SEC never classified. Distinguishes pooled investment vehicles
+    /// (commodity pools 6221, investment offices 6722/6726, asset-backed 6189)
+    /// from operating companies.
+    /// </summary>
+    public string Sic { get; set; }
+
     public List<string> Exchanges { get; set; } = [];
 
     /// <summary>
