@@ -1,9 +1,9 @@
-using Equibles.Holdings.HostedService;
+using Equibles.Holdings.HostedService.Services;
 using Equibles.Integrations.Sec.Models;
 
 namespace Equibles.UnitTests.Holdings;
 
-public class Holdings13FReconciliationWorkerSelectFilingsToReingestTests
+public class Holdings13FReconciliationServiceSelectFilingsToReingestTests
 {
     private static readonly DateOnly MinReportDate = new(2020, 1, 1);
     private static readonly DateOnly GlobalLatest = new(2026, 3, 31);
@@ -36,7 +36,7 @@ public class Holdings13FReconciliationWorkerSelectFilingsToReingestTests
         };
         var ingested = new HashSet<DateOnly> { new(2025, 9, 30) };
 
-        var result = Holdings13FReconciliationWorker.SelectFilingsToReingest(
+        var result = Holdings13FReconciliationService.SelectFilingsToReingest(
             edgar,
             ingested,
             MinReportDate,
@@ -53,7 +53,7 @@ public class Holdings13FReconciliationWorkerSelectFilingsToReingestTests
     {
         var edgar = new[] { Filing("13F-NT", new(2026, 3, 31), new(2026, 5, 8), "ACC-NT") };
 
-        var result = Holdings13FReconciliationWorker.SelectFilingsToReingest(
+        var result = Holdings13FReconciliationService.SelectFilingsToReingest(
             edgar,
             new HashSet<DateOnly>(),
             MinReportDate,
@@ -74,7 +74,7 @@ public class Holdings13FReconciliationWorkerSelectFilingsToReingestTests
             Filing("13F-HR", new(2026, 3, 31), new(2026, 5, 13), "ACC-ORIG"),
         };
 
-        var result = Holdings13FReconciliationWorker.SelectFilingsToReingest(
+        var result = Holdings13FReconciliationService.SelectFilingsToReingest(
             edgar,
             new HashSet<DateOnly>(),
             MinReportDate,
@@ -91,7 +91,7 @@ public class Holdings13FReconciliationWorkerSelectFilingsToReingestTests
     {
         var edgar = new[] { Filing("13F-HR", new(2026, 6, 30), new(2026, 8, 12), "ACC-FUTURE") };
 
-        var result = Holdings13FReconciliationWorker.SelectFilingsToReingest(
+        var result = Holdings13FReconciliationService.SelectFilingsToReingest(
             edgar,
             new HashSet<DateOnly>(),
             MinReportDate,

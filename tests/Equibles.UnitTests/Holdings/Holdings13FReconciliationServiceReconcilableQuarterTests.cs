@@ -1,12 +1,12 @@
-using Equibles.Holdings.HostedService;
+using Equibles.Holdings.HostedService.Services;
 
 namespace Equibles.UnitTests.Holdings;
 
-public class Holdings13FReconciliationWorkerReconcilableQuarterTests
+public class Holdings13FReconciliationServiceReconcilableQuarterTests
 {
     // The newest quarter a filer can be "late" on is the most recent quarter end
     // whose 45-day filing deadline has elapsed. Inside an open filing window the
-    // worker must reconcile through the PRIOR quarter, so it doesn't treat filers
+    // service must reconcile through the PRIOR quarter, so it doesn't treat filers
     // that simply haven't filed yet as gaps.
     [Theory]
     // Well past Q1-2026's 15 May deadline → Q1 is reconcilable.
@@ -21,7 +21,7 @@ public class Holdings13FReconciliationWorkerReconcilableQuarterTests
     [InlineData("2025-11-20", "2025-09-30")]
     public void LatestReconcilableQuarterEnd_GatesOnTheFilingDeadline(string today, string expected)
     {
-        var result = Holdings13FReconciliationWorker.LatestReconcilableQuarterEnd(
+        var result = Holdings13FReconciliationService.LatestReconcilableQuarterEnd(
             DateOnly.Parse(today)
         );
 

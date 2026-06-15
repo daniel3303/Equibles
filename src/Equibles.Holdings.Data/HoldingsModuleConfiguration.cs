@@ -101,6 +101,10 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<RealtimeSweepState>();
         builder.Entity<FundScore>();
 
+        // Audit trail for on-demand 13F reconciliation runs; its CreationTime and
+        // InstitutionalHolderId indexes are declared as attributes on the entity.
+        builder.Entity<HoldingsReconciliationLog>();
+
         // StockQuarterlyActivity carries its composite (CommonStockId, ReportDate)
         // key and ReportDate index as attributes on the entity; no Fluent config
         // is needed beyond registering it.
