@@ -36,4 +36,16 @@ public enum TransactionCode
 
     [Display(Name = "Other")]
     Other,
+
+    /// <summary>
+    /// Not a transaction: a position snapshot parsed from a Form 3/4/5
+    /// <c>nonDerivativeHolding</c>/<c>derivativeHolding</c> element. The filing
+    /// reports the holding with no trade, so <see cref="InsiderTransaction.Shares"/>
+    /// carries the whole position (equal to
+    /// <see cref="InsiderTransaction.SharesOwnedAfter"/>) and the price is 0.
+    /// Kept so ownership summaries can read the position, but excluded from
+    /// transaction lists — see <c>ExcludeHoldings</c>.
+    /// </summary>
+    [Display(Name = "Holding")]
+    Holding,
 }

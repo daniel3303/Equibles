@@ -502,7 +502,7 @@ public class InsiderTradingFilingProcessorTests
         result.Should().BeTrue();
         var transactions = txRepo.GetAll().ToList();
         transactions.Should().HaveCount(1);
-        transactions[0].TransactionCode.Should().Be(TransactionCode.Other);
+        transactions[0].TransactionCode.Should().Be(TransactionCode.Holding);
         transactions[0].Shares.Should().Be(10000);
         transactions[0].SharesOwnedAfter.Should().Be(10000);
     }
@@ -733,7 +733,7 @@ public class InsiderTradingFilingProcessorTests
         // rely on: a newly-onboarding executive who already owns stock options reports them
         // as derivativeHoldings (no transactionDate, no acquired/disposed code — just "this
         // is what I currently hold"). `ParseHolding` synthesises a record using
-        // `filing.ReportDate` as the TransactionDate, hard-codes TransactionCode.Other and
+        // `filing.ReportDate` as the TransactionDate, tags TransactionCode.Holding and
         // AcquiredDisposed.Acquired, and lifts Shares from `postTransactionAmounts`.
         //
         // A regression that dropped this branch — or accidentally narrowed the inner foreach
@@ -777,8 +777,8 @@ public class InsiderTradingFilingProcessorTests
         transactions.Should().ContainSingle();
         transactions[0].SecurityTitle.Should().Be("Stock Option (Right to Buy)");
         transactions[0].Shares.Should().Be(5000);
-        // ParseHolding hard-codes TransactionCode = Other (no transaction, just a held position).
-        transactions[0].TransactionCode.Should().Be(TransactionCode.Other);
+        // ParseHolding tags a held position as TransactionCode = Holding (no transaction).
+        transactions[0].TransactionCode.Should().Be(TransactionCode.Holding);
         // TransactionDate falls back to filing.ReportDate because <derivativeHolding> has no
         // <transactionDate> element of its own.
         transactions[0].TransactionDate.Should().Be(filing.ReportDate);
@@ -1171,7 +1171,7 @@ public class InsiderTradingFilingProcessorTests
         //
         // Result: one persisted holding-as-transaction with SecurityTitle=null, Shares=0,
         // SharesOwnedAfter=0 (both derived from the same null sharesStr), OwnershipNature=Direct
-        // (`!= "I"` falls to Direct), TransactionCode=Other (hardcoded), TransactionDate
+        // (`!= "I"` falls to Direct), TransactionCode=Holding (tagged), TransactionDate
         // pulled from the filing's ReportDate. The transactions-count==0 fallback (which would
         // synthesize a "No Securities Owned" row) must NOT fire because ParseHolding does
         // return a row even when every optional element is null.
@@ -1204,7 +1204,7 @@ public class InsiderTradingFilingProcessorTests
         var transactions = txRepo.GetAll().ToList();
         transactions.Should().ContainSingle();
         transactions[0].SecurityTitle.Should().BeNull();
-        transactions[0].TransactionCode.Should().Be(TransactionCode.Other);
+        transactions[0].TransactionCode.Should().Be(TransactionCode.Holding);
         transactions[0].Shares.Should().Be(0);
         transactions[0].SharesOwnedAfter.Should().Be(0);
         transactions[0].OwnershipNature.Should().Be(OwnershipNature.Direct);

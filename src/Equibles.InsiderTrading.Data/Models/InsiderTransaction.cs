@@ -25,9 +25,13 @@ public class InsiderTransaction
     /// v3 restates per-ADS prices on ADS/ADR rows to per-ordinary so Shares ×
     /// PricePerShare is a real value (re-evaluated from the footnotes — see
     /// <see cref="ReportedPricePerShare"/>); v4 captures the Rule 10b5-1
-    /// affirmative-defense checkbox into <see cref="IsRule10b5One"/>.
+    /// affirmative-defense checkbox into <see cref="IsRule10b5One"/>; v5 tags
+    /// holding-only rows (parsed from a <c>nonDerivativeHolding</c>/
+    /// <c>derivativeHolding</c> element) as <see cref="TransactionCode.Holding"/>
+    /// instead of <see cref="TransactionCode.Other"/>, so the reprocess re-tags
+    /// every historical holding row and transaction lists can exclude them.
     /// </summary>
-    public const int CurrentParserVersion = 4;
+    public const int CurrentParserVersion = 5;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 

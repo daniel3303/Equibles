@@ -9,6 +9,7 @@ using Equibles.Data.Extensions;
 using Equibles.Finra.Repositories;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
+using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Statements;
@@ -315,7 +316,9 @@ public class StockTabService
 
     public async Task<InsiderTradingTabViewModel> LoadInsiderTradingTab(CommonStock stock)
     {
-        var transactionQuery = _insiderTransactionRepository.GetByStockWithOwner(stock);
+        var transactionQuery = _insiderTransactionRepository
+            .GetByStockWithOwner(stock)
+            .ExcludeHoldings();
         if (_minSyncDate is { } minDate)
         {
             transactionQuery = transactionQuery.Where(t => t.TransactionDate >= minDate);

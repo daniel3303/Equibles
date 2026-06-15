@@ -6,6 +6,7 @@ using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
+using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Mcp;
@@ -61,6 +62,7 @@ public class InsiderTradingTools
 
                 var transactions = await _transactionRepository
                     .GetByStockWithOwner(stock)
+                    .ExcludeHoldings()
                     .OrderByDescending(t => t.TransactionDate)
                     .Take(maxResults)
                     .ToListAsync();

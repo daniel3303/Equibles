@@ -243,6 +243,14 @@ public class InsiderFilingReprocessManager
                     row.SecurityKind = reparsed.SecurityKind;
                     result.Reclassified++;
                 }
+                // Re-tag the transaction code (v5 moved holding-only rows from Other
+                // to Holding). The parser is deterministic, so a real trade's code is
+                // unchanged; only mislabelled holding snapshots flip.
+                if (row.TransactionCode != reparsed.TransactionCode)
+                {
+                    row.TransactionCode = reparsed.TransactionCode;
+                    result.Reclassified++;
+                }
                 // Re-derive footnotes (added in parser v2); cheap to always copy.
                 row.Notes = reparsed.Notes;
             }
