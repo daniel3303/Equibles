@@ -47,6 +47,34 @@ public class InvestorRelationsProbeClientTests
     }
 
     [Fact]
+    public async Task Discover_Sidecar_FetchThrows_DegradesToMiss()
+    {
+        // A sidecar render can fail with an exception (e.g. a navigation timeout) instead of the
+        // contractual null. The probe must degrade that to a miss — if it bubbles out of Discover,
+        // the caller skips the definitive-miss back-off, so the stock is never stamped, re-occupies
+        // every batch, and starves the rest of the IR-discovery universe.
+        var stealth = Substitute.For<IStealthBrowserClient>();
+        stealth.IsEnabled.Returns(true);
+        stealth
+            .FetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<string>(new TimeoutException("navigation timeout")));
+
+        var client = new InvestorRelationsProbeClient(
+            new HttpClient(new ThrowingHandler()),
+            stealth,
+            NullLogger<InvestorRelationsProbeClient>.Instance
+        );
+
+        IrDiscoveryResult result = null;
+        var act = async () =>
+            result = await client.Discover("acme.com", ["investors"], [], CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+        result.Should().BeNull();
+        await stealth.Received().FetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Discover_NoSidecar_DirectIrPage_ResolvesViaPlainHttp()
     {
         // Standalone build with no sidecar: a reachable IR page resolves over plain HTTP
