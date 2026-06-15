@@ -34,12 +34,10 @@ public class Holdings13FReconciliationService
     private const int FilingDeadlineDays = 45;
 
     // Only chase filers whose newest materialised quarter is within this many
-    // quarters of the reconcilable horizon. Older trailing filers are either long
-    // defunct or carry deep historical gaps the bulk import owns.
+    // quarters of the reconcilable horizon, and only heal quarters back to this
+    // window. Older trailing filers are either long defunct or carry deep
+    // historical gaps the bulk import owns.
     private const int RecentWindowQuarters = 4;
-
-    // Quarters older than this are out of scope for on-demand reconciliation.
-    private static readonly DateOnly DefaultMinReportDate = new(2020, 1, 1);
 
     // A filer checked within this window is skipped when picking the "next" lagging
     // filer, so repeated clicks advance through the backlog instead of re-hitting
@@ -169,6 +167,7 @@ public class Holdings13FReconciliationService
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var reconcileThrough = LatestReconcilableQuarterEnd(today);
+        var windowFloor = reconcileThrough.AddMonths(-3 * RecentWindowQuarters);
         var globalLatest = await _snapshotRepo
             .GetAll()
             .MaxAsync(s => (DateOnly?)s.ReportDate, cancellationToken);
@@ -181,18 +180,20 @@ public class Holdings13FReconciliationService
             .Get13FReportDatesByHolder(holder)
             .ToListAsync(cancellationToken);
         var ingestedSet = ingestedDates.ToHashSet();
-        // FilingDate-floored at the filer's latest materialised quarter: any 13F-HR
-        // for a newer quarter is filed after it, so this stays a cheap recent-block
-        // lookup instead of paging the full archive.
-        var fromDate = ingestedDates.Count > 0 ? ingestedDates.Max() : DefaultMinReportDate;
 
         List<FilingData> edgarFilings;
         try
         {
+            // Floor the lookup at the recent-window start, NOT the filer's latest
+            // materialised quarter. EDGAR filters by FilingDate, so flooring at the
+            // newest held ReportDate would drop a 13F-HR for an OLDER quarter we are
+            // missing (filed before it) — exactly the wiped-quarter gap this heals.
+            // The window floor covers every in-scope quarter while still excluding
+            // the deep archive (those are the bulk import's job).
             edgarFilings = await _edgarClient.GetCompanyFilings(
                 holder.Cik,
                 documentType: null,
-                fromDate: fromDate,
+                fromDate: windowFloor,
                 toDate: today
             );
         }
@@ -217,7 +218,7 @@ public class Holdings13FReconciliationService
         var toReingest = SelectFilingsToReingest(
             edgarFilings,
             ingestedSet,
-            DefaultMinReportDate,
+            windowFloor,
             healHorizon
         );
         if (toReingest.Count == 0)
@@ -256,7 +257,7 @@ public class Holdings13FReconciliationService
         {
             healed = await _ingestionService.IngestSpecificFilings(
                 entries,
-                DefaultMinReportDate,
+                windowFloor,
                 cancellationToken
             );
         }
@@ -281,13 +282,14 @@ public class Holdings13FReconciliationService
         if (healed == 0)
         {
             // EDGAR listed missing quarters but none imported holdings — transient
-            // (e.g. CUSIPs not yet seeded) or an upstream empty filing. Retryable.
+            // (e.g. CUSIPs not yet seeded) or an upstream empty filing. There is no
+            // background retry now, so the operator must reconcile again.
             return await Record(
                 holder,
                 ReconciliationOutcome.Failed,
                 0,
                 $"EDGAR listed {periods.Count} missing quarter(s) ({FormatPeriods(periods)}) "
-                    + "but none re-imported with holdings; will retry.",
+                    + "but none re-imported with holdings; reconcile again to retry.",
                 triggeredBy,
                 cancellationToken
             );
