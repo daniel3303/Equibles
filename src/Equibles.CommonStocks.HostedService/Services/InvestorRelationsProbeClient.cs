@@ -92,10 +92,27 @@ public class InvestorRelationsProbeClient
     {
         if (_stealthClient.IsEnabled)
         {
-            // The stealth fetch follows redirects internally, so the requested URL is the best
-            // one we have for the rendered page.
-            var rendered = await _stealthClient.FetchHtml(url, cancellationToken);
-            return (rendered, url);
+            try
+            {
+                // The stealth fetch follows redirects internally, so the requested URL is the
+                // best one we have for the rendered page.
+                var rendered = await _stealthClient.FetchHtml(url, cancellationToken);
+                return (rendered, url);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // FetchHtml is contracted to degrade to null, but a sidecar navigation
+                // timeout/error can still surface as an exception. Swallow it the same way the
+                // plain-HTTP path below does: a single host that throws must not bubble out of
+                // the probe, or the caller skips the definitive-miss back-off and the stock
+                // re-occupies every batch, starving the rest of the universe.
+                _logger.LogDebug(ex, "Investor relations stealth probe failed for {Url}", url);
+                return (null, url);
+            }
         }
 
         try
