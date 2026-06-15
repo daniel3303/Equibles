@@ -16,26 +16,46 @@ namespace Equibles.Holdings.HostedService;
 /// and the quarterly bulk import can both leave a filer silently missing a
 /// quarter — a poisoned import, a filing recorded "processed" yet wiped by a
 /// same-quarter Schedule 13D/G restatement, or one that simply aged out of the
-/// trailing re-sweep window before it ever imported. When that filer is large
-/// (BlackRock, ~$5T) it vanishes from the AUM rankings entirely, because the
-/// Top-by-AUM page only ranks filers at the single global latest report date.
+/// trailing re-sweep window before it ever imported.
 ///
-/// This worker reconciles the largest lagging filers against EDGAR's
-/// authoritative submission history: for each filer whose latest materialised
-/// quarter trails the global latest, it asks EDGAR which 13F-HRs that filer has
-/// actually filed and re-ingests any whose holdings we are missing. It only acts
-/// when EDGAR genuinely lists a 13F-HR we lack, so a filer that legitimately
-/// filed a 13F-NT notice (e.g. Vanguard Group Inc) or simply stopped filing is
-/// left alone. Re-ingestion runs through the shared import path, which republishes
-/// the per-quarter snapshot rebuild, so a healed filer reappears in the rankings.
+/// Each cycle it reconciles <b>every</b> filer that should have filed a recent
+/// quarter but hasn't materialised it, against EDGAR's authoritative submission
+/// history, and re-ingests any 13F-HR whose holdings we are missing. Candidacy is
+/// gated two ways so the scan stays bounded and meaningful:
+/// <list type="bullet">
+///   <item>only quarters whose 45-day filing deadline has elapsed count as
+///     "missing" — a filer still inside its filing window is not a gap;</item>
+///   <item>only filers whose newest materialised quarter is within
+///     <see cref="RecentWindowQuarters"/> of that deadline are chased — deeper
+///     historical gaps belong to the quarterly bulk import, and long-defunct
+///     filers are not re-checked forever.</item>
+/// </list>
+/// It only acts when EDGAR genuinely lists a 13F-HR we lack, so a filer that
+/// legitimately filed a 13F-NT notice (e.g. Vanguard Group Inc) or simply stopped
+/// filing is left alone. Re-ingestion runs through the shared import path, which
+/// republishes the per-quarter snapshot rebuild, so a healed filer reappears in
+/// the rankings.
+///
+/// This is a <b>transitional</b> worker: with the cross-type amendment fix in
+/// place no new gaps form, so once a cycle reports <c>converged=true</c> (nothing
+/// left to heal) it can be retired — see the deletion follow-up issue.
 /// </summary>
 public class Holdings13FReconciliationWorker : BaseScraperWorker
 {
-    // Reconcile only the largest lagging filers each cycle. They are the ones
-    // that move the rankings, and the cap bounds the per-cycle EDGAR request
-    // budget (one submissions lookup per candidate, plus artifact fetches only
-    // for the filers actually missing a quarter).
-    private const int MaxLaggingFilersPerCycle = 200;
+    // 13F filers have 45 days after a quarter end to submit; only a quarter past
+    // that deadline can be called "missing" rather than "not filed yet".
+    private const int FilingDeadlineDays = 45;
+
+    // Only chase filers whose newest materialised quarter is within this many
+    // quarters of the reconcilable horizon. Older trailing filers are either long
+    // defunct or carry deep historical gaps the bulk import owns; chasing them
+    // every cycle would grow the EDGAR budget without bound.
+    private const int RecentWindowQuarters = 4;
+
+    // Defensive per-cycle ceiling. The deadline + recent-window candidacy already
+    // bounds the set to genuinely-behind recent filers; this only guards against a
+    // pathological universe stalling the cycle, and a hit is logged as a warning.
+    private const int MaxCandidatesPerCycle = 3000;
 
     private readonly WorkerOptions _workerOptions;
     private readonly IConfiguration _configuration;
@@ -72,6 +92,7 @@ public class Holdings13FReconciliationWorker : BaseScraperWorker
     {
         var startDate = _workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1);
         var minReportDate = DateOnly.FromDateTime(startDate);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         await using var scope = ScopeFactory.CreateAsyncScope();
         var snapshotRepo =
@@ -83,8 +104,6 @@ public class Holdings13FReconciliationWorker : BaseScraperWorker
         var ingestionService =
             scope.ServiceProvider.GetRequiredService<Realtime13FIngestionService>();
 
-        // The latest quarter any filer has materialised — the date the Top-by-AUM
-        // ranking pins to. A filer trailing this is a reconciliation candidate.
         var globalLatest = await snapshotRepo
             .GetAll()
             .MaxAsync(s => (DateOnly?)s.ReportDate, stoppingToken);
@@ -94,9 +113,18 @@ public class Holdings13FReconciliationWorker : BaseScraperWorker
             return;
         }
 
-        // Largest filers (by peak materialised AUM) whose newest quarter trails
-        // the global latest. Peak AUM keeps dead micro-filers out of the budget
-        // and puts the rankings-moving names (BlackRock, Vanguard) first.
+        // Newest quarter a filer can be "late" on (deadline elapsed), and the
+        // oldest still worth chasing. Heal up to whichever is later of the ranking
+        // horizon and that deadline quarter.
+        var reconcileThrough = LatestReconcilableQuarterEnd(today);
+        var windowFloor = reconcileThrough.AddMonths(-3 * RecentWindowQuarters);
+        var healHorizon =
+            globalLatest.Value >= reconcileThrough ? globalLatest.Value : reconcileThrough;
+
+        // Every filer whose newest materialised quarter falls in the recent window
+        // but trails the deadline quarter — i.e. it owes a quarter it hasn't
+        // materialised. AUM-ordered so the rankings-moving names heal first; the
+        // window (not an AUM cut) is what bounds the set, so coverage is universal.
         var laggards = await snapshotRepo
             .GetAll()
             .GroupBy(s => s.InstitutionalHolderId)
@@ -106,16 +134,27 @@ public class Holdings13FReconciliationWorker : BaseScraperWorker
                 LatestReportDate = g.Max(s => s.ReportDate),
                 PeakAum = g.Max(s => s.Aum),
             })
-            .Where(x => x.LatestReportDate < globalLatest.Value)
+            .Where(x => x.LatestReportDate < reconcileThrough && x.LatestReportDate >= windowFloor)
             .OrderByDescending(x => x.PeakAum)
-            .Take(MaxLaggingFilersPerCycle)
+            .Take(MaxCandidatesPerCycle + 1)
             .ToListAsync(stoppingToken);
+
+        if (laggards.Count > MaxCandidatesPerCycle)
+        {
+            laggards = laggards.Take(MaxCandidatesPerCycle).ToList();
+            Logger.LogWarning(
+                "13F reconciliation: more than {Cap} candidate filers in the recent window; "
+                    + "capping this cycle and reconciling the rest next cycle",
+                MaxCandidatesPerCycle
+            );
+        }
 
         if (laggards.Count == 0)
         {
             Logger.LogInformation(
-                "13F reconciliation: every materialised filer is current at {GlobalLatest:yyyy-MM-dd}",
-                globalLatest.Value
+                "13F reconciliation cycle complete: converged=true — no recently-active filer "
+                    + "is missing a past-deadline quarter (reconcilable through {Through:yyyy-MM-dd})",
+                reconcileThrough
             );
             return;
         }
@@ -126,7 +165,6 @@ public class Holdings13FReconciliationWorker : BaseScraperWorker
             .Where(h => holderIds.Contains(h.Id))
             .ToDictionaryAsync(h => h.Id, stoppingToken);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var totalHealed = 0;
         var filersHealed = 0;
 
@@ -173,7 +211,7 @@ public class Holdings13FReconciliationWorker : BaseScraperWorker
                 edgarFilings,
                 ingestedSet,
                 minReportDate,
-                globalLatest.Value
+                healHorizon
             );
             if (toReingest.Count == 0)
                 continue;
@@ -206,12 +244,56 @@ public class Holdings13FReconciliationWorker : BaseScraperWorker
                 filersHealed++;
         }
 
+        // converged=true means this cycle found nothing left to re-ingest. With the
+        // cross-type amendment fix preventing new gaps, a converged cycle is the
+        // signal this transitional worker can be retired.
         Logger.LogInformation(
-            "13F reconciliation cycle complete: re-ingested {Filings} filing(s) across {Filers} filer(s) (scanned {Scanned} lagging filer(s))",
+            "13F reconciliation cycle complete: converged={Converged} — re-ingested {Filings} filing(s) "
+                + "across {Filers} filer(s) (scanned {Scanned} candidate(s))",
+            totalHealed == 0,
             totalHealed,
             filersHealed,
             laggards.Count
         );
+    }
+
+    /// <summary>
+    /// The most recent quarter end whose 13F filing deadline (45 days after the
+    /// quarter end) has elapsed — the newest quarter a filer can be considered
+    /// late/missing on. During a quarter's open filing window the worker must not
+    /// treat not-yet-filed filers as gaps, or it would chase the whole universe.
+    /// </summary>
+    internal static DateOnly LatestReconcilableQuarterEnd(DateOnly today)
+    {
+        var quarterEnd = MostRecentQuarterEnd(today);
+        while (today < quarterEnd.AddDays(FilingDeadlineDays))
+            quarterEnd = PreviousQuarterEnd(quarterEnd);
+        return quarterEnd;
+    }
+
+    // The latest calendar quarter end on or before today.
+    private static DateOnly MostRecentQuarterEnd(DateOnly today)
+    {
+        var endMonth = (today.Month - 1) / 3 * 3 + 3; // 3, 6, 9, 12
+        var candidate = new DateOnly(
+            today.Year,
+            endMonth,
+            DateTime.DaysInMonth(today.Year, endMonth)
+        );
+        return candidate <= today ? candidate : PreviousQuarterEnd(candidate);
+    }
+
+    // The quarter end one quarter before the given quarter end (3/6/9/12 month).
+    private static DateOnly PreviousQuarterEnd(DateOnly quarterEnd)
+    {
+        var month = quarterEnd.Month - 3;
+        var year = quarterEnd.Year;
+        if (month == 0)
+        {
+            month = 12;
+            year -= 1;
+        }
+        return new DateOnly(year, month, DateTime.DaysInMonth(year, month));
     }
 
     /// <summary>
@@ -224,14 +306,14 @@ public class Holdings13FReconciliationWorker : BaseScraperWorker
         IReadOnlyCollection<FilingData> edgarFilings,
         ISet<DateOnly> ingestedReportDates,
         DateOnly minReportDate,
-        DateOnly globalLatest
+        DateOnly healHorizon
     ) =>
         edgarFilings
             .Where(f =>
                 f.Form != null
                 && f.Form.StartsWith("13F-HR", StringComparison.OrdinalIgnoreCase)
                 && f.ReportDate >= minReportDate
-                && f.ReportDate <= globalLatest
+                && f.ReportDate <= healHorizon
                 && !ingestedReportDates.Contains(f.ReportDate)
             )
             .OrderBy(f => f.FilingDate)
