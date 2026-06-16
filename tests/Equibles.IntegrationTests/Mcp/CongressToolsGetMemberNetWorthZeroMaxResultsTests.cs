@@ -17,9 +17,7 @@ public class CongressToolsGetMemberNetWorthZeroMaxResultsTests : ParadeDbMcpTest
     // factual claim about the member. A caller passing a nonsensical
     // maxResults (0) must never turn a member WITH disclosures into that
     // false claim — the limit clamp has to keep at least one row.
-    [Fact(
-        Skip = "GH-3666 — maxResults 0 passes the clamp and renders the false no-disclosure message"
-    )]
+    [Fact]
     public async Task GetMemberNetWorth_ZeroMaxResults_DoesNotClaimNoDisclosures()
     {
         var member = new CongressMember
