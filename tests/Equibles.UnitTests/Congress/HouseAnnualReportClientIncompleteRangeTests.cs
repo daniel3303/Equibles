@@ -8,9 +8,7 @@ public class HouseAnnualReportClientIncompleteRangeTests
     private static List<ScheduleToken> Tokens(params (string text, double left)[] words) =>
         words.Select(w => new ScheduleToken(w.text, w.left)).ToList();
 
-    [Fact(
-        Skip = "GH-3656 — incomplete range cell is emitted as a fabricated (0, X) bracket instead of being dropped"
-    )]
+    [Fact]
     public void ParseScheduleLines_RangeUpperBoundNeverArrives_DropsTheRow()
     {
         // Line items must carry "the form's own brackets". A range cell that

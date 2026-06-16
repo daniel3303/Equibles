@@ -732,6 +732,14 @@ public partial class HouseAnnualReportClient
             if (_rangeText == null)
                 return null;
 
+            // A range cell still ending in the opening bound's dash ("$X -")
+            // never received its wrapped upper bound (truncated/dropped line):
+            // it is not a bracket the filer checked. Drop the row rather than
+            // let the single-amount fallback fabricate a (0, X) range from the
+            // lone opening bound.
+            if (_rangeText.TrimEnd().EndsWith('-'))
+                return null;
+
             var (minimum, maximum) = ParseAmountRange(_rangeText);
             if (minimum == 0 && maximum == 0)
                 return null;
