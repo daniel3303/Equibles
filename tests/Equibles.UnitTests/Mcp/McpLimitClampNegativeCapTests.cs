@@ -4,18 +4,18 @@ namespace Equibles.UnitTests.Mcp;
 
 public class McpLimitClampNegativeCapTests
 {
-    // Contract: McpLimit.Clamp exists so a negative result cap never reaches
+    // Contract: McpLimit.Clamp exists so a non-positive result cap never reaches
     // .Take(...) as a negative SQL LIMIT (PostgreSQL rejects it as an internal
-    // error). The documented promise is that a non-positive cap yields zero
-    // rows, i.e. the clamp returns a non-negative value — 0 for any negative
-    // input. int.MinValue is the extreme boundary: it must still clamp to 0,
-    // not overflow or pass a negative value through.
+    // error) and never yields zero rows (zero rows make a tool render a factual
+    // empty-state message even when the subject has data). A non-positive cap
+    // clamps to the floor of 1. int.MinValue is the extreme boundary: it must
+    // still clamp to 1, not overflow or pass a negative value through.
     [Fact]
-    public void Clamp_IntMinValue_ReturnsZeroNotNegative()
+    public void Clamp_IntMinValue_ReturnsFloorNotNegative()
     {
         var result = McpLimit.Clamp(int.MinValue);
 
-        result.Should().Be(0);
+        result.Should().Be(1);
     }
 
     // Contract: an oversized cap (e.g. int.MaxValue) must be bounded so it never flows
@@ -29,9 +29,11 @@ public class McpLimitClampNegativeCapTests
         result.Should().Be(McpLimit.MaxResults);
     }
 
-    // Values within [0, MaxResults] must pass through unchanged.
+    // A non-positive cap clamps up to the floor of 1; values within
+    // [1, MaxResults] pass through unchanged.
     [Theory]
-    [InlineData(0, 0)]
+    [InlineData(0, 1)]
+    [InlineData(1, 1)]
     [InlineData(10, 10)]
     [InlineData(McpLimit.MaxResults, McpLimit.MaxResults)]
     public void Clamp_WithinRange_ReturnsInput(int input, int expected)
