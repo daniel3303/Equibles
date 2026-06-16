@@ -66,6 +66,27 @@ public class NportFilingRepositoryTests : IDisposable
         };
     }
 
+    // A sweep-discovered filing: no tracked stock, registrant identified by CIK.
+    private static NportFiling CreateTrustFiling(
+        string registrantCik,
+        string accessionNumber,
+        DateOnly? filingDate = null,
+        string seriesName = "Vanguard 500 Index Fund",
+        string seriesId = "S000002277"
+    )
+    {
+        var filing = CreateFiling(
+            commonStockId: Guid.Empty,
+            accessionNumber,
+            filingDate,
+            seriesName,
+            seriesId
+        );
+        filing.CommonStockId = null;
+        filing.RegistrantCik = registrantCik;
+        return filing;
+    }
+
     [Fact]
     public async Task GetByStock_ReturnsOnlyFilingsForThatStock()
     {
@@ -114,23 +135,6 @@ public class NportFilingRepositoryTests : IDisposable
         var any = await _repository.GetByAccessionNumber("9999999999-99-999999").AnyAsync();
 
         any.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task GetRecent_ReturnsOnlyFilingsOnOrAfterCutoff()
-    {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
-        await _dbContext.SaveChangesAsync();
-
-        _repository.Add(CreateFiling(stock.Id, "old", filingDate: new DateOnly(2024, 1, 1)));
-        _repository.Add(CreateFiling(stock.Id, "new", filingDate: new DateOnly(2025, 1, 15)));
-        await _repository.SaveChanges();
-
-        var result = await _repository.GetRecent(new DateOnly(2025, 1, 1)).ToListAsync();
-
-        result.Should().ContainSingle();
-        result[0].AccessionNumber.Should().Be("new");
     }
 
     [Fact]
@@ -386,5 +390,74 @@ public class NportFilingRepositoryTests : IDisposable
         var result = await _repository.GetHoldingsByCusip("037833100").ToListAsync();
 
         result.Should().ContainSingle().Which.Name.Should().Be("APPLE INC");
+    }
+
+    // Sweep-discovered filings carry no CommonStockId; their series is scoped by registrant CIK.
+    // Only the newest report of a trust series may surface, exactly as for tracked stocks.
+    [Fact]
+    public async Task GetLatestPerSeries_TrustOnlyFilings_ScopedByRegistrantCikNewestWins()
+    {
+        var older = CreateTrustFiling("36405", "0000036405-24-000001", new DateOnly(2024, 11, 20));
+        older.ReportPeriodDate = new DateOnly(2024, 10, 31);
+        var newest = CreateTrustFiling("36405", "0000036405-25-000002", new DateOnly(2025, 1, 15));
+        newest.ReportPeriodDate = new DateOnly(2024, 12, 31);
+        _repository.Add(older);
+        _repository.Add(newest);
+        await _repository.SaveChanges();
+
+        var result = await _repository.GetLatestPerSeries(DateOnly.MinValue).ToListAsync();
+
+        result.Should().ContainSingle().Which.Id.Should().Be(newest.Id);
+    }
+
+    // Two id-less trust filings from different registrants are different funds — registrant CIK,
+    // not a shared null CommonStockId, must keep them apart (otherwise every trust-only id-less
+    // filing would collapse into one).
+    [Fact]
+    public async Task GetLatestPerSeries_IdlessTrustFilingsDifferentRegistrants_BothSurvive()
+    {
+        var fundA = CreateTrustFiling(
+            "111111",
+            "0001111111-26-000001",
+            new DateOnly(2026, 1, 15),
+            "Cohen Closed-End Fund",
+            seriesId: null
+        );
+        fundA.ReportPeriodDate = new DateOnly(2025, 12, 31);
+        var fundB = CreateTrustFiling(
+            "222222",
+            "0002222222-26-000002",
+            new DateOnly(2026, 2, 15),
+            "Clough Closed-End Fund",
+            seriesId: null
+        );
+        fundB.ReportPeriodDate = new DateOnly(2026, 1, 31);
+        _repository.Add(fundA);
+        _repository.Add(fundB);
+        await _repository.SaveChanges();
+
+        var result = await _repository.GetLatestPerSeries(DateOnly.MinValue).ToListAsync();
+
+        result.Should().HaveCount(2);
+        result.Select(f => f.Id).Should().BeEquivalentTo([fundA.Id, fundB.Id]);
+    }
+
+    [Fact]
+    public async Task GetByRegistrantCikAndSeries_KnownSeries_ReturnsIt()
+    {
+        _repository.Add(CreateTrustFiling("36405", "0000036405-25-000002"));
+        await _repository.SaveChanges();
+
+        var known = await _repository.GetByRegistrantCikAndSeries("36405", "S000002277").AnyAsync();
+        var unknownSeries = await _repository
+            .GetByRegistrantCikAndSeries("36405", "S999999999")
+            .AnyAsync();
+        var unknownRegistrant = await _repository
+            .GetByRegistrantCikAndSeries("99999", "S000002277")
+            .AnyAsync();
+
+        known.Should().BeTrue();
+        unknownSeries.Should().BeFalse();
+        unknownRegistrant.Should().BeFalse();
     }
 }

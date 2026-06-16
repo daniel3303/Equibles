@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data;
 using Equibles.Errors.Repositories;
@@ -122,6 +123,7 @@ public class NportFilingReprocessManagerTests
         );
 
         var repo = new NportFilingRepository(dbContext);
+        var commonStockRepo = new CommonStockRepository(dbContext);
         var secClient = Substitute.For<ISecEdgarClient>();
 
         // The error reporter is only reached when a submission fails to parse; the valid-XML paths
@@ -135,6 +137,7 @@ public class NportFilingReprocessManagerTests
 
         var manager = new NportFilingReprocessManager(
             repo,
+            commonStockRepo,
             secClient,
             dbContext,
             errorReporter,

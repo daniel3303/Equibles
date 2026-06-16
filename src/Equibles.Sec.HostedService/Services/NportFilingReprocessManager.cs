@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
@@ -38,13 +39,20 @@ public class NportFilingReprocessManager
     internal const int MaxReprocessAttempts = 3;
 
     private readonly NportFilingRepository _filingRepository;
+    private readonly CommonStockRepository _commonStockRepository;
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly ErrorReporter _errorReporter;
     private readonly ILogger<NportFilingReprocessManager> _logger;
 
+    // The tracked-stock CUSIP set, loaded on first need within a run. Only sweep-discovered
+    // (registrant-only) filings store a CUSIP-filtered schedule, so the set is consulted only when
+    // one is re-derived — most runs never touch it.
+    private HashSet<string> _trackedCusips;
+
     public NportFilingReprocessManager(
         NportFilingRepository filingRepository,
+        CommonStockRepository commonStockRepository,
         ISecEdgarClient secEdgarClient,
         EquiblesFinancialDbContext dbContext,
         ErrorReporter errorReporter,
@@ -52,6 +60,7 @@ public class NportFilingReprocessManager
     )
     {
         _filingRepository = filingRepository;
+        _commonStockRepository = commonStockRepository;
         _secEdgarClient = secEdgarClient;
         _dbContext = dbContext;
         _errorReporter = errorReporter;
@@ -174,7 +183,9 @@ public class NportFilingReprocessManager
     // the caller can record the attempt and retry the filing on a later run.
     private async Task<int> ReprocessFiling(NportFiling filing)
     {
-        var cik = filing.CommonStock?.Cik;
+        // A sweep-discovered filing has no tracked stock; its registrant CIK is the one to re-fetch
+        // from. A feed-crawled filing carries no registrant CIK and re-fetches via its stock's.
+        var cik = filing.RegistrantCik ?? filing.CommonStock?.Cik;
         if (string.IsNullOrEmpty(cik))
             throw new InvalidOperationException(
                 $"NPORT-P filing {filing.AccessionNumber} has no issuer CIK to re-fetch from EDGAR."
@@ -214,12 +225,27 @@ public class NportFilingReprocessManager
                 $"NPORT-P {filing.AccessionNumber} is missing its genInfo section."
             );
 
+        // Sweep-discovered (registrant-only) filings keep only positions in stocks we track — they
+        // exist solely to answer the reverse "who holds this stock" lookup. Re-derive that same
+        // filtered schedule so reprocess doesn't re-inflate the filing with the fund's full
+        // portfolio of bonds, derivatives and untracked equities.
+        var reparsedHoldings = parsed.Holdings;
+        if (filing.CommonStockId == null)
+        {
+            var trackedCusips = await GetTrackedCusips();
+            reparsedHoldings = parsed
+                .Holdings.Where(h =>
+                    !string.IsNullOrEmpty(h.Cusip) && trackedCusips.Contains(h.Cusip)
+                )
+                .ToList();
+        }
+
         // Replace the schedule of holdings and refresh the header facts, then stamp the version so
         // the filing drops out of the work-set.
         _dbContext.Set<NportHolding>().RemoveRange(filing.Holdings);
-        foreach (var holding in parsed.Holdings)
+        foreach (var holding in reparsedHoldings)
             holding.NportFilingId = filing.Id;
-        _dbContext.Set<NportHolding>().AddRange(parsed.Holdings);
+        _dbContext.Set<NportHolding>().AddRange(reparsedHoldings);
 
         filing.RegistrantName = parsed.RegistrantName;
         filing.SeriesName = parsed.SeriesName;
@@ -234,6 +260,23 @@ public class NportFilingReprocessManager
         filing.ParserVersion = NportFiling.CurrentParserVersion;
         filing.ReprocessAttempts = 0;
 
-        return parsed.Holdings.Count;
+        return reparsedHoldings.Count;
+    }
+
+    // The set of CUSIPs we track, loaded once per run and cached. Only consulted when a
+    // sweep-discovered filing is re-derived, so it stays unloaded on runs without one.
+    private async Task<HashSet<string>> GetTrackedCusips()
+    {
+        if (_trackedCusips != null)
+            return _trackedCusips;
+
+        var cusips = await _commonStockRepository
+            .GetAll()
+            .Where(c => c.Cusip != null && c.Cusip != "")
+            .Select(c => c.Cusip)
+            .ToListAsync();
+
+        _trackedCusips = new HashSet<string>(cusips, StringComparer.OrdinalIgnoreCase);
+        return _trackedCusips;
     }
 }

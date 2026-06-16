@@ -36,6 +36,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<FilingItemsBackfillWorker>();
         services.AddHostedService<InsiderFilingReprocessWorker>();
         services.AddHostedService<NportFilingReprocessWorker>();
+        services.AddHostedService<NportRealtimeWorker>();
 
         return services;
     }

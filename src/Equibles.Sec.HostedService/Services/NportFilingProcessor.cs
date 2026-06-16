@@ -65,10 +65,13 @@ public class NportFilingProcessor : IssuerFeedFilingProcessor<NportFiling, Nport
     /// <summary>
     /// Parses an NPORT-P submission root into a <see cref="NportFiling"/> with its schedule of
     /// holdings, stamped at <see cref="NportFiling.CurrentParserVersion"/>. Shared by the ingest
-    /// pipeline (<see cref="ParseFiling"/>) and the version-driven reprocess pass, so both derive
-    /// holdings identically. Returns null when the submission lacks the required genInfo section.
+    /// pipeline (<see cref="ParseFiling"/>), the daily-index sweep and the version-driven reprocess
+    /// pass, so all three derive holdings identically. <paramref name="companyId"/> is null for the
+    /// sweep, whose registrant is not a tracked stock (the caller sets
+    /// <see cref="NportFiling.RegistrantCik"/> instead). Returns null when the submission lacks the
+    /// required genInfo section.
     /// </summary>
-    internal static NportFiling ParseEntity(XElement root, Guid companyId, FilingData filing)
+    internal static NportFiling ParseEntity(XElement root, Guid? companyId, FilingData filing)
     {
         var headerData = El(root, "headerData");
         var formData = El(root, "formData");

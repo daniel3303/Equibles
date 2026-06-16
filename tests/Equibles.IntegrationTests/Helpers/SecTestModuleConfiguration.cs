@@ -34,6 +34,7 @@ public class SecTestModuleConfiguration : Equibles.Data.IModuleConfiguration
         builder.Entity<NCenServiceProvider>();
         builder.Entity<NportFiling>();
         builder.Entity<NportHolding>();
+        builder.Entity<ProcessedNportFiling>();
         builder.Ignore<Chunk>();
         builder.Ignore<Embedding>();
     }
