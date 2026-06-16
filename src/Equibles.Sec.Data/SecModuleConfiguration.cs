@@ -27,6 +27,7 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<FormAdvAdviser>();
         builder.Entity<FormDFiling>();
         builder.Entity<FormDRelatedPerson>();
+        builder.Entity<FundSeries>();
         builder.Entity<NCenFiling>();
         builder.Entity<NCenServiceProvider>();
         builder.Entity<NportFiling>();
