@@ -19,8 +19,8 @@
     </a>
 
     <!-- Navbar -->
-    @* Frosted-glass navbar: translucent base-100 (color-mix keeps the alpha — a plain `/70` opacity modifier is dropped on DaisyUI theme colors) over a backdrop blur. *@
-    <header class="navbar bg-[color-mix(in_oklab,var(--color-base-100)_72%,transparent)] backdrop-blur-lg backdrop-saturate-150 border-b border-base-200 min-h-0 h-14 sticky top-0 z-40">
+    @* Frosted-glass navbar: translucent base-100 over a backdrop blur + saturate so content softens as it scrolls under. *@
+    <header class="navbar bg-base-100/72 backdrop-blur-lg backdrop-saturate-150 border-b border-base-200 min-h-0 h-14 sticky top-0 z-40">
         <div class="max-w-6xl mx-auto w-full px-6 flex items-center">
             <div class="flex-1 flex items-center gap-6">
                 <a asp-action="Index" asp-controller="Home" class="flex items-center gap-2">
