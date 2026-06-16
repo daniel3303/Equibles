@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Equibles.Cboe.Data.Models;
 using Equibles.Cboe.Repositories;
+using Equibles.Cboe.Repositories.Extensions;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
@@ -63,6 +64,7 @@ public class CboeTools
 
                 var records = await _putCallRepository
                     .GetByType(ratioType, start, end)
+                    .OnlyReconcilable()
                     .OrderByDescending(r => r.Date)
                     .Take(maxResults)
                     .ToListAsync();
