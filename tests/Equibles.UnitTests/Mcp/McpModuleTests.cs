@@ -409,6 +409,8 @@ public class McpModuleToolDiscoveryTests
                     "GetFundOperations",
                     "GetFundHoldings",
                     "GetFundsHoldingStock",
+                    "SearchFunds",
+                    "GetFundProfile",
                     "SearchInvestmentAdvisers",
                     "GetInvestmentAdviser",
                 }

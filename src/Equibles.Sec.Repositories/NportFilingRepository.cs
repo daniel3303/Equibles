@@ -117,4 +117,64 @@ public class NportFilingRepository : BaseRepository<NportFiling>
             )
         );
     }
+
+    /// <summary>
+    /// All filings of a single fund series, identified the same way as <see cref="GetLatestPerSeries"/>
+    /// — a tracked fund by its <see cref="NportFiling.CommonStockId"/>, a sweep-discovered trust by
+    /// its <see cref="NportFiling.RegistrantCik"/>, never name text; an id-less filing belongs to the
+    /// registrant's single fund, so an empty <paramref name="seriesId"/> matches the id-less reports.
+    /// Pass the series' own <c>CommonStockId</c> (or null for a trust) and its <c>RegistrantCik</c>.
+    /// </summary>
+    public IQueryable<NportFiling> GetSeriesFilings(
+        Guid? commonStockId,
+        string registrantCik,
+        string seriesId
+    )
+    {
+        return GetAll()
+            .Where(f =>
+                (
+                    (commonStockId != null && f.CommonStockId == commonStockId)
+                    || (
+                        commonStockId == null
+                        && f.CommonStockId == null
+                        && f.RegistrantCik == registrantCik
+                    )
+                )
+                && (
+                    f.SeriesId == seriesId
+                    || (string.IsNullOrEmpty(f.SeriesId) && string.IsNullOrEmpty(seriesId))
+                )
+            );
+    }
+
+    /// <summary>
+    /// One report per reporting period for a single series: the latest filing of each
+    /// <see cref="NportFiling.ReportPeriodDate"/> on or after <paramref name="floor"/>, so an
+    /// amendment or re-file of a period collapses to the newest by filing date then accession
+    /// number. This is the per-period spine of a fund's history and current portfolio — order by
+    /// <c>ReportPeriodDate</c> for the time series, or take the greatest for the latest report.
+    /// </summary>
+    public IQueryable<NportFiling> GetSeriesReportsByPeriod(
+        Guid? commonStockId,
+        string registrantCik,
+        string seriesId,
+        DateOnly floor
+    )
+    {
+        var filings = GetSeriesFilings(commonStockId, registrantCik, seriesId)
+            .Where(f => f.ReportPeriodDate >= floor);
+        return filings.Where(f =>
+            !filings.Any(f2 =>
+                f2.ReportPeriodDate == f.ReportPeriodDate
+                && (
+                    f2.FilingDate > f.FilingDate
+                    || (
+                        f2.FilingDate == f.FilingDate
+                        && string.Compare(f2.AccessionNumber, f.AccessionNumber) > 0
+                    )
+                )
+            )
+        );
+    }
 }
