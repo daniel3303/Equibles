@@ -50,6 +50,15 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         // Mirrors the per-stock covering index above so the rollups are
         // index-only scans. EF merges this with the entity's
         // `[Index(InstitutionalHolderId, ReportDate)]` attribute into one btree.
+        //
+        // FilingDate rides along too so the per-holder latest-filing-date probe
+        // (`SELECT max(FilingDate) WHERE InstitutionalHolderId = @h AND ReportDate
+        // = @d`) on the institution-profile / valuation path runs index-only. Without
+        // it Postgres had no index that could seek that holder+quarter and read
+        // FilingDate, so it fell back to a backward scan of the FilingDate index that
+        // filtered out millions of rows before finding the match and hit the 30s
+        // command timeout — a hard 500 on /institutions/{id} and
+        // /stocks/{ticker}/holders/{cik} (#3605).
         builder
             .Entity<InstitutionalHolding>()
             .HasIndex(h => new { h.InstitutionalHolderId, h.ReportDate })
@@ -58,6 +67,7 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
                 h.CommonStockId,
                 h.Value,
                 h.Shares,
+                h.FilingDate,
             });
 
         // Covering index for the per-stock 13F ranking pages (Most-Held Stocks,
