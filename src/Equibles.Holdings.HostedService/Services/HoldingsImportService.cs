@@ -216,14 +216,21 @@ public class HoldingsImportService
 
         foreach (var group in byCikAndPeriod)
         {
-            // FilingDate is day-granular (and, on the real-time path, derived
-            // from the daily-index date), so an original and its same-day
-            // amendment can tie. Break ties by accession number — SEC assigns
-            // these monotonically per filer agent, so the lexicographically
-            // greatest accession is the later submission. Without this the
-            // winner is nondeterministic and an amendment can be dropped.
+            // FilingDate must be compared as a parsed date, not as a string: the
+            // bulk datasets carry SEC `dd-MMM-yyyy` values ("14-FEB-2025"), so an
+            // ordinal string sort compares the day-of-month first and orders
+            // "29-JAN-2025" after "14-FEB-2025", dropping the genuinely later
+            // amendment in favour of its original whenever the pair spans a month.
+            // FilingDate is day-granular, so an original and its same-day amendment
+            // can still tie on the parsed date; break those ties by accession
+            // number — SEC assigns these monotonically per filer agent, so the
+            // lexicographically greatest accession is the later submission.
             var latest = group
-                .OrderByDescending(s => s.FilingDate, StringComparer.Ordinal)
+                .OrderByDescending(s =>
+                    TryParseDateOnly(s.FilingDate, out var filingDate)
+                        ? filingDate
+                        : DateOnly.MinValue
+                )
                 .ThenByDescending(s => s.AccessionNumber, StringComparer.Ordinal)
                 .First();
 
