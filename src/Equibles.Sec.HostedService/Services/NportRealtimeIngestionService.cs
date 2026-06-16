@@ -377,7 +377,9 @@ public class NportRealtimeIngestionService
             if (!string.IsNullOrEmpty(row.Cik))
                 ciks.Add(NormalizeCik(row.Cik));
 
-            foreach (var secondary in row.SecondaryCiks)
+            // The projection reads the SecondaryCiks column directly, bypassing the entity getter
+            // that coalesces null to []; almost every stored row has a NULL column, so guard it.
+            foreach (var secondary in row.SecondaryCiks ?? [])
             {
                 if (!string.IsNullOrEmpty(secondary))
                     ciks.Add(NormalizeCik(secondary));
