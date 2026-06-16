@@ -460,4 +460,75 @@ public class NportFilingRepositoryTests : IDisposable
         unknownSeries.Should().BeFalse();
         unknownRegistrant.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task GetSeriesFilings_TrackedFund_ReturnsOnlyThatStocksSeries()
+    {
+        var voo = CreateStock("VOO", "0000036405");
+        var spy = CreateStock("SPY", "0000884394");
+        _dbContext.Set<CommonStock>().AddRange(voo, spy);
+        await _dbContext.SaveChangesAsync();
+
+        _repository.Add(CreateFiling(voo.Id, "0000036405-24-000001"));
+        _repository.Add(CreateFiling(voo.Id, "0000036405-25-000002"));
+        _repository.Add(CreateFiling(spy.Id, "0000884394-24-000001"));
+        await _repository.SaveChanges();
+
+        var result = await _repository
+            .GetSeriesFilings(voo.Id, registrantCik: null, "S000002277")
+            .ToListAsync();
+
+        result.Should().HaveCount(2);
+        result.Should().OnlyContain(f => f.CommonStockId == voo.Id);
+    }
+
+    [Fact]
+    public async Task GetSeriesFilings_TrustSeries_ScopedByRegistrantAndSeries()
+    {
+        _repository.Add(CreateTrustFiling("36405", "0000036405-25-000001", seriesId: "S000002277"));
+        _repository.Add(CreateTrustFiling("36405", "0000036405-25-000002", seriesId: "S000009999"));
+        await _repository.SaveChanges();
+
+        var result = await _repository
+            .GetSeriesFilings(commonStockId: null, "36405", "S000002277")
+            .ToListAsync();
+
+        result.Should().ContainSingle().Which.SeriesId.Should().Be("S000002277");
+    }
+
+    // A period's amendment or re-file must collapse to the single newest filing, so a fund's
+    // history and current portfolio never double-count a restated month.
+    [Fact]
+    public async Task GetSeriesReportsByPeriod_CollapsesAmendmentsToTheLatestFilingPerPeriod()
+    {
+        var stock = CreateStock();
+        _dbContext.Set<CommonStock>().Add(stock);
+        await _dbContext.SaveChangesAsync();
+
+        var q1Original = CreateFiling(stock.Id, "0000036405-25-000001", new DateOnly(2025, 2, 10));
+        q1Original.ReportPeriodDate = new DateOnly(2025, 1, 31);
+        var q1Amendment = CreateFiling(stock.Id, "0000036405-25-000002", new DateOnly(2025, 3, 15));
+        q1Amendment.ReportPeriodDate = new DateOnly(2025, 1, 31);
+        var q2 = CreateFiling(stock.Id, "0000036405-25-000003", new DateOnly(2025, 3, 12));
+        q2.ReportPeriodDate = new DateOnly(2025, 2, 28);
+        var belowFloor = CreateFiling(stock.Id, "0000036405-24-000004", new DateOnly(2024, 12, 10));
+        belowFloor.ReportPeriodDate = new DateOnly(2024, 11, 30);
+        _repository.Add(q1Original);
+        _repository.Add(q1Amendment);
+        _repository.Add(q2);
+        _repository.Add(belowFloor);
+        await _repository.SaveChanges();
+
+        var result = await _repository
+            .GetSeriesReportsByPeriod(stock.Id, null, "S000002277", new DateOnly(2025, 1, 1))
+            .ToListAsync();
+
+        result.Should().HaveCount(2, "one report per period above the floor");
+        result
+            .Should()
+            .ContainSingle(f => f.ReportPeriodDate == new DateOnly(2025, 1, 31))
+            .Which.Id.Should()
+            .Be(q1Amendment.Id, "the later-filed amendment wins its period");
+        result.Select(f => f.Id).Should().NotContain(belowFloor.Id);
+    }
 }
