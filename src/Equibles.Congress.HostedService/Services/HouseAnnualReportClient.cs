@@ -51,7 +51,18 @@ public partial class HouseAnnualReportClient
     private const string ZipUrlTemplate = BaseUrl + "/public_disc/financial-pdfs/{0}FD.zip";
     private const string AnnualPdfUrlTemplate = BaseUrl + "/public_disc/financial-pdfs/{0}/{1}.pdf";
 
-    private static readonly string[] HonorificPrefixes = ["Hon. ", "Mr. ", "Mrs. ", "Ms. "];
+    // Honorific tokens some House filings inject into the disclosed name, with or
+    // without a trailing period ("Mr"/"Mr."/"Dr"). They are not part of the name;
+    // left in, they fragment one person into several CongressMember records keyed
+    // on the raw name string (e.g. "Mark Dr Green" vs "Mark Green").
+    private static readonly HashSet<string> HonorificTokens = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Mr",
+        "Mrs",
+        "Ms",
+        "Dr",
+        "Hon",
+    };
 
     public HouseAnnualReportClient(HttpClient httpClient, ILogger<HouseAnnualReportClient> logger)
     {
@@ -609,11 +620,28 @@ public partial class HouseAnnualReportClient
         );
     }
 
+    // Normalises a House-disclosed member name so cosmetic variants resolve to one
+    // identity: drops honorific tokens in any position (period-agnostic) and
+    // collapses an immediately repeated token (the source occasionally doubles the
+    // first name, e.g. "Scott Scott Franklin"). Whole-token matching keeps real
+    // names such as "Mraz" intact.
     private static string StripHonorificPrefixes(string name)
     {
-        foreach (var prefix in HonorificPrefixes)
-            name = name.Replace(prefix, "");
-        return name;
+        var tokens = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var result = new List<string>(tokens.Length);
+        foreach (var token in tokens)
+        {
+            if (HonorificTokens.Contains(token.TrimEnd('.')))
+                continue;
+            if (
+                result.Count > 0
+                && string.Equals(result[^1], token, StringComparison.OrdinalIgnoreCase)
+            )
+                continue;
+            result.Add(token);
+        }
+
+        return string.Join(' ', result);
     }
 
     // Bracketed asset-type code such as [ST], [OP], [BA] — a code, not part of
