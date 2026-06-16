@@ -150,14 +150,25 @@ public class InsiderFilingReprocessManager
             }
             catch (DbUpdateException ex)
             {
-                // A concurrent ingest insert of the same filing (unique accession) or a
-                // similar conflict — drop the batch's changes and retry these next run.
-                _logger.LogWarning(
-                    ex,
-                    "Insider filing reprocess batch save failed; retrying next run"
-                );
-                foreach (var accession in accessions)
-                    failedThisRun.Add(accession);
+                // A concurrent ingest or reprocess run inserted one of these filings' cache
+                // rows first, so this batch's duplicate-accession insert is rejected by the
+                // unique index. That cache write is best-effort, but the batch's transaction
+                // updates (parser-version advances, reclassifications, price repairs) are
+                // not — detaching the pending filing/file inserts and re-saving lets the
+                // transaction work commit instead of being discarded with the conflict (#2454).
+                if (await TryCommitWithoutPendingCacheInserts())
+                {
+                    result.Processed += attempted;
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Insider filing reprocess batch save failed; retrying next run"
+                    );
+                    foreach (var accession in accessions)
+                        failedThisRun.Add(accession);
+                }
             }
             finally
             {
@@ -178,6 +189,37 @@ public class InsiderFilingReprocessManager
         }
 
         return result;
+    }
+
+    // Re-saves the batch after detaching the best-effort filing/file cache inserts that a
+    // concurrent run beat us to (the unique-accession conflict). Those cache rows are
+    // regenerable — re-fetched on a later pass — but the batch's transaction updates are the
+    // run's real work and must survive a duplicate filing insert. The only rows this manager
+    // ever stages as inserts are the cached InsiderFiling and its File; the transaction
+    // updates are tracked as modifications, so detaching the inserts leaves them intact.
+    // Returns false when there is nothing pending to drop (an unrelated failure) or the
+    // retry still fails, leaving the original discard-and-retry-next-run behaviour in place.
+    private async Task<bool> TryCommitWithoutPendingCacheInserts()
+    {
+        var pendingInserts = _dbContext
+            .ChangeTracker.Entries()
+            .Where(e => e.State == EntityState.Added)
+            .ToList();
+        if (pendingInserts.Count == 0)
+            return false;
+
+        foreach (var entry in pendingInserts)
+            entry.State = EntityState.Detached;
+
+        try
+        {
+            await _transactionRepository.SaveChanges();
+            return true;
+        }
+        catch (DbUpdateException)
+        {
+            return false;
+        }
     }
 
     private async Task ReprocessFiling(string accession, InsiderFilingReprocessResult result)
