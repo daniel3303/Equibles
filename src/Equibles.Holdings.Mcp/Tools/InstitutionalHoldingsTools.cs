@@ -559,7 +559,10 @@ public class InstitutionalHoldingsTools
         string Error
     )> ResolveMarketActivityDates(string reportDate)
     {
-        var reportDates = await _holdingRepository.GetAvailableReportDates().ToListAsync();
+        // 13F-only: the prior entry must be the prior QUARTER. The all-filings list now
+        // carries daily 13D/G event dates, which would make "previous" the prior day and
+        // compare a quarter-end portfolio against a single-day stake.
+        var reportDates = await _holdingRepository.Get13FAvailableReportDates().ToListAsync();
         if (reportDates.Count == 0)
             return (default, default, "No 13F holdings data available.");
 
