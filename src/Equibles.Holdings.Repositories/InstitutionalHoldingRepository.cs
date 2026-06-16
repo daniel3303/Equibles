@@ -48,6 +48,18 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return GetByHolder(holder, reportDate).Include(h => h.CommonStock);
     }
 
+    // 13F-only holdings for one holder at a quarter end. A holder can file a Schedule 13D/G
+    // whose event ReportDate coincides with a 13F quarter end; that stake shares this table
+    // but is not part of the 13F portfolio, so a portfolio summary (reported AUM, sector
+    // allocation) must exclude it or the single disclosed position double-counts the AUM.
+    public IQueryable<InstitutionalHolding> Get13FByHolder(
+        InstitutionalHolder holder,
+        DateOnly reportDate
+    )
+    {
+        return GetByHolder(holder, reportDate).Where(h => h.FilingType == FilingType.Form13F);
+    }
+
     public IQueryable<InstitutionalHolding> GetLatestByStock(CommonStock stock)
     {
         var latestDates = GetAll()
