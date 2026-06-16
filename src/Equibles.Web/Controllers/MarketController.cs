@@ -1,5 +1,6 @@
 using Equibles.Cboe.Data.Models;
 using Equibles.Cboe.Repositories;
+using Equibles.Cboe.Repositories.Extensions;
 using Equibles.Core.Extensions;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.Extensions;
@@ -87,6 +88,7 @@ public class MarketController : BaseController
 
         var records = await _putCallRepository
             .GetByType(ratioType)
+            .OnlyReconcilable()
             .OrderByDescending(r => r.Date)
             .Select(r => new PutCallRatioItem
             {
