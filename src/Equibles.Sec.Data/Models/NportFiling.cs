@@ -1,15 +1,23 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Equibles.CommonStocks.Data.Models;
-using Equibles.Sec.Data.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Sec.Data.Models;
 
 /// <summary>
 /// A SEC Form NPORT-P monthly portfolio report filed by a registered investment company (mutual
-/// fund, ETF or closed-end fund) for one of its series. NPORT-P appears in the registrant's EDGAR
-/// submissions feed, so each report is attributed to the registrant's <see cref="CommonStock"/>.
+/// fund, ETF or closed-end fund) for one of its series.
+///
+/// A filing reaches the database two ways. Funds that are themselves tracked issuers (listed
+/// closed-end funds, standalone ETF trusts) are crawled through their EDGAR submissions feed and
+/// the report is attributed to the registrant's <see cref="CommonStock"/> — <see cref="CommonStockId"/>
+/// is set, <see cref="RegistrantCik"/> is null. The giant multi-series fund-family trusts
+/// ("Vanguard Index Funds", "Fidelity Concord Street Trust", "iShares Trust") are not tracked
+/// issuers, so they are instead discovered by the daily-index NPORT-P sweep — <see cref="CommonStockId"/>
+/// is null and the registrant is identified by <see cref="RegistrantCik"/>. Exactly one of the two
+/// is set, so the two populations never share a series.
+///
 /// The record captures the series' header facts — name, identifier, reporting period, total assets
 /// and liabilities, net assets — plus the schedule of portfolio investments in
 /// <see cref="Holdings"/>. Both the original report ("NPORT-P") and its amendments ("NPORT-P/A")
@@ -19,7 +27,8 @@ namespace Equibles.Sec.Data.Models;
 [Index(nameof(AccessionNumber), IsUnique = true)]
 [Index(nameof(FilingDate))]
 [Index(nameof(ParserVersion))]
-public class NportFiling : IStockFiling
+[Index(nameof(RegistrantCik))]
+public class NportFiling
 {
     /// <summary>
     /// Current holdings-parsing algorithm version. Bump this whenever the NPORT-P parse changes so
@@ -31,8 +40,23 @@ public class NportFiling : IStockFiling
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
+    /// <summary>
+    /// The tracked stock the report is attributed to, when the fund is itself a tracked issuer
+    /// (listed closed-end fund or standalone ETF trust). Null for filings discovered by the
+    /// daily-index sweep, whose registrant is a fund-family trust that is not a tracked stock —
+    /// those are identified by <see cref="RegistrantCik"/> instead.
+    /// </summary>
+    public Guid? CommonStockId { get; set; }
     public virtual CommonStock CommonStock { get; set; }
+
+    /// <summary>
+    /// The registrant's SEC CIK, set on filings discovered by the daily-index NPORT-P sweep (where
+    /// the registrant is not a tracked stock). Null on filings crawled through a tracked issuer's
+    /// submissions feed, whose registrant is identified by <see cref="CommonStockId"/>. Used both to
+    /// re-fetch the submission during reprocess and to scope a series to its registrant.
+    /// </summary>
+    [MaxLength(16)]
+    public string RegistrantCik { get; set; }
 
     [MaxLength(32)]
     public string AccessionNumber { get; set; }

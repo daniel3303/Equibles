@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Equibles.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    partial class EquiblesDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260616010229_AddNportTrustSweepCoverage")]
+    partial class AddNportTrustSweepCoverage
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -321,6 +324,126 @@ namespace Equibles.Migrations.Migrations
                         .IsUnique();
 
                     b.ToTable("CommonStock");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.EarningsCalendarEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CommonStockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FiscalQuarter")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FiscalYear")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly>("ScheduledDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScheduledDate");
+
+                    b.HasIndex("CommonStockId", "FiscalYear", "FiscalQuarter")
+                        .IsUnique();
+
+                    b.ToTable("EarningsCalendarEntry");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.IrEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CommonStockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartDateTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CommonStockId", "StartDateTime");
+
+                    b.HasIndex("CommonStockId", "StartDateTime", "Title")
+                        .IsUnique();
+
+                    b.ToTable("IrEvent");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.IrNewsItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CommonStockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Summary")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CommonStockId", "PublishedAt");
+
+                    b.HasIndex("CommonStockId", "Url")
+                        .IsUnique();
+
+                    b.ToTable("IrNewsItem");
                 });
 
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.Taxonomies.Industry", b =>
@@ -2641,6 +2764,39 @@ namespace Equibles.Migrations.Migrations
                         .HasForeignKey("IndustryId");
 
                     b.Navigation("Industry");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.EarningsCalendarEntry", b =>
+                {
+                    b.HasOne("Equibles.CommonStocks.Data.Models.CommonStock", "CommonStock")
+                        .WithMany()
+                        .HasForeignKey("CommonStockId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CommonStock");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.IrEvent", b =>
+                {
+                    b.HasOne("Equibles.CommonStocks.Data.Models.CommonStock", "CommonStock")
+                        .WithMany()
+                        .HasForeignKey("CommonStockId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CommonStock");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.IrNewsItem", b =>
+                {
+                    b.HasOne("Equibles.CommonStocks.Data.Models.CommonStock", "CommonStock")
+                        .WithMany()
+                        .HasForeignKey("CommonStockId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CommonStock");
                 });
 
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.Taxonomies.Industry", b =>

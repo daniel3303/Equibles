@@ -1,12 +1,39 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Equibles.Sec.Data.Models;
 
 namespace Equibles.Sec.Repositories;
 
-public class NportFilingRepository : SecFilingRepositoryBase<NportFiling>
+/// <summary>
+/// Reads and writes NPORT-P portfolio reports. Unlike the other SEC filing repositories this one
+/// does not derive from <c>SecFilingRepositoryBase</c>: an NPORT-P filing is not necessarily
+/// attributed to a tracked stock (multi-series fund-family trusts discovered by the daily-index
+/// sweep carry a <see cref="NportFiling.RegistrantCik"/> instead of a <see cref="NportFiling.CommonStockId"/>),
+/// so its registrant identity is optional.
+/// </summary>
+public class NportFilingRepository : BaseRepository<NportFiling>
 {
     public NportFilingRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
+
+    /// <summary>The filings attributed to a tracked stock (the fund crawled through its own feed).</summary>
+    public IQueryable<NportFiling> GetByStock(CommonStock stock)
+    {
+        return GetAll().Where(f => f.CommonStockId == stock.Id);
+    }
+
+    public IQueryable<NportFiling> GetByAccessionNumber(string accessionNumber)
+    {
+        return GetAll().Where(f => f.AccessionNumber == accessionNumber);
+    }
+
+    /// <summary>The filings whose accession number is in the set — the sweep's batch dedup lookup.</summary>
+    public IQueryable<NportFiling> GetByAccessionNumbers(
+        IReadOnlyCollection<string> accessionNumbers
+    )
+    {
+        return GetAll().Where(f => accessionNumbers.Contains(f.AccessionNumber));
+    }
 
     public IQueryable<NportHolding> GetHoldings(NportFiling filing)
     {
@@ -20,23 +47,59 @@ public class NportFilingRepository : SecFilingRepositoryBase<NportFiling>
     }
 
     /// <summary>
+    /// Filings of a sweep-discovered series, identified by registrant CIK and series id (an id-less
+    /// registrant collapses to its single fund). Lets the sweep tell whether it has stored this
+    /// series before, so a later report holding none of our tracked stocks is still recorded as the
+    /// series' latest — otherwise an earlier report would linger and an exited position would read as
+    /// current.
+    /// </summary>
+    public IQueryable<NportFiling> GetByRegistrantCikAndSeries(
+        string registrantCik,
+        string seriesId
+    )
+    {
+        return GetAll()
+            .Where(f =>
+                f.RegistrantCik == registrantCik
+                && (
+                    f.SeriesId == seriesId
+                    || (string.IsNullOrEmpty(f.SeriesId) && string.IsNullOrEmpty(seriesId))
+                )
+            );
+    }
+
+    /// <summary>
     /// Each fund series' most recent NPORT report whose portfolio is as of the floor date or
     /// later. Series identity never compares name text — the same fund's name varies across
     /// filings ("and"/"&amp;", "Inc"/"Inc.", stray spaces, legal renames), which would freeze a
-    /// stale "latest" report under every spelling. Within a stock, filings carrying the same
-    /// non-empty <see cref="NportFiling.SeriesId"/> are the same series; filings carrying
-    /// different non-empty ids are genuinely different series and never supersede each other;
-    /// and an id-less filing belongs to the registrant's single fund (listed closed-end funds
-    /// file with no series id at all), so it shares identity with every filing of its stock.
-    /// The latest report is the one with the greatest report period, breaking ties by filing
-    /// date and then accession number so amendments and re-filings of the same period win.
+    /// stale "latest" report under every spelling.
+    ///
+    /// A series is scoped to its registrant: a filing crawled through a tracked stock's feed is
+    /// scoped by <see cref="NportFiling.CommonStockId"/>; a filing discovered by the daily-index
+    /// sweep (whose registrant is a fund-family trust that is not a tracked stock) is scoped by
+    /// <see cref="NportFiling.RegistrantCik"/>. Exactly one is set per filing, so the two
+    /// populations never collide. Within a registrant, filings carrying the same non-empty
+    /// <see cref="NportFiling.SeriesId"/> are the same series; filings carrying different non-empty
+    /// ids are genuinely different series and never supersede each other; and an id-less filing
+    /// belongs to the registrant's single fund (listed closed-end funds file with no series id at
+    /// all), so it shares identity with every filing of its registrant.
+    ///
+    /// The latest report is the one with the greatest report period, breaking ties by filing date
+    /// and then accession number so amendments and re-filings of the same period win.
     /// </summary>
     public IQueryable<NportFiling> GetLatestPerSeries(DateOnly floor)
     {
         var filings = GetAll().Where(f => f.ReportPeriodDate >= floor);
         return filings.Where(f =>
             !filings.Any(f2 =>
-                f2.CommonStockId == f.CommonStockId
+                (
+                    (f.CommonStockId != null && f2.CommonStockId == f.CommonStockId)
+                    || (
+                        f.CommonStockId == null
+                        && f2.CommonStockId == null
+                        && f2.RegistrantCik == f.RegistrantCik
+                    )
+                )
                 && (
                     f2.SeriesId == f.SeriesId
                     || string.IsNullOrEmpty(f.SeriesId)
