@@ -10,7 +10,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Equibles.Mcp\Equibles.Mcp.csproj" />
     <ProjectReference Include="..\Equibles.Holdings.Mcp\Equibles.Holdings.Mcp.csproj" />
-    <ProjectReference Include="..\Equibles.InvestorRelations.Mcp\Equibles.InvestorRelations.Mcp.csproj" />
     <ProjectReference Include="..\Equibles.InsiderTrading.Mcp\Equibles.InsiderTrading.Mcp.csproj" />
     <ProjectReference Include="..\Equibles.Sec.Mcp\Equibles.Sec.Mcp.csproj" />
     <ProjectReference Include="..\Equibles.Sec.FinancialFacts.Mcp\Equibles.Sec.FinancialFacts.Mcp.csproj" />

@@ -18,7 +18,6 @@ using Equibles.Holdings.Data.Extensions;
 using Equibles.Holdings.Mcp.Extensions;
 using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.InsiderTrading.Mcp.Extensions;
-using Equibles.InvestorRelations.Mcp.Extensions;
 using Equibles.Mcp.Contracts;
 using Equibles.Mcp.Extensions;
 using Equibles.Mcp.Middleware;
@@ -82,7 +81,6 @@ public partial class Program
         builder.Services.AddEquiblesMcp(mcp =>
         {
             mcp.AddHoldings();
-            mcp.AddInvestorRelations();
             mcp.AddInsiderTrading();
             mcp.AddFred();
             mcp.AddSec();
