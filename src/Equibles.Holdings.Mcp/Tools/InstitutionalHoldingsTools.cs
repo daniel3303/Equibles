@@ -772,10 +772,12 @@ public class InstitutionalHoldingsTools
                 var previousDate = GetPriorReportDate(reportDates, targetDate);
 
                 var currentHoldings = await _holdingRepository
-                    .GetByHolder(holder, targetDate)
+                    .Get13FByHolder(holder, targetDate)
                     .ToListAsync();
                 var previousHoldings = previousDate.HasValue
-                    ? await _holdingRepository.GetByHolder(holder, previousDate.Value).ToListAsync()
+                    ? await _holdingRepository
+                        .Get13FByHolder(holder, previousDate.Value)
+                        .ToListAsync()
                     : [];
                 var summary = InstitutionPortfolioSummaryCalculator.Calculate(
                     currentHoldings,
@@ -879,7 +881,7 @@ public class InstitutionalHoldingsTools
                     return error;
 
                 var holdings = await _holdingRepository
-                    .GetByHolder(holder, targetDate)
+                    .Get13FByHolder(holder, targetDate)
                     .Include(h => h.CommonStock)
                         .ThenInclude(s => s.Industry)
                     .ToListAsync();

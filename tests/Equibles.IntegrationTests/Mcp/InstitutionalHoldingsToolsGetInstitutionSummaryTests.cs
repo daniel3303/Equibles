@@ -142,6 +142,60 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
         output.Should().NotContain("BlackRock Advisors");
     }
 
+    [Fact]
+    public async Task GetInstitutionSummary_Schedule13GAtSame13FQuarter_ExcludesItFromReportedAum()
+    {
+        // A holder can file a Schedule 13G whose event date lands on a 13F quarter end. That
+        // single disclosed stake shares the holdings table but is not part of the 13F
+        // portfolio — reported AUM and position count must reflect the 13F holdings only,
+        // never the 13F + 13G sum that doubled cross-filing holders' AUM (GH-3929).
+        var apple = new CommonStock
+        {
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            Cik = "0000320193",
+        };
+        var tesla = new CommonStock
+        {
+            Ticker = "TSLA",
+            Name = "Tesla Inc.",
+            Cik = "0001318605",
+        };
+        var holder = new InstitutionalHolder { Cik = "00090001", Name = "Crossfiling Capital" };
+        DbContext.AddRange(apple, tesla, holder);
+        var quarterEnd = new DateOnly(2026, 3, 31);
+        // The real 13F portfolio: one position worth $1,000,000.
+        DbContext.Add(MakeHolding(apple, holder, quarterEnd, shares: 1_000, value: 1_000_000));
+        // A Schedule 13G stake reported at the same quarter end and worth far more — summing
+        // it would inflate the AUM and add a phantom second position.
+        DbContext.Add(
+            new InstitutionalHolding
+            {
+                CommonStockId = tesla.Id,
+                InstitutionalHolderId = holder.Id,
+                FilingDate = quarterEnd.AddDays(45),
+                ReportDate = quarterEnd,
+                FilingType = FilingType.Schedule13G,
+                Shares = 5_000,
+                Value = 9_000_000,
+                ShareType = ShareType.Shares,
+                InvestmentDiscretion = InvestmentDiscretion.Sole,
+                AccessionNumber = "acc-13g-tsla",
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = NewSut(verify);
+
+        var output = await sut.GetInstitutionSummary("Crossfiling Capital");
+
+        output.Should().Contain("| Reported AUM | $1,000,000 |");
+        output.Should().Contain("| # Positions | 1 |");
+        output.Should().NotContain("10,000,000");
+    }
+
     private InstitutionalHoldingsTools NewSut(Equibles.Data.EquiblesFinancialDbContext ctx) =>
         new(
             new InstitutionalHoldingRepository(ctx),
