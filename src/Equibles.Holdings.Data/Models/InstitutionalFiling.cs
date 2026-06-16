@@ -27,7 +27,13 @@ namespace Equibles.Holdings.Data.Models;
 /// </para>
 /// </summary>
 [Index(nameof(AccessionNumber), IsUnique = true)]
-[Index(nameof(FilingDate))]
+// Composite over (FilingDate, AccessionNumber) so the "latest filings" feed's
+// ORDER BY FilingDate DESC, AccessionNumber DESC + page is served by a backward
+// index scan instead of a full sort of the whole rollup, which exceeded the 30s
+// command timeout and 500'd the page on every load (#3565). FilingDate is the
+// leading column, so this also serves the FilingDate-only lookups the old
+// single-column index covered.
+[Index(nameof(FilingDate), nameof(AccessionNumber))]
 public class InstitutionalFiling
 {
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
