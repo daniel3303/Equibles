@@ -108,7 +108,7 @@ public class HoldingsExportController : BaseController
         if (holder == null)
             return NotFound();
 
-        var reportDates = await _holdingRepository.GetReportDatesByHolder(holder).ToListAsync();
+        var reportDates = await _holdingRepository.Get13FReportDatesByHolder(holder).ToListAsync();
         if (reportDates.Count == 0)
             return NotFound();
 
