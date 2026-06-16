@@ -11,8 +11,5 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<CommonStock>();
         builder.Entity<Industry>();
         builder.Entity<Sector>();
-        builder.Entity<IrNewsItem>();
-        builder.Entity<IrEvent>();
-        builder.Entity<EarningsCalendarEntry>();
     }
 }
