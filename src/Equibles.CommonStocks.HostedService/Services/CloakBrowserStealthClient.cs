@@ -144,6 +144,10 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
     /// DOM is kept rather than discarding an otherwise successful render. A genuine
     /// navigation failure — refused connection, DNS, protocol error — is a different
     /// exception that still propagates, so the fetch degrades to a miss as before.
+    /// Playwright .NET surfaces the wait timeout as a <see cref="System.TimeoutException"/>
+    /// (not a <see cref="PlaywrightException"/>), so that is caught directly; the
+    /// message-matched <see cref="PlaywrightException"/> clause is kept as a belt-and-braces
+    /// guard for any path that reports the same timeout as a Playwright error.
     /// </summary>
     internal static async Task NavigateWaitingForNetworkIdle(
         IPage page,
@@ -162,6 +166,10 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
                     Timeout = timeoutMilliseconds,
                 }
             );
+        }
+        catch (System.TimeoutException)
+        {
+            logger.LogDebug("NetworkIdle wait timed out for {Url}; using the loaded DOM.", url);
         }
         catch (PlaywrightException ex) when (IsNetworkIdleTimeout(ex))
         {
