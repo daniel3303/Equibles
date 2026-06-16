@@ -38,6 +38,27 @@ public class CloakBrowserStealthClientNavigateTests
     }
 
     [Fact]
+    public async Task NavigateWaitingForNetworkIdle_SwallowsSystemTimeoutException_SoTheLoadedDomIsKept()
+    {
+        // Playwright .NET surfaces a GotoAsync wait timeout as System.TimeoutException — NOT a
+        // PlaywrightException — which is what the FDA calendar actually throws in production. The
+        // idle-wait timeout must still be non-fatal regardless of the concrete timeout type.
+        var page = Substitute.For<IPage>();
+        page.GotoAsync(Arg.Any<string>(), Arg.Any<PageGotoOptions>())
+            .ThrowsAsync(new System.TimeoutException("Timeout 45000ms exceeded."));
+
+        var navigate = async () =>
+            await CloakBrowserStealthClient.NavigateWaitingForNetworkIdle(
+                page,
+                "https://www.fda.gov/advisory-committees/advisory-committee-calendar",
+                45000,
+                NullLogger.Instance
+            );
+
+        await navigate.Should().NotThrowAsync();
+    }
+
+    [Fact]
     public async Task NavigateWaitingForNetworkIdle_Rethrows_OnGenuineNavigationFailure()
     {
         var page = Substitute.For<IPage>();
