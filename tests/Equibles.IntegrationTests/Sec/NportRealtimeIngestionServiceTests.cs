@@ -164,6 +164,50 @@ public class NportRealtimeIngestionServiceTests
         await secClient.Received(1).GetDocumentContent(skipped.AccessionNumber, Arg.Any<string>());
     }
 
+    [Fact]
+    public async Task IngestRecentFilings_TrackedStockWithNullSecondaryCiks_StillIngests()
+    {
+        var (service, dbContext, secClient) = CreateServiceWithDeps();
+        // Almost every production CommonStock row has a NULL SecondaryCiks column (it predates the
+        // column), and the LoadTrackedCiks projection reads the column directly, bypassing the
+        // entity getter that coalesces null to []. Iterating it without a null guard threw and
+        // aborted the entire sweep cycle, so a tracked stock with no secondary CIKs must not stop
+        // ingestion. The other seeds in this file default SecondaryCiks to [], which is why this
+        // case slipped through.
+        dbContext.Add(
+            new CommonStock
+            {
+                Id = Guid.NewGuid(),
+                Ticker = "AAPL",
+                Name = "AAPL",
+                Cik = "0000320193",
+                Cusip = AppleCusip,
+                SecondaryCiks = null,
+            }
+        );
+        dbContext.SaveChanges();
+        dbContext.ChangeTracker.Clear();
+
+        var entry = Entry("0000036405-26-000001", cik: "36405");
+        StubDailyIndex(secClient, entry);
+        StubContent(
+            secClient,
+            entry,
+            NportXml("VANGUARD INDEX FUNDS", "S000002277", (AppleCusip, "APPLE INC", 170_000_000m))
+        );
+
+        var result = await service.IngestRecentFilings(
+            new DateOnly(2026, 3, 1),
+            lookbackDays: 1,
+            maxFetchesPerCycle: 100,
+            CancellationToken.None
+        );
+
+        result.Stored.Should().Be(1);
+        var stored = await dbContext.Set<NportFiling>().Include(f => f.Holdings).SingleAsync();
+        stored.Holdings.Should().ContainSingle().Which.Cusip.Should().Be(AppleCusip);
+    }
+
     // ── Helpers ──
 
     private static (
