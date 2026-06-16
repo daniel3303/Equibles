@@ -80,8 +80,10 @@ public class HoldingsCloneBacktestProvider
         }
         outcome.BenchmarkName = benchmarkStock.Name;
 
-        var reportDates = await _holdingRepository.GetReportDatesByHolder(holder).ToListAsync();
-        // GetReportDatesByHolder returns latest first; the backtest iterates earliest first.
+        var reportDates = await _holdingRepository.Get13FReportDatesByHolder(holder).ToListAsync();
+        // Get13FReportDatesByHolder returns latest first; the backtest iterates earliest first.
+        // 13D/G event dates are excluded so a single disclosed stake never rotates the whole
+        // simulation into one stock at the event date.
         reportDates.Reverse();
         if (reportDates.Count == 0)
         {
@@ -104,7 +106,7 @@ public class HoldingsCloneBacktestProvider
         }
 
         var holdings = await _holdingRepository
-            .GetHistoryByHolder(holder)
+            .Get13FHistoryByHolder(holder)
             .Where(h => relevant.Contains(h.ReportDate))
             .Select(h => new BacktestHoldingRow(
                 h.ReportDate,

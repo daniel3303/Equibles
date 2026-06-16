@@ -65,7 +65,7 @@ public class ProfilesController : BaseController
             return NotFound();
 
         var holdings = await _institutionalHoldingRepository
-            .GetHistoryByHolder(holder)
+            .Get13FHistoryByHolder(holder)
             .TakeMostRecent(holding => holding.ReportDate, RecentRowLimit)
             .Select(holding => new HoldingRowViewModel
             {
@@ -80,7 +80,7 @@ public class ProfilesController : BaseController
         // Header strip + industry allocation — pulled with extra per-quarter
         // materializations so the existing recent-rows list keeps its top-50 shape.
         var distinctDates = await _institutionalHoldingRepository
-            .GetReportDatesByHolder(holder)
+            .Get13FReportDatesByHolder(holder)
             .ToListAsync();
         var (summary, industryAllocation) = await BuildSummaryAndAllocation(holder, distinctDates);
         var (quarterlyActivity, activityResolved, activityPrior) = await BuildQuarterlyActivity(
@@ -464,7 +464,7 @@ public class ProfilesController : BaseController
         foreach (var holder in holders)
         {
             var dates = await _institutionalHoldingRepository
-                .GetReportDatesByHolder(holder)
+                .Get13FReportDatesByHolder(holder)
                 .ToListAsync();
             perHolderDates.Add(dates);
         }

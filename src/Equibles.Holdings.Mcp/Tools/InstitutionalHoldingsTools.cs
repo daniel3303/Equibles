@@ -242,7 +242,7 @@ public class InstitutionalHoldingsTools
 
                 var (targetDate, found) = await TryResolveLatestReportDate(
                     reportDate,
-                    _holdingRepository.GetReportDatesByHolder(holder)
+                    _holdingRepository.Get13FReportDatesByHolder(holder)
                 );
                 if (!found)
                     return $"No holdings data for {holder.Name}.";
@@ -924,7 +924,7 @@ public class InstitutionalHoldingsTools
                     return holderError;
 
                 var reportDates = await _holdingRepository
-                    .GetReportDatesByHolder(holder)
+                    .Get13FReportDatesByHolder(holder)
                     .ToListAsync();
                 if (reportDates.Count < 2)
                     return $"{holder.Name} has fewer than two reported quarters — no diff available.";
@@ -1082,7 +1082,7 @@ public class InstitutionalHoldingsTools
     {
         var perHolder = new List<List<DateOnly>>(holders.Count);
         foreach (var holder in holders)
-            perHolder.Add(await _holdingRepository.GetReportDatesByHolder(holder).ToListAsync());
+            perHolder.Add(await _holdingRepository.Get13FReportDatesByHolder(holder).ToListAsync());
 
         return perHolder
             .Skip(1)
@@ -1319,7 +1319,7 @@ public class InstitutionalHoldingsTools
         if (holderError != null)
             return (null, null, default, holderError);
 
-        var reportDates = await _holdingRepository.GetReportDatesByHolder(holder).ToListAsync();
+        var reportDates = await _holdingRepository.Get13FReportDatesByHolder(holder).ToListAsync();
         if (reportDates.Count == 0)
             return (holder, null, default, $"No 13F holdings reported by {holder.Name}.");
 
