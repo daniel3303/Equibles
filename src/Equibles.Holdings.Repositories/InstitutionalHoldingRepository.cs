@@ -89,6 +89,14 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     public IQueryable<DateOnly> GetAvailableReportDates() =>
         GetAll().DistinctReportDatesDescending();
 
+    // Market-wide 13F-only report dates, newest first. Schedule 13D/G rows carry a daily
+    // event date, not a quarter end (see Get13FHistoryByHolder); including them makes the
+    // "prior" entry the prior day, so a quarter-over-quarter comparison silently degrades
+    // into quarter-vs-single-day. Market-wide activity pages resolve their comparison
+    // window off this list, so it must stay 13F-only.
+    public IQueryable<DateOnly> Get13FAvailableReportDates() =>
+        GetAll().Where(h => h.FilingType == FilingType.Form13F).DistinctReportDatesDescending();
+
     // Latest dates first — see GetAvailableReportDates for the ordering contract.
     public IQueryable<DateOnly> GetReportDatesByStock(CommonStock stock) =>
         GetHistoryByStock(stock).DistinctReportDatesDescending();
