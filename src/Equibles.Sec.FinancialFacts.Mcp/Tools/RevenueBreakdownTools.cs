@@ -36,6 +36,14 @@ public class RevenueBreakdownTools
     ];
     private static readonly string[] AllAxes = [.. SegmentAxes, .. GeographyAxes, .. ProductAxes];
 
+    // srt:ConsolidationItemsAxis = us-gaap:OperatingSegmentsMember is a transparent
+    // qualifier ("this figure is a pure operating-segment total"), not a second slice of
+    // the value. A fact carrying it alongside one real axis still partitions total revenue,
+    // so it must not be discarded as a cross-cut. Issuers such as Apple tag every operating
+    // segment this way from FY2025 on, which otherwise drops the latest fiscal year (#3628).
+    private const string ConsolidationItemsAxis = "srt:ConsolidationItemsAxis";
+    private const string OperatingSegmentsMember = "us-gaap:OperatingSegmentsMember";
+
     // The shortest span a fiscal year can cover — 52 weeks on a 52/53-week calendar with
     // headroom for short transition years (mirrors FinancialStatementsHelper).
     private const int MinAnnualSpanDays = 350;
@@ -100,6 +108,8 @@ public class RevenueBreakdownTools
                 // Annual revenue facts carrying exactly one dimension on a known axis.
                 // Cross-cut facts (e.g. segment × geography) are excluded — including
                 // them in a single-axis mix would double-count the revenue they slice.
+                // The OperatingSegments qualifier (see above) is the one allowed extra
+                // dimension: it tags the fact as a pure segment total without slicing it.
                 var rows = await _financialFactRepository
                     .GetByStock(stock)
                     .Where(f =>
@@ -107,12 +117,18 @@ public class RevenueBreakdownTools
                         && f.PeriodType == FactPeriodType.Duration
                         && f.PeriodStart.AddDays(MinAnnualSpanDays) <= f.PeriodEnd
                         && f.DimensionsKey != ""
-                        && f.Dimensions.Count == 1
-                        && AllAxes.Contains(f.Dimensions.First().Axis)
+                        && f.Dimensions.Count(d => AllAxes.Contains(d.Axis)) == 1
+                        && f.Dimensions.All(d =>
+                            AllAxes.Contains(d.Axis)
+                            || (
+                                d.Axis == ConsolidationItemsAxis
+                                && d.Member == OperatingSegmentsMember
+                            )
+                        )
                     )
                     .Select(f => new DimensionalRevenueRow(
-                        f.Dimensions.First().Axis,
-                        f.Dimensions.First().Member,
+                        f.Dimensions.First(d => AllAxes.Contains(d.Axis)).Axis,
+                        f.Dimensions.First(d => AllAxes.Contains(d.Axis)).Member,
                         f.PeriodEnd,
                         f.Value,
                         f.Unit,
