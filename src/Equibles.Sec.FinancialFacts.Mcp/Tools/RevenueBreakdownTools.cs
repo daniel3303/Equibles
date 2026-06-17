@@ -256,30 +256,221 @@ public class RevenueBreakdownTools
             // Compared against the consolidated total in the SAME unit as the pinned members.
             // Several revenue concepts may each report a total; the members complete the period
             // if they reconcile to any one of them (e.g. ASC 606 revenue vs. total Revenues).
-            var complete =
-                totals.TryGetValue((period.Key, unit), out var candidates)
-                && candidates.Any(total =>
-                    total != 0m
-                    && Math.Abs(latestSum - total) <= Math.Abs(total) * ReconciliationTolerance
-                );
+            var candidates = totals.TryGetValue((period.Key, unit), out var totalsForPeriod)
+                ? totalsForPeriod
+                : [];
+            var complete = candidates.Any(total =>
+                total != 0m
+                && Math.Abs(latestSum - total) <= Math.Abs(total) * ReconciliationTolerance
+            );
 
+            List<DimensionalRevenueRow> periodRows;
             if (complete)
             {
                 // Latest filing re-disaggregates the whole period — keep only its members,
                 // collapsing any duplicate member within the same filing to its first fact.
-                result.AddRange(latestFiling.GroupBy(r => r.Member).Select(g => g.First()));
+                periodRows = latestFiling.GroupBy(r => r.Member).Select(g => g.First()).ToList();
             }
             else
             {
                 // Partial amendment — latest-filed fact wins per member, older members carried.
-                result.AddRange(
-                    period
-                        .GroupBy(r => r.Member)
-                        .Select(g => g.OrderByDescending(r => r.FiledDate).First())
-                );
+                periodRows = period
+                    .GroupBy(r => r.Member)
+                    .Select(g => g.OrderByDescending(r => r.FiledDate).First())
+                    .ToList();
             }
+
+            // An issuer can tag two overlapping disaggregation schemes on the same axis in one
+            // filing (e.g. a regional partition AND a by-country partition), each summing to
+            // consolidated total revenue. Both survive the merge above, so the axis would show
+            // ~2x actual revenue (#3897). Collapse to one scheme when the members partition
+            // cleanly into 2+ full-total subsets; otherwise leave the period untouched.
+            result.AddRange(CollapseOverlappingSchemes(periodRows, candidates));
         }
         return result;
+    }
+
+    // When the members of one period partition into 2+ DISJOINT subsets that EACH reconcile to
+    // a consolidated total revenue (with no member left over), the issuer tagged multiple
+    // overlapping schemes on the same axis. Keep only the MOST GRANULAR full-total subset (the
+    // most members — the most informative view); every full-total subset is individually
+    // correct, so this only chooses which correct view to show, never alters a number.
+    //
+    // Pure arithmetic, no member-name matching. The guard is strict: act only when the members
+    // FULLY partition into >=2 disjoint full-total subsets. A single scheme, or a partial
+    // overlap with no clean second full-total subset, is left unchanged — nothing is dropped.
+    private static List<DimensionalRevenueRow> CollapseOverlappingSchemes(
+        List<DimensionalRevenueRow> periodRows,
+        IReadOnlyList<decimal> candidates
+    )
+    {
+        if (periodRows.Count < 2)
+        {
+            return periodRows;
+        }
+
+        foreach (var total in candidates.Where(t => t != 0m).Distinct())
+        {
+            var tolerance = Math.Abs(total) * ReconciliationTolerance;
+
+            // Skip the trivial case where the whole member set already equals the total — that
+            // is one scheme, not an overlap of two.
+            if (Math.Abs(periodRows.Sum(r => r.Value) - total) <= tolerance)
+            {
+                continue;
+            }
+
+            var partition = FindFullTotalPartition(periodRows, total, tolerance);
+            if (partition != null && partition.Count >= 2)
+            {
+                // Keep the most granular subset; ties broken by the larger summed value, then a
+                // stable member ordering, so the choice is deterministic.
+                return partition
+                    .OrderByDescending(subset => subset.Count)
+                    .ThenByDescending(subset => subset.Sum(r => r.Value))
+                    .ThenBy(subset => string.Join("|", subset.Select(r => r.Member).Order()))
+                    .First();
+            }
+        }
+
+        return periodRows;
+    }
+
+    // Partition the members into disjoint subsets that each sum to `total` (within tolerance),
+    // covering every member exactly once. Returns the cover that minimises the total deviation
+    // from `total` across its subsets — so the genuine schemes (each summing to the exact
+    // consolidated figure) win over a tolerance-admitted near-miss that stitches members from
+    // different schemes together. Returns null when no full cover exists (not a clean overlap).
+    //
+    // Bounded and deterministic: geography axes carry well under 15 members, the candidate
+    // subsets are enumerated by a bounded subset-sum walk anchored on the first uncovered
+    // member, and ties are broken toward more subsets (more schemes) for stability.
+    private static List<List<DimensionalRevenueRow>> FindFullTotalPartition(
+        List<DimensionalRevenueRow> periodRows,
+        decimal total,
+        decimal tolerance
+    )
+    {
+        // Order once so every subset and the final cover are produced deterministically.
+        var members = periodRows
+            .OrderByDescending(r => r.Value)
+            .ThenBy(r => r.Member, StringComparer.Ordinal)
+            .ToList();
+
+        // All subsets summing to total within tolerance, each as a bitmask over `members`.
+        var fullTotalSubsets = new List<(int Mask, decimal Deviation)>();
+        EnumerateFullTotalSubsets(members, 0, 0, 0m, total, tolerance, fullTotalSubsets);
+        if (fullTotalSubsets.Count == 0)
+        {
+            return null;
+        }
+
+        var (bestMasks, found) = FindBestCover(members.Count, fullTotalSubsets, total);
+        if (!found)
+        {
+            return null;
+        }
+
+        return bestMasks
+            .Select(mask =>
+                Enumerable
+                    .Range(0, members.Count)
+                    .Where(i => (mask & (1 << i)) != 0)
+                    .Select(i => members[i])
+                    .ToList()
+            )
+            .ToList();
+    }
+
+    // Depth-first enumeration of every subset of members[startIndex..] whose running sum reaches
+    // `total` within tolerance, recorded as a bitmask plus its absolute deviation from total.
+    private static void EnumerateFullTotalSubsets(
+        List<DimensionalRevenueRow> members,
+        int startIndex,
+        int mask,
+        decimal sum,
+        decimal total,
+        decimal tolerance,
+        List<(int Mask, decimal Deviation)> output
+    )
+    {
+        if (mask != 0 && Math.Abs(sum - total) <= tolerance)
+        {
+            output.Add((mask, Math.Abs(sum - total)));
+            // A superset only adds positive values, moving further from total — so stop here.
+            return;
+        }
+        if (sum - total > tolerance)
+        {
+            return;
+        }
+
+        for (var i = startIndex; i < members.Count; i++)
+        {
+            EnumerateFullTotalSubsets(
+                members,
+                i + 1,
+                mask | (1 << i),
+                sum + members[i].Value,
+                total,
+                tolerance,
+                output
+            );
+        }
+    }
+
+    // Choose the disjoint cover of all members (each index used once) built from the full-total
+    // subsets, minimising summed deviation, then preferring more subsets. Anchors each step on
+    // the lowest uncovered index so the search is forced and bounded.
+    private static (List<int> Masks, bool Found) FindBestCover(
+        int memberCount,
+        List<(int Mask, decimal Deviation)> subsets,
+        decimal total
+    )
+    {
+        var allCovered = (1 << memberCount) - 1;
+        List<int> best = null;
+        var bestDeviation = decimal.MaxValue;
+
+        void Search(int covered, List<int> chosen, decimal deviation)
+        {
+            if (deviation >= bestDeviation)
+            {
+                return;
+            }
+            if (covered == allCovered)
+            {
+                if (
+                    best == null
+                    || deviation < bestDeviation
+                    || (deviation == bestDeviation && chosen.Count > best.Count)
+                )
+                {
+                    best = [.. chosen];
+                    bestDeviation = deviation;
+                }
+                return;
+            }
+
+            var anchor = 0;
+            while ((covered & (1 << anchor)) != 0)
+            {
+                anchor++;
+            }
+
+            foreach (var (mask, dev) in subsets)
+            {
+                if ((mask & (1 << anchor)) != 0 && (mask & covered) == 0)
+                {
+                    chosen.Add(mask);
+                    Search(covered | mask, chosen, deviation + dev);
+                    chosen.RemoveAt(chosen.Count - 1);
+                }
+            }
+        }
+
+        Search(0, [], 0m);
+        return (best ?? [], best != null);
     }
 
     // Pivot one axis's rows into period-end columns (oldest first) × member rows. Filings
