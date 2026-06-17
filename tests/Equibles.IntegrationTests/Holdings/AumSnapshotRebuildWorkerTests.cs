@@ -82,6 +82,30 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
         protected override TimeSpan SleepInterval => TimeSpan.FromMilliseconds(1);
     }
 
+    // The worker backfills on a 1ms loop, so snapshot rows land asynchronously
+    // after StartAsync. Poll a fresh context until the expected state appears
+    // rather than sleeping a fixed interval — the old 500ms wait flaked when the
+    // backfill outlasted it on a slow host or a cold test container (#3780).
+    private async Task WaitForSnapshots(
+        Func<Equibles.Data.EquiblesFinancialDbContext, Task<bool>> ready
+    )
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (true)
+        {
+            await using (var ctx = _fixture.CreateDbContext())
+            {
+                if (await ready(ctx))
+                    return;
+            }
+
+            if (DateTime.UtcNow > deadline)
+                return; // let the assertion report the shortfall with detail
+
+            await Task.Delay(25);
+        }
+    }
+
     [Fact]
     public async Task ExecuteAsync_EmptySnapshotsButHoldingsExist_BackfillsEveryQuarter()
     {
@@ -101,7 +125,9 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
         // awaits ExecuteAsync, so contexts created by the loop are guaranteed
         // to be idle by the time DisposeAsync disposes them.
         await worker.StartAsync(cts.Token);
-        await Task.Delay(TimeSpan.FromMilliseconds(500), cts.Token);
+        await WaitForSnapshots(async ctx =>
+            await ctx.Set<AumQuarterlySnapshot>().CountAsync() >= 2
+        );
         await worker.StopAsync(CancellationToken.None);
 
         await using var read = FreshContext();
@@ -150,7 +176,13 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await worker.StartAsync(cts.Token);
-        await Task.Delay(TimeSpan.FromMilliseconds(500), cts.Token);
+        // Wait for both quarters present AND the Q4 sentinel overwritten — the
+        // upsert lands both in one backfill pass, so this is satisfied together.
+        await WaitForSnapshots(async ctx =>
+            await ctx.Set<AumQuarterlySnapshot>().CountAsync() >= 2
+            && await ctx.Set<AumQuarterlySnapshot>()
+                .AnyAsync(s => s.ReportDate == Q4 && s.TotalValue == 200_000)
+        );
         await worker.StopAsync(CancellationToken.None);
 
         await using var read = FreshContext();
@@ -238,7 +270,10 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await worker.StartAsync(cts.Token);
-        await Task.Delay(TimeSpan.FromMilliseconds(500), cts.Token);
+        await WaitForSnapshots(async ctx =>
+            await ctx.Set<HolderQuarterlySnapshot>()
+                .CountAsync(s => s.InstitutionalHolderId == holder.Id) >= quarters.Count
+        );
         await worker.StopAsync(CancellationToken.None);
 
         await using var read = FreshContext();
