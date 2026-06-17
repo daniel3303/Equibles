@@ -28,6 +28,15 @@ public class FinancialFactsTools
     private const int MaxResultsCap = 200;
     private const int MaxTickers = 25;
 
+    // A 10-Q tags each flow line twice under the same fiscal (year, period): the
+    // discrete three-month quarter and the fiscal year-to-date (6 months at Q2,
+    // 9 at Q3). A quarterly query must surface the discrete quarter, so prefer a
+    // duration spanning at most one quarter; the annual period symmetrically
+    // prefers a full-year span. The longest a discrete quarter runs (14-week
+    // 4-4-5 quarter, with headroom) and the shortest a fiscal year runs (52 weeks).
+    private const int MaxDiscreteQuarterDays = 100;
+    private const int MinAnnualSpanDays = 350;
+
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
     private readonly CommonStockRepository _commonStockRepository;
@@ -339,7 +348,29 @@ public class FinancialFactsTools
         bool asOriginallyReported = false
     )
     {
-        var byPriority = facts.OrderBy(f => conceptPriority[f.FinancialConceptId]);
+        var candidates = facts.ToList();
+
+        // Prefer the fact whose duration matches the fiscal period's granularity, so a
+        // quarter reads as the discrete three months and never the year-to-date total a
+        // 10-Q tags under the same fiscal Q2/Q3 (the financials tab handles this in
+        // FinancialStatementsHelper.PickCurrentlyReportedFact). Instants (balance sheet,
+        // zero span) always qualify; if nothing matches the span, keep every candidate.
+        var fiscalPeriod = candidates[0].FiscalPeriod;
+        var preferredSpan = candidates
+            .Where(f =>
+            {
+                if (f.PeriodType != FactPeriodType.Duration)
+                    return true;
+                var spanDays = f.PeriodEnd.DayNumber - f.PeriodStart.DayNumber;
+                return fiscalPeriod == SecFiscalPeriod.FullYear
+                    ? spanDays >= MinAnnualSpanDays
+                    : spanDays <= MaxDiscreteQuarterDays;
+            })
+            .ToList();
+        if (preferredSpan.Count > 0)
+            candidates = preferredSpan;
+
+        var byPriority = candidates.OrderBy(f => conceptPriority[f.FinancialConceptId]);
         return asOriginallyReported
             ? byPriority.ThenBy(f => f.FiledDate).ThenBy(f => f.AccessionNumber).First()
             : byPriority
