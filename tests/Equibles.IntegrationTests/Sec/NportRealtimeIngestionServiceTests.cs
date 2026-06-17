@@ -302,20 +302,20 @@ public class NportRealtimeIngestionServiceTests
             "\n",
             holdings.Select(h =>
                 $"""
-                  <invstOrSec>
-                    <name>{h.name}</name>
-                    <cusip>{h.cusip}</cusip>
-                    <balance>1.00</balance>
-                    <units>NS</units>
-                    <curCd>USD</curCd>
-                    <valUSD>{h.valueUsd}</valUSD>
-                    <pctVal>1.00</pctVal>
-                    <payoffProfile>Long</payoffProfile>
-                    <assetCat>EC</assetCat>
-                    <issuerCat>CORP</issuerCat>
-                    <invCountry>US</invCountry>
-                  </invstOrSec>
-                """
+                      <invstOrSec>
+                        <name>{h.name}</name>
+                        <cusip>{h.cusip}</cusip>
+                        <balance>1.00</balance>
+                        <units>NS</units>
+                        <curCd>USD</curCd>
+                        <valUSD>{h.valueUsd}</valUSD>
+                        <pctVal>1.00</pctVal>
+                        <payoffProfile>Long</payoffProfile>
+                        <assetCat>EC</assetCat>
+                        <issuerCat>CORP</issuerCat>
+                        <invCountry>US</invCountry>
+                      </invstOrSec>
+                    """
             )
         );
 
