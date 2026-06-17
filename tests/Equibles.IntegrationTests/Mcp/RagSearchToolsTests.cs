@@ -237,8 +237,10 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
         var result = await Sut().SearchDocuments("services segment revenue", maxResults: -1);
 
         result.Should().NotContain("An error occurred while executing");
-        // Clamped to zero rows → the standard empty-result message.
-        result.Should().Be("No relevant financial documents found.");
+        // McpLimit.Clamp floors a non-positive cap at 1 (never turns "has data" into "no data"),
+        // so the seeded document is still returned rather than a false empty-result message.
+        result.Should().NotBe("No relevant financial documents found.");
+        result.Should().Contain("services segment");
     }
 
     // ── SearchCompanyDocuments ──────────────────────────────────────────

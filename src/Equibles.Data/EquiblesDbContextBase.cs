@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace Equibles.Data;
 
@@ -22,6 +23,24 @@ public abstract class EquiblesDbContextBase : DbContext
         : base(options)
     {
         _modules = modules;
+    }
+
+    /// <summary>
+    /// Stable identity of this context's module composition, used by
+    /// <see cref="ModuleAwareModelCacheKeyFactory"/> so contexts of the same type
+    /// built from different module sets cache distinct models. Constant per
+    /// context type in production.
+    /// </summary>
+    internal string ModuleCacheKey =>
+        string.Join(
+            ",",
+            _modules.Select(m => m.GetType().FullName).OrderBy(name => name, StringComparer.Ordinal)
+        );
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        base.OnConfiguring(optionsBuilder);
+        optionsBuilder.ReplaceService<IModelCacheKeyFactory, ModuleAwareModelCacheKeyFactory>();
     }
 
     protected override void OnModelCreating(ModelBuilder builder)
