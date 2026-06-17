@@ -11,7 +11,10 @@ namespace Equibles.Sec.Data.Models;
 /// issuer categories NPORT reports as short codes (e.g. asset "EC" equity-common, "DBT" debt,
 /// "DE" derivative; issuer "CORP" corporate, "RF" registered fund).
 /// </summary>
-[Index(nameof(NportFilingId))]
+// Composite (NportFilingId, ValueUsd) backs the fund-profile holdings page: it filters a single
+// filing's lines and returns them value-ordered for paging without a separate sort, and its leading
+// column still serves every plain NportFilingId lookup. Supersedes the bare NportFilingId index.
+[Index(nameof(NportFilingId), nameof(ValueUsd))]
 [Index(nameof(Cusip))]
 public class NportHolding
 {

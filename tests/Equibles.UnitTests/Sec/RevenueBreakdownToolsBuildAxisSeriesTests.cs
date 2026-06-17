@@ -65,7 +65,10 @@ public class RevenueBreakdownToolsBuildAxisSeriesTests
         var (unit, periodEnds, members) = RevenueBreakdownTools.BuildAxisSeries(
             rows,
             ["us-gaap:StatementBusinessSegmentsAxis"],
-            maxYears: 8
+            maxYears: 8,
+            // No consolidated total seeded — every period falls to the latest-filed-per-member
+            // merge, the behaviour this test pins.
+            new Dictionary<(DateOnly, string), IReadOnlyList<decimal>>()
         );
 
         unit.Should().Be("USD");
