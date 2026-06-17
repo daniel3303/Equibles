@@ -123,15 +123,15 @@ public class HoldingsRealtimeIngestionZeroHoldingsSkipTests : IAsyncLifetime
                 var file = ci.ArgAt<string>(2);
                 var xml = file.Equals("primary_doc.xml", StringComparison.OrdinalIgnoreCase)
                     ? """
-                    <edgarSubmission xmlns="http://www.sec.gov/edgar/thirteenffiler">
-                      <headerData><filerInfo><filer><credentials><cik>0001067983</cik></credentials></filer></filerInfo></headerData>
-                      <formData><coverPage>
-                        <reportCalendarOrQuarter>09-30-2024</reportCalendarOrQuarter>
-                        <isAmendment>false</isAmendment>
-                        <filingManager><name>EMPTY FILER</name></filingManager>
-                      </coverPage></formData>
-                    </edgarSubmission>
-                    """
+                        <edgarSubmission xmlns="http://www.sec.gov/edgar/thirteenffiler">
+                          <headerData><filerInfo><filer><credentials><cik>0001067983</cik></credentials></filer></filerInfo></headerData>
+                          <formData><coverPage>
+                            <reportCalendarOrQuarter>09-30-2024</reportCalendarOrQuarter>
+                            <isAmendment>false</isAmendment>
+                            <filingManager><name>EMPTY FILER</name></filingManager>
+                          </coverPage></formData>
+                        </edgarSubmission>
+                        """
                     // Well-formed information table with NO infoTable rows.
                     : """<informationTable xmlns="http://www.sec.gov/edgar/document/thirteenf/informationtable" />""";
                 return Encoding.UTF8.GetBytes(xml);
