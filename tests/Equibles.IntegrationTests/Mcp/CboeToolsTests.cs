@@ -123,8 +123,12 @@ public class CboeToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetPutCallRatios_NullVolumes_RenderEmDash()
+    public async Task GetPutCallRatios_NullPutVolume_RendersEmDash()
     {
+        // OnlyReconcilable (#3760) requires a positive call denominator and a ratio below total
+        // volume, so a fully-null row is dropped from the served series. PutVolume is the one
+        // optional column that can be null on an otherwise-reconcilable row, and it must still
+        // render as an em-dash rather than a blank or a zero.
         DbContext
             .Set<CboePutCallRatio>()
             .Add(
@@ -132,10 +136,10 @@ public class CboeToolsTests : ParadeDbMcpTestBase
                 {
                     RatioType = CboePutCallRatioType.Vix,
                     Date = new DateOnly(2026, 4, 1),
-                    CallVolume = null,
+                    CallVolume = 1_000_000,
                     PutVolume = null,
-                    TotalVolume = null,
-                    PutCallRatio = null,
+                    TotalVolume = 2_000_000,
+                    PutCallRatio = 0.5m,
                 }
             );
         await DbContext.SaveChangesAsync();
@@ -144,7 +148,7 @@ public class CboeToolsTests : ParadeDbMcpTestBase
             .GetPutCallRatios(type: "Vix", startDate: "2026-03-01", endDate: "2026-04-30");
 
         result.Should().Contain("2026-04-01");
-        result.Should().Contain("| — | — | — | — |");
+        result.Should().Contain("| 1,000,000 | — | 2,000,000 | 0.50 |");
     }
 
     // ── GetVixHistory ────────────────────────────────────────────────────

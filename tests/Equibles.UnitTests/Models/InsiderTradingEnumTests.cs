@@ -31,6 +31,7 @@ public class InsiderTradingEnumTests
     [InlineData(TransactionCode.Inheritance, "Inheritance")]
     [InlineData(TransactionCode.Discretionary, "Discretionary")]
     [InlineData(TransactionCode.Other, "Other")]
+    [InlineData(TransactionCode.Holding, "Holding")]
     public void TransactionCode_AllValues_HaveCorrectDisplayName(
         TransactionCode code,
         string expected
@@ -67,7 +68,7 @@ public class InsiderTradingEnumTests
     public void TransactionCode_AllValues_HaveDisplayAttribute()
     {
         var values = Enum.GetValues<TransactionCode>();
-        values.Should().HaveCount(11);
+        values.Should().HaveCount(12);
 
         foreach (var value in values)
         {
