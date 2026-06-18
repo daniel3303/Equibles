@@ -77,13 +77,15 @@ public class RevenueBreakdownToolsReconcileToTotalTests
         );
 
         members.Should().HaveCount(2, "a partial amendment carries the un-amended member forward");
+        // Identify members by the same label the code derives, so the assertion does not depend
+        // on the runtime's ICU/CLDR English name for a country (e.g. "China mainland" vs "China").
         members
-            .Single(m => m.Label == "United States")
+            .Single(m => m.Label == RevenueBreakdownTools.Humanize("country:US"))
             .Values[0]
             .Should()
             .Be(70m, "the restated value wins for the amended member");
         members
-            .Single(m => m.Label == "China mainland")
+            .Single(m => m.Label == RevenueBreakdownTools.Humanize("country:CN"))
             .Values[0]
             .Should()
             .Be(40m, "the un-amended member carries forward from the prior filing");
