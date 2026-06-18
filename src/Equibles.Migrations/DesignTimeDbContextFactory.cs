@@ -7,6 +7,7 @@ using Equibles.Errors.Data;
 using Equibles.FdaCatalysts.Data;
 using Equibles.Finra.Data;
 using Equibles.Fred.Data;
+using Equibles.GovernmentContracts.Data;
 using Equibles.Holdings.Data;
 using Equibles.InsiderTrading.Data;
 using Equibles.Media.Data;
@@ -59,6 +60,7 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<EquiblesFi
             new CftcModuleConfiguration(),
             new CboeModuleConfiguration(),
             new FdaCatalystsModuleConfiguration(),
+            new GovernmentContractsModuleConfiguration(),
             new SecModuleConfiguration(),
             new FinancialFactsModuleConfiguration(),
             new MediaModuleConfiguration(),

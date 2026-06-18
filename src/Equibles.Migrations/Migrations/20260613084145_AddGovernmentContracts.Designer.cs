@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Equibles.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    partial class EquiblesDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260613084145_AddGovernmentContracts")]
+    partial class AddGovernmentContracts
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -251,10 +254,6 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
-                    b.Property<string>("EntityType")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
                     b.Property<int?>("FiscalYearEndDay")
                         .HasColumnType("integer");
 
@@ -270,9 +269,6 @@ namespace Equibles.Migrations.Migrations
                     b.Property<string>("InvestorRelationsUrl")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
-
-                    b.Property<DateTime?>("IrContentScrapedAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("IrPlatformType")
                         .HasColumnType("integer");
@@ -292,10 +288,6 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<long>("SharesOutStanding")
                         .HasColumnType("bigint");
-
-                    b.Property<string>("Sic")
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)");
 
                     b.Property<string>("Ticker")
                         .HasMaxLength(16)
@@ -321,6 +313,126 @@ namespace Equibles.Migrations.Migrations
                         .IsUnique();
 
                     b.ToTable("CommonStock");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.EarningsCalendarEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CommonStockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FiscalQuarter")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FiscalYear")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly>("ScheduledDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScheduledDate");
+
+                    b.HasIndex("CommonStockId", "FiscalYear", "FiscalQuarter")
+                        .IsUnique();
+
+                    b.ToTable("EarningsCalendarEntry");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.IrEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CommonStockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartDateTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CommonStockId", "StartDateTime");
+
+                    b.HasIndex("CommonStockId", "StartDateTime", "Title")
+                        .IsUnique();
+
+                    b.ToTable("IrEvent");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.IrNewsItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CommonStockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Summary")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CommonStockId", "PublishedAt");
+
+                    b.HasIndex("CommonStockId", "Url")
+                        .IsUnique();
+
+                    b.ToTable("IrNewsItem");
                 });
 
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.Taxonomies.Industry", b =>
@@ -546,60 +658,6 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("Source");
 
                     b.ToTable("Errors");
-                });
-
-            modelBuilder.Entity("Equibles.FdaCatalysts.Data.Models.FdaCatalyst", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("CatalystType")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Center")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("CommonStockId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreationTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateOnly?>("EndDate")
-                        .HasColumnType("date");
-
-                    b.Property<DateOnly>("MeetingDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("SourceReference")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("SourceUrl")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Summary")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CommonStockId");
-
-                    b.HasIndex("MeetingDate");
-
-                    b.HasIndex("SourceReference")
-                        .IsUnique();
-
-                    b.HasIndex("CatalystType", "MeetingDate");
-
-                    b.ToTable("FdaCatalyst");
                 });
 
             modelBuilder.Entity("Equibles.Finra.Data.Models.DailyShortVolume", b =>
@@ -1057,45 +1115,6 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("HolderQuarterlySnapshot");
                 });
 
-            modelBuilder.Entity("Equibles.Holdings.Data.Models.HoldingsReconciliationLog", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreationTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Details")
-                        .HasColumnType("text");
-
-                    b.Property<string>("HolderCik")
-                        .HasColumnType("text");
-
-                    b.Property<string>("HolderName")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("InstitutionalHolderId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Outcome")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("QuartersReingested")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("TriggeredBy")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreationTime");
-
-                    b.HasIndex("InstitutionalHolderId");
-
-                    b.ToTable("HoldingsReconciliationLog");
-                });
-
             modelBuilder.Entity("Equibles.Holdings.Data.Models.InstitutionalFiling", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1132,9 +1151,9 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("AccessionNumber")
                         .IsUnique();
 
-                    b.HasIndex("InstitutionalHolderId");
+                    b.HasIndex("FilingDate");
 
-                    b.HasIndex("FilingDate", "AccessionNumber");
+                    b.HasIndex("InstitutionalHolderId");
 
                     b.ToTable("InstitutionalFiling");
                 });
@@ -1280,7 +1299,7 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasIndex("InstitutionalHolderId", "ReportDate");
 
-                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("InstitutionalHolderId", "ReportDate"), new[] { "CommonStockId", "Value", "Shares", "FilingDate" });
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("InstitutionalHolderId", "ReportDate"), new[] { "CommonStockId", "Value", "Shares" });
 
                     b.HasIndex("ReportDate", "CommonStockId", "InstitutionalHolderId");
 
@@ -1656,9 +1675,6 @@ namespace Equibles.Migrations.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool?>("IsPriceValid")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool?>("IsRule10b5One")
                         .HasColumnType("boolean");
 
                     b.PrimitiveCollection<List<string>>("Notes")
@@ -2181,82 +2197,6 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("FormDRelatedPerson");
                 });
 
-            modelBuilder.Entity("Equibles.Sec.Data.Models.FundSeries", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("CommonStockId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("ComputedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FundType")
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<string>("IdentityKey")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<DateOnly>("LatestFilingDate")
-                        .HasColumnType("date");
-
-                    b.Property<DateOnly>("LatestReportPeriodDate")
-                        .HasColumnType("date");
-
-                    b.Property<decimal>("NetAssets")
-                        .HasColumnType("numeric");
-
-                    b.Property<int>("PositionCount")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("RegistrantCik")
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<string>("RegistrantName")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<string>("SeriesId")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("SeriesName")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<string>("Slug")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("Ticker")
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<decimal>("TotalAssets")
-                        .HasColumnType("numeric");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CommonStockId");
-
-                    b.HasIndex("IdentityKey")
-                        .IsUnique();
-
-                    b.HasIndex("Slug")
-                        .IsUnique();
-
-                    b.HasIndex("RegistrantCik", "SeriesId");
-
-                    b.ToTable("FundSeries");
-                });
-
             modelBuilder.Entity("Equibles.Sec.Data.Models.NCenFiling", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2367,7 +2307,7 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
-                    b.Property<Guid?>("CommonStockId")
+                    b.Property<Guid>("CommonStockId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreationTime")
@@ -2387,10 +2327,6 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<int>("ParserVersion")
                         .HasColumnType("integer");
-
-                    b.Property<string>("RegistrantCik")
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
 
                     b.Property<string>("RegistrantName")
                         .HasMaxLength(512)
@@ -2431,8 +2367,6 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("FilingDate");
 
                     b.HasIndex("ParserVersion");
-
-                    b.HasIndex("RegistrantCik");
 
                     b.HasIndex("CommonStockId", "FilingDate");
 
@@ -2504,31 +2438,9 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasIndex("Cusip");
 
-                    b.HasIndex("NportFilingId", "ValueUsd");
+                    b.HasIndex("NportFilingId");
 
                     b.ToTable("NportHolding");
-                });
-
-            modelBuilder.Entity("Equibles.Sec.Data.Models.ProcessedNportFiling", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AccessionNumber")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<DateTime>("CreationTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AccessionNumber")
-                        .IsUnique();
-
-                    b.ToTable("ProcessedNportFiling");
                 });
 
             modelBuilder.Entity("Equibles.Sec.Data.Models.TranscriptCheckStatus", b =>
@@ -2791,6 +2703,39 @@ namespace Equibles.Migrations.Migrations
                         .HasForeignKey("IndustryId");
 
                     b.Navigation("Industry");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.EarningsCalendarEntry", b =>
+                {
+                    b.HasOne("Equibles.CommonStocks.Data.Models.CommonStock", "CommonStock")
+                        .WithMany()
+                        .HasForeignKey("CommonStockId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CommonStock");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.IrEvent", b =>
+                {
+                    b.HasOne("Equibles.CommonStocks.Data.Models.CommonStock", "CommonStock")
+                        .WithMany()
+                        .HasForeignKey("CommonStockId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CommonStock");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.IrNewsItem", b =>
+                {
+                    b.HasOne("Equibles.CommonStocks.Data.Models.CommonStock", "CommonStock")
+                        .WithMany()
+                        .HasForeignKey("CommonStockId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CommonStock");
                 });
 
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.Taxonomies.Industry", b =>
@@ -3163,7 +3108,9 @@ namespace Equibles.Migrations.Migrations
                 {
                     b.HasOne("Equibles.CommonStocks.Data.Models.CommonStock", "CommonStock")
                         .WithMany()
-                        .HasForeignKey("CommonStockId");
+                        .HasForeignKey("CommonStockId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("CommonStock");
                 });
