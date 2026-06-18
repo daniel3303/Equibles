@@ -11,5 +11,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Equibles.Sec.FinancialFacts.Data\Equibles.Sec.FinancialFacts.Data.csproj" />
+    <ProjectReference Include="..\Equibles.Sec.FinancialFacts.Repositories\Equibles.Sec.FinancialFacts.Repositories.csproj" />
   </ItemGroup>
 </Project>
