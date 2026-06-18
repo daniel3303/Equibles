@@ -1,5 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
+using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Data;
 using Equibles.Data.Extensions;
 using Equibles.Errors.BusinessLogic;
@@ -102,14 +104,18 @@ public class FinancialFactsImportService
         if (lastSeen.HasValue && lastSeen.Value >= maxFiled)
         {
             // Nothing filed since the last successful sync — record the check
-            // and skip the (expensive) re-upsert of the full history.
+            // and skip the (expensive) re-upsert of the full history. Still re-source the share
+            // count: an already-ingested cover-page fact may post-date the stale Yahoo figure
+            // (and this corrects existing rows the first cycle after the change ships).
             await UpsertSyncStatus(stock, lastSeen, cancellationToken);
+            await UpdateSharesOutstanding(stock, cancellationToken);
             return;
         }
 
         try
         {
             await PersistFacts(stock, parsed, maxFiled, cancellationToken);
+            await UpdateSharesOutstanding(stock, cancellationToken);
         }
         // Per-company fault isolation (mirrors FtdImportService): one company's
         // failure is reported and skipped so the worker cycle continues for the
@@ -130,6 +136,29 @@ public class FinancialFactsImportService
                 $"ticker: {stock.Ticker}, cik: {stock.Cik}"
             );
         }
+    }
+
+    // Sets the stock's share count from the authoritative SEC cover-page fact the import just
+    // ingested, so the lagging per-share-class Yahoo figure no longer drives market cap and
+    // ownership percentages (#3575/#2503). No-ops when the issuer has no consolidated fact
+    // (multi-class filers — summed across classes elsewhere) or the value is unchanged.
+    private async Task UpdateSharesOutstanding(CommonStock stock, CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var sharesProvider = scope.ServiceProvider.GetRequiredService<SharesOutstandingProvider>();
+        var shares = await sharesProvider.GetReportedSharesOutstanding(stock, cancellationToken);
+        if (shares == null)
+            return;
+
+        var stockRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var tracked = await stockRepository
+            .GetByIds([stock.Id])
+            .FirstOrDefaultAsync(cancellationToken);
+        if (tracked == null || tracked.SharesOutStanding == shares.Value)
+            return;
+
+        tracked.SharesOutStanding = shares.Value;
+        await stockRepository.SaveChanges();
     }
 
     private async Task PersistFacts(

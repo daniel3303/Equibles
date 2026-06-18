@@ -47,6 +47,10 @@ public static class FinancialConceptAliases
         ["stockholders-equity"] = [new(FactTaxonomy.UsGaap, "StockholdersEquity")],
         ["retained-earnings"] = [new(FactTaxonomy.UsGaap, "RetainedEarningsAccumulatedDeficit")],
         ["cash"] = [new(FactTaxonomy.UsGaap, "CashAndCashEquivalentsAtCarryingValue")],
+        // The issuer's cover-page common shares outstanding. Single-class filers report it
+        // consolidated (no dimension); multi-class filers report it only per share class, so a
+        // consolidated fact is absent and the entity total is the sum across classes.
+        ["shares-outstanding"] = [new(FactTaxonomy.Dei, "EntityCommonStockSharesOutstanding")],
         ["operating-cash-flow"] =
         [
             new(FactTaxonomy.UsGaap, "NetCashProvidedByUsedInOperatingActivities"),

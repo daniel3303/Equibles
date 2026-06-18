@@ -5,6 +5,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.Integrations.Yahoo.Models;
+using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Worker;
 using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.Repositories;
@@ -184,11 +185,22 @@ public class YahooPriceImportService
 
         var stock = await stockRepo.Get(commonStockId);
 
+        // The SEC cover-page count (dei:EntityCommonStockSharesOutstanding) is authoritative and
+        // current; Yahoo's figure is per-share-class and lags corporate actions. Defer to EDGAR
+        // for the share count when the issuer has a consolidated SEC fact, so Yahoo can't overwrite
+        // it with a stale or single-class value (#3575/#2503).
+        var sharesProvider = scope.ServiceProvider.GetRequiredService<SharesOutstandingProvider>();
+        var edgarShares = await sharesProvider.GetReportedSharesOutstanding(stock, cancellationToken);
+
         // Per-field conservative writes: only update on actual change, and never
         // overwrite a known value with 0 (treated as Yahoo "unknown" by the rest of
         // the codebase).
         var changed = false;
-        if (stats.SharesOutstanding != 0 && stock.SharesOutStanding != stats.SharesOutstanding)
+        if (
+            edgarShares == null
+            && stats.SharesOutstanding != 0
+            && stock.SharesOutStanding != stats.SharesOutstanding
+        )
         {
             stock.SharesOutStanding = stats.SharesOutstanding;
             changed = true;
