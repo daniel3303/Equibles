@@ -29,18 +29,23 @@ public class WikidataWebsiteSource : IWebsiteSource
         CancellationToken cancellationToken
     )
     {
-        var stocksByCik = stocks
+        var stockGroups = stocks
             .Where(s => !string.IsNullOrWhiteSpace(s.Cik))
             .GroupBy(s => s.Cik)
-            .ToDictionary(g => g.Key, g => g.First());
-        if (stocksByCik.Count == 0)
+            .ToList();
+        if (stockGroups.Count == 0)
             return new Dictionary<Guid, string>();
 
         var websitesByCik = await _wikidataClient.GetOfficialWebsitesByCik(
-            stocksByCik.Keys,
+            stockGroups.Select(g => g.Key).ToList(),
             cancellationToken
         );
 
-        return websitesByCik.ToDictionary(pair => stocksByCik[pair.Key].Id, pair => pair.Value);
+        // One Wikidata website per CIK fans out to every stock sharing that CIK
+        // (dual-class issuers like GOOGL/GOOG), not just the first one seen.
+        return stockGroups
+            .Where(g => websitesByCik.ContainsKey(g.Key))
+            .SelectMany(g => g.Select(s => (s.Id, Website: websitesByCik[g.Key])))
+            .ToDictionary(x => x.Id, x => x.Website);
     }
 }

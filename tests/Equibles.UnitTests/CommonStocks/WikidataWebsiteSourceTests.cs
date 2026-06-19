@@ -38,9 +38,7 @@ public class WikidataWebsiteSourceTests
             .Be(new KeyValuePair<Guid, string>(withAnswer.Id, "https://apple.com/"));
     }
 
-    [Fact(
-        Skip = "GH-3818 — FindWebsites drops CIK-siblings; only the first stock sharing a CIK gets the website"
-    )]
+    [Fact]
     public async Task TwoStocksSharingACik_BothReceiveTheWebsite()
     {
         // Dual-class issuers (e.g. GOOGL/GOOG) are separate stocks that share one CIK; Wikidata
