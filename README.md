@@ -184,6 +184,7 @@ The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, 
 - **Futures Positioning** — COT positioning data, latest snapshot across all contracts, contract search
 - **Market Indicators** — VIX historical data, put/call ratios by type (equity, index, total, VIX, ETP)
 - **Government Contracts** — Federal contract awards won by a ticker (awarding agency, amount, period dates) and a ranking of the top public-company contractors by total federal dollars over a date range (USAspending.gov)
+- **FDA Catalysts** — Scheduled FDA advisory-committee (AdComm) meetings over a date range — the regulatory catalyst dates that move biotech and pharma stocks (FDA.gov)
 
 ### Connecting to Claude Desktop
 
