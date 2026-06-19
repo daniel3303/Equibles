@@ -150,6 +150,19 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetPutCallRatios` — put/call ratios by category (equity, index, total, VIX, ETP).
 - `GetVixHistory` — daily VIX OHLC history (1990-present once backfilled).
 
+### `mcp.AddGovernmentContracts()` — federal contract awards
+
+`GovernmentContractsTools`:
+
+- `GetGovernmentContracts` — federal contract awards (USAspending.gov) won by one public company, with awarding agency, award amount, period dates, and description.
+- `GetTopGovernmentContractors` — rank public companies by total federal contract dollars awarded over a date range.
+
+### `mcp.AddFdaCatalysts()` — FDA advisory-committee meetings
+
+`FdaCatalystTools`:
+
+- `GetFdaCatalysts` — scheduled FDA advisory-committee (AdComm) meetings from the FDA.gov calendar — the regulatory catalyst dates that move biotech and pharma stocks.
+
 ## Tool implementation conventions
 
 - Every tool method runs through [`McpToolExecutor.Execute`](../../src/Equibles.Mcp/McpToolExecutor.cs), which wraps the body in a try/catch and logs failures.
