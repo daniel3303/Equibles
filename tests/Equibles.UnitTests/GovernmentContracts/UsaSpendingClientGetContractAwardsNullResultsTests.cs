@@ -14,7 +14,7 @@ namespace Equibles.UnitTests.GovernmentContracts;
 /// </summary>
 public class UsaSpendingClientGetContractAwardsNullResultsTests
 {
-    [Fact(Skip = "GH-3802 — GetContractAwards NREs when a page's results field is JSON null")]
+    [Fact]
     public async Task GetContractAwards_ResultsFieldIsNull_ReturnsEmptyWithoutThrowing()
     {
         const string body = "{\"results\":null,\"page_metadata\":{\"page\":1,\"hasNext\":false}}";

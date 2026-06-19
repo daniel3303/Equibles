@@ -134,8 +134,13 @@ public class UsaSpendingClient : IUsaSpendingClient
             return _httpClient.SendAsync(request);
         });
 
-        return JsonConvert.DeserializeObject<UsaSpendingAwardResponse>(content)
+        var response =
+            JsonConvert.DeserializeObject<UsaSpendingAwardResponse>(content)
             ?? new UsaSpendingAwardResponse();
+        // A page with "results": null overwrites the model's default empty list with null;
+        // restore the non-null invariant so callers can read Results without a guard.
+        response.Results ??= [];
+        return response;
     }
 
     private async Task<string> SendWithRetry(Func<Task<HttpResponseMessage>> sendRequest)
