@@ -89,6 +89,14 @@ public static class UsaSpendingAwardMapper
         if (string.IsNullOrWhiteSpace(value))
             return null;
         var trimmed = value.Trim();
-        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
+        if (trimmed.Length <= maxLength)
+            return trimmed;
+        // Don't split a surrogate pair at the cap — back off one unit so the result
+        // stays well-formed UTF-16 (Postgres rejects lone surrogates in text columns).
+        var end =
+            maxLength > 0 && char.IsHighSurrogate(trimmed[maxLength - 1])
+                ? maxLength - 1
+                : maxLength;
+        return trimmed[..end];
     }
 }

@@ -98,7 +98,7 @@ public class UsaSpendingAwardMapperTests
         entity.NaicsCode.Should().Be("541512");
     }
 
-    [Fact(Skip = "GH-3786 — Truncate splits surrogate pairs, leaving an orphaned surrogate")]
+    [Fact]
     public void Map_truncating_an_over_long_recipient_name_does_not_split_a_surrogate_pair()
     {
         // Contract: truncation must yield a well-formed prefix. Slicing by char index at
