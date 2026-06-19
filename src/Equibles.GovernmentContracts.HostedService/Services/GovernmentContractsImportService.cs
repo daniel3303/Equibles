@@ -197,7 +197,7 @@ public class GovernmentContractsImportService : IImporter
         var latest = await repository
             .GetAll()
             .Where(c => c.ActionDate != null)
-            .MaxAsync(c => (DateOnly?)c.ActionDate, cancellationToken);
+            .MaxAsync(c => c.ActionDate, cancellationToken);
 
         return SyncDateResolver.Resolve(latest ?? default, _workerOptions);
     }
