@@ -183,6 +183,7 @@ The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, 
 - **Stock Prices** — Daily OHLCV history with adjusted close, latest close across one or more tickers, and on-demand technical indicators (EMA, Stochastic Oscillator, Average True Range, On-Balance Volume, Bollinger Bands)
 - **Futures Positioning** — COT positioning data, latest snapshot across all contracts, contract search
 - **Market Indicators** — VIX historical data, put/call ratios by type (equity, index, total, VIX, ETP)
+- **Government Contracts** — Federal contract awards won by a ticker (awarding agency, amount, period dates) and a ranking of the top public-company contractors by total federal dollars over a date range (USAspending.gov)
 
 ### Connecting to Claude Desktop
 
