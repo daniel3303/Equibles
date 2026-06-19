@@ -70,6 +70,23 @@ public class WikidataClientTests
     }
 
     [Fact]
+    public async Task EqualLengthWebsites_OrdinallySmallestWins_RegardlessOfBindingOrder()
+    {
+        // Contract: among equal-length candidates the pick is the ordinally-smallest URL,
+        // deterministically — so binding order must not change the result.
+        var (client, _) = BuildSut(
+            SparqlJson(
+                ("0000320193", "https://zzz.example/"),
+                ("0000320193", "https://aaa.example/")
+            )
+        );
+
+        var result = await client.GetOfficialWebsitesByCik(["320193"], CancellationToken.None);
+
+        result["320193"].Should().Be("https://aaa.example/");
+    }
+
+    [Fact]
     public async Task UnknownCiks_AreAbsentFromTheResult()
     {
         var (client, _) = BuildSut(SparqlJson(("0000320193", "https://apple.com/")));
