@@ -44,7 +44,7 @@ The background-scraper host. Plain `Host.CreateApplicationBuilder` (not `WebAppl
 - Current binds: `WorkerOptions`, `DocumentScraperOptions`, `FinraOptions` + `FinraScraperOptions`, `FredOptions` + `FredScraperOptions`, `FtdScraperOptions`, `FinancialFactsScraperOptions`, `YahooPriceScraperOptions`, `CftcScraperOptions`, `CboeScraperOptions`.
 - Each scraper reads its own section so per-source tuning never leaks across modules.
 - Per-module `Add*Worker()` extensions register the `BackgroundService` workers from each `.HostedService` project.
-- Current set: `AddSecWorker()`, `AddSecFinancialFactsWorker()`, `AddFinraWorker()`, `AddFredWorker()`, `AddYahooWorker()`, `AddCftcWorker()`, `AddCboeWorker()`, `AddCongressWorker()`, `AddHoldingsWorker()`.
+- Current set: `AddSecWorker()`, `AddSecFinancialFactsWorker()`, `AddFinraWorker()`, `AddFredWorker()`, `AddYahooWorker()`, `AddCftcWorker()`, `AddCboeWorker()`, `AddCongressWorker()`, `AddHoldingsWorker()`, `AddCommonStocksWorker()`, `AddFdaCatalystWorker()`.
 - `AddWorkerServices()` wires the cross-cutting worker plumbing (`SyncDateResolver`, etc.).
 - Per `Directory.Build.props`, every `.HostedService` project shares the global usings `Microsoft.Extensions.{DependencyInjection,Hosting,Logging,Options}` + `Equibles.Data` + `Equibles.Core`.
 
