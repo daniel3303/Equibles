@@ -16,6 +16,8 @@ Index of the financial-domain modules in `src/`. Each row is one logical domain;
 | **FINRA Short Data** ([`Equibles.Finra.*`](../../src/Equibles.Finra.Data)) | FINRA API | `DailyShortVolume`, `ShortInterest` | `FinraScraperWorker` | `Equibles.Finra.Mcp` |
 | **CFTC** ([`Equibles.Cftc.*`](../../src/Equibles.Cftc.Data)) | CFTC Commitments of Traders | `CftcContract`, `CftcContractCategory`, `CftcPositionReport` | `CftcScraperWorker` | `Equibles.Cftc.Mcp` |
 | **CBOE** ([`Equibles.Cboe.*`](../../src/Equibles.Cboe.Data)) | CBOE | `CboeVixDaily`, `CboePutCallRatio` (with `CboePutCallRatioType` enum) | `CboeScraperWorker` | `Equibles.Cboe.Mcp` |
+| **Government Contracts** ([`Equibles.GovernmentContracts.*`](../../src/Equibles.GovernmentContracts.Data)) | USAspending.gov | `GovernmentContract` (with `GovernmentContractAwardType` enum) | `GovernmentContractsScraperWorker` | `Equibles.GovernmentContracts.Mcp` |
+| **FDA Catalysts** ([`Equibles.FdaCatalysts.*`](../../src/Equibles.FdaCatalysts.Data)) | FDA.gov advisory-committee calendar | `FdaCatalyst` (with `FdaCatalystType` enum) | `FdaCatalystScraperWorker` | `Equibles.FdaCatalysts.Mcp` |
 
 ## Cross-cutting modules
 
