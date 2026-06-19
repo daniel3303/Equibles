@@ -1,7 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
-using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Data;
 using Equibles.Data.Extensions;
 using Equibles.Errors.BusinessLogic;
@@ -9,6 +8,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models.Responses;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Repositories;
@@ -142,7 +142,10 @@ public class FinancialFactsImportService
     // ingested, so the lagging per-share-class Yahoo figure no longer drives market cap and
     // ownership percentages (#3575/#2503). No-ops when the issuer has no consolidated fact
     // (multi-class filers — summed across classes elsewhere) or the value is unchanged.
-    private async Task UpdateSharesOutstanding(CommonStock stock, CancellationToken cancellationToken)
+    private async Task UpdateSharesOutstanding(
+        CommonStock stock,
+        CancellationToken cancellationToken
+    )
     {
         using var scope = _scopeFactory.CreateScope();
         var sharesProvider = scope.ServiceProvider.GetRequiredService<SharesOutstandingProvider>();

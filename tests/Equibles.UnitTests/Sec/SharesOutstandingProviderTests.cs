@@ -54,12 +54,30 @@ public class SharesOutstandingProviderTests
         };
         db.AddRange(stock, concept);
         // Older filing — the stale pre-split figure Yahoo also carries.
-        db.Add(Fact(stock, concept, 276_898_105m, new DateOnly(2025, 11, 25), new DateOnly(2025, 11, 25)));
+        db.Add(
+            Fact(
+                stock,
+                concept,
+                276_898_105m,
+                new DateOnly(2025, 11, 25),
+                new DateOnly(2025, 11, 25)
+            )
+        );
         // Latest filing — the current post-reverse-split entity total.
-        db.Add(Fact(stock, concept, 14_061_261m, new DateOnly(2026, 6, 1), new DateOnly(2026, 5, 29)));
+        db.Add(
+            Fact(stock, concept, 14_061_261m, new DateOnly(2026, 6, 1), new DateOnly(2026, 5, 29))
+        );
         // A per-class dimensional fact in the same latest filing must never be chosen.
-        db.Add(Fact(stock, concept, 99_999m, new DateOnly(2026, 6, 1), new DateOnly(2026, 5, 29),
-            dimensionsKey: "dei:SecurityClassAxis=copr:ClassAMember"));
+        db.Add(
+            Fact(
+                stock,
+                concept,
+                99_999m,
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 5, 29),
+                dimensionsKey: "dei:SecurityClassAxis=copr:ClassAMember"
+            )
+        );
         await db.SaveChangesAsync();
 
         var provider = new SharesOutstandingProvider(
@@ -91,10 +109,26 @@ public class SharesOutstandingProviderTests
         // Multi-class issuer: the cover-page count is reported only per share class (dimensional),
         // so there is no consolidated fact for the entity total — that is summed across classes
         // separately, not sourced here.
-        db.Add(Fact(stock, concept, 5_800_000_000m, new DateOnly(2026, 4, 24), new DateOnly(2026, 4, 17),
-            dimensionsKey: "dei:SecurityClassAxis=goog:ClassAMember"));
-        db.Add(Fact(stock, concept, 6_400_000_000m, new DateOnly(2026, 4, 24), new DateOnly(2026, 4, 17),
-            dimensionsKey: "dei:SecurityClassAxis=goog:ClassCMember"));
+        db.Add(
+            Fact(
+                stock,
+                concept,
+                5_800_000_000m,
+                new DateOnly(2026, 4, 24),
+                new DateOnly(2026, 4, 17),
+                dimensionsKey: "dei:SecurityClassAxis=goog:ClassAMember"
+            )
+        );
+        db.Add(
+            Fact(
+                stock,
+                concept,
+                6_400_000_000m,
+                new DateOnly(2026, 4, 24),
+                new DateOnly(2026, 4, 17),
+                dimensionsKey: "dei:SecurityClassAxis=goog:ClassCMember"
+            )
+        );
         await db.SaveChangesAsync();
 
         var provider = new SharesOutstandingProvider(
