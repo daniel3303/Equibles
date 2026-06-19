@@ -31,6 +31,7 @@ See [`docs/`](docs/README.md) for the user guide and technical documentation.
 | **Stock Prices** | Yahoo Finance | Daily OHLCV prices with technical indicators (SMA, RSI, MACD) |
 | **Futures Positioning** | CFTC | Commitments of Traders (COT) data for 30+ futures contracts |
 | **Market Indicators** | CBOE | VIX volatility index (1990+) and put/call ratios by category |
+| **Government Contracts** | USAspending.gov | Federal contract awards to public companies — amounts, awarding agencies, dates, and NAICS/PSC codes |
 
 ## Quick Start
 
