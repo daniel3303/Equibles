@@ -1,7 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
-using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Data;
 using Equibles.Data.Extensions;
 using Equibles.Errors.BusinessLogic;
@@ -9,6 +8,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models.Responses;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Repositories;
@@ -140,13 +140,20 @@ public class FinancialFactsImportService
 
     // Sets the stock's share count from the authoritative SEC cover-page fact the import just
     // ingested, so the lagging per-share-class Yahoo figure no longer drives market cap and
-    // ownership percentages (#3575/#2503). No-ops when the issuer has no consolidated fact
-    // (multi-class filers — summed across classes elsewhere) or the value is unchanged.
-    private async Task UpdateSharesOutstanding(CommonStock stock, CancellationToken cancellationToken)
+    // ownership percentages (#3575/#2503). Uses the single-class consolidated fact when present
+    // (#3575); for a multi-class issuer, which carries no consolidated fact, falls back to the sum
+    // across its per-class cover-page facts (#2503). No-ops when neither is on record or the value
+    // is unchanged.
+    private async Task UpdateSharesOutstanding(
+        CommonStock stock,
+        CancellationToken cancellationToken
+    )
     {
         using var scope = _scopeFactory.CreateScope();
         var sharesProvider = scope.ServiceProvider.GetRequiredService<SharesOutstandingProvider>();
-        var shares = await sharesProvider.GetReportedSharesOutstanding(stock, cancellationToken);
+        var shares =
+            await sharesProvider.GetReportedSharesOutstanding(stock, cancellationToken)
+            ?? await sharesProvider.GetSummedPerClassSharesOutstanding(stock, cancellationToken);
         if (shares == null)
             return;
 
