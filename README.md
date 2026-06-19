@@ -32,6 +32,7 @@ See [`docs/`](docs/README.md) for the user guide and technical documentation.
 | **Futures Positioning** | CFTC | Commitments of Traders (COT) data for 30+ futures contracts |
 | **Market Indicators** | CBOE | VIX volatility index (1990+) and put/call ratios by category |
 | **Government Contracts** | USAspending.gov | Federal contract awards to public companies — amounts, awarding agencies, dates, and NAICS/PSC codes |
+| **FDA Catalysts** | FDA.gov | Advisory-committee (AdComm) meeting calendar — scheduled FDA panel dates, center, and title that act as regulatory catalysts for biotech/pharma stocks |
 
 ## Quick Start
 
