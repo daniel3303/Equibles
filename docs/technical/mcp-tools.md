@@ -70,6 +70,11 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetFundHoldings` — portfolio holdings of a fund or ETF from its latest SEC Form NPORT-P monthly report: series, reporting period, net assets, and largest positions (issuer, CUSIP, position size, USD value, share of net assets, asset category). Only registered funds file NPORT-P.
 - `GetFundsHoldingStock` — reverse lookup: the registered funds and ETFs holding a given stock, matched by CUSIP against each fund series' most recent NPORT-P report (so an exited position never shows as current). Returns registrant and series, reporting period, position size, USD value, share of the fund's net assets, and payoff profile (Long/Short), largest positions first.
 
+`FundDirectoryTools`:
+
+- `SearchFunds` — search the directory of registered funds and ETFs (NPORT-P filers) by name, ticker, or registrant; returns each series with a profile id, net assets, reported-holding count, and latest report date, largest first. Covers multi-series trusts (iShares, Vanguard, Fidelity) that carry no ticker of their own.
+- `GetFundProfile` — one registered fund's profile and largest holdings from its latest NPORT-P report, addressed by a profile id from `SearchFunds` or the fund's own ticker.
+
 `NCenTools`:
 
 - `GetFundOperations` — operational data for a fund, ETF or closed-end fund from SEC Form N-CEN annual reports: registrant classification, Investment Company Act file number, reporting period, first/last-filing flags, and named service providers (advisers, sub-advisers, custodians, transfer agents, administrators, auditors, underwriters). Only registered funds file N-CEN.
