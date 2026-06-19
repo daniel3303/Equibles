@@ -190,7 +190,10 @@ public class YahooPriceImportService
         // for the share count when the issuer has a consolidated SEC fact, so Yahoo can't overwrite
         // it with a stale or single-class value (#3575/#2503).
         var sharesProvider = scope.ServiceProvider.GetRequiredService<SharesOutstandingProvider>();
-        var edgarShares = await sharesProvider.GetReportedSharesOutstanding(stock, cancellationToken);
+        var edgarShares = await sharesProvider.GetReportedSharesOutstanding(
+            stock,
+            cancellationToken
+        );
 
         // Per-field conservative writes: only update on actual change, and never
         // overwrite a known value with 0 (treated as Yahoo "unknown" by the rest of
