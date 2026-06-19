@@ -97,4 +97,20 @@ public class UsaSpendingAwardMapperTests
 
         entity.NaicsCode.Should().Be("541512");
     }
+
+    [Fact(Skip = "GH-3786 — Truncate splits surrogate pairs, leaving an orphaned surrogate")]
+    public void Map_truncating_an_over_long_recipient_name_does_not_split_a_surrogate_pair()
+    {
+        // Contract: truncation must yield a well-formed prefix. Slicing by char index at
+        // the 512 cap can orphan a surrogate pair, producing invalid UTF-16 Postgres rejects.
+        var record = SampleRecord();
+        record.RecipientName = new string('A', 511) + "😀"; // 511 chars + 😀 = 513 > 512
+
+        var entity = UsaSpendingAwardMapper.Map(record, Guid.NewGuid());
+
+        entity.RecipientName.Should().NotBeNull();
+        char.IsHighSurrogate(entity.RecipientName![^1])
+            .Should()
+            .BeFalse("truncating at the 512-char cap must not leave an orphaned high surrogate");
+    }
 }
