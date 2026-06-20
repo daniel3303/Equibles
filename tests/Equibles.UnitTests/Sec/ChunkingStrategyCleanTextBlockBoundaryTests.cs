@@ -15,9 +15,7 @@ public class ChunkingStrategyCleanTextBlockBoundaryTests
     // so "<td>Net income</td><td>1000</td>" collapses to "Net income1000", gluing the
     // value onto the label and producing a junk token that pollutes embeddings/search.
     // A reader (and a searcher) relies on the two cells staying separate.
-    [Fact(
-        Skip = "GH-3842 — CleanText concatenates adjacent block/table-cell text, gluing label onto value"
-    )]
+    [Fact]
     public void CleanText_AdjacentTableCells_DoesNotConcatenateLabelAndValue()
     {
         var result = _strategy.CleanText(
