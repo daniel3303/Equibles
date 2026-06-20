@@ -106,9 +106,15 @@ public class FormDFilingProcessor : IssuerFeedFilingProcessor<FormDFiling, FormD
             IsRemainingIndefinite = remainingIndefinite,
             MinimumInvestmentAccepted = ParseLong(Val(offeringData, "minimumInvestmentAccepted")),
             HasNonAccreditedInvestors = ParseBool(Val(investors, "hasNonAccreditedInvestors")),
-            TotalNumberAlreadyInvested = (int)ParseLong(
-                Val(investors, "totalNumberAlreadyInvested")
-            ),
+            // The XML is filer-entered, so an out-of-range count (a typo, or a figure pasted
+            // into the wrong field) must not wrap negative when narrowed to the int column.
+            // Clamp to a non-negative, representable value before casting.
+            TotalNumberAlreadyInvested = (int)
+                Math.Clamp(
+                    ParseLong(Val(investors, "totalNumberAlreadyInvested")),
+                    0,
+                    int.MaxValue
+                ),
         };
 
         foreach (var personElement in Els(El(root, "relatedPersonsList"), "relatedPersonInfo"))

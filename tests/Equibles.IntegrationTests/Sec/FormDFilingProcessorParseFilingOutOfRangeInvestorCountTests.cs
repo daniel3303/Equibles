@@ -21,9 +21,7 @@ public class FormDFilingProcessorParseFilingOutOfRangeInvestorCountTests
     // count, or a figure pasted into the wrong field) must not silently corrupt the stored
     // row. ParseLong reads the long correctly (3,000,000,000 < Int64.Max); the bug is the
     // unchecked (int) narrowing at the call site, which wraps it to a negative count.
-    [Fact(
-        Skip = "GH-3839 — (int) narrowing wraps an out-of-range Form D investor count to a negative value"
-    )]
+    [Fact]
     public async Task Process_InvestorCountAboveInt32Max_DoesNotStoreNegativeCount()
     {
         var (processor, repo, secClient) = CreateProcessorWithDeps();
