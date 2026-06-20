@@ -13,7 +13,7 @@ public class FdaAdvisoryCommitteeCalendarParserSkippedRowSlugTests
     // skipped row must not consume the slug — the later, fully valid row for the same meeting must
     // still be captured. Adversarial: the parser registers the slug as "seen" before validating the
     // Start Date, so a date-less first row suppresses the valid duplicate and the meeting is lost.
-    [Fact(Skip = "GH-3861 — date-less first row consumes the slug, dropping a valid duplicate row")]
+    [Fact]
     public void Parse_FirstRowWithoutStartDateSharesSlug_StillCapturesTheValidRow()
     {
         const string html =
