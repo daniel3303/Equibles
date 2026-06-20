@@ -31,6 +31,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Browse investment advisers (SEC Form ADV)](how-to-browse-investment-advisers.md)
 - [View a fund's portfolio holdings (SEC Form N-PORT)](how-to-view-fund-holdings.md)
 - [View a fund's operations (SEC Form N-CEN)](how-to-view-fund-operations.md)
+- [Ask your AI assistant about funds in the directory](how-to-ask-about-fund-directory.md)
 - [View a company's exempt offerings (SEC Form D)](how-to-view-exempt-offerings.md)
 - [View a company's financial statements (SEC XBRL)](how-to-view-financial-statements.md)
 - [Use the 13F holdings screener](how-to-use-holdings-screener.md)
