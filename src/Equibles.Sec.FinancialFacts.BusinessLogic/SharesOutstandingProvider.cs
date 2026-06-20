@@ -59,7 +59,12 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
             .Select(f => (decimal?)f.Value)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return value.HasValue ? (long)value.Value : (long?)null;
+        // A corrupt/typo'd cover-page fact can carry a count that parses but exceeds Int64; the
+        // decimal->long cast would throw, crashing the caller. Treat an unrepresentable figure as
+        // none on record (null), matching how every other decimal->long cast here is range-checked.
+        return value.HasValue && value.Value >= long.MinValue && value.Value <= long.MaxValue
+            ? (long)value.Value
+            : (long?)null;
     }
 
     // The entity-wide share count for a multi-class issuer, summed across its share classes from
@@ -107,7 +112,9 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
             .GroupBy(f => f.Dimensions[0].Member)
             .Sum(g => g.First().Value);
 
-        return total > 0 ? (long)total : (long?)null;
+        // Same range-check: a corrupt per-class count can push the sum past Int64; degrade to null
+        // rather than let the decimal->long cast throw.
+        return total > 0 && total <= long.MaxValue ? (long)total : (long?)null;
     }
 
     // The financial-concept ids the "shares-outstanding" alias resolves to, or an empty list when
