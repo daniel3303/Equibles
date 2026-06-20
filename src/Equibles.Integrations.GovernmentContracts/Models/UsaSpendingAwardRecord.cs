@@ -45,9 +45,11 @@ public class UsaSpendingAwardRecord
     public string LastModifiedDate { get; set; }
 
     [JsonProperty("NAICS")]
+    [JsonConverter(typeof(UsaSpendingCodeConverter))]
     public string Naics { get; set; }
 
     [JsonProperty("PSC")]
+    [JsonConverter(typeof(UsaSpendingCodeConverter))]
     public string Psc { get; set; }
 
     [JsonProperty("Description")]
