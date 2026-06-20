@@ -201,6 +201,22 @@ public class CongressionalTradeSyncService
                 continue;
             }
 
+            // A trade is disclosed after it happens, so the transaction date can never be after
+            // the filing date. A source typo (e.g. a wrong year) that breaks this would otherwise
+            // sort to the top of the member's newest-first trade history.
+            if (tx.TransactionDate > tx.FilingDate)
+            {
+                _logger.LogWarning(
+                    "Skipping congressional trade with transaction date {TransactionDate} after "
+                        + "filing date {FilingDate} for {Member} ({Ticker})",
+                    tx.TransactionDate,
+                    tx.FilingDate,
+                    tx.MemberName,
+                    tx.Ticker
+                );
+                continue;
+            }
+
             var stock = stocks[tx.Ticker];
 
             trades.Add(
