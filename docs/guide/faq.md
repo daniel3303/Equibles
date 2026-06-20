@@ -28,8 +28,10 @@ Equibles scrapes several public and free-tier data sources automatically. Each s
 | **U.S. Congress** | Congressional stock trades (House disclosures) | Every 12 hours |
 | **CBOE** | Options and volatility data | Every 24 hours |
 | **CFTC** | Commitments of Traders reports (futures positioning) | Every 24 hours |
+| **USAspending.gov** | Federal government contract awards won by public companies | Every 24 hours |
+| **FDA.gov** | FDA advisory-committee (AdComm) meeting calendar — regulatory catalyst dates for biotech and pharma stocks | Every 24 hours |
 
-The SEC filing and document-processing scrapers run nearly continuously (every 15 seconds) to pick up new filings as they appear on EDGAR. All other scrapers default to a 24-hour cycle. You don't need API keys for SEC, Yahoo, Congress, CBOE, or CFTC — those work out of the box. FRED and FINRA require free API keys; without them those scrapers are simply skipped.
+The SEC filing and document-processing scrapers run nearly continuously (every 15 seconds) to pick up new filings as they appear on EDGAR. All other scrapers default to a 24-hour cycle. You don't need API keys for SEC, Yahoo, Congress, CBOE, CFTC, USAspending, or FDA — those work out of the box. FRED and FINRA require free API keys; without them those scrapers are simply skipped.
 
 ## Can I run Equibles without Docker?
 
