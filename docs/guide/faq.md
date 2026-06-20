@@ -33,6 +33,12 @@ Equibles scrapes several public and free-tier data sources automatically. Each s
 
 The SEC filing and document-processing scrapers run nearly continuously (every 15 seconds) to pick up new filings as they appear on EDGAR. All other scrapers default to a 24-hour cycle. You don't need API keys for SEC, Yahoo, Congress, CBOE, CFTC, USAspending, or FDA — those work out of the box. FRED and FINRA require free API keys; without them those scrapers are simply skipped.
 
+## I started the stack but the web portal is nearly empty — is something wrong?
+
+Probably not. Equibles ships with no data and fills itself in by scraping, so the first few minutes look sparse. SEC filings and institutional holdings start appearing within minutes of the first `docker compose up`, and the rest backfills over the following hours as each scraper works through its history. Give it time before assuming a problem.
+
+If one area stays empty much longer than the others, check whether it needs an API key: economic indicators need a [FRED key](how-to-set-up-fred-api-key.md) and short-sale volume needs a [FINRA key](how-to-set-up-finra-api-key.md) — without them those two scrapers are skipped while everything else still runs. You can watch progress and spot errors on the [status page](how-to-view-status-and-errors.md). To make the initial backfill faster and lighter, restrict the [tickers synced](how-to-restrict-ticker-sync.md) or set a [later start date](how-to-change-sync-start-date.md).
+
 ## Can I run Equibles without Docker?
 
 Yes, but Docker is strongly recommended. Equibles requires [ParadeDB](https://www.paradedb.com/) — a PostgreSQL distribution that bundles the `pgvector` and `pg_search` extensions — not a plain PostgreSQL server. The database migrations create BM25 full-text indexes and vector columns that only work when those extensions are installed. If you run against vanilla PostgreSQL, startup will fail with `CREATE EXTENSION "pg_search" does not exist`.
