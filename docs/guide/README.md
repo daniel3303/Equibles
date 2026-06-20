@@ -51,6 +51,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Browse economic indicators](how-to-browse-economic-data.md)
 - [Browse market indicators (VIX and put/call ratios)](how-to-browse-market-indicators.md)
 - [Browse futures positioning (CFTC Commitments of Traders)](how-to-browse-futures.md)
+- [Ask your AI assistant about federal government contracts](how-to-ask-about-government-contracts.md)
 
 ## FAQ
 
