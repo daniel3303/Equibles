@@ -112,6 +112,20 @@ public class GovernmentContractsImportService : IImporter
                     ex.StackTrace,
                     $"window: {windowStart}..{windowEnd}"
                 );
+
+                // A transport-level failure (the API is unreachable, even after the client's retries)
+                // is systemic: every remaining window would fail identically and record its own error,
+                // turning one outage into hundreds of duplicate rows. Stop the cycle after reporting
+                // once; the next run resumes from the same start date once the API is reachable again.
+                // Other (window-specific) failures fall through and the scan continues.
+                if (ex is HttpRequestException)
+                {
+                    _logger.LogWarning(
+                        "Government contracts import: aborting this cycle after a transport failure; "
+                            + "remaining windows will be retried on the next run"
+                    );
+                    break;
+                }
             }
         }
 
