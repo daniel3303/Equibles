@@ -15,7 +15,7 @@ public class GovernmentContractsToolsShortenSurrogateTests
     // value[..80] keeps the high half and drops the low half.
     //
     // Reflection-invoke since Shorten is private static.
-    [Fact(Skip = "GH-3827 — Shorten orphans a surrogate pair when truncating")]
+    [Fact]
     public void Shorten_CutThroughSurrogatePair_DoesNotOrphanSurrogate()
     {
         var method = typeof(GovernmentContractsTools).GetMethod(
