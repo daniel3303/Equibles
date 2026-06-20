@@ -41,9 +41,7 @@ public class SharesOutstandingProviderReportedSharesOverflowTests
         return ctx;
     }
 
-    [Fact(
-        Skip = "GH-3836 — GetReportedSharesOutstanding throws OverflowException on an out-of-range fact value"
-    )]
+    [Fact]
     public async Task GetReportedSharesOutstanding_FactValueExceedsInt64_DegradesToNullInsteadOfThrowing()
     {
         await using var db = NewDb();
@@ -81,6 +79,78 @@ public class SharesOutstandingProviderReportedSharesOverflowTests
         var shares = await provider.GetReportedSharesOutstanding(stock);
 
         shares.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetSummedPerClassSharesOutstanding_SumExceedsInt64_DegradesToNullInsteadOfThrowing()
+    {
+        await using var db = NewDb();
+        var stock = new CommonStock
+        {
+            Ticker = "BIGCO",
+            Name = "Overflow Industries",
+            Cik = "0009999999",
+        };
+        var concept = new FinancialConcept
+        {
+            Taxonomy = FactTaxonomy.Dei,
+            Tag = "EntityCommonStockSharesOutstanding",
+        };
+        db.AddRange(stock, concept);
+        // A single corrupt per-class count of 1e20 makes the summed total exceed long.MaxValue;
+        // the same unguarded (long)total cast must degrade to null, not throw.
+        db.Add(
+            ClassFact(
+                stock,
+                concept,
+                100_000_000_000_000_000_000m,
+                new DateOnly(2026, 4, 30),
+                new DateOnly(2026, 4, 23),
+                "0009999999-26-000001",
+                "us-gaap:CommonClassAMember"
+            )
+        );
+        await db.SaveChangesAsync();
+
+        var provider = new SharesOutstandingProvider(
+            new FinancialFactRepository(db),
+            new FinancialConceptRepository(db)
+        );
+
+        var shares = await provider.GetSummedPerClassSharesOutstanding(stock);
+
+        shares.Should().BeNull();
+    }
+
+    private static FinancialFact ClassFact(
+        CommonStock stock,
+        FinancialConcept concept,
+        decimal value,
+        DateOnly filed,
+        DateOnly asOf,
+        string accession,
+        string member,
+        string axis = "us-gaap:StatementClassOfStockAxis"
+    )
+    {
+        var fact = new FinancialFact
+        {
+            CommonStockId = stock.Id,
+            FinancialConceptId = concept.Id,
+            Unit = "shares",
+            PeriodType = FactPeriodType.Instant,
+            PeriodStart = asOf,
+            PeriodEnd = asOf,
+            Value = value,
+            FiscalYear = asOf.Year,
+            FiscalPeriod = SecFiscalPeriod.FullYear,
+            Form = DocumentType.TenQ,
+            FiledDate = filed,
+            AccessionNumber = accession,
+            DimensionsKey = $"{axis}={member}",
+        };
+        fact.Dimensions.Add(new FinancialFactDimension { Axis = axis, Member = member });
+        return fact;
     }
 
     private static FinancialFact Fact(
