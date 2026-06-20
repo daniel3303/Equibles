@@ -13,11 +13,16 @@ namespace Equibles.UnitTests.GovernmentContracts;
 /// </summary>
 public class RecipientNameNormalizerSuffixOnlyTests
 {
-    [Fact(Skip = "GH-3845 — suffix-only name >= min length leaks a generic key instead of null")]
-    public void Normalize_SuffixOnlyNameAtOrAboveMinLength_ReturnsNull()
+    [Theory]
+    [InlineData("Corporation")]
+    [InlineData("Company")]
+    [InlineData("Limited")]
+    [InlineData("Incorporated")]
+    [InlineData("The Company")]
+    public void Normalize_SuffixOnlyNameAtOrAboveMinLength_ReturnsNull(string input)
     {
-        // "Corporation" is a pure legal-entity suffix (no real name token); the contract strips
+        // These collapse to a pure legal-entity suffix with no real name token; the contract strips
         // it and returns null, exactly as "Inc"/"Co" do. Nothing meaningful remains to key on.
-        RecipientNameNormalizer.Normalize("Corporation").Should().BeNull();
+        RecipientNameNormalizer.Normalize(input).Should().BeNull();
     }
 }
