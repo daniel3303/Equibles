@@ -41,6 +41,7 @@ Task-focused recipes for someone who has Equibles running.
 - [View the 13F Conviction Heat Map](how-to-view-conviction-heat-map.md)
 - [View the Smart Money Index](how-to-view-smart-money-index.md)
 - [Compare institutions with the overlap matrix](how-to-compare-institution-overlap.md)
+- [View the combined portfolio of several institutions](how-to-view-combined-institution-portfolio.md)
 - [Check worker health and recent errors](how-to-view-status-and-errors.md)
 - [Search for stocks, filings, institutions, and more](how-to-search.md)
 - [View market-wide insider trading activity](how-to-view-insider-activity.md)
