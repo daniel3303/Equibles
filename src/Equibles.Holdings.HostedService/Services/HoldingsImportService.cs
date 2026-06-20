@@ -494,7 +494,13 @@ public class HoldingsImportService
     // losing the filer's whole batch to a 22001 abort.
     internal static string ClampLength(string value, int maxLength)
     {
-        return value != null && value.Length > maxLength ? value[..maxLength] : value;
+        if (value == null || value.Length <= maxLength)
+            return value;
+        // Back off one unit if the cap lands on a high surrogate, so the kept prefix never
+        // ends in an orphan surrogate that corrupts the PostgreSQL UTF-8 round-trip (22001).
+        var end =
+            maxLength > 0 && char.IsHighSurrogate(value[maxLength - 1]) ? maxLength - 1 : maxLength;
+        return value[..end];
     }
 
     private async Task ParseOtherManagers(
