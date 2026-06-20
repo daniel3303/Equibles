@@ -170,12 +170,12 @@ public class HoldingsValueRecalculator
 
             foreach (var holding in pendingHoldings)
             {
-                holding.Value = (long)(holding.Shares * closePrice);
+                holding.Value = ToBoundedValue(holding.Shares, closePrice);
                 holding.ValuePending = false;
 
                 foreach (var entry in holding.ManagerEntries)
                 {
-                    entry.Value = (long)(entry.Shares * closePrice);
+                    entry.Value = ToBoundedValue(entry.Shares, closePrice);
                 }
             }
 
@@ -183,5 +183,14 @@ public class HoldingsValueRecalculator
             totalUpdated += pendingHoldings.Count;
         }
         return totalUpdated;
+    }
+
+    // shares comes from filer-controlled SSHPRNAMT; an oversized count makes the decimal
+    // product exceed Int64, so range-check before the cast (mirrors ParseHoldingRow and
+    // Filing13DGXmlParser) instead of throwing OverflowException and aborting the batch.
+    private static long ToBoundedValue(long shares, decimal closePrice)
+    {
+        var product = shares * closePrice;
+        return product >= long.MinValue && product <= long.MaxValue ? (long)product : 0L;
     }
 }

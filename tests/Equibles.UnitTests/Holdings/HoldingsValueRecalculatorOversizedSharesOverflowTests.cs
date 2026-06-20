@@ -25,7 +25,7 @@ namespace Equibles.UnitTests.Holdings;
 /// </summary>
 public class HoldingsValueRecalculatorOversizedSharesOverflowTests
 {
-    [Fact(Skip = "GH-3855 — Recalculate throws OverflowException on an oversized pending holding")]
+    [Fact]
     public async Task Recalculate_PendingHoldingSharesTimesPriceExceedsInt64_DoesNotThrowOverflow()
     {
         await using var db = CreateDbContext();
