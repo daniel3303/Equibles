@@ -4,6 +4,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Core.Contracts;
+using Equibles.Core.Extensions;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
@@ -492,16 +493,8 @@ public class HoldingsImportService
     // Truncates a parsed string to its destination column bound. The cover page is
     // free text; a value past the bound is malformed, and storing the prefix beats
     // losing the filer's whole batch to a 22001 abort.
-    internal static string ClampLength(string value, int maxLength)
-    {
-        if (value == null || value.Length <= maxLength)
-            return value;
-        // Back off one unit if the cap lands on a high surrogate, so the kept prefix never
-        // ends in an orphan surrogate that corrupts the PostgreSQL UTF-8 round-trip (22001).
-        var end =
-            maxLength > 0 && char.IsHighSurrogate(value[maxLength - 1]) ? maxLength - 1 : maxLength;
-        return value[..end];
-    }
+    internal static string ClampLength(string value, int maxLength) =>
+        value.TruncateToFit(maxLength);
 
     private async Task ParseOtherManagers(
         ImportContext context,
