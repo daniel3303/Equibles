@@ -28,6 +28,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Back up and restore your database](how-to-back-up-and-restore.md)
 - [Change the log level for troubleshooting](how-to-change-log-level.md)
 - [Browse institutional portfolios and run a backtest](how-to-browse-institutions.md)
+- [Ask your AI assistant to backtest cloning a fund's portfolio](how-to-ask-about-fund-clone-backtest.md)
 - [Browse investment advisers (SEC Form ADV)](how-to-browse-investment-advisers.md)
 - [View a fund's portfolio holdings (SEC Form N-PORT)](how-to-view-fund-holdings.md)
 - [View a fund's operations (SEC Form N-CEN)](how-to-view-fund-operations.md)
