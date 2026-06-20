@@ -61,6 +61,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Browse economic indicators](how-to-browse-economic-data.md)
 - [Ask your AI assistant about the economic release calendar](how-to-ask-about-economic-calendar.md)
 - [Browse market indicators (VIX and put/call ratios)](how-to-browse-market-indicators.md)
+- [Ask your AI assistant for technical indicators](how-to-ask-about-technical-indicators.md)
 - [Browse futures positioning (CFTC Commitments of Traders)](how-to-browse-futures.md)
 - [Ask your AI assistant about federal government contracts](how-to-ask-about-government-contracts.md)
 - [Ask your AI assistant about upcoming FDA catalysts](how-to-ask-about-fda-catalysts.md)
