@@ -216,6 +216,15 @@ public static class InsiderFilingParser
         if (!TryParseTransactionDate(transactionDateStr, out var transactionDate))
             return null;
 
+        // A Form 4 reports an already-executed trade and must be filed within two business
+        // days of it, so the transaction can never post-date its filing. Filer year typos (a
+        // date keyed 2035 or 0022) otherwise pass through verbatim and sort to the top or
+        // bottom of the insider history. Anchor an implausible date to the filing's period of
+        // report — the date SEC requires to match the transaction, and the same anchor the
+        // holding path already trusts.
+        if (!IsPlausibleTransactionDate(transactionDate, filing.FilingDate))
+            transactionDate = filing.ReportDate;
+
         return new InsiderTransaction
         {
             InsiderOwnerId = owner.Id,
@@ -361,6 +370,17 @@ public static class InsiderFilingParser
         // Fix unescaped ampersands in entity names
         return Regex.Replace(xml, @"&(?!(amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)", "&amp;");
     }
+
+    // SEC's electronic ownership filings describe modern trades; a year before this floor
+    // (the earliest seen in production was 0022) is a keyed-wrong date, not a real trade.
+    // Paired with the "never after the filing date" rule it brackets a plausible transaction
+    // date in both directions.
+    internal const int MinPlausibleTransactionYear = 1900;
+
+    internal static bool IsPlausibleTransactionDate(
+        DateOnly transactionDate,
+        DateOnly filingDate
+    ) => transactionDate.Year >= MinPlausibleTransactionYear && transactionDate <= filingDate;
 
     // Form 4 transactionDate is ISO yyyy-MM-dd (ownership XSD). Parse it
     // culture-independently — under a non-Gregorian host culture (e.g.
