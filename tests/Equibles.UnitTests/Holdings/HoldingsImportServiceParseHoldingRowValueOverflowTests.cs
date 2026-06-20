@@ -17,7 +17,7 @@ namespace Equibles.UnitTests.Holdings;
 /// </summary>
 public class HoldingsImportServiceParseHoldingRowValueOverflowTests
 {
-    [Fact(Skip = "GH-3852 — ParseHoldingRow throws OverflowException on an oversized share count")]
+    [Fact]
     public void ParseHoldingRow_SharesTimesPriceExceedsInt64_DoesNotThrowOverflow()
     {
         var method = typeof(HoldingsImportService).GetMethod(
