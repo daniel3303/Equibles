@@ -130,7 +130,7 @@ public class NportTools
 
                 var positions = await currentPositions
                     .OrderByDescending(p => p.ValueUsd)
-                    .Take(maxResults)
+                    .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
                 var result = MarkdownTable.Start(
