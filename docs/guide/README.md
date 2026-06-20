@@ -32,6 +32,7 @@ Task-focused recipes for someone who has Equibles running.
 - [View a fund's portfolio holdings (SEC Form N-PORT)](how-to-view-fund-holdings.md)
 - [View a fund's operations (SEC Form N-CEN)](how-to-view-fund-operations.md)
 - [View a company's exempt offerings (SEC Form D)](how-to-view-exempt-offerings.md)
+- [View a company's financial statements (SEC XBRL)](how-to-view-financial-statements.md)
 - [Use the 13F holdings screener](how-to-use-holdings-screener.md)
 - [View quarterly holdings activity across the market](how-to-view-holdings-activity.md)
 - [View the latest 13F filings](how-to-view-latest-13f-filings.md)
