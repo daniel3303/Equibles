@@ -51,6 +51,7 @@ Task-focused recipes for someone who has Equibles running.
 - [View the combined portfolio of several institutions](how-to-view-combined-institution-portfolio.md)
 - [Check worker health and recent errors](how-to-view-status-and-errors.md)
 - [Search for stocks, filings, institutions, and more](how-to-search.md)
+- [Ask your AI assistant to search a company's SEC filings](how-to-ask-about-sec-filings.md)
 - [View market-wide insider trading activity](how-to-view-insider-activity.md)
 - [View an insider's trading profile](how-to-view-insider-profile.md)
 - [View proposed insider sales (SEC Form 144)](how-to-view-proposed-sales.md)
