@@ -16,7 +16,7 @@ namespace Equibles.UnitTests.Holdings;
 /// </summary>
 public class HoldingsImportServiceClampLengthSurrogateTests
 {
-    [Fact(Skip = "GH-3849 — ClampLength orphans a surrogate pair at the column-width cap")]
+    [Fact]
     public void ClampLength_MaxLengthSplitsSurrogatePair_ResultContainsNoOrphanSurrogate()
     {
         // "🏛" (U+1F3DB) is a surrogate pair; placed so maxLength=10 falls between the
