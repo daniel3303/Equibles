@@ -144,13 +144,23 @@ public class UsaSpendingClient : IUsaSpendingClient
         {
             await RateLimiter.WaitAsync();
 
-            using var response = await sendRequest();
-
-            if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < MaxRetries)
+            HttpResponseMessage response;
+            try
             {
+                response = await sendRequest();
+            }
+            catch (Exception ex)
+                when (ex is HttpRequestException or TaskCanceledException && attempt < MaxRetries)
+            {
+                // A transport-level failure — connection reset, DNS blip, TLS error or a request
+                // timeout — throws here and never reaches the status-code checks below. Without this
+                // a momentary network hiccup fails the whole import window (and, repeated across every
+                // window, floods the error log); retry it with the same backoff a 5xx gets.
                 var delay = ExponentialBackoff(attempt);
                 _logger.LogWarning(
-                    "USAspending rate limited (429), retrying in {Delay}s (attempt {Attempt}/{Max})",
+                    ex,
+                    "USAspending request failed ({Error}), retrying in {Delay}s (attempt {Attempt}/{Max})",
+                    ex.Message,
                     delay.TotalSeconds,
                     attempt + 1,
                     MaxRetries
@@ -159,22 +169,38 @@ public class UsaSpendingClient : IUsaSpendingClient
                 continue;
             }
 
-            if ((int)response.StatusCode >= 500 && attempt < MaxRetries)
+            using (response)
             {
-                var delay = ExponentialBackoff(attempt);
-                _logger.LogWarning(
-                    "USAspending server error ({StatusCode}), retrying in {Delay}s (attempt {Attempt}/{Max})",
-                    (int)response.StatusCode,
-                    delay.TotalSeconds,
-                    attempt + 1,
-                    MaxRetries
-                );
-                await Task.Delay(delay);
-                continue;
-            }
+                if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < MaxRetries)
+                {
+                    var delay = ExponentialBackoff(attempt);
+                    _logger.LogWarning(
+                        "USAspending rate limited (429), retrying in {Delay}s (attempt {Attempt}/{Max})",
+                        delay.TotalSeconds,
+                        attempt + 1,
+                        MaxRetries
+                    );
+                    await Task.Delay(delay);
+                    continue;
+                }
 
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadAsStringAsync();
+                if ((int)response.StatusCode >= 500 && attempt < MaxRetries)
+                {
+                    var delay = ExponentialBackoff(attempt);
+                    _logger.LogWarning(
+                        "USAspending server error ({StatusCode}), retrying in {Delay}s (attempt {Attempt}/{Max})",
+                        (int)response.StatusCode,
+                        delay.TotalSeconds,
+                        attempt + 1,
+                        MaxRetries
+                    );
+                    await Task.Delay(delay);
+                    continue;
+                }
+
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadAsStringAsync();
+            }
         }
 
         throw new HttpRequestException("Max retries exceeded for USAspending API request");
