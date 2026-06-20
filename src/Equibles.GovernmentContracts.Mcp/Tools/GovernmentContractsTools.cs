@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
+using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.GovernmentContracts.Data.Models;
@@ -170,13 +171,7 @@ public class GovernmentContractsTools
         var trimmed = value.Trim();
         if (trimmed.Length <= maxLength)
             return trimmed;
-        // Don't split a surrogate pair at the cap — back off one unit so the result stays
-        // well-formed UTF-16 (a lone surrogate corrupts the tool's JSON reply).
-        var end =
-            maxLength > 0 && char.IsHighSurrogate(trimmed[maxLength - 1])
-                ? maxLength - 1
-                : maxLength;
-        return trimmed[..end] + "…";
+        return trimmed.TruncateToFit(maxLength) + "…";
     }
 
     // Markdown cells can't contain a raw pipe or newline without breaking the table.

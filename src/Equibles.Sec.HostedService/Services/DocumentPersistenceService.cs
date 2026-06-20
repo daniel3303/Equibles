@@ -1,6 +1,7 @@
 using System.Data;
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.Core.Extensions;
 using Equibles.Media.BusinessLogic;
 using Equibles.Messaging.Contracts.Sec;
 using Equibles.Sec.Data.Models;
@@ -117,18 +118,8 @@ public class DocumentPersistenceService : IDocumentPersistenceService
 
         var compressed = GzipCompressor.Compress(xbrl.RawBytes);
         // File.Name is capped at 256 chars; EDGAR document names are bare short tokens, but
-        // guard against a pathological envelope value so the insert can never overflow. A raw
-        // slice can split a surrogate pair, leaving an orphan high surrogate that corrupts the
-        // UTF-8 round-trip on insert — back off one unit when the cut lands mid-pair (mirrors
-        // EdgarXmlSubmissionParser.Truncate).
-        var name = xbrl.SourceFileName;
-        if (name?.Length > MaxFileNameLength)
-        {
-            var end = char.IsHighSurrogate(name[MaxFileNameLength - 1])
-                ? MaxFileNameLength - 1
-                : MaxFileNameLength;
-            name = name[..end];
-        }
+        // guard against a pathological envelope value so the insert can never overflow.
+        var name = xbrl.SourceFileName.TruncateToFit(MaxFileNameLength);
         var xbrlFile = await _fileManager.SaveInternalFile(
             compressed,
             name,
