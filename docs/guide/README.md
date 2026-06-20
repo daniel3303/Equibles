@@ -34,6 +34,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Ask your AI assistant about funds in the directory](how-to-ask-about-fund-directory.md)
 - [View a company's exempt offerings (SEC Form D)](how-to-view-exempt-offerings.md)
 - [View a company's financial statements (SEC XBRL)](how-to-view-financial-statements.md)
+- [Ask your AI assistant for a company's revenue breakdown](how-to-ask-about-revenue-breakdown.md)
 - [Use the 13F holdings screener](how-to-use-holdings-screener.md)
 - [View quarterly holdings activity across the market](how-to-view-holdings-activity.md)
 - [View the latest 13F filings](how-to-view-latest-13f-filings.md)
