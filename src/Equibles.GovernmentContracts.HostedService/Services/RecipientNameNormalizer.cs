@@ -58,7 +58,10 @@ public static class RecipientNameNormalizer
         if (tokens.Count > 1 && tokens[0] == "THE")
             tokens.RemoveAt(0);
 
-        while (tokens.Count > 1 && LegalSuffixes.Contains(tokens[^1]))
+        // Strip every trailing legal suffix, including the last remaining token: a name that is
+        // nothing but suffixes ("Corporation", "The Company") must reduce to an empty key so it
+        // falls through to null below, rather than leaking a generic word into exact-match resolution.
+        while (tokens.Count > 0 && LegalSuffixes.Contains(tokens[^1]))
             tokens.RemoveAt(tokens.Count - 1);
 
         var key = string.Join(' ', tokens);
