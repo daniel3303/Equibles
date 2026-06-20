@@ -58,6 +58,7 @@ Task-focused recipes for someone who has Equibles running.
 - [View proposed insider sales (SEC Form 144)](how-to-view-proposed-sales.md)
 - [Ask your AI assistant about a company's insider trading](how-to-ask-about-insider-trading.md)
 - [View a member of Congress's trading profile](how-to-view-congress-member-trades.md)
+- [Ask your AI assistant about congressional stock trades](how-to-ask-about-congressional-trades.md)
 - [Ask your AI assistant about a member of Congress's net worth](how-to-ask-about-congress-member-net-worth.md)
 - [Browse market-wide short data (most shorted and largest short volume)](how-to-browse-short-data.md)
 - [Ask your AI assistant about off-exchange (dark pool) volume](how-to-ask-about-off-exchange-volume.md)
