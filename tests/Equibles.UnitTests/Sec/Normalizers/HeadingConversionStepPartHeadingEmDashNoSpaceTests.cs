@@ -15,9 +15,7 @@ public class HeadingConversionStepPartHeadingEmDashNoSpaceTests
     // splits on the ASCII hyphen ("Part II-Other"), so the em-dash (U+2014) it actually emits
     // must tokenize the same way. A missed split leaves the header an un-promoted span,
     // breaking table-of-contents/chunk extraction for that part.
-    [Fact(
-        Skip = "GH-3866 — em-dash-glued Part heading title not tokenized, header left un-promoted"
-    )]
+    [Fact]
     public void Execute_PartHeadingEmDashNoSpaceTitle_PromotesItToHeading()
     {
         var doc = _parser.ParseDocument(
