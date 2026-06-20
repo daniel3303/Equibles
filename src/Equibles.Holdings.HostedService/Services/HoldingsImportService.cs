@@ -903,7 +903,12 @@ public class HoldingsImportService
             (commonStockId, reportDate),
             out var closePrice
         );
-        var value = hasPrice ? (long)(shares * closePrice) : 0L;
+        // shares comes from filer-controlled SSHPRNAMT; an oversized count makes the decimal
+        // product exceed Int64, so range-check before the cast (mirrors Filing13DGXmlParser)
+        // instead of throwing OverflowException and aborting the whole filing's import.
+        var product = shares * closePrice;
+        var value =
+            hasPrice && product >= long.MinValue && product <= long.MaxValue ? (long)product : 0L;
         var valuePending = !hasPrice;
 
         var otherManagerNumber = ParseNullableInt(GetValue(row, "OTHERMANAGER"));
