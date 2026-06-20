@@ -17,7 +17,7 @@ namespace Equibles.UnitTests.Holdings;
 /// </summary>
 public class Corrupt13FShareCountRepairerRepairValueOverflowTests
 {
-    [Fact(Skip = "GH-3858 — Repair throws OverflowException on an oversized duplicated row")]
+    [Fact]
     public void Repair_DuplicatedRowValueOverPriceExceedsInt64_DoesNotThrowOverflow()
     {
         // Duplicated row (Shares == ReportedValue) with an oversized value and a $0.50
