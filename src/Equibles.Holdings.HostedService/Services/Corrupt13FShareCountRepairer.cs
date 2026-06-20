@@ -90,11 +90,28 @@ internal static class Corrupt13FShareCountRepairer
                 && closePrice > 0
             )
             {
-                var shares = (long)Math.Round(reportedDollars / closePrice);
+                var recoveredShares = Math.Round(reportedDollars / closePrice);
+                var recoveredValue = recoveredShares * closePrice;
+                // An oversized corrupt row can push value ÷ price (and the value it
+                // implies) past Int64; it is too large to represent, so drop it like the
+                // neither-anchor case below instead of letting the (long) casts throw
+                // OverflowException and abort the whole import batch.
+                if (
+                    recoveredShares < long.MinValue
+                    || recoveredShares > long.MaxValue
+                    || recoveredValue < long.MinValue
+                    || recoveredValue > long.MaxValue
+                )
+                {
+                    dropped++;
+                    continue;
+                }
+
+                var shares = (long)recoveredShares;
                 // The truncating cast deliberately mirrors ParseHoldingRow's
                 // `(long)(shares * closePrice)` so a repaired row is identical
                 // to what the same filing would have produced if filed correctly.
-                ApplyRepair(row, shares, (long)(shares * closePrice), valuePending: false);
+                ApplyRepair(row, shares, (long)recoveredValue, valuePending: false);
                 repaired++;
                 kept.Add(row);
                 continue;
