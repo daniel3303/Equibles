@@ -17,6 +17,14 @@ internal static class FiscalPeriodResolver
     // any real-world drift while still rejecting unrelated dates.
     private const int FyeMatchWindowDays = 14;
 
+    // A fiscal-year end in the first days of January marks a 52/53-week filer
+    // whose year-end oscillates around Dec 31 and occasionally lands just into
+    // the new year (e.g. Johnson & Johnson: SEC's submissions fiscalYearEnd is
+    // "0103", yet every recent fiscal year is December-anchored — FY2025 ended
+    // 2025-12-28). It is *not* a genuine late-January retail year-end (Walmart,
+    // Target: day ~31). The day cutoff separates the two.
+    private const int EarlyJanuaryFiscalYearEndDay = 7;
+
     private const int AnnualMinDays = 350;
     private const int AnnualMaxDays = 380;
     private const int QuarterMinDays = 80;
@@ -44,6 +52,17 @@ internal static class FiscalPeriodResolver
             return null;
         if (fyeMonth < 1 || fyeMonth > 12 || fyeDay < 1 || fyeDay > 31)
             return null;
+
+        // Treat an early-January (year-turn) fiscal-year end as December-anchored
+        // so the period lands in the year the company actually reports. Without
+        // this, every period for such a filer is labelled one fiscal year too
+        // high (e.g. J&J's quarter ending 2026-03-29 would resolve to FY2027
+        // instead of FY2026). Issue #4423.
+        if (fyeMonth == 1 && fyeDay <= EarlyJanuaryFiscalYearEndDay)
+        {
+            fyeMonth = 12;
+            fyeDay = 31;
+        }
 
         var candidates = new[]
         {
