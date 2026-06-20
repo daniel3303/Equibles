@@ -24,7 +24,7 @@ public class NportToolsGetFundsHoldingStockNegativeMaxResultsTests : ParadeDbMcp
             NullLogger<NportTools>()
         );
 
-    [Fact(Skip = "GH-3830 — GetFundsHoldingStock surfaces an internal error on a negative maxResults")]
+    [Fact]
     public async Task GetFundsHoldingStock_NegativeMaxResults_DegradesGracefullyWithoutInternalError()
     {
         // Contract: maxResults is documented as "Maximum number of fund positions to return" — a
