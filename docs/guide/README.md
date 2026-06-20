@@ -65,6 +65,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Ask your AI assistant about off-exchange (dark pool) volume](how-to-ask-about-off-exchange-volume.md)
 - [Ask your AI assistant for short-squeeze candidates](how-to-ask-about-short-squeeze-candidates.md)
 - [Browse economic indicators](how-to-browse-economic-data.md)
+- [Ask your AI assistant about economic indicators (FRED data)](how-to-ask-about-economic-indicators.md)
 - [Ask your AI assistant about the economic release calendar](how-to-ask-about-economic-calendar.md)
 - [Browse market indicators (VIX and put/call ratios)](how-to-browse-market-indicators.md)
 - [Ask your AI assistant about market sentiment (VIX and put/call ratios)](how-to-ask-about-market-sentiment.md)
