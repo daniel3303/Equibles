@@ -29,7 +29,14 @@ internal static class SecHeadingKeyword
             return false;
 
         var after = upperText.Substring(keyword.Length + 1).Trim();
-        var tokens = after.Split([' ', '.', '-', ':'], StringSplitOptions.RemoveEmptyEntries);
+        // SEC EDGAR separates the identifier from a glued title with an em-dash (U+2014)
+        // or en-dash (U+2013), not the ASCII hyphen — "PART II—OTHER INFORMATION". Treat
+        // all three as token separators so a no-space dash doesn't fuse the numeral to the
+        // next word and defeat the identifier check.
+        var tokens = after.Split(
+            [' ', '.', '-', ':', '—', '–'],
+            StringSplitOptions.RemoveEmptyEntries
+        );
         if (tokens.Length == 0)
             return false;
 
