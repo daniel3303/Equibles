@@ -4,6 +4,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models.Responses;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.HostedService.Services;
 using Equibles.Sec.FinancialFacts.Repositories;
@@ -67,6 +68,8 @@ public class FinancialFactsImportServiceIdempotencyTests : IAsyncLifetime
                 sp.GetService(typeof(FinancialFactsSyncStatusRepository))
                     .Returns(new FinancialFactsSyncStatusRepository(ctx));
                 sp.GetService(typeof(DocumentRepository)).Returns(new DocumentRepository(ctx));
+                sp.GetService(typeof(ISharesOutstandingProvider))
+                    .Returns(Substitute.For<ISharesOutstandingProvider>());
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
                 return scope;
