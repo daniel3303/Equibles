@@ -45,6 +45,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Search for stocks, filings, institutions, and more](how-to-search.md)
 - [View market-wide insider trading activity](how-to-view-insider-activity.md)
 - [View proposed insider sales (SEC Form 144)](how-to-view-proposed-sales.md)
+- [View a member of Congress's trading profile](how-to-view-congress-member-trades.md)
 - [Browse market-wide short data (most shorted and largest short volume)](how-to-browse-short-data.md)
 - [Browse economic indicators](how-to-browse-economic-data.md)
 - [Browse market indicators (VIX and put/call ratios)](how-to-browse-market-indicators.md)
