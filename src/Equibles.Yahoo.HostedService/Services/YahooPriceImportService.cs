@@ -189,7 +189,7 @@ public class YahooPriceImportService
         // current; Yahoo's figure is per-share-class and lags corporate actions. Defer to EDGAR
         // for the share count when the issuer has a consolidated SEC fact, so Yahoo can't overwrite
         // it with a stale or single-class value (#3575/#2503).
-        var sharesProvider = scope.ServiceProvider.GetRequiredService<SharesOutstandingProvider>();
+        var sharesProvider = scope.ServiceProvider.GetRequiredService<ISharesOutstandingProvider>();
         var edgarShares = await sharesProvider.GetReportedSharesOutstanding(
             stock,
             cancellationToken

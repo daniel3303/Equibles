@@ -3,6 +3,7 @@ using Equibles.Core.AutoWiring;
 using Equibles.Sec.FinancialFacts.Data.Statements;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Equibles.Sec.FinancialFacts.BusinessLogic;
 
@@ -14,8 +15,8 @@ namespace Equibles.Sec.FinancialFacts.BusinessLogic;
 // issuer reports the count only per share class (dimensional facts on the class-of-stock axis,
 // no consolidated fact), so GetSummedPerClassSharesOutstanding sums those classes into the entity
 // total (#2503).
-[Service]
-public class SharesOutstandingProvider
+[Service(ServiceLifetime.Scoped, typeof(ISharesOutstandingProvider))]
+public class SharesOutstandingProvider : ISharesOutstandingProvider
 {
     private const string SharesUnit = "shares";
 
