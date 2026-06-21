@@ -10,7 +10,9 @@ public class InvestorRelationsLinkExtractorDedupSuppressesLaterIrAnchorTests
     // slot and silently suppress a later IR anchor to that URL. Here a generic "Company
     // Overview" link and an "Investor Relations" link share /overview; the page clearly has an
     // IR link, so /overview must be returned.
-    [Fact(Skip = "GH-3957 — dedup key recorded before IR classification drops a valid later IR link")]
+    [Fact(
+        Skip = "GH-3957 — dedup key recorded before IR classification drops a valid later IR link"
+    )]
     public void Extract_NonIrAnchorPrecedesIrAnchorToSameUrl_StillReturnsTheIrCandidate()
     {
         const string html =
