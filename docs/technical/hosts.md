@@ -57,7 +57,7 @@ The background-scraper host. Plain `Host.CreateApplicationBuilder` (not `WebAppl
 Every host runs the same five steps described in [Architecture → Host composition](architecture.md#host-composition):
 
 1. `PluginLoader.LoadAll()`
-2. `AddEquiblesDbContext(... modules.AddAllModules().AddMessaging() ...)` (Worker calls `AddMessaging` separately as a service registration, not as a module — the module registration still happens via `AddAllModules()`)
+2. `AddEquiblesFinancialDbContext(... modules.AddAllModules().AddMessaging() ...)` (Worker calls `AddMessaging` separately as a service registration, not as a module — the module registration still happens via `AddAllModules()`)
 3. `AddAllRepositories()`
 4. `AutoWireServicesFrom<T>()` (once per assembly to wire)
 5. Host-specific registrations
