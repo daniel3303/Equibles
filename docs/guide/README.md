@@ -33,6 +33,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Ask your AI assistant about investment advisers (SEC Form ADV)](how-to-ask-about-investment-advisers.md)
 - [View a fund's portfolio holdings (SEC Form N-PORT)](how-to-view-fund-holdings.md)
 - [View a fund's operations (SEC Form N-CEN)](how-to-view-fund-operations.md)
+- [Ask your AI assistant about a fund's operations (SEC Form N-CEN)](how-to-ask-about-fund-operations.md)
 - [Ask your AI assistant about funds in the directory](how-to-ask-about-fund-directory.md)
 - [Ask your AI assistant which funds and ETFs hold a stock](how-to-ask-about-funds-holding-a-stock.md)
 - [View a company's exempt offerings (SEC Form D)](how-to-view-exempt-offerings.md)
