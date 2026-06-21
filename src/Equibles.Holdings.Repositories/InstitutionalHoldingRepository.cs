@@ -14,6 +14,12 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     public InstitutionalHoldingRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
+    // 13F-only filter shared by the per-stock and per-holder 13F surfaces. Schedule 13D/G rows
+    // live in this same table (distinguished by FilingType); excluding them keeps a filer's 13F
+    // holding and its 13D/G stake from both rendering and double-counting ownership (GH-4449).
+    private static readonly Expression<Func<InstitutionalHolding, bool>> Is13F = h =>
+        h.FilingType == FilingType.Form13F;
+
     public IQueryable<InstitutionalHolding> GetByStock(CommonStock stock, DateOnly reportDate)
     {
         return GetAll().Where(h => h.CommonStockId == stock.Id && h.ReportDate == reportDate);
@@ -36,7 +42,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // the filer's ownership (GH-4449).
     public IQueryable<InstitutionalHolding> Get13FByStock(CommonStock stock, DateOnly reportDate)
     {
-        return GetByStock(stock, reportDate).Where(h => h.FilingType == FilingType.Form13F);
+        return GetByStock(stock, reportDate).Where(Is13F);
     }
 
     // Same stock/date 13F-only filter as Get13FByStock, with the InstitutionalHolder navigation
@@ -77,7 +83,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         DateOnly reportDate
     )
     {
-        return GetByHolder(holder, reportDate).Where(h => h.FilingType == FilingType.Form13F);
+        return GetByHolder(holder, reportDate).Where(Is13F);
     }
 
     public IQueryable<InstitutionalHolding> GetLatestByStock(CommonStock stock)
@@ -109,7 +115,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // quarter axis and its share count inflates the per-quarter total (GH-4449).
     public IQueryable<InstitutionalHolding> Get13FHistoryByStock(CommonStock stock)
     {
-        return GetHistoryByStock(stock).Where(h => h.FilingType == FilingType.Form13F);
+        return GetHistoryByStock(stock).Where(Is13F);
     }
 
     public IQueryable<InstitutionalHolding> GetHistoryByHolder(InstitutionalHolder holder)
@@ -123,7 +129,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // exclude them or a later 13D/G filing replaces the fund's real portfolio.
     public IQueryable<InstitutionalHolding> Get13FHistoryByHolder(InstitutionalHolder holder)
     {
-        return GetHistoryByHolder(holder).Where(h => h.FilingType == FilingType.Form13F);
+        return GetHistoryByHolder(holder).Where(Is13F);
     }
 
     // Latest dates first — callers consistently treat index 0 as the newest filing window.
@@ -136,7 +142,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // into quarter-vs-single-day. Market-wide activity pages resolve their comparison
     // window off this list, so it must stay 13F-only.
     public IQueryable<DateOnly> Get13FAvailableReportDates() =>
-        GetAll().Where(h => h.FilingType == FilingType.Form13F).DistinctReportDatesDescending();
+        GetAll().Where(Is13F).DistinctReportDatesDescending();
 
     // Latest dates first — see GetAvailableReportDates for the ordering contract.
     public IQueryable<DateOnly> GetReportDatesByStock(CommonStock stock) =>
