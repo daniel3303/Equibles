@@ -33,4 +33,17 @@ public interface IDocumentPersistenceService
     /// ingested before capture was enabled.
     /// </summary>
     Task UpdateXbrl(Document document, XbrlCaptureResult xbrl);
+
+    /// <summary>
+    /// Replaces the body of an already-persisted <see cref="Document"/> in place, keeping its id —
+    /// so soft references to it (e.g. an earnings call's TranscriptDocumentId) stay valid with no
+    /// re-link — and dropping its stale chunks (their embeddings cascade) so the chunking worker
+    /// re-chunks the new body on its next pass. Used when a document's source data is re-derived,
+    /// e.g. an audio transcript regenerated after its speakers are re-resolved.
+    /// </summary>
+    Task ReplaceContent(
+        Document document,
+        byte[] content,
+        CancellationToken cancellationToken = default
+    );
 }

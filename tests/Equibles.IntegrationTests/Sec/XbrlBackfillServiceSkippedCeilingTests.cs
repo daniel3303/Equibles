@@ -83,6 +83,7 @@ public class XbrlBackfillServiceSkippedCeilingTests : ParadeDbMcpTestBase
         var repo = new DocumentRepository(DbContext);
         var persistence = new DocumentPersistenceService(
             repo,
+            new ChunkRepository(DbContext),
             new FileManager(new FileRepository(DbContext)),
             Substitute.For<IBus>()
         );

@@ -8,6 +8,7 @@ using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Models;
 using Equibles.Sec.Repositories;
 using MassTransit;
+using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Sec.HostedService.Services;
 
@@ -16,16 +17,19 @@ public class DocumentPersistenceService : IDocumentPersistenceService
     private const int MaxFileNameLength = 256;
 
     private readonly DocumentRepository _documentRepository;
+    private readonly ChunkRepository _chunkRepository;
     private readonly IFileManager _fileManager;
     private readonly IBus _bus;
 
     public DocumentPersistenceService(
         DocumentRepository documentRepository,
+        ChunkRepository chunkRepository,
         IFileManager fileManager,
         IBus bus
     )
     {
         _documentRepository = documentRepository;
+        _chunkRepository = chunkRepository;
         _fileManager = fileManager;
         _bus = bus;
     }
@@ -103,6 +107,36 @@ public class DocumentPersistenceService : IDocumentPersistenceService
     {
         await ApplyXbrlCapture(document, xbrl ?? XbrlCaptureResult.NotChecked);
         await _documentRepository.SaveChanges();
+    }
+
+    public async Task ReplaceContent(
+        Document document,
+        byte[] content,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var transaction = await _documentRepository.CreateTransaction(
+            IsolationLevel.ReadCommitted,
+            cancellationToken
+        );
+
+        // Swap in a new content file and recount lines. The document keeps its id, so every soft
+        // reference to it (e.g. an earnings call's TranscriptDocumentId) stays valid with no re-link.
+        var fileName = document.Content?.NameWithExtension ?? $"{document.Id}.txt";
+        var file = await _fileManager.SaveFile(content, fileName);
+        document.Content = file;
+        document.LineCount = Encoding.UTF8.GetString(content).Split('\n').Length;
+        _documentRepository.Update(document);
+
+        // Drop the stale chunks (their embeddings cascade at the DB level) so the chunking worker,
+        // which polls for documents that have no chunks, re-chunks the new body on its next pass.
+        await _chunkRepository
+            .GetAll()
+            .Where(c => c.DocumentId == document.Id)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await _documentRepository.SaveChanges();
+        await transaction.CommitAsync(cancellationToken);
     }
 
     // Stores the captured XBRL envelope as a gzip-compressed internal File and records its

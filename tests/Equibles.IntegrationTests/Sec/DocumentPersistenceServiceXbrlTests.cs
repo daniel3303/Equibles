@@ -53,6 +53,7 @@ public class DocumentPersistenceServiceXbrlTests : ParadeDbMcpTestBase
     private DocumentPersistenceService BuildSut() =>
         new(
             new DocumentRepository(DbContext),
+            new ChunkRepository(DbContext),
             new FileManager(new FileRepository(DbContext)),
             Substitute.For<IBus>()
         );
