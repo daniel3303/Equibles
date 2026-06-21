@@ -123,6 +123,13 @@ The cursor pattern means re-running is cheap (a single query for `max(date)` per
 - [`FdaAdvisoryCommitteeCalendarImportService`](../../src/Equibles.FdaCatalysts.HostedService/Services/FdaAdvisoryCommitteeCalendarImportService.cs) parses the calendar, then upserts each meeting by its stable per-meeting slug (`FdaCatalyst.SourceReference`): an existing row refreshes its mutable fields, a new meeting inserts.
 - The calendar is mutable — scheduled dates and venues shift before a meeting happens — so a `max(date)` cursor would skip edits to already-stored meetings. Re-reading every cycle keeps stored rows in sync.
 
+### Government contracts — windowed scan with unique-key dedup
+
+[`GovernmentContractsImportService`](../../src/Equibles.GovernmentContracts.HostedService/Services/GovernmentContractsImportService.cs) resumes from a `SyncDateResolver` watermark like the cursor scrapers above (`max(ActionDate)`), but USAspending requires a bounded date range per request, so it walks forward from that start date in `WindowDays`-sized chunks.
+
+- Awards back-fill into past dates, so a monotonic cursor alone would re-import already-stored rows. Each window's mapped awards are de-duplicated against `LoadExistingKeys` by `AwardUniqueKey` before persistence — only genuinely new awards insert.
+- A transient transport failure aborts the scan and records one error; the next run resumes from the same watermark. Window-specific failures fall through so the remaining windows still process.
+
 ## Cold-start patterns
 
 - Empty `CommonStock` table → most scrapers `RequestRetrySoon()` and wait `NotReadyRetryInterval` (2 min) instead of the full `SleepInterval` (24h).
