@@ -18,11 +18,6 @@ namespace Equibles.Sec.HostedService.Services;
 /// </summary>
 public class XbrlBackfillService
 {
-    // After this many failed cycles a document is no longer selected, so a permanently
-    // unfetchable filing (deleted/superseded on EDGAR, unparseable) can't sit at the head of
-    // the newest-first queue and starve every older document behind it.
-    private const int MaxAttempts = 5;
-
     // Rows ingested before AccessionNumber existed carry it only inside the stored EDGAR
     // full-submission URL (https://www.sec.gov/Archives/edgar/data/{cik}/{accession}.txt).
     // The accession is the file name; recovering it makes those rows backfillable.
@@ -64,22 +59,10 @@ public class XbrlBackfillService
             return result;
         }
 
-        // Only documents that came from a filing and whose issuer has a CIK qualify: either
-        // they carry the accession directly, or it can be recovered from the stored EDGAR
-        // submission URL (rows ingested before AccessionNumber existed). Non-EDGAR documents
-        // (e.g. earnings-call transcripts) have neither and are never selected. Documents
-        // that have exhausted their retry ceiling are dropped from the working set so they
-        // can't block the queue. Newest first so recent filings fill in soonest.
-        var query = _documentRepository
-            .GetByXbrlStatus(XbrlCaptureStatus.NotChecked)
-            .Where(d =>
-                (
-                    d.AccessionNumber != null
-                    || (d.SourceUrl != null && d.SourceUrl.Contains("/Archives/edgar/data/"))
-                )
-                && d.CommonStock.Cik != null
-                && d.XbrlCaptureAttempts < MaxAttempts
-            );
+        // The repository defines the work-set (EDGAR-sourced, issuer has a CIK, under the
+        // retry ceiling). Apply the optional minimum-reporting-date floor on top, then take the
+        // newest first so recent filings fill in soonest.
+        var query = _documentRepository.GetPendingXbrlBackfill();
 
         if (minReportingDate.HasValue)
         {

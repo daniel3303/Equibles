@@ -96,6 +96,14 @@ public class Document
     public int XbrlCaptureAttempts { get; set; }
 
     /// <summary>
+    /// Retry ceiling for <see cref="XbrlCaptureAttempts"/>: once a
+    /// <see cref="XbrlCaptureStatus.NotChecked"/> document has failed to reach a terminal
+    /// capture this many times it leaves the backfill working set, so a permanently
+    /// unfetchable filing can't starve the rest of the queue.
+    /// </summary>
+    public const int MaxXbrlCaptureAttempts = 5;
+
+    /// <summary>
     /// Version of the dimensional-fact extractor that last processed this document's
     /// captured XBRL envelope. 0 = never extracted; the extraction sweep selects
     /// <see cref="XbrlCaptureStatus.Captured"/> documents whose version is below the
