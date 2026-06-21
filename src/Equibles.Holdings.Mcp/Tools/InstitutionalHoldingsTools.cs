@@ -80,12 +80,12 @@ public class InstitutionalHoldingsTools
 
                 var (targetDate, found) = await TryResolveLatestReportDate(
                     reportDate,
-                    _holdingRepository.GetReportDatesByStock(stock)
+                    _holdingRepository.Get13FReportDatesByStock(stock)
                 );
                 if (!found)
                     return $"No institutional holdings data available for {ticker}.";
 
-                var allHoldings = _holdingRepository.GetByStock(stock, targetDate);
+                var allHoldings = _holdingRepository.Get13FByStock(stock, targetDate);
                 var totalInstitutions = await allHoldings
                     .Select(h => h.InstitutionalHolderId)
                     .Distinct()
@@ -170,7 +170,7 @@ public class InstitutionalHoldingsTools
                     return stockError;
 
                 var reportDates = await _holdingRepository
-                    .GetReportDatesByStock(stock)
+                    .Get13FReportDatesByStock(stock)
                     .Take(McpLimit.Clamp(maxPeriods))
                     .ToListAsync();
 
@@ -199,7 +199,7 @@ public class InstitutionalHoldingsTools
         long previousShares = 0;
         foreach (var date in reportDates.OrderBy(d => d))
         {
-            var holdings = await _holdingRepository.GetByStock(stock, date).ToListAsync();
+            var holdings = await _holdingRepository.Get13FByStock(stock, date).ToListAsync();
             var totalShares = holdings.Sum(h => h.Shares);
             var totalValue = holdings.Sum(h => h.Value);
             var institutionCount = holdings.Select(h => h.InstitutionalHolderId).Distinct().Count();
@@ -342,7 +342,7 @@ public class InstitutionalHoldingsTools
                     return stockError;
 
                 var reportDates = await _holdingRepository
-                    .GetReportDatesByStock(stock)
+                    .Get13FReportDatesByStock(stock)
                     .ToListAsync();
 
                 var targetDate = TryParseReportDate(reportDate, out var parsed)
@@ -354,11 +354,11 @@ public class InstitutionalHoldingsTools
                 var previousDate = GetPriorReportDate(reportDates, targetDate);
 
                 var currentHoldings = await _holdingRepository
-                    .GetByStockWithHolder(stock, targetDate)
+                    .Get13FByStockWithHolder(stock, targetDate)
                     .ToListAsync();
                 var previousHoldings = previousDate.HasValue
                     ? await _holdingRepository
-                        .GetByStockWithHolder(stock, previousDate.Value)
+                        .Get13FByStockWithHolder(stock, previousDate.Value)
                         .ToListAsync()
                     : [];
 
