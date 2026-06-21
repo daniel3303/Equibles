@@ -8,9 +8,7 @@ public class SenateAnnualReportClientLiabilityDescriptionWithoutTypeTests
     // Contract: a liability line's description reads "Type (Creditor)" when both are present
     // (e.g. "Mortgage (Sample Bank)"). When the Type column is absent there is no type, so the
     // description must be the creditor alone — not an empty-type wrapper with a leading space.
-    [Fact(
-        Skip = "GH-3964 — missing Type column yields description \" (Creditor)\" instead of the creditor alone"
-    )]
+    [Fact]
     public void ParseAnnualReportHtml_LiabilityWithoutTypeColumn_DescriptionIsCreditorAlone()
     {
         const string html = """
