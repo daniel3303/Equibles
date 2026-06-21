@@ -55,6 +55,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Compare institutions with the overlap matrix](how-to-compare-institution-overlap.md)
 - [Compare institutions side by side](how-to-compare-institutions-side-by-side.md)
 - [Ask your AI assistant about portfolio overlap between two funds](how-to-ask-about-fund-overlap.md)
+- [Ask your AI assistant what several funds agree on (consensus holdings)](how-to-ask-about-consensus-holdings.md)
 - [View the combined portfolio of several institutions](how-to-view-combined-institution-portfolio.md)
 - [Check worker health and recent errors](how-to-view-status-and-errors.md)
 - [Search for stocks, filings, institutions, and more](how-to-search.md)
