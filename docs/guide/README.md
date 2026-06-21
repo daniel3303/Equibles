@@ -71,6 +71,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Ask your AI assistant about a member of Congress's net worth](how-to-ask-about-congress-member-net-worth.md)
 - [Browse market-wide short data (most shorted and largest short volume)](how-to-browse-short-data.md)
 - [Ask your AI assistant about a stock's short data](how-to-ask-about-short-data.md)
+- [Ask your AI assistant about market-wide short data](how-to-ask-about-market-wide-short-data.md)
 - [Ask your AI assistant about off-exchange (dark pool) volume](how-to-ask-about-off-exchange-volume.md)
 - [Ask your AI assistant for short-squeeze candidates](how-to-ask-about-short-squeeze-candidates.md)
 - [Browse economic indicators](how-to-browse-economic-data.md)
