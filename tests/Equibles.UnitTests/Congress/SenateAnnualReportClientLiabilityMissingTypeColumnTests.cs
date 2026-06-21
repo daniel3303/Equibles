@@ -11,7 +11,7 @@ public class SenateAnnualReportClientLiabilityMissingTypeColumnTests
     // liability layout and must degrade gracefully (the electronic-layout
     // design never crashes on header variance), not throw while indexing a
     // missing column.
-    [Fact(Skip = "GH-3938 — ParseLiabilityTable throws (cells[-1]) on a liability table without a Type column")]
+    [Fact]
     public void ParseAnnualReportHtml_LiabilityTableWithoutTypeColumn_DoesNotThrow()
     {
         const string html = """
