@@ -130,6 +130,13 @@ The cursor pattern means re-running is cheap (a single query for `max(date)` per
 - Awards back-fill into past dates, so a monotonic cursor alone would re-import already-stored rows. Each window's mapped awards are de-duplicated against `LoadExistingKeys` by `AwardUniqueKey` before persistence — only genuinely new awards insert.
 - A transient transport failure aborts the scan and records one error; the next run resumes from the same watermark. Window-specific failures fall through so the remaining windows still process.
 
+### Congress — fixed-window re-scan across both chambers
+
+The two congressional scrapers re-read a fixed recent window every cycle instead of advancing a `max(date)` watermark, because members file and amend disclosures well after the reporting period — a monotonic cursor would step past a late filing and never pick it up.
+
+- [`CongressionalTradeSyncService`](../../src/Equibles.Congress.HostedService/Services/CongressionalTradeSyncService.cs) re-reads trades from `MinSyncDate` (default: the trailing 90 days) to today from both the `SenateDisclosureClient` and `HouseDisclosureClient`, then matches each transaction to a tracked stock.
+- [`CongressionalAnnualDisclosureSyncService`](../../src/Equibles.Congress.HostedService/Services/CongressionalAnnualDisclosureSyncService.cs) re-reads annual financial disclosures across a span of coverage years (House per year, Senate by submitted date) and upserts each report by its stable key, so a late amendment refreshes the stored row rather than inserting a duplicate.
+
 ## Cold-start patterns
 
 - Empty `CommonStock` table → most scrapers `RequestRetrySoon()` and wait `NotReadyRetryInterval` (2 min) instead of the full `SleepInterval` (24h).
