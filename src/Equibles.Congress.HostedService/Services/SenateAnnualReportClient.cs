@@ -342,7 +342,10 @@ public partial class SenateAnnualReportClient
             if (range == null)
                 continue;
 
-            var type = CellText(cells[typeColumn]);
+            // The entry gate only requires "creditor" and "amount"; a table
+            // without a Type column leaves typeColumn at -1 (the bounds check
+            // above already tolerates it), so read it only when present.
+            var type = typeColumn >= 0 ? CellText(cells[typeColumn]) : "";
             var creditor = CellText(cells[creditorColumn]);
             var description = string.IsNullOrEmpty(creditor) ? type : $"{type} ({creditor})";
             if (string.IsNullOrEmpty(description))
