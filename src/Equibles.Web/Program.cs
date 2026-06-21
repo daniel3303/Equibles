@@ -218,6 +218,14 @@ public partial class Program
             app.UseHsts();
         }
 
+        // Re-execute to the branded Error page for status-code responses that
+        // carry no body — most importantly a 404 from an unmatched route, which
+        // otherwise reaches the user as an empty browser error page. Registered in
+        // every environment: UseExceptionHandler above only covers thrown
+        // exceptions, not bare status codes. HomeController.Error reads the {0}
+        // status code from the route and renders the matching message.
+        app.UseStatusCodePagesWithReExecute("/home/error/{0}");
+
         app.UseSecurityHeaders();
         app.UseResponseCompression();
 
