@@ -49,7 +49,7 @@ Each upstream source has its own integration project:
 | `Equibles.Integrations.Cboe` | CBOE indicators |
 | `Equibles.Integrations.GovernmentContracts` | USAspending.gov federal contract awards |
 | `Equibles.Integrations.Wikidata` | Wikidata SPARQL endpoint (company metadata discovery) |
-| `Equibles.Integrations.Common` | Shared infrastructure — currently `RateLimiter` only |
+| `Equibles.Integrations.Common` | Shared infrastructure — `RateLimiter` plus the `RetryBackoff` exponential-backoff formula and the `HttpRetry.Send` 429/5xx retry helper |
 
 Every client follows the same shape: one interface + one implementation registered via `[Service(ServiceLifetime.Scoped, typeof(IXxxClient))]` (the AutoWire attribute from `Equibles.Core.AutoWiring`). The interface lives in `Contracts/`, the DTOs in `Models/`, and the wire/transport details in the client class itself.
 
