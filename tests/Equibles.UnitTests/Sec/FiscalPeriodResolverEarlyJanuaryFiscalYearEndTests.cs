@@ -50,6 +50,23 @@ public class FiscalPeriodResolverEarlyJanuaryFiscalYearEndTests
     }
 
     [Fact]
+    public void Resolve_FyeOnSeventhOfJanuary_Quarter_IsDecemberAnchoredYear()
+    {
+        // Boundary: EarlyJanuaryFiscalYearEndDay is an *inclusive* cutoff of 7, so
+        // a year-turn FYE landing exactly on Jan 7 is still December-anchored and
+        // its quarter ending 2026-03-29 must resolve to FY2026 Q1, not FY2027.
+        // Guards the cutoff against an off-by-one (<= becoming <, or 7 becoming 6).
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2025, 12, 29),
+            periodEnd: new DateOnly(2026, 3, 29),
+            fyeMonth: 1,
+            fyeDay: 7
+        );
+
+        result.Should().Be((2026, SecFiscalPeriod.Q1));
+    }
+
+    [Fact]
     public void Resolve_GenuineLateJanuaryFye_Quarter_IsUnaffected()
     {
         // Walmart-style retail filer ending Jan 31 is a real January fiscal year
