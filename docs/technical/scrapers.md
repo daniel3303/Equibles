@@ -116,6 +116,13 @@ The cursor pattern means re-running is cheap (a single query for `max(date)` per
 - `Persist` re-loads the row and writes only when `InvestorRelationsUrl` is still null, so an overlapping run or manual edit is never clobbered.
 - A stock that has no discoverable IR page stays null and is re-probed every cycle — there is no last-attempted timestamp yet, so persistent misses are not yet suppressed.
 
+### FDA catalysts — watermark-less re-read + upsert
+
+[`FdaCatalystScraperWorker`](../../src/Equibles.FdaCatalysts.HostedService/FdaCatalystScraperWorker.cs) reconciles the forward-looking FDA advisory-committee calendar, which carries no historical watermark — every cycle re-reads the whole calendar rather than resuming from a `max(date)` cursor.
+
+- [`FdaAdvisoryCommitteeCalendarImportService`](../../src/Equibles.FdaCatalysts.HostedService/Services/FdaAdvisoryCommitteeCalendarImportService.cs) parses the calendar, then upserts each meeting by its stable per-meeting slug (`FdaCatalyst.SourceReference`): an existing row refreshes its mutable fields, a new meeting inserts.
+- The calendar is mutable — scheduled dates and venues shift before a meeting happens — so a `max(date)` cursor would skip edits to already-stored meetings. Re-reading every cycle keeps stored rows in sync.
+
 ## Cold-start patterns
 
 - Empty `CommonStock` table → most scrapers `RequestRetrySoon()` and wait `NotReadyRetryInterval` (2 min) instead of the full `SleepInterval` (24h).
