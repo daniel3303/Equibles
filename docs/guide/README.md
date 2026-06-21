@@ -41,6 +41,7 @@ Task-focused recipes for someone who has Equibles running.
 - [Use the 13F holdings screener](how-to-use-holdings-screener.md)
 - [View quarterly holdings activity across the market](how-to-view-holdings-activity.md)
 - [Ask your AI assistant which stocks institutions hold most](how-to-ask-about-most-held-stocks.md)
+- [Ask your AI assistant what institutions are buying and selling (13F leaderboards)](how-to-ask-about-market-wide-13f-activity.md)
 - [Ask your AI assistant who owns a stock (institutional holders)](how-to-ask-about-institutional-ownership.md)
 - [Ask your AI assistant about an institution's portfolio](how-to-ask-about-institution-portfolio.md)
 - [View the latest 13F filings](how-to-view-latest-13f-filings.md)
