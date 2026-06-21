@@ -86,6 +86,7 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase
         var bus = Substitute.For<IBus>();
         var sut = new DocumentPersistenceService(
             new DocumentRepository(DbContext),
+            new ChunkRepository(DbContext),
             fileManager,
             bus
         );

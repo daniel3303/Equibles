@@ -98,7 +98,12 @@ public class DocumentPersistenceServiceTests : IDisposable
             .Returns(savedFile);
 
         var documentRepo = new DocumentRepository(_dbContext);
-        var sut = new DocumentPersistenceService(documentRepo, fileManager, Substitute.For<IBus>());
+        var sut = new DocumentPersistenceService(
+            documentRepo,
+            new ChunkRepository(_dbContext),
+            fileManager,
+            Substitute.For<IBus>()
+        );
 
         var content = Encoding.UTF8.GetBytes("First line\nSecond line\nThird line");
 

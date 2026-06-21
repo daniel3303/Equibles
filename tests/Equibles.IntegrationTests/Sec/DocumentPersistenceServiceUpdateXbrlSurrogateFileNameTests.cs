@@ -46,6 +46,7 @@ public class DocumentPersistenceServiceUpdateXbrlSurrogateFileNameTests : Parade
         await using var ctx = Fixture.CreateDbContext();
         var service = new DocumentPersistenceService(
             new DocumentRepository(ctx),
+            new ChunkRepository(ctx),
             fileManager,
             Substitute.For<IBus>()
         );
