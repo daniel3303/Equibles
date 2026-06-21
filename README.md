@@ -55,7 +55,7 @@ This starts:
 | **db** | 5432 | ParadeDB (PostgreSQL + pgvector + pg_search) |
 | **web** | 8080 | Web portal for browsing data |
 | **mcp** | 8081 | MCP server for AI assistants |
-| **worker** | — | Scrapers (SEC, FINRA, Congress, FRED, Yahoo) |
+| **worker** | — | Scrapers (SEC, FINRA, Congress, FRED, Yahoo, CFTC, CBOE, USAspending, FDA) |
 
 Data scraping starts automatically. SEC filings, holdings, insider trades, and congressional trades will begin populating within minutes.
 
