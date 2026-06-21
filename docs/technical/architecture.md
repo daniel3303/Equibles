@@ -36,7 +36,7 @@ Three host applications:
 Every host runs the same five-step startup, varying only in which optional layers it wires up:
 
 1. `Equibles.Plugins.PluginLoader.LoadAll()` — loads any optional plugin assemblies first so reflection-based registration sees them.
-2. `services.AddEquiblesDbContext(connectionString, modules => modules.AddAllModules().AddMessaging(), migrationsAssembly: …)` — composes the shared DbContext.
+2. `services.AddEquiblesFinancialDbContext(connectionString, modules => modules.AddAllModules().AddMessaging(), migrationsAssembly: …)` — composes the shared DbContext.
 3. `services.AddAllRepositories()` — reflects across loaded `Equibles.*` assemblies and registers every `BaseRepository<T>` as scoped.
 4. `services.AutoWireServicesFrom<T>()` — assembly-scoped DI registration driven by `[Service]` attributes; called once per assembly the host wants to wire (Equibles.Errors, Equibles.CommonStocks, etc.).
 5. Host-specific wiring — controllers + Razor views (Web), MCP tool registration (`mcp.AddHoldings()`, …), or `BackgroundService` workers (`services.AddHoldingsWorker()`, …).
@@ -45,7 +45,7 @@ Every host runs the same five-step startup, varying only in which optional layer
 
 ## Data flow
 
-```
+```text
 Data (entities) → Repositories (IQueryable) → Managers (write paths) → Controllers / MCP tools / HostedServices
 ```
 
@@ -62,7 +62,7 @@ Data (entities) → Repositories (IQueryable) → Managers (write paths) → Con
 ## EF and database
 
 - Single migrations assembly: [`src/Equibles.Migrations`](../../src/Equibles.Migrations).
-- Every host passes `migrationsAssembly: typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly` when calling `AddEquiblesDbContext`.
+- Every host passes `migrationsAssembly: typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly` when calling `AddEquiblesFinancialDbContext`.
 - Migrations apply on host startup via `await dbContext.Database.MigrateAsync()` with a 1-hour command timeout for index rebuilds.
 - The Npgsql provider is configured with `UseVector()` (pgvector), `UseParadeDb()` (BM25 / `pg_search`), `UseQuerySplittingBehavior(SplitQuery)`, and lazy-loading proxies.
 
