@@ -57,16 +57,23 @@ public static class InvestorRelationsLinkExtractor
         {
             if (!TryResolveHref(baseUri, anchor.GetAttributeValue("href", ""), out var absolute))
                 continue;
-            if (!seen.Add(absolute))
-                continue;
 
             var text = HtmlEntity.DeEntitize(anchor.InnerText ?? "").Trim().ToLowerInvariant();
             var haystack = text + " " + absolute.ToLowerInvariant();
 
+            // De-duplicate among the candidates only — recording the dedup key here, after
+            // classification, means a non-IR anchor to a URL can't consume the slot and suppress
+            // a later IR anchor to that same URL (GH-3957).
             if (PrimaryKeywords.Any(haystack.Contains) || HasIrHostOrPath(absolute))
-                primary.Add(absolute);
+            {
+                if (seen.Add(absolute))
+                    primary.Add(absolute);
+            }
             else if (SecondaryKeywords.Any(haystack.Contains))
-                secondary.Add(absolute);
+            {
+                if (seen.Add(absolute))
+                    secondary.Add(absolute);
+            }
         }
 
         return primary.Concat(secondary).Take(max).ToList();
