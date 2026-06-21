@@ -125,10 +125,7 @@ public class DocumentRepositoryGetPendingXbrlBackfillTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
         var sut = new DocumentRepository(verify);
 
-        var pending = await sut.GetPendingXbrlBackfill()
-            .Where(d => d.CommonStock.Cik == "0000320193" || d.CommonStock.Ticker == "NOCIK")
-            .AsNoTracking()
-            .ToListAsync();
+        var pending = await sut.GetPendingXbrlBackfill().AsNoTracking().ToListAsync();
 
         pending
             .Select(d => d.Id)

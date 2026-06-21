@@ -105,7 +105,7 @@ public class XbrlBackfillServiceSkippedCeilingTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Backfill_DocumentStuckOnSkippedPath_StopsBeingSelectedAfterRetryCeiling()
     {
-        const int maxAttempts = 5;
+        const int maxAttempts = Document.MaxXbrlCaptureAttempts;
         var company = await SeedCompany();
         await SeedDocument(company.Id, "STUCK-SKIPPED", new DateOnly(2024, 3, 1));
         DbContext.ChangeTracker.Clear();
