@@ -22,8 +22,10 @@ public class AsFiledHtmlCaptureService
     /// Stitcher version stamped onto a processed document. The backfill re-stitches 8-K
     /// documents whose <c>AsFiledHtmlVersion</c> is below this, so bumping it after a stitcher
     /// change reprocesses the corpus (same version-stamp redrain as the XBRL-facts extractor).
+    /// Forwards to <see cref="Document.AsFiledHtmlBuilderVersion"/> — the single source of truth
+    /// in the Data layer, so the backoffice can read it without depending on this assembly.
     /// </summary>
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = Document.AsFiledHtmlBuilderVersion;
 
     // Upper bound on the stitched page we'll store, matching the viewer's serve-time cap
     // (DocumentOriginalHtmlProvider.MaxOriginalHtmlBytes). A page bigger than this could never be
