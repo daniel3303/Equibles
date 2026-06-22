@@ -177,6 +177,44 @@ public class FredReleaseCalendarImportService : IImporter
             return;
         }
 
+        // Drop releases whose value is merely carried forward every calendar day
+        // rather than published on scheduled announcement dates. With
+        // include_release_dates_with_no_data=true, FRED fills a "release date" for
+        // EVERY day — including weekends — for releases backed by a continuously
+        // carried-forward daily rate level (e.g. the FOMC Press Release driven by
+        // the DFEDTARL/DFEDTARU target range). The daily level update is not an
+        // announcement event, so projecting it onto the calendar produced a phantom
+        // "FOMC Press Release" entry on every single day (the only row on weekends).
+        //
+        // The defensible, data-only discriminator: no genuine statistical release
+        // (CPI, Employment Situation, GDP) — and no genuine business-day daily print
+        // (EFFR, SOFR, VIXCLS) — is ever published on a Saturday or Sunday. A release
+        // that FRED reports on any weekend day is therefore a 7-day carry-forward, not
+        // an announcement. We never model the 8 real FOMC meeting dates from this feed,
+        // so suppressing such a release entirely is the conservative correct outcome.
+        var carriedForwardReleases = parsed
+            .Where(p => p.Date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+            .Select(p => p.ReleaseId)
+            .ToHashSet();
+
+        if (carriedForwardReleases.Count > 0)
+        {
+            var dropped = parsed.RemoveAll(p => carriedForwardReleases.Contains(p.ReleaseId));
+            _logger.LogDebug(
+                "Skipped {Count} carry-forward release dates across {Releases} continuously-updated releases",
+                dropped,
+                carriedForwardReleases.Count
+            );
+
+            if (parsed.Count == 0)
+            {
+                _logger.LogDebug(
+                    "No scheduled FRED release dates after dropping carry-forward fills"
+                );
+                return;
+            }
+        }
+
         var minDate = parsed.Min(p => p.Date);
         var maxDate = parsed.Max(p => p.Date);
 

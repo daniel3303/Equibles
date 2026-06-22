@@ -128,6 +128,74 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Import_ContinuousCarryForwardRelease_DropsItButKeepsGenuinePeriodicRelease()
+    {
+        // The FOMC Press Release is driven by the DFEDTARL/DFEDTARU target range,
+        // a daily 7-day rate level whose value is carried forward every calendar
+        // day. With include_release_dates_with_no_data=true, FRED fills a release
+        // date for EVERY day — including weekends — producing a phantom daily
+        // "FOMC Press Release". A genuine periodic release (CPI) prints on real
+        // distinct scheduled dates and never on a weekend.
+        _seriesRepo.Add(new FredSeries { SeriesId = "DFEDTARU", Title = "Fed Funds Upper" });
+        _seriesRepo.Add(new FredSeries { SeriesId = "CPIAUCSL", Title = "CPI All Items" });
+        await _seriesRepo.SaveChanges();
+
+        var fomcRelease = new FredReleaseRecord
+        {
+            Id = 101,
+            Name = "FOMC Press Release",
+            PressRelease = true,
+        };
+        var cpiRelease = new FredReleaseRecord
+        {
+            Id = 10,
+            Name = "Consumer Price Index",
+            PressRelease = true,
+        };
+        _fredClient.GetSeriesRelease("DFEDTARU").Returns(Task.FromResult(fomcRelease));
+        _fredClient.GetSeriesRelease("CPIAUCSL").Returns(Task.FromResult(cpiRelease));
+        _fredClient
+            .GetReleaseDates(Arg.Any<DateOnly?>())
+            .Returns(
+                Task.FromResult(
+                    new List<FredReleaseDateRecord>
+                    {
+                        // FOMC carried forward every day, incl. a Sat (20th) and Sun (21st).
+                        new() { ReleaseId = 101, Date = "2026-06-19" }, // Fri
+                        new() { ReleaseId = 101, Date = "2026-06-20" }, // Sat
+                        new() { ReleaseId = 101, Date = "2026-06-21" }, // Sun
+                        new() { ReleaseId = 101, Date = "2026-06-22" }, // Mon
+                        // Genuine CPI print on one real weekday date.
+                        new() { ReleaseId = 10, Date = "2026-06-11" },
+                    }
+                )
+            );
+
+        await _sut.Import(CancellationToken.None);
+
+        var fomc = _releaseRepo.GetAll().Single(r => r.ReleaseId == 101);
+        var cpi = _releaseRepo.GetAll().Single(r => r.ReleaseId == 10);
+
+        var dates = _dateRepo.GetAll().ToList();
+        dates
+            .Should()
+            .OnlyContain(
+                d => d.FredReleaseId == cpi.Id,
+                "the carried-forward FOMC press release must not appear on the calendar at all"
+            );
+        dates
+            .Select(d => d.Date)
+            .Should()
+            .BeEquivalentTo(
+                [new DateOnly(2026, 6, 11)],
+                "only the genuine periodic CPI date survives"
+            );
+        dates
+            .Should()
+            .NotContain(d => d.FredReleaseId == fomc.Id, "no FOMC phantom on weekdays either");
+    }
+
+    [Fact]
     public async Task Import_DateAlreadyStored_InsertsOnlyTheNewDate()
     {
         var release = new FredRelease { ReleaseId = 10, Name = "Consumer Price Index" };
