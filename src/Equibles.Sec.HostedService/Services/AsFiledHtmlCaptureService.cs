@@ -25,6 +25,12 @@ public class AsFiledHtmlCaptureService
     /// </summary>
     public const int CurrentVersion = 1;
 
+    // Upper bound on the stitched page we'll store, matching the viewer's serve-time cap
+    // (DocumentOriginalHtmlProvider.MaxOriginalHtmlBytes). A page bigger than this could never be
+    // served, so we drop it at capture rather than persist an un-servable blob — the viewer then
+    // degrades to the primary-only inline-iXBRL page. Keep the two caps in sync.
+    private const long MaxHtmlBytes = 30L * 1024 * 1024;
+
     private readonly AsFiledHtmlCaptureOptions _options;
 
     public AsFiledHtmlCaptureService(IOptions<AsFiledHtmlCaptureOptions> options)
@@ -47,12 +53,21 @@ public class AsFiledHtmlCaptureService
         if (!_options.Enabled)
             return AsFiledHtmlCaptureResult.None;
 
-        return SecDocumentEnvelopeParser.TryBuildAsFiledHtml(
-            submissionContent,
-            filing.PrimaryDocument,
-            out var html
+        if (
+            !SecDocumentEnvelopeParser.TryBuildAsFiledHtml(
+                submissionContent,
+                filing.PrimaryDocument,
+                out var html
+            )
         )
-            ? AsFiledHtmlCaptureResult.Built(Encoding.UTF8.GetBytes(html))
-            : AsFiledHtmlCaptureResult.None;
+        {
+            return AsFiledHtmlCaptureResult.None;
+        }
+
+        var bytes = Encoding.UTF8.GetBytes(html);
+        // Too big to ever serve — treat as nothing to stitch so we don't store a dead blob.
+        return bytes.Length > MaxHtmlBytes
+            ? AsFiledHtmlCaptureResult.None
+            : AsFiledHtmlCaptureResult.Built(bytes);
     }
 }
