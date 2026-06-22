@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Equibles.Congress.Data.Models;
 using Equibles.Congress.HostedService.Models;
+using Equibles.Core.Extensions;
 using HtmlAgilityPack;
 
 namespace Equibles.Congress.HostedService.Services;
@@ -209,12 +210,7 @@ public static partial class DisclosureParsingHelper
     {
         if (maxLength <= 0)
             return value == null ? value : string.Empty;
-        if (value == null || value.Length <= maxLength)
-            return value;
-
-        var end =
-            maxLength > 0 && char.IsHighSurrogate(value[maxLength - 1]) ? maxLength - 1 : maxLength;
-        return value[..end];
+        return value.TruncateToFit(maxLength);
     }
 
     public static DateOnly? ParseDate(string text)

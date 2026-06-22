@@ -342,9 +342,18 @@ public partial class SenateAnnualReportClient
             if (range == null)
                 continue;
 
-            var type = CellText(cells[typeColumn]);
+            // The entry gate only requires "creditor" and "amount"; a table
+            // without a Type column leaves typeColumn at -1 (the bounds check
+            // above already tolerates it), so read it only when present.
+            var type = typeColumn >= 0 ? CellText(cells[typeColumn]) : "";
             var creditor = CellText(cells[creditorColumn]);
-            var description = string.IsNullOrEmpty(creditor) ? type : $"{type} ({creditor})";
+            // Combine into "Type (Creditor)" only when both are present; with one missing
+            // (e.g. a table that omits the Type column) use the other alone, so the
+            // description never carries an empty-type wrapper like " (Creditor)".
+            var description =
+                string.IsNullOrEmpty(type) ? creditor
+                : string.IsNullOrEmpty(creditor) ? type
+                : $"{type} ({creditor})";
             if (string.IsNullOrEmpty(description))
                 continue;
 

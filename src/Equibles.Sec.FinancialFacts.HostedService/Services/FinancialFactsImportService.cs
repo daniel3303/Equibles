@@ -150,7 +150,7 @@ public class FinancialFactsImportService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var sharesProvider = scope.ServiceProvider.GetRequiredService<SharesOutstandingProvider>();
+        var sharesProvider = scope.ServiceProvider.GetRequiredService<ISharesOutstandingProvider>();
         var shares =
             await sharesProvider.GetReportedSharesOutstanding(stock, cancellationToken)
             ?? await sharesProvider.GetSummedPerClassSharesOutstanding(stock, cancellationToken);

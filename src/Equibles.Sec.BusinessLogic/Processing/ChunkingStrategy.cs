@@ -99,7 +99,12 @@ public class ChunkingStrategy
             comment.Remove();
         }
 
-        text = document.Body.TextContent;
+        // TextContent concatenates descendant text with NO separator, so adjacent
+        // block-level cells (a table label and its figure, or sibling <p>/<div>/<li>)
+        // glue into one junk token ("Net income1000") that never matches a search
+        // query. Join the remaining text nodes with a space instead; the \s+ collapse
+        // below removes any extra space introduced between inline runs of one word.
+        text = string.Join(" ", document.Body.Descendants<IText>().Select(node => node.Data));
 
         text = Regex.Replace(text, @"\s+", " ");
         return text.Trim();

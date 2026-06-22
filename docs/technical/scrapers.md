@@ -47,7 +47,9 @@ Each upstream source has its own integration project:
 | `Equibles.Integrations.Finra` | FINRA API |
 | `Equibles.Integrations.Cftc` | CFTC Commitments of Traders |
 | `Equibles.Integrations.Cboe` | CBOE indicators |
-| `Equibles.Integrations.Common` | Shared infrastructure — currently `RateLimiter` only |
+| `Equibles.Integrations.GovernmentContracts` | USAspending.gov federal contract awards |
+| `Equibles.Integrations.Wikidata` | Wikidata SPARQL endpoint (company metadata discovery) |
+| `Equibles.Integrations.Common` | Shared infrastructure — `RateLimiter` plus the `RetryBackoff` exponential-backoff formula and the `HttpRetry.Send` 429/5xx retry helper |
 
 Every client follows the same shape: one interface + one implementation registered via `[Service(ServiceLifetime.Scoped, typeof(IXxxClient))]` (the AutoWire attribute from `Equibles.Core.AutoWiring`). The interface lives in `Contracts/`, the DTOs in `Models/`, and the wire/transport details in the client class itself.
 
@@ -113,6 +115,27 @@ The cursor pattern means re-running is cheap (a single query for `max(date)` per
 - Discovery is a probe, not a fetch: [`InvestorRelationsProbeClient`](../../src/Equibles.CommonStocks.HostedService/Services/InvestorRelationsProbeClient.cs) tries `CandidatePaths` against the company website (`/investor-relations`, `/investors`, …) then `CandidateSubdomains` (`ir.`, `investors.`), and [`InvestorRelationsPageValidator`](../../src/Equibles.CommonStocks.HostedService/Services/InvestorRelationsPageValidator.cs) confirms the HTML is a real IR page — title/body keyword signals reject soft-404s and homepages a guessed path redirected to.
 - `Persist` re-loads the row and writes only when `InvestorRelationsUrl` is still null, so an overlapping run or manual edit is never clobbered.
 - A stock that has no discoverable IR page stays null and is re-probed every cycle — there is no last-attempted timestamp yet, so persistent misses are not yet suppressed.
+
+### FDA catalysts — watermark-less re-read + upsert
+
+[`FdaCatalystScraperWorker`](../../src/Equibles.FdaCatalysts.HostedService/FdaCatalystScraperWorker.cs) reconciles the forward-looking FDA advisory-committee calendar, which carries no historical watermark — every cycle re-reads the whole calendar rather than resuming from a `max(date)` cursor.
+
+- [`FdaAdvisoryCommitteeCalendarImportService`](../../src/Equibles.FdaCatalysts.HostedService/Services/FdaAdvisoryCommitteeCalendarImportService.cs) parses the calendar, then upserts each meeting by its stable per-meeting slug (`FdaCatalyst.SourceReference`): an existing row refreshes its mutable fields, a new meeting inserts.
+- The calendar is mutable — scheduled dates and venues shift before a meeting happens — so a `max(date)` cursor would skip edits to already-stored meetings. Re-reading every cycle keeps stored rows in sync.
+
+### Government contracts — windowed scan with unique-key dedup
+
+[`GovernmentContractsImportService`](../../src/Equibles.GovernmentContracts.HostedService/Services/GovernmentContractsImportService.cs) resumes from a `SyncDateResolver` watermark like the cursor scrapers above (`max(ActionDate)`), but USAspending requires a bounded date range per request, so it walks forward from that start date in `WindowDays`-sized chunks.
+
+- Awards back-fill into past dates, so a monotonic cursor alone would re-import already-stored rows. Each window's mapped awards are de-duplicated against `LoadExistingKeys` by `AwardUniqueKey` before persistence — only genuinely new awards insert.
+- A transient transport failure aborts the scan and records one error; the next run resumes from the same watermark. Window-specific failures fall through so the remaining windows still process.
+
+### Congress — fixed-window re-scan across both chambers
+
+The two congressional scrapers re-read a fixed recent window every cycle instead of advancing a `max(date)` watermark, because members file and amend disclosures well after the reporting period — a monotonic cursor would step past a late filing and never pick it up.
+
+- [`CongressionalTradeSyncService`](../../src/Equibles.Congress.HostedService/Services/CongressionalTradeSyncService.cs) re-reads trades from `MinSyncDate` (default: the trailing 90 days) to today from both the `SenateDisclosureClient` and `HouseDisclosureClient`, then matches each transaction to a tracked stock.
+- [`CongressionalAnnualDisclosureSyncService`](../../src/Equibles.Congress.HostedService/Services/CongressionalAnnualDisclosureSyncService.cs) re-reads annual financial disclosures across a span of coverage years (House per year, Senate by submitted date) and upserts each report by its stable key, so a late amendment refreshes the stored row rather than inserting a duplicate.
 
 ## Cold-start patterns
 

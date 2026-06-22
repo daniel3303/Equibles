@@ -32,6 +32,7 @@ See [`docs/`](docs/README.md) for the user guide and technical documentation.
 | **Futures Positioning** | CFTC | Commitments of Traders (COT) data for 30+ futures contracts |
 | **Market Indicators** | CBOE | VIX volatility index (1990+) and put/call ratios by category |
 | **Government Contracts** | USAspending.gov | Federal contract awards to public companies — amounts, awarding agencies, dates, and NAICS/PSC codes |
+| **FDA Catalysts** | FDA.gov | Advisory-committee (AdComm) meeting calendar — scheduled FDA panel dates, center, and title that act as regulatory catalysts for biotech/pharma stocks |
 
 ## Quick Start
 
@@ -54,7 +55,7 @@ This starts:
 | **db** | 5432 | ParadeDB (PostgreSQL + pgvector + pg_search) |
 | **web** | 8080 | Web portal for browsing data |
 | **mcp** | 8081 | MCP server for AI assistants |
-| **worker** | — | Scrapers (SEC, FINRA, Congress, FRED, Yahoo) |
+| **worker** | — | Scrapers (SEC, FINRA, Congress, FRED, Yahoo, CFTC, CBOE, USAspending, FDA) |
 
 Data scraping starts automatically. SEC filings, holdings, insider trades, and congressional trades will begin populating within minutes.
 
@@ -182,6 +183,8 @@ The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, 
 - **Stock Prices** — Daily OHLCV history with adjusted close, latest close across one or more tickers, and on-demand technical indicators (EMA, Stochastic Oscillator, Average True Range, On-Balance Volume, Bollinger Bands)
 - **Futures Positioning** — COT positioning data, latest snapshot across all contracts, contract search
 - **Market Indicators** — VIX historical data, put/call ratios by type (equity, index, total, VIX, ETP)
+- **Government Contracts** — Federal contract awards won by a ticker (awarding agency, amount, period dates) and a ranking of the top public-company contractors by total federal dollars over a date range (USAspending.gov)
+- **FDA Catalysts** — Scheduled FDA advisory-committee (AdComm) meetings over a date range — the regulatory catalyst dates that move biotech and pharma stocks (FDA.gov)
 
 ### Connecting to Claude Desktop
 

@@ -44,7 +44,7 @@ The background-scraper host. Plain `Host.CreateApplicationBuilder` (not `WebAppl
 - Current binds: `WorkerOptions`, `DocumentScraperOptions`, `FinraOptions` + `FinraScraperOptions`, `FredOptions` + `FredScraperOptions`, `FtdScraperOptions`, `FinancialFactsScraperOptions`, `YahooPriceScraperOptions`, `CftcScraperOptions`, `CboeScraperOptions`.
 - Each scraper reads its own section so per-source tuning never leaks across modules.
 - Per-module `Add*Worker()` extensions register the `BackgroundService` workers from each `.HostedService` project.
-- Current set: `AddSecWorker()`, `AddSecFinancialFactsWorker()`, `AddFinraWorker()`, `AddFredWorker()`, `AddYahooWorker()`, `AddCftcWorker()`, `AddCboeWorker()`, `AddCongressWorker()`, `AddHoldingsWorker()`.
+- Current set: `AddSecWorker()`, `AddSecFinancialFactsWorker()`, `AddFinraWorker()`, `AddFredWorker()`, `AddYahooWorker()`, `AddCftcWorker()`, `AddCboeWorker()`, `AddCongressWorker()`, `AddHoldingsWorker()`, `AddCommonStocksWorker()`, `AddFdaCatalystWorker()`, `AddGovernmentContractsWorker()`.
 - `AddWorkerServices()` wires the cross-cutting worker plumbing (`SyncDateResolver`, etc.).
 - Per `Directory.Build.props`, every `.HostedService` project shares the global usings `Microsoft.Extensions.{DependencyInjection,Hosting,Logging,Options}` + `Equibles.Data` + `Equibles.Core`.
 
@@ -57,7 +57,7 @@ The background-scraper host. Plain `Host.CreateApplicationBuilder` (not `WebAppl
 Every host runs the same five steps described in [Architecture → Host composition](architecture.md#host-composition):
 
 1. `PluginLoader.LoadAll()`
-2. `AddEquiblesDbContext(... modules.AddAllModules().AddMessaging() ...)` (Worker calls `AddMessaging` separately as a service registration, not as a module — the module registration still happens via `AddAllModules()`)
+2. `AddEquiblesFinancialDbContext(... modules.AddAllModules().AddMessaging() ...)` (Worker calls `AddMessaging` separately as a service registration, not as a module — the module registration still happens via `AddAllModules()`)
 3. `AddAllRepositories()`
 4. `AutoWireServicesFrom<T>()` (once per assembly to wire)
 5. Host-specific registrations

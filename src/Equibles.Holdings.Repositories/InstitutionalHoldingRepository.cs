@@ -29,6 +29,26 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return GetByStock(stock, reportDate).Include(h => h.InstitutionalHolder);
     }
 
+    // 13F-only holdings of one stock at a quarter end. Mirrors Get13FByHolder: a holder can
+    // file a Schedule 13D/G whose daily event ReportDate coincides with a 13F quarter end and
+    // shares this table, so a per-stock institutional-holders list must exclude it or the
+    // filer's 13F holding and its 13D/G stake both render as separate rows, double-counting
+    // the filer's ownership (GH-4449).
+    public IQueryable<InstitutionalHolding> Get13FByStock(CommonStock stock, DateOnly reportDate)
+    {
+        return GetByStock(stock, reportDate).Where(h => h.FilingType == FilingType.Form13F);
+    }
+
+    // Same stock/date 13F-only filter as Get13FByStock, with the InstitutionalHolder navigation
+    // eagerly loaded for callers that render holder fields while aggregating rows.
+    public IQueryable<InstitutionalHolding> Get13FByStockWithHolder(
+        CommonStock stock,
+        DateOnly reportDate
+    )
+    {
+        return Get13FByStock(stock, reportDate).Include(h => h.InstitutionalHolder);
+    }
+
     public IQueryable<InstitutionalHolding> GetByHolder(
         InstitutionalHolder holder,
         DateOnly reportDate
@@ -83,6 +103,15 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return GetAll().Where(h => h.CommonStockId == stock.Id);
     }
 
+    // 13F-only history of one stock's institutional holders. Schedule 13D/G rows carry a daily
+    // event date, not a quarter end, and describe a single disclosed stake; an ownership-trend
+    // or report-date series for the stock must exclude them or a 13D/G event date pollutes the
+    // quarter axis and its share count inflates the per-quarter total (GH-4449).
+    public IQueryable<InstitutionalHolding> Get13FHistoryByStock(CommonStock stock)
+    {
+        return GetHistoryByStock(stock).Where(h => h.FilingType == FilingType.Form13F);
+    }
+
     public IQueryable<InstitutionalHolding> GetHistoryByHolder(InstitutionalHolder holder)
     {
         return GetAll().Where(h => h.InstitutionalHolderId == holder.Id);
@@ -112,6 +141,12 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // Latest dates first — see GetAvailableReportDates for the ordering contract.
     public IQueryable<DateOnly> GetReportDatesByStock(CommonStock stock) =>
         GetHistoryByStock(stock).DistinctReportDatesDescending();
+
+    // Latest 13F quarter-end dates first for one stock — see Get13FHistoryByStock for why
+    // 13D/G event dates are excluded. The per-stock holders surfaces resolve their target and
+    // comparison quarters off this list, so it must stay 13F-only (GH-4449).
+    public IQueryable<DateOnly> Get13FReportDatesByStock(CommonStock stock) =>
+        Get13FHistoryByStock(stock).DistinctReportDatesDescending();
 
     // Latest dates first — see GetAvailableReportDates for the ordering contract.
     public IQueryable<DateOnly> GetReportDatesByHolder(InstitutionalHolder holder) =>
@@ -498,8 +533,15 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     )
     {
         var ids = holderIds.ToList();
+        // 13F-only: "first owned quarter" is the earliest 13F quarter a holder reported the
+        // stock. A Schedule 13D/G stake carries a daily event date that would otherwise win
+        // the Min and mislabel the first-owned quarter (GH-4449).
         return GetAll()
-            .Where(h => h.CommonStockId == stock.Id && ids.Contains(h.InstitutionalHolderId))
+            .Where(h =>
+                h.CommonStockId == stock.Id
+                && ids.Contains(h.InstitutionalHolderId)
+                && h.FilingType == FilingType.Form13F
+            )
             .GroupBy(h => h.InstitutionalHolderId)
             .Select(g => new KeyValuePair<Guid, DateOnly>(g.Key, g.Min(h => h.ReportDate)));
     }

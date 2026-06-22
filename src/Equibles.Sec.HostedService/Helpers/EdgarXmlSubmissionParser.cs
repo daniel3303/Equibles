@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Sec.Models;
@@ -135,14 +136,7 @@ internal static class EdgarXmlSubmissionParser
     /// INSERT with a length-overflow. Pass the column's <c>[MaxLength]</c> as
     /// <paramref name="maxLength"/>; <c>null</c> and shorter values pass through unchanged.
     /// </summary>
-    internal static string Truncate(string value, int maxLength)
-    {
-        if (value == null || value.Length <= maxLength)
-            return value;
-        var end =
-            maxLength > 0 && char.IsHighSurrogate(value[maxLength - 1]) ? maxLength - 1 : maxLength;
-        return value[..end];
-    }
+    internal static string Truncate(string value, int maxLength) => value.TruncateToFit(maxLength);
 
     /// <summary>
     /// Trimmed text with the "N/A" placeholder and blanks normalized to <c>null</c>.

@@ -712,14 +712,14 @@ public class StockTabService
     private Task<List<InstitutionalHolding>> LoadHoldingsByStockWithHolder(
         CommonStock stock,
         DateOnly reportDate
-    ) => _institutionalHoldingRepository.GetByStockWithHolder(stock, reportDate).ToListAsync();
+    ) => _institutionalHoldingRepository.Get13FByStockWithHolder(stock, reportDate).ToListAsync();
 
     // Report dates for the holdings tab, newest first, clamped to the sync
     // floor: quarters before it hold partial filings, so their dates must not
     // appear in the selector, the stats, or the combined view's quarter pair.
     private Task<List<DateOnly>> LoadClampedReportDates(CommonStock stock)
     {
-        var datesQuery = _institutionalHoldingRepository.GetReportDatesByStock(stock);
+        var datesQuery = _institutionalHoldingRepository.Get13FReportDatesByStock(stock);
         if (_minSyncDate is { } minDate)
         {
             datesQuery = datesQuery.Where(d => d >= minDate);
@@ -732,7 +732,7 @@ public class StockTabService
     // latest point matches the stats shown for the latest quarter.
     private async Task<List<OwnershipTrendPoint>> LoadOwnershipTrend(CommonStock stock)
     {
-        var holdingsQuery = _institutionalHoldingRepository.GetHistoryByStock(stock);
+        var holdingsQuery = _institutionalHoldingRepository.Get13FHistoryByStock(stock);
         if (_minSyncDate is { } trendFloor)
         {
             holdingsQuery = holdingsQuery.Where(h => h.ReportDate >= trendFloor);

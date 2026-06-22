@@ -8,6 +8,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.Integrations.Yahoo.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Worker;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Data.Models;
@@ -52,7 +53,8 @@ public class YahooPriceImportServiceTests : IDisposable
         // TickerMapService resolves CommonStockRepository from scoped DI.
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(DailyStockPriceRepository), _priceRepo),
-            (typeof(CommonStockRepository), _stockRepo)
+            (typeof(CommonStockRepository), _stockRepo),
+            (typeof(ISharesOutstandingProvider), Substitute.For<ISharesOutstandingProvider>())
         );
 
         var tickerMapService = new TickerMapService(scopeFactory);

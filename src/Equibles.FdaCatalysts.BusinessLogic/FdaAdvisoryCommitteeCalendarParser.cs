@@ -82,7 +82,7 @@ public static class FdaAdvisoryCommitteeCalendarParser
 
             var href = link.GetAttributeValue("href", string.Empty).Trim();
             var slug = ExtractSlug(href);
-            if (slug.Length == 0 || !seenSlugs.Add(slug))
+            if (slug.Length == 0)
             {
                 continue;
             }
@@ -101,6 +101,14 @@ public static class FdaAdvisoryCommitteeCalendarParser
 
             var center = HtmlEntity.DeEntitize(cells[centerCol].InnerText).Trim();
             if (center.Length == 0)
+            {
+                continue;
+            }
+
+            // Dedup only after the row is known good. Registering the slug earlier let a skipped row
+            // (e.g. one with no parseable Start Date) consume the slug and suppress a later, fully
+            // valid listing of the same meeting — dropping it entirely (#3861).
+            if (!seenSlugs.Add(slug))
             {
                 continue;
             }

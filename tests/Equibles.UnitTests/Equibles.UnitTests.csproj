@@ -56,6 +56,7 @@
     <ProjectReference Include="..\..\src\Equibles.Congress.HostedService\Equibles.Congress.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.GovernmentContracts.Data\Equibles.GovernmentContracts.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.GovernmentContracts.HostedService\Equibles.GovernmentContracts.HostedService.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.GovernmentContracts.Mcp\Equibles.GovernmentContracts.Mcp.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.GovernmentContracts\Equibles.Integrations.GovernmentContracts.csproj" />
     <ProjectReference Include="..\..\src\Equibles.InsiderTrading.Repositories\Equibles.InsiderTrading.Repositories.csproj" />
     <ProjectReference Include="..\..\src\Equibles.InsiderTrading.BusinessLogic\Equibles.InsiderTrading.BusinessLogic.csproj" />

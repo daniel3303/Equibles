@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
+using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.GovernmentContracts.Data.Models;
@@ -168,7 +169,9 @@ public class GovernmentContractsTools
         if (string.IsNullOrWhiteSpace(value))
             return null;
         var trimmed = value.Trim();
-        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength] + "…";
+        if (trimmed.Length <= maxLength)
+            return trimmed;
+        return trimmed.TruncateToFit(maxLength) + "…";
     }
 
     // Markdown cells can't contain a raw pipe or newline without breaking the table.

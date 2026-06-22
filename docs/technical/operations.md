@@ -58,6 +58,7 @@ Each scraper has its own option section. All scraper option binds live in [`src/
 | `YahooPriceScraper` | Yahoo price worker cadence + per-ticker backoff. |
 | `CftcScraper` | CFTC COT worker cadence + contract subset. |
 | `CboeScraper` | CBOE worker cadence. |
+| `FdaCatalystScraper` | FDA advisory-committee calendar worker cadence + source calendar URL. |
 | `DocumentScraper` | SEC document download cadence + concurrency. |
 | `Worker` | Cross-cutting: `MinSyncDate`, `TickersToSync`. |
 

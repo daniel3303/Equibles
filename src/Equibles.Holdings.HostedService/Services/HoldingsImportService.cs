@@ -4,6 +4,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Core.Contracts;
+using Equibles.Core.Extensions;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
@@ -492,10 +493,8 @@ public class HoldingsImportService
     // Truncates a parsed string to its destination column bound. The cover page is
     // free text; a value past the bound is malformed, and storing the prefix beats
     // losing the filer's whole batch to a 22001 abort.
-    internal static string ClampLength(string value, int maxLength)
-    {
-        return value != null && value.Length > maxLength ? value[..maxLength] : value;
-    }
+    internal static string ClampLength(string value, int maxLength) =>
+        value.TruncateToFit(maxLength);
 
     private async Task ParseOtherManagers(
         ImportContext context,
@@ -897,7 +896,12 @@ public class HoldingsImportService
             (commonStockId, reportDate),
             out var closePrice
         );
-        var value = hasPrice ? (long)(shares * closePrice) : 0L;
+        // shares comes from filer-controlled SSHPRNAMT; an oversized count makes the decimal
+        // product exceed Int64, so range-check before the cast (mirrors Filing13DGXmlParser)
+        // instead of throwing OverflowException and aborting the whole filing's import.
+        var product = shares * closePrice;
+        var value =
+            hasPrice && product >= long.MinValue && product <= long.MaxValue ? (long)product : 0L;
         var valuePending = !hasPrice;
 
         var otherManagerNumber = ParseNullableInt(GetValue(row, "OTHERMANAGER"));

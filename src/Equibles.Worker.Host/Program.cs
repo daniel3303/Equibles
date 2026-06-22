@@ -17,6 +17,8 @@ using Equibles.Finra.Data.Extensions;
 using Equibles.Finra.HostedService.Extensions;
 using Equibles.Fred.Data.Extensions;
 using Equibles.Fred.HostedService.Extensions;
+using Equibles.GovernmentContracts.HostedService.Configuration;
+using Equibles.GovernmentContracts.HostedService.Extensions;
 using Equibles.Holdings.Data.Extensions;
 using Equibles.Holdings.HostedService.Extensions;
 using Equibles.InsiderTrading.Data.Extensions;
@@ -117,6 +119,9 @@ builder.Services.Configure<Equibles.CommonStocks.HostedService.Configuration.Ste
 builder.Services.Configure<FdaCatalystScraperOptions>(
     builder.Configuration.GetSection("FdaCatalystScraper")
 );
+builder.Services.Configure<GovernmentContractsScraperOptions>(
+    builder.Configuration.GetSection("GovernmentContractsScraper")
+);
 
 // Without this bind, IOptions<EmbeddingConfig> is always default (Enabled=false),
 // so GenerateEmbeddingBatch short-circuits and no embeddings are ever produced —
@@ -150,6 +155,7 @@ builder.Services.AddCommonStocksWorker();
 // Reads the stealth browser registered by AddCommonStocksWorker above to render the
 // client-side FDA.gov advisory-committee calendar.
 builder.Services.AddFdaCatalystWorker();
+builder.Services.AddGovernmentContractsWorker();
 
 var host = builder.Build();
 host.Run();

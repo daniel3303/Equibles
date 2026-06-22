@@ -33,6 +33,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetFundOverlap` — 13F portfolio overlap between two filers at their latest common `ReportDate`: Jaccard similarity, dollar-weighted overlap, and a side-by-side stock table with per-fund shares + percent of portfolio.
 - `GetConsensusHoldings` — combined portfolio of 2-25 filers at their latest common `ReportDate`; stocks ranked by holder count then combined value, with optional `minFunds` floor.
 - `GetMostHeldStocks` — cross-sectional ranking of stocks by institutional 13F breadth for a quarter, ordered by filer count (default), quarter-over-quarter change in filer count (warming / cooling), or total reported value; includes Δ filers, total value, Δ value, and the stock's share of the 13F universe.
+- `GetFundCloneBacktest` — backtest cloning a filer's reported 13F portfolio against a benchmark over a trailing window, rebalancing on the SEC filing lag; returns total return, CAGR, and max drawdown for both the clone and the benchmark plus the alpha between them.
 
 ### `mcp.AddInsiderTrading()` — Form 3 / 4
 
@@ -70,6 +71,11 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetFundHoldings` — portfolio holdings of a fund or ETF from its latest SEC Form NPORT-P monthly report: series, reporting period, net assets, and largest positions (issuer, CUSIP, position size, USD value, share of net assets, asset category). Only registered funds file NPORT-P.
 - `GetFundsHoldingStock` — reverse lookup: the registered funds and ETFs holding a given stock, matched by CUSIP against each fund series' most recent NPORT-P report (so an exited position never shows as current). Returns registrant and series, reporting period, position size, USD value, share of the fund's net assets, and payoff profile (Long/Short), largest positions first.
 
+`FundDirectoryTools`:
+
+- `SearchFunds` — search the directory of registered funds and ETFs (NPORT-P filers) by name, ticker, or registrant; returns each series with a profile id, net assets, reported-holding count, and latest report date, largest first. Covers multi-series trusts (iShares, Vanguard, Fidelity) that carry no ticker of their own.
+- `GetFundProfile` — one registered fund's profile and largest holdings from its latest NPORT-P report, addressed by a profile id from `SearchFunds` or the fund's own ticker.
+
 `NCenTools`:
 
 - `GetFundOperations` — operational data for a fund, ETF or closed-end fund from SEC Form N-CEN annual reports: registrant classification, Investment Company Act file number, reporting period, first/last-filing flags, and named service providers (advisers, sub-advisers, custodians, transfer agents, administrators, auditors, underwriters). Only registered funds file N-CEN.
@@ -101,6 +107,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetCongressionalTrades` — trades for a ticker across all members.
 - `GetMemberTrades` — trades by one member of Congress.
 - `SearchCongressMembers` — search members by name / chamber / position.
+- `GetMemberNetWorth` — a member's net-worth history from annual financial disclosures, reported as yearly min–max bands (electronic filings only).
 
 ### `mcp.AddFred()` — FRED economic indicators
 
@@ -109,6 +116,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetEconomicIndicator` — observations for a FRED series (e.g. `DGS10`, `UNRATE`).
 - `GetLatestEconomicData` — latest snapshot across the curated macro indicators.
 - `SearchEconomicIndicators` — keyword search across series titles / categories.
+- `GetEconomicCalendar` — scheduled and recent US macro release dates (CPI, Employment Situation, GDP, …) and the FRED series each updates; defaults to the next 30 days.
 
 ### `mcp.AddStockPrices()` — Yahoo OHLCV + technical indicators
 
@@ -149,6 +157,19 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 - `GetPutCallRatios` — put/call ratios by category (equity, index, total, VIX, ETP).
 - `GetVixHistory` — daily VIX OHLC history (1990-present once backfilled).
+
+### `mcp.AddGovernmentContracts()` — federal contract awards
+
+`GovernmentContractsTools`:
+
+- `GetGovernmentContracts` — federal contract awards (USAspending.gov) won by one public company, with awarding agency, award amount, period dates, and description.
+- `GetTopGovernmentContractors` — rank public companies by total federal contract dollars awarded over a date range.
+
+### `mcp.AddFdaCatalysts()` — FDA advisory-committee meetings
+
+`FdaCatalystTools`:
+
+- `GetFdaCatalysts` — scheduled FDA advisory-committee (AdComm) meetings from the FDA.gov calendar — the regulatory catalyst dates that move biotech and pharma stocks.
 
 ## Tool implementation conventions
 

@@ -61,7 +61,7 @@ Why the indirection through `ViewData` rather than a single `StockDetailViewMode
 ## Frontend build
 
 - [`package.json`](../../src/Equibles.Web/package.json) — Vite 6, Tailwind v4 (`@tailwindcss/postcss`), DaisyUI v5, plus `chart.js`, `aos`, `typed.js`.
-- [`vite.config.js`](../../src/Equibles.Web/vite.config.js) — single entry `src/index.js`, output to `wwwroot/dist/` as `bundle.js` + `main.css`. `emptyOutDir: true` cleans the bundle on each build.
+- [`vite.config.js`](../../src/Equibles.Web/vite.config.js) — two entries (`src/index.js` → `bundle.js`, `src/chart.js` → `chart.js`), output to `wwwroot/dist/` with CSS emitted as `main.css`. `emptyOutDir: true` cleans the output on each build.
 - [`src/css/main.css`](../../src/Equibles.Web/src/css/main.css) — Tailwind v4 CSS-first config.
   - `@import "tailwindcss"`.
   - `@plugin "daisyui"` + `@plugin "@tailwindcss/typography"`.

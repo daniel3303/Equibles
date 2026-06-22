@@ -189,8 +189,11 @@ public class YahooPriceImportService
         // current; Yahoo's figure is per-share-class and lags corporate actions. Defer to EDGAR
         // for the share count when the issuer has a consolidated SEC fact, so Yahoo can't overwrite
         // it with a stale or single-class value (#3575/#2503).
-        var sharesProvider = scope.ServiceProvider.GetRequiredService<SharesOutstandingProvider>();
-        var edgarShares = await sharesProvider.GetReportedSharesOutstanding(stock, cancellationToken);
+        var sharesProvider = scope.ServiceProvider.GetRequiredService<ISharesOutstandingProvider>();
+        var edgarShares = await sharesProvider.GetReportedSharesOutstanding(
+            stock,
+            cancellationToken
+        );
 
         // Per-field conservative writes: only update on actual change, and never
         // overwrite a known value with 0 (treated as Yahoo "unknown" by the rest of
@@ -205,12 +208,16 @@ public class YahooPriceImportService
             stock.SharesOutStanding = stats.SharesOutstanding;
             changed = true;
         }
-        if (
-            stats.MarketCapitalization != 0
-            && stock.MarketCapitalization != stats.MarketCapitalization
-        )
+        // Reconcile Yahoo's market cap onto the authoritative EDGAR share base so it never
+        // disagrees with SharesOutStanding by the share-count ratio (#3575/#2503).
+        var marketCap = ReconcileMarketCap(
+            edgarShares,
+            stats.SharesOutstanding,
+            stats.MarketCapitalization
+        );
+        if (stats.MarketCapitalization != 0 && stock.MarketCapitalization != marketCap)
         {
-            stock.MarketCapitalization = stats.MarketCapitalization;
+            stock.MarketCapitalization = marketCap;
             changed = true;
         }
 
@@ -225,6 +232,23 @@ public class YahooPriceImportService
             stats.MarketCapitalization
         );
     }
+
+    // Yahoo's market cap is its own (per-share-class / stale) share count times price. When EDGAR
+    // is the authoritative share source the importer keeps EDGAR's SharesOutStanding, so storing
+    // Yahoo's market cap verbatim leaves the two figures on different share bases — they disagree
+    // by the share-count ratio (a reverse-split lag inflates market cap ~20x, COPR #3575; a
+    // multi-class issuer understates Yahoo's shares ~2x, #2503). Rescale Yahoo's market cap onto
+    // the EDGAR base (== EDGAR shares × the same implied price) so market cap stays consistent with
+    // SharesOutStanding and the screener's derived price (market cap ÷ shares) holds. Falls back to
+    // Yahoo's figure when there is no EDGAR count or no usable Yahoo share base to rescale from.
+    private static double ReconcileMarketCap(
+        long? edgarShares,
+        long yahooShares,
+        double yahooMarketCap
+    ) =>
+        edgarShares is > 0 && yahooShares > 0 && yahooMarketCap > 0
+            ? yahooMarketCap * ((double)edgarShares.Value / yahooShares)
+            : yahooMarketCap;
 
     private async Task SyncCompanyProfile(
         string ticker,

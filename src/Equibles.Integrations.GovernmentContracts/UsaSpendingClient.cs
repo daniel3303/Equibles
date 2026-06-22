@@ -126,16 +126,21 @@ public class UsaSpendingClient : IUsaSpendingClient
     private async Task<UsaSpendingAwardResponse> PostQuery(object body)
     {
         var json = JsonConvert.SerializeObject(body);
-        var content = await SendWithRetry(() =>
+        var content = await SendWithRetry(async () =>
         {
-            var request = new HttpRequestMessage(HttpMethod.Post, SearchUrl);
+            using var request = new HttpRequestMessage(HttpMethod.Post, SearchUrl);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             request.Content = new StringContent(json, Encoding.UTF8, "application/json");
-            return _httpClient.SendAsync(request);
+            return await _httpClient.SendAsync(request);
         });
 
-        return JsonConvert.DeserializeObject<UsaSpendingAwardResponse>(content)
+        var response =
+            JsonConvert.DeserializeObject<UsaSpendingAwardResponse>(content)
             ?? new UsaSpendingAwardResponse();
+        // A page with "results": null overwrites the model's default empty list with null;
+        // restore the non-null invariant so callers can read Results without a guard.
+        response.Results ??= [];
+        return response;
     }
 
     private async Task<string> SendWithRetry(Func<Task<HttpResponseMessage>> sendRequest)

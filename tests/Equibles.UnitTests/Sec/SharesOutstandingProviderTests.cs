@@ -319,6 +319,81 @@ public class SharesOutstandingProviderTests
         shares.Should().BeNull();
     }
 
+    [Fact]
+    public async Task GetSummedPerClassSharesOutstanding_DeduplicatesRestatedClassRow_InLatestFiling()
+    {
+        await using var db = NewDb();
+        var stock = new CommonStock
+        {
+            Ticker = "GOOGL",
+            Name = "Alphabet",
+            Cik = "0001652044",
+        };
+        var concept = new FinancialConcept
+        {
+            Taxonomy = FactTaxonomy.Dei,
+            Tag = "EntityCommonStockSharesOutstanding",
+        };
+        db.AddRange(stock, concept);
+        // The latest filing carries Class A twice (a restated/duplicate row). The contract pins each
+        // class is counted once, so the entity total must not double-count Class A.
+        const string acc = "0001652044-26-000048";
+        db.Add(
+            ClassFact(
+                stock,
+                concept,
+                5_824_000_000m,
+                new(2026, 4, 30),
+                new(2026, 4, 23),
+                acc,
+                "us-gaap:CommonClassAMember"
+            )
+        );
+        db.Add(
+            ClassFact(
+                stock,
+                concept,
+                5_824_000_000m,
+                new(2026, 4, 30),
+                new(2026, 4, 23),
+                acc,
+                "us-gaap:CommonClassAMember"
+            )
+        );
+        db.Add(
+            ClassFact(
+                stock,
+                concept,
+                5_456_000_000m,
+                new(2026, 4, 30),
+                new(2026, 4, 23),
+                acc,
+                "goog:CapitalClassCMember"
+            )
+        );
+        db.Add(
+            ClassFact(
+                stock,
+                concept,
+                836_000_000m,
+                new(2026, 4, 30),
+                new(2026, 4, 23),
+                acc,
+                "us-gaap:CommonClassBMember"
+            )
+        );
+        await db.SaveChangesAsync();
+
+        var provider = new SharesOutstandingProvider(
+            new FinancialFactRepository(db),
+            new FinancialConceptRepository(db)
+        );
+
+        var shares = await provider.GetSummedPerClassSharesOutstanding(stock);
+
+        shares.Should().Be(12_116_000_000);
+    }
+
     private static FinancialFact ClassFact(
         CommonStock stock,
         FinancialConcept concept,

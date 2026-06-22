@@ -1,4 +1,5 @@
 using System.Globalization;
+using Equibles.Core.Extensions;
 using Equibles.GovernmentContracts.Data.Models;
 using Equibles.Integrations.GovernmentContracts.Models;
 
@@ -88,7 +89,6 @@ public static class UsaSpendingAwardMapper
     {
         if (string.IsNullOrWhiteSpace(value))
             return null;
-        var trimmed = value.Trim();
-        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
+        return value.Trim().TruncateToFit(maxLength);
     }
 }
