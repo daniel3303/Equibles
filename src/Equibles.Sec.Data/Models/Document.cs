@@ -159,5 +159,13 @@ public class Document
     /// <summary>Retry ceiling for <see cref="AsFiledHtmlAttempts"/>.</summary>
     public const int MaxAsFiledHtmlAttempts = 5;
 
+    /// <summary>
+    /// Current as-filed HTML stitcher version — the single source of truth for "which documents
+    /// still need stitching". Lives here (Data) rather than in the worker so both the backfill
+    /// work-set query and the backoffice "pending" metric can reference it without depending on
+    /// the hosted-service assembly. Bump it after a stitcher change to re-stitch the corpus.
+    /// </summary>
+    public const int AsFiledHtmlBuilderVersion = 1;
+
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }

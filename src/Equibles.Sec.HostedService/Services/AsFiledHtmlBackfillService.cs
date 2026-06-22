@@ -58,10 +58,7 @@ public class AsFiledHtmlBackfillService
             return result;
         }
 
-        var query = _documentRepository.GetPendingAsFiledHtml(
-            AsFiledHtmlCaptureService.CurrentVersion,
-            Document.MaxAsFiledHtmlAttempts
-        );
+        var query = _documentRepository.GetPendingAsFiledHtml();
 
         if (minReportingDate.HasValue)
         {
