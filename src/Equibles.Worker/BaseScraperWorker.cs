@@ -18,6 +18,7 @@ public abstract class BaseScraperWorker : BackgroundService
 
     private bool _retrySoonRequested;
     private bool _continuationRequested;
+    private int _consecutiveFailures;
 
     protected abstract string WorkerName { get; }
     protected abstract TimeSpan SleepInterval { get; }
@@ -104,6 +105,23 @@ public abstract class BaseScraperWorker : BackgroundService
     /// </summary>
     protected void RequestImmediateContinuation() => _continuationRequested = true;
 
+    /// <summary>
+    /// Base wait after a cycle that FAULTED (DoWork threw). Short by design so a transient
+    /// dependency outage — e.g. the database bouncing during a deploy — costs minutes, not
+    /// the full <see cref="SleepInterval"/>. The wait grows exponentially per consecutive
+    /// failure (see <see cref="ErrorBackoff"/>), capped by <see cref="MaxErrorBackoffInterval"/>,
+    /// and a clean cycle resets the streak. Without this a single throw parked the worker for
+    /// a whole <see cref="SleepInterval"/> (up to hours), abandoning any backlog it was draining.
+    /// </summary>
+    protected virtual TimeSpan ErrorBackoffInterval => TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// Upper bound for the exponential <see cref="ErrorBackoffInterval"/> growth. A faulted cycle
+    /// never waits longer than this — nor longer than <see cref="SleepInterval"/>, whichever is
+    /// smaller — so a prolonged outage backs off in bounded steps instead of hammering.
+    /// </summary>
+    protected virtual TimeSpan MaxErrorBackoffInterval => TimeSpan.FromMinutes(15);
+
     protected BaseScraperWorker(
         ILogger logger,
         IServiceScopeFactory scopeFactory,
@@ -153,6 +171,7 @@ public abstract class BaseScraperWorker : BackgroundService
             Logger.LogInformation("{Worker} running at: {Time}", WorkerName, DateTimeOffset.Now);
             _retrySoonRequested = false;
             _continuationRequested = false;
+            var faulted = false;
 
             await PublishActivity(ScraperActivitySeverity.Info, "cycle started", stoppingToken);
 
@@ -172,6 +191,12 @@ public abstract class BaseScraperWorker : BackgroundService
             }
             catch (Exception ex)
             {
+                // A faulted cycle backs off briefly and retries instead of sleeping the full
+                // SleepInterval — a transient outage (e.g. the DB bouncing during a deploy)
+                // must not park the worker for hours. ErrorReporter.Report is best-effort and
+                // never throws, so the backoff path below always runs.
+                faulted = true;
+                _consecutiveFailures++;
                 Logger.LogCritical(ex, "Critical error in {Worker}", WorkerName);
                 // ErrorReporter publishes its own ScraperActivity with the same
                 // source + the error message, so the activity feed gets a row
@@ -185,47 +210,68 @@ public abstract class BaseScraperWorker : BackgroundService
             }
 
             TimeSpan interval;
-            if (_retrySoonRequested)
+            if (faulted)
             {
-                interval = NotReadyRetryInterval;
-                Logger.LogInformation(
-                    "{Worker} not ready (dependency pending); retrying in {Interval}",
+                interval = ErrorBackoff();
+                Logger.LogWarning(
+                    "{Worker} cycle failed ({Failures} in a row); backing off {Interval} before retry",
                     WorkerName,
-                    interval
+                    _consecutiveFailures,
+                    FormatInterval(interval)
                 );
                 await PublishActivity(
                     ScraperActivitySeverity.Warn,
-                    $"not ready, retrying in {FormatInterval(interval)}",
-                    stoppingToken
-                );
-            }
-            else if (_continuationRequested)
-            {
-                interval = ContinuationInterval;
-                Logger.LogInformation(
-                    "{Worker} has more work queued; continuing in {Interval}",
-                    WorkerName,
-                    interval
-                );
-                await PublishActivity(
-                    ScraperActivitySeverity.Info,
-                    $"more work queued, continuing in {FormatInterval(interval)}",
+                    $"cycle failed, retrying in {FormatInterval(interval)}",
                     stoppingToken
                 );
             }
             else
             {
-                interval = SleepInterval;
-                Logger.LogInformation(
-                    "{Worker} cycle complete. Sleeping for {Interval}",
-                    WorkerName,
-                    interval
-                );
-                await PublishActivity(
-                    ScraperActivitySeverity.Info,
-                    $"cycle complete, sleeping {FormatInterval(interval)}",
-                    stoppingToken
-                );
+                // A clean cycle clears the failure streak, so the next fault starts
+                // again from the base ErrorBackoffInterval.
+                _consecutiveFailures = 0;
+                if (_retrySoonRequested)
+                {
+                    interval = NotReadyRetryInterval;
+                    Logger.LogInformation(
+                        "{Worker} not ready (dependency pending); retrying in {Interval}",
+                        WorkerName,
+                        interval
+                    );
+                    await PublishActivity(
+                        ScraperActivitySeverity.Warn,
+                        $"not ready, retrying in {FormatInterval(interval)}",
+                        stoppingToken
+                    );
+                }
+                else if (_continuationRequested)
+                {
+                    interval = ContinuationInterval;
+                    Logger.LogInformation(
+                        "{Worker} has more work queued; continuing in {Interval}",
+                        WorkerName,
+                        interval
+                    );
+                    await PublishActivity(
+                        ScraperActivitySeverity.Info,
+                        $"more work queued, continuing in {FormatInterval(interval)}",
+                        stoppingToken
+                    );
+                }
+                else
+                {
+                    interval = SleepInterval;
+                    Logger.LogInformation(
+                        "{Worker} cycle complete. Sleeping for {Interval}",
+                        WorkerName,
+                        interval
+                    );
+                    await PublishActivity(
+                        ScraperActivitySeverity.Info,
+                        $"cycle complete, sleeping {FormatInterval(interval)}",
+                        stoppingToken
+                    );
+                }
             }
             await WaitForNextCycle(interval, stoppingToken);
         }
@@ -238,6 +284,21 @@ public abstract class BaseScraperWorker : BackgroundService
         if (interval.TotalMinutes >= 1)
             return $"{interval.TotalMinutes.ToString("0.#", CultureInfo.InvariantCulture)}m";
         return $"{interval.TotalSeconds.ToString("0", CultureInfo.InvariantCulture)}s";
+    }
+
+    /// <summary>
+    /// Exponential backoff for consecutive faulted cycles: <see cref="ErrorBackoffInterval"/>
+    /// doubled once per consecutive failure, capped at the smaller of <see cref="SleepInterval"/>
+    /// and <see cref="MaxErrorBackoffInterval"/>. Called with <see cref="_consecutiveFailures"/>
+    /// already incremented, so the first failure waits exactly one base interval.
+    /// </summary>
+    private TimeSpan ErrorBackoff()
+    {
+        var cap = SleepInterval < MaxErrorBackoffInterval ? SleepInterval : MaxErrorBackoffInterval;
+        // Cap the doublings so the shift can't overflow a long; this is far past the cap anyway.
+        var doublings = Math.Min(_consecutiveFailures - 1, 16);
+        var scaledTicks = ErrorBackoffInterval.Ticks * (1L << doublings);
+        return TimeSpan.FromTicks(Math.Min(scaledTicks, cap.Ticks));
     }
 
     /// <summary>
