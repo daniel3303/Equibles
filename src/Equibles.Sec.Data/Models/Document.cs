@@ -13,6 +13,7 @@ namespace Equibles.Sec.Data.Models;
 [Index(nameof(AccessionNumber), IsUnique = false)]
 [Index(nameof(XbrlStatus), IsUnique = false)]
 [Index(nameof(XbrlStatus), nameof(XbrlFactsVersion))]
+[Index(nameof(DocumentType), nameof(AsFiledHtmlVersion))]
 [Index(nameof(CreationTime), IsUnique = false)]
 public class Document
 {
@@ -119,6 +120,44 @@ public class Document
     /// below the extractor's current version.
     /// </summary>
     public int XbrlFactsAttempts { get; set; }
+
+    // --- As-filed display HTML (the primary document + its displayable exhibits, stitched) ---
+    // Kept SEPARATE from XbrlContent (which the dimensional-fact extractor parses): the as-filed
+    // viewer needs the WHOLE filing — an 8-K's cover page PLUS its linked exhibits, e.g. the
+    // Exhibit 99.1 press release — so a citation grounded in an exhibit can be pinpointed and the
+    // cover page's exhibit links resolve in-page. Building it as its own artifact keeps display
+    // enrichment from ever perturbing fact extraction. Only populated for filings that carry a
+    // displayable exhibit (currently 8-Ks); null otherwise.
+
+    /// <summary>
+    /// The file holding the gzip-compressed stitched as-filed HTML, or null when none was built
+    /// (no displayable exhibit, or not yet processed). The pre-compression size is
+    /// <see cref="AsFiledHtmlUncompressedSize"/>.
+    /// </summary>
+    public Guid? AsFiledHtmlContentId { get; set; }
+    public virtual File AsFiledHtmlContent { get; set; }
+
+    /// <summary>Size in bytes of the stitched as-filed HTML before gzip compression. Null when none built.</summary>
+    public long? AsFiledHtmlUncompressedSize { get; set; }
+
+    /// <summary>
+    /// Version of the as-filed HTML stitcher that last processed this document. 0 = never built.
+    /// The backfill selects 8-K documents whose version is below the builder's current one, so
+    /// bumping the builder version re-stitches the corpus (same version-stamp redrain as the
+    /// XBRL-facts extractor). A filing examined and found to carry no displayable exhibit is
+    /// stamped current with a null <see cref="AsFiledHtmlContentId"/> so it isn't re-fetched.
+    /// </summary>
+    public int AsFiledHtmlVersion { get; set; }
+
+    /// <summary>
+    /// How many times building the as-filed HTML (fetch/stitch) has failed for this document.
+    /// The backfill stops selecting it at the ceiling so one unbuildable filing can't starve
+    /// the queue.
+    /// </summary>
+    public int AsFiledHtmlAttempts { get; set; }
+
+    /// <summary>Retry ceiling for <see cref="AsFiledHtmlAttempts"/>.</summary>
+    public const int MaxAsFiledHtmlAttempts = 5;
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }

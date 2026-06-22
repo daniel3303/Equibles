@@ -1,3 +1,6 @@
+using System.Text;
+using AngleSharp.Dom;
+using AngleSharp.Html.Parser;
 using Equibles.Sec.Data.Models;
 
 namespace Equibles.Sec.BusinessLogic;
@@ -229,4 +232,207 @@ public static class SecDocumentEnvelopeParser
 
     private static bool TryExtractSgmlTagValue(string block, string tagName, out string value) =>
         SecSgmlEnvelope.TryGetTagValue(block, tagName, out value);
+
+    /// <summary>
+    /// Builds a single "as-filed" HTML page from a full SEC submission envelope: the primary
+    /// document followed by each displayable exhibit (a registered form or <c>EX-* &lt; 100</c>),
+    /// each wrapped in an anchored <c>&lt;section&gt;</c>, with intra-filing links to those
+    /// exhibits rewritten to in-page anchors. This lets the document viewer show the WHOLE
+    /// filing — e.g. an 8-K cover page PLUS its Exhibit 99.1 press release — so a citation
+    /// grounded in an exhibit resolves on the page and the cover page's exhibit links scroll
+    /// in-page instead of dead-ending on a file we don't host. Reads only the in-hand submission,
+    /// so it costs no extra EDGAR round-trip.
+    /// </summary>
+    /// <returns>
+    /// True and the stitched HTML when the filing carries at least one displayable exhibit;
+    /// false when there's nothing to stitch (single document, or no displayable exhibit).
+    /// </returns>
+    public static bool TryBuildAsFiledHtml(
+        string envelope,
+        string primaryDocumentFileName,
+        out string content
+    )
+    {
+        content = string.Empty;
+        if (string.IsNullOrEmpty(envelope))
+            return false;
+
+        var docs = new List<AsFiledBlock>();
+        foreach (var block in EnumerateDocumentBlocks(envelope))
+        {
+            if (
+                !TryExtractSgmlTagValue(block, "TYPE", out var blockType)
+                || string.IsNullOrEmpty(blockType)
+                || !IsDisplayableDocumentType(blockType)
+            )
+                continue;
+
+            TryExtractSgmlTagValue(block, "FILENAME", out var blockFileName);
+            if (!IsHtmlFilename(blockFileName))
+                continue;
+            if (!TryExtractTextBody(block, out var body))
+                continue;
+
+            var isPrimary =
+                !string.IsNullOrEmpty(primaryDocumentFileName)
+                && string.Equals(
+                    blockFileName,
+                    primaryDocumentFileName,
+                    StringComparison.OrdinalIgnoreCase
+                );
+            var isExhibit = blockType.StartsWith("EX-", StringComparison.OrdinalIgnoreCase);
+            docs.Add(new AsFiledBlock(blockFileName, blockType, body, isPrimary, isExhibit));
+        }
+
+        // Nothing to stitch unless there's a primary AND at least one exhibit to fold in.
+        if (docs.Count < 2 || !docs.Exists(d => d.IsExhibit))
+            return false;
+
+        // EDGAR lists the primary document first; if none was flagged (e.g. a backfill that
+        // doesn't know the primary's filename), treat the first displayable block as primary.
+        if (!docs.Exists(d => d.IsPrimary))
+            docs[0].IsPrimary = true;
+
+        // Primary leads, exhibits follow in envelope order. Assign stable section ids and map
+        // each filename to its section so links into the filing can target it.
+        docs = docs.OrderByDescending(d => d.IsPrimary).ToList();
+        var sectionByFile = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < docs.Count; i++)
+        {
+            docs[i].SectionId = $"asfiled-{i}";
+            if (!string.IsNullOrEmpty(docs[i].FileName))
+                sectionByFile[docs[i].FileName] = docs[i].SectionId;
+        }
+
+        var parser = new HtmlParser(
+            new HtmlParserOptions { IsAcceptingCustomElementsEverywhere = true }
+        );
+        var head = new StringBuilder();
+        var sections = new StringBuilder();
+
+        foreach (var doc in docs)
+        {
+            var parsed = parser.ParseDocument(doc.Body);
+
+            // Most SEC formatting is inline style attributes (kept on the elements when we take
+            // the body inner HTML); hoist any explicit <head><style> blocks so they survive too.
+            // The stitched documents share one cascade, so an exhibit's styles can in principle
+            // restyle the cover-page section — acceptable inside the script-free sandboxed frame
+            // this is served into (display only; no script/network via the page's CSP).
+            if (parsed.Head != null)
+            {
+                foreach (var style in parsed.Head.QuerySelectorAll("style"))
+                    head.Append(style.OuterHtml);
+            }
+
+            RewriteIntraFilingLinks(parsed, sectionByFile);
+
+            sections.Append("<section id=\"").Append(doc.SectionId).Append('"');
+            sections.Append(" data-asfiled-type=\"").Append(Escape(doc.Type)).Append('"');
+            sections.Append(" data-asfiled-file=\"").Append(Escape(doc.FileName)).Append("\">");
+            sections.Append(parsed.Body?.InnerHtml ?? string.Empty);
+            sections.Append("</section>");
+        }
+
+        content =
+            "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+            + head
+            + "</head><body>"
+            + sections
+            + "</body></html>";
+        return true;
+    }
+
+    // Rewrites every intra-filing anchor — one whose href resolves to a filename we kept as a
+    // section — to the in-page fragment for that section, so the cover page's "Exhibit 99.1"
+    // link scrolls to the stitched exhibit instead of pointing at a file we don't host.
+    private static void RewriteIntraFilingLinks(
+        IDocument document,
+        IReadOnlyDictionary<string, string> sectionByFile
+    )
+    {
+        foreach (var anchor in document.QuerySelectorAll("a[href]"))
+        {
+            var href = anchor.GetAttribute("href");
+            if (string.IsNullOrEmpty(href) || href.StartsWith('#'))
+                continue;
+
+            var fileName = HrefFileName(href);
+            if (fileName != null && sectionByFile.TryGetValue(fileName, out var section))
+                anchor.SetAttribute("href", "#" + section);
+        }
+    }
+
+    // The bare filename an href points at: drop any query/fragment, take the last path segment.
+    // Handles a bare relative name ("ex99-1.htm"), a relative path ("./ex99-1.htm") and an
+    // absolute EDGAR URL that self-references the same filing.
+    private static string HrefFileName(string href)
+    {
+        var cut = href.IndexOfAny(['?', '#']);
+        if (cut >= 0)
+            href = href.Substring(0, cut);
+
+        var slash = href.LastIndexOf('/');
+        var name = slash >= 0 ? href.Substring(slash + 1) : href;
+        return string.IsNullOrEmpty(name) ? null : name;
+    }
+
+    // Whether an SGML <TYPE> line names a document we render in the as-filed view: a registered
+    // form (the primary) or a numbered exhibit below 100 (EX-99.1 etc.). Mirrors the allow rule
+    // the markdown normalizer uses so the two representations cover the same documents.
+    private static bool IsDisplayableDocumentType(string documentTypeLine)
+    {
+        var tokens = documentTypeLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        for (var take = tokens.Length; take >= 1; take--)
+        {
+            if (DocumentType.FromDisplayName(string.Join(' ', tokens[..take])) != null)
+                return true;
+        }
+
+        var documentType = tokens.Length > 0 ? tokens[0] : documentTypeLine;
+        if (documentType.StartsWith("EX-", StringComparison.OrdinalIgnoreCase))
+        {
+            var exNumber = documentType.Substring(3).Split('.')[0];
+            if (int.TryParse(exNumber, out var number) && number < 100)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsHtmlFilename(string filename) =>
+        !string.IsNullOrEmpty(filename)
+        && (
+            filename.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)
+            || filename.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
+        );
+
+    // Escaping for a value (an untrusted SGML FILENAME/TYPE) placed inside a double-quoted HTML
+    // attribute. Escaping the quote is what prevents attribute breakout; & < > are escaped too so
+    // the value can't start a tag or entity.
+    private static string Escape(string value) =>
+        string.IsNullOrEmpty(value)
+            ? string.Empty
+            : value
+                .Replace("&", "&amp;")
+                .Replace("\"", "&quot;")
+                .Replace("<", "&lt;")
+                .Replace(">", "&gt;");
+
+    // One displayable document inside a filing while it's being stitched.
+    private sealed class AsFiledBlock(
+        string fileName,
+        string type,
+        string body,
+        bool isPrimary,
+        bool isExhibit
+    )
+    {
+        public string FileName { get; } = fileName;
+        public string Type { get; } = type;
+        public string Body { get; } = body;
+        public bool IsPrimary { get; set; } = isPrimary;
+        public bool IsExhibit { get; } = isExhibit;
+        public string SectionId { get; set; }
+    }
 }

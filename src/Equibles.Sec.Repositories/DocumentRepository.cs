@@ -73,6 +73,30 @@ public class DocumentRepository : BaseRepository<Document>
             );
     }
 
+    /// <summary>
+    /// The as-filed HTML backfill work-set: EDGAR-sourced 8-K documents whose stitched as-filed
+    /// HTML is below <paramref name="belowVersion"/> (the builder's current version) and still
+    /// under the retry ceiling. Scoped to 8-Ks because that's where the linked exhibits (the
+    /// Exhibit 99.1 press release) and the broken citations live; widen the type set to extend
+    /// coverage. A document qualifies only when it came from an EDGAR filing (the accession is
+    /// stored or recoverable from the submission URL) and its issuer has a CIK, so the backfill
+    /// can re-fetch the submission to stitch.
+    /// </summary>
+    public IQueryable<Document> GetPendingAsFiledHtml(int belowVersion, int maxAttempts)
+    {
+        return GetAll()
+            .Where(d =>
+                (d.DocumentType == DocumentType.EightK || d.DocumentType == DocumentType.EightKa)
+                && d.AsFiledHtmlVersion < belowVersion
+                && d.AsFiledHtmlAttempts < maxAttempts
+                && (
+                    d.AccessionNumber != null
+                    || (d.SourceUrl != null && d.SourceUrl.Contains("/Archives/edgar/data/"))
+                )
+                && d.CommonStock.Cik != null
+            );
+    }
+
     public async Task<Document> GetWithContent(Guid id)
     {
         // The content bytes ride along eagerly: leaving File.FileContent to a lazy load
