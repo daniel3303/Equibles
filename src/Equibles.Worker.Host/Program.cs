@@ -83,6 +83,9 @@ builder.Services.Configure<Equibles.Sec.HostedService.Configuration.FormAdvScrap
 builder.Services.Configure<Equibles.Sec.HostedService.Configuration.XbrlCaptureOptions>(
     builder.Configuration.GetSection("XbrlCapture")
 );
+builder.Services.Configure<Equibles.Sec.HostedService.Configuration.AsFiledHtmlCaptureOptions>(
+    builder.Configuration.GetSection("AsFiledHtml")
+);
 builder.Services.Configure<Equibles.Sec.HostedService.Configuration.FilingItemsBackfillOptions>(
     builder.Configuration.GetSection("FilingItemsBackfill")
 );

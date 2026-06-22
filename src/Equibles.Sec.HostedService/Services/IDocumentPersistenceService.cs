@@ -24,6 +24,7 @@ public interface IDocumentPersistenceService
         string accessionNumber = null,
         string items = null,
         XbrlCaptureResult xbrl = null,
+        AsFiledHtmlCaptureResult asFiledHtml = null,
         CancellationToken cancellationToken = default
     );
 
@@ -33,6 +34,13 @@ public interface IDocumentPersistenceService
     /// ingested before capture was enabled.
     /// </summary>
     Task UpdateXbrl(Document document, XbrlCaptureResult xbrl);
+
+    /// <summary>
+    /// Applies a resolved as-filed HTML build onto an already-persisted, tracked
+    /// <see cref="Document"/> and saves — used by the backfill to stitch documents ingested
+    /// before the as-filed view was built (or to re-stitch after a builder-version bump).
+    /// </summary>
+    Task UpdateAsFiledHtml(Document document, AsFiledHtmlCaptureResult asFiledHtml);
 
     /// <summary>
     /// Replaces the body of an already-persisted <see cref="Document"/> in place, keeping its id —
