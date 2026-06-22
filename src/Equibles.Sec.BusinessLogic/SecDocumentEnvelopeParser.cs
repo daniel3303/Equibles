@@ -316,6 +316,9 @@ public static class SecDocumentEnvelopeParser
 
             // Most SEC formatting is inline style attributes (kept on the elements when we take
             // the body inner HTML); hoist any explicit <head><style> blocks so they survive too.
+            // The stitched documents share one cascade, so an exhibit's styles can in principle
+            // restyle the cover-page section — acceptable inside the script-free sandboxed frame
+            // this is served into (display only; no script/network via the page's CSP).
             if (parsed.Head != null)
             {
                 foreach (var style in parsed.Head.QuerySelectorAll("style"))
@@ -404,11 +407,17 @@ public static class SecDocumentEnvelopeParser
             || filename.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
         );
 
-    // Minimal escaping for a value placed inside a double-quoted HTML attribute.
+    // Escaping for a value (an untrusted SGML FILENAME/TYPE) placed inside a double-quoted HTML
+    // attribute. Escaping the quote is what prevents attribute breakout; & < > are escaped too so
+    // the value can't start a tag or entity.
     private static string Escape(string value) =>
         string.IsNullOrEmpty(value)
             ? string.Empty
-            : value.Replace("&", "&amp;").Replace("\"", "&quot;").Replace("<", "&lt;");
+            : value
+                .Replace("&", "&amp;")
+                .Replace("\"", "&quot;")
+                .Replace("<", "&lt;")
+                .Replace(">", "&gt;");
 
     // One displayable document inside a filing while it's being stitched.
     private sealed class AsFiledBlock(
