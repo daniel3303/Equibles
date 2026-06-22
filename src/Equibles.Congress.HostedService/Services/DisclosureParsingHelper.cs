@@ -10,6 +10,64 @@ public static partial class DisclosureParsingHelper
 {
     private const string EmptySentinel = "--";
 
+    // Honorific tokens some filings inject into the disclosed name, with or
+    // without a trailing period ("Mr"/"Mr."/"Dr"). They are not part of the
+    // name; left in, they fragment one person into several CongressMember
+    // records keyed on the raw name string (e.g. "Matt Mr Rosendale" vs
+    // "Matt Rosendale" — GH-3374).
+    private static readonly HashSet<string> HonorificTokens = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Mr",
+        "Mrs",
+        "Ms",
+        "Dr",
+        "Hon",
+    };
+
+    /// <summary>
+    /// Canonicalises a disclosed congressional member name so cosmetic variants
+    /// resolve to one identity. The single normaliser every source (House
+    /// XML/PDF, Senate) and the member upsert key run through, so a name is
+    /// keyed identically no matter which scraper emitted it (GH-3374).
+    ///
+    /// Applies only the safe, unambiguous transforms:
+    /// <list type="bullet">
+    /// <item>drops honorific tokens in any position, period-agnostic
+    /// ("Scott Mr Franklin" / "Mark Dr Green");</item>
+    /// <item>collapses an immediately repeated token — the parser's doubled
+    /// first name ("Scott Scott Franklin");</item>
+    /// <item>collapses runs of whitespace and trims.</item>
+    /// </list>
+    /// Whole-token matching keeps real names like "Mraz" intact. It deliberately
+    /// does NOT reconcile initial/order variants ("C. Scott Franklin" vs
+    /// "Scott Franklin") — that needs a stable filer id and risks merging two
+    /// distinct people.
+    /// </summary>
+    public static string NormalizeMemberName(string name)
+    {
+        if (name == null)
+            return null;
+
+        var tokens = name.Split(
+            (char[])null,
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+        );
+        var result = new List<string>(tokens.Length);
+        foreach (var token in tokens)
+        {
+            if (HonorificTokens.Contains(token.TrimEnd('.')))
+                continue;
+            if (
+                result.Count > 0
+                && string.Equals(result[^1], token, StringComparison.OrdinalIgnoreCase)
+            )
+                continue;
+            result.Add(token);
+        }
+
+        return string.Join(' ', result);
+    }
+
     public static List<DisclosureTransaction> ParseTransactionsFromHtml(
         string html,
         string memberName,
