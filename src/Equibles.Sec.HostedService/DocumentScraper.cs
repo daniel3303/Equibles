@@ -601,6 +601,31 @@ public class DocumentScraper : IDocumentScraper
                     scope.ServiceProvider.GetRequiredService<XbrlEnvelopeCaptureService>();
                 var xbrl = xbrlCapture.Capture(content, filing);
 
+                // Stitch the as-filed HTML (cover page + exhibits) for the forms that carry
+                // linked exhibits — built from the same submission, so no extra EDGAR fetch.
+                // Best-effort: a malformed envelope must not break ingest, so a failure leaves
+                // AsFiledHtmlVersion at 0 for the backfill to retry.
+                AsFiledHtmlCaptureResult asFiledHtml = null;
+                if (AsFiledHtmlCaptureService.AppliesTo(documentType))
+                {
+                    var asFiledCapture =
+                        scope.ServiceProvider.GetRequiredService<AsFiledHtmlCaptureService>();
+                    try
+                    {
+                        asFiledHtml = asFiledCapture.Capture(content, filing);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(
+                            ex,
+                            "As-filed HTML build failed for {Ticker} - {DocumentType} - {FilingDate}; backfill will retry.",
+                            companyOutContext.Ticker,
+                            documentType,
+                            filing.FilingDate
+                        );
+                    }
+                }
+
                 var normalizedHtml = normalizer.Normalize(content);
                 var markdownDocument = converter.Convert(normalizedHtml);
 
@@ -630,6 +655,7 @@ public class DocumentScraper : IDocumentScraper
                     filing.AccessionNumber,
                     filing.Items,
                     xbrl,
+                    asFiledHtml,
                     cancellationToken
                 );
 

@@ -55,6 +55,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         string accessionNumber = null,
         string items = null,
         XbrlCaptureResult xbrl = null,
+        AsFiledHtmlCaptureResult asFiledHtml = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -80,6 +81,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         };
 
         await ApplyXbrlCapture(document, xbrl ?? XbrlCaptureResult.NotChecked);
+        await ApplyAsFiledHtmlCapture(document, asFiledHtml);
 
         _documentRepository.Add(document);
         await _documentRepository.SaveChanges();
@@ -106,6 +108,12 @@ public class DocumentPersistenceService : IDocumentPersistenceService
     public async Task UpdateXbrl(Document document, XbrlCaptureResult xbrl)
     {
         await ApplyXbrlCapture(document, xbrl ?? XbrlCaptureResult.NotChecked);
+        await _documentRepository.SaveChanges();
+    }
+
+    public async Task UpdateAsFiledHtml(Document document, AsFiledHtmlCaptureResult asFiledHtml)
+    {
+        await ApplyAsFiledHtmlCapture(document, asFiledHtml);
         await _documentRepository.SaveChanges();
     }
 
@@ -165,5 +173,38 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         document.XbrlType = xbrl.Type;
         document.XbrlUncompressedSize = xbrl.RawBytes.Length;
         document.XbrlStatus = XbrlCaptureStatus.Captured;
+    }
+
+    // Stores the stitched as-filed HTML as a gzip-compressed internal File and stamps the
+    // builder version so the backfill won't re-process it. A null result means "not built this
+    // pass" (left at version 0 for the backfill); an examined-but-no-exhibit result (Html null)
+    // is stamped current with no File so it isn't re-fetched.
+    private async Task ApplyAsFiledHtmlCapture(Document document, AsFiledHtmlCaptureResult result)
+    {
+        if (result == null)
+        {
+            return;
+        }
+
+        if (result.Html == null)
+        {
+            document.AsFiledHtmlVersion = AsFiledHtmlCaptureService.CurrentVersion;
+            return;
+        }
+
+        var compressed = GzipCompressor.Compress(result.Html);
+        var name = $"asfiled-{document.AccessionNumber ?? document.Id.ToString()}".TruncateToFit(
+            MaxFileNameLength
+        );
+        var htmlFile = await _fileManager.SaveInternalFile(
+            compressed,
+            name,
+            "gz",
+            "application/gzip"
+        );
+
+        document.AsFiledHtmlContent = htmlFile;
+        document.AsFiledHtmlUncompressedSize = result.Html.Length;
+        document.AsFiledHtmlVersion = AsFiledHtmlCaptureService.CurrentVersion;
     }
 }
