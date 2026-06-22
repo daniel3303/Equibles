@@ -23,3 +23,7 @@ anual
 # "nD" — substring inside identifiers in src/Equibles.Web/package-lock.json
 # (e.g. "andDate", date hashes). codespell suggests "and"/"2nd".
 nd
+
+# "currentY" — the running Y-coordinate cursor when reconstructing the House PTR
+# table from PDF word geometry. codespell suggests "currently".
+currenty

@@ -167,7 +167,7 @@ public partial class SenateAnnualReportClient
 
         var firstName = row[0]?.Trim() ?? "";
         var lastName = row[1]?.Trim() ?? "";
-        var memberName = $"{firstName} {lastName}".Trim();
+        var memberName = NormalizeMemberName($"{firstName} {lastName}");
         if (string.IsNullOrEmpty(memberName))
             return null;
 
