@@ -14,9 +14,7 @@ namespace Equibles.UnitTests.Congress;
 /// </summary>
 public class DisclosureParsingHelperNormalizeMemberNameRepeatedInitialTests
 {
-    [Fact(
-        Skip = "GH-3989 — doubled-token collapse folds a genuine repeated initial: \"C. C. Franklin\" → \"C. Franklin\""
-    )]
+    [Fact]
     public void NormalizeMemberName_RepeatedGenuineInitial_LeavesBothInitialsIntact()
     {
         DisclosureParsingHelper.NormalizeMemberName("C. C. Franklin").Should().Be("C. C. Franklin");
