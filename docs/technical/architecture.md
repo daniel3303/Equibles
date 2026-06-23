@@ -78,7 +78,7 @@ Data (entities) → Repositories (IQueryable) → Managers (write paths) → Con
 | `EquiblesFinancialDbContext` + module builder | `Equibles.Data` |
 | `BaseRepository<T>` | `Equibles.Data` |
 | Migrations snapshot | `Equibles.Migrations` |
-| Outbound HTTP clients (SEC, FRED, Yahoo, FINRA, CFTC, CBOE) | `Equibles.Integrations.<Source>` |
+| Outbound HTTP clients (SEC, FRED, Yahoo, FINRA, CFTC, CBOE, GovernmentContracts, Wikidata) | `Equibles.Integrations.<Source>` |
 | Smart-enum types, shared utilities | `Equibles.Core` |
 | MCP host wiring (`AddModule`, middleware) | `Equibles.Mcp` |
 | Cross-module search abstractions | `Equibles.Search.Abstractions`, `Equibles.Search` |
