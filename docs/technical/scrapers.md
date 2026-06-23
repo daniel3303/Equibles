@@ -98,6 +98,14 @@ Workers that fetch from a paginated / batched feed maintain a dedup ledger so re
 
 Per-document `Equibles.Sec.Data.Models.Document` rows carry the accession + the processing status. `DocumentScraper` writes the row on first sight; `DocumentProcessorWorker` flips it to processed after the per-document-type processor (`InsiderTradingFilingProcessor`, etc.) returns successfully. A failure leaves the row in its current state so the next cycle retries.
 
+### SEC Financial Facts — per-stock filing watermark + per-document version stamp
+
+The two SEC Financial Facts workers each keep their own ledger.
+
+- [`FinancialFactsScraperWorker`](../../src/Equibles.Sec.FinancialFacts.HostedService/FinancialFactsScraperWorker.cs) walks every CIK-bearing company and pulls its SEC Company Facts. [`FinancialFactsImportService`](../../src/Equibles.Sec.FinancialFacts.HostedService/Services/FinancialFactsImportService.cs) records a per-stock [`FinancialFactsSyncStatus`](../../src/Equibles.Sec.FinancialFacts.Data/Models/FinancialFactsSyncStatus.cs) row (keyed by `CommonStockId`) holding `LastFiledDateSeen` and `LastCheckedAt`.
+- When the API's max `Filed` date is no newer than `LastFiledDateSeen`, the import skips the expensive full-history re-upsert and only refreshes the share count — so a re-run costs one Company Facts request per company, not a full reparse.
+- [`XbrlFactsExtractionWorker`](../../src/Equibles.Sec.FinancialFacts.HostedService/XbrlFactsExtractionWorker.cs) sweeps documents whose captured XBRL envelope has not been processed at the current `XbrlFactExtractionService.CurrentVersion`, stamped per document via `Document.XbrlFactsVersion` — see [Modules → SEC Financial Facts](modules.md) for the dimensional-facts detail.
+
 ### FTD / FINRA / FRED / Yahoo / CFTC / CBOE — "latest date" cursor
 
 These sources publish a continuous time series rather than discrete filings. Each scraper resolves the start date via `SyncDateResolver.Resolve(latestInDb, workerOptions)`:
