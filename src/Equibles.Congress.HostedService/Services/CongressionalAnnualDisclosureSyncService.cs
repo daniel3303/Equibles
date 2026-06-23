@@ -156,12 +156,10 @@ public class CongressionalAnnualDisclosureSyncService
         {
             ct.ThrowIfCancellationRequested();
 
-            if (!members.TryGetValue(report.MemberName, out var member))
+            var memberName = DisclosureParsingHelper.NormalizeMemberName(report.MemberName);
+            if (!members.TryGetValue(memberName, out var member))
             {
-                _logger.LogWarning(
-                    "Congress member not found after upsert: {Name}",
-                    report.MemberName
-                );
+                _logger.LogWarning("Congress member not found after upsert: {Name}", memberName);
                 continue;
             }
 
@@ -205,10 +203,12 @@ public class CongressionalAnnualDisclosureSyncService
         CancellationToken ct
     )
     {
+        // Canonicalise the name so cosmetic disclosure variants resolve to one
+        // CongressMember record (GH-3374) — the same identity key the trade
+        // sync uses, so the two pipelines converge on the same member.
         var distinctMembers = reports
-            .GroupBy(r => r.MemberName)
-            .Select(g => g.First())
-            .Select(r => new CongressMember { Name = r.MemberName, Position = r.Position })
+            .GroupBy(r => DisclosureParsingHelper.NormalizeMemberName(r.MemberName))
+            .Select(g => new CongressMember { Name = g.Key, Position = g.First().Position })
             .ToList();
 
         await dbContext

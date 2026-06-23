@@ -163,10 +163,14 @@ public class CongressionalTradeSyncService
         CancellationToken ct
     )
     {
+        // Key identity on the canonical name so cosmetic disclosure variants
+        // (mid-name honorific, doubled first name) resolve to one record no
+        // matter which scraper emitted the transaction (GH-3374). Every source
+        // already normalises at emission; doing it here too makes the upsert key
+        // the single source of truth for member identity.
         var distinctMembers = matched
-            .GroupBy(t => t.MemberName)
-            .Select(g => g.First())
-            .Select(t => new CongressMember { Name = t.MemberName, Position = t.Position })
+            .GroupBy(t => DisclosureParsingHelper.NormalizeMemberName(t.MemberName))
+            .Select(g => new CongressMember { Name = g.Key, Position = g.First().Position })
             .ToList();
 
         await dbContext
@@ -195,9 +199,10 @@ public class CongressionalTradeSyncService
 
         foreach (var tx in matched)
         {
-            if (!members.TryGetValue(tx.MemberName, out var member))
+            var memberName = DisclosureParsingHelper.NormalizeMemberName(tx.MemberName);
+            if (!members.TryGetValue(memberName, out var member))
             {
-                _logger.LogWarning("Congress member not found after upsert: {Name}", tx.MemberName);
+                _logger.LogWarning("Congress member not found after upsert: {Name}", memberName);
                 continue;
             }
 
