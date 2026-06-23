@@ -247,4 +247,44 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
             .Should()
             .BeEquivalentTo([new DateOnly(2026, 6, 11), new DateOnly(2026, 7, 14)]);
     }
+
+    [Fact]
+    public async Task Import_EveryTrackedReleaseCarriedForward_PersistsNoDatesAndDoesNotThrow()
+    {
+        // When every tracked release is a weekend-flagged carry-forward, the drop
+        // empties the parsed list. The importer must return cleanly with no calendar
+        // rows — and crucially without throwing: the date-range computation right
+        // after the drop calls Min/Max, which throw on an empty sequence.
+        _seriesRepo.Add(new FredSeries { SeriesId = "DFEDTARU", Title = "Fed Funds Upper" });
+        await _seriesRepo.SaveChanges();
+
+        var fomcRelease = new FredReleaseRecord
+        {
+            Id = 101,
+            Name = "FOMC Press Release",
+            PressRelease = true,
+        };
+        _fredClient.GetSeriesRelease("DFEDTARU").Returns(Task.FromResult(fomcRelease));
+        _fredClient
+            .GetReleaseDates(Arg.Any<DateOnly?>())
+            .Returns(
+                Task.FromResult(
+                    new List<FredReleaseDateRecord>
+                    {
+                        new() { ReleaseId = 101, Date = "2026-06-19" }, // Fri
+                        new() { ReleaseId = 101, Date = "2026-06-20" }, // Sat
+                        new() { ReleaseId = 101, Date = "2026-06-22" }, // Mon
+                    }
+                )
+            );
+
+        var import = async () => await _sut.Import(CancellationToken.None);
+
+        await import.Should().NotThrowAsync();
+        _dateRepo
+            .GetAll()
+            .ToList()
+            .Should()
+            .BeEmpty("a release seen on any weekend is a carry-forward and contributes no dates");
+    }
 }
