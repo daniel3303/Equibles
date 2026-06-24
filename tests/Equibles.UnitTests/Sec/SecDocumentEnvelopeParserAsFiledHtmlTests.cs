@@ -96,6 +96,59 @@ public class SecDocumentEnvelopeParserAsFiledHtmlTests
     }
 
     [Fact]
+    public void TryBuildAsFiledHtml_DiscoversAndNormalizesExhibitImages()
+    {
+        // An investor-deck exhibit references its slides (and a logo) by relative/absolute name.
+        var exhibitWithImages =
+            "<html><body>"
+            + "<img src=\"deck001.jpg\">"
+            + "<img src=\"./sub/deck002.JPG\">"
+            + "<img src=\"https://www.sec.gov/Archives/edgar/data/1/000/logo.gif\">"
+            + "<img src=\"data:image/png;base64,AAAA\">"
+            + "<img src=\"notes.pdf\">"
+            + "</body></html>";
+
+        var envelope = $"""
+            <SEC-DOCUMENT>
+            <DOCUMENT>
+            <TYPE>8-K
+            <SEQUENCE>1
+            <FILENAME>acme_8k.htm
+            <TEXT>
+            {PrimaryBody}
+            </TEXT>
+            </DOCUMENT>
+            <DOCUMENT>
+            <TYPE>EX-99.1
+            <SEQUENCE>2
+            <FILENAME>acme_ex99-1.htm
+            <TEXT>
+            {exhibitWithImages}
+            </TEXT>
+            </DOCUMENT>
+            </SEC-DOCUMENT>
+            """;
+
+        var built = SecDocumentEnvelopeParser.TryBuildAsFiledHtml(
+            envelope,
+            "acme_8k.htm",
+            out var content,
+            out var images
+        );
+
+        built.Should().BeTrue();
+        // Only safe, bare image filenames are surfaced — relative/absolute resolve to the bare
+        // name; the inline data: image and the non-image .pdf are ignored.
+        images.Should().BeEquivalentTo(["deck001.jpg", "deck002.JPG", "logo.gif"]);
+        // Each surfaced <img src> is normalized to its bare filename so the viewer can match by
+        // (document, filename), while the inline data: image is left untouched.
+        content.Should().Contain("src=\"deck001.jpg\"");
+        content.Should().Contain("src=\"deck002.JPG\"");
+        content.Should().Contain("src=\"logo.gif\"");
+        content.Should().Contain("data:image/png;base64,AAAA");
+    }
+
+    [Fact]
     public void TryBuildAsFiledHtml_NoExhibit_ReturnsFalse()
     {
         var envelope = Submission("acme_8k.htm", withExhibit: false);

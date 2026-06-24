@@ -25,6 +25,13 @@ public class Document
     public virtual List<Chunk> Chunks { get; set; } = [];
 
     /// <summary>
+    /// Images referenced by this filing's as-filed HTML (8-K deck slides, logos, figures),
+    /// downloaded from EDGAR and stored so the viewer can serve them from our own origin instead
+    /// of hotlinking SEC. Cascade-deleted with the document; see <see cref="DocumentImage"/>.
+    /// </summary>
+    public virtual List<DocumentImage> Images { get; set; } = [];
+
+    /// <summary>
     /// The file containing the document content.
     /// </summary>
     public Guid ContentId { get; set; }
@@ -165,7 +172,12 @@ public class Document
     /// work-set query and the backoffice "pending" metric can reference it without depending on
     /// the hosted-service assembly. Bump it after a stitcher change to re-stitch the corpus.
     /// </summary>
-    public const int AsFiledHtmlBuilderVersion = 1;
+    /// <remarks>
+    /// Bumped to 2 when the stitcher started downloading the filing's referenced images (8-K deck
+    /// slides, logos) into <see cref="Images"/>; the backfill re-processes the corpus to pull
+    /// images for filings stitched by the image-less v1 builder.
+    /// </remarks>
+    public const int AsFiledHtmlBuilderVersion = 2;
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }

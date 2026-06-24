@@ -7,6 +7,10 @@ namespace Equibles.Sec.BusinessLogic;
 
 public static class SecDocumentEnvelopeParser
 {
+    // Cap on a surfaced image filename, matching the DocumentImage.FileName column. The stitcher
+    // skips longer names so the stored lookup key always equals the name left in the as-filed HTML.
+    private const int MaxImageFileNameLength = 256;
+
     private const string DocumentStartTag = "<DOCUMENT>";
     private const string DocumentEndTag = "</DOCUMENT>";
     private const string TextStartTag = "<TEXT>";
@@ -251,9 +255,25 @@ public static class SecDocumentEnvelopeParser
         string envelope,
         string primaryDocumentFileName,
         out string content
+    ) => TryBuildAsFiledHtml(envelope, primaryDocumentFileName, out content, out _);
+
+    /// <summary>
+    /// As <see cref="TryBuildAsFiledHtml(string,string,out string)"/>, but also surfaces the bare
+    /// relative filenames of the images the stitched page references (e.g. an 8-K investor-deck's
+    /// slide JPGs and the cover-page logo). Each such <c>&lt;img src&gt;</c> is normalized in the
+    /// stored HTML to its bare filename so the viewer can rewrite it to a same-origin proxy by
+    /// (document, filename); the caller downloads these from EDGAR and stores them. Inline
+    /// <c>data:</c> images and non-image references are left untouched and not surfaced.
+    /// </summary>
+    public static bool TryBuildAsFiledHtml(
+        string envelope,
+        string primaryDocumentFileName,
+        out string content,
+        out IReadOnlyList<string> imageFileNames
     )
     {
         content = string.Empty;
+        imageFileNames = [];
         if (string.IsNullOrEmpty(envelope))
             return false;
 
@@ -309,6 +329,8 @@ public static class SecDocumentEnvelopeParser
         );
         var head = new StringBuilder();
         var sections = new StringBuilder();
+        var images = new List<string>();
+        var seenImages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var doc in docs)
         {
@@ -326,6 +348,7 @@ public static class SecDocumentEnvelopeParser
             }
 
             RewriteIntraFilingLinks(parsed, sectionByFile);
+            CollectAndNormalizeImages(parsed, images, seenImages);
 
             sections.Append("<section id=\"").Append(doc.SectionId).Append('"');
             sections.Append(" data-asfiled-type=\"").Append(Escape(doc.Type)).Append('"');
@@ -340,8 +363,51 @@ public static class SecDocumentEnvelopeParser
             + "</head><body>"
             + sections
             + "</body></html>";
+        imageFileNames = images;
         return true;
     }
+
+    // Surfaces the images the page references and rewrites each such <img src> to the bare EDGAR
+    // filename. A filing references its images by a relative name pointing at the SEC submission
+    // folder (e.g. "ebs2026-03x31deck001.jpg"); normalizing to the bare name lets the viewer match
+    // an image to its stored blob by (document, filename) however the filing wrote the src. Inline
+    // data: images are left untouched (the viewer serves those directly); anything that isn't a
+    // safe bare image filename is left as-is and not surfaced (the viewer drops the broken hotlink).
+    private static void CollectAndNormalizeImages(
+        IDocument document,
+        List<string> imageFileNames,
+        HashSet<string> seen
+    )
+    {
+        foreach (var img in document.QuerySelectorAll("img[src]"))
+        {
+            var src = img.GetAttribute("src");
+            if (
+                string.IsNullOrEmpty(src)
+                || src.StartsWith("data:", StringComparison.OrdinalIgnoreCase)
+            )
+                continue;
+
+            var fileName = HrefFileName(src);
+            if (
+                fileName == null
+                || fileName.Length > MaxImageFileNameLength
+                || !IsSafeFilename(fileName)
+                || !IsImageFilename(fileName)
+            )
+                continue;
+
+            img.SetAttribute("src", fileName);
+            if (seen.Add(fileName))
+                imageFileNames.Add(fileName);
+        }
+    }
+
+    private static bool IsImageFilename(string filename) =>
+        filename.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+        || filename.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)
+        || filename.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+        || filename.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
 
     // Rewrites every intra-filing anchor — one whose href resolves to a filename we kept as a
     // section — to the in-page fragment for that section, so the cover page's "Exhibit 99.1"

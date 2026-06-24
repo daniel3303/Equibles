@@ -23,6 +23,21 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
             b.Property(e => e.DocumentType).HasConversion(docTypeConversion);
         });
 
+        builder.Entity<DocumentImage>(b =>
+        {
+            // The link rows cascade with the document (the doc owns its image set). The File blob
+            // is restrict — it's cleaned up on the same app delete path as the document's other
+            // artifacts, after the link row is gone — so File can't be deleted while still referenced.
+            b.HasOne(e => e.Document)
+                .WithMany(d => d.Images)
+                .HasForeignKey(e => e.DocumentId)
+                .OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(e => e.File)
+                .WithMany()
+                .HasForeignKey(e => e.FileId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         builder.Entity<FailToDeliver>();
         builder.Entity<FormAdvAdviser>();
         builder.Entity<FormDFiling>();

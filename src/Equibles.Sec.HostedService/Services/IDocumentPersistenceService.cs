@@ -40,7 +40,11 @@ public interface IDocumentPersistenceService
     /// <see cref="Document"/> and saves — used by the backfill to stitch documents ingested
     /// before the as-filed view was built (or to re-stitch after a builder-version bump).
     /// </summary>
-    Task UpdateAsFiledHtml(Document document, AsFiledHtmlCaptureResult asFiledHtml);
+    Task UpdateAsFiledHtml(
+        Document document,
+        AsFiledHtmlCaptureResult asFiledHtml,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>
     /// Replaces the body of an already-persisted <see cref="Document"/> in place, keeping its id —
