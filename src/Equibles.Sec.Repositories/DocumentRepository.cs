@@ -51,29 +51,6 @@ public class DocumentRepository : BaseRepository<Document>
     }
 
     /// <summary>
-    /// The XBRL backfill work-set: the <see cref="XbrlCaptureStatus.NotChecked"/> documents the
-    /// backfill will actually select. A document qualifies only when it came from an EDGAR filing
-    /// — the accession is stored directly, or recoverable from the stored EDGAR submission URL
-    /// (rows ingested before AccessionNumber existed) — and its issuer has a CIK. Non-EDGAR
-    /// documents (e.g. earnings-call transcripts) are NotChecked but have no filing to re-fetch,
-    /// so they are never selected and must not count as pending work. Documents that have
-    /// exhausted their retry ceiling are excluded too, since they can no longer be reselected.
-    /// This is the single definition of "pending backfill" shared by the worker and the dashboard.
-    /// </summary>
-    public IQueryable<Document> GetPendingXbrlBackfill()
-    {
-        return GetByXbrlStatus(XbrlCaptureStatus.NotChecked)
-            .Where(d =>
-                (
-                    d.AccessionNumber != null
-                    || (d.SourceUrl != null && d.SourceUrl.Contains("/Archives/edgar/data/"))
-                )
-                && d.CommonStock.Cik != null
-                && d.XbrlCaptureAttempts < Document.MaxXbrlCaptureAttempts
-            );
-    }
-
-    /// <summary>
     /// The as-filed HTML backfill work-set: EDGAR-sourced 8-K documents whose stitched as-filed
     /// HTML is below the current builder version (<see cref="Document.AsFiledHtmlBuilderVersion"/>)
     /// and still under the retry ceiling. Scoped to 8-Ks because that's where the linked exhibits
