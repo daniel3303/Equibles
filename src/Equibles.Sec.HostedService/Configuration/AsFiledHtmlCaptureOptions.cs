@@ -22,4 +22,23 @@ public class AsFiledHtmlCaptureOptions
     /// shared EDGAR budget to the live scrapers between bursts.
     /// </summary>
     public int BackfillDrainIntervalSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Largest single image (in bytes) downloaded and stored for a filing's as-filed HTML. An
+    /// image over this is skipped (the viewer drops the broken reference) so one pathological asset
+    /// can't bloat storage. Real EDGAR slide JPGs run well under a megabyte.
+    /// </summary>
+    public long MaxImageBytes { get; set; } = 8L * 1024 * 1024;
+
+    /// <summary>
+    /// Total bytes of images stored for a single document. Once a filing's downloaded images reach
+    /// this, the rest are skipped — bounds the storage a single image-heavy deck can consume.
+    /// </summary>
+    public long MaxTotalImageBytes { get; set; } = 40L * 1024 * 1024;
+
+    /// <summary>
+    /// Most images stored for a single document. Bounds the EDGAR fetches and rows one filing can
+    /// generate; a long investor deck (~40 slides) sits well under this.
+    /// </summary>
+    public int MaxImagesPerDocument { get; set; } = 200;
 }

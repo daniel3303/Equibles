@@ -23,6 +23,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<XbrlEnvelopeCaptureService>();
         services.AddScoped<AsFiledHtmlCaptureService>();
         services.AddScoped<AsFiledHtmlBackfillService>();
+        services.AddScoped<DocumentImageService>();
         services.AddScoped<FilingItemsBackfillService>();
         services.AddScoped<IDocumentScraper, DocumentScraper>();
         // Primary IWebsiteSource (consumed by the CommonStocks website discovery

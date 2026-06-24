@@ -100,15 +100,16 @@ public class AsFiledHtmlBackfillService
                 );
                 // The submission doesn't name its primary document; TryBuildAsFiledHtml falls
                 // back to the first displayable block (the primary by EDGAR convention).
-                var capture = _captureService.Capture(
+                var capture = await _captureService.Capture(
                     content,
                     new FilingData
                     {
                         Cik = document.CommonStock.Cik,
                         AccessionNumber = document.AccessionNumber,
-                    }
+                    },
+                    cancellationToken
                 );
-                await _persistenceService.UpdateAsFiledHtml(document, capture);
+                await _persistenceService.UpdateAsFiledHtml(document, capture, cancellationToken);
 
                 if (capture.Html != null)
                 {

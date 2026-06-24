@@ -19,18 +19,21 @@ public class DocumentPersistenceService : IDocumentPersistenceService
     private readonly DocumentRepository _documentRepository;
     private readonly ChunkRepository _chunkRepository;
     private readonly IFileManager _fileManager;
+    private readonly DocumentImageService _documentImageService;
     private readonly IBus _bus;
 
     public DocumentPersistenceService(
         DocumentRepository documentRepository,
         ChunkRepository chunkRepository,
         IFileManager fileManager,
+        DocumentImageService documentImageService,
         IBus bus
     )
     {
         _documentRepository = documentRepository;
         _chunkRepository = chunkRepository;
         _fileManager = fileManager;
+        _documentImageService = documentImageService;
         _bus = bus;
     }
 
@@ -81,7 +84,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         };
 
         await ApplyXbrlCapture(document, xbrl ?? XbrlCaptureResult.NotChecked);
-        await ApplyAsFiledHtmlCapture(document, asFiledHtml);
+        await ApplyAsFiledHtmlCapture(document, asFiledHtml, cancellationToken);
 
         _documentRepository.Add(document);
         await _documentRepository.SaveChanges();
@@ -111,10 +114,23 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         await _documentRepository.SaveChanges();
     }
 
-    public async Task UpdateAsFiledHtml(Document document, AsFiledHtmlCaptureResult asFiledHtml)
+    public async Task UpdateAsFiledHtml(
+        Document document,
+        AsFiledHtmlCaptureResult asFiledHtml,
+        CancellationToken cancellationToken = default
+    )
     {
-        await ApplyAsFiledHtmlCapture(document, asFiledHtml);
+        // Wrap in a transaction so a re-stitch's image reconciliation is atomic: clearing the prior
+        // images (an immediate ExecuteDelete) and inserting the new set + version stamp commit
+        // together, so a mid-save failure can't leave the document with its old images gone and no
+        // new ones (it stays below the builder version for a later backfill pass to retry cleanly).
+        await using var transaction = await _documentRepository.CreateTransaction(
+            IsolationLevel.ReadCommitted,
+            cancellationToken
+        );
+        await ApplyAsFiledHtmlCapture(document, asFiledHtml, cancellationToken);
         await _documentRepository.SaveChanges();
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task ReplaceContent(
@@ -175,11 +191,16 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         document.XbrlStatus = XbrlCaptureStatus.Captured;
     }
 
-    // Stores the stitched as-filed HTML as a gzip-compressed internal File and stamps the
-    // builder version so the backfill won't re-process it. A null result means "not built this
-    // pass" (left at version 0 for the backfill); an examined-but-no-exhibit result (Html null)
-    // is stamped current with no File so it isn't re-fetched.
-    private async Task ApplyAsFiledHtmlCapture(Document document, AsFiledHtmlCaptureResult result)
+    // Stores the stitched as-filed HTML as a gzip-compressed internal File, syncs the filing's
+    // downloaded images, and stamps the builder version so the backfill won't re-process it. A
+    // null result means "not built this pass" (left at version 0 for the backfill); an
+    // examined-but-no-exhibit result (Html null) is stamped current with no File so it isn't
+    // re-fetched.
+    private async Task ApplyAsFiledHtmlCapture(
+        Document document,
+        AsFiledHtmlCaptureResult result,
+        CancellationToken cancellationToken
+    )
     {
         if (result == null)
         {
@@ -205,6 +226,11 @@ public class DocumentPersistenceService : IDocumentPersistenceService
 
         document.AsFiledHtmlContent = htmlFile;
         document.AsFiledHtmlUncompressedSize = result.Html.Length;
+
+        // Replace the document's stored image set with the freshly captured one (clears prior
+        // images on a re-stitch). Persisted in the same unit of work as the document/version stamp.
+        await _documentImageService.SyncImages(document, result.Images, cancellationToken);
+
         document.AsFiledHtmlVersion = AsFiledHtmlCaptureService.CurrentVersion;
     }
 }

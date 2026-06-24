@@ -612,7 +612,11 @@ public class DocumentScraper : IDocumentScraper
                         scope.ServiceProvider.GetRequiredService<AsFiledHtmlCaptureService>();
                     try
                     {
-                        asFiledHtml = asFiledCapture.Capture(content, filing);
+                        asFiledHtml = await asFiledCapture.Capture(
+                            content,
+                            filing,
+                            cancellationToken
+                        );
                     }
                     catch (Exception ex)
                     {
