@@ -1,4 +1,3 @@
-using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Sec.HostedService;
 using Equibles.Sec.HostedService.Configuration;
@@ -49,7 +48,6 @@ public class XbrlBackfillWorkerWhitespaceEmailTests
                 scopeFactory,
                 errorReporter,
                 captureOptions,
-                Options.Create(new WorkerOptions()),
                 configuration
             ) { }
 
