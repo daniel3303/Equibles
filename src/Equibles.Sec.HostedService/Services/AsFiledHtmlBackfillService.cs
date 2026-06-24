@@ -19,7 +19,7 @@ namespace Equibles.Sec.HostedService.Services;
 public class AsFiledHtmlBackfillService
 {
     // Rows ingested before AccessionNumber existed carry it only inside the stored EDGAR
-    // full-submission URL; recovering it makes those rows backfillable (same as XBRL backfill).
+    // full-submission URL; recovering it makes those rows backfillable.
     private static readonly Regex EdgarSourceUrlAccession = new(
         @"/Archives/edgar/data/\d+/(\d{10}-\d{2}-\d{6})\.txt$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase
