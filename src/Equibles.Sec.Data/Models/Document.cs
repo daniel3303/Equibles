@@ -14,6 +14,8 @@ namespace Equibles.Sec.Data.Models;
 [Index(nameof(XbrlStatus), IsUnique = false)]
 [Index(nameof(XbrlStatus), nameof(XbrlFactsVersion))]
 [Index(nameof(DocumentType), nameof(AsFiledHtmlVersion))]
+[Index(nameof(ReportedStatementsStatus), IsUnique = false)]
+[Index(nameof(ReportedStatementsStatus), nameof(ReportedStatementsParseVersion))]
 [Index(nameof(CreationTime), IsUnique = false)]
 public class Document
 {
@@ -178,6 +180,71 @@ public class Document
     /// images for filings stitched by the image-less v1 builder.
     /// </remarks>
     public const int AsFiledHtmlBuilderVersion = 2;
+
+    // --- As-reported statement capture (SEC's pre-rendered R-files) ---
+    // SEC renders each financial statement of an XBRL filing into an HTML table (R2.htm,
+    // R3.htm…) from the filing's own presentation/calculation/label linkbases, and indexes
+    // them in FilingSummary.xml. We capture FilingSummary + the "Statements" R-files here as
+    // one gzip bundle (the network step), then a separate local parse step turns them into
+    // ReportedFinancialStatement rows. Kept apart from XbrlContent (fact extraction) and
+    // AsFiledHtmlContent (the human viewer) so presentation capture perturbs neither.
+
+    /// <summary>
+    /// Whether the filing's as-reported statement bundle has been captured. Default
+    /// <see cref="XbrlCaptureStatus.NotChecked"/> is the backfill target;
+    /// <see cref="XbrlCaptureStatus.Captured"/> and <see cref="XbrlCaptureStatus.NotPresent"/>
+    /// (no FilingSummary / no XBRL) are terminal.
+    /// </summary>
+    public XbrlCaptureStatus ReportedStatementsStatus { get; set; } = XbrlCaptureStatus.NotChecked;
+
+    /// <summary>
+    /// The file holding the gzip bundle of FilingSummary.xml plus the "Statements" R-files,
+    /// or null when none was captured. The pre-compression size is
+    /// <see cref="ReportedStatementsUncompressedSize"/>.
+    /// </summary>
+    public Guid? ReportedStatementsContentId { get; set; }
+    public virtual File ReportedStatementsContent { get; set; }
+
+    /// <summary>Size in bytes of the R-file bundle before gzip compression. Null when none captured.</summary>
+    public long? ReportedStatementsUncompressedSize { get; set; }
+
+    /// <summary>
+    /// How many times capturing the R-file bundle has failed for this document. The backfill
+    /// stops selecting it at <see cref="MaxReportedStatementsCaptureAttempts"/> so a
+    /// permanently-unfetchable filing can't starve the queue. Only meaningful while
+    /// <see cref="ReportedStatementsStatus"/> is <see cref="XbrlCaptureStatus.NotChecked"/>.
+    /// </summary>
+    public int ReportedStatementsCaptureAttempts { get; set; }
+
+    /// <summary>Retry ceiling for <see cref="ReportedStatementsCaptureAttempts"/>.</summary>
+    public const int MaxReportedStatementsCaptureAttempts = 5;
+
+    /// <summary>
+    /// Version of the R-file parser that last reconstructed this document's statements from the
+    /// captured bundle. 0 = never parsed; the parse sweep selects
+    /// <see cref="XbrlCaptureStatus.Captured"/> documents whose version is below
+    /// <see cref="ReportedStatementsParserVersion"/>, so bumping the parser re-derives the
+    /// corpus offline without re-fetching EDGAR (same redrain as the XBRL-facts extractor).
+    /// </summary>
+    public int ReportedStatementsParseVersion { get; set; }
+
+    /// <summary>
+    /// How many times parsing the captured R-file bundle has failed for this document. The
+    /// parse sweep stops selecting it at <see cref="MaxReportedStatementsParseAttempts"/> so
+    /// one unparseable bundle can't starve the queue.
+    /// </summary>
+    public int ReportedStatementsParseAttempts { get; set; }
+
+    /// <summary>Retry ceiling for <see cref="ReportedStatementsParseAttempts"/>.</summary>
+    public const int MaxReportedStatementsParseAttempts = 5;
+
+    /// <summary>
+    /// Current R-file parser version — the single source of truth for "which captured filings
+    /// still need (re)parsing". Lives here (Data) so both the parse work-set query and the
+    /// backoffice "pending" metric can reference it without depending on the hosted-service
+    /// assembly. Bump after a parser change to re-derive the corpus.
+    /// </summary>
+    public const int ReportedStatementsParserVersion = 1;
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }
