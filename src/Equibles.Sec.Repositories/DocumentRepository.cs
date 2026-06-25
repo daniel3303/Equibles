@@ -50,6 +50,11 @@ public class DocumentRepository : BaseRepository<Document>
         return GetAll().Where(d => d.XbrlStatus == status);
     }
 
+    public IQueryable<Document> GetByReportedStatementsStatus(XbrlCaptureStatus status)
+    {
+        return GetAll().Where(d => d.ReportedStatementsStatus == status);
+    }
+
     /// <summary>
     /// The as-filed HTML backfill work-set: EDGAR-sourced 8-K documents whose stitched as-filed
     /// HTML is below the current builder version (<see cref="Document.AsFiledHtmlBuilderVersion"/>)
