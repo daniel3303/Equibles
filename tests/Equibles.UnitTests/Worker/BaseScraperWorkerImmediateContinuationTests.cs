@@ -9,8 +9,8 @@ namespace Equibles.UnitTests.Worker;
 
 public class BaseScraperWorkerImmediateContinuationTests
 {
-    // A cycle that calls RequestImmediateContinuation (e.g. an XBRL backfill that filled
-    // its batch and still has a backlog queued) must wait the short ContinuationInterval,
+    // A cycle that calls RequestImmediateContinuation (e.g. an as-filed HTML backfill that
+    // filled its batch and still has a backlog queued) must wait the short ContinuationInterval,
     // NOT the full SleepInterval — so the backlog drains in successive bursts instead of one
     // batch every SleepInterval. SleepInterval is 1h here: if the continuation path didn't
     // apply, the second cycle would never arrive and the test would time out.

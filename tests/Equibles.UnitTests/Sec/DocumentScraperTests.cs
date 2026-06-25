@@ -154,6 +154,7 @@ public class DocumentScraperTests
                 "0000123456-25-000001",
                 Arg.Any<string>(),
                 Arg.Any<XbrlCaptureResult>(),
+                Arg.Any<AsFiledHtmlCaptureResult>(),
                 Arg.Any<CancellationToken>()
             );
         harness.PdfTextExtractor.DidNotReceiveWithAnyArgs().Extract(default);
@@ -285,6 +286,7 @@ public class DocumentScraperTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<XbrlCaptureResult>(),
+                Arg.Any<AsFiledHtmlCaptureResult>(),
                 Arg.Any<CancellationToken>()
             );
         await harness
@@ -300,6 +302,7 @@ public class DocumentScraperTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<XbrlCaptureResult>(),
+                Arg.Any<AsFiledHtmlCaptureResult>(),
                 Arg.Any<CancellationToken>()
             );
         await harness
@@ -315,6 +318,7 @@ public class DocumentScraperTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<XbrlCaptureResult>(),
+                Arg.Any<AsFiledHtmlCaptureResult>(),
                 Arg.Any<CancellationToken>()
             );
     }
@@ -676,6 +680,13 @@ public class DocumentScraperTests
                 Options.Create(new XbrlCaptureOptions())
             );
             services.AddScoped<XbrlEnvelopeCaptureService>();
+            // The as-filed HTML stitcher is resolved per scope only for 8-K filings; these tests
+            // exercise non-8-K forms, but register it (with default options) so an 8-K test added
+            // later resolves it instead of throwing.
+            services.AddSingleton<IOptions<AsFiledHtmlCaptureOptions>>(
+                Options.Create(new AsFiledHtmlCaptureOptions())
+            );
+            services.AddScoped<AsFiledHtmlCaptureService>();
 
             var provider = services.BuildServiceProvider();
             ScopeFactory = provider.GetRequiredService<IServiceScopeFactory>();

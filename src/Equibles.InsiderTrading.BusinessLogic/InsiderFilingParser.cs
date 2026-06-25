@@ -46,6 +46,12 @@ public static class InsiderFilingParser
         {
             if (tx == null)
                 return;
+            // A Form 3/4/5 discloses an event that has already occurred, so a transaction date after
+            // the filing date — or an absurd year from a source typo (e.g. 2035 or 0022) — is
+            // impossible. Newest-first trade lists would otherwise sort such a row to the very top,
+            // so drop it rather than store the bad date verbatim.
+            if (tx.TransactionDate > tx.FilingDate || tx.TransactionDate.Year < 1900)
+                return;
             tx.TransactionOrder = transactions.Count;
             tx.IsRule10b5One = rule10b5One;
             transactions.Add(tx);
