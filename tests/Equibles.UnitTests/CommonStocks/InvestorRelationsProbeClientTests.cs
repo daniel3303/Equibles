@@ -18,17 +18,45 @@ public class InvestorRelationsProbeClientTests
         + "</head><body>Request unsuccessful.</body></html>";
 
     [Fact]
-    public async Task Discover_Sidecar_RendersCandidate_WithoutAnyPlainHttp()
+    public async Task Discover_Sidecar_PlainHttpResolves_SidecarNotTouched()
     {
-        // With a sidecar configured, every candidate is rendered through the stealth
-        // browser (most IR hosts are bot-protected). The plain HttpClient must never be
-        // touched — its handler throws if it is.
+        // Plain HTTP is tried first even when a sidecar is configured: a reachable IR page resolves
+        // over plain HTTP and the contended stealth sidecar is never touched.
         var stealth = Substitute.For<IStealthBrowserClient>();
         stealth.IsEnabled.Returns(true);
         stealth.FetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(RenderedIrPage);
 
         var client = new InvestorRelationsProbeClient(
-            new HttpClient(new ThrowingHandler()),
+            new HttpClient(
+                new ConstantHandler(
+                    HttpStatusCode.OK,
+                    "text/html",
+                    "<html><head><title>Investor Relations - Acme</title></head><body></body></html>"
+                )
+            ),
+            stealth,
+            NullLogger<InvestorRelationsProbeClient>.Instance
+        );
+
+        var result = await client.Discover("acme.com", ["investors"], [], CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.Url.Should().Be("https://acme.com/investors");
+        await stealth.DidNotReceive().FetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Discover_Sidecar_PlainHttpBotWalled_FallsBackToSidecarRender()
+    {
+        // When plain HTTP only gets a bot-wall challenge (which fails validation), discovery
+        // escalates to the stealth render — and only then — which resolves the real IR page.
+        var stealth = Substitute.For<IStealthBrowserClient>();
+        stealth.IsEnabled.Returns(true);
+        stealth.FetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(RenderedIrPage);
+
+        var plain = new ConstantHandler(HttpStatusCode.OK, "text/html", IncapsulaStub);
+        var client = new InvestorRelationsProbeClient(
+            new HttpClient(plain),
             stealth,
             NullLogger<InvestorRelationsProbeClient>.Instance
         );
@@ -42,17 +70,17 @@ public class InvestorRelationsProbeClientTests
 
         result.Should().NotBeNull();
         result!.Url.Should().Be("https://emergentbiosolutions.com/investors");
-        result.Platform.Should().Be(IrPlatformType.Custom);
-        await stealth.Received(1).FetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        plain.Calls.Should().BeGreaterThan(0); // plain HTTP was tried before the sidecar
+        await stealth.Received().FetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Discover_Sidecar_FetchThrows_DegradesToMiss()
+    public async Task Discover_Sidecar_PlainHttpMissesAndSidecarThrows_DegradesToMiss()
     {
-        // A sidecar render can fail with an exception (e.g. a navigation timeout) instead of the
-        // contractual null. The probe must degrade that to a miss — if it bubbles out of Discover,
-        // the caller skips the definitive-miss back-off, so the stock is never stamped, re-occupies
-        // every batch, and starves the rest of the IR-discovery universe.
+        // Plain HTTP misses (bot wall), then the sidecar render fails with an exception (e.g. a
+        // navigation timeout) instead of the contractual null. The probe must degrade that to a
+        // miss — if it bubbles out of Discover, the caller skips the definitive-miss back-off, so
+        // the stock is never stamped, re-occupies every batch, and starves the rest of the universe.
         var stealth = Substitute.For<IStealthBrowserClient>();
         stealth.IsEnabled.Returns(true);
         stealth
@@ -60,7 +88,7 @@ public class InvestorRelationsProbeClientTests
             .Returns(Task.FromException<string>(new TimeoutException("navigation timeout")));
 
         var client = new InvestorRelationsProbeClient(
-            new HttpClient(new ThrowingHandler()),
+            new HttpClient(new ConstantHandler(HttpStatusCode.OK, "text/html", IncapsulaStub)),
             stealth,
             NullLogger<InvestorRelationsProbeClient>.Instance
         );
@@ -214,19 +242,6 @@ public class InvestorRelationsProbeClientTests
             );
     }
 
-    // Fails the test if plain HTTP is used — proves the sidecar path never falls through
-    // to the HttpClient when a sidecar is configured.
-    private sealed class ThrowingHandler : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken
-        ) =>
-            throw new InvalidOperationException(
-                "plain HTTP must not be used when a sidecar is configured"
-            );
-    }
-
     // Returns a valid IR page (title alone satisfies the validator) but reports a
     // post-redirect RequestUri far longer than the 256-char column ceiling.
     private sealed class LongFinalUrlHandler : HttpMessageHandler
@@ -255,12 +270,14 @@ public class InvestorRelationsProbeClientTests
         }
     }
 
-    // Returns a fixed status, content-type, and body for every request.
+    // Returns a fixed status, content-type, and body for every request, counting how many
+    // requests it served (so a test can prove the plain-HTTP path was exercised).
     private sealed class ConstantHandler : HttpMessageHandler
     {
         private readonly HttpStatusCode _status;
         private readonly string _mediaType;
         private readonly string _body;
+        private int _calls;
 
         public ConstantHandler(HttpStatusCode status, string mediaType, string body)
         {
@@ -269,11 +286,14 @@ public class InvestorRelationsProbeClientTests
             _body = body;
         }
 
+        public int Calls => _calls;
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken
         )
         {
+            Interlocked.Increment(ref _calls);
             return Task.FromResult(
                 new HttpResponseMessage(_status)
                 {

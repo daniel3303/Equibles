@@ -17,13 +17,22 @@ public class InvestorRelationsDiscoveryOptions : ScraperOptions
     /// resolves to a validated IR page wins.
     /// </summary>
     public List<string> CandidatePaths { get; set; } =
-    ["investor-relations", "investors", "investor", "ir", "shareholders", "shareholder"];
+    [
+        "investor-relations",
+        "investorrelations",
+        "investors",
+        "investor",
+        "ir",
+        "shareholders",
+        "shareholder",
+    ];
 
     /// <summary>
     /// Subdomain prefixes probed against the registrable domain (e.g.
     /// <c>https://ir.acme.com</c>). Tried after the path candidates.
     /// </summary>
-    public List<string> CandidateSubdomains { get; set; } = ["ir", "investors", "investor"];
+    public List<string> CandidateSubdomains { get; set; } =
+    ["ir", "investors", "investor", "investorrelations"];
 
     /// <summary>
     /// Days to wait before re-probing a stock whose last discovery attempt found no

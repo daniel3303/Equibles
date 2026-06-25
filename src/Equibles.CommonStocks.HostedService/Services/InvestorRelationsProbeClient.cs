@@ -5,11 +5,14 @@ namespace Equibles.CommonStocks.HostedService.Services;
 
 /// <summary>
 /// Probes a company's candidate investor-relations URLs and returns the first one
-/// that resolves to a validated IR page. When a stealth sidecar is configured (the
-/// commercial deployment), every candidate is rendered through
-/// <see cref="IStealthBrowserClient"/> — most IR hosts are bot-protected, so plain
-/// HTTP would just be walled. Plain HTTP (the typed <see cref="HttpClient"/> from
-/// <c>AddCommonStocksWorker</c>) is used only as the fallback when no sidecar is set.
+/// that resolves to a validated IR page. Tries plain HTTP first (the typed
+/// <see cref="HttpClient"/> from <c>AddCommonStocksWorker</c>): it is cheap and never touches the
+/// shared stealth sidecar, which is contended with the slide/webcast capture. Only when the
+/// plain-HTTP pass finds nothing AND a sidecar is configured does it run a second pass that renders
+/// every candidate through <see cref="IStealthBrowserClient"/> — catching the bot-protected hosts
+/// (where plain HTTP gets a challenge page that fails validation) and the JS-rendered homepages
+/// whose IR nav links aren't in the static HTML. Escalating only on a plain-HTTP miss keeps sidecar
+/// load proportional to the hard cases instead of every stock.
 /// </summary>
 public class InvestorRelationsProbeClient
 {
@@ -51,11 +54,38 @@ public class InvestorRelationsProbeClient
     {
         var candidates = InvestorRelationsCandidateBuilder.Build(website, paths, subdomains);
 
+        // Pass 1 — plain HTTP. Cheap, polite, and never touches the shared stealth sidecar; most
+        // IR pages that aren't bot-walled resolve here.
+        var direct = await Probe(candidates, website, useSidecar: false, cancellationToken);
+        if (direct != null)
+            return direct;
+
+        // Pass 2 — stealth render, only when a sidecar is configured and only after plain HTTP came
+        // up empty. Catches the bot-protected hosts (plain HTTP saw a challenge page that failed
+        // validation) and the JS-rendered homepages whose IR nav links aren't in the static HTML.
+        if (_stealthClient.IsEnabled)
+            return await Probe(candidates, website, useSidecar: true, cancellationToken);
+
+        return null;
+    }
+
+    /// <summary>
+    /// Runs one discovery pass over the guessed candidates and then the homepage crawl, all over
+    /// the requested transport (plain HTTP or the stealth sidecar). Returns the first validated IR
+    /// page, or null when nothing resolves in this pass.
+    /// </summary>
+    private async Task<IrDiscoveryResult> Probe(
+        IReadOnlyList<string> candidates,
+        string website,
+        bool useSidecar,
+        CancellationToken cancellationToken
+    )
+    {
         foreach (var candidate in candidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var resolved = await TryResolve(candidate, cancellationToken);
+            var resolved = await TryResolve(candidate, useSidecar, cancellationToken);
             if (resolved != null)
                 return resolved;
         }
@@ -64,15 +94,16 @@ public class InvestorRelationsProbeClient
         // investor-relations link it exposes — the IR page is often at a location guessing can't
         // reach (a Q4 / GCS host, a regional or locale path, a deeper path), and the homepage URL
         // itself is sometimes the IR site.
-        return await CrawlHomepage(website, cancellationToken);
+        return await CrawlHomepage(website, useSidecar, cancellationToken);
     }
 
     private async Task<IrDiscoveryResult> TryResolve(
         string url,
+        bool useSidecar,
         CancellationToken cancellationToken
     )
     {
-        var (html, finalUrl) = await Fetch(url, cancellationToken);
+        var (html, finalUrl) = await Fetch(url, useSidecar, cancellationToken);
         if (html == null)
             return null;
 
@@ -80,41 +111,51 @@ public class InvestorRelationsProbeClient
     }
 
     /// <summary>
-    /// Fetches the page's HTML and the URL it actually landed on: rendered through the stealth
-    /// sidecar when one is configured (most company/IR hosts are bot-protected, so plain HTTP
-    /// would be walled), otherwise plain HTTP as the standalone fallback. Returns
+    /// Fetches the page's HTML and the URL it actually landed on, over the requested transport: the
+    /// stealth sidecar when <paramref name="useSidecar"/> is set, otherwise plain HTTP. Returns
     /// <c>(null, url)</c> on any miss; a single host never fails the discovery batch.
     /// </summary>
-    private async Task<(string Html, string FinalUrl)> Fetch(
+    private Task<(string Html, string FinalUrl)> Fetch(
+        string url,
+        bool useSidecar,
+        CancellationToken cancellationToken
+    ) => useSidecar ? FetchRendered(url, cancellationToken) : FetchPlain(url, cancellationToken);
+
+    // Renders the page through the stealth sidecar (most IR hosts are bot-protected). The stealth
+    // fetch follows redirects internally, so the requested URL is the best one we have.
+    private async Task<(string Html, string FinalUrl)> FetchRendered(
         string url,
         CancellationToken cancellationToken
     )
     {
-        if (_stealthClient.IsEnabled)
+        try
         {
-            try
-            {
-                // The stealth fetch follows redirects internally, so the requested URL is the
-                // best one we have for the rendered page.
-                var rendered = await _stealthClient.FetchHtml(url, cancellationToken);
-                return (rendered, url);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // FetchHtml is contracted to degrade to null, but a sidecar navigation
-                // timeout/error can still surface as an exception. Swallow it the same way the
-                // plain-HTTP path below does: a single host that throws must not bubble out of
-                // the probe, or the caller skips the definitive-miss back-off and the stock
-                // re-occupies every batch, starving the rest of the universe.
-                _logger.LogDebug(ex, "Investor relations stealth probe failed for {Url}", url);
-                return (null, url);
-            }
+            var rendered = await _stealthClient.FetchHtml(url, cancellationToken);
+            return (rendered, url);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // FetchHtml is contracted to degrade to null, but a sidecar navigation timeout/error
+            // can still surface as an exception. Swallow it the same way the plain-HTTP path does:
+            // a single host that throws must not bubble out of the probe, or the caller skips the
+            // definitive-miss back-off and the stock re-occupies every batch, starving the rest of
+            // the universe.
+            _logger.LogDebug(ex, "Investor relations stealth probe failed for {Url}", url);
+            return (null, url);
+        }
+    }
 
+    // Fetches the page over plain HTTP, politely rate-limited. Only HTML is read (it can be
+    // keyword-validated); a non-HTML body, an error status, or a dead host is a miss.
+    private async Task<(string Html, string FinalUrl)> FetchPlain(
+        string url,
+        CancellationToken cancellationToken
+    )
+    {
         try
         {
             await RateLimiter.WaitAsync();
@@ -152,10 +193,12 @@ public class InvestorRelationsProbeClient
     /// <summary>
     /// Fetches the company homepage and either validates it directly as the IR site (when the
     /// website itself is an investor.* host) or follows the investor-relations link(s) it
-    /// exposes — catching IR pages at locations path/subdomain guessing can't reach.
+    /// exposes — catching IR pages at locations path/subdomain guessing can't reach. Uses the same
+    /// transport (<paramref name="useSidecar"/>) as the pass it runs in.
     /// </summary>
     private async Task<IrDiscoveryResult> CrawlHomepage(
         string website,
+        bool useSidecar,
         CancellationToken cancellationToken
     )
     {
@@ -166,7 +209,7 @@ public class InvestorRelationsProbeClient
         if (homepage == null)
             return null;
 
-        var (html, finalUrl) = await Fetch(homepage, cancellationToken);
+        var (html, finalUrl) = await Fetch(homepage, useSidecar, cancellationToken);
         if (html == null)
             return null;
 
@@ -179,7 +222,7 @@ public class InvestorRelationsProbeClient
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var resolved = await TryResolve(link, cancellationToken);
+            var resolved = await TryResolve(link, useSidecar, cancellationToken);
             if (resolved != null)
             {
                 _logger.LogInformation(
