@@ -1,4 +1,5 @@
 using System.Text;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Repositories;
 using Equibles.Sec.FinancialFacts.Data.Enums;
@@ -267,7 +268,7 @@ public class StocksController : BaseController
 
     private async Task<Equibles.CommonStocks.Data.Models.CommonStock> LoadStock(string ticker)
     {
-        return await _commonStockRepository.GetByTicker(ticker.ToUpperInvariant());
+        return await _commonStockRepository.GetByTicker(TickerNormalizer.Normalize(ticker));
     }
 
     private StockDetailViewModel BuildStockViewModel(
@@ -314,7 +315,7 @@ public class StocksController : BaseController
     [HttpGet("~/stocks/{ticker}/holders/{cik}")]
     public async Task<IActionResult> ShowHolder(string ticker, string cik)
     {
-        var stock = await _commonStockRepository.GetByTicker(ticker.ToUpperInvariant());
+        var stock = await _commonStockRepository.GetByTicker(TickerNormalizer.Normalize(ticker));
         if (stock == null)
             return NotFound();
 
