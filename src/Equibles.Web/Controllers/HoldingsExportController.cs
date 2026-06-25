@@ -1,4 +1,5 @@
 using System.Text;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
@@ -40,7 +41,7 @@ public class HoldingsExportController : BaseController
         if (string.IsNullOrWhiteSpace(ticker))
             return NotFound();
 
-        var stock = await _stockRepository.GetByTicker(ticker.ToUpperInvariant());
+        var stock = await _stockRepository.GetByTicker(TickerNormalizer.Normalize(ticker));
         if (stock == null)
             return NotFound();
 
