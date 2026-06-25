@@ -1,8 +1,8 @@
-using Equibles.Web.Extensions;
+using Equibles.Web.ViewModels.Shared;
 
 namespace Equibles.Web.ViewModels.ShortActivity;
 
-public class MostShortedBrowserViewModel
+public class MostShortedBrowserViewModel : PagedBrowserViewModel
 {
     public List<MostShortedListItemViewModel> Records { get; set; } = [];
 
@@ -16,8 +16,4 @@ public class MostShortedBrowserViewModel
     public List<DateOnly> AvailableDates { get; set; } = [];
 
     public MostShortedSort Sort { get; set; }
-    public int Page { get; set; } = 1;
-    public int PageSize { get; set; } = 50;
-    public int TotalCount { get; set; }
-    public int TotalPages => Pagination.PageCount(TotalCount, PageSize);
 }
