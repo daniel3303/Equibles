@@ -161,7 +161,4 @@ public class MarketController : BaseController
             "CBOE Volatility Index (VIX) daily history with chart and statistics.";
         return View(viewModel);
     }
-
-    private static StatsSummary ComputeStats(double[] values, int decimals) =>
-        values.ComputeStats(decimals);
 }
