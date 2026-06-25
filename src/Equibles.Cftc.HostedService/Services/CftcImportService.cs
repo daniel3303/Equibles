@@ -207,7 +207,7 @@ public class CftcImportService : IImporter
 
         if (totalInserted > 0)
         {
-            await UpdateContractMetadata(contractIdMap, cancellationToken);
+            await UpdateContractMetadata(cancellationToken);
         }
 
         IEnumerable<CftcPositionReport> MapNewReports()
@@ -257,30 +257,32 @@ public class CftcImportService : IImporter
             .ToHashSet();
     }
 
-    private async Task UpdateContractMetadata(
-        Dictionary<string, Guid> contractIdMap,
-        CancellationToken cancellationToken
-    )
+    private async Task UpdateContractMetadata(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var contractRepo = scope.ServiceProvider.GetRequiredService<CftcContractRepository>();
         var reportRepo = scope.ServiceProvider.GetRequiredService<CftcPositionReportRepository>();
 
-        foreach (var contractId in contractIdMap.Values)
+        // One aggregate query yields the newest report per contract; only contracts that
+        // actually hold reports come back, so there's nothing to skip.
+        var latestByContract = (
+            await reportRepo.GetLatestPerContract().ToListAsync(cancellationToken)
+        ).ToDictionary(r => r.CftcContractId, r => r.ReportDate);
+
+        if (latestByContract.Count == 0)
+            return;
+
+        var contractIds = latestByContract.Keys.ToList();
+        var contracts = await contractRepo
+            .GetAll()
+            .Where(c => contractIds.Contains(c.Id))
+            .ToListAsync(cancellationToken);
+
+        var updatedAt = DateTime.UtcNow;
+        foreach (var contract in contracts)
         {
-            var latestDate = await reportRepo
-                .GetAll()
-                .Where(r => r.CftcContractId == contractId)
-                .Select(r => r.ReportDate)
-                .OrderByDescending(d => d)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (latestDate == default)
-                continue;
-
-            var contract = await contractRepo.Get(contractId);
-            contract.LatestReportDate = latestDate;
-            contract.LastUpdated = DateTime.UtcNow;
+            contract.LatestReportDate = latestByContract[contract.Id];
+            contract.LastUpdated = updatedAt;
         }
 
         await contractRepo.SaveChanges();
