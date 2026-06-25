@@ -21,7 +21,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDocumentPersistenceService, DocumentPersistenceService>();
         services.AddScoped<ICompanySyncService, CompanySyncService>();
         services.AddScoped<XbrlEnvelopeCaptureService>();
-        services.AddScoped<XbrlBackfillService>();
+        services.AddScoped<AsFiledHtmlCaptureService>();
+        services.AddScoped<AsFiledHtmlBackfillService>();
+        services.AddScoped<DocumentImageService>();
         services.AddScoped<FilingItemsBackfillService>();
         services.AddScoped<IDocumentScraper, DocumentScraper>();
         // Primary IWebsiteSource (consumed by the CommonStocks website discovery
@@ -32,7 +34,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<DocumentProcessorWorker>();
         services.AddHostedService<FtdScraperWorker>();
         services.AddHostedService<FormAdvScraperWorker>();
-        services.AddHostedService<XbrlBackfillWorker>();
+        services.AddHostedService<AsFiledHtmlBackfillWorker>();
         services.AddHostedService<FilingItemsBackfillWorker>();
         services.AddHostedService<InsiderFilingReprocessWorker>();
         services.AddHostedService<NportFilingReprocessWorker>();

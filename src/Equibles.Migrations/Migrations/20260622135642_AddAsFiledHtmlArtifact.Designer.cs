@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Equibles.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    partial class EquiblesDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260622135642_AddAsFiledHtmlArtifact")]
+    partial class AddAsFiledHtmlArtifact
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1967,33 +1970,6 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("Document");
                 });
 
-            modelBuilder.Entity("Equibles.Sec.Data.Models.DocumentImage", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("DocumentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("FileId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("FileName")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FileId");
-
-                    b.HasIndex("DocumentId", "FileName")
-                        .IsUnique();
-
-                    b.ToTable("DocumentImage");
-                });
-
             modelBuilder.Entity("Equibles.Sec.Data.Models.FailToDeliver", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3153,25 +3129,6 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("XbrlContent");
                 });
 
-            modelBuilder.Entity("Equibles.Sec.Data.Models.DocumentImage", b =>
-                {
-                    b.HasOne("Equibles.Sec.Data.Models.Document", "Document")
-                        .WithMany("Images")
-                        .HasForeignKey("DocumentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Equibles.Media.Data.Models.File", "File")
-                        .WithMany()
-                        .HasForeignKey("FileId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Document");
-
-                    b.Navigation("File");
-                });
-
             modelBuilder.Entity("Equibles.Sec.Data.Models.FailToDeliver", b =>
                 {
                     b.HasOne("Equibles.CommonStocks.Data.Models.CommonStock", "CommonStock")
@@ -3373,8 +3330,6 @@ namespace Equibles.Migrations.Migrations
             modelBuilder.Entity("Equibles.Sec.Data.Models.Document", b =>
                 {
                     b.Navigation("Chunks");
-
-                    b.Navigation("Images");
                 });
 
             modelBuilder.Entity("Equibles.Sec.Data.Models.FormDFiling", b =>

@@ -88,6 +88,11 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase
             new DocumentRepository(DbContext),
             new ChunkRepository(DbContext),
             fileManager,
+            new DocumentImageService(
+                new DocumentImageRepository(DbContext),
+                new Equibles.Media.Repositories.FileRepository(DbContext),
+                fileManager
+            ),
             bus
         );
 

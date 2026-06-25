@@ -48,6 +48,11 @@ public class DocumentPersistenceServiceUpdateXbrlSurrogateFileNameTests : Parade
             new DocumentRepository(ctx),
             new ChunkRepository(ctx),
             fileManager,
+            new DocumentImageService(
+                new DocumentImageRepository(ctx),
+                new Equibles.Media.Repositories.FileRepository(ctx),
+                fileManager
+            ),
             Substitute.For<IBus>()
         );
 
