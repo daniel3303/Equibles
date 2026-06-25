@@ -1,17 +1,16 @@
-using System.Reflection;
-using Equibles.Web.Controllers;
+using Equibles.Web.Extensions;
 
 namespace Equibles.UnitTests.Web;
 
 public class MarketControllerComputeStatsSkewedSampleTests
 {
-    // MarketController.ComputeStats is the private helper that powers the
-    // /Market/PutCallRatio and /Market/Vix stats panels. It returns a
-    // StatsSummary with five distinct named decimals (Mean / Median / Min
-    // / Max / StdDev) — five fields, all of type `decimal?`, all read
-    // from the SAME MathNet `DescriptiveStatistics` instance with one
-    // exception: Median bypasses DescriptiveStatistics and calls
-    // `values.Median()` directly (the MathNet extension method).
+    // StatisticsExtensions.ComputeStats powers the /Market/PutCallRatio and
+    // /Market/Vix stats panels. It returns a StatsSummary with five distinct
+    // named decimals (Mean / Median / Min / Max / StdDev) — five fields, all
+    // of type `decimal?`, all read from the SAME MathNet
+    // `DescriptiveStatistics` instance with one exception: Median bypasses
+    // DescriptiveStatistics and calls `values.Median()` directly (the MathNet
+    // extension method).
     //
     // Five-field record structs of compatible types are exactly the
     // shape where a copy-paste refactor silently swaps two fields and
@@ -35,25 +34,14 @@ public class MarketControllerComputeStatsSkewedSampleTests
     // values and the pin fails on both Mean and Median. Asserting
     // Min and Max too lets the test also catch positional swaps in
     // the rest of the record-struct constructor call.
-    //
-    // ComputeStats is private static and the result is a private
-    // nested record struct — reflect on both.
     [Fact]
     public void ComputeStats_SkewedSample_MeanAndMedianAreDistinctFromEachOther()
     {
-        var method = typeof(MarketController).GetMethod(
-            "ComputeStats",
-            BindingFlags.NonPublic | BindingFlags.Static
-        );
+        var summary = new[] { 1.0, 2.0, 10.0 }.ComputeStats(decimals: 2);
 
-        var summary = method!.Invoke(null, [new[] { 1.0, 2.0, 10.0 }, 2]);
-
-        var type = summary!.GetType();
-        decimal? Get(string name) => (decimal?)type.GetProperty(name)!.GetValue(summary);
-
-        Get("Mean").Should().Be(4.33m);
-        Get("Median").Should().Be(2m);
-        Get("Min").Should().Be(1m);
-        Get("Max").Should().Be(10m);
+        summary.Mean.Should().Be(4.33m);
+        summary.Median.Should().Be(2m);
+        summary.Min.Should().Be(1m);
+        summary.Max.Should().Be(10m);
     }
 }
