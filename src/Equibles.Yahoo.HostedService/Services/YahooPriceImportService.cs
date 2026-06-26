@@ -195,6 +195,18 @@ public class YahooPriceImportService
             cancellationToken
         );
 
+        // A foreign private issuer (20-F/40-F filer) reports its cover-page count in ordinary
+        // shares, a different unit from the US-listed ADR Yahoo prices. Yahoo already returns a
+        // correct, self-consistent ADR market cap + ADR share count for the ticker, so reconciling
+        // it onto the EDGAR ordinary base would inflate market cap by the ADR ratio (e.g. Latam
+        // Airlines $16.7B -> $33T at ~2000x). Drop the EDGAR count for these issuers so Yahoo's ADR
+        // figures stand verbatim; the reconciliation stays in force for domestic 10-K/10-Q filers.
+        if (
+            edgarShares != null
+            && await sharesProvider.IsForeignPrivateIssuer(stock, cancellationToken)
+        )
+            edgarShares = null;
+
         // Per-field conservative writes: only update on actual change, and never
         // overwrite a known value with 0 (treated as Yahoo "unknown" by the rest of
         // the codebase).
@@ -241,6 +253,9 @@ public class YahooPriceImportService
     // the EDGAR base (== EDGAR shares × the same implied price) so market cap stays consistent with
     // SharesOutStanding and the screener's derived price (market cap ÷ shares) holds. Falls back to
     // Yahoo's figure when there is no EDGAR count or no usable Yahoo share base to rescale from.
+    // The caller passes edgarShares == null for foreign private issuers (20-F/40-F), whose EDGAR
+    // count is in ordinary shares — a different unit from the US-listed ADR — so they keep Yahoo's
+    // self-consistent ADR market cap rather than being rescaled onto the ordinary base.
     private static double ReconcileMarketCap(
         long? edgarShares,
         long yahooShares,

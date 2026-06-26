@@ -27,4 +27,16 @@ public interface ISharesOutstandingProvider
         CommonStock stock,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// True when the authoritative shares-outstanding fact comes from a foreign-private-issuer
+    /// annual form (20-F or 40-F). Such issuers report the cover-page count in <em>ordinary</em>
+    /// shares, a different unit from the US-listed ADR a price feed quotes, so the reported count
+    /// must not be reconciled against an ADR market cap / price (it would inflate it by the ADR
+    /// ratio). False for domestic 10-K/10-Q filers and when no shares fact is on record.
+    /// </summary>
+    Task<bool> IsForeignPrivateIssuer(
+        CommonStock stock,
+        CancellationToken cancellationToken = default
+    );
 }

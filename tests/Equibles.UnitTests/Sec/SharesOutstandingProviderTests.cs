@@ -394,6 +394,161 @@ public class SharesOutstandingProviderTests
         shares.Should().Be(12_116_000_000);
     }
 
+    [Theory]
+    [InlineData("TwentyF")]
+    [InlineData("FortyF")]
+    public async Task IsForeignPrivateIssuer_LatestSharesFactIsForeignAnnualForm_ReturnsTrue(
+        string formValue
+    )
+    {
+        await using var db = NewDb();
+        var stock = new CommonStock
+        {
+            Ticker = "LTM",
+            Name = "Latam Airlines Group S.A.",
+            Cik = "0001047716",
+        };
+        var concept = new FinancialConcept
+        {
+            Taxonomy = FactTaxonomy.Dei,
+            Tag = "EntityCommonStockSharesOutstanding",
+        };
+        db.AddRange(stock, concept);
+        // A foreign private issuer reports its ordinary-share cover-page count on a 20-F (or 40-F
+        // for Canadian cross-listings), never a 10-K.
+        db.Add(
+            Fact(
+                stock,
+                concept,
+                574_215_983_709m,
+                new DateOnly(2026, 4, 30),
+                new DateOnly(2025, 12, 31),
+                form: DocumentType.FromValue(formValue)
+            )
+        );
+        await db.SaveChangesAsync();
+
+        var provider = new SharesOutstandingProvider(
+            new FinancialFactRepository(db),
+            new FinancialConceptRepository(db)
+        );
+
+        var isForeign = await provider.IsForeignPrivateIssuer(stock);
+
+        isForeign.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task IsForeignPrivateIssuer_DomesticTenKFiler_ReturnsFalse()
+    {
+        await using var db = NewDb();
+        var stock = new CommonStock
+        {
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            Cik = "0000320193",
+        };
+        var concept = new FinancialConcept
+        {
+            Taxonomy = FactTaxonomy.Dei,
+            Tag = "EntityCommonStockSharesOutstanding",
+        };
+        db.AddRange(stock, concept);
+        db.Add(
+            Fact(
+                stock,
+                concept,
+                14_687_356_000m,
+                new DateOnly(2026, 5, 1),
+                new DateOnly(2026, 4, 26),
+                form: DocumentType.TenK
+            )
+        );
+        await db.SaveChangesAsync();
+
+        var provider = new SharesOutstandingProvider(
+            new FinancialFactRepository(db),
+            new FinancialConceptRepository(db)
+        );
+
+        var isForeign = await provider.IsForeignPrivateIssuer(stock);
+
+        isForeign.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task IsForeignPrivateIssuer_NoSharesFacts_ReturnsFalse()
+    {
+        await using var db = NewDb();
+        var stock = new CommonStock
+        {
+            Ticker = "NEW",
+            Name = "Freshly Listed Co",
+            Cik = "0009999999",
+        };
+        db.Add(stock);
+        await db.SaveChangesAsync();
+
+        var provider = new SharesOutstandingProvider(
+            new FinancialFactRepository(db),
+            new FinancialConceptRepository(db)
+        );
+
+        var isForeign = await provider.IsForeignPrivateIssuer(stock);
+
+        isForeign.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task IsForeignPrivateIssuer_KeysOffLatestFiledFact()
+    {
+        await using var db = NewDb();
+        var stock = new CommonStock
+        {
+            Ticker = "XYZ",
+            Name = "Redomiciled Co",
+            Cik = "0008888888",
+        };
+        var concept = new FinancialConcept
+        {
+            Taxonomy = FactTaxonomy.Dei,
+            Tag = "EntityCommonStockSharesOutstanding",
+        };
+        db.AddRange(stock, concept);
+        // An older 20-F must not win over the most-recently-filed 10-K — the gate keys off the same
+        // latest-filed fact GetReportedSharesOutstanding reconciles against.
+        db.Add(
+            Fact(
+                stock,
+                concept,
+                1_000_000m,
+                new DateOnly(2024, 4, 30),
+                new DateOnly(2023, 12, 31),
+                form: DocumentType.TwentyF
+            )
+        );
+        db.Add(
+            Fact(
+                stock,
+                concept,
+                2_000_000m,
+                new DateOnly(2026, 2, 20),
+                new DateOnly(2025, 12, 31),
+                form: DocumentType.TenK
+            )
+        );
+        await db.SaveChangesAsync();
+
+        var provider = new SharesOutstandingProvider(
+            new FinancialFactRepository(db),
+            new FinancialConceptRepository(db)
+        );
+
+        var isForeign = await provider.IsForeignPrivateIssuer(stock);
+
+        isForeign.Should().BeFalse();
+    }
+
     private static FinancialFact ClassFact(
         CommonStock stock,
         FinancialConcept concept,
@@ -431,7 +586,8 @@ public class SharesOutstandingProviderTests
         decimal value,
         DateOnly filed,
         DateOnly asOf,
-        string dimensionsKey = ""
+        string dimensionsKey = "",
+        DocumentType form = null
     ) =>
         new()
         {
@@ -444,7 +600,7 @@ public class SharesOutstandingProviderTests
             Value = value,
             FiscalYear = asOf.Year,
             FiscalPeriod = SecFiscalPeriod.FullYear,
-            Form = DocumentType.TenQ,
+            Form = form ?? DocumentType.TenQ,
             FiledDate = filed,
             AccessionNumber = $"ACC-{Guid.NewGuid():N}"[..20],
             DimensionsKey = dimensionsKey,

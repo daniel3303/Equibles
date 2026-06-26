@@ -28,6 +28,7 @@ public class YahooPriceImportServiceTests : IDisposable
     private readonly DailyStockPriceRepository _priceRepo;
     private readonly CommonStockRepository _stockRepo;
     private readonly IYahooFinanceClient _yahooClient;
+    private readonly ISharesOutstandingProvider _sharesProvider;
     private readonly ErrorReporter _errorReporter;
     private readonly WorkerOptions _workerOptions;
     private readonly YahooPriceImportService _service;
@@ -48,13 +49,14 @@ public class YahooPriceImportServiceTests : IDisposable
         );
 
         _workerOptions = new WorkerOptions();
+        _sharesProvider = Substitute.For<ISharesOutstandingProvider>();
 
         // The service resolves DailyStockPriceRepository from scoped DI.
         // TickerMapService resolves CommonStockRepository from scoped DI.
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(DailyStockPriceRepository), _priceRepo),
             (typeof(CommonStockRepository), _stockRepo),
-            (typeof(ISharesOutstandingProvider), Substitute.For<ISharesOutstandingProvider>())
+            (typeof(ISharesOutstandingProvider), _sharesProvider)
         );
 
         var tickerMapService = new TickerMapService(scopeFactory);
@@ -637,6 +639,70 @@ public class YahooPriceImportServiceTests : IDisposable
         var updated = _stockRepo.GetAll().Single(s => s.Ticker == "SHS0");
         updated.SharesOutStanding.Should().Be(12_345_678);
         updated.MarketCapitalization.Should().Be(2_222_222d);
+    }
+
+    [Fact]
+    public async Task Import_ForeignPrivateIssuer_StoresYahooAdrMarketCapAndSharesWithoutReconciling()
+    {
+        // Latam Airlines (ADR): Yahoo returns the correct, self-consistent ADR pair — $16.66B market
+        // cap on 287M ADR shares. EDGAR reports the issuer's 574B *ordinary* shares from its 20-F,
+        // a different unit. Reconciling onto that ordinary base would inflate market cap ~2000x to
+        // ~$33T, so a foreign private issuer must keep Yahoo's ADR figures verbatim.
+        var stock = CreateStock("LTM", "Latam Airlines Group S.A.");
+        await SeedStocks(stock);
+
+        _sharesProvider.GetReportedSharesOutstanding(stock).Returns(574_215_983_709L);
+        _sharesProvider.IsForeignPrivateIssuer(stock).Returns(true);
+
+        _yahooClient
+            .GetHistoricalPrices("LTM", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns([]);
+        _yahooClient
+            .GetKeyStatistics("LTM")
+            .Returns(
+                new KeyStatistics
+                {
+                    SharesOutstanding = 287_107_992,
+                    MarketCapitalization = 16_657_130_496d,
+                }
+            );
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "LTM");
+        updated.MarketCapitalization.Should().Be(16_657_130_496d);
+        updated.SharesOutStanding.Should().Be(287_107_992);
+    }
+
+    [Fact]
+    public async Task Import_DomesticIssuer_ReconcilesMarketCapOntoEdgarShareBase()
+    {
+        // A domestic multi-class issuer keeps the reconciliation: EDGAR's consolidated count (10M)
+        // is twice Yahoo's single-class count (5M), so Yahoo's $1B market cap rescales to $2B to
+        // stay consistent with the authoritative share base.
+        var stock = CreateStock("DOM", "Domestic Multi-Class Co.");
+        await SeedStocks(stock);
+
+        _sharesProvider.GetReportedSharesOutstanding(stock).Returns(10_000_000L);
+        _sharesProvider.IsForeignPrivateIssuer(stock).Returns(false);
+
+        _yahooClient
+            .GetHistoricalPrices("DOM", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns([]);
+        _yahooClient
+            .GetKeyStatistics("DOM")
+            .Returns(
+                new KeyStatistics
+                {
+                    SharesOutstanding = 5_000_000,
+                    MarketCapitalization = 1_000_000_000d,
+                }
+            );
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "DOM");
+        updated.MarketCapitalization.Should().Be(2_000_000_000d);
     }
 
     [Fact]

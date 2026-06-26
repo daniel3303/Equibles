@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.AutoWiring;
+using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -115,6 +116,36 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         // Same range-check: a corrupt per-class count can push the sum past Int64; degrade to null
         // rather than let the decimal->long cast throw.
         return total > 0 && total <= long.MaxValue ? (long)total : (long?)null;
+    }
+
+    // True when the latest-filed consolidated shares fact — the one GetReportedSharesOutstanding
+    // reconciles against — was filed on a foreign-private-issuer annual form (20-F/40-F). Those
+    // cover-page counts are in the issuer's ordinary shares, which are a different unit from the
+    // US-listed ADR a price feed quotes; the Yahoo importer uses this to skip reconciling Yahoo's
+    // (correct, self-consistent) ADR market cap / shares onto that ordinary base, which would
+    // otherwise inflate market cap by the ADR ratio (e.g. Latam Airlines ~2000x). Authoritative —
+    // keyed off the SEC form, not a ticker/name heuristic.
+    public async Task<bool> IsForeignPrivateIssuer(
+        CommonStock stock,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var conceptIds = await ResolveConceptIds(cancellationToken);
+        if (conceptIds.Count == 0)
+            return false;
+
+        // Same fact selection as GetReportedSharesOutstanding (latest FiledDate, then PeriodEnd),
+        // so the gate matches the count that would be reconciled. FromValue round-trips Form back to
+        // the cached DocumentType statics, so reference equality holds after materialization.
+        var form = await _financialFactRepository
+            .GetConsolidatedByStock(stock)
+            .Where(f => conceptIds.Contains(f.FinancialConceptId) && f.Unit == SharesUnit)
+            .OrderByDescending(f => f.FiledDate)
+            .ThenByDescending(f => f.PeriodEnd)
+            .Select(f => f.Form)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return form == DocumentType.TwentyF || form == DocumentType.FortyF;
     }
 
     // The financial-concept ids the "shares-outstanding" alias resolves to, or an empty list when
