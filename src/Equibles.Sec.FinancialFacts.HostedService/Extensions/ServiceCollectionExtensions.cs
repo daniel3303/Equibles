@@ -15,6 +15,7 @@ public static class ServiceCollectionExtensions
         services.AutoWireServicesFrom<InlineXbrlParser>();
         services.AddHostedService<FinancialFactsScraperWorker>();
         services.AddHostedService<XbrlFactsExtractionWorker>();
+        services.AddHostedService<ReportedStatementsCaptureWorker>();
         return services;
     }
 }

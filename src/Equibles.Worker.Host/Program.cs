@@ -95,6 +95,9 @@ builder.Services.Configure<FinancialFactsScraperOptions>(
 builder.Services.Configure<Equibles.Sec.FinancialFacts.HostedService.Configuration.XbrlFactsExtractionOptions>(
     builder.Configuration.GetSection("XbrlFactsExtraction")
 );
+builder.Services.Configure<Equibles.Sec.FinancialFacts.HostedService.Configuration.ReportedStatementsCaptureOptions>(
+    builder.Configuration.GetSection("ReportedStatementsCapture")
+);
 builder.Services.Configure<Equibles.Fred.HostedService.Configuration.FredScraperOptions>(
     builder.Configuration.GetSection("FredScraper")
 );
