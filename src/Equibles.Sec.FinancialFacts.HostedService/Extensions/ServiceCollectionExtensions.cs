@@ -16,6 +16,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<FinancialFactsScraperWorker>();
         services.AddHostedService<XbrlFactsExtractionWorker>();
         services.AddHostedService<ReportedStatementsCaptureWorker>();
+        services.AddHostedService<ReportedStatementsParseWorker>();
         return services;
     }
 }

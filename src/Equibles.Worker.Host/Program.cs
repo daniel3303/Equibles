@@ -98,6 +98,9 @@ builder.Services.Configure<Equibles.Sec.FinancialFacts.HostedService.Configurati
 builder.Services.Configure<Equibles.Sec.FinancialFacts.HostedService.Configuration.ReportedStatementsCaptureOptions>(
     builder.Configuration.GetSection("ReportedStatementsCapture")
 );
+builder.Services.Configure<Equibles.Sec.FinancialFacts.HostedService.Configuration.ReportedStatementsParseOptions>(
+    builder.Configuration.GetSection("ReportedStatementsParse")
+);
 builder.Services.Configure<Equibles.Fred.HostedService.Configuration.FredScraperOptions>(
     builder.Configuration.GetSection("FredScraper")
 );
