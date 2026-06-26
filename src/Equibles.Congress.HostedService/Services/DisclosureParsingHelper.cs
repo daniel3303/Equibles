@@ -57,8 +57,13 @@ public static partial class DisclosureParsingHelper
         {
             if (HonorificTokens.Contains(token.TrimEnd('.')))
                 continue;
+            // Collapse an immediately repeated token (the parser's doubled first
+            // name, "Scott Scott"), but never a repeated single-letter initial:
+            // "C. C. Franklin" is a genuine two-initial name and folding it would
+            // merge a distinct identity (GH-3989).
             if (
                 result.Count > 0
+                && !IsInitialToken(token)
                 && string.Equals(result[^1], token, StringComparison.OrdinalIgnoreCase)
             )
                 continue;
@@ -66,6 +71,13 @@ public static partial class DisclosureParsingHelper
         }
 
         return string.Join(' ', result);
+    }
+
+    // An initial is a single letter, optionally followed by a period ("C" or "C.").
+    private static bool IsInitialToken(string token)
+    {
+        var bare = token.TrimEnd('.');
+        return bare.Length == 1 && char.IsLetter(bare[0]);
     }
 
     public static List<DisclosureTransaction> ParseTransactionsFromHtml(

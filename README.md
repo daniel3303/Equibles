@@ -114,7 +114,7 @@ Worker__MinSyncDate=2024-01-01
 |---------|---------|-------------|
 | `Embedding__Enabled` | `false` | Set to `true` to enable vector embedding generation |
 | `Embedding__BaseUrl` | — | Ollama or OpenAI-compatible endpoint (e.g., `http://localhost:11434`) |
-| `Embedding__ModelName` | — | Model name (e.g., `bge-m3`) |
+| `Embedding__ModelName` | — | Model name (e.g., `qwen3-embedding:0.6b`) |
 | `Embedding__BatchSize` | `10` | Texts per embedding batch |
 
 **Update notifications (optional):**
@@ -242,7 +242,7 @@ Any MCP-compatible client can connect to `http://localhost:8081/mcp` (HTTP trans
 
 ## Vector Embeddings (advanced, opt-in)
 
-Vector embeddings enable semantic search over SEC filings (e.g., "find revenue growth discussion in Apple's 10-K"). This requires downloading the Ollama runtime (~2GB) and the BGE-M3 model (~1.2GB).
+Vector embeddings enable semantic search over SEC filings (e.g., "find revenue growth discussion in Apple's 10-K"). This requires downloading the Ollama runtime (~2GB) and the Qwen3-Embedding-0.6B model (~640MB).
 
 ```bash
 docker compose --profile embedding up
@@ -252,7 +252,7 @@ This adds:
 
 | Service | Port | Description |
 |---------|------|-------------|
-| **embedding** | 11434 | Ollama server with BGE-M3 model |
+| **embedding** | 11434 | Ollama server with Qwen3-Embedding-0.6B model |
 | **worker-embedding** | — | Worker with embedding generation enabled |
 
 Without the embedding profile, BM25 full-text search via ParadeDB still works out of the box — vector search is purely additive.

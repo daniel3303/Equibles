@@ -102,6 +102,11 @@ public class DocumentPersistenceServiceTests : IDisposable
             documentRepo,
             new ChunkRepository(_dbContext),
             fileManager,
+            new DocumentImageService(
+                new DocumentImageRepository(_dbContext),
+                new Equibles.Media.Repositories.FileRepository(_dbContext),
+                fileManager
+            ),
             Substitute.For<IBus>()
         );
 

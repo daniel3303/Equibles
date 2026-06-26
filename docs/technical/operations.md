@@ -77,8 +77,8 @@ Activating the profile adds two services and swaps the default worker:
 | Service | Image | Role |
 |---|---|---|
 | `embedding` | `ollama/ollama` | Ollama runtime on port `11434`. |
-| `embedding-pull` | `ollama/ollama` | One-shot init container that runs `ollama pull bge-m3` after `embedding` becomes healthy. |
-| `worker-embedding` | Equibles worker image | Replaces the default `worker` with `Embedding__Enabled=true` + the BGE-M3 endpoint. |
+| `embedding-pull` | `ollama/ollama` | One-shot init container that runs `ollama pull qwen3-embedding:0.6b` after `embedding` becomes healthy. |
+| `worker-embedding` | Equibles worker image | Replaces the default `worker` with `Embedding__Enabled=true` + the Qwen3-Embedding-0.6B endpoint. |
 
 Embedding-related variables (override only if running Ollama elsewhere):
 
@@ -86,7 +86,7 @@ Embedding-related variables (override only if running Ollama elsewhere):
 |---|---|
 | `Embedding__Enabled` | `false` (or `true` under the embedding profile's worker) |
 | `Embedding__BaseUrl` | `http://embedding:11434` (the in-network DNS name) |
-| `Embedding__ModelName` | `bge-m3` |
+| `Embedding__ModelName` | `qwen3-embedding:0.6b` |
 | `Embedding__BatchSize` | `10` |
 
 The MCP server's `RagManager` reads the same `EmbeddingConfig` binding for query-time embedding; the worker reads it for chunk-time embedding. Without both bound to a working endpoint, `RagSearchTools` returns empty results.
@@ -114,7 +114,7 @@ Bumping to `Information` is useful for diagnosing slow scraper cycles; `Debug` i
 | `mcp` | built from `src/Equibles.Mcp.Server/Dockerfile` | `8081:8080` | MCP transport at `/mcp`. Depends on `web` being healthy. |
 | `worker` | built from `src/Equibles.Worker.Host/Dockerfile` | — | Background scrapers. Depends on `web` being healthy. |
 | `embedding` (profile `embedding`) | `ollama/ollama:latest` | `11434:11434` | Ollama for embeddings. |
-| `embedding-pull` (profile `embedding`) | `ollama/ollama:latest` | — | Pulls the BGE-M3 model once and exits. |
+| `embedding-pull` (profile `embedding`) | `ollama/ollama:latest` | — | Pulls the Qwen3-Embedding-0.6B model once and exits. |
 | `worker-embedding` (profile `embedding`) | built from `src/Equibles.Worker.Host/Dockerfile` | — | Worker with `Embedding__Enabled=true`. Replaces the default `worker`. |
 
 ## Upgrading
@@ -137,7 +137,7 @@ Two named volumes survive container rebuilds:
 |---|---|---|
 | `db-data` | `/var/lib/postgresql` on `db` | Everything — your data. |
 | `web-keys` | `/app/keys` on `web` | Data-protection keys for auth cookies + anti-forgery. |
-| `ollama-data` (profile `embedding`) | `/root/.ollama` on `embedding` | The downloaded BGE-M3 model (~1.2 GB). |
+| `ollama-data` (profile `embedding`) | `/root/.ollama` on `embedding` | The downloaded Qwen3-Embedding-0.6B model (~640 MB). |
 
 A `docker compose down` keeps these volumes. `docker compose down -v` deletes them — only use when you want to wipe the database.
 
@@ -160,7 +160,7 @@ A `docker compose down` keeps these volumes. `docker compose down -v` deletes th
 ## Air-gapped deploys
 
 - Set `CHECK_FOR_UPDATES=false` to stop the GitHub Releases poll.
-- Do not activate the `embedding` profile unless your network can reach the upstream Ollama image and the BGE-M3 model. Pre-pulling and saving via `docker image save` works.
+- Do not activate the `embedding` profile unless your network can reach the upstream Ollama image and the Qwen3-Embedding-0.6B model. Pre-pulling and saving via `docker image save` works.
 - Most scrapers will simply error if their upstream is unreachable — those errors land on the Status dashboard, not the container's stderr alone.
 
 ## Common operational issues

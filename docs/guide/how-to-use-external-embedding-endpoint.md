@@ -15,10 +15,10 @@ Use this when you want to avoid the extra ~3 GB Docker download, share a GPU acr
     curl http://ollama.local:11434/api/tags
     ```
 
-    The response should list a model. BGE-M3 is the default Equibles expects:
+    The response should list a model. Qwen3-Embedding-0.6B is the default Equibles expects:
 
     ```bash
-    ollama pull bge-m3
+    ollama pull qwen3-embedding:0.6b
     ```
 
     For an OpenAI-compatible endpoint, confirm with the provider which embedding model name to use (e.g., `text-embedding-3-small`).
@@ -28,7 +28,7 @@ Use this when you want to avoid the extra ~3 GB Docker download, share a GPU acr
     ```env
     Embedding__Enabled=true
     Embedding__BaseUrl=http://ollama.local:11434
-    Embedding__ModelName=bge-m3
+    Embedding__ModelName=qwen3-embedding:0.6b
     # Optional — defaults to 10
     # Embedding__BatchSize=20
     ```

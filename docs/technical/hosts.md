@@ -50,7 +50,7 @@ The background-scraper host. Plain `Host.CreateApplicationBuilder` (not `WebAppl
 
 ## Embedding profile
 
-`docker-compose.yml` defines `worker-embedding` under the `embedding` profile alongside an `embedding` Ollama service. Activate with `docker compose --profile embedding up`. The profile substitutes the default `worker` with `worker-embedding`, which sets `Embedding__Enabled=true`, `Embedding__BaseUrl=http://embedding:11434`, `Embedding__ModelName=bge-m3`. The same `EmbeddingConfig` binding the MCP server reads is what enables SEC chunk embedding generation on this worker.
+`docker-compose.yml` defines `worker-embedding` under the `embedding` profile alongside an `embedding` Ollama service. Activate with `docker compose --profile embedding up`. The profile substitutes the default `worker` with `worker-embedding`, which sets `Embedding__Enabled=true`, `Embedding__BaseUrl=http://embedding:11434`, `Embedding__ModelName=qwen3-embedding:0.6b`. The same `EmbeddingConfig` binding the MCP server reads is what enables SEC chunk embedding generation on this worker.
 
 ## Shared startup sequence
 
