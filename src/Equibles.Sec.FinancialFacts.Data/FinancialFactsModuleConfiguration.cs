@@ -25,6 +25,11 @@ public class FinancialFactsModuleConfiguration : Equibles.Data.IFinancialModule
 
         builder.Entity<FinancialFactDimension>();
 
+        builder.Entity<ReportedFinancialStatement>(b =>
+        {
+            b.Property(e => e.Form).HasConversion(docTypeConversion);
+        });
+
         builder.Entity<FinancialFactsSyncStatus>();
     }
 }
