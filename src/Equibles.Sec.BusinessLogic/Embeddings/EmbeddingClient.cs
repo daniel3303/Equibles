@@ -37,13 +37,19 @@ public class EmbeddingClient : IEmbeddingClient
         }
     }
 
-    public async Task<float[]> GenerateEmbedding(string text)
+    public async Task<float[]> GenerateEmbedding(
+        string text,
+        CancellationToken cancellationToken = default
+    )
     {
-        var embeddings = await GenerateEmbeddings([text]);
+        var embeddings = await GenerateEmbeddings([text], cancellationToken);
         return embeddings.FirstOrDefault();
     }
 
-    public async Task<List<float[]>> GenerateEmbeddings(List<string> texts)
+    public async Task<List<float[]>> GenerateEmbeddings(
+        List<string> texts,
+        CancellationToken cancellationToken = default
+    )
     {
         if (!texts.Any() || !_config.IsConfigured)
         {
@@ -55,7 +61,7 @@ public class EmbeddingClient : IEmbeddingClient
 
         foreach (var batch in batches)
         {
-            allEmbeddings.AddRange(await ProcessBatch(batch.ToList()));
+            allEmbeddings.AddRange(await ProcessBatch(batch.ToList(), cancellationToken));
         }
 
         // Positionally aligned to `texts`; entries are null where embedding failed.
@@ -76,50 +82,115 @@ public class EmbeddingClient : IEmbeddingClient
         }
     }
 
-    private async Task<List<float[]>> ProcessBatch(List<string> batch)
+    private async Task<List<float[]>> ProcessBatch(
+        List<string> batch,
+        CancellationToken cancellationToken
+    )
     {
-        // Ollama's /api/embed handles one input per call. Embed each text
-        // independently and return a list positionally aligned to `batch`,
-        // using null for any text that fails (e.g. Ollama returns 500 because
-        // the model emitted a NaN vector for that specific input). One bad
-        // chunk must never abort the batch or crash the document processor —
-        // the caller skips null entries so the backlog keeps draining.
-        var embeddings = new List<float[]>(batch.Count);
-        foreach (var text in batch)
+        // OpenAI-compatible servers (vLLM/TEI) embed a whole ARRAY of inputs in one batched forward
+        // pass — dramatically faster than one request per text (which makes vLLM process them
+        // serially). So send the batch as a single array request. Ollama's /api/embed takes one
+        // input per call, so there we fan out concurrently instead (BatchSize = concurrency width).
+        // Either way the result is positionally aligned to `batch`; an entry is null where that text
+        // failed. One bad chunk must never abort the batch — the caller skips null entries so the
+        // backlog keeps draining.
+        if (_config.Provider == EmbeddingProvider.OpenAI)
         {
-            try
-            {
-                var payload = new { model = _config.ModelName, input = text };
-
-                var json = JsonSerializer.Serialize(payload);
-                using var content = new StringContent(
-                    json,
-                    System.Text.Encoding.UTF8,
-                    "application/json"
-                );
-
-                var response = await _httpClient.PostAsync("/api/embed", content);
-                response.EnsureSuccessStatusCode();
-
-                var responseJson = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<OllamaEmbedResponse>(responseJson);
-
-                embeddings.Add(
-                    result?.Embeddings != null && result.Embeddings.Count > 0
-                        ? result.Embeddings[0]
-                        : null
-                );
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Skipping a chunk that failed to embed (continuing with the rest)"
-                );
-                embeddings.Add(null);
-            }
+            var batched = await TryEmbedBatchViaOpenAi(batch, cancellationToken);
+            if (batched != null)
+                return batched;
+            // The whole-array request failed (transient, or one poison input rejected the array) —
+            // fall through to per-text so a single bad chunk can't drop the rest of the batch.
         }
 
-        return embeddings;
+        var embeddings = await Task.WhenAll(
+            batch.Select(text => EmbedSingle(text, cancellationToken))
+        );
+        return embeddings.ToList();
+    }
+
+    // Embeds the whole batch in ONE /v1/embeddings request (vLLM/TEI batch the array). Returns the
+    // vectors positionally aligned to `batch`, or null if the request failed so the caller can fall
+    // back to per-text. Never throws.
+    private async Task<List<float[]>> TryEmbedBatchViaOpenAi(
+        List<string> batch,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var payload = new { model = _config.ModelName, input = batch };
+            var json = JsonSerializer.Serialize(payload);
+            using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.PostAsync("/v1/embeddings", content, cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+            var result = JsonSerializer.Deserialize<OpenAiEmbedResponse>(responseJson);
+            if (result?.Data == null || result.Data.Count != batch.Count)
+                return null;
+
+            // The OpenAI shape returns one entry per input with an `index` mapping it back to its
+            // input position — order by that rather than trusting array order.
+            var ordered = new float[batch.Count][];
+            foreach (var item in result.Data)
+                if (item.Index >= 0 && item.Index < ordered.Length)
+                    ordered[item.Index] = item.Embedding;
+            return [.. ordered];
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Batch embedding request failed; falling back to per-text");
+            return null;
+        }
+    }
+
+    private async Task<float[]> EmbedSingle(string text, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Same { model, input } payload either way; only the endpoint and response shape differ.
+            var payload = new { model = _config.ModelName, input = text };
+            var json = JsonSerializer.Serialize(payload);
+            using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+            return _config.Provider == EmbeddingProvider.OpenAI
+                ? await EmbedViaOpenAi(content, cancellationToken)
+                : await EmbedViaOllama(content, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Skipping a chunk that failed to embed (continuing with the rest)");
+            return null;
+        }
+    }
+
+    private async Task<float[]> EmbedViaOllama(
+        StringContent content,
+        CancellationToken cancellationToken
+    )
+    {
+        var response = await _httpClient.PostAsync("/api/embed", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+        var result = JsonSerializer.Deserialize<OllamaEmbedResponse>(responseJson);
+
+        return result?.Embeddings is { Count: > 0 } ? result.Embeddings[0] : null;
+    }
+
+    private async Task<float[]> EmbedViaOpenAi(
+        StringContent content,
+        CancellationToken cancellationToken
+    )
+    {
+        var response = await _httpClient.PostAsync("/v1/embeddings", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+        var result = JsonSerializer.Deserialize<OpenAiEmbedResponse>(responseJson);
+
+        return result?.Data is { Count: > 0 } ? result.Data[0].Embedding : null;
     }
 }

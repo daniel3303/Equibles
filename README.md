@@ -113,8 +113,10 @@ Worker__MinSyncDate=2024-01-01
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `Embedding__Enabled` | `false` | Set to `true` to enable vector embedding generation |
-| `Embedding__BaseUrl` | — | Ollama or OpenAI-compatible endpoint (e.g., `http://localhost:11434`) |
+| `Embedding__Provider` | `Ollama` | `Ollama` (`/api/embed`) or `OpenAI` (`/v1/embeddings` — vLLM, Text-Embeddings-Inference, or OpenAI) |
+| `Embedding__BaseUrl` | — | Embedding endpoint (e.g., `http://localhost:11434`) |
 | `Embedding__ModelName` | — | Model name (e.g., `qwen3-embedding:0.6b`) |
+| `Embedding__ApiKey` | — | Bearer token, if the server requires one (e.g. vLLM `--api-key`) |
 | `Embedding__BatchSize` | `10` | Texts per embedding batch |
 
 **Update notifications (optional):**
@@ -256,6 +258,8 @@ This adds:
 | **worker-embedding** | — | Worker with embedding generation enabled |
 
 Without the embedding profile, BM25 full-text search via ParadeDB still works out of the box — vector search is purely additive.
+
+**Bundled Ollama is the default** because it needs no GPU and runs anywhere. For bulk embedding at scale, point `Embedding__Provider=OpenAI` at a batched server such as [vLLM](https://docs.vllm.ai) or [Text-Embeddings-Inference](https://github.com/huggingface/text-embeddings-inference) — they continuously batch on the GPU and are far faster than Ollama for large corpora. See [docs/guide/how-to-use-external-embedding-endpoint.md](docs/guide/how-to-use-external-embedding-endpoint.md).
 
 ## Screenshots
 

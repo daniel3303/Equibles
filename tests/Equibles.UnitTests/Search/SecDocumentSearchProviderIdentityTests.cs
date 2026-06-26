@@ -1,4 +1,4 @@
-using Equibles.Sec.Repositories.Search;
+using Equibles.Sec.BusinessLogic.Search;
 
 namespace Equibles.UnitTests.Search;
 

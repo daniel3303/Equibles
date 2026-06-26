@@ -2,10 +2,10 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.Data.Models;
 using Equibles.Search.Abstractions;
+using Equibles.Sec.BusinessLogic.Search;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
 using Equibles.Sec.Repositories;
-using Equibles.Sec.Repositories.Search;
 using Xunit;
 using File = Equibles.Media.Data.Models.File;
 
@@ -47,7 +47,7 @@ public class SecDocumentSearchProviderDedupTests : ParadeDbMcpTestBase
 
         await DbContext.SaveChangesAsync();
 
-        var sut = new SecDocumentSearchProvider(new ChunkRepository(DbContext));
+        var sut = new SecDocumentSearchProvider(HybridChunkSearcherFactory.Bm25Only(DbContext));
 
         var group = await sut.Search(
             new SearchRequest { Query = "zzqxquantum", MaxPerProvider = 5 },

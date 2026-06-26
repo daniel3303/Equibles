@@ -47,7 +47,7 @@ public class RagManagerBuildContextStartLineNumberTests
             },
         };
 
-        var sut = new RagManager(chunkRepository: null, commonStockRepository: null, logger: null);
+        var sut = new RagManager(hybridChunkSearcher: null, commonStockRepository: null, logger: null);
 
         var output = await sut.BuildContext(chunks);
 

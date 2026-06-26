@@ -85,9 +85,13 @@ Embedding-related variables (override only if running Ollama elsewhere):
 | Variable | Default |
 |---|---|
 | `Embedding__Enabled` | `false` (or `true` under the embedding profile's worker) |
+| `Embedding__Provider` | `Ollama` (`/api/embed`); set `OpenAI` for a `/v1/embeddings` server (vLLM / TEI / OpenAI) |
 | `Embedding__BaseUrl` | `http://embedding:11434` (the in-network DNS name) |
 | `Embedding__ModelName` | `qwen3-embedding:0.6b` |
+| `Embedding__ApiKey` | — (bearer token, if the server requires one) |
 | `Embedding__BatchSize` | `10` |
+
+`Provider` selects the request shape only — the bundled profile runs Ollama (no GPU required). For high-throughput bulk embedding, point `Provider=OpenAI` at a continuously-batching server such as vLLM or Text-Embeddings-Inference; see `docs/guide/how-to-use-external-embedding-endpoint.md`.
 
 The MCP server's `RagManager` reads the same `EmbeddingConfig` binding for query-time embedding; the worker reads it for chunk-time embedding. Without both bound to a working endpoint, `RagSearchTools` returns empty results.
 
