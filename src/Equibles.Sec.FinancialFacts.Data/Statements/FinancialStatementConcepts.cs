@@ -25,6 +25,19 @@ public static class FinancialStatementConcepts
             "RevenueFromContractWithCustomerExcludingAssessedTax",
             "Revenue (ASC 606)"
         ),
+        // Financial-sector top lines. Banks, broker-dealers and insurers never file the
+        // operating-company revenue tags above, so without these their income statement
+        // shows no top line at all. Ordered as a financial income statement reads; a given
+        // filer reports only the subset that fits it, and unreported lines simply don't render.
+        new(
+            FactTaxonomy.UsGaap,
+            "InterestAndDividendIncomeOperating",
+            "Interest & Dividend Income"
+        ),
+        new(FactTaxonomy.UsGaap, "InterestIncomeExpenseNet", "Net Interest Income"),
+        new(FactTaxonomy.UsGaap, "NoninterestIncome", "Noninterest Income"),
+        new(FactTaxonomy.UsGaap, "RevenuesNetOfInterestExpense", "Total Net Revenue"),
+        new(FactTaxonomy.UsGaap, "PremiumsEarnedNet", "Premiums Earned (Net)"),
         new(FactTaxonomy.UsGaap, "CostOfRevenue", "Cost of Revenue"),
         new(FactTaxonomy.UsGaap, "GrossProfit", "Gross Profit"),
         new(FactTaxonomy.UsGaap, "OperatingExpenses", "Operating Expenses"),
