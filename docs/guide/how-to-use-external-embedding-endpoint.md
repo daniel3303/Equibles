@@ -23,17 +23,33 @@ Use this when you want to avoid the extra ~3 GB Docker download, share a GPU acr
 
     For an OpenAI-compatible endpoint, confirm with the provider which embedding model name to use (e.g., `text-embedding-3-small`).
 
-2. **Edit `.env`** and set the three embedding variables. Point `Embedding__BaseUrl` at your endpoint and use the matching model name:
+2. **Edit `.env`** and set the embedding variables. Point `Embedding__BaseUrl` at your endpoint, use the matching model name, and set `Embedding__Provider` to the API your server speaks.
+
+    **Ollama** (`/api/embed`) — the default:
 
     ```env
     Embedding__Enabled=true
+    Embedding__Provider=Ollama
     Embedding__BaseUrl=http://ollama.local:11434
     Embedding__ModelName=qwen3-embedding:0.6b
     # Optional — defaults to 10
     # Embedding__BatchSize=20
     ```
 
-    If the host running Equibles can reach Ollama only through Docker's host network, use `http://host.docker.internal:11434` on macOS / Windows or your host's LAN IP on Linux.
+    **OpenAI-compatible** (`/v1/embeddings`) — vLLM, Text-Embeddings-Inference, or OpenAI. These continuously batch on the GPU and are much faster for bulk embedding:
+
+    ```env
+    Embedding__Enabled=true
+    Embedding__Provider=OpenAI
+    Embedding__BaseUrl=http://vllm.local:11434
+    Embedding__ModelName=Qwen/Qwen3-Embedding-0.6B
+    # Set if the server requires a bearer token (e.g. vLLM started with --api-key, or OpenAI):
+    # Embedding__ApiKey=sk-...
+    ```
+
+    For example, to run vLLM yourself: `vllm serve Qwen/Qwen3-Embedding-0.6B --task embed` exposes `/v1/embeddings` on port 8000.
+
+    If the host running Equibles can reach the endpoint only through Docker's host network, use `http://host.docker.internal:11434` on macOS / Windows or your host's LAN IP on Linux.
 
 3. **Start the stack without the bundled embedding profile.** The vanilla `docker compose up -d` is enough — `--profile embedding` would launch its own Ollama, which you don't want here:
 

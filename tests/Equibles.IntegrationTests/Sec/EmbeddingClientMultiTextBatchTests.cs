@@ -9,12 +9,12 @@ namespace Equibles.IntegrationTests.Sec;
 
 /// <summary>
 /// Sibling to <see cref="EmbeddingClientGenerateTests"/>, which pins the
-/// <c>batch.Count == 1</c> shortcut. This pins the multi-text branch of
-/// ProcessBatch (lines 113-137, zero-hit): Ollama's /api/embed takes one input
-/// at a time, so a batch of N must POST N times and collect one vector each. A
-/// regression that broke the per-text loop (e.g. posted the whole batch once or
-/// dropped <c>Embeddings[0]</c>) would silently shrink every multi-chunk
-/// document's embedding set with no exception.
+/// single-text shortcut. This pins the multi-text branch of ProcessBatch:
+/// Ollama's /api/embed takes one input at a time, so a batch of N must POST N
+/// times (now concurrently) and collect one vector each, positionally aligned to
+/// the inputs. A regression that posted the whole batch once, dropped
+/// <c>Embeddings[0]</c>, or reordered the results would silently corrupt every
+/// multi-chunk document's embedding set with no exception.
 /// </summary>
 public class EmbeddingClientMultiTextBatchTests
 {
@@ -52,7 +52,11 @@ public class EmbeddingClientMultiTextBatchTests
     private sealed class CountingHandler : HttpMessageHandler
     {
         private readonly string _body;
-        public int CallCount { get; private set; }
+        private int _callCount;
+
+        // The batch is now embedded concurrently, so SendAsync can be entered from several
+        // threads at once — count atomically.
+        public int CallCount => Volatile.Read(ref _callCount);
 
         public CountingHandler(string body) => _body = body;
 
@@ -61,7 +65,7 @@ public class EmbeddingClientMultiTextBatchTests
             CancellationToken cancellationToken
         )
         {
-            CallCount++;
+            Interlocked.Increment(ref _callCount);
             return Task.FromResult(
                 new HttpResponseMessage(HttpStatusCode.OK)
                 {

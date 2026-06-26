@@ -21,7 +21,7 @@ public class RagSearchToolsListCompanyDocumentsCultureInvarianceTests : ParadeDb
     private RagSearchTools Sut()
     {
         var ragManager = new RagManager(
-            new ChunkRepository(DbContext),
+            HybridChunkSearcherFactory.Bm25Only(DbContext),
             new CommonStockRepository(DbContext),
             NullLogger<RagManager>()
         );

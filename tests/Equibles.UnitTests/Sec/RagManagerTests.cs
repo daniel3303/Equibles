@@ -63,7 +63,7 @@ public class RagManagerTests
             },
         };
 
-        var sut = new RagManager(chunkRepository: null, commonStockRepository: null, logger: null);
+        var sut = new RagManager(hybridChunkSearcher: null, commonStockRepository: null, logger: null);
 
         var result = await sut.BuildContext(chunks);
 
@@ -103,7 +103,7 @@ public class RagManagerTests
         // The pair (non-empty → ordered excerpts, empty → friendly empty-message)
         // distinguishes a working guard from BOTH guard-dropped (NRE catchpath)
         // AND guard-inverted (wrong message for non-empty case) regressions.
-        var sut = new RagManager(chunkRepository: null, commonStockRepository: null, logger: null);
+        var sut = new RagManager(hybridChunkSearcher: null, commonStockRepository: null, logger: null);
 
         var result = await sut.BuildContext(new List<Chunk>());
 

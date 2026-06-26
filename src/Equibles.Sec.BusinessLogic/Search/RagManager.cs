@@ -13,17 +13,17 @@ namespace Equibles.Sec.BusinessLogic.Search;
 [Service(ServiceLifetime.Scoped, typeof(IRagManager))]
 public class RagManager : IRagManager
 {
-    private readonly ChunkRepository _chunkRepository;
+    private readonly HybridChunkSearcher _hybridChunkSearcher;
     private readonly CommonStockRepository _commonStockRepository;
     private readonly ILogger<RagManager> _logger;
 
     public RagManager(
-        ChunkRepository chunkRepository,
+        HybridChunkSearcher hybridChunkSearcher,
         CommonStockRepository commonStockRepository,
         ILogger<RagManager> logger
     )
     {
-        _chunkRepository = chunkRepository;
+        _hybridChunkSearcher = hybridChunkSearcher;
         _commonStockRepository = commonStockRepository;
         _logger = logger;
     }
@@ -36,7 +36,7 @@ public class RagManager : IRagManager
         DateOnly? endDate = null
     )
     {
-        var chunks = await _chunkRepository.HybridSearch(
+        var chunks = await _hybridChunkSearcher.Search(
             query,
             maxResults,
             documentType: documentType,
@@ -58,7 +58,7 @@ public class RagManager : IRagManager
     )
     {
         ticker = await ResolvePrimaryTicker(ticker);
-        var chunks = await _chunkRepository.HybridSearch(
+        var chunks = await _hybridChunkSearcher.Search(
             query,
             maxResults,
             ticker,
@@ -81,7 +81,7 @@ public class RagManager : IRagManager
         int maxResults = 5
     )
     {
-        var chunks = await _chunkRepository.HybridSearch(query, maxResults, documentId: documentId);
+        var chunks = await _hybridChunkSearcher.Search(query, maxResults, documentId: documentId);
 
         _logger.LogInformation(
             "Found {Count} relevant chunks for document {DocumentId}",

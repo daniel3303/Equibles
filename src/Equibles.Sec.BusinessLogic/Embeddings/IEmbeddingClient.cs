@@ -9,7 +9,7 @@ public interface IEmbeddingClient
     /// embedded (e.g. the model emitted a degenerate vector) — callers must
     /// null-check the result.
     /// </summary>
-    Task<float[]> GenerateEmbedding(string text);
+    Task<float[]> GenerateEmbedding(string text, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Embeds each text. The result is positionally aligned to
@@ -18,7 +18,10 @@ public interface IEmbeddingClient
     /// alignment and null-check each entry. A single failed text never aborts
     /// the batch.
     /// </summary>
-    Task<List<float[]>> GenerateEmbeddings(List<string> texts);
+    Task<List<float[]>> GenerateEmbeddings(
+        List<string> texts,
+        CancellationToken cancellationToken = default
+    );
 
     Task<int> GetEmbeddingDimension();
 }

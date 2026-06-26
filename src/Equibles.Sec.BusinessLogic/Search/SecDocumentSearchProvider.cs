@@ -1,9 +1,9 @@
 using Equibles.Search.Abstractions;
 
-namespace Equibles.Sec.Repositories.Search;
+namespace Equibles.Sec.BusinessLogic.Search;
 
 /// <summary>
-/// SEC filings group. Reuses the production BM25 + vector hybrid search and collapses chunk hits
+/// SEC filings group. Reuses the production BM25 + semantic hybrid search and collapses chunk hits
 /// to one entry per document, preserving relevance order.
 /// </summary>
 public class SecDocumentSearchProvider : ISearchProvider
@@ -12,11 +12,11 @@ public class SecDocumentSearchProvider : ISearchProvider
     // This is best-effort: if the top chunks all belong to few documents the group may under-fill.
     private const int ChunkOverFetchFactor = 4;
 
-    private readonly ChunkRepository _chunkRepository;
+    private readonly HybridChunkSearcher _chunkSearcher;
 
-    public SecDocumentSearchProvider(ChunkRepository chunkRepository)
+    public SecDocumentSearchProvider(HybridChunkSearcher chunkSearcher)
     {
-        _chunkRepository = chunkRepository;
+        _chunkSearcher = chunkSearcher;
     }
 
     public string Category => "SEC Filings";
@@ -28,7 +28,7 @@ public class SecDocumentSearchProvider : ISearchProvider
         CancellationToken cancellationToken
     )
     {
-        var chunks = await _chunkRepository.HybridSearch(
+        var chunks = await _chunkSearcher.Search(
             request.Query,
             request.MaxPerProvider * ChunkOverFetchFactor,
             startDate: request.DateFrom,
