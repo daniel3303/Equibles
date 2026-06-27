@@ -18,4 +18,12 @@ public class WebsiteDiscoveryOptions : ScraperOptions
     /// stamped and retry on the next cycle.
     /// </summary>
     public int CheckCooldownDays { get; set; } = 30;
+
+    /// <summary>
+    /// How many candidate reachability probes to run concurrently within a cycle. Each probe is a
+    /// stealth-browser render that can take up to the render timeout for a dead/slow host, so a
+    /// serial loop made a batch with many dead candidates take many minutes. Bounded to keep within
+    /// the stealth sidecar's own concurrency cap (defaults align with StealthFetch:MaxConcurrency).
+    /// </summary>
+    public int ProbeConcurrency { get; set; } = 6;
 }

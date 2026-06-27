@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using Equibles.CommonStocks.BusinessLogic.Websites;
 using Equibles.CommonStocks.Data.Models;
@@ -106,31 +107,42 @@ public class WebsiteDiscoveryService : IImporter
                 continue;
             }
 
-            var unfilled = new List<WebsiteSourceStock>();
-            foreach (var stock in remaining)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var validated = candidates.TryGetValue(stock.Id, out var candidate)
-                    ? await _probeClient.Validate(candidate, cancellationToken)
-                    : null;
-                if (validated != null && await Persist(stock.Id, validated))
+            // Probe candidates concurrently: each probe is a stealth-browser render that can take up
+            // to the render timeout for a dead/slow host, so a serial loop made a batch with many
+            // dead candidates take many minutes (and the cycle never reached its commit step). The
+            // stealth client caps actual renders via its own semaphore; Persist/MarkChecked each open
+            // their own scope, so this is safe to fan out. Stocks with no candidate skip the probe.
+            var unfilled = new ConcurrentBag<WebsiteSourceStock>();
+            await Parallel.ForEachAsync(
+                remaining,
+                new ParallelOptions
                 {
-                    discovered++;
-                    _logger.LogDebug(
-                        "Discovered website for {Ticker} via {Source}: {Url}",
-                        stock.Ticker,
-                        source.Name,
-                        validated
-                    );
-                }
-                else
+                    MaxDegreeOfParallelism = Math.Max(1, _options.ProbeConcurrency),
+                    CancellationToken = cancellationToken,
+                },
+                async (stock, ct) =>
                 {
-                    unfilled.Add(stock);
+                    var validated = candidates.TryGetValue(stock.Id, out var candidate)
+                        ? await _probeClient.Validate(candidate, ct)
+                        : null;
+                    if (validated != null && await Persist(stock.Id, validated))
+                    {
+                        _logger.LogDebug(
+                            "Discovered website for {Ticker} via {Source}: {Url}",
+                            stock.Ticker,
+                            source.Name,
+                            validated
+                        );
+                    }
+                    else
+                    {
+                        unfilled.Add(stock);
+                    }
                 }
-            }
+            );
 
-            remaining = unfilled;
+            discovered += remaining.Count - unfilled.Count;
+            remaining = unfilled.ToList();
         }
 
         // Every source definitively missed these stocks — stamp the attempt so they
