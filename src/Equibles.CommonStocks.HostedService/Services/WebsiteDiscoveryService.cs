@@ -51,19 +51,27 @@ public class WebsiteDiscoveryService : IImporter
         _options = options.Value;
     }
 
-    public async Task Import(CancellationToken cancellationToken)
+    public Task Import(CancellationToken cancellationToken) => DiscoverBatch(cancellationToken);
+
+    /// <summary>
+    /// Runs one discovery batch and returns true when it filled a full batch — i.e. more pending
+    /// stocks remain — so the worker chains straight into the next batch (short ContinuationInterval)
+    /// instead of sleeping the full SleepInterval, draining a large backlog in successive bursts
+    /// rather than one batch per cycle.
+    /// </summary>
+    public async Task<bool> DiscoverBatch(CancellationToken cancellationToken)
     {
         if (_sources.Count == 0)
         {
             _logger.LogInformation("Website discovery: no website sources registered");
-            return;
+            return false;
         }
 
         var batch = await LoadCandidates(cancellationToken);
         if (batch.Count == 0)
         {
             _logger.LogInformation("Website discovery: no stocks pending discovery");
-            return;
+            return false;
         }
 
         _logger.LogInformation(
@@ -159,6 +167,10 @@ public class WebsiteDiscoveryService : IImporter
             discovered,
             remaining.Count
         );
+
+        // A full batch means more pending stocks remain (the candidate query was capped by BatchSize),
+        // so signal the worker to chain into the next batch rather than sleeping the full interval.
+        return batch.Count >= _options.BatchSize;
     }
 
     private async Task<List<WebsiteSourceStock>> LoadCandidates(CancellationToken cancellationToken)

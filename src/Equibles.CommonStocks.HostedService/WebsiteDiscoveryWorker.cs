@@ -32,6 +32,17 @@ public class WebsiteDiscoveryWorker : BaseScraperWorker
         SleepInterval = TimeSpan.FromHours(options.Value.SleepIntervalHours);
     }
 
-    protected override Task DoWork(CancellationToken stoppingToken) =>
-        RunImport<WebsiteDiscoveryService>(stoppingToken);
+    protected override async Task DoWork(CancellationToken stoppingToken)
+    {
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var service = scope.ServiceProvider.GetRequiredService<WebsiteDiscoveryService>();
+
+        // Drain a large backlog in successive bursts: when a cycle fills a full batch there are
+        // still pending stocks, so chain into the next batch after the short ContinuationInterval
+        // instead of sleeping the full SleepInterval (one batch per hour).
+        if (await service.DiscoverBatch(stoppingToken))
+        {
+            RequestImmediateContinuation();
+        }
+    }
 }
