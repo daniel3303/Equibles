@@ -13,6 +13,11 @@ namespace Equibles.Yahoo.HostedService.Services;
 /// </summary>
 public class YahooWebsiteSource : IWebsiteSource
 {
+    // Per-ticker ceiling for the Yahoo profile lookup. Yahoo's unofficial endpoint can hang a
+    // response; without this cap one slow ticker stalls the whole sequential batch past its
+    // commit step, so the batch persists nothing.
+    private static readonly TimeSpan LookupTimeout = TimeSpan.FromSeconds(15);
+
     private readonly IYahooFinanceClient _yahooClient;
     private readonly ILogger<YahooWebsiteSource> _logger;
 
@@ -41,13 +46,31 @@ public class YahooWebsiteSource : IWebsiteSource
 
             try
             {
-                var website = (await _yahooClient.GetCompanyProfile(stock.Ticker))?.Website;
+                // Bound each lookup: Yahoo's unofficial endpoint occasionally hangs a
+                // response, and with no per-call cap one slow ticker stalls the whole
+                // sequential batch for minutes — long enough that the cycle never reaches
+                // its commit step, so NO stock in the batch gets persisted. A tight timeout
+                // abandons the slow ticker and keeps the batch moving.
+                var website = (
+                    await _yahooClient
+                        .GetCompanyProfile(stock.Ticker)
+                        .WaitAsync(LookupTimeout, cancellationToken)
+                )?.Website;
                 if (!string.IsNullOrWhiteSpace(website))
                     results[stock.Id] = website;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
+            }
+            catch (TimeoutException ex)
+            {
+                // The lookup outran LookupTimeout — skip this ticker, keep the batch.
+                _logger.LogDebug(
+                    ex,
+                    "Yahoo asset profile lookup timed out for {Ticker}",
+                    stock.Ticker
+                );
             }
             catch (HttpRequestException ex)
             {
