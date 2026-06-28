@@ -7,7 +7,9 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.Messaging.Contracts.CommonStocks;
 using Equibles.Worker;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -33,6 +35,7 @@ public class WebsiteDiscoveryService : IImporter
     private readonly ErrorReporter _errorReporter;
     private readonly ILogger<WebsiteDiscoveryService> _logger;
     private readonly WebsiteDiscoveryOptions _options;
+    private readonly IBus _bus;
 
     public WebsiteDiscoveryService(
         IServiceScopeFactory scopeFactory,
@@ -40,7 +43,8 @@ public class WebsiteDiscoveryService : IImporter
         WebsiteProbeClient probeClient,
         ErrorReporter errorReporter,
         ILogger<WebsiteDiscoveryService> logger,
-        IOptions<WebsiteDiscoveryOptions> options
+        IOptions<WebsiteDiscoveryOptions> options,
+        IBus bus
     )
     {
         _scopeFactory = scopeFactory;
@@ -49,6 +53,7 @@ public class WebsiteDiscoveryService : IImporter
         _errorReporter = errorReporter;
         _logger = logger;
         _options = options.Value;
+        _bus = bus;
     }
 
     public Task Import(CancellationToken cancellationToken) => DiscoverBatch(cancellationToken);
@@ -213,6 +218,13 @@ public class WebsiteDiscoveryService : IImporter
         stock.Website = website;
         stock.WebsiteCheckedAt = DateTime.UtcNow;
         await repo.SaveChanges();
+
+        // The website is the input IR discovery needs, so cascade straight into an IR probe instead
+        // of waiting out that worker's own cooldown. Published via the root bus after the write
+        // commits (financial-domain event, bypasses any bus outbox); the consumer is idempotent and
+        // a reconciliation backstop in IR discovery's candidate query catches a publish lost to a
+        // crash, so at-least-once delivery is safe.
+        await _bus.Publish(new StockWebsiteDiscovered(stock.Id, stock.Ticker, website));
         return true;
     }
 

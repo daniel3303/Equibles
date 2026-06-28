@@ -62,6 +62,15 @@ public class CommonStock
     public DateTime? InvestorRelationsCheckedAt { get; set; }
 
     /// <summary>
+    /// The IR-discovery code generation under which this stock was last probed (see
+    /// <c>InvestorRelationsDiscoveryVersion</c>). Defaults to 0 so the whole pre-existing corpus
+    /// counts as the oldest generation; when the probe logic improves and the version is bumped, a
+    /// stock stamped with an older version becomes eligible for re-probe immediately, without waiting
+    /// out its cooldown — so an improvement reaches the backlog of misses on deploy, not over 30 days.
+    /// </summary>
+    public int InvestorRelationsDiscoveryVersion { get; set; }
+
+    /// <summary>
     /// When an IR content scraper (news/events) last worked through this stock (UTC),
     /// stamped on every cycle the stock is scraped — whether or not new rows were
     /// found. Null until first scraped. Scrapers order their cohort least-recently

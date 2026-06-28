@@ -80,7 +80,8 @@ public class WebsiteDiscoveryServiceTests
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
             Substitute.For<ILogger<WebsiteDiscoveryService>>(),
-            Options.Create(discoveryOptions)
+            Options.Create(discoveryOptions),
+            Substitute.For<MassTransit.IBus>()
         );
     }
 
