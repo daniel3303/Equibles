@@ -41,4 +41,12 @@ public class InvestorRelationsDiscoveryOptions : ScraperOptions
     /// next cycle.
     /// </summary>
     public int ProbeCooldownDays { get; set; } = 30;
+
+    /// <summary>
+    /// How many candidate probes to run concurrently within a cycle. Each probe escalates to a
+    /// stealth-browser render for bot-walled hosts, which can take up to the render timeout, so a
+    /// serial loop made a batch with many such hosts take many minutes. Bounded to keep within the
+    /// shared stealth sidecar's own concurrency cap (contended with slide/webcast capture).
+    /// </summary>
+    public int ProbeConcurrency { get; set; } = 6;
 }
