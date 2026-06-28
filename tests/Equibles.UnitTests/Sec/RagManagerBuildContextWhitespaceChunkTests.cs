@@ -53,7 +53,11 @@ public class RagManagerBuildContextWhitespaceChunkTests
             },
         };
 
-        var sut = new RagManager(hybridChunkSearcher: null, commonStockRepository: null, logger: null);
+        var sut = new RagManager(
+            hybridChunkSearcher: null,
+            commonStockRepository: null,
+            logger: null
+        );
 
         var result = await sut.BuildContext(chunks);
 

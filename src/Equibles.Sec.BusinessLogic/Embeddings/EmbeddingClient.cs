@@ -121,9 +121,17 @@ public class EmbeddingClient : IEmbeddingClient
         {
             var payload = new { model = _config.ModelName, input = batch };
             var json = JsonSerializer.Serialize(payload);
-            using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            using var content = new StringContent(
+                json,
+                System.Text.Encoding.UTF8,
+                "application/json"
+            );
 
-            var response = await _httpClient.PostAsync("/v1/embeddings", content, cancellationToken);
+            var response = await _httpClient.PostAsync(
+                "/v1/embeddings",
+                content,
+                cancellationToken
+            );
             response.EnsureSuccessStatusCode();
 
             var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -153,7 +161,11 @@ public class EmbeddingClient : IEmbeddingClient
             // Same { model, input } payload either way; only the endpoint and response shape differ.
             var payload = new { model = _config.ModelName, input = text };
             var json = JsonSerializer.Serialize(payload);
-            using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            using var content = new StringContent(
+                json,
+                System.Text.Encoding.UTF8,
+                "application/json"
+            );
 
             return _config.Provider == EmbeddingProvider.OpenAI
                 ? await EmbedViaOpenAi(content, cancellationToken)
@@ -161,7 +173,10 @@ public class EmbeddingClient : IEmbeddingClient
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Skipping a chunk that failed to embed (continuing with the rest)");
+            _logger.LogWarning(
+                ex,
+                "Skipping a chunk that failed to embed (continuing with the rest)"
+            );
             return null;
         }
     }

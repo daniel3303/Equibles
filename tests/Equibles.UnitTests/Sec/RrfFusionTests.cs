@@ -18,7 +18,9 @@ public class RrfFusionTests
         var b = Id(2);
         var c = Id(3);
 
-        var result = RrfFusion.Fuse([[a, b, c]]);
+        var result = RrfFusion.Fuse([
+            [a, b, c],
+        ]);
 
         result.Should().Equal(a, b, c);
     }
@@ -50,7 +52,9 @@ public class RrfFusionTests
         var first = Id(1);
         var second = Id(2);
 
-        var result = RrfFusion.Fuse([[first, second]]);
+        var result = RrfFusion.Fuse([
+            [first, second],
+        ]);
 
         result.Should().Equal(first, second);
     }
@@ -63,8 +67,14 @@ public class RrfFusionTests
         var low = Id(1);
         var high = Id(2);
 
-        var forward = RrfFusion.Fuse([[high], [low]]);
-        var reversed = RrfFusion.Fuse([[low], [high]]);
+        var forward = RrfFusion.Fuse([
+            [high],
+            [low],
+        ]);
+        var reversed = RrfFusion.Fuse([
+            [low],
+            [high],
+        ]);
 
         forward.Should().Equal(low, high);
         reversed.Should().Equal(low, high);
