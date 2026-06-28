@@ -35,12 +35,19 @@ public class InvestorRelationsDiscoveryOptions : ScraperOptions
     ["ir", "investors", "investor", "investorrelations"];
 
     /// <summary>
-    /// Days to wait before re-probing a stock whose last discovery attempt found no
-    /// IR page. Definitive misses are stamped on the stock, so persistent misses back
-    /// off for this window; transient probe errors are not stamped and retry on the
-    /// next cycle.
+    /// Initial backoff (days) before re-probing a stock whose last attempt found no IR page. Each
+    /// subsequent definitive miss doubles the wait, capped at <see cref="RetryMaxBackoffDays"/>, so a
+    /// transiently-blocked site (a Cloudflare "access denied", a one-off render failure) is retried
+    /// within a day instead of written off for weeks, while a persistent miss still backs off to the
+    /// cap. Transient probe errors are not stamped at all and retry on the next cycle.
     /// </summary>
-    public int ProbeCooldownDays { get; set; } = 30;
+    public int RetryInitialBackoffDays { get; set; } = 1;
+
+    /// <summary>
+    /// Cap (days) on the exponential re-probe backoff — a miss never waits longer than this between
+    /// attempts, so even a long-failing site is re-checked at least this often.
+    /// </summary>
+    public int RetryMaxBackoffDays { get; set; } = 15;
 
     /// <summary>
     /// How many candidate probes to run concurrently within a cycle. Each probe escalates to a
