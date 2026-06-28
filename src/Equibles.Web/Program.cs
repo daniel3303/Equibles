@@ -77,6 +77,15 @@ public partial class Program
         // Holdings business-logic services the portal consumes directly (e.g. the smart-money
         // index manager). Repositories these depend on are registered by AddAllRepositories.
         builder.Services.AutoWireServicesFrom<Equibles.Holdings.BusinessLogic.SmartMoneyIndexManager>();
+        // The SEC Filings search provider (discovered by AddEquiblesSearch) depends on the hybrid
+        // BM25 + semantic searcher and the embedding client, both [Service]s in Sec.BusinessLogic.
+        // Register that assembly + bind EmbeddingConfig so the query can embed at request time —
+        // mirrors the MCP host; without it SecDocumentSearchProvider can't resolve HybridChunkSearcher
+        // and service-provider validation fails at startup.
+        builder.Services.AutoWireServicesFrom<Equibles.Sec.BusinessLogic.Search.RagManager>();
+        builder.Services.Configure<Equibles.Sec.BusinessLogic.Embeddings.EmbeddingConfig>(
+            builder.Configuration.GetSection("Embedding")
+        );
 
         var authSettings =
             builder.Configuration.GetSection("Auth").Get<AuthSettings>() ?? new AuthSettings();
