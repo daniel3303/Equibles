@@ -10,21 +10,41 @@ using Xunit;
 namespace Equibles.UnitTests.CommonStocks;
 
 /// <summary>
-/// Contract: the stealth navigation waits for the network to fall idle, but a host that
-/// streams background telemetry (e.g. the FDA advisory-committee calendar) never lets the
-/// network go idle, so the idle wait times out even though the document is fully rendered.
-/// That timeout must be non-fatal — the loaded DOM is kept — while a genuine navigation
-/// failure still propagates so the fetch degrades to a miss rather than returning a
-/// half-broken page.
+/// Contract: the stealth navigation waits only for DOMContentLoaded, then a brief settle for any
+/// client-rendered / post-challenge content — not full network-idle, which most IR/company pages
+/// (streaming background telemetry) never reach, burning the whole render budget. A settle-wait
+/// timeout must be non-fatal — the loaded DOM is kept — while a genuine navigation failure on the
+/// initial load still propagates so the fetch degrades to a miss rather than returning a broken page.
 /// </summary>
 public class CloakBrowserStealthClientNavigateTests
 {
     [Fact]
-    public async Task NavigateWaitingForNetworkIdle_SwallowsIdleTimeout_SoTheLoadedDomIsKept()
+    public async Task Navigate_WaitsForDomContentLoaded_NotNetworkIdle()
     {
         var page = Substitute.For<IPage>();
-        page.GotoAsync(Arg.Any<string>(), Arg.Any<PageGotoOptions>())
-            .ThrowsAsync(new PlaywrightException("Timeout 45000ms exceeded."));
+
+        await CloakBrowserStealthClient.NavigateWaitingForNetworkIdle(
+            page,
+            "https://www.example.com",
+            45000,
+            NullLogger.Instance
+        );
+
+        await page.Received()
+            .GotoAsync(
+                "https://www.example.com",
+                Arg.Is<PageGotoOptions>(o => o.WaitUntil == WaitUntilState.DOMContentLoaded)
+            );
+    }
+
+    [Fact]
+    public async Task Navigate_SwallowsSettleTimeout_SoTheLoadedDomIsKept()
+    {
+        // The DOM loads, but the page streams background telemetry so the settle's network-idle wait
+        // times out. That must be non-fatal — the already-loaded DOM is kept.
+        var page = Substitute.For<IPage>();
+        page.WaitForLoadStateAsync(Arg.Any<LoadState>(), Arg.Any<PageWaitForLoadStateOptions>())
+            .ThrowsAsync(new PlaywrightException("Timeout 8000ms exceeded."));
 
         var navigate = async () =>
             await CloakBrowserStealthClient.NavigateWaitingForNetworkIdle(
@@ -38,14 +58,13 @@ public class CloakBrowserStealthClientNavigateTests
     }
 
     [Fact]
-    public async Task NavigateWaitingForNetworkIdle_SwallowsSystemTimeoutException_SoTheLoadedDomIsKept()
+    public async Task Navigate_SwallowsSystemTimeoutExceptionOnSettle_SoTheLoadedDomIsKept()
     {
-        // Playwright .NET surfaces a GotoAsync wait timeout as System.TimeoutException — NOT a
-        // PlaywrightException — which is what the FDA calendar actually throws in production. The
-        // idle-wait timeout must still be non-fatal regardless of the concrete timeout type.
+        // Playwright .NET surfaces a wait timeout as System.TimeoutException — NOT a
+        // PlaywrightException. The settle timeout must be non-fatal regardless of the concrete type.
         var page = Substitute.For<IPage>();
-        page.GotoAsync(Arg.Any<string>(), Arg.Any<PageGotoOptions>())
-            .ThrowsAsync(new System.TimeoutException("Timeout 45000ms exceeded."));
+        page.WaitForLoadStateAsync(Arg.Any<LoadState>(), Arg.Any<PageWaitForLoadStateOptions>())
+            .ThrowsAsync(new System.TimeoutException("Timeout 8000ms exceeded."));
 
         var navigate = async () =>
             await CloakBrowserStealthClient.NavigateWaitingForNetworkIdle(
@@ -59,7 +78,7 @@ public class CloakBrowserStealthClientNavigateTests
     }
 
     [Fact]
-    public async Task NavigateWaitingForNetworkIdle_Rethrows_OnGenuineNavigationFailure()
+    public async Task Navigate_Rethrows_OnGenuineNavigationFailure()
     {
         var page = Substitute.For<IPage>();
         page.GotoAsync(Arg.Any<string>(), Arg.Any<PageGotoOptions>())

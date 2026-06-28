@@ -103,10 +103,14 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
         {
             var playwright = await EnsureDriver(cancellationToken);
 
-            // cloakserve speaks CDP over WebSocket; connect, work, disconnect.
-            await using var browser = await playwright.Chromium.ConnectOverCDPAsync(
-                _options.SidecarUrl
-            );
+            // cloakserve speaks CDP over WebSocket; connect, work, disconnect. The connect is bounded
+            // by a timeout: a wedged/over-loaded sidecar can leave ConnectOverCDPAsync hanging
+            // indefinitely (no built-in timeout), and a single hung connect holds a concurrency slot
+            // forever — enough of them stall the whole discovery sweep. On timeout this degrades to a
+            // miss like any other connect failure, and the caller re-probes the stock later.
+            await using var browser = await playwright
+                .Chromium.ConnectOverCDPAsync(_options.SidecarUrl)
+                .WaitAsync(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), cancellationToken);
             var context = await browser.NewContextAsync();
             try
             {
@@ -122,6 +126,13 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
         {
             throw;
         }
+        catch (TimeoutException)
+        {
+            // The CDP connect outran ConnectTimeoutSeconds (wedged/over-loaded sidecar). Degrade to a
+            // miss rather than holding the concurrency slot; the stock is re-probed on a later cycle.
+            _logger.LogWarning("Stealth connect timed out for {Url}", url);
+            return null;
+        }
         catch (PlaywrightException ex)
         {
             // Connection refused, navigation failure, or render timeout. Enabled-but-
@@ -135,19 +146,23 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
     private Task Navigate(IPage page, string url) =>
         NavigateWaitingForNetworkIdle(page, url, _options.RenderTimeoutSeconds * 1000, _logger);
 
+    // Brief settle after DOMContentLoaded to let client-rendered / post-bot-challenge content appear,
+    // capped well below the full render budget. Waiting for full network-idle instead burned the
+    // whole budget (~45s) on every IR/company page, because most stream background telemetry/ads that
+    // never let the network fall idle — which made a full-universe discovery sweep infeasible.
+    private const int SettleTimeoutMilliseconds = 8000;
+
     /// <summary>
-    /// Navigates to <paramref name="url"/> waiting for the network to fall idle, but
-    /// treats an idle-wait timeout as non-fatal. Some hosts (e.g. the FDA advisory-
-    /// committee calendar) stream background telemetry that never lets the network go
-    /// idle, so <see cref="WaitUntilState.NetworkIdle"/> times out even though the
-    /// document has fully rendered within the budget. On that timeout the already-loaded
-    /// DOM is kept rather than discarding an otherwise successful render. A genuine
-    /// navigation failure — refused connection, DNS, protocol error — is a different
-    /// exception that still propagates, so the fetch degrades to a miss as before.
-    /// Playwright .NET surfaces the wait timeout as a <see cref="System.TimeoutException"/>
-    /// (not a <see cref="PlaywrightException"/>), so that is caught directly; the
-    /// message-matched <see cref="PlaywrightException"/> clause is kept as a belt-and-braces
-    /// guard for any path that reports the same timeout as a Playwright error.
+    /// Navigates to <paramref name="url"/> waiting only for <see cref="WaitUntilState.DOMContentLoaded"/>
+    /// — the document, not full network-idle — then gives the page a brief settle window for any
+    /// client-rendered or post-challenge content to appear. Most IR/company pages stream background
+    /// telemetry that never lets the network fall idle, so waiting for idle burned the entire render
+    /// budget on every page; DOMContentLoaded plus a short settle captures the real content in
+    /// seconds instead. A settle-wait timeout is non-fatal — the already-loaded DOM is kept. A genuine
+    /// navigation failure (refused connection, DNS, protocol error) is a different exception that
+    /// still propagates, so the fetch degrades to a miss as before. The settle timeout surfaces as a
+    /// <see cref="System.TimeoutException"/> (or, on some paths, a message-matched
+    /// <see cref="PlaywrightException"/>), both caught here.
     /// </summary>
     internal static async Task NavigateWaitingForNetworkIdle(
         IPage page,
@@ -156,24 +171,29 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
         ILogger logger
     )
     {
+        await page.GotoAsync(
+            url,
+            new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.DOMContentLoaded,
+                Timeout = timeoutMilliseconds,
+            }
+        );
+
         try
         {
-            await page.GotoAsync(
-                url,
-                new PageGotoOptions
-                {
-                    WaitUntil = WaitUntilState.NetworkIdle,
-                    Timeout = timeoutMilliseconds,
-                }
+            await page.WaitForLoadStateAsync(
+                LoadState.NetworkIdle,
+                new PageWaitForLoadStateOptions { Timeout = SettleTimeoutMilliseconds }
             );
         }
         catch (System.TimeoutException)
         {
-            logger.LogDebug("NetworkIdle wait timed out for {Url}; using the loaded DOM.", url);
+            logger.LogDebug("Settle wait timed out for {Url}; using the loaded DOM.", url);
         }
         catch (PlaywrightException ex) when (IsNetworkIdleTimeout(ex))
         {
-            logger.LogDebug("NetworkIdle wait timed out for {Url}; using the loaded DOM.", url);
+            logger.LogDebug("Settle wait timed out for {Url}; using the loaded DOM.", url);
         }
     }
 
