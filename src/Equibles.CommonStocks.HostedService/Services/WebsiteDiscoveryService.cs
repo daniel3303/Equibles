@@ -179,9 +179,14 @@ public class WebsiteDiscoveryService : IImporter
         var repo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
 
         var cutoff = DateTime.UtcNow.AddDays(-_options.CheckCooldownDays);
+        // Largest companies first: a single bad bulk run can leave thousands of stocks pending,
+        // and alphabetical order buries the high-value ones (e.g. TSLA, WMT) behind obscure
+        // tickers for hours. Market cap is the priority signal; unknown caps (0) drain last,
+        // tie-broken alphabetically for a stable order.
         var rows = await repo.GetAll()
             .Where(PendingDiscovery(cutoff))
-            .OrderBy(s => s.Ticker)
+            .OrderByDescending(s => s.MarketCapitalization)
+            .ThenBy(s => s.Ticker)
             .Take(_options.BatchSize)
             .Select(s => new
             {

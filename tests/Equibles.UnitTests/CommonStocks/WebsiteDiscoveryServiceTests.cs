@@ -57,7 +57,8 @@ public class WebsiteDiscoveryServiceTests
     private static WebsiteDiscoveryService BuildSut(
         DbContextOptions<EquiblesFinancialDbContext> options,
         IEnumerable<IWebsiteSource> sources,
-        HttpStatusCode probeStatus = HttpStatusCode.OK
+        HttpStatusCode probeStatus = HttpStatusCode.OK,
+        int? batchSize = null
     )
     {
         var stealth = Substitute.For<IStealthBrowserClient>();
@@ -67,6 +68,9 @@ public class WebsiteDiscoveryServiceTests
             stealth,
             Substitute.For<ILogger<WebsiteProbeClient>>()
         );
+        var discoveryOptions = new WebsiteDiscoveryOptions();
+        if (batchSize.HasValue)
+            discoveryOptions.BatchSize = batchSize.Value;
         return new WebsiteDiscoveryService(
             ScopeFactory(options),
             sources,
@@ -76,7 +80,7 @@ public class WebsiteDiscoveryServiceTests
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
             Substitute.For<ILogger<WebsiteDiscoveryService>>(),
-            Options.Create(new WebsiteDiscoveryOptions())
+            Options.Create(discoveryOptions)
         );
     }
 
@@ -84,7 +88,8 @@ public class WebsiteDiscoveryServiceTests
         DbContextOptions<EquiblesFinancialDbContext> options,
         string ticker,
         string website = null,
-        DateTime? checkedAt = null
+        DateTime? checkedAt = null,
+        double marketCap = 0
     )
     {
         using var ctx = NewContext(options);
@@ -95,6 +100,7 @@ public class WebsiteDiscoveryServiceTests
             Name = ticker + " Inc",
             Website = website,
             WebsiteCheckedAt = checkedAt,
+            MarketCapitalization = marketCap,
         };
         ctx.Set<CommonStock>().Add(stock);
         await ctx.SaveChangesAsync();
@@ -215,6 +221,28 @@ public class WebsiteDiscoveryServiceTests
         await BuildSut(options, [source]).Import(CancellationToken.None);
 
         source.SeenTickers.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task LargestMarketCapStocks_AreAttemptedFirst()
+    {
+        var options = NewDbOptions();
+        // A bounded batch must drain the high-value companies before obscure ones, regardless of
+        // ticker — a single bad bulk run can leave thousands pending and alphabetical order would
+        // bury the large caps behind them.
+        await SeedStock(options, "AAA", marketCap: 1_000_000);
+        await SeedStock(options, "ZZZ", marketCap: 1_000_000_000);
+        await SeedStock(options, "MMM", marketCap: 50_000_000);
+        var source = new StubSource(10, []);
+
+        await BuildSut(options, [source], batchSize: 2).Import(CancellationToken.None);
+
+        source
+            .SeenTickers.Should()
+            .BeEquivalentTo(
+                ["ZZZ", "MMM"],
+                "the two largest caps are attempted first; the tiny AAA waits for the next cycle"
+            );
     }
 
     private sealed class StubSource : IWebsiteSource
