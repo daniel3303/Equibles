@@ -54,9 +54,20 @@ public class InvestorRelationsProbeClient
     {
         var candidates = InvestorRelationsCandidateBuilder.Build(website, paths, subdomains);
 
+        // TEMP DEBUG INSTRUMENTATION (#ir-probe-timing): per-pass timing to locate the discovery
+        // sweep stall. Remove once the bottleneck is fixed.
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
         // Pass 1 — plain HTTP. Cheap, polite, and never touches the shared stealth sidecar; most
         // IR pages that aren't bot-walled resolve here.
         var direct = await Probe(candidates, website, useSidecar: false, cancellationToken);
+        _logger.LogInformation(
+            "IR-PROBE-TIMING pass1(plain) {Website}: {Result} in {Ms}ms ({Candidates} candidates)",
+            website,
+            direct != null ? "HIT" : "miss",
+            sw.ElapsedMilliseconds,
+            candidates.Count
+        );
         if (direct != null)
             return direct;
 
@@ -64,7 +75,17 @@ public class InvestorRelationsProbeClient
         // up empty. Catches the bot-protected hosts (plain HTTP saw a challenge page that failed
         // validation) and the JS-rendered homepages whose IR nav links aren't in the static HTML.
         if (_stealthClient.IsEnabled)
-            return await Probe(candidates, website, useSidecar: true, cancellationToken);
+        {
+            sw.Restart();
+            var rendered = await Probe(candidates, website, useSidecar: true, cancellationToken);
+            _logger.LogInformation(
+                "IR-PROBE-TIMING pass2(stealth) {Website}: {Result} in {Ms}ms",
+                website,
+                rendered != null ? "HIT" : "miss",
+                sw.ElapsedMilliseconds
+            );
+            return rendered;
+        }
 
         return null;
     }

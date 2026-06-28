@@ -116,6 +116,14 @@ public class InvestorRelationsDiscoveryService : IImporter
         CancellationToken cancellationToken
     )
     {
+        // TEMP DEBUG INSTRUMENTATION (#ir-probe-timing): a "start" with no matching "end" marks a
+        // hung stock (and names the host to test directly). Remove once the stall is fixed.
+        _logger.LogInformation(
+            "IR-PROBE-TIMING start {Ticker} {Website}",
+            candidate.Ticker,
+            candidate.Website
+        );
+        var stockSw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             var result = await _probeClient.Discover(
@@ -123,6 +131,12 @@ public class InvestorRelationsDiscoveryService : IImporter
                 _options.CandidatePaths,
                 _options.CandidateSubdomains,
                 cancellationToken
+            );
+            _logger.LogInformation(
+                "IR-PROBE-TIMING end {Ticker}: {Result} in {Ms}ms",
+                candidate.Ticker,
+                result != null ? "HIT" : "miss",
+                stockSw.ElapsedMilliseconds
             );
             // Definitive miss — every candidate was probed and none validated. Stamp the attempt so
             // the stock backs off for the cooldown window instead of re-occupying a batch slot every
