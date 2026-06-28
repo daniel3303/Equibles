@@ -172,12 +172,12 @@ public class InvestorRelationsDiscoveryService : IImporter
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
 
-        var cutoff = DateTime.UtcNow.AddDays(-_options.ProbeCooldownDays);
+        var now = DateTime.UtcNow;
         // Largest companies first: high-value names (TSLA, WMT) shouldn't wait behind thousands of
         // obscure tickers. Market cap is the priority signal; unknown caps (0) drain last,
         // tie-broken alphabetically for a stable order.
         var rows = await repo.GetAll()
-            .Where(PendingDiscovery(cutoff, InvestorRelationsDiscoveryVersion.Current))
+            .Where(PendingDiscovery(now, InvestorRelationsDiscoveryVersion.Current))
             .OrderByDescending(s => s.MarketCapitalization)
             .ThenBy(s => s.Ticker)
             .Take(_options.BatchSize)
@@ -242,21 +242,55 @@ public class InvestorRelationsDiscoveryService : IImporter
         if (stock == null)
             return;
 
-        stock.InvestorRelationsCheckedAt = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        // Exponential backoff: double the previous wait each miss, starting at the initial backoff and
+        // capped at the max — so a transiently-blocked site is re-probed within a day while a
+        // persistent miss settles at the cap. Computed from the prior schedule BEFORE the stamps below
+        // overwrite it.
+        stock.InvestorRelationsRetryAfter = now.Add(NextBackoff(stock));
+        stock.InvestorRelationsCheckedAt = now;
         stock.InvestorRelationsDiscoveryVersion = InvestorRelationsDiscoveryVersion.Current;
         await repo.SaveChanges();
     }
 
+    // The wait already served before this miss, recovered from the gap between the last check and its
+    // scheduled retry — so the schedule advances without a separate attempt counter.
+    private TimeSpan NextBackoff(CommonStock stock)
+    {
+        var previous =
+            stock.InvestorRelationsCheckedAt.HasValue && stock.InvestorRelationsRetryAfter.HasValue
+                ? stock.InvestorRelationsRetryAfter.Value - stock.InvestorRelationsCheckedAt.Value
+                : TimeSpan.Zero;
+        return ComputeBackoff(
+            previous,
+            _options.RetryInitialBackoffDays,
+            _options.RetryMaxBackoffDays
+        );
+    }
+
+    /// <summary>
+    /// The next re-probe backoff for a definitive miss: the initial backoff on the first miss (when
+    /// <paramref name="previous"/> is zero), then double the previous wait on each subsequent miss,
+    /// capped at <paramref name="maxDays"/>. E.g. with 1/15 the schedule is 1, 2, 4, 8, 15, 15… days.
+    /// </summary>
+    public static TimeSpan ComputeBackoff(TimeSpan previous, int initialDays, int maxDays)
+    {
+        var initial = TimeSpan.FromDays(Math.Max(1, initialDays));
+        var max = TimeSpan.FromDays(Math.Max(maxDays, Math.Max(1, initialDays)));
+        var next = previous <= TimeSpan.Zero ? initial : TimeSpan.FromTicks(previous.Ticks * 2);
+        return next > max ? max : next;
+    }
+
     /// <summary>
     /// Stocks eligible for an IR discovery probe: a known website, no discovered IR page yet, and one
-    /// of — never probed; probed before the cooldown (periodic recheck for an externally-added page);
-    /// probed under an older discovery version (<paramref name="currentVersion"/> — our probe improved,
-    /// re-sweep the backlog now); or probed before the website was found
-    /// (<c>InvestorRelationsCheckedAt &lt; WebsiteCheckedAt</c> — the input changed; the reconciliation
-    /// backstop for a website-discovered event lost to a crash).
+    /// of — never probed; due for a re-probe (its exponential miss-backoff has elapsed, or it predates
+    /// the backoff field and so re-probes once); probed under an older discovery version
+    /// (<paramref name="currentVersion"/> — our probe improved, re-sweep the backlog now); or probed
+    /// before the website was found (<c>InvestorRelationsCheckedAt &lt; WebsiteCheckedAt</c> — the
+    /// input changed; the reconciliation backstop for a website-discovered event lost to a crash).
     /// </summary>
     public static Expression<Func<CommonStock, bool>> PendingDiscovery(
-        DateTime cutoff,
+        DateTime now,
         int currentVersion
     )
     {
@@ -266,7 +300,8 @@ public class InvestorRelationsDiscoveryService : IImporter
             && s.InvestorRelationsUrl == null
             && (
                 s.InvestorRelationsCheckedAt == null
-                || s.InvestorRelationsCheckedAt < cutoff
+                || s.InvestorRelationsRetryAfter == null
+                || s.InvestorRelationsRetryAfter <= now
                 || s.InvestorRelationsDiscoveryVersion < currentVersion
                 || s.InvestorRelationsCheckedAt < s.WebsiteCheckedAt
             );

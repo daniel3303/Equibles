@@ -5,29 +5,35 @@ namespace Equibles.UnitTests.CommonStocks;
 
 public class InvestorRelationsDiscoveryServicePendingDiscoveryTests
 {
-    private static readonly DateTime Cutoff = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime Now = new(2026, 6, 15, 0, 0, 0, DateTimeKind.Utc);
     private const int CurrentVersion = 5;
 
+    private static DateTime Utc(string value) => DateTime.Parse(value).ToUniversalTime();
+
     [Theory]
-    [InlineData(null, true)] // never probed → always eligible
-    [InlineData("2026-05-15", true)] // probed before the cutoff → cooldown elapsed
-    [InlineData("2026-06-05", false)] // probed within the cooldown → backs off
-    public void PendingDiscovery_CheckedAt_GatesOnCooldownCutoff(string checkedAt, bool expected)
+    [InlineData(null, true)] // probed, but no backoff stamped (legacy row) → re-probe once
+    [InlineData("2026-06-10", true)] // backoff elapsed (RetryAfter in the past) → eligible
+    [InlineData("2026-06-20", false)] // still backing off (RetryAfter in the future) → skipped
+    public void PendingDiscovery_RetryAfter_GatesOnExponentialBackoff(
+        string retryAfter,
+        bool expected
+    )
     {
-        // Contract: persistent misses back off — a stock probed within the cooldown window is
-        // skipped, while never-probed stocks and stocks whose cooldown has elapsed are eligible.
-        // Version is current and the website wasn't found after the probe, so the cooldown clause
-        // is isolated.
+        // Contract: a definitive miss backs off on an exponential schedule — once RetryAfter has
+        // elapsed (or was never stamped) the stock is re-probed; while it's still in the future the
+        // stock is skipped. Version is current and the website wasn't found after the probe, so only
+        // the backoff clause is in play.
         var stock = new CommonStock
         {
             Website = "https://acme.com",
-            InvestorRelationsCheckedAt =
-                checkedAt == null ? null : DateTime.Parse(checkedAt).ToUniversalTime(),
+            InvestorRelationsCheckedAt = Utc("2026-06-09"),
+            InvestorRelationsRetryAfter = retryAfter == null ? null : Utc(retryAfter),
+            WebsiteCheckedAt = Utc("2026-06-09"),
             InvestorRelationsDiscoveryVersion = CurrentVersion,
         };
 
         var eligible = InvestorRelationsDiscoveryService
-            .PendingDiscovery(Cutoff, CurrentVersion)
+            .PendingDiscovery(Now, CurrentVersion)
             .Compile();
 
         eligible(stock).Should().Be(expected);
@@ -51,7 +57,7 @@ public class InvestorRelationsDiscoveryServicePendingDiscoveryTests
         };
 
         var eligible = InvestorRelationsDiscoveryService
-            .PendingDiscovery(Cutoff, CurrentVersion)
+            .PendingDiscovery(Now, CurrentVersion)
             .Compile();
 
         eligible(stock).Should().Be(expected);
@@ -59,45 +65,62 @@ public class InvestorRelationsDiscoveryServicePendingDiscoveryTests
 
     [Theory]
     [InlineData(CurrentVersion - 1, true)] // probed under an older generation → re-sweep now
-    [InlineData(CurrentVersion, false)] // already at the current generation → wait for the cooldown
-    public void PendingDiscovery_OlderVersion_IsEligibleWithinCooldown(int version, bool expected)
+    [InlineData(CurrentVersion, false)] // already at the current generation → wait out the backoff
+    public void PendingDiscovery_OlderVersion_IsEligibleWhileBackingOff(int version, bool expected)
     {
         // Contract: a probe-logic improvement (version bump) re-opens the backlog of misses
-        // immediately, bypassing the cooldown — even a stock probed moments ago is reconsidered when
-        // it was probed under an older version.
+        // immediately, bypassing the backoff — even a stock still mid-backoff is reconsidered when it
+        // was probed under an older version.
         var stock = new CommonStock
         {
             Website = "https://acme.com",
-            InvestorRelationsCheckedAt = new DateTime(2026, 6, 5, 0, 0, 0, DateTimeKind.Utc), // within cooldown
-            WebsiteCheckedAt = new DateTime(2026, 6, 5, 0, 0, 0, DateTimeKind.Utc),
+            InvestorRelationsCheckedAt = Utc("2026-06-14"),
+            InvestorRelationsRetryAfter = Utc("2026-06-20"), // still backing off
+            WebsiteCheckedAt = Utc("2026-06-14"),
             InvestorRelationsDiscoveryVersion = version,
         };
 
         var eligible = InvestorRelationsDiscoveryService
-            .PendingDiscovery(Cutoff, CurrentVersion)
+            .PendingDiscovery(Now, CurrentVersion)
             .Compile();
 
         eligible(stock).Should().Be(expected);
     }
 
     [Fact]
-    public void PendingDiscovery_WebsiteFoundAfterLastProbe_IsEligibleWithinCooldown()
+    public void PendingDiscovery_WebsiteFoundAfterLastProbe_IsEligibleWhileBackingOff()
     {
         // Contract: the reconciliation backstop for the website-discovered cascade — a stock probed
-        // (and missed) BEFORE its website was found is re-probed even within the cooldown and at the
-        // current version, because the input it needs only arrived afterwards.
+        // (and missed) BEFORE its website was found is re-probed even mid-backoff and at the current
+        // version, because the input it needs only arrived afterwards.
         var stock = new CommonStock
         {
             Website = "https://acme.com",
-            InvestorRelationsCheckedAt = new DateTime(2026, 6, 5, 0, 0, 0, DateTimeKind.Utc),
-            WebsiteCheckedAt = new DateTime(2026, 6, 6, 0, 0, 0, DateTimeKind.Utc), // website found later
+            InvestorRelationsCheckedAt = Utc("2026-06-14"),
+            InvestorRelationsRetryAfter = Utc("2026-06-20"), // still backing off
+            WebsiteCheckedAt = Utc("2026-06-16"), // website found later
             InvestorRelationsDiscoveryVersion = CurrentVersion,
         };
 
         var eligible = InvestorRelationsDiscoveryService
-            .PendingDiscovery(Cutoff, CurrentVersion)
+            .PendingDiscovery(Now, CurrentVersion)
             .Compile();
 
         eligible(stock).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(0, 1)] // first miss → the initial backoff
+    [InlineData(1, 2)] // then double each subsequent miss…
+    [InlineData(2, 4)]
+    [InlineData(4, 8)]
+    [InlineData(8, 15)] // 16 would exceed the cap → clamped to 15
+    [InlineData(15, 15)] // and stays at the cap thereafter
+    public void ComputeBackoff_DoublesFromInitialUpToCap(double previousDays, double expectedDays)
+    {
+        InvestorRelationsDiscoveryService
+            .ComputeBackoff(TimeSpan.FromDays(previousDays), initialDays: 1, maxDays: 15)
+            .Should()
+            .Be(TimeSpan.FromDays(expectedDays));
     }
 }

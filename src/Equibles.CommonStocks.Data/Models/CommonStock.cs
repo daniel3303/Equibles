@@ -71,6 +71,16 @@ public class CommonStock
     public int InvestorRelationsDiscoveryVersion { get; set; }
 
     /// <summary>
+    /// Earliest time (UTC) this stock may be re-probed after a definitive miss. Each miss backs off
+    /// exponentially — the wait doubles from the initial backoff up to the configured cap — so a
+    /// transiently-blocked site (a Cloudflare "access denied", a one-off render failure) is retried
+    /// within a day rather than written off for weeks, while a persistently-missing site still settles
+    /// at the cap. Null until the first miss; a row stamped before this field existed (or eligible by
+    /// version / website-changed) is re-probed immediately, then gets its own backoff schedule.
+    /// </summary>
+    public DateTime? InvestorRelationsRetryAfter { get; set; }
+
+    /// <summary>
     /// When an IR content scraper (news/events) last worked through this stock (UTC),
     /// stamped on every cycle the stock is scraped — whether or not new rows were
     /// found. Null until first scraped. Scrapers order their cohort least-recently
