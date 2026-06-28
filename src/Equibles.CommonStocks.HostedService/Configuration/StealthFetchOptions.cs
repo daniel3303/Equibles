@@ -40,4 +40,13 @@ public class StealthFetchOptions
     /// fetch degrades to a miss and the stock is re-probed later.
     /// </summary>
     public int ConnectTimeoutSeconds { get; set; } = 20;
+
+    /// <summary>
+    /// Hard ceiling (seconds) on the whole stealth operation — connect, context, page, and render
+    /// combined. None of the underlying Playwright calls has a built-in timeout, so a wedged sidecar
+    /// could hang any of them forever; this bounds the entire operation so it always releases its
+    /// concurrency slot and degrades to a miss. Set above ConnectTimeoutSeconds + RenderTimeoutSeconds
+    /// so it only fires on a genuine hang, not a legitimately slow render.
+    /// </summary>
+    public int OperationTimeoutSeconds { get; set; } = 90;
 }

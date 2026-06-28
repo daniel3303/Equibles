@@ -34,15 +34,9 @@ public static class ServiceCollectionExtensions
 
         // Typed client: short timeout and a contact User-Agent, following many
         // redirects to land on the real IR page. Response size is capped so a
-        // misbehaving host can't stream an unbounded body into memory.
-        services.AddHttpClient<InvestorRelationsProbeClient>(client =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(10);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd(
-                "EquiblesBot/1.0 (+https://equibles.com)"
-            );
-            client.MaxResponseContentBufferSize = 2 * 1024 * 1024;
-        });
+        // IR-page discovery probes through the stealth sidecar only (no plain-HTTP client): IR hosts
+        // are bot-protected, so plain HTTP only ever returned challenge pages that failed validation.
+        services.AddScoped<InvestorRelationsProbeClient>();
 
         services.AddHostedService<InvestorRelationsDiscoveryWorker>();
 
