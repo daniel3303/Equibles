@@ -101,45 +101,93 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
         await _concurrencyLimiter.WaitAsync(cancellationToken);
         try
         {
-            var playwright = await EnsureDriver(cancellationToken);
+            // Hard ceiling on the WHOLE operation (connect + context + page + render). None of the
+            // Playwright calls below has a built-in timeout, so a wedged/over-loaded sidecar could
+            // leave any of them hanging indefinitely. Every await is observed against this linked
+            // token, so a hang at any stage degrades to a miss and the caller re-probes later.
+            using var opCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            opCts.CancelAfter(TimeSpan.FromSeconds(_options.OperationTimeoutSeconds));
+            var opToken = opCts.Token;
 
-            // cloakserve speaks CDP over WebSocket; connect, work, disconnect. The connect is bounded
-            // by a timeout: a wedged/over-loaded sidecar can leave ConnectOverCDPAsync hanging
-            // indefinitely (no built-in timeout), and a single hung connect holds a concurrency slot
-            // forever — enough of them stall the whole discovery sweep. On timeout this degrades to a
-            // miss like any other connect failure, and the caller re-probes the stock later.
-            await using var browser = await playwright
-                .Chromium.ConnectOverCDPAsync(_options.SidecarUrl)
-                .WaitAsync(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), cancellationToken);
-            var context = await browser.NewContextAsync();
+            IBrowser browser = null;
+            IBrowserContext context = null;
             try
             {
-                var page = await context.NewPageAsync();
-                return await action(page);
+                var playwright = await EnsureDriver(opToken);
+
+                // cloakserve speaks CDP over WebSocket; connect, work, disconnect. A tighter connect
+                // timeout fails a dead sidecar faster than the overall ceiling.
+                browser = await playwright
+                    .Chromium.ConnectOverCDPAsync(_options.SidecarUrl)
+                    .WaitAsync(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), opToken);
+                context = await browser.NewContextAsync().WaitAsync(opToken);
+                var page = await context.NewPageAsync().WaitAsync(opToken);
+                return await action(page).WaitAsync(opToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                // Outran OperationTimeoutSeconds (a wedged sidecar hung connect, context, page, or
+                // render). Degrade to a miss rather than holding the slot.
+                _logger.LogWarning("Stealth operation timed out for {Url}", url);
+                return null;
+            }
+            catch (TimeoutException)
+            {
+                // The CDP connect outran ConnectTimeoutSeconds (wedged/over-loaded sidecar).
+                _logger.LogWarning("Stealth connect timed out for {Url}", url);
+                return null;
+            }
+            catch (PlaywrightException ex)
+            {
+                // Connection refused, navigation failure, or render timeout. The caller degrades to a
+                // miss rather than failing the batch.
+                _logger.LogWarning(ex, "Stealth fetch failed for {Url}", url);
+                return null;
             }
             finally
             {
-                await context.CloseAsync();
+                // Best-effort, bounded teardown: on a wedged sidecar CloseAsync / CDP-disconnect can
+                // itself hang, which would hold the concurrency slot past the ceiling. Cap each and
+                // swallow — a leaked context/connection on the dying sidecar is the lesser evil.
+                await CloseQuietly(context, browser);
             }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        finally
         {
-            throw;
+            // Always release the permit — the missing release here previously leaked one slot per
+            // call, so after MaxConcurrency calls every stealth render blocked forever (the sweep
+            // froze: "running but never completing").
+            _concurrencyLimiter.Release();
         }
-        catch (TimeoutException)
+    }
+
+    // Tears down the page context and CDP connection best-effort, each bounded by a short budget: on
+    // a wedged sidecar the close/disconnect can itself hang, which would hold the concurrency slot
+    // past the operation ceiling. A leaked context on the dying sidecar is the lesser evil.
+    private async Task CloseQuietly(IBrowserContext context, IBrowser browser)
+    {
+        try
         {
-            // The CDP connect outran ConnectTimeoutSeconds (wedged/over-loaded sidecar). Degrade to a
-            // miss rather than holding the concurrency slot; the stock is re-probed on a later cycle.
-            _logger.LogWarning("Stealth connect timed out for {Url}", url);
-            return null;
+            if (context != null)
+                await context.CloseAsync().WaitAsync(TimeSpan.FromSeconds(5));
         }
-        catch (PlaywrightException ex)
+        catch (Exception ex)
         {
-            // Connection refused, navigation failure, or render timeout. Enabled-but-
-            // broken is a misconfiguration worth surfacing, but the caller still
-            // degrades to a miss rather than failing the batch.
-            _logger.LogWarning(ex, "Stealth fetch failed for {Url}", url);
-            return null;
+            _logger.LogDebug(ex, "Stealth context close failed (sidecar likely wedged)");
+        }
+
+        try
+        {
+            if (browser != null)
+                await browser.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Stealth browser disconnect failed (sidecar likely wedged)");
         }
     }
 
