@@ -72,7 +72,9 @@ public class EmbeddingRepository : BaseRepository<Embedding>
         if (ticker != null)
         {
             var loweredTicker = ticker.ToLowerInvariant();
-            query = query.Where(e => e.Chunk.Ticker != null && e.Chunk.Ticker.ToLower() == loweredTicker);
+            query = query.Where(e =>
+                e.Chunk.Ticker != null && e.Chunk.Ticker.ToLower() == loweredTicker
+            );
         }
 
         if (documentId.HasValue)

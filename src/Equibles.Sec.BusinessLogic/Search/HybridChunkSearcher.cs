@@ -181,9 +181,7 @@ public class HybridChunkSearcher
 
         var scored = new List<(Guid Id, double Similarity)>();
         foreach (var stored in storedVectors)
-            scored.Add(
-                (stored.ChunkId, CosineSimilarity(queryVector, stored.Vector.ToArray()))
-            );
+            scored.Add((stored.ChunkId, CosineSimilarity(queryVector, stored.Vector.ToArray())));
 
         return scored
             .OrderByDescending(entry => entry.Similarity)
@@ -241,10 +239,7 @@ public class HybridChunkSearcher
                 byId[chunk.Id] = chunk;
         }
 
-        return orderedIds
-            .Where(id => byId.ContainsKey(id))
-            .Select(id => byId[id])
-            .ToList();
+        return orderedIds.Where(id => byId.ContainsKey(id)).Select(id => byId[id]).ToList();
     }
 
     private static DateTime? ToUtc(DateOnly? date)
