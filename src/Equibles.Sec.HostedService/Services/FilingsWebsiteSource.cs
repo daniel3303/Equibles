@@ -1,4 +1,3 @@
-using System.Text;
 using Equibles.CommonStocks.BusinessLogic.Websites;
 using Equibles.Sec.BusinessLogic.Websites;
 using Equibles.Sec.Data.Models;
@@ -84,9 +83,11 @@ public class FilingsWebsiteSource : IWebsiteSource
 
     /// <summary>
     /// Loads the normalised text of the stock's most recent filing of
-    /// <paramref name="filingType"/>, or null when it has none. Content bytes are
-    /// large, so each document gets its own short-lived scope instead of
-    /// accumulating in one change tracker for the whole batch.
+    /// <paramref name="filingType"/>, or null when it has none. The filing body is
+    /// not stored on <c>Document.Content</c> — the ingestion pipeline splits it into
+    /// ordered <c>Chunk</c> rows (for retrieval), so the text is reassembled from
+    /// those. Each document gets its own short-lived scope instead of accumulating a
+    /// whole batch's chunks in one change tracker.
     /// </summary>
     private async Task<string> LoadLatestFilingText(
         Guid stockId,
@@ -95,9 +96,11 @@ public class FilingsWebsiteSource : IWebsiteSource
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
+        var documents = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
+        var chunks = scope.ServiceProvider.GetRequiredService<ChunkRepository>();
 
-        var documentId = await repo.GetAll()
+        var documentId = await documents
+            .GetAll()
             .Where(d => d.CommonStockId == stockId && d.DocumentType == filingType)
             .OrderByDescending(d => d.ReportingDate)
             .Select(d => (Guid?)d.Id)
@@ -105,8 +108,16 @@ public class FilingsWebsiteSource : IWebsiteSource
         if (documentId == null)
             return null;
 
-        var document = await repo.GetWithContent(documentId.Value);
-        var bytes = document?.Content?.FileContent?.Bytes;
-        return bytes is { Length: > 0 } ? Encoding.UTF8.GetString(bytes) : null;
+        // Chunks tile the document in order and overlap at their boundaries, so the
+        // website disclosure is always wholly inside a chunk, and joining in Index
+        // order preserves URL order for the extractor's corporate-over-IR preference.
+        var parts = await chunks
+            .GetAll()
+            .Where(c => c.DocumentId == documentId.Value)
+            .OrderBy(c => c.Index)
+            .Select(c => c.Content)
+            .ToListAsync(cancellationToken);
+
+        return parts.Count == 0 ? null : string.Join("\n", parts);
     }
 }

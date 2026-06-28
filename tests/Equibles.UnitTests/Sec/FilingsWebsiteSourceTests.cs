@@ -1,10 +1,8 @@
-using System.Text;
 using Equibles.CommonStocks.BusinessLogic.Websites;
 using Equibles.CommonStocks.Data;
-using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
-using Equibles.Media.Data;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.Data.Models.Chunks;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -13,7 +11,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Xunit;
-using File = Equibles.Media.Data.Models.File;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -21,7 +18,9 @@ namespace Equibles.UnitTests.Sec;
 /// Contract: <c>FilingsWebsiteSource</c> reads the website disclosure from the
 /// stock's most recent stored filing, trying 10-K first (where the disclosure is
 /// mandated), then DEF 14A, then 10-Q — and reads the most recent filing of a
-/// type, since a company's website can change over its filing history.
+/// type, since a company's website can change over its filing history. The filing
+/// body is stored as ordered <c>Chunk</c> rows (not on <c>Document.Content</c>), so
+/// the source reassembles the text from those chunks.
 /// </summary>
 public class FilingsWebsiteSourceTests
 {
@@ -40,8 +39,7 @@ public class FilingsWebsiteSourceTests
             new IModuleConfiguration[]
             {
                 new CommonStocksModuleConfiguration(),
-                new DocumentOnlyModuleConfiguration(),
-                new MediaModuleConfiguration(),
+                new DocumentAndChunkModuleConfiguration(),
             }
         );
         ctx.Database.EnsureCreated();
@@ -55,50 +53,48 @@ public class FilingsWebsiteSourceTests
         var services = new ServiceCollection();
         services.AddScoped(_ => NewContext(options));
         services.AddScoped<DocumentRepository>();
+        services.AddScoped<ChunkRepository>();
         return new FilingsWebsiteSource(
             services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             Substitute.For<ILogger<FilingsWebsiteSource>>()
         );
     }
 
+    /// <summary>
+    /// Seeds a filing whose body is split across <paramref name="chunkContents"/> in
+    /// order — mirroring how the ingestion pipeline stores the text as chunks.
+    /// </summary>
     private static async Task SeedFiling(
         DbContextOptions<EquiblesFinancialDbContext> options,
         Guid stockId,
         DocumentType type,
         DateOnly reportingDate,
-        string text
+        params string[] chunkContents
     )
     {
         using var ctx = NewContext(options);
-        // GetWithContent eagerly includes the CommonStock principal, so the
-        // document's stock must exist for the row to materialise.
-        if (!await ctx.Set<CommonStock>().AnyAsync(cs => cs.Id == stockId))
-            ctx.Set<CommonStock>()
+        var document = new Document
+        {
+            CommonStockId = stockId,
+            DocumentType = type,
+            ReportingDate = reportingDate,
+        };
+        ctx.Set<Document>().Add(document);
+        await ctx.SaveChangesAsync();
+
+        for (var i = 0; i < chunkContents.Length; i++)
+            ctx.Set<Chunk>()
                 .Add(
-                    new CommonStock
+                    new Chunk
                     {
-                        Id = stockId,
-                        Ticker = stockId.ToString("N")[..8],
-                        Cik = stockId.ToString("N")[..10],
-                        Name = "Seeded Stock",
+                        DocumentId = document.Id,
+                        Index = i,
+                        Content = chunkContents[i],
+                        DocumentType = type,
+                        Ticker = "EXM",
+                        ReportingDate = reportingDate.ToDateTime(TimeOnly.MinValue),
                     }
                 );
-        ctx.Set<Document>()
-            .Add(
-                new Document
-                {
-                    CommonStockId = stockId,
-                    DocumentType = type,
-                    ReportingDate = reportingDate,
-                    Content = new File
-                    {
-                        Name = "filing",
-                        Extension = "txt",
-                        ContentType = "text/plain",
-                        FileContent = { Bytes = Encoding.UTF8.GetBytes(text) },
-                    },
-                }
-            );
         await ctx.SaveChangesAsync();
     }
 
@@ -182,6 +178,28 @@ public class FilingsWebsiteSourceTests
 
         results[proxyOnly].Should().Be("www.from-proxy.com");
         results[tenQOnly].Should().Be("www.from-10q.com");
+    }
+
+    [Fact]
+    public async Task DisclosureInALaterChunk_IsReassembledAndFound()
+    {
+        var options = NewDbOptions();
+        var stockId = Guid.NewGuid();
+        // The disclosure lives past the first chunk: the source must read every chunk
+        // in Index order, not just chunk 0.
+        await SeedFiling(
+            options,
+            stockId,
+            DocumentType.TenK,
+            new DateOnly(2025, 9, 27),
+            "Item 1. Business. The company designs and sells products worldwide.",
+            "Available Information. Our website address is www.later-chunk.com, where filings are posted."
+        );
+
+        var results = await BuildSut(options)
+            .FindWebsites([Stock(stockId)], CancellationToken.None);
+
+        results[stockId].Should().Be("www.later-chunk.com");
     }
 
     [Fact]
