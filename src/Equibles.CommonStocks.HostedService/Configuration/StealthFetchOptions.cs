@@ -32,4 +32,12 @@ public class StealthFetchOptions
     /// IR fetch goes through the sidecar.
     /// </summary>
     public int MaxConcurrency { get; set; } = 6;
+
+    /// <summary>
+    /// Timeout (seconds) for the CDP connect to the sidecar. ConnectOverCDPAsync has no built-in
+    /// timeout, so a wedged or over-loaded sidecar can leave a connect hanging forever, holding a
+    /// concurrency slot and — enough of them — stalling the whole discovery sweep. On timeout the
+    /// fetch degrades to a miss and the stock is re-probed later.
+    /// </summary>
+    public int ConnectTimeoutSeconds { get; set; } = 20;
 }
