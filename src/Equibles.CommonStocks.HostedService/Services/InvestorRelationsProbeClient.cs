@@ -26,11 +26,14 @@ public class InvestorRelationsProbeClient
     }
 
     /// <summary>
-    /// Returns the validated investor-relations URL for <paramref name="website"/> together with the
-    /// platform classified from its page, or null when no candidate resolves to a recognisable IR
-    /// page (or no sidecar is configured).
+    /// Probes <paramref name="website"/> for an investor-relations page and returns a classified
+    /// <see cref="IrProbeResult"/>: <c>Found</c> with the validated URL + platform; <c>NoIrPageFound</c>
+    /// when every candidate was assessed and none was an IR page; or <c>Inconclusive</c> when the
+    /// stealth engine was unavailable for one or more candidates, so a real IR page may have been
+    /// missed. With no sidecar configured the probe reports <c>NoIrPageFound</c> (it can't get past bot
+    /// walls anyway, and re-probing won't help).
     /// </summary>
-    public async Task<IrDiscoveryResult> Discover(
+    public async Task<IrProbeResult> Discover(
         string website,
         IEnumerable<string> paths,
         IEnumerable<string> subdomains,
@@ -38,42 +41,64 @@ public class InvestorRelationsProbeClient
     )
     {
         if (!_stealthClient.IsEnabled)
-            return null;
+            return IrProbeResult.NoIrPage;
 
         var candidates = InvestorRelationsCandidateBuilder.Build(website, paths, subdomains);
 
-        // Render each guessed path/subdomain through the sidecar; the first that validates wins.
+        // Render each guessed path/subdomain through the sidecar; the first that validates wins. Track
+        // whether any candidate couldn't be assessed (engine unavailable) so a transient failure isn't
+        // reported as a conclusive "no IR page".
+        var anyTransient = false;
         foreach (var candidate in candidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var resolved = await TryResolve(candidate, cancellationToken);
-            if (resolved != null)
-                return resolved;
+            var (page, transient) = await ProbeCandidate(candidate, candidate, cancellationToken);
+            if (page != null)
+                return IrProbeResult.Found(page);
+            anyTransient |= transient;
         }
 
         // None of the guesses validated. Crawl the homepage and follow the investor-relations link it
         // exposes — the IR page is often at a location guessing can't reach (a Q4 / GCS host, a
         // regional or locale path, a deeper path), and the homepage URL itself is sometimes the IR site.
-        return await CrawlHomepage(website, cancellationToken);
+        var (homepageResult, homepageTransient) = await CrawlHomepage(website, cancellationToken);
+        if (homepageResult != null)
+            return IrProbeResult.Found(homepageResult);
+        anyTransient |= homepageTransient;
+
+        return anyTransient ? IrProbeResult.Inconclusive : IrProbeResult.NoIrPage;
     }
 
-    private async Task<IrDiscoveryResult> TryResolve(
+    // Renders one candidate and classifies it: a validated page; a non-validating render or a
+    // definitively-absent host (both conclusive — assessed, not an IR page here); or a transient engine
+    // failure that left the candidate unassessed.
+    private async Task<(IrDiscoveryResult Page, bool Transient)> ProbeCandidate(
+        string url,
+        string fallbackUrl,
+        CancellationToken cancellationToken
+    )
+    {
+        var fetch = await FetchRendered(url, cancellationToken);
+        return fetch.Status switch
+        {
+            StealthFetchStatus.Rendered => (BuildResult(fetch.Html, url, fallbackUrl), false),
+            StealthFetchStatus.PageUnavailable => (null, false),
+            _ => (null, true),
+        };
+    }
+
+    // Renders the page through the stealth sidecar (most IR hosts are bot-protected), returning its
+    // classified outcome. Degrades an unexpected throw to a transient sidecar-unavailable result so a
+    // single host never fails the discovery batch nor is wrongly written off as having no IR page.
+    private async Task<StealthFetchResult> FetchRendered(
         string url,
         CancellationToken cancellationToken
     )
     {
-        var html = await FetchRendered(url, cancellationToken);
-        return html == null ? null : BuildResult(html, url, url);
-    }
-
-    // Renders the page through the stealth sidecar (most IR hosts are bot-protected). Degrades to
-    // null on any error so a single host never fails the discovery batch.
-    private async Task<string> FetchRendered(string url, CancellationToken cancellationToken)
-    {
         try
         {
-            return await _stealthClient.FetchHtml(url, cancellationToken);
+            return await _stealthClient.TryFetchHtml(url, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -81,21 +106,18 @@ public class InvestorRelationsProbeClient
         }
         catch (Exception ex)
         {
-            // FetchHtml is contracted to degrade to null, but a sidecar navigation timeout/error can
-            // still surface as an exception. Swallow it: a single host that throws must not bubble out
-            // of the probe, or the caller skips the definitive-miss back-off and the stock re-occupies
-            // every batch, starving the rest of the universe.
             _logger.LogDebug(ex, "Investor relations stealth probe failed for {Url}", url);
-            return null;
+            return StealthFetchResult.SidecarUnavailable;
         }
     }
 
     /// <summary>
     /// Fetches the company homepage and either validates it directly as the IR site (when the website
     /// itself is an investor.* host) or follows the investor-relations link(s) it exposes — catching
-    /// IR pages at locations path/subdomain guessing can't reach.
+    /// IR pages at locations path/subdomain guessing can't reach. Returns the validated page (or null)
+    /// and whether any fetch was transiently unassessable.
     /// </summary>
-    private async Task<IrDiscoveryResult> CrawlHomepage(
+    private async Task<(IrDiscoveryResult Result, bool Transient)> CrawlHomepage(
         string website,
         CancellationToken cancellationToken
     )
@@ -105,34 +127,39 @@ public class InvestorRelationsProbeClient
         // normalize it here too.
         var homepage = NormalizeWebsite(website);
         if (homepage == null)
-            return null;
+            return (null, false);
 
-        var html = await FetchRendered(homepage, cancellationToken);
-        if (html == null)
-            return null;
+        var fetch = await FetchRendered(homepage, cancellationToken);
+        if (fetch.Status != StealthFetchStatus.Rendered)
+            // Couldn't load the homepage — transient unless the host is definitively absent.
+            return (null, fetch.Status != StealthFetchStatus.PageUnavailable);
+
+        var html = fetch.Html;
 
         // The website itself might BE the IR site (e.g. investor.acme.com).
         var self = BuildResult(html, homepage, website);
         if (self != null)
-            return self;
+            return (self, false);
 
+        var anyTransient = false;
         foreach (var link in InvestorRelationsLinkExtractor.Extract(html, homepage))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var resolved = await TryResolve(link, cancellationToken);
-            if (resolved != null)
+            var (page, transient) = await ProbeCandidate(link, link, cancellationToken);
+            if (page != null)
             {
                 _logger.LogInformation(
                     "Investor relations page resolved via homepage link {Link} for {Website}",
                     link,
                     website
                 );
-                return resolved;
+                return (page, false);
             }
+            anyTransient |= transient;
         }
 
-        return null;
+        return (null, anyTransient);
     }
 
     // Turns a possibly-scheme-less website into an absolute http(s) URL, or null when it can't be

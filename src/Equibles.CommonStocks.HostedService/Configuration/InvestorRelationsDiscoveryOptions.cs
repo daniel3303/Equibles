@@ -35,19 +35,29 @@ public class InvestorRelationsDiscoveryOptions : ScraperOptions
     ["ir", "investors", "investor", "investorrelations"];
 
     /// <summary>
-    /// Initial backoff (days) before re-probing a stock whose last attempt found no IR page. Each
-    /// subsequent definitive miss doubles the wait, capped at <see cref="RetryMaxBackoffDays"/>, so a
-    /// transiently-blocked site (a Cloudflare "access denied", a one-off render failure) is retried
-    /// within a day instead of written off for weeks, while a persistent miss still backs off to the
-    /// cap. Transient probe errors are not stamped at all and retry on the next cycle.
+    /// Initial backoff (days) before re-probing a stock whose last attempt <em>conclusively</em> found
+    /// no IR page (every candidate was assessed and none validated). Each subsequent conclusive miss
+    /// doubles the wait, capped at <see cref="RetryMaxBackoffDays"/>, so a persistent miss settles at
+    /// the cap. An <em>inconclusive</em> attempt — the stealth engine was unavailable for a candidate —
+    /// uses the shorter <see cref="RetryTransientBackoffHours"/> instead, so a stock with a reachable IR
+    /// page isn't exiled for weeks over one bad sidecar moment.
     /// </summary>
     public int RetryInitialBackoffDays { get; set; } = 1;
 
     /// <summary>
-    /// Cap (days) on the exponential re-probe backoff — a miss never waits longer than this between
-    /// attempts, so even a long-failing site is re-checked at least this often.
+    /// Cap (days) on the exponential re-probe backoff — a conclusive miss never waits longer than this
+    /// between attempts, so even a long-failing site is re-checked at least this often.
     /// </summary>
     public int RetryMaxBackoffDays { get; set; } = 15;
+
+    /// <summary>
+    /// Backoff (hours) before re-probing a stock whose last attempt was <em>inconclusive</em> — the
+    /// stealth engine was unavailable for a candidate, so a real IR page may have been missed. Short and
+    /// fixed (it does not escalate): long enough not to re-occupy a batch slot every cycle, short enough
+    /// that a transiently-unreachable IR page is recovered within the day rather than after the
+    /// multi-day conclusive-miss schedule.
+    /// </summary>
+    public int RetryTransientBackoffHours { get; set; } = 6;
 
     /// <summary>
     /// How many candidate probes to run concurrently within a cycle. Each probe escalates to a

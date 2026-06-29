@@ -54,7 +54,10 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
 
     public bool IsEnabled => !string.IsNullOrWhiteSpace(_options.SidecarUrl);
 
-    public Task<string> FetchHtml(string url, CancellationToken cancellationToken) =>
+    public async Task<string> FetchHtml(string url, CancellationToken cancellationToken) =>
+        (await TryFetchHtml(url, cancellationToken)).Html;
+
+    public Task<StealthFetchResult> TryFetchHtml(string url, CancellationToken cancellationToken) =>
         RunInStealthPage(
             url,
             async page =>
@@ -65,12 +68,12 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
             cancellationToken
         );
 
-    public Task<string> FetchRaw(string url, CancellationToken cancellationToken)
+    public async Task<string> FetchRaw(string url, CancellationToken cancellationToken)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
-            return Task.FromResult<string>(null);
+            return null;
 
-        return RunInStealthPage(
+        var result = await RunInStealthPage(
             url,
             async page =>
             {
@@ -82,21 +85,24 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
             },
             cancellationToken
         );
+        return result.Html;
     }
 
     /// <summary>
     /// Connects to the sidecar, runs <paramref name="action"/> against a fresh page
-    /// in an isolated context, and disconnects. Returns null (degrading to a miss)
-    /// when the engine is disabled or the connection/navigation/render fails.
+    /// in an isolated context, and disconnects. Returns a classified
+    /// <see cref="StealthFetchResult"/> — rendered HTML on success, or a page-/sidecar-unavailable
+    /// status when the connection/navigation/render fails — so the caller can tell a conclusive miss
+    /// from a transient infrastructure failure. Never throws except on caller cancellation.
     /// </summary>
-    private async Task<string> RunInStealthPage(
+    private async Task<StealthFetchResult> RunInStealthPage(
         string url,
         Func<IPage, Task<string>> action,
         CancellationToken cancellationToken
     )
     {
         if (!IsEnabled)
-            return null;
+            return StealthFetchResult.Disabled;
 
         await _concurrencyLimiter.WaitAsync(cancellationToken);
         try
@@ -122,7 +128,8 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
                     .WaitAsync(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), opToken);
                 context = await browser.NewContextAsync().WaitAsync(opToken);
                 var page = await context.NewPageAsync().WaitAsync(opToken);
-                return await action(page).WaitAsync(opToken);
+                var html = await action(page).WaitAsync(opToken);
+                return StealthFetchResult.Rendered(html);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -131,22 +138,22 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
             catch (OperationCanceledException)
             {
                 // Outran OperationTimeoutSeconds (a wedged sidecar hung connect, context, page, or
-                // render). Degrade to a miss rather than holding the slot.
+                // render). Transient — degrade to a sidecar-unavailable miss rather than holding the slot.
                 _logger.LogWarning("Stealth operation timed out for {Url}", url);
-                return null;
+                return StealthFetchResult.SidecarUnavailable;
             }
             catch (TimeoutException)
             {
-                // The CDP connect outran ConnectTimeoutSeconds (wedged/over-loaded sidecar).
+                // The CDP connect outran ConnectTimeoutSeconds (wedged/over-loaded sidecar). Transient.
                 _logger.LogWarning("Stealth connect timed out for {Url}", url);
-                return null;
+                return StealthFetchResult.SidecarUnavailable;
             }
             catch (PlaywrightException ex)
             {
-                // Connection refused, navigation failure, or render timeout. The caller degrades to a
-                // miss rather than failing the batch.
+                // A navigation/render/connection failure. Classify it: a host that does not exist is a
+                // conclusive miss for this URL, everything else is a transient sidecar-side failure.
                 _logger.LogWarning(ex, "Stealth fetch failed for {Url}", url);
-                return null;
+                return ClassifyPlaywrightFailure(ex);
             }
             finally
             {
@@ -189,6 +196,25 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
         {
             _logger.LogDebug(ex, "Stealth browser disconnect failed (sidecar likely wedged)");
         }
+    }
+
+    // A navigation that fails because the host does not exist (DNS) or is unreachable is a CONCLUSIVE
+    // miss for that URL — re-probing won't change it. Anything else (connection refused/closed, a render
+    // timeout, or a reaped/wedged sidecar surfacing as "Target/Browser/Page closed" or "Process exited")
+    // is treated as a TRANSIENT sidecar-side failure, so the caller retries rather than writing the page
+    // off. Erring toward transient is deliberate: a wrongly-transient verdict costs a re-probe, a
+    // wrongly-conclusive one exiles a live page for the full backoff.
+    private static StealthFetchResult ClassifyPlaywrightFailure(PlaywrightException ex)
+    {
+        var message = ex.Message ?? "";
+        var hostDefinitivelyAbsent =
+            message.Contains("ERR_NAME_NOT_RESOLVED", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("ERR_ADDRESS_UNREACHABLE", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("ERR_ADDRESS_INVALID", StringComparison.OrdinalIgnoreCase);
+
+        return hostDefinitivelyAbsent
+            ? StealthFetchResult.PageUnavailable
+            : StealthFetchResult.SidecarUnavailable;
     }
 
     private Task Navigate(IPage page, string url) =>

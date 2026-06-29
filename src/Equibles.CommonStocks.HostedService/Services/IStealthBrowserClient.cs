@@ -26,6 +26,15 @@ public interface IStealthBrowserClient
     Task<string> FetchHtml(string url, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Like <see cref="FetchHtml"/>, but returns a <see cref="StealthFetchResult"/> that classifies the
+    /// outcome — rendered, page-unavailable (conclusive), or sidecar-unavailable (transient). Callers
+    /// that must distinguish "the page genuinely isn't there" from "the engine couldn't reach it this
+    /// time" use this; everyone else can keep using <see cref="FetchHtml"/>. Degrades rather than
+    /// throwing, on the same contract as <see cref="FetchHtml"/>.
+    /// </summary>
+    Task<StealthFetchResult> TryFetchHtml(string url, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Clears the host's bot challenge in the stealth browser, then fetches
     /// <paramref name="url"/> from within that cleared page context and returns the
     /// raw response body. Unlike <see cref="FetchHtml"/> this returns the bytes the
