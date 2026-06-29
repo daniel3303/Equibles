@@ -19,4 +19,11 @@ public static class LikePattern
     {
         return $"%{Escape(text)}%";
     }
+
+    // Escapes LIKE metacharacters and appends % for a prefix (starts-with) match.
+    // Use with EF.Functions.ILike(column, pattern, LikePattern.EscapeChar).
+    public static string StartsWith(string text)
+    {
+        return $"{Escape(text)}%";
+    }
 }

@@ -11,25 +11,37 @@ public class CommonStockRepository : BaseRepository<CommonStock>
 
     public IQueryable<CommonStock> Search(string search)
     {
-        var query = GetAll().OrderBy(c => c.Ticker).AsQueryable();
+        var query = GetAll();
 
-        if (!string.IsNullOrEmpty(search))
+        if (string.IsNullOrEmpty(search))
         {
-            foreach (var word in search.Split(" "))
-            {
-                // Escape LIKE metacharacters so a typed '_' or '%' matches literally
-                // rather than behaving as a wildcard.
-                var pattern = LikePattern.Contains(word);
-                query = query.Where(c =>
-                    EF.Functions.ILike(c.Ticker, pattern, LikePattern.EscapeChar)
-                    || EF.Functions.ILike(c.Name, pattern, LikePattern.EscapeChar)
-                    || EF.Functions.ILike(c.Description, pattern, LikePattern.EscapeChar)
-                    || EF.Functions.ILike(c.Industry.Name, pattern, LikePattern.EscapeChar)
-                );
-            }
+            return query.OrderBy(c => c.Ticker);
         }
 
-        return query;
+        foreach (var word in search.Split(" "))
+        {
+            // Escape LIKE metacharacters so a typed '_' or '%' matches literally
+            // rather than behaving as a wildcard.
+            var pattern = LikePattern.Contains(word);
+            query = query.Where(c =>
+                EF.Functions.ILike(c.Ticker, pattern, LikePattern.EscapeChar)
+                || EF.Functions.ILike(c.Name, pattern, LikePattern.EscapeChar)
+                || EF.Functions.ILike(c.Description, pattern, LikePattern.EscapeChar)
+                || EF.Functions.ILike(c.Industry.Name, pattern, LikePattern.EscapeChar)
+            );
+        }
+
+        // Rank an exact ticker hit to the very top, then ticker prefix hits, ahead of the
+        // alphabetical fallback — so a typed symbol (e.g. "ARE") leads its group instead of
+        // sorting past a per-group result cap alphabetically (ARE would otherwise fall behind
+        // ABXXF/ACHC/…). Both comparisons run through ILike so they stay case-insensitive and
+        // metacharacter-safe like the filter above; ordering by the boolean puts matches first.
+        var exact = LikePattern.Escape(search.Trim());
+        var prefix = LikePattern.StartsWith(search.Trim());
+        return query
+            .OrderByDescending(c => EF.Functions.ILike(c.Ticker, exact, LikePattern.EscapeChar))
+            .ThenByDescending(c => EF.Functions.ILike(c.Ticker, prefix, LikePattern.EscapeChar))
+            .ThenBy(c => c.Ticker);
     }
 
     public async Task<CommonStock> GetByCik(string cik)
