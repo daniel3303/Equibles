@@ -124,27 +124,35 @@ public class InvestorRelationsDiscoveryService : IImporter
                 _options.CandidateSubdomains,
                 cancellationToken
             );
-            // Definitive miss — every candidate was probed and none validated. Stamp the attempt so
-            // the stock backs off for the cooldown window instead of re-occupying a batch slot every
-            // cycle. Transient errors below deliberately skip the stamp.
-            if (result == null)
-            {
-                await MarkChecked(candidate.Id);
-                return false;
-            }
 
-            if (await Persist(candidate.Id, result))
+            switch (result.Outcome)
             {
-                _logger.LogDebug(
-                    "Discovered investor relations page for {Ticker}: {Url} ({Platform})",
-                    candidate.Ticker,
-                    result.Url,
-                    result.Platform
-                );
-                return true;
-            }
+                case IrProbeOutcome.Found:
+                    if (await Persist(candidate.Id, result.Page))
+                    {
+                        _logger.LogDebug(
+                            "Discovered investor relations page for {Ticker}: {Url} ({Platform})",
+                            candidate.Ticker,
+                            result.Page.Url,
+                            result.Page.Platform
+                        );
+                        return true;
+                    }
+                    return false;
 
-            return false;
+                case IrProbeOutcome.Inconclusive:
+                    // The stealth engine was unavailable for a candidate, so a real IR page may have
+                    // been missed. Back off briefly and retry rather than exiling the stock on the
+                    // escalating conclusive-miss schedule.
+                    await MarkTransientMiss(candidate.Id);
+                    return false;
+
+                default:
+                    // Conclusive miss — every candidate was assessed and none validated. Stamp the
+                    // exponential backoff so the stock isn't re-occupying a batch slot every cycle.
+                    await MarkConclusiveMiss(candidate.Id);
+                    return false;
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -233,7 +241,9 @@ public class InvestorRelationsDiscoveryService : IImporter
         return true;
     }
 
-    private async Task MarkChecked(Guid commonStockId)
+    // A conclusive miss: every candidate was assessed and none was an IR page. Stamp the escalating
+    // backoff so a persistent miss settles at the cap instead of re-occupying a batch slot every cycle.
+    private async Task MarkConclusiveMiss(Guid commonStockId)
     {
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
@@ -248,6 +258,29 @@ public class InvestorRelationsDiscoveryService : IImporter
         // persistent miss settles at the cap. Computed from the prior schedule BEFORE the stamps below
         // overwrite it.
         stock.InvestorRelationsRetryAfter = now.Add(NextBackoff(stock));
+        stock.InvestorRelationsCheckedAt = now;
+        stock.InvestorRelationsDiscoveryVersion = InvestorRelationsDiscoveryVersion.Current;
+        await repo.SaveChanges();
+    }
+
+    // An inconclusive attempt: the stealth engine was unavailable for a candidate this cycle, so a real
+    // IR page may have been missed. Stamp a short, fixed cooldown — long enough not to re-occupy a batch
+    // slot every cycle, short enough that a stock with a reachable IR page isn't exiled on the escalating
+    // conclusive-miss schedule over one bad sidecar moment. Deliberately does NOT advance the exponential
+    // schedule.
+    private async Task MarkTransientMiss(Guid commonStockId)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+
+        var stock = await repo.Get(commonStockId);
+        if (stock == null)
+            return;
+
+        var now = DateTime.UtcNow;
+        stock.InvestorRelationsRetryAfter = now.AddHours(
+            Math.Max(1, _options.RetryTransientBackoffHours)
+        );
         stock.InvestorRelationsCheckedAt = now;
         stock.InvestorRelationsDiscoveryVersion = InvestorRelationsDiscoveryVersion.Current;
         await repo.SaveChanges();
