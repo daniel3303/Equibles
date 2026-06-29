@@ -1,5 +1,7 @@
 using Equibles.CommonStocks.HostedService.Services;
+using Equibles.Worker;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace Equibles.UnitTests.CommonStocks;
@@ -26,10 +28,7 @@ public class InvestorRelationsProbeClientTests
     {
         var stealth = EnabledStealth(_ => IrPage);
 
-        var client = new InvestorRelationsProbeClient(
-            stealth,
-            NullLogger<InvestorRelationsProbeClient>.Instance
-        );
+        var client = NewClient(stealth);
 
         var result = await client.Discover("acme.com", ["investors"], [], CancellationToken.None);
 
@@ -44,10 +43,7 @@ public class InvestorRelationsProbeClientTests
         // fully assessed and has no IR page. This is the only case that earns the escalating backoff.
         var stealth = EnabledStealth(_ => NotIr);
 
-        var client = new InvestorRelationsProbeClient(
-            stealth,
-            NullLogger<InvestorRelationsProbeClient>.Instance
-        );
+        var client = NewClient(stealth);
 
         var result = await client.Discover(
             "acme.com",
@@ -67,10 +63,7 @@ public class InvestorRelationsProbeClientTests
         // so re-probing won't help — a conclusive miss, not a transient one.
         var stealth = EnabledStealthResults(_ => StealthFetchResult.PageUnavailable);
 
-        var client = new InvestorRelationsProbeClient(
-            stealth,
-            NullLogger<InvestorRelationsProbeClient>.Instance
-        );
+        var client = NewClient(stealth);
 
         var result = await client.Discover(
             "acme.com",
@@ -95,10 +88,7 @@ public class InvestorRelationsProbeClientTests
                 : StealthFetchResult.Rendered(NotIr)
         );
 
-        var client = new InvestorRelationsProbeClient(
-            stealth,
-            NullLogger<InvestorRelationsProbeClient>.Instance
-        );
+        var client = NewClient(stealth);
 
         var result = await client.Discover("acme.com", ["investors"], [], CancellationToken.None);
 
@@ -117,10 +107,7 @@ public class InvestorRelationsProbeClientTests
             : StealthFetchResult.Rendered(NotIr)
         );
 
-        var client = new InvestorRelationsProbeClient(
-            stealth,
-            NullLogger<InvestorRelationsProbeClient>.Instance
-        );
+        var client = NewClient(stealth);
 
         var result = await client.Discover(
             "acme.com",
@@ -141,10 +128,7 @@ public class InvestorRelationsProbeClientTests
         var stealth = Substitute.For<IStealthBrowserClient>();
         stealth.IsEnabled.Returns(false);
 
-        var client = new InvestorRelationsProbeClient(
-            stealth,
-            NullLogger<InvestorRelationsProbeClient>.Instance
-        );
+        var client = NewClient(stealth);
 
         var result = await client.Discover("acme.com", ["investors"], [], CancellationToken.None);
 
@@ -166,10 +150,7 @@ public class InvestorRelationsProbeClientTests
                 Task.FromException<StealthFetchResult>(new TimeoutException("navigation timeout"))
             );
 
-        var client = new InvestorRelationsProbeClient(
-            stealth,
-            NullLogger<InvestorRelationsProbeClient>.Instance
-        );
+        var client = NewClient(stealth);
 
         IrProbeResult result = null;
         var act = async () =>
@@ -194,10 +175,7 @@ public class InvestorRelationsProbeClientTests
             : NotIr
         );
 
-        var client = new InvestorRelationsProbeClient(
-            stealth,
-            NullLogger<InvestorRelationsProbeClient>.Instance
-        );
+        var client = NewClient(stealth);
 
         var result = await client.Discover(
             "acme.com",
@@ -209,6 +187,61 @@ public class InvestorRelationsProbeClientTests
         result.Outcome.Should().Be(IrProbeOutcome.Found);
         result.Page!.Url.Should().Be("https://acme.com/en-us/investors");
     }
+
+    [Fact]
+    public async Task Discover_RenderHitsRateLimitInterstitial_IsInconclusiveAndCoolsHostDown()
+    {
+        // The render landed on a Cloudflare 1015 page. The probe must NOT treat that as a validated
+        // page or a conclusive miss — it cools the host down and reports the attempt inconclusive so
+        // the stock retries after the cooldown.
+        const string rateLimited =
+            "<html><head><title>Error 1015</title></head>"
+            + "<body>You are being rate limited</body></html>";
+        var stealth = EnabledStealth(_ => rateLimited);
+        var gate = NewGate();
+
+        var client = new InvestorRelationsProbeClient(
+            stealth,
+            gate,
+            NullLogger<InvestorRelationsProbeClient>.Instance
+        );
+
+        var result = await client.Discover("acme.com", ["investors"], [], CancellationToken.None);
+
+        result.Outcome.Should().Be(IrProbeOutcome.Inconclusive);
+        gate.IsCoolingDown("https://acme.com/investors").Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Discover_HostAlreadyCoolingDown_SkipsTheRenderEntirely()
+    {
+        // A host parked in cooldown is skipped without a render — no sidecar call — and reported
+        // inconclusive so the stock waits out the cooldown rather than being written off.
+        var stealth = EnabledStealth(_ => IrPage);
+        var gate = NewGate();
+        gate.RecordRateLimited("https://acme.com/investors");
+
+        var client = new InvestorRelationsProbeClient(
+            stealth,
+            gate,
+            NullLogger<InvestorRelationsProbeClient>.Instance
+        );
+
+        var result = await client.Discover("acme.com", ["investors"], [], CancellationToken.None);
+
+        result.Outcome.Should().Be(IrProbeOutcome.Inconclusive);
+        await stealth.DidNotReceive().TryFetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    private static InvestorRelationsProbeClient NewClient(IStealthBrowserClient stealth) =>
+        new(stealth, NewGate(), NullLogger<InvestorRelationsProbeClient>.Instance);
+
+    // A gate with no inter-request delay so tests don't pay the throttle wait.
+    private static OutboundHostGate NewGate() =>
+        new(
+            Options.Create(new OutboundHostGateOptions { MinIntervalMilliseconds = 0 }),
+            NullLogger<OutboundHostGate>.Instance
+        );
 
     private static IStealthBrowserClient EnabledStealth(Func<string, string> bodyForUrl) =>
         EnabledStealthResults(url => StealthFetchResult.Rendered(bodyForUrl(url)));

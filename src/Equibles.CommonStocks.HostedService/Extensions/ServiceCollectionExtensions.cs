@@ -1,7 +1,8 @@
 using Equibles.CommonStocks.BusinessLogic.Websites;
 using Equibles.CommonStocks.HostedService.Services;
 using Equibles.Core.AutoWiring;
-using Microsoft.Extensions.DependencyInjection;
+using Equibles.Worker;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Equibles.CommonStocks.HostedService.Extensions;
 
@@ -11,6 +12,13 @@ public static class ServiceCollectionExtensions
     {
         services.AutoWireServicesFrom<InvestorRelationsDiscoveryService>();
         services.AutoWireServicesFrom<Equibles.Integrations.Wikidata.WikidataClient>();
+
+        // Shared, process-wide politeness gate for outbound scraping (per-host throttle + rate-limit
+        // cooldown). A singleton so every scraper lane (IR discovery here, webcast/slides capture,
+        // IR-flow) shares one view of each host — the rate-limit ban is IP-wide. TryAdd so a host that
+        // also registers it (the commercial worker wires its capture path to the same instance) doesn't
+        // create a second.
+        services.TryAddSingleton<OutboundHostGate>();
 
         // Secondary IWebsiteSource: Wikidata's official-website fact joined on the
         // SEC CIK (the filings source registered by the Sec module is the primary).
