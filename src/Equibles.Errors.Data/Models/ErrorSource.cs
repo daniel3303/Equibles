@@ -34,6 +34,7 @@ public sealed class ErrorSource
     public static readonly ErrorSource FdaCatalystScraper = new("FdaCatalystScraper");
     public static readonly ErrorSource Authentication = new("Authentication");
     public static readonly ErrorSource Alvis = new("Alvis");
+    public static readonly ErrorSource WebRequest = new("WebRequest");
     public static readonly ErrorSource Other = new("Other");
 
     public static IEnumerable<ErrorSource> GetAll() =>
@@ -62,6 +63,7 @@ public sealed class ErrorSource
             FdaCatalystScraper,
             Authentication,
             Alvis,
+            WebRequest,
             Other,
         ];
 
