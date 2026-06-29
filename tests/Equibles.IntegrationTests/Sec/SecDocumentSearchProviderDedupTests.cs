@@ -47,8 +47,13 @@ public class SecDocumentSearchProviderDedupTests : ParadeDbMcpTestBase
 
         await DbContext.SaveChangesAsync();
 
-        var sut = new SecDocumentSearchProvider(HybridChunkSearcherFactory.Bm25Only(DbContext));
+        var sut = new SecDocumentSearchProvider(
+            HybridChunkSearcherFactory.Bm25Only(DbContext),
+            new DocumentRepository(DbContext)
+        );
 
+        // "zzqxquantum" is no company's ticker, so the exact-ticker path finds nothing and the
+        // provider falls back to the content search this test is pinning.
         var group = await sut.Search(
             new SearchRequest { Query = "zzqxquantum", MaxPerProvider = 5 },
             CancellationToken.None
