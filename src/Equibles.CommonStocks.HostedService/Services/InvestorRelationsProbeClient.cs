@@ -1,3 +1,5 @@
+using Equibles.Worker;
+
 namespace Equibles.CommonStocks.HostedService.Services;
 
 /// <summary>
@@ -14,14 +16,17 @@ public class InvestorRelationsProbeClient
     private const int MaxUrlLength = 256;
 
     private readonly IStealthBrowserClient _stealthClient;
+    private readonly OutboundHostGate _hostGate;
     private readonly ILogger<InvestorRelationsProbeClient> _logger;
 
     public InvestorRelationsProbeClient(
         IStealthBrowserClient stealthClient,
+        OutboundHostGate hostGate,
         ILogger<InvestorRelationsProbeClient> logger
     )
     {
         _stealthClient = stealthClient;
+        _hostGate = hostGate;
         _logger = logger;
     }
 
@@ -96,9 +101,34 @@ public class InvestorRelationsProbeClient
         CancellationToken cancellationToken
     )
     {
+        // Politeness gate: skip a host parked in a rate-limit cooldown, and otherwise pace requests so
+        // the candidate burst doesn't trip the host's limiter. A skipped/paced host is transient — the
+        // stock retries after the cooldown rather than being recorded as having no IR page.
+        if (_hostGate.IsCoolingDown(url))
+            return StealthFetchResult.SidecarUnavailable;
         try
         {
-            return await _stealthClient.TryFetchHtml(url, cancellationToken);
+            await _hostGate.WaitForTurn(url, cancellationToken);
+        }
+        catch (HostCoolingDownException)
+        {
+            return StealthFetchResult.SidecarUnavailable;
+        }
+
+        try
+        {
+            var result = await _stealthClient.TryFetchHtml(url, cancellationToken);
+            // The render landed on a rate-limit interstitial (Cloudflare 1015): cool the host down so
+            // every lane stops hitting it, and treat this candidate as a transient miss.
+            if (
+                result.Status == StealthFetchStatus.Rendered
+                && RateLimitDetector.IsRateLimited(null, result.Html)
+            )
+            {
+                _hostGate.RecordRateLimited(url);
+                return StealthFetchResult.SidecarUnavailable;
+            }
+            return result;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
