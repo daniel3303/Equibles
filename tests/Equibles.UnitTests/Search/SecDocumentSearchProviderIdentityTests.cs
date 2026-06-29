@@ -45,7 +45,7 @@ public class SecDocumentSearchProviderIdentityTests
     [Fact]
     public void Category_AndOrder_ArePinnedConstants()
     {
-        var sut = new SecDocumentSearchProvider(null);
+        var sut = new SecDocumentSearchProvider(null, null);
 
         sut.Category.Should().Be("SEC Filings");
         sut.Order.Should().Be(10);
