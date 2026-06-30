@@ -11,6 +11,15 @@ public class DocumentProcessorWorker : BaseScraperWorker
     protected override TimeSpan SleepInterval => TimeSpan.FromSeconds(15);
     protected override ErrorSource ErrorSource => ErrorSource.DocumentProcessor;
 
+    // The embedding sidecar (vLLM) is recycled by autoheal and on every deploy, and then reloads
+    // its model for a minute or two. During that window every embedding cycle faults ("no
+    // embeddings produced — server likely down"). A faulted cycle backs off ~15s (ErrorBackoff is
+    // capped at SleepInterval), so this many consecutive faults is roughly five minutes of solid
+    // outage — comfortably past a normal reload. Below it the faults are transient and stay out of
+    // the Errors page; only a genuinely sustained outage records a single row. Live "is it down"
+    // visibility comes from the System Health probe + activity feed, not these rows.
+    protected override int ErrorReportThreshold => 20;
+
     public DocumentProcessorWorker(
         ILogger<DocumentProcessorWorker> logger,
         IServiceScopeFactory scopeFactory,

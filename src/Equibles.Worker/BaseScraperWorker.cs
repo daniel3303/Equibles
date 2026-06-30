@@ -19,6 +19,7 @@ public abstract class BaseScraperWorker : BackgroundService
     private bool _retrySoonRequested;
     private bool _continuationRequested;
     private int _consecutiveFailures;
+    private bool _errorReportedForStreak;
 
     protected abstract string WorkerName { get; }
     protected abstract TimeSpan SleepInterval { get; }
@@ -122,6 +123,19 @@ public abstract class BaseScraperWorker : BackgroundService
     /// </summary>
     protected virtual TimeSpan MaxErrorBackoffInterval => TimeSpan.FromMinutes(15);
 
+    /// <summary>
+    /// Number of consecutive faulted cycles a streak must reach before it is persisted to the
+    /// Errors table. Default 1 — the first faulted cycle is reported immediately (the long-standing
+    /// behavior). A worker whose dependency restarts routinely — e.g. the embeddings processor,
+    /// whose vLLM sidecar is recycled by autoheal and then reloads its model over a cycle or two —
+    /// raises this so a brief, self-healing blip logs a warning and backs off (still retrying via
+    /// <see cref="ErrorBackoff"/>) WITHOUT flooding the Errors page. Only a streak that reaches the
+    /// threshold records a single Error row for the episode; once recorded the rest of the streak
+    /// stays warnings, and a clean cycle resets the streak. Live liveness is unaffected — the
+    /// "cycle failed" activity row is still published every faulted cycle regardless of this.
+    /// </summary>
+    protected virtual int ErrorReportThreshold => 1;
+
     protected BaseScraperWorker(
         ILogger logger,
         IServiceScopeFactory scopeFactory,
@@ -197,16 +211,36 @@ public abstract class BaseScraperWorker : BackgroundService
                 // never throws, so the backoff path below always runs.
                 faulted = true;
                 _consecutiveFailures++;
-                Logger.LogCritical(ex, "Critical error in {Worker}", WorkerName);
-                // ErrorReporter publishes its own ScraperActivity with the same
-                // source + the error message, so the activity feed gets a row
-                // without double-emitting here.
-                await ErrorReporter.Report(
-                    ErrorSource,
-                    $"{WorkerName}.DoWork",
-                    ex.Message,
-                    ex.StackTrace
-                );
+
+                // A streak only lands in the Errors table once it reaches ErrorReportThreshold
+                // (default 1 → the first fault), and only once per streak. Below the threshold —
+                // a brief, self-healing blip on a worker that opts into a higher threshold — we
+                // log a warning and let the backoff retry, keeping transient restarts out of the
+                // Errors page operators watch for real defects. A clean cycle resets the streak.
+                if (_consecutiveFailures >= ErrorReportThreshold && !_errorReportedForStreak)
+                {
+                    _errorReportedForStreak = true;
+                    Logger.LogCritical(ex, "Critical error in {Worker}", WorkerName);
+                    // ErrorReporter publishes its own ScraperActivity with the same
+                    // source + the error message, so the activity feed gets a row
+                    // without double-emitting here.
+                    await ErrorReporter.Report(
+                        ErrorSource,
+                        $"{WorkerName}.DoWork",
+                        ex.Message,
+                        ex.StackTrace
+                    );
+                }
+                else
+                {
+                    Logger.LogWarning(
+                        ex,
+                        "{Worker} cycle faulted ({Failures} in a row; reports at {Threshold})",
+                        WorkerName,
+                        _consecutiveFailures,
+                        ErrorReportThreshold
+                    );
+                }
             }
 
             TimeSpan interval;
@@ -228,8 +262,9 @@ public abstract class BaseScraperWorker : BackgroundService
             else
             {
                 // A clean cycle clears the failure streak, so the next fault starts
-                // again from the base ErrorBackoffInterval.
+                // again from the base ErrorBackoffInterval and a fresh report streak.
                 _consecutiveFailures = 0;
+                _errorReportedForStreak = false;
                 if (_retrySoonRequested)
                 {
                     interval = NotReadyRetryInterval;
