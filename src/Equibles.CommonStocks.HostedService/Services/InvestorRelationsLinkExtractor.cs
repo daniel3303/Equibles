@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 
 namespace Equibles.CommonStocks.HostedService.Services;
@@ -76,7 +77,28 @@ public static class InvestorRelationsLinkExtractor
             }
         }
 
-        return primary.Concat(secondary).Take(max).ToList();
+        // Keep deep press-release / news-article detail pages last among the primaries so a shallower
+        // IR landing/section page wins downstream ("first that validates"). An article is only a
+        // fallback — still returned, so a stock whose sole IR link is an article is unaffected (GH-5018).
+        var landingPrimary = primary.Where(url => !IsDeepArticle(url));
+        var articlePrimary = primary.Where(IsDeepArticle);
+        return landingPrimary.Concat(articlePrimary).Concat(secondary).Take(max).ToList();
+    }
+
+    // A deep press-release / news-article detail page (e.g. ir.host/news-release-details/2026/...)
+    // carries the same IR nav/footer as the landing page, so it validates as an IR page — but it is a
+    // single, often-dated article and a poor canonical IR entry point. Matches the path shape the
+    // GH-5018 audit used: a news/press segment followed by a detail/release/update/video marker or a
+    // dated /20YY/ segment.
+    private static readonly Regex DeepArticlePath = new(
+        @"(news|press)[-/].*(detail|release|update|video|/20\d\d/)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled
+    );
+
+    private static bool IsDeepArticle(string url)
+    {
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            && DeepArticlePath.IsMatch(uri.AbsolutePath);
     }
 
     // The link's host is an ir. / investor(s). subdomain, or its path carries an "ir" segment
