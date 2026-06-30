@@ -29,6 +29,20 @@ public interface ISharesOutstandingProvider
     );
 
     /// <summary>
+    /// The issuer's current entity-wide share count: the more-recently-filed of the latest
+    /// consolidated cover-page fact and the latest per-class sum. A single-class issuer (only a
+    /// consolidated fact) or a multi-class issuer that never reported a consolidated count (only
+    /// per-class facts) returns that one figure. When an issuer reports <em>both</em> — e.g. a
+    /// dual-class filer whose classless cover-page series ended years ago when it switched to
+    /// per-class reporting — the stale consolidated value must not win, so the figure from the
+    /// most recent filing is used. Null when the issuer has neither on record.
+    /// </summary>
+    Task<long?> GetCurrentSharesOutstanding(
+        CommonStock stock,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// True when the authoritative shares-outstanding fact comes from a foreign-private-issuer
     /// annual form (20-F or 40-F). Such issuers report the cover-page count in <em>ordinary</em>
     /// shares, a different unit from the US-listed ADR a price feed quotes, so the reported count

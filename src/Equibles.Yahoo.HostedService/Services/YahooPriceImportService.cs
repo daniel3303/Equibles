@@ -187,10 +187,12 @@ public class YahooPriceImportService
 
         // The SEC cover-page count (dei:EntityCommonStockSharesOutstanding) is authoritative and
         // current; Yahoo's figure is per-share-class and lags corporate actions. Defer to EDGAR
-        // for the share count when the issuer has a consolidated SEC fact, so Yahoo can't overwrite
-        // it with a stale or single-class value (#3575/#2503).
+        // for the share count when the issuer has an SEC fact, so Yahoo can't overwrite it with a
+        // stale or single-class value (#3575/#2503). Uses the more-recently-filed of the
+        // consolidated and per-class facts so a dual-class issuer frozen on a stale consolidated
+        // value falls through to its current per-class total (#5158).
         var sharesProvider = scope.ServiceProvider.GetRequiredService<ISharesOutstandingProvider>();
-        var edgarShares = await sharesProvider.GetReportedSharesOutstanding(
+        var edgarShares = await sharesProvider.GetCurrentSharesOutstanding(
             stock,
             cancellationToken
         );
