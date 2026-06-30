@@ -394,6 +394,72 @@ public class SharesOutstandingProviderTests
         shares.Should().Be(12_116_000_000);
     }
 
+    [Fact]
+    public async Task GetCurrentSharesOutstanding_StaleConsolidatedAndCurrentPerClass_PrefersCurrentPerClassSum()
+    {
+        await using var db = NewDb();
+        // Mastercard: the classless dei:EntityCommonStockSharesOutstanding series stopped in 2010
+        // when it switched to per-class reporting, so the latest CONSOLIDATED fact is the stale
+        // 2010 122,530,193 while the current entity total is the sum of the 2026 per-class facts.
+        // The stale consolidated value must not win (#5158).
+        var stock = new CommonStock
+        {
+            Ticker = "MA",
+            Name = "Mastercard Incorporated",
+            Cik = "0001141391",
+        };
+        var concept = new FinancialConcept
+        {
+            Taxonomy = FactTaxonomy.Dei,
+            Tag = "EntityCommonStockSharesOutstanding",
+        };
+        db.AddRange(stock, concept);
+        // The stale classless cover-page fact, last reported in the 2010 Q3 10-Q.
+        db.Add(
+            Fact(
+                stock,
+                concept,
+                122_530_193m,
+                new DateOnly(2010, 10, 27),
+                new DateOnly(2010, 9, 30)
+            )
+        );
+        // The current entity total, reported per share class in the latest 2026 filing.
+        const string acc = "0001141391-26-000050";
+        db.Add(
+            ClassFact(
+                stock,
+                concept,
+                900_000_000m,
+                new(2026, 4, 30),
+                new(2026, 4, 23),
+                acc,
+                "us-gaap:CommonClassAMember"
+            )
+        );
+        db.Add(
+            ClassFact(
+                stock,
+                concept,
+                8_000_000m,
+                new(2026, 4, 30),
+                new(2026, 4, 23),
+                acc,
+                "ma:ClassBMember"
+            )
+        );
+        await db.SaveChangesAsync();
+
+        var provider = new SharesOutstandingProvider(
+            new FinancialFactRepository(db),
+            new FinancialConceptRepository(db)
+        );
+
+        var shares = await provider.GetCurrentSharesOutstanding(stock);
+
+        shares.Should().Be(908_000_000);
+    }
+
     [Theory]
     [InlineData("TwentyF")]
     [InlineData("FortyF")]

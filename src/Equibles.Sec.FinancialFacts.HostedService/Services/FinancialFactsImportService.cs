@@ -140,10 +140,10 @@ public class FinancialFactsImportService
 
     // Sets the stock's share count from the authoritative SEC cover-page fact the import just
     // ingested, so the lagging per-share-class Yahoo figure no longer drives market cap and
-    // ownership percentages (#3575/#2503). Uses the single-class consolidated fact when present
-    // (#3575); for a multi-class issuer, which carries no consolidated fact, falls back to the sum
-    // across its per-class cover-page facts (#2503). No-ops when neither is on record or the value
-    // is unchanged.
+    // ownership percentages (#3575/#2503). Takes the more-recently-filed of the single-class
+    // consolidated fact (#3575) and the summed per-class facts (#2503), so a dual-class issuer
+    // whose classless series ended years ago is not frozen on a stale consolidated value (#5158).
+    // No-ops when neither is on record or the value is unchanged.
     private async Task UpdateSharesOutstanding(
         CommonStock stock,
         CancellationToken cancellationToken
@@ -151,9 +151,7 @@ public class FinancialFactsImportService
     {
         using var scope = _scopeFactory.CreateScope();
         var sharesProvider = scope.ServiceProvider.GetRequiredService<ISharesOutstandingProvider>();
-        var shares =
-            await sharesProvider.GetReportedSharesOutstanding(stock, cancellationToken)
-            ?? await sharesProvider.GetSummedPerClassSharesOutstanding(stock, cancellationToken);
+        var shares = await sharesProvider.GetCurrentSharesOutstanding(stock, cancellationToken);
         if (shares == null)
             return;
 

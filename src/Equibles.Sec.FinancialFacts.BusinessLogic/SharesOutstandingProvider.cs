@@ -44,29 +44,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     public async Task<long?> GetReportedSharesOutstanding(
         CommonStock stock,
         CancellationToken cancellationToken = default
-    )
-    {
-        var conceptIds = await ResolveConceptIds(cancellationToken);
-        if (conceptIds.Count == 0)
-            return null;
-
-        // The latest filing wins (FiledDate), then the most recent as-of date within it; the value
-        // is a whole share count.
-        var value = await _financialFactRepository
-            .GetConsolidatedByStock(stock)
-            .Where(f => conceptIds.Contains(f.FinancialConceptId) && f.Unit == SharesUnit)
-            .OrderByDescending(f => f.FiledDate)
-            .ThenByDescending(f => f.PeriodEnd)
-            .Select(f => (decimal?)f.Value)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        // A corrupt/typo'd cover-page fact can carry a count that parses but exceeds Int64; the
-        // decimal->long cast would throw, crashing the caller. Treat an unrepresentable figure as
-        // none on record (null), matching how every other decimal->long cast here is range-checked.
-        return value.HasValue && value.Value >= long.MinValue && value.Value <= long.MaxValue
-            ? (long)value.Value
-            : (long?)null;
-    }
+    ) => (await GetLatestConsolidated(stock, cancellationToken))?.Shares;
 
     // The entity-wide share count for a multi-class issuer, summed across its share classes from
     // the latest filing's per-class cover-page facts, or null when the issuer reports no per-class
@@ -76,6 +54,70 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     public async Task<long?> GetSummedPerClassSharesOutstanding(
         CommonStock stock,
         CancellationToken cancellationToken = default
+    ) => (await GetLatestPerClass(stock, cancellationToken))?.Shares;
+
+    // The issuer's current entity total: the more-recently-filed of the latest consolidated fact
+    // and the latest per-class sum. Most issuers have only one of the two, in which case that one
+    // is returned. A dual-class filer (e.g. Mastercard, Visa) can have BOTH — its classless
+    // dei:EntityCommonStockSharesOutstanding series ended years ago when it moved to per-class
+    // reporting, leaving a stale consolidated fact alongside current per-class facts — so the
+    // figure from the most recent filing wins; a same-filing tie keeps the consolidated total,
+    // which is the entity figure directly (#5158).
+    public async Task<long?> GetCurrentSharesOutstanding(
+        CommonStock stock,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var consolidated = await GetLatestConsolidated(stock, cancellationToken);
+        var perClass = await GetLatestPerClass(stock, cancellationToken);
+
+        if (consolidated == null)
+            return perClass?.Shares;
+        if (perClass == null)
+            return consolidated.Value.Shares;
+
+        return perClass.Value.Filed > consolidated.Value.Filed
+            ? perClass.Value.Shares
+            : consolidated.Value.Shares;
+    }
+
+    // The latest-filed consolidated (classless) cover-page count and the date it was filed, or null
+    // when the issuer has no consolidated fact on record or the count is unrepresentable as Int64.
+    private async Task<(long Shares, DateOnly Filed)?> GetLatestConsolidated(
+        CommonStock stock,
+        CancellationToken cancellationToken
+    )
+    {
+        var conceptIds = await ResolveConceptIds(cancellationToken);
+        if (conceptIds.Count == 0)
+            return null;
+
+        // The latest filing wins (FiledDate), then the most recent as-of date within it; the value
+        // is a whole share count.
+        var match = await _financialFactRepository
+            .GetConsolidatedByStock(stock)
+            .Where(f => conceptIds.Contains(f.FinancialConceptId) && f.Unit == SharesUnit)
+            .OrderByDescending(f => f.FiledDate)
+            .ThenByDescending(f => f.PeriodEnd)
+            .Select(f => new { f.Value, f.FiledDate })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (match == null)
+            return null;
+
+        // A corrupt/typo'd cover-page fact can carry a count that parses but exceeds Int64; the
+        // decimal->long cast would throw, crashing the caller. Treat an unrepresentable figure as
+        // none on record (null), matching how every other decimal->long cast here is range-checked.
+        return match.Value >= long.MinValue && match.Value <= long.MaxValue
+            ? ((long)match.Value, match.FiledDate)
+            : ((long, DateOnly)?)null;
+    }
+
+    // The entity total summed across the latest filing's per-class cover-page facts and that
+    // filing's filed date, or null when the issuer reports no per-class count on the class-of-stock
+    // axis or the sum is unrepresentable as Int64.
+    private async Task<(long Shares, DateOnly Filed)?> GetLatestPerClass(
+        CommonStock stock,
+        CancellationToken cancellationToken
     )
     {
         var conceptIds = await ResolveConceptIds(cancellationToken);
@@ -115,7 +157,9 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
 
         // Same range-check: a corrupt per-class count can push the sum past Int64; degrade to null
         // rather than let the decimal->long cast throw.
-        return total > 0 && total <= long.MaxValue ? (long)total : (long?)null;
+        return total > 0 && total <= long.MaxValue
+            ? ((long)total, latest.FiledDate)
+            : ((long, DateOnly)?)null;
     }
 
     // True when the latest-filed consolidated shares fact — the one GetReportedSharesOutstanding
