@@ -25,11 +25,11 @@ public class InvestorRelationsCandidateBuilderTests
     }
 
     [Fact]
-    public void Build_PathsPrecedeSubdomains_AndUseRegistrableDomainForSubdomains()
+    public void Build_SubdomainsPrecedePaths_AndUseRegistrableDomainForSubdomains()
     {
-        // Contract: probe the company website's own paths first (strongest match
-        // when present), then IR subdomains of the registrable domain. The "www."
-        // is kept for same-origin path probes but stripped for subdomain hosts.
+        // Contract: probe the IR subdomains of the registrable domain first (the
+        // canonical investor portal), then the company website's own paths. The
+        // "www." is stripped for subdomain hosts but kept for same-origin path probes.
         var result = InvestorRelationsCandidateBuilder.Build(
             "https://www.acme.com",
             Paths,
@@ -39,10 +39,10 @@ public class InvestorRelationsCandidateBuilderTests
         result
             .Should()
             .Equal(
-                "https://www.acme.com/investor-relations",
-                "https://www.acme.com/ir",
                 "https://ir.acme.com",
-                "https://investors.acme.com"
+                "https://investors.acme.com",
+                "https://www.acme.com/investor-relations",
+                "https://www.acme.com/ir"
             );
     }
 
@@ -61,7 +61,7 @@ public class InvestorRelationsCandidateBuilderTests
     {
         var result = InvestorRelationsCandidateBuilder.Build("http://acme.com", ["ir"], ["ir"]);
 
-        result.Should().Equal("http://acme.com/ir", "http://ir.acme.com");
+        result.Should().Equal("http://ir.acme.com", "http://acme.com/ir");
     }
 
     [Fact]
@@ -94,6 +94,6 @@ public class InvestorRelationsCandidateBuilderTests
             [".ir."]
         );
 
-        result.Should().Equal("https://acme.com/investors", "https://ir.acme.com");
+        result.Should().Equal("https://ir.acme.com", "https://acme.com/investors");
     }
 }

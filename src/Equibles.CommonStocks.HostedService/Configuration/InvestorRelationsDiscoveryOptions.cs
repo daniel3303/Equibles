@@ -13,8 +13,9 @@ public class InvestorRelationsDiscoveryOptions : ScraperOptions
 
     /// <summary>
     /// Relative paths probed against the company website (e.g.
-    /// <c>https://acme.com/investor-relations</c>). Tried in order; the first that
-    /// resolves to a validated IR page wins.
+    /// <c>https://acme.com/investor-relations</c>). Tried in order, but only after
+    /// the subdomain candidates — a generic on-site path is often a redirecting
+    /// marketing stub, so the dedicated IR subdomain is preferred when it exists.
     /// </summary>
     public List<string> CandidatePaths { get; set; } =
     [
@@ -29,7 +30,8 @@ public class InvestorRelationsDiscoveryOptions : ScraperOptions
 
     /// <summary>
     /// Subdomain prefixes probed against the registrable domain (e.g.
-    /// <c>https://ir.acme.com</c>). Tried after the path candidates.
+    /// <c>https://ir.acme.com</c>). Tried before the path candidates: the dedicated
+    /// IR host is the canonical investor portal and the first that validates wins.
     /// </summary>
     public List<string> CandidateSubdomains { get; set; } =
     ["ir", "investors", "investor", "investorrelations"];
