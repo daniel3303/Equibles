@@ -8,9 +8,14 @@ namespace Equibles.CommonStocks.HostedService.Services;
 public static class InvestorRelationsCandidateBuilder
 {
     /// <summary>
-    /// Produces candidate URLs for <paramref name="website"/>: first the company
-    /// website with each <paramref name="paths"/> segment appended, then each
-    /// <paramref name="subdomains"/> prefix in front of the registrable domain.
+    /// Produces candidate URLs for <paramref name="website"/>: first each
+    /// <paramref name="subdomains"/> prefix in front of the registrable domain
+    /// (ir.acme.com, investors.acme.com), then the company website with each
+    /// <paramref name="paths"/> segment appended. Subdomains lead because the
+    /// dedicated IR host (the Q4 / GCS / Notified portal) is the canonical
+    /// investor site, whereas a generic on-site path like <c>/investor</c> is
+    /// often a marketing stub that client-side redirects to a single press
+    /// release — which then passes a keyword check while exposing no events feed.
     /// Returns an empty list when the website is missing or unparseable. Results
     /// are de-duplicated case-insensitively while preserving order.
     /// </summary>
@@ -45,18 +50,21 @@ public static class InvestorRelationsCandidateBuilder
 
         var candidates = new List<string>();
 
-        foreach (var path in paths)
-        {
-            if (string.IsNullOrWhiteSpace(path))
-                continue;
-            candidates.Add($"{scheme}://{host}/{path.Trim('/')}");
-        }
-
+        // Subdomains first: the dedicated IR host is the canonical investor portal,
+        // so probe it before falling back to guessed on-site paths (which can be
+        // redirecting marketing stubs).
         foreach (var subdomain in subdomains)
         {
             if (string.IsNullOrWhiteSpace(subdomain))
                 continue;
             candidates.Add($"{scheme}://{subdomain.Trim('.')}.{registrableDomain}");
+        }
+
+        foreach (var path in paths)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                continue;
+            candidates.Add($"{scheme}://{host}/{path.Trim('/')}");
         }
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
