@@ -28,7 +28,7 @@ public class YahooPriceImportServiceReconcileMarketCapTests
         long? edgarShares,
         long yahooShares,
         double yahooMarketCap
-    ) => (double)ReconcileMarketCapMethod.Invoke(null, [edgarShares, yahooShares, yahooMarketCap]);
+    ) => (double)ReconcileMarketCapMethod.Invoke(null, [edgarShares, yahooShares, yahooMarketCap, null]);
 
     [Fact]
     public void ReconcileMarketCap_EdgarSharesDifferFromYahoo_RescalesOntoEdgarBase()
