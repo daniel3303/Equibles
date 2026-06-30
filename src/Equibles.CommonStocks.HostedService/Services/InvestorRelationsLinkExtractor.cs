@@ -76,8 +76,18 @@ public static class InvestorRelationsLinkExtractor
             }
         }
 
-        return primary.Concat(secondary).Take(max).ToList();
+        // Among the primary candidates prefer the shallowest path, so an IR landing / overview page
+        // outranks a deep article / press-release detail page on the same IR host — downstream takes
+        // the first candidate that validates, and a deep "latest news" article validates too
+        // (GH-5018). OrderBy is stable, so equal-depth candidates keep their document order.
+        return primary.OrderBy(PathDepth).Concat(secondary).Take(max).ToList();
     }
+
+    // Number of non-empty path segments, used to rank a shallow IR landing above a deep article.
+    private static int PathDepth(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            ? uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Length
+            : int.MaxValue;
 
     // The link's host is an ir. / investor(s). subdomain, or its path carries an "ir" segment
     // (e.g. a locale-prefixed /ja/ir/) — strong IR signals even when the anchor text isn't English.
