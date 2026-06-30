@@ -23,7 +23,9 @@ public class YahooPriceImportServiceReconcileMarketCapZeroYahooSharesTests
         long? edgarShares,
         long yahooShares,
         double yahooMarketCap
-    ) => (double)ReconcileMarketCapMethod.Invoke(null, [edgarShares, yahooShares, yahooMarketCap, null]);
+    ) =>
+        (double)
+            ReconcileMarketCapMethod.Invoke(null, [edgarShares, yahooShares, yahooMarketCap, null]);
 
     [Fact]
     public void ReconcileMarketCap_YahooShareCountZero_KeepsYahooMarketCap()

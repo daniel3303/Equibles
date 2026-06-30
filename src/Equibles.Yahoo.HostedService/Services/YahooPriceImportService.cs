@@ -282,7 +282,8 @@ public class YahooPriceImportService
         long yahooShares,
         double yahooMarketCap,
         decimal? currentPrice = null
-    ) {
+    )
+    {
         if (edgarShares is > 0 && yahooShares > 0 && yahooMarketCap > 0)
             return yahooMarketCap * ((double)edgarShares.Value / yahooShares);
         if (edgarShares is > 0 && currentPrice is > 0)
