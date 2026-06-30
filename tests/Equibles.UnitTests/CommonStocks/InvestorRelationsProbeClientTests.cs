@@ -233,8 +233,89 @@ public class InvestorRelationsProbeClientTests
         await stealth.DidNotReceive().TryFetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
-    private static InvestorRelationsProbeClient NewClient(IStealthBrowserClient stealth) =>
-        new(stealth, NewGate(), NullLogger<InvestorRelationsProbeClient>.Instance);
+    [Fact]
+    public async Task Discover_KeywordValidButConfirmerRejects_IsConclusiveMiss()
+    {
+        // The page clears the keyword prefilter but the second-pass confirmer rejects it (e.g. it is a
+        // sitemap that merely links to IR sections, or a single press release stuffed with IR
+        // boilerplate). The candidate is assessed and is not a real IR page, so the probe reports a
+        // conclusive miss instead of persisting the wrong URL.
+        var stealth = EnabledStealth(_ => IrPage);
+        var confirmer = RejectingConfirmer();
+
+        var client = NewClient(stealth, confirmer);
+
+        var result = await client.Discover("acme.com", ["investors"], [], CancellationToken.None);
+
+        result.Outcome.Should().Be(IrProbeOutcome.NoIrPageFound);
+        result.Page.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Discover_KeywordValidAndConfirmerApproves_ReturnsFound()
+    {
+        // Keyword prefilter passes and the confirmer agrees it is a real IR page — it is persisted.
+        var stealth = EnabledStealth(_ => IrPage);
+        var confirmer = ApprovingConfirmer();
+
+        var client = NewClient(stealth, confirmer);
+
+        var result = await client.Discover("acme.com", ["investors"], [], CancellationToken.None);
+
+        result.Outcome.Should().Be(IrProbeOutcome.Found);
+        result.Page!.Url.Should().Be("https://acme.com/investors");
+    }
+
+    [Fact]
+    public async Task Discover_KeywordRejects_ConfirmerNotConsulted()
+    {
+        // The confirmer is the expensive second pass; it must run ONLY on pages that already cleared
+        // the cheap keyword prefilter — never on every render — so cost stays bounded to plausible
+        // candidates.
+        var stealth = EnabledStealth(_ => NotIr);
+        var confirmer = ApprovingConfirmer();
+
+        var client = NewClient(stealth, confirmer);
+
+        var result = await client.Discover("acme.com", ["investors"], [], CancellationToken.None);
+
+        result.Outcome.Should().Be(IrProbeOutcome.NoIrPageFound);
+        await confirmer
+            .DidNotReceive()
+            .IsInvestorRelationsPage(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    private static IInvestorRelationsPageConfirmer ApprovingConfirmer() => Confirmer(true);
+
+    private static IInvestorRelationsPageConfirmer RejectingConfirmer() => Confirmer(false);
+
+    private static IInvestorRelationsPageConfirmer Confirmer(bool verdict)
+    {
+        var confirmer = Substitute.For<IInvestorRelationsPageConfirmer>();
+        confirmer
+            .IsInvestorRelationsPage(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(verdict);
+        return confirmer;
+    }
+
+    private static InvestorRelationsProbeClient NewClient(
+        IStealthBrowserClient stealth,
+        params IInvestorRelationsPageConfirmer[] confirmers
+    ) =>
+        new(
+            stealth,
+            NewGate(),
+            NullLogger<InvestorRelationsProbeClient>.Instance,
+            confirmers.Length == 0 ? null : confirmers
+        );
 
     // A gate with no inter-request delay so tests don't pay the throttle wait.
     private static OutboundHostGate NewGate() =>

@@ -17,16 +17,22 @@ public class InvestorRelationsProbeClient
 
     private readonly IStealthBrowserClient _stealthClient;
     private readonly OutboundHostGate _hostGate;
+    private readonly IReadOnlyList<IInvestorRelationsPageConfirmer> _confirmers;
     private readonly ILogger<InvestorRelationsProbeClient> _logger;
 
     public InvestorRelationsProbeClient(
         IStealthBrowserClient stealthClient,
         OutboundHostGate hostGate,
-        ILogger<InvestorRelationsProbeClient> logger
+        ILogger<InvestorRelationsProbeClient> logger,
+        IEnumerable<IInvestorRelationsPageConfirmer> confirmers = null
     )
     {
         _stealthClient = stealthClient;
         _hostGate = hostGate;
+        // Optional second-pass confirmers. None in a standalone OSS build (the prefilter is the only
+        // gate); the commercial build registers one. A null is the no-confirmer case for the tests
+        // that construct the client directly.
+        _confirmers = confirmers?.ToList() ?? [];
         _logger = logger;
     }
 
@@ -85,12 +91,44 @@ public class InvestorRelationsProbeClient
     )
     {
         var fetch = await FetchRendered(url, cancellationToken);
-        return fetch.Status switch
+        if (fetch.Status == StealthFetchStatus.Rendered)
         {
-            StealthFetchStatus.Rendered => (BuildResult(fetch.Html, url, fallbackUrl), false),
-            StealthFetchStatus.PageUnavailable => (null, false),
-            _ => (null, true),
-        };
+            var page = BuildResult(fetch.Html, url, fallbackUrl);
+            // A keyword-validated page must also clear the optional second-pass confirmers before it
+            // counts as found. A confirmer rejection is a conclusive assessment of THIS candidate
+            // (assessed, not an IR page), so the probe keeps looking rather than retrying.
+            if (page == null || !await IsConfirmedIrPage(page.Url, fetch.Html, cancellationToken))
+                return (null, false);
+            return (page, false);
+        }
+
+        // PageUnavailable is conclusive (definitively absent); anything else is a transient engine miss.
+        return (null, fetch.Status != StealthFetchStatus.PageUnavailable);
+    }
+
+    // Runs the optional second-pass confirmers on a candidate that already passed the keyword
+    // prefilter. With no confirmer registered (the OSS default) every page is accepted, so behavior
+    // is keyword-only. The commercial build registers a confirmer that rejects the link-dense pages
+    // (sitemaps, indexes) and press releases the keyword check can't distinguish from a real IR hub.
+    private async Task<bool> IsConfirmedIrPage(
+        string url,
+        string html,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var confirmer in _confirmers)
+        {
+            if (!await confirmer.IsInvestorRelationsPage(url, html, cancellationToken))
+            {
+                _logger.LogDebug(
+                    "Investor relations candidate rejected by page confirmer: {Url}",
+                    url
+                );
+                return false;
+            }
+        }
+
+        return true;
     }
 
     // Renders the page through the stealth sidecar (most IR hosts are bot-protected), returning its
@@ -166,9 +204,10 @@ public class InvestorRelationsProbeClient
 
         var html = fetch.Html;
 
-        // The website itself might BE the IR site (e.g. investor.acme.com).
+        // The website itself might BE the IR site (e.g. investor.acme.com). It must clear the
+        // confirmers too; if it doesn't, fall through to following the homepage's IR links.
         var self = BuildResult(html, homepage, website);
-        if (self != null)
+        if (self != null && await IsConfirmedIrPage(self.Url, html, cancellationToken))
             return (self, false);
 
         var anyTransient = false;
