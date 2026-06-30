@@ -223,13 +223,26 @@ public class YahooPriceImportService
             changed = true;
         }
         // Reconcile Yahoo's market cap onto the authoritative EDGAR share base so it never
-        // disagrees with SharesOutStanding by the share-count ratio (#3575/#2503).
+        // disagrees with SharesOutStanding by the share-count ratio (#3575/#2503). When Yahoo's own
+        // market cap is unusable, fall back to EDGAR shares × the latest stored close (#5238) —
+        // otherwise a corrected SharesOutStanding never gets a matching MarketCapitalization.
+        decimal? currentPrice = null;
+        if (stats.MarketCapitalization == 0 && edgarShares is > 0)
+        {
+            var priceRepo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+            currentPrice = await priceRepo
+                .GetByStock(stock)
+                .OrderByDescending(p => p.Date)
+                .Select(p => (decimal?)p.Close)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
         var marketCap = ReconcileMarketCap(
             edgarShares,
             stats.SharesOutstanding,
-            stats.MarketCapitalization
+            stats.MarketCapitalization,
+            currentPrice
         );
-        if (stats.MarketCapitalization != 0 && stock.MarketCapitalization != marketCap)
+        if (marketCap != 0 && stock.MarketCapitalization != marketCap)
         {
             stock.MarketCapitalization = marketCap;
             changed = true;
@@ -258,14 +271,25 @@ public class YahooPriceImportService
     // The caller passes edgarShares == null for foreign private issuers (20-F/40-F), whose EDGAR
     // count is in ordinary shares — a different unit from the US-listed ADR — so they keep Yahoo's
     // self-consistent ADR market cap rather than being rescaled onto the ordinary base.
+    //
+    // Yahoo sometimes returns no market cap at all (summaryDetail.marketCap missing — common for
+    // multi-class issuers it hasn't reconciled, #5238): with no Yahoo market cap there is nothing
+    // to rescale, and the figure would otherwise stay stale forever even after EDGAR's share count
+    // is corrected. When a current price is available (the same import cycle's freshly-fetched
+    // close), compute EDGAR shares × price directly instead of leaving the stored value untouched.
     private static double ReconcileMarketCap(
         long? edgarShares,
         long yahooShares,
-        double yahooMarketCap
-    ) =>
-        edgarShares is > 0 && yahooShares > 0 && yahooMarketCap > 0
-            ? yahooMarketCap * ((double)edgarShares.Value / yahooShares)
-            : yahooMarketCap;
+        double yahooMarketCap,
+        decimal? currentPrice = null
+    )
+    {
+        if (edgarShares is > 0 && yahooShares > 0 && yahooMarketCap > 0)
+            return yahooMarketCap * ((double)edgarShares.Value / yahooShares);
+        if (edgarShares is > 0 && currentPrice is > 0)
+            return (double)edgarShares.Value * (double)currentPrice.Value;
+        return yahooMarketCap;
+    }
 
     private async Task SyncCompanyProfile(
         string ticker,
