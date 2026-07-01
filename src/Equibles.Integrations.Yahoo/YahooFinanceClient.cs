@@ -60,11 +60,7 @@ public class YahooFinanceClient : IYahooFinanceClient
     // events Yahoo returns for the window (events=split). Callers that need
     // only prices go through GetHistoricalPrices; the split capture piggybacks
     // on this same request so it costs no extra HTTP round-trip.
-    public async Task<YahooChartData> GetChart(
-        string ticker,
-        DateOnly startDate,
-        DateOnly endDate
-    )
+    public async Task<YahooChartData> GetChart(string ticker, DateOnly startDate, DateOnly endDate)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
         // Yahoo stamps daily bars in the exchange's local time, but the

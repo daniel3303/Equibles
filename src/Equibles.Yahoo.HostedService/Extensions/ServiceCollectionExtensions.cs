@@ -1,7 +1,7 @@
 using Equibles.CommonStocks.BusinessLogic.Websites;
-using Equibles.CorporateActions.BusinessLogic;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Contracts;
+using Equibles.CorporateActions.BusinessLogic;
 using Equibles.Yahoo.HostedService.Services;
 using Microsoft.Extensions.DependencyInjection;
 

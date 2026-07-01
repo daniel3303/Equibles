@@ -48,9 +48,7 @@ public class StockSplitCaptureManager
                 );
                 changes++;
             }
-            else if (
-                match.Numerator != split.Numerator || match.Denominator != split.Denominator
-            )
+            else if (match.Numerator != split.Numerator || match.Denominator != split.Denominator)
             {
                 match.Numerator = split.Numerator;
                 match.Denominator = split.Denominator;

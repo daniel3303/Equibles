@@ -29,5 +29,9 @@ public interface IInvestorRelationsPageConfirmer
     /// outage then degrades discovery to keyword-only behavior rather than wrongly writing a real IR
     /// page off as absent and exiling the stock on the miss back-off.
     /// </summary>
-    Task<bool> IsInvestorRelationsPage(string url, string html, CancellationToken cancellationToken);
+    Task<bool> IsInvestorRelationsPage(
+        string url,
+        string html,
+        CancellationToken cancellationToken
+    );
 }

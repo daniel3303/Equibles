@@ -6,8 +6,4 @@ namespace Equibles.CorporateActions.BusinessLogic;
 /// is how many distinct stocks had unreconciled splits before the cap, and
 /// <see cref="Skipped"/> is the remainder deferred to a later cycle.
 /// </summary>
-public record PendingSplitSelection(
-    IReadOnlyList<Guid> StockIds,
-    int TotalPending,
-    int Skipped
-);
+public record PendingSplitSelection(IReadOnlyList<Guid> StockIds, int TotalPending, int Skipped);
