@@ -17,7 +17,7 @@ public class FileManagerSaveInternalFileTests
     public async Task SaveInternalFile_NonAllowlistedExtension_PersistsBlobVerbatim()
     {
         var repository = Substitute.For<FileRepository>((EquiblesFinancialDbContext)null);
-        var sut = new FileManager(repository);
+        var sut = FileManagerTestFactory.Create(repository);
         var content = "gzip-xbrl-bytes"u8.ToArray();
 
         var file = await sut.SaveInternalFile(content, "xbrl-envelope", "gz", "application/gzip");

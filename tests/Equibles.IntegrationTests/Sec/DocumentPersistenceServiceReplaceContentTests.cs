@@ -48,11 +48,11 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
         new(
             new DocumentRepository(DbContext),
             new ChunkRepository(DbContext),
-            new FileManager(new FileRepository(DbContext)),
+            FileManagerTestFactory.Create(new FileRepository(DbContext)),
             new DocumentImageService(
                 new DocumentImageRepository(DbContext),
                 new FileRepository(DbContext),
-                new FileManager(new FileRepository(DbContext))
+                FileManagerTestFactory.Create(new FileRepository(DbContext))
             ),
             Substitute.For<IBus>()
         );

@@ -12,7 +12,7 @@ public class FileManagerSaveFileExtensionAllowlistTests
     public FileManagerSaveFileExtensionAllowlistTests()
     {
         var context = TestDbContextFactory.Create(new MediaModuleConfiguration());
-        _sut = new FileManager(new FileRepository(context));
+        _sut = FileManagerTestFactory.Create(new FileRepository(context));
     }
 
     // Contract: FileManager publishes a curated AcceptedExtensions allowlist
