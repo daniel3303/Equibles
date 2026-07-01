@@ -48,7 +48,9 @@ public class XbrlFactExtractionService
     /// extraction. Bump to reprocess the whole captured corpus after an
     /// extractor behavior change.
     /// </summary>
-    public const int CurrentVersion = 1;
+    // Version 2: TR2/TR3 zerodash + TR4/TR5 num-comma-decimal(-apos) format
+    // coverage in InlineXbrlParser.
+    public const int CurrentVersion = 2;
 
     private const int InsertBatchSize = 1000;
 
