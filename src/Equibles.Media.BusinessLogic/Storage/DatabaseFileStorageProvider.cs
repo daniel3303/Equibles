@@ -24,7 +24,10 @@ public class DatabaseFileStorageProvider : IFileStorageProvider
 
     public Task<byte[]> GetContent(File file)
     {
-        return Task.FromResult(file.FileContent.Bytes);
+        // Null-tolerant: a File indexed but never downloaded has a FileContent row with
+        // null Bytes, and callers treat null as "no content" — matching the pre-refactor
+        // `file.Content?.FileContent?.Bytes` semantics exactly.
+        return Task.FromResult(file.FileContent?.Bytes);
     }
 
     public Task<Stream> OpenRead(File file)
