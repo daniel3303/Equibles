@@ -27,9 +27,9 @@ public class ReportedStatementsCaptureWorker : BaseScraperWorker
     protected override TimeSpan SleepInterval { get; }
     protected override ErrorSource ErrorSource => ErrorSource.FinancialFactsScraper;
 
-    // Start after the lighter, time-sensitive SEC sweeps so this bulk capture doesn't drain the
-    // shared EDGAR request budget ahead of them after a deploy.
-    protected override TimeSpan StartupDelay => TimeSpan.FromMinutes(10);
+    // Start shortly after the other SEC sweeps have booted so they claim their initial watermark,
+    // then this bulk capture drains aggressively alongside them.
+    protected override TimeSpan StartupDelay => TimeSpan.FromMinutes(1);
 
     public ReportedStatementsCaptureWorker(
         ILogger<ReportedStatementsCaptureWorker> logger,
@@ -87,6 +87,7 @@ public class ReportedStatementsCaptureWorker : BaseScraperWorker
             {
                 document.ReportedStatementsStatus = await captureService.Capture(
                     document,
+                    _options.MaxParallelFetches,
                     stoppingToken
                 );
                 if (document.ReportedStatementsStatus == XbrlCaptureStatus.Captured)
