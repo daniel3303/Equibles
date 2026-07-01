@@ -3,6 +3,7 @@ using Equibles.Cboe.Data;
 using Equibles.Cftc.Data;
 using Equibles.CommonStocks.Data;
 using Equibles.Congress.Data;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Errors.Data;
 using Equibles.FdaCatalysts.Data;
@@ -206,6 +207,7 @@ public class McpServerAppFixture : IAsyncLifetime
             new YahooModuleConfiguration(),
             new CftcModuleConfiguration(),
             new CboeModuleConfiguration(),
+            new CorporateActionsModuleConfiguration(),
             new FdaCatalystsModuleConfiguration(),
             new GovernmentContractsModuleConfiguration(),
             new SecModuleConfiguration(),
