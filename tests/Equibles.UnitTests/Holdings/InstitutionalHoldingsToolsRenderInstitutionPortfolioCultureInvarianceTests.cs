@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Reflection;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Mcp.Tools;
 
@@ -51,7 +52,10 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioCultureInvarian
             },
         };
         var targetDate = new DateOnly(2024, 12, 31);
-        object[] args = [holder, targetDate, holdings];
+        // No splits for this stock → shares render as reported; the pin is about culture, not
+        // split adjustment (RenderInstitutionPortfolio gained a splits-by-stock parameter).
+        var splitsByStock = new Dictionary<Guid, List<StockSplit>>();
+        object[] args = [holder, targetDate, holdings, splitsByStock];
 
         var original = CultureInfo.CurrentCulture;
         string invariantOutput;

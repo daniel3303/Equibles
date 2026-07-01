@@ -283,7 +283,13 @@ public class InstitutionalHoldingsTools
                 if (holdings.Count == 0)
                     return $"No holdings found for {holder.Name} as of {FormatDate(targetDate)}.";
 
-                return RenderInstitutionPortfolio(holder, targetDate, holdings);
+                // 13F holdings are shown on today's split basis across the platform (matching the
+                // web and GetTopHolders), so restate each position's share count by its own
+                // stock's post-report-date splits. Value is a paired per-holding dollar figure
+                // and stays as reported.
+                var splitsByStock = await LoadSplitsByStock(holdings.Select(h => h.CommonStockId));
+
+                return RenderInstitutionPortfolio(holder, targetDate, holdings, splitsByStock);
             },
             "GetInstitutionPortfolio",
             $"institution: {institutionName}"
@@ -293,7 +299,8 @@ public class InstitutionalHoldingsTools
     private static string RenderInstitutionPortfolio(
         InstitutionalHolder holder,
         DateOnly targetDate,
-        List<InstitutionalHolding> holdings
+        List<InstitutionalHolding> holdings,
+        IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock
     )
     {
         var result = MarkdownTable.Start(
@@ -305,9 +312,16 @@ public class InstitutionalHoldingsTools
         result.AppendNumberedRows(
             holdings,
             (rank, h) =>
-                $"| {rank} | {h.CommonStock.Ticker} | {h.CommonStock.Name} | "
-                + $"{McpFormat.WholeNumber(h.Shares)} | "
-                + $"{FormatMillions(h.Value)} |"
+            {
+                var shares = SplitAdjustment.AdjustShareCount(
+                    h.Shares,
+                    targetDate,
+                    SplitsFor(splitsByStock, h.CommonStockId)
+                );
+                return $"| {rank} | {h.CommonStock.Ticker} | {h.CommonStock.Name} | "
+                    + $"{McpFormat.WholeNumber(shares)} | "
+                    + $"{FormatMillions(h.Value)} |";
+            }
         );
 
         return result.ToString();
@@ -638,12 +652,21 @@ public class InstitutionalHoldingsTools
         StringBuilder result
     )
     {
-        var activity = _holdingRepository.GetQuarterlyActivity(targetDate, previousDate);
+        // Materialize the whole quarter's activity, then restate each stock's share counts onto
+        // today's split basis BEFORE bucketing and the Δ Shares column. A split between the two
+        // report dates sits the quarters on different bases, so a flat position would otherwise
+        // read as a phantom buyer/seller. Δ Value is a dollar figure and is split-invariant (it
+        // drives the ordering). The restatement is per-stock, so it cannot translate to SQL.
+        var activity = await _holdingRepository
+            .GetQuarterlyActivity(targetDate, previousDate)
+            .ToListAsync();
+        await RestateActivitySharesToTodaysBasis(activity, targetDate, previousDate);
+
         var movers = activity.Where(a => a.CurrentShares != a.PreviousShares);
         var rows =
             normalizedBucket == "top-buys"
-                ? await movers.TopBuyers().Take(maxResults).ToListAsync()
-                : await movers.TopSellers().Take(maxResults).ToListAsync();
+                ? movers.TopBuyers().Take(maxResults).ToList()
+                : movers.TopSellers().Take(maxResults).ToList();
         if (rows.Count == 0)
             return result + "_No stocks moved in this direction this quarter._";
 
@@ -988,6 +1011,14 @@ public class InstitutionalHoldingsTools
                     previousHoldings
                 );
 
+                // Restate every diffed position onto today's split basis before the buckets are
+                // read. When a split falls between the two quarters they sit on different bases,
+                // so a flat holding would otherwise land in Increased/Reduced as a phantom move.
+                // Initiated/Exited are defined by a zero side that restatement preserves; only
+                // the Increased/Reduced/Unchanged split can flip, so re-bucket those. Δ Value is
+                // split-invariant and drives the ordering — left untouched.
+                await RestateAndRebucketQuarterlyActivity(grouped, targetDate, priorDate.Value);
+
                 return RenderQuarterlyActivity(
                     holder,
                     targetDate,
@@ -1317,6 +1348,102 @@ public class InstitutionalHoldingsTools
 
     private Task<Dictionary<Guid, CommonStock>> LoadStocksByIds(List<Guid> stockIds) =>
         _commonStockRepository.GetByIds(stockIds).ToDictionaryAsync(s => s.Id);
+
+    // Batch-loads the splits for a set of stocks once, grouped by stock, so cross-sectional
+    // tools can restate each row's share counts onto today's basis without an N+1 query.
+    private async Task<Dictionary<Guid, List<StockSplit>>> LoadSplitsByStock(
+        IEnumerable<Guid> stockIds
+    )
+    {
+        var ids = stockIds.Distinct().ToList();
+        if (ids.Count == 0)
+            return new Dictionary<Guid, List<StockSplit>>();
+
+        var splits = await _stockSplitRepository
+            .GetAll()
+            .Where(s => ids.Contains(s.CommonStockId))
+            .ToListAsync();
+        return splits.GroupBy(s => s.CommonStockId).ToDictionary(g => g.Key, g => g.ToList());
+    }
+
+    // A stock with no splits restates by factor 1 (no-op), so an absent key returns an empty set.
+    private static IReadOnlyList<StockSplit> SplitsFor(
+        IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock,
+        Guid stockId
+    ) => splitsByStock.TryGetValue(stockId, out var splits) ? splits : [];
+
+    // Restates each activity row's current/previous share counts onto today's split basis
+    // (current at the target quarter, previous at the prior quarter) from each row's own
+    // stock's splits. These rows are query projections, not tracked entities, so mutating them
+    // in place is safe; Δ Shares recomputes from the restated counts.
+    private async Task RestateActivitySharesToTodaysBasis(
+        IReadOnlyList<MarketWideStockActivity> activity,
+        DateOnly currentDate,
+        DateOnly previousDate
+    )
+    {
+        var splitsByStock = await LoadSplitsByStock(activity.Select(a => a.CommonStockId));
+        foreach (var a in activity)
+        {
+            var splits = SplitsFor(splitsByStock, a.CommonStockId);
+            a.CurrentShares = SplitAdjustment.AdjustShareCount(a.CurrentShares, currentDate, splits);
+            a.PreviousShares = SplitAdjustment.AdjustShareCount(
+                a.PreviousShares,
+                previousDate,
+                splits
+            );
+        }
+    }
+
+    // Restates the quarterly-activity diff onto today's split basis, then re-classifies the
+    // movement buckets from the restated counts. A zero side is preserved by restatement, so
+    // Initiated/Exited stay put; only Increased/Reduced/Unchanged can flip.
+    private async Task RestateAndRebucketQuarterlyActivity(
+        Dictionary<StockPositionChangeType, List<StockPositionChange>> grouped,
+        DateOnly currentDate,
+        DateOnly previousDate
+    )
+    {
+        var splitsByStock = await LoadSplitsByStock(
+            grouped.Values.SelectMany(rows => rows).Select(r => r.CommonStockId)
+        );
+
+        foreach (var rows in grouped.Values)
+        {
+            foreach (var r in rows)
+            {
+                var splits = SplitsFor(splitsByStock, r.CommonStockId);
+                r.CurrentShares = SplitAdjustment.AdjustShareCount(
+                    r.CurrentShares,
+                    currentDate,
+                    splits
+                );
+                r.PreviousShares = SplitAdjustment.AdjustShareCount(
+                    r.PreviousShares,
+                    previousDate,
+                    splits
+                );
+            }
+        }
+
+        var movement = new List<StockPositionChange>();
+        movement.AddRange(grouped[StockPositionChangeType.Increased]);
+        movement.AddRange(grouped[StockPositionChangeType.Reduced]);
+        movement.AddRange(grouped[StockPositionChangeType.Unchanged]);
+        grouped[StockPositionChangeType.Increased] = [];
+        grouped[StockPositionChangeType.Reduced] = [];
+        grouped[StockPositionChangeType.Unchanged] = [];
+
+        foreach (var r in movement)
+        {
+            var type =
+                r.CurrentShares == r.PreviousShares ? StockPositionChangeType.Unchanged
+                : r.CurrentShares > r.PreviousShares ? StockPositionChangeType.Increased
+                : StockPositionChangeType.Reduced;
+            r.ChangeType = type;
+            grouped[type].Add(r);
+        }
+    }
 
     private static (string Ticker, string Name) ResolveStockCells(
         IDictionary<Guid, CommonStock> stocks,
