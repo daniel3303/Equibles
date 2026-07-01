@@ -1,7 +1,10 @@
 using Equibles.Core.AutoWiring;
+using Equibles.Media.BusinessLogic.Configuration;
+using Equibles.Media.BusinessLogic.Storage;
 using Equibles.Media.Data.Models;
 using Equibles.Media.Repositories;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using MimeTypes;
 using File = Equibles.Media.Data.Models.File;
 
@@ -30,10 +33,21 @@ public class FileManager : IFileManager
     }
 
     private readonly FileRepository _fileRepository;
+    private readonly DatabaseFileStorageProvider _databaseProvider;
+    private readonly FileSystemFileStorageProvider _fileSystemProvider;
+    private readonly FileStorageOptions _options;
 
-    public FileManager(FileRepository fileRepository)
+    public FileManager(
+        FileRepository fileRepository,
+        DatabaseFileStorageProvider databaseProvider,
+        FileSystemFileStorageProvider fileSystemProvider,
+        IOptions<FileStorageOptions> options
+    )
     {
         _fileRepository = fileRepository;
+        _databaseProvider = databaseProvider;
+        _fileSystemProvider = fileSystemProvider;
+        _options = options.Value;
     }
 
     /**
@@ -45,7 +59,7 @@ public class FileManager : IFileManager
      * <param name="fileName">The file name</param>
      * <param name="protect">If the file should be protected using a security token for access</param>
      */
-    public Task<File> SaveFile(byte[] content, string fileName, bool protect = false)
+    public async Task<File> SaveFile(byte[] content, string fileName, bool protect = false)
     {
         var fileExtension = Path.GetExtension(fileName)?.TrimStart('.');
         var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(fileName);
@@ -75,14 +89,14 @@ public class FileManager : IFileManager
         {
             Extension = fileExtension,
             Name = fileNameWithoutExtension,
-            Size = content.Length,
             ContentType = contentType,
         };
 
-        file.FileContent = new FileContent() { File = file, Bytes = content };
+        // User uploads always stay in the database (small, hot, served directly).
+        await _databaseProvider.Save(file, content, FileStorageTiers.Blob);
 
         _fileRepository.Add(file);
-        return Task.FromResult(file);
+        return file;
     }
 
     /// <summary>
@@ -92,29 +106,43 @@ public class FileManager : IFileManager
     /// gzip-compressed XBRL envelope captured during SEC ingest), never for user uploads —
     /// those must go through <see cref="SaveFile"/> so the allowlist is enforced.
     /// </summary>
-    public Task<File> SaveInternalFile(
+    public async Task<File> SaveInternalFile(
         byte[] content,
         string name,
         string extension,
-        string contentType
+        string contentType,
+        StorageProvider storage = null,
+        string tier = null
     )
     {
         var file = new File()
         {
             Extension = extension,
             Name = name,
-            Size = content.Length,
             ContentType = contentType,
         };
 
-        file.FileContent = new FileContent() { File = file, Bytes = content };
+        var provider = ResolveWriteProvider(storage);
+        await provider.Save(file, content, tier ?? FileStorageTiers.Blob);
 
         _fileRepository.Add(file);
-        return Task.FromResult(file);
+        return file;
+    }
+
+    public Task<byte[]> GetContent(File file)
+    {
+        return ResolveProvider(file.StorageProvider).GetContent(file);
+    }
+
+    public Task<Stream> OpenRead(File file)
+    {
+        return ResolveProvider(file.StorageProvider).OpenRead(file);
     }
 
     /// <summary>
-    /// Deletes a file from the database. The db context is not saved.
+    /// Deletes a file from the database. The db context is not saved. Filesystem-stored
+    /// bytes are reclaimed by the orphan sweep, not deleted inline — content addressing
+    /// means another row may reference the same path.
     /// </summary>
     /// <param name="file">The file to delete</param>
     public void DeleteFile(File file)
@@ -122,5 +150,28 @@ public class FileManager : IFileManager
         if (file == null)
             return;
         _fileRepository.Delete(file);
+    }
+
+    // Filesystem writes are opt-in: when the store is disabled, fall back to the database
+    // so a deployment without a configured root keeps working unchanged.
+    private IFileStorageProvider ResolveWriteProvider(StorageProvider requested)
+    {
+        var target = requested ?? StorageProvider.Database;
+        if (target == StorageProvider.FileSystem && !_options.Enabled)
+        {
+            target = StorageProvider.Database;
+        }
+
+        return ResolveProvider(target);
+    }
+
+    private IFileStorageProvider ResolveProvider(StorageProvider provider)
+    {
+        if (provider == StorageProvider.FileSystem)
+        {
+            return _fileSystemProvider;
+        }
+
+        return _databaseProvider;
     }
 }

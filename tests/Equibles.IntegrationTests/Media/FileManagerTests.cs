@@ -14,7 +14,7 @@ public class FileManagerTests
     {
         var context = TestDbContextFactory.Create(new MediaModuleConfiguration());
         _repository = new FileRepository(context);
-        _sut = new FileManager(_repository);
+        _sut = FileManagerTestFactory.Create(_repository);
     }
 
     [Fact]

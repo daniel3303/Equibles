@@ -17,7 +17,7 @@ public class FileManagerSaveFileUppercaseExtensionTests
     public async Task SaveFile_AcceptedExtensionInUpperCase_ResolvesRealContentType()
     {
         var repository = Substitute.For<FileRepository>((EquiblesFinancialDbContext)null);
-        var sut = new FileManager(repository);
+        var sut = FileManagerTestFactory.Create(repository);
         var content = "fake-pdf-content"u8.ToArray();
 
         var file = await sut.SaveFile(content, "quarterly-report.PDF");
