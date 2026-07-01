@@ -97,6 +97,86 @@ public static class DurableFileWriter
     }
 
     /// <summary>
+    /// Like <see cref="WriteIfMissing"/> but WITHOUT any fsync — temp file + atomic rename
+    /// only, leaving the data in the page cache. For bulk migration where the caller makes a
+    /// whole batch durable at once via <see cref="SyncFileSystem"/> before committing the
+    /// matching database rows: per-file fsyncs on a spinning disk are seek-bound (a few
+    /// dozen per second), while buffered writes stream at full disk bandwidth.
+    /// </summary>
+    public static async Task WriteIfMissingBuffered(string fullPath, byte[] content)
+    {
+        if (System.IO.File.Exists(fullPath))
+        {
+            return; // dedup: identical content already stored
+        }
+
+        var directory = Path.GetDirectoryName(fullPath);
+        Directory.CreateDirectory(directory);
+
+        var tempPath = Path.Combine(directory, "." + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            await System.IO.File.WriteAllBytesAsync(tempPath, content);
+            try
+            {
+                System.IO.File.Move(tempPath, fullPath, overwrite: false);
+            }
+            catch (IOException) when (System.IO.File.Exists(fullPath))
+            {
+                // A concurrent writer won the race with identical (content-addressed) bytes.
+            }
+        }
+        finally
+        {
+            if (System.IO.File.Exists(tempPath))
+            {
+                try
+                {
+                    System.IO.File.Delete(tempPath);
+                }
+                catch (IOException)
+                {
+                    // Best-effort cleanup; the orphan sweep removes any straggler temp files.
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Flushes every dirty page of the filesystem containing <paramref name="directory"/> to
+    /// stable storage (Linux syncfs). The batch-durability counterpart of
+    /// <see cref="WriteIfMissingBuffered"/>: call once after writing a batch, before
+    /// committing the database rows that point at it. Falls back to a global sync elsewhere.
+    /// </summary>
+    public static void SyncFileSystem(string directory)
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            var fd = open(directory, O_RDONLY);
+            if (fd >= 0)
+            {
+                try
+                {
+                    syncfs(fd);
+                }
+                finally
+                {
+                    close(fd);
+                }
+                return;
+            }
+        }
+
+        if (
+            RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+            || RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+        )
+        {
+            sync();
+        }
+    }
+
+    /// <summary>
     /// Persists a directory's entries to stable storage. .NET has no built-in directory
     /// fsync, so on Unix we open the directory and fsync its descriptor. No-op on Windows
     /// (development only; production runs on Linux), where directory handles can't be fsynced.
@@ -134,6 +214,12 @@ public static class DurableFileWriter
 
     [DllImport("libc", SetLastError = true)]
     private static extern int fsync(int fd);
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int syncfs(int fd);
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern void sync();
 
     [DllImport("libc", SetLastError = true)]
     private static extern int close(int fd);

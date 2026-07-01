@@ -28,17 +28,39 @@ public class FileSystemFileStorageProvider : IFileStorageProvider
 
     public async Task Save(File file, byte[] content, string tier)
     {
+        var fullPath = StampAndResolve(file, content, tier);
+        await DurableFileWriter.WriteIfMissing(fullPath, content);
+    }
+
+    /// <summary>
+    /// Bulk-migration variant of <see cref="Save"/>: writes buffered (no per-file fsync).
+    /// The caller MUST call <see cref="SyncStore"/> after the batch, before committing the
+    /// database rows, so bytes are durable before any row points at them.
+    /// </summary>
+    public async Task SaveBuffered(File file, byte[] content, string tier)
+    {
+        var fullPath = StampAndResolve(file, content, tier);
+        await DurableFileWriter.WriteIfMissingBuffered(fullPath, content);
+    }
+
+    /// <summary>Flushes the whole store's filesystem to stable storage (batch durability barrier).</summary>
+    public void SyncStore()
+    {
+        DurableFileWriter.SyncFileSystem(RequireRoot());
+    }
+
+    private string StampAndResolve(File file, byte[] content, string tier)
+    {
         var hashHex = ContentAddressedPath.ComputeSha256Hex(content);
         var relativePath = ContentAddressedPath.Build(tier, hashHex);
         var fullPath = Path.Combine(RequireRoot(), ContentAddressedPath.ToOsPath(relativePath));
-
-        await DurableFileWriter.WriteIfMissing(fullPath, content);
 
         file.Size = content.Length;
         file.StorageProvider = StorageProvider.FileSystem;
         file.RelativePath = relativePath;
         file.ContentHash = ContentAddressedPath.HashPrefix + hashHex;
         file.FileContent = null;
+        return fullPath;
     }
 
     public Task<byte[]> GetContent(File file)

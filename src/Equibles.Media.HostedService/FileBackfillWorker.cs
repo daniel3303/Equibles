@@ -133,6 +133,8 @@ public class FileBackfillWorker : BackgroundService
         // never downloaded) have nothing to move and are excluded so they don't stall the drain.
         // Only ids are claimed here — bytes are loaded one file at a time below so peak memory
         // is a single blob regardless of batch size (audio blobs run tens of MB each).
+        // Deliberately unordered: an ORDER BY would sort every remaining row on every claim
+        // (millions of rows, once per batch), and drain order carries no meaning.
         var batchIds = await dbContext
             .Set<File>()
             .Where(f =>
@@ -141,7 +143,6 @@ public class FileBackfillWorker : BackgroundService
                 && f.FileContent != null
                 && f.FileContent.Bytes != null
             )
-            .OrderBy(f => f.CreationTime)
             .Take(_backfillOptions.BatchSize)
             .Select(f => f.Id)
             .ToListAsync(cancellationToken);
@@ -166,12 +167,13 @@ public class FileBackfillWorker : BackgroundService
                 continue;
             }
 
-            // Write to disk first (durable), then flip the row and drop the DB bytes.
+            // Buffered write (no per-file fsync — seek-bound on a spinning disk); the whole
+            // batch is made durable by the single SyncStore below, BEFORE the rows commit.
             // Audio goes to its own durability tier so a future mirrored mount at
             // <root>/audio covers the precious, hard-to-recapture recordings; everything
             // else is re-scrapable and lands on the bulk blob tier.
             var tier = IsAudio(file) ? FileStorageTiers.Audio : FileStorageTiers.Blob;
-            await fileSystemProvider.Save(file, content.Bytes, tier);
+            await fileSystemProvider.SaveBuffered(file, content.Bytes, tier);
             dbContext.Remove(content);
 
             // Release the blob reference immediately — the row is being deleted, and the
@@ -180,6 +182,10 @@ public class FileBackfillWorker : BackgroundService
             moved++;
         }
 
+        // Batch durability barrier: flush every buffered blob to stable storage before the
+        // database rows flip to FileSystem — a crash before this point leaves all rows
+        // Database-stored (bytes intact in the DB), never a row pointing at volatile bytes.
+        fileSystemProvider.SyncStore();
         await dbContext.SaveChangesAsync(cancellationToken);
         _logger.LogInformation(
             "File backfill moved {Moved} blob(s) to the filesystem store",
