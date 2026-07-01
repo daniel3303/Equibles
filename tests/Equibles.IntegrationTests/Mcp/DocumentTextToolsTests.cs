@@ -1,10 +1,12 @@
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Mcp.Tools;
 using Equibles.Sec.Repositories;
+using NSubstitute;
 using Xunit;
 using File = Equibles.Media.Data.Models.File;
 
@@ -16,8 +18,17 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase
     public DocumentTextToolsTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private DocumentTextTools Sut() =>
-        new(new DocumentRepository(DbContext), ErrorManager, NullLogger<DocumentTextTools>());
+    private DocumentTextTools Sut()
+    {
+        var fileManager = Substitute.For<IFileManager>();
+        fileManager.GetContent(Arg.Any<File>()).Returns(ci => ((File)ci[0]).FileContent.Bytes);
+        return new(
+            new DocumentRepository(DbContext),
+            ErrorManager,
+            fileManager,
+            NullLogger<DocumentTextTools>()
+        );
+    }
 
     private async Task<Document> SeedDocument(
         string content,

@@ -61,18 +61,21 @@ public class XbrlFactExtractionService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly InlineXbrlParser _inlineParser;
     private readonly StandaloneXbrlParser _standaloneParser;
+    private readonly IFileManager _fileManager;
     private readonly ILogger<XbrlFactExtractionService> _logger;
 
     public XbrlFactExtractionService(
         IServiceScopeFactory scopeFactory,
         InlineXbrlParser inlineParser,
         StandaloneXbrlParser standaloneParser,
+        IFileManager fileManager,
         ILogger<XbrlFactExtractionService> logger
     )
     {
         _scopeFactory = scopeFactory;
         _inlineParser = inlineParser;
         _standaloneParser = standaloneParser;
+        _fileManager = fileManager;
         _logger = logger;
     }
 
@@ -92,7 +95,7 @@ public class XbrlFactExtractionService
             return 0;
 
         var envelope = Encoding.UTF8.GetString(
-            GzipCompressor.Decompress(document.XbrlContent.FileContent.Bytes)
+            GzipCompressor.Decompress(await _fileManager.GetContent(document.XbrlContent))
         );
 
         var parsed =

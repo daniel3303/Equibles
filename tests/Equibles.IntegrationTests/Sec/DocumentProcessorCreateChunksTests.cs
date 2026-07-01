@@ -1,5 +1,6 @@
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.Media.BusinessLogic;
 using Equibles.Sec.BusinessLogic.Embeddings;
 using Equibles.Sec.BusinessLogic.Processing;
 using Equibles.Sec.BusinessLogic.Tokenization;
@@ -59,12 +60,15 @@ public class DocumentProcessorCreateChunksTests
         var chunkRepository = Substitute.For<ChunkRepository>(
             (Equibles.Data.EquiblesFinancialDbContext)null
         );
+        var fileManager = Substitute.For<IFileManager>();
+        fileManager.GetContent(Arg.Any<File>()).Returns(ci => ((File)ci[0]).FileContent.Bytes);
         var sut = new DocumentProcessor(
             chunkRepository,
             Substitute.For<EmbeddingRepository>((Equibles.Data.EquiblesFinancialDbContext)null),
             Substitute.For<IEmbeddingClient>(),
             new ChunkingStrategy(new TokenCounter()),
             Options.Create(new EmbeddingConfig { ModelName = "test-model" }),
+            fileManager,
             Substitute.For<ILogger<DocumentProcessor>>()
         );
 

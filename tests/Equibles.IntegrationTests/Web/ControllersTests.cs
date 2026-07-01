@@ -22,6 +22,7 @@ using Equibles.Holdings.Repositories;
 using Equibles.InsiderTrading.Data;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data;
 using Equibles.Messaging;
 using Equibles.Sec.Data.Models;
@@ -333,6 +334,7 @@ public class StocksControllerTests : IDisposable
             _institutionalHoldingRepository,
             _documentRepository,
             _stockTabService,
+            Substitute.For<IFileManager>(),
             _logger
         );
         controller.ControllerContext = new ControllerContext

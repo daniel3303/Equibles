@@ -1,5 +1,6 @@
 using System.Text;
 using Equibles.Core.AutoWiring;
+using Equibles.Media.BusinessLogic;
 using Equibles.Sec.BusinessLogic.Embeddings;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
@@ -19,6 +20,7 @@ public class DocumentProcessor : IDocumentProcessor
     private readonly IEmbeddingClient _embeddingClient;
     private readonly ChunkingStrategy _chunkingStrategy;
     private readonly EmbeddingConfig _embeddingConfig;
+    private readonly IFileManager _fileManager;
     private readonly ILogger<DocumentProcessor> _logger;
 
     public DocumentProcessor(
@@ -27,6 +29,7 @@ public class DocumentProcessor : IDocumentProcessor
         IEmbeddingClient embeddingClient,
         ChunkingStrategy chunkingStrategy,
         IOptions<EmbeddingConfig> embeddingConfig,
+        IFileManager fileManager,
         ILogger<DocumentProcessor> logger
     )
     {
@@ -35,6 +38,7 @@ public class DocumentProcessor : IDocumentProcessor
         _embeddingClient = embeddingClient;
         _chunkingStrategy = chunkingStrategy;
         _embeddingConfig = embeddingConfig.Value;
+        _fileManager = fileManager;
         _logger = logger;
     }
 
@@ -140,7 +144,7 @@ public class DocumentProcessor : IDocumentProcessor
             document.CommonStock.Ticker
         );
 
-        var content = GetDocumentContent(document);
+        var content = await GetDocumentContent(document);
         if (string.IsNullOrWhiteSpace(content))
         {
             _logger.LogWarning("Document {DocumentId} has no content", document.Id);
@@ -155,14 +159,14 @@ public class DocumentProcessor : IDocumentProcessor
         );
     }
 
-    private string GetDocumentContent(Document document)
+    private async Task<string> GetDocumentContent(Document document)
     {
         if (document.Content == null)
         {
             throw new Exception("Document content is null");
         }
 
-        return Encoding.UTF8.GetString(document.Content.FileContent.Bytes);
+        return Encoding.UTF8.GetString(await _fileManager.GetContent(document.Content));
     }
 
     private async Task<List<Chunk>> CreateChunks(Document document, string content)

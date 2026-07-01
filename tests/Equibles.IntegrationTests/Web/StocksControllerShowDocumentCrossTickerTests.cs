@@ -2,6 +2,7 @@ using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.Data.Models;
@@ -64,6 +65,7 @@ public class StocksControllerShowDocumentCrossTickerTests
             institutionalHoldingRepository: null!,
             new DocumentRepository(ctx),
             stockTabService: null!,
+            Substitute.For<IFileManager>(),
             Substitute.For<ILogger<StocksController>>()
         );
 

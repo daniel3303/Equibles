@@ -77,6 +77,9 @@ public partial class Program
         builder.Services.Configure<Equibles.Sec.BusinessLogic.Embeddings.EmbeddingConfig>(
             builder.Configuration.GetSection("Embedding")
         );
+        builder.Services.Configure<Equibles.Media.BusinessLogic.Configuration.FileStorageOptions>(
+            builder.Configuration.GetSection("FileStorage")
+        );
 
         builder.Services.AddEquiblesMcp(mcp =>
         {

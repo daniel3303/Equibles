@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Sec.BusinessLogic.Embeddings;
 using Equibles.Sec.BusinessLogic.Processing;
 using Equibles.Sec.BusinessLogic.Tokenization;
@@ -30,15 +31,20 @@ public class DocumentProcessorChunkDocumentGuardTests : ParadeDbMcpTestBase
     public DocumentProcessorChunkDocumentGuardTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private DocumentProcessor BuildProcessor() =>
-        new(
+    private DocumentProcessor BuildProcessor()
+    {
+        var fileManager = Substitute.For<IFileManager>();
+        fileManager.GetContent(Arg.Any<File>()).Returns(ci => ((File)ci[0]).FileContent.Bytes);
+        return new(
             new ChunkRepository(DbContext),
             new EmbeddingRepository(DbContext),
             Substitute.For<IEmbeddingClient>(),
             new ChunkingStrategy(new TokenCounter()),
             Options.Create(new EmbeddingConfig()),
+            fileManager,
             Substitute.For<ILogger<DocumentProcessor>>()
         );
+    }
 
     private static Task InvokeChunk(DocumentProcessor sut, Document document)
     {

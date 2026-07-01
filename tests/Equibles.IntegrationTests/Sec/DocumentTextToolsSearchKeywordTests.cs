@@ -1,6 +1,7 @@
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Mcp.Tools;
@@ -58,9 +59,12 @@ public class DocumentTextToolsSearchKeywordTests : ParadeDbMcpTestBase
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
+        var fileManager = Substitute.For<IFileManager>();
+        fileManager.GetContent(Arg.Any<File>()).Returns(ci => ((File)ci[0]).FileContent.Bytes);
         var sut = new DocumentTextTools(
             new DocumentRepository(DbContext),
             ErrorManager,
+            fileManager,
             Substitute.For<ILogger<DocumentTextTools>>()
         );
 

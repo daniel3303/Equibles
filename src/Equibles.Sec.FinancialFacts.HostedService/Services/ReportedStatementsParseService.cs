@@ -1,4 +1,5 @@
 using Equibles.Core.AutoWiring;
+using Equibles.Media.BusinessLogic;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.BusinessLogic.ReportedStatements;
 using Equibles.Sec.FinancialFacts.Data.Models;
@@ -22,10 +23,15 @@ public class ReportedStatementsParseService
     private const string FilingSummaryFileName = "FilingSummary.xml";
 
     private readonly ReportedFinancialStatementRepository _statementRepository;
+    private readonly IFileManager _fileManager;
 
-    public ReportedStatementsParseService(ReportedFinancialStatementRepository statementRepository)
+    public ReportedStatementsParseService(
+        ReportedFinancialStatementRepository statementRepository,
+        IFileManager fileManager
+    )
     {
         _statementRepository = statementRepository;
+        _fileManager = fileManager;
     }
 
     /// <summary>
@@ -35,7 +41,12 @@ public class ReportedStatementsParseService
     /// </summary>
     public async Task<int> Parse(Document document, CancellationToken cancellationToken)
     {
-        var bytes = document.ReportedStatementsContent?.FileContent?.Bytes;
+        if (document.ReportedStatementsContent == null)
+        {
+            return 0;
+        }
+
+        var bytes = await _fileManager.GetContent(document.ReportedStatementsContent);
         if (bytes is not { Length: > 0 })
         {
             return 0;

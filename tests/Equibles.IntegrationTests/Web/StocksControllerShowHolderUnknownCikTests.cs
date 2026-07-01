@@ -4,6 +4,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
@@ -55,6 +56,7 @@ public class StocksControllerShowHolderUnknownCikTests
             institutionalHoldingRepository: null!,
             documentRepository: null!,
             stockTabService: null!,
+            Substitute.For<IFileManager>(),
             Substitute.For<ILogger<StocksController>>()
         );
 

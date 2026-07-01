@@ -1,5 +1,6 @@
 using Equibles.Errors.Data.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Sec.Mcp.Tools;
 using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -32,6 +33,7 @@ public class DocumentTextToolsReadLinesErrorTests : ParadeDbMcpTestBase
         var sut = new DocumentTextTools(
             new DocumentRepository(disposedContext),
             ErrorManager,
+            Substitute.For<IFileManager>(),
             Substitute.For<ILogger<DocumentTextTools>>()
         );
 
