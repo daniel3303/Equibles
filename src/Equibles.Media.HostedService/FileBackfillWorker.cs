@@ -13,13 +13,15 @@ using File = Equibles.Media.Data.Models.File;
 namespace Equibles.Media.HostedService;
 
 /// <summary>
-/// One-off, resumable drain of database-stored blobs onto the filesystem store. Each tick
+/// One-off, resumable drain of database-stored blobs onto the filesystem store. Each pass
 /// claims a batch of Database-provider File rows (excluding small Image rows — headshots /
 /// web images stay in the DB) that still hold bytes, writes them to the content-addressed
 /// store, flips the row to FileSystem, and deletes the FileContent row. Progress is durable
-/// in File.StorageProvider, so it resumes for free. Self-disabling: after a few consecutive
-/// empty ticks it stops, and since new writes now go straight to FileSystem the backlog never
-/// regrows. Runs only when both the store and the backfill are enabled in config.
+/// in File.StorageProvider, so it resumes for free. While full batches keep coming the worker
+/// drains continuously (no inter-tick delay); memory stays bounded because blobs are loaded
+/// one at a time and released as soon as they are written. Self-disabling: after a few
+/// consecutive empty passes it stops, and since new writes now go straight to FileSystem the
+/// backlog never regrows. Runs only when both the store and the backfill are enabled in config.
 /// </summary>
 public class FileBackfillWorker : BackgroundService
 {
@@ -32,7 +34,7 @@ public class FileBackfillWorker : BackgroundService
     protected virtual TimeSpan StartupDelay => TimeSpan.FromMinutes(1);
     protected virtual TimeSpan TickInterval => TimeSpan.FromSeconds(5);
 
-    // Stop after this many consecutive empty ticks (the backlog is drained).
+    // Stop after this many consecutive empty passes (the backlog is drained).
     private const int EmptyTicksBeforeStop = 3;
 
     public FileBackfillWorker(
@@ -72,10 +74,10 @@ public class FileBackfillWorker : BackgroundService
         var emptyTicks = 0;
         while (!stoppingToken.IsCancellationRequested)
         {
-            int moved;
+            var claimed = -1;
             try
             {
-                moved = await DrainOnce(stoppingToken);
+                (claimed, _) = await DrainOnce(stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -84,10 +86,9 @@ public class FileBackfillWorker : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "File backfill tick failed; will retry on next interval");
-                moved = -1;
             }
 
-            if (moved == 0)
+            if (claimed == 0)
             {
                 emptyTicks++;
                 if (emptyTicks >= EmptyTicksBeforeStop)
@@ -96,9 +97,17 @@ public class FileBackfillWorker : BackgroundService
                     return;
                 }
             }
-            else if (moved > 0)
+            else if (claimed > 0)
             {
                 emptyTicks = 0;
+
+                // A full batch means the backlog almost certainly continues — drain
+                // straight through without sleeping so throughput is bounded by I/O,
+                // not by the tick interval.
+                if (claimed >= _backfillOptions.BatchSize)
+                {
+                    continue;
+                }
             }
 
             try
@@ -112,7 +121,7 @@ public class FileBackfillWorker : BackgroundService
         }
     }
 
-    internal async Task<int> DrainOnce(CancellationToken cancellationToken)
+    internal async Task<(int Claimed, int Moved)> DrainOnce(CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
@@ -122,7 +131,9 @@ public class FileBackfillWorker : BackgroundService
         // Claim a batch of database-stored, non-image files that still hold bytes. Image rows
         // (headshots / web images) intentionally stay in the DB; null-Bytes rows (indexed but
         // never downloaded) have nothing to move and are excluded so they don't stall the drain.
-        var batch = await dbContext
+        // Only ids are claimed here — bytes are loaded one file at a time below so peak memory
+        // is a single blob regardless of batch size (audio blobs run tens of MB each).
+        var batchIds = await dbContext
             .Set<File>()
             .Where(f =>
                 !(f is Image)
@@ -132,19 +143,24 @@ public class FileBackfillWorker : BackgroundService
             )
             .OrderBy(f => f.CreationTime)
             .Take(_backfillOptions.BatchSize)
-            .Include(f => f.FileContent)
+            .Select(f => f.Id)
             .ToListAsync(cancellationToken);
 
-        if (batch.Count == 0)
+        if (batchIds.Count == 0)
         {
-            return 0;
+            return (0, 0);
         }
 
         var moved = 0;
-        foreach (var file in batch)
+        foreach (var fileId in batchIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var content = file.FileContent;
+
+            var file = await dbContext
+                .Set<File>()
+                .Include(f => f.FileContent)
+                .FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken);
+            var content = file?.FileContent;
             if (content?.Bytes == null)
             {
                 continue;
@@ -157,6 +173,10 @@ public class FileBackfillWorker : BackgroundService
             var tier = IsAudio(file) ? FileStorageTiers.Audio : FileStorageTiers.Blob;
             await fileSystemProvider.Save(file, content.Bytes, tier);
             dbContext.Remove(content);
+
+            // Release the blob reference immediately — the row is being deleted, and the
+            // tracked entity would otherwise pin every batch blob in memory until SaveChanges.
+            content.Bytes = null;
             moved++;
         }
 
@@ -165,7 +185,7 @@ public class FileBackfillWorker : BackgroundService
             "File backfill moved {Moved} blob(s) to the filesystem store",
             moved
         );
-        return moved;
+        return (batchIds.Count, moved);
     }
 
     private static bool IsAudio(File file)

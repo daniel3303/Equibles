@@ -99,9 +99,10 @@ public class FileBackfillWorkerDrainTests : ParadeDbMcpTestBase
                 NullLogger<FileBackfillWorker>()
             );
 
-            var moved = await worker.DrainOnce(CancellationToken.None);
+            var result = await worker.DrainOnce(CancellationToken.None);
 
-            moved.Should().Be(2);
+            result.Claimed.Should().Be(2);
+            result.Moved.Should().Be(2);
 
             await using var verify = Fixture.CreateDbContext();
 
