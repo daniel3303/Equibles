@@ -39,8 +39,30 @@ public class FileSystemFileStorageProvider : IFileStorageProvider
     /// </summary>
     public async Task SaveBuffered(File file, byte[] content, string tier)
     {
-        var fullPath = StampAndResolve(file, content, tier);
+        var stamp = await WriteBuffered(content, tier);
+        file.Size = content.Length;
+        file.StorageProvider = StorageProvider.FileSystem;
+        file.RelativePath = stamp.RelativePath;
+        file.ContentHash = stamp.ContentHash;
+        file.FileContent = null;
+    }
+
+    /// <summary>
+    /// Entity-free buffered write for bulk migration: stores the bytes at their
+    /// content-addressed path (no fsync — pair with <see cref="SyncStore"/>) and returns the
+    /// values to stamp on the row later. Lets parallel workers write blobs without sharing a
+    /// DbContext; the caller applies the row changes after the durability barrier.
+    /// </summary>
+    public async Task<(string RelativePath, string ContentHash)> WriteBuffered(
+        byte[] content,
+        string tier
+    )
+    {
+        var hashHex = ContentAddressedPath.ComputeSha256Hex(content);
+        var relativePath = ContentAddressedPath.Build(tier, hashHex);
+        var fullPath = Path.Combine(RequireRoot(), ContentAddressedPath.ToOsPath(relativePath));
         await DurableFileWriter.WriteIfMissingBuffered(fullPath, content);
+        return (relativePath, ContentAddressedPath.HashPrefix + hashHex);
     }
 
     /// <summary>Flushes the whole store's filesystem to stable storage (batch durability barrier).</summary>

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Equibles.Data;
 using Equibles.Media.BusinessLogic.Configuration;
 using Equibles.Media.BusinessLogic.Storage;
@@ -16,12 +17,14 @@ namespace Equibles.Media.HostedService;
 /// One-off, resumable drain of database-stored blobs onto the filesystem store. Each pass
 /// claims a batch of Database-provider File rows (excluding small Image rows — headshots /
 /// web images stay in the DB) that still hold bytes, writes them to the content-addressed
-/// store, flips the row to FileSystem, and deletes the FileContent row. Progress is durable
-/// in File.StorageProvider, so it resumes for free. While full batches keep coming the worker
-/// drains continuously (no inter-tick delay); memory stays bounded because blobs are loaded
-/// one at a time and released as soon as they are written. Self-disabling: after a few
-/// consecutive empty passes it stops, and since new writes now go straight to FileSystem the
-/// backlog never regrows. Runs only when both the store and the backfill are enabled in config.
+/// store, flips the rows to FileSystem, and deletes the FileContent rows. Progress is durable
+/// in File.StorageProvider, so it resumes for free. Within a batch, blobs are loaded and
+/// written by <see cref="FileBackfillOptions.Concurrency"/> parallel tasks (bounding both
+/// memory and DB read parallelism); the rows commit only after a single per-batch durability
+/// barrier, so no row ever points at volatile bytes. While full batches keep coming the worker
+/// drains continuously (no inter-tick delay). Self-disabling: after a few consecutive empty
+/// passes it stops, and since new writes now go straight to FileSystem the backlog never
+/// regrows. Runs only when both the store and the backfill are enabled in config.
 /// </summary>
 public class FileBackfillWorker : BackgroundService
 {
@@ -152,51 +155,105 @@ public class FileBackfillWorker : BackgroundService
             return (0, 0);
         }
 
-        var moved = 0;
-        foreach (var fileId in batchIds)
+        // Phase 1 — parallel: each task loads one blob untracked in its own scope, hashes it,
+        // and writes it buffered (no per-file fsync — seek-bound on a spinning disk). No
+        // database state changes yet; the values to stamp on the row are collected instead.
+        // Concurrency bounds both peak memory (that many blobs in flight) and DB parallelism.
+        var written = new ConcurrentBag<MovedBlob>();
+        var parallelOptions = new ParallelOptions
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var file = await dbContext
-                .Set<File>()
-                .Include(f => f.FileContent)
-                .FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken);
-            var content = file?.FileContent;
-            if (content?.Bytes == null)
+            MaxDegreeOfParallelism = Math.Max(1, _backfillOptions.Concurrency),
+            CancellationToken = cancellationToken,
+        };
+        await Parallel.ForEachAsync(
+            batchIds,
+            parallelOptions,
+            async (fileId, taskCancellation) =>
             {
-                continue;
+                await using var taskScope = _scopeFactory.CreateAsyncScope();
+                var taskDb =
+                    taskScope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+
+                var blob = await taskDb
+                    .Set<File>()
+                    .AsNoTracking()
+                    .Where(f => f.Id == fileId && f.FileContent != null)
+                    .Select(f => new
+                    {
+                        f.Id,
+                        f.ContentType,
+                        ContentId = f.FileContent.Id,
+                        f.FileContent.Bytes,
+                    })
+                    .FirstOrDefaultAsync(taskCancellation);
+                if (blob?.Bytes == null)
+                {
+                    return;
+                }
+
+                // Audio goes to its own durability tier so a future mirrored mount at
+                // <root>/audio covers the precious, hard-to-recapture recordings; everything
+                // else is re-scrapable and lands on the bulk blob tier.
+                var tier = IsAudio(blob.ContentType)
+                    ? FileStorageTiers.Audio
+                    : FileStorageTiers.Blob;
+                var stamp = await fileSystemProvider.WriteBuffered(blob.Bytes, tier);
+                written.Add(
+                    new MovedBlob(
+                        blob.Id,
+                        blob.ContentId,
+                        stamp.RelativePath,
+                        stamp.ContentHash,
+                        blob.Bytes.Length
+                    )
+                );
             }
+        );
 
-            // Buffered write (no per-file fsync — seek-bound on a spinning disk); the whole
-            // batch is made durable by the single SyncStore below, BEFORE the rows commit.
-            // Audio goes to its own durability tier so a future mirrored mount at
-            // <root>/audio covers the precious, hard-to-recapture recordings; everything
-            // else is re-scrapable and lands on the bulk blob tier.
-            var tier = IsAudio(file) ? FileStorageTiers.Audio : FileStorageTiers.Blob;
-            await fileSystemProvider.SaveBuffered(file, content.Bytes, tier);
-            dbContext.Remove(content);
-
-            // Release the blob reference immediately — the row is being deleted, and the
-            // tracked entity would otherwise pin every batch blob in memory until SaveChanges.
-            content.Bytes = null;
-            moved++;
+        if (written.IsEmpty)
+        {
+            return (batchIds.Count, 0);
         }
 
         // Batch durability barrier: flush every buffered blob to stable storage before the
         // database rows flip to FileSystem — a crash before this point leaves all rows
         // Database-stored (bytes intact in the DB), never a row pointing at volatile bytes.
         fileSystemProvider.SyncStore();
+
+        // Phase 2 — apply the row changes via attached stubs (no bytes re-read) in a single
+        // commit: flip each File to FileSystem and delete its FileContent row.
+        foreach (var blob in written)
+        {
+            var file = new File { Id = blob.FileId };
+            dbContext.Attach(file);
+            file.Size = blob.Size;
+            file.StorageProvider = StorageProvider.FileSystem;
+            file.RelativePath = blob.RelativePath;
+            file.ContentHash = blob.ContentHash;
+
+            dbContext.Entry(new FileContent { Id = blob.ContentId, FileId = blob.FileId }).State =
+                EntityState.Deleted;
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
         _logger.LogInformation(
             "File backfill moved {Moved} blob(s) to the filesystem store",
-            moved
+            written.Count
         );
-        return (batchIds.Count, moved);
+        return (batchIds.Count, written.Count);
     }
 
-    private static bool IsAudio(File file)
+    private static bool IsAudio(string contentType)
     {
-        return file.ContentType != null
-            && file.ContentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase);
+        return contentType != null
+            && contentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase);
     }
+
+    private sealed record MovedBlob(
+        Guid FileId,
+        Guid ContentId,
+        string RelativePath,
+        string ContentHash,
+        long Size
+    );
 }
