@@ -23,6 +23,17 @@ public static class DurableFileWriter
         }
 
         var directory = Path.GetDirectoryName(fullPath);
+
+        // Record the deepest ancestor that already exists before we create the shard chain,
+        // so afterwards we can fsync every directory whose entries changed — not just the
+        // leaf. Sharding creates fresh <xx>/<yy> dirs; persisting the file's dirent alone
+        // would still lose those parent dirents on a crash, orphaning the fsynced file.
+        var deepestExistingAncestor = directory;
+        while (deepestExistingAncestor != null && !Directory.Exists(deepestExistingAncestor))
+        {
+            deepestExistingAncestor = Path.GetDirectoryName(deepestExistingAncestor);
+        }
+
         Directory.CreateDirectory(directory);
 
         // Temp file lives in the final directory so the rename stays on one filesystem
@@ -57,7 +68,17 @@ public static class DurableFileWriter
                 return;
             }
 
-            FsyncDirectory(directory);
+            // Persist the file's dirent (leaf) and each freshly-created shard directory,
+            // walking up to and including the first pre-existing ancestor (its entry set
+            // also changed by gaining the topmost new child).
+            for (var dir = directory; dir != null; dir = Path.GetDirectoryName(dir))
+            {
+                FsyncDirectory(dir);
+                if (dir == deepestExistingAncestor)
+                {
+                    break;
+                }
+            }
         }
         finally
         {
