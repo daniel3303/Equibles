@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.BusinessLogic.Websites;
+using Equibles.CorporateActions.BusinessLogic;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Contracts;
 using Equibles.Yahoo.HostedService.Services;
@@ -12,6 +13,12 @@ public static class ServiceCollectionExtensions
     {
         services.AutoWireServicesFrom<YahooPriceImportService>();
         services.AutoWireServicesFrom<Equibles.Integrations.Yahoo.YahooFinanceClient>();
+
+        // The price import piggybacks split capture on its chart fetch; register
+        // the capture manager so it resolves in the import scope. Its
+        // StockSplitRepository is picked up by AddAllRepositories (PluginLoader
+        // loads Equibles.CorporateActions.Repositories.dll from the output dir).
+        services.AutoWireServicesFrom<StockSplitCaptureManager>();
 
         // Yahoo is the OSS source of stock prices for Holdings valuation.
         services.AddScoped<IStockPriceProvider, YahooStockPriceProvider>();
