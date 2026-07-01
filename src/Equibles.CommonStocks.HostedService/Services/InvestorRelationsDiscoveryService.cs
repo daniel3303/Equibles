@@ -52,6 +52,17 @@ public class InvestorRelationsDiscoveryService : IImporter
     /// </summary>
     public async Task<bool> DiscoverBatch(CancellationToken cancellationToken)
     {
+        // Without a stealth sidecar nothing can be assessed (every probe is Inconclusive), so don't
+        // load a batch at all — probing would only churn transient-miss stamps across the backlog.
+        // Loud on purpose: in a deployment that expects a sidecar this is a misconfiguration.
+        if (!_probeClient.IsEnabled)
+        {
+            _logger.LogWarning(
+                "Investor relations discovery skipped: no stealth browser sidecar is configured"
+            );
+            return false;
+        }
+
         var batch = await LoadCandidates(cancellationToken);
         if (batch.Count == 0)
         {
@@ -104,6 +115,17 @@ public class InvestorRelationsDiscoveryService : IImporter
         CancellationToken cancellationToken
     )
     {
+        // Same no-sidecar guard as the batch sweep; the periodic sweep picks the stock up once a
+        // sidecar is configured (its InvestorRelationsUrl stays null, so it stays pending).
+        if (!_probeClient.IsEnabled)
+        {
+            _logger.LogWarning(
+                "Investor relations discovery for stock {StockId} skipped: no stealth browser sidecar is configured",
+                commonStockId
+            );
+            return false;
+        }
+
         var candidate = await LoadCandidate(commonStockId, cancellationToken);
         if (candidate == null)
             return false;
@@ -267,7 +289,9 @@ public class InvestorRelationsDiscoveryService : IImporter
     // IR page may have been missed. Stamp a short, fixed cooldown — long enough not to re-occupy a batch
     // slot every cycle, short enough that a stock with a reachable IR page isn't exiled on the escalating
     // conclusive-miss schedule over one bad sidecar moment. Deliberately does NOT advance the exponential
-    // schedule.
+    // schedule, and deliberately does NOT stamp the discovery version: the stock was never assessed
+    // under this generation, so a version bump must still be able to re-sweep it. PendingDiscovery
+    // keeps the short cooldown from being bypassed by that version clause.
     private async Task MarkTransientMiss(Guid commonStockId)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -282,7 +306,6 @@ public class InvestorRelationsDiscoveryService : IImporter
             Math.Max(1, _options.RetryTransientBackoffHours)
         );
         stock.InvestorRelationsCheckedAt = now;
-        stock.InvestorRelationsDiscoveryVersion = InvestorRelationsDiscoveryVersion.Current;
         await repo.SaveChanges();
     }
 
@@ -315,12 +338,25 @@ public class InvestorRelationsDiscoveryService : IImporter
     }
 
     /// <summary>
+    /// Ceiling separating a short transient (engine-unavailable) cooldown from a conclusive-miss
+    /// backoff, measured as the RetryAfter−CheckedAt gap. Sits above the default transient cooldown
+    /// (<see cref="InvestorRelationsDiscoveryOptions.RetryTransientBackoffHours"/>, 6h) and below the
+    /// smallest conclusive backoff (<see cref="InvestorRelationsDiscoveryOptions.RetryInitialBackoffDays"/>,
+    /// 1 day). The version-bump clause in <see cref="PendingDiscovery"/> bypasses only backoffs longer
+    /// than this: a transient miss keeps the stock's old version stamp, so without the ceiling every
+    /// old-version stock in a transient cooldown would be re-eligible immediately and a saturated
+    /// sidecar would livelock the sweep on the same top-priority stocks.
+    /// </summary>
+    public const double TransientCooldownCeilingHours = 12;
+
+    /// <summary>
     /// Stocks eligible for an IR discovery probe: a known website, no discovered IR page yet, and one
     /// of — never probed; due for a re-probe (its exponential miss-backoff has elapsed, or it predates
     /// the backoff field and so re-probes once); probed under an older discovery version
-    /// (<paramref name="currentVersion"/> — our probe improved, re-sweep the backlog now); or probed
-    /// before the website was found (<c>InvestorRelationsCheckedAt &lt; WebsiteCheckedAt</c> — the
-    /// input changed; the reconciliation backstop for a website-discovered event lost to a crash).
+    /// (<paramref name="currentVersion"/> — our probe improved, re-sweep the backlog now) unless it is
+    /// sitting out a short transient cooldown (see <see cref="TransientCooldownCeilingHours"/>); or
+    /// probed before the website was found (<c>InvestorRelationsCheckedAt &lt; WebsiteCheckedAt</c> —
+    /// the input changed; the reconciliation backstop for a website-discovered event lost to a crash).
     /// </summary>
     public static Expression<Func<CommonStock, bool>> PendingDiscovery(
         DateTime now,
@@ -335,7 +371,11 @@ public class InvestorRelationsDiscoveryService : IImporter
                 s.InvestorRelationsCheckedAt == null
                 || s.InvestorRelationsRetryAfter == null
                 || s.InvestorRelationsRetryAfter <= now
-                || s.InvestorRelationsDiscoveryVersion < currentVersion
+                || (
+                    s.InvestorRelationsDiscoveryVersion < currentVersion
+                    && s.InvestorRelationsRetryAfter
+                        > s.InvestorRelationsCheckedAt.Value.AddHours(TransientCooldownCeilingHours)
+                )
                 || s.InvestorRelationsCheckedAt < s.WebsiteCheckedAt
             );
     }

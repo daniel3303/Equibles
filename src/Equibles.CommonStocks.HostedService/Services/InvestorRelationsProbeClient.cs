@@ -7,8 +7,10 @@ namespace Equibles.CommonStocks.HostedService.Services;
 /// validated IR page. All fetches go through the stealth sidecar (<see cref="IStealthBrowserClient"/>):
 /// virtually every IR host is bot-protected, so a plain-HTTP pass only ever returned a challenge page
 /// that failed validation — it found nothing while adding ~100s of dead-host timeouts per stock before
-/// the stealth pass even started. With no sidecar configured the client is a no-op (a build without a
-/// stealth browser can't get past the bot walls anyway), so discovery simply finds nothing.
+/// the stealth pass even started. With no sidecar configured the probe reports every stock
+/// <c>Inconclusive</c> (nothing was assessed), never a conclusive miss — a sidecar misconfiguration
+/// must not stamp the whole backlog as checked. Callers should skip the sweep entirely via
+/// <see cref="IsEnabled"/>.
 /// </summary>
 public class InvestorRelationsProbeClient
 {
@@ -37,12 +39,19 @@ public class InvestorRelationsProbeClient
     }
 
     /// <summary>
+    /// Whether a stealth sidecar is configured. When false every probe is <c>Inconclusive</c>, so
+    /// callers should skip the sweep (loudly) instead of burning batch slots on unassessable stocks.
+    /// </summary>
+    public bool IsEnabled => _stealthClient.IsEnabled;
+
+    /// <summary>
     /// Probes <paramref name="website"/> for an investor-relations page and returns a classified
     /// <see cref="IrProbeResult"/>: <c>Found</c> with the validated URL + platform; <c>NoIrPageFound</c>
     /// when every candidate was assessed and none was an IR page; or <c>Inconclusive</c> when the
     /// stealth engine was unavailable for one or more candidates, so a real IR page may have been
-    /// missed. With no sidecar configured the probe reports <c>NoIrPageFound</c> (it can't get past bot
-    /// walls anyway, and re-probing won't help).
+    /// missed. With no sidecar configured the probe reports <c>Inconclusive</c>: nothing was assessed,
+    /// and a conclusive miss here would stamp the stock checked-at-current-version — a sidecar
+    /// misconfiguration would silently poison the whole backlog.
     /// </summary>
     public async Task<IrProbeResult> Discover(
         string website,
@@ -52,7 +61,7 @@ public class InvestorRelationsProbeClient
     )
     {
         if (!_stealthClient.IsEnabled)
-            return IrProbeResult.NoIrPage;
+            return IrProbeResult.Inconclusive;
 
         var candidates = InvestorRelationsCandidateBuilder.Build(website, paths, subdomains);
 

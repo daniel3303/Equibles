@@ -11,8 +11,8 @@ namespace Equibles.UnitTests.CommonStocks;
 /// homepage crawl) is rendered, the first that validates as an IR page wins, and the probe reports a
 /// classified outcome: <c>Found</c>, <c>NoIrPageFound</c> (every candidate was assessed and none was an
 /// IR page), or <c>Inconclusive</c> (the engine was unavailable for a candidate, so a real IR page may
-/// have been missed). With no sidecar configured it reports <c>NoIrPageFound</c>. There is no
-/// plain-HTTP path.
+/// have been missed). With no sidecar configured it reports <c>Inconclusive</c> — nothing was
+/// assessed, and a conclusive miss would stamp the backlog as checked. There is no plain-HTTP path.
 /// </summary>
 public class InvestorRelationsProbeClientTests
 {
@@ -121,10 +121,12 @@ public class InvestorRelationsProbeClientTests
     }
 
     [Fact]
-    public async Task Discover_NoSidecar_IsNoOpConclusiveMiss()
+    public async Task Discover_NoSidecar_IsInconclusiveNoOp()
     {
-        // No stealth browser configured: the probe can't get past bot walls, so it finds nothing (there
-        // is no plain-HTTP fallback) and re-probing won't help — report a conclusive miss.
+        // No stealth browser configured: nothing can be assessed, so the probe must NOT report a
+        // conclusive miss — that would stamp the stock checked-at-current-version and a sidecar
+        // misconfiguration would silently poison the whole backlog. It reports Inconclusive without
+        // touching the sidecar, and exposes IsEnabled=false so callers skip the sweep entirely.
         var stealth = Substitute.For<IStealthBrowserClient>();
         stealth.IsEnabled.Returns(false);
 
@@ -132,7 +134,8 @@ public class InvestorRelationsProbeClientTests
 
         var result = await client.Discover("acme.com", ["investors"], [], CancellationToken.None);
 
-        result.Outcome.Should().Be(IrProbeOutcome.NoIrPageFound);
+        client.IsEnabled.Should().BeFalse();
+        result.Outcome.Should().Be(IrProbeOutcome.Inconclusive);
         await stealth.DidNotReceive().TryFetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 

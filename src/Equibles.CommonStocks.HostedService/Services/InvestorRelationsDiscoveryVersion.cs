@@ -21,10 +21,15 @@ namespace Equibles.CommonStocks.HostedService.Services;
 public static class InvestorRelationsDiscoveryVersion
 {
     /// <summary>
-    /// v1: the discovery logic as it stands today (plain-HTTP-first with stealth fallback, path +
-    /// subdomain guessing, homepage crawl, platform classification). The column defaults the
+    /// v1: the discovery logic as it stood at introduction (plain-HTTP-first with stealth fallback,
+    /// path + subdomain guessing, homepage crawl, platform classification). The column defaults the
     /// pre-existing corpus to 0, so every stock probed before this generation is reconsidered once
     /// against it.
+    ///
+    /// v2: subdomain-first candidate ordering, press-release (<c>og:type=article</c>) rejection, and
+    /// the second-pass page confirmers all shipped without a bump, so the backlog of misses was never
+    /// re-examined against them — this bump re-sweeps it. Also the first generation where a transient
+    /// (engine-unavailable) miss leaves the stamped version untouched.
     /// </summary>
-    public const int Current = 1;
+    public const int Current = 2;
 }
