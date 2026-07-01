@@ -28,7 +28,7 @@ public class EmbeddingClient : IEmbeddingClient
         if (_config.IsConfigured)
         {
             _httpClient.BaseAddress = new Uri(_config.BaseUrl);
-            _httpClient.Timeout = TimeSpan.FromSeconds(30);
+            _httpClient.Timeout = TimeSpan.FromSeconds(Math.Max(1, _config.RequestTimeoutSeconds));
 
             if (!string.IsNullOrEmpty(_config.ApiKey))
             {
@@ -106,6 +106,20 @@ public class EmbeddingClient : IEmbeddingClient
         var embeddings = await Task.WhenAll(
             batch.Select(text => EmbedSingle(text, cancellationToken))
         );
+
+        // One aggregated line per batch instead of one warning per failed chunk: under a saturated
+        // or restarting server every chunk fails, and per-chunk warnings flooded the log by the
+        // hundreds of thousands, burying real errors. Per-chunk detail stays at Debug.
+        var failed = embeddings.Count(e => e == null);
+        if (failed > 0)
+        {
+            _logger.LogWarning(
+                "Skipped {Failed} of {Total} chunks that failed to embed (continuing with the rest)",
+                failed,
+                embeddings.Length
+            );
+        }
+
         return embeddings.ToList();
     }
 
@@ -173,10 +187,8 @@ public class EmbeddingClient : IEmbeddingClient
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(
-                ex,
-                "Skipping a chunk that failed to embed (continuing with the rest)"
-            );
+            // Per-chunk failures are aggregated into one warning per batch by ProcessBatch.
+            _logger.LogDebug(ex, "Chunk failed to embed (continuing with the rest)");
             return null;
         }
     }
