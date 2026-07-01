@@ -67,7 +67,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             cancellationToken
         );
 
-        var file = await _fileManager.SaveFile(content, fileName);
+        var file = await SaveTextContent(content, fileName);
         var lineCount = Encoding.UTF8.GetString(content).Split('\n').Length;
 
         var document = new Document
@@ -147,7 +147,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         // Swap in a new content file and recount lines. The document keeps its id, so every soft
         // reference to it (e.g. an earnings call's TranscriptDocumentId) stays valid with no re-link.
         var fileName = document.Content?.NameWithExtension ?? $"{document.Id}.txt";
-        var file = await _fileManager.SaveFile(content, fileName);
+        var file = await SaveTextContent(content, fileName);
         document.Content = file;
         document.LineCount = Encoding.UTF8.GetString(content).Split('\n').Length;
         _documentRepository.Update(document);
@@ -161,6 +161,26 @@ public class DocumentPersistenceService : IDocumentPersistenceService
 
         await _documentRepository.SaveChanges();
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    // The filing text body is system-generated (never a user upload), so it goes through the
+    // internal save with a filesystem-store request — the bulk txt tier belongs on disk, not
+    // in the database (falls back to the database while the store is disabled).
+    private Task<Media.Data.Models.File> SaveTextContent(byte[] content, string fileName)
+    {
+        var extension = Path.GetExtension(fileName)?.TrimStart('.');
+        if (string.IsNullOrEmpty(extension))
+        {
+            extension = "txt";
+        }
+
+        return _fileManager.SaveInternalFile(
+            content,
+            Path.GetFileNameWithoutExtension(fileName),
+            extension,
+            "text/plain",
+            storage: Media.Data.Models.StorageProvider.FileSystem
+        );
     }
 
     // Stores the captured XBRL envelope as a gzip-compressed internal File and records its
