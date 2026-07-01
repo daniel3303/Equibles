@@ -1,5 +1,8 @@
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Finra.BusinessLogic.Models;
 using Equibles.Finra.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -30,16 +33,19 @@ public class ShortSqueezeScoreManager
     private readonly ShortInterestRepository _shortInterestRepository;
     private readonly DailyShortVolumeRepository _dailyShortVolumeRepository;
     private readonly CommonStockRepository _commonStockRepository;
+    private readonly StockSplitRepository _stockSplitRepository;
 
     public ShortSqueezeScoreManager(
         ShortInterestRepository shortInterestRepository,
         DailyShortVolumeRepository dailyShortVolumeRepository,
-        CommonStockRepository commonStockRepository
+        CommonStockRepository commonStockRepository,
+        StockSplitRepository stockSplitRepository
     )
     {
         _shortInterestRepository = shortInterestRepository;
         _dailyShortVolumeRepository = dailyShortVolumeRepository;
         _commonStockRepository = commonStockRepository;
+        _stockSplitRepository = stockSplitRepository;
     }
 
     public async Task<List<ShortSqueezeScore>> Compute(
@@ -88,6 +94,20 @@ public class ShortSqueezeScoreManager
 
         var trends = await LoadShortVolumeTrends(stockIds, settlementDate, cancellationToken);
 
+        // Load every scored stock's splits once so the short position — a share COUNT
+        // observed as-of the settlement date — can be restated onto today's basis before
+        // it is divided by the CURRENT shares outstanding. Without this a stock that split
+        // after the settlement date reports a short-interest-percent-of-shares off by the
+        // split factor (e.g. a 10:1 split makes the raw ratio 10× too small).
+        var splitsByStock = (
+            await _stockSplitRepository
+                .GetAll()
+                .Where(s => stockIds.Contains(s.CommonStockId))
+                .ToListAsync(cancellationToken)
+        )
+            .GroupBy(s => s.CommonStockId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<StockSplit>)g.ToList());
+
         var scores = new List<ShortSqueezeScore>();
         foreach (var shortInterest in shortInterests)
         {
@@ -118,8 +138,12 @@ public class ShortSqueezeScoreManager
                     CommonStockId = stock.Id,
                     Ticker = stock.Ticker,
                     SettlementDate = settlementDate,
-                    ShortInterestPercentOfShares =
-                        shortInterest.CurrentShortPosition / (decimal)stock.SharesOutStanding,
+                    ShortInterestPercentOfShares = ShortInterestPercentOfShares(
+                        shortInterest.CurrentShortPosition,
+                        stock.SharesOutStanding,
+                        settlementDate,
+                        splitsByStock.TryGetValue(stock.Id, out var stockSplits) ? stockSplits : []
+                    ),
                     DaysToCover = daysToCover,
                     // TryGetValue, not GetValueOrDefault: a stock with no volume data
                     // must carry a null trend (factor drops out), never a zero trend.
@@ -180,6 +204,25 @@ public class ShortSqueezeScoreManager
         }
 
         return trends;
+    }
+
+    /// <summary>
+    /// Short interest as a fraction of shares outstanding, with the short position
+    /// restated onto today's split basis first. The short position is a share COUNT
+    /// as-of <paramref name="settlementDate"/>; the shares-outstanding denominator is
+    /// the CURRENT count, so the two must sit on the same basis before dividing. When
+    /// the stock has no splits after the settlement date the factor is 1 and the ratio
+    /// is unchanged.
+    /// </summary>
+    private static decimal ShortInterestPercentOfShares(
+        long currentShortPosition,
+        long sharesOutstanding,
+        DateOnly settlementDate,
+        IReadOnlyList<StockSplit> splits
+    )
+    {
+        var factor = SplitAdjustment.ShareCountFactor(settlementDate, splits);
+        return currentShortPosition * factor / sharesOutstanding;
     }
 
     private static void ApplyPercentiles(List<ShortSqueezeScore> scores)

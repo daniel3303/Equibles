@@ -3,6 +3,9 @@ using System.Globalization;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
@@ -24,6 +27,7 @@ public class ShortDataTools
     private readonly ShortInterestRepository _shortInterestRepository;
     private readonly CommonStockRepository _commonStockRepository;
     private readonly ShortSqueezeScoreManager _shortSqueezeScoreManager;
+    private readonly StockSplitRepository _stockSplitRepository;
     private readonly McpToolRunner _runner;
 
     public ShortDataTools(
@@ -31,6 +35,7 @@ public class ShortDataTools
         ShortInterestRepository shortInterestRepository,
         CommonStockRepository commonStockRepository,
         ShortSqueezeScoreManager shortSqueezeScoreManager,
+        StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
         ILogger<ShortDataTools> logger
     )
@@ -39,6 +44,7 @@ public class ShortDataTools
         _shortInterestRepository = shortInterestRepository;
         _commonStockRepository = commonStockRepository;
         _shortSqueezeScoreManager = shortSqueezeScoreManager;
+        _stockSplitRepository = stockSplitRepository;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -80,13 +86,24 @@ public class ShortDataTools
                     .Take(maxResults)
                     .ToListAsync();
 
+                // Restate each day's volumes onto today's split basis so the series is
+                // continuous across a split (a raw pre-split day would otherwise show a
+                // phantom step against post-split days). The same-day Short % is a ratio of
+                // two counts on the same date, so it is split-invariant and left as-is.
+                var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
+
                 return MarkdownTable.Render(
                     records.OrderBy(r => r.Date).ToList(),
                     $"No short volume data found for {stock.Ticker} in the specified date range.",
                     $"Daily short volume for {stock.Ticker} ({stock.Name}):",
                     "| Date | Short Volume | Exempt | Total Volume | Short % |",
                     "|------|-------------|--------|-------------|---------|",
-                    r => RenderShortVolumeRow($"{r.Date:yyyy-MM-dd}", r)
+                    r =>
+                        RenderShortVolumeRow(
+                            $"{r.Date:yyyy-MM-dd}",
+                            r,
+                            SplitAdjustment.ShareCountFactor(r.Date, splits)
+                        )
                 );
             },
             "GetShortVolume",
@@ -132,13 +149,25 @@ public class ShortDataTools
                     .Take(maxResults)
                     .ToListAsync();
 
+                // Restate each settlement's share counts (short position, change, average
+                // daily volume) onto today's split basis so the series is continuous across a
+                // split. Days to cover is a same-settlement ratio (position ÷ ADV) and is left
+                // as reported — restating the numerator and denominator by the same factor
+                // leaves it unchanged anyway.
+                var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
+
                 return MarkdownTable.Render(
                     records.OrderBy(r => r.SettlementDate).ToList(),
                     $"No short interest data found for {stock.Ticker} in the specified date range.",
                     $"Short interest for {stock.Ticker} ({stock.Name}):",
                     "| Settlement Date | Short Position | Change | Avg Daily Volume | Days to Cover |",
                     "|----------------|---------------|--------|-----------------|---------------|",
-                    r => RenderShortInterestRow($"{r.SettlementDate:yyyy-MM-dd}", r)
+                    r =>
+                        RenderShortInterestRow(
+                            $"{r.SettlementDate:yyyy-MM-dd}",
+                            r,
+                            SplitAdjustment.ShareCountFactor(r.SettlementDate, splits)
+                        )
                 );
             },
             "GetShortInterest",
@@ -244,21 +273,45 @@ public class ShortDataTools
     }
 
     // Render with InvariantCulture so the MCP markdown does not fork the separators by host
-    // locale (e.g. de-DE would render 5.000.000 / 62,5%).
-    private static string RenderShortVolumeRow(string leadCell, DailyShortVolume r)
+    // locale (e.g. de-DE would render 5.000.000 / 62,5%). `shareFactor` restates the volume
+    // counts onto today's split basis (1 = no adjustment, the single-date snapshot tools).
+    private static string RenderShortVolumeRow(
+        string leadCell,
+        DailyShortVolume r,
+        decimal shareFactor = 1m
+    )
     {
+        // Short % is computed from raw counts — it is a same-day ratio and split-invariant,
+        // so the factor cancels; adjusting only the displayed absolute volumes.
         var shortPct = r.TotalVolume > 0 ? (double)r.ShortVolume / r.TotalVolume * 100 : 0;
-        return $"| {leadCell} | {McpFormat.WholeNumber(r.ShortVolume)} | {McpFormat.WholeNumber(r.ShortExemptVolume)} | {McpFormat.WholeNumber(r.TotalVolume)} | {McpFormat.Invariant(shortPct, "F1")}% |";
+        var shortVolume = SplitAdjustment.AdjustShareCount(r.ShortVolume, shareFactor);
+        var exemptVolume = SplitAdjustment.AdjustShareCount(r.ShortExemptVolume, shareFactor);
+        var totalVolume = SplitAdjustment.AdjustShareCount(r.TotalVolume, shareFactor);
+        return $"| {leadCell} | {McpFormat.WholeNumber(shortVolume)} | {McpFormat.WholeNumber(exemptVolume)} | {McpFormat.WholeNumber(totalVolume)} | {McpFormat.Invariant(shortPct, "F1")}% |";
     }
 
     // Render with InvariantCulture so the MCP markdown does not fork the separators by host
-    // locale (e.g. de-DE would render 1.234.567 / 12,3).
-    private static string RenderShortInterestRow(string leadCell, ShortInterest r)
+    // locale (e.g. de-DE would render 1.234.567 / 12,3). `shareFactor` restates the share
+    // counts onto today's split basis (1 = no adjustment, the single-date snapshot tools).
+    private static string RenderShortInterestRow(
+        string leadCell,
+        ShortInterest r,
+        decimal shareFactor = 1m
+    )
     {
-        var changeStr = FormatSignedChange(r.ChangeInShortPosition);
-        var advStr = McpFormat.OrDash(r.AverageDailyVolume, "N0");
+        var position = SplitAdjustment.AdjustShareCount(r.CurrentShortPosition, shareFactor);
+        var changeStr = FormatSignedChange(
+            SplitAdjustment.AdjustShareCount(r.ChangeInShortPosition, shareFactor)
+        );
+        // Average daily volume is a share count as-of the settlement; restate it too so the
+        // row stays self-consistent (position ÷ ADV still reconciles to Days to Cover).
+        var adv = r.AverageDailyVolume.HasValue
+            ? SplitAdjustment.AdjustShareCount(r.AverageDailyVolume.Value, shareFactor)
+            : (long?)null;
+        var advStr = McpFormat.OrDash(adv, "N0");
+        // Days to cover is a same-settlement ratio — left as reported (split-invariant).
         var dtcStr = McpFormat.OrDash(r.DaysToCover, "F1");
-        return $"| {leadCell} | {McpFormat.WholeNumber(r.CurrentShortPosition)} | {changeStr} | {advStr} | {dtcStr} |";
+        return $"| {leadCell} | {McpFormat.WholeNumber(position)} | {changeStr} | {advStr} | {dtcStr} |";
     }
 
     private static string FormatSignedChange(long change) =>
