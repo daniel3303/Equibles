@@ -10,8 +10,16 @@ public class FileBackfillOptions
     public bool Enabled { get; set; }
 
     /// <summary>
-    /// Rows claimed per tick. Each tick loads the full bytes of the whole batch into memory,
-    /// and filing/XBRL blobs are multi-MB, so keep this modest; tune via config for the corpus.
+    /// Rows claimed per pass. Memory is bounded by <see cref="Concurrency"/> (blobs in
+    /// flight), not by the batch size, so this mainly amortizes the claim query and the
+    /// per-batch commit.
     /// </summary>
-    public int BatchSize { get; set; } = 25;
+    public int BatchSize { get; set; } = 1000;
+
+    /// <summary>
+    /// How many blobs are loaded and written concurrently within a batch. Peak memory is
+    /// roughly this many blobs (audio runs tens of MB each); it also sets the database
+    /// read parallelism, so keep it well below the connection pool size.
+    /// </summary>
+    public int Concurrency { get; set; } = 8;
 }
