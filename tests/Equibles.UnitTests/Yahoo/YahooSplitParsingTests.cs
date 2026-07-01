@@ -77,7 +77,9 @@ public class YahooSplitParsingTests
         var chart = await client.GetChart("NVDA", WindowStart, WindowEnd);
 
         chart.Prices.Should().HaveCount(2);
-        chart.Prices.Should().Contain(p => p.Date == new DateOnly(2024, 6, 28) && p.Close == 120.5m);
+        chart
+            .Prices.Should()
+            .Contain(p => p.Date == new DateOnly(2024, 6, 28) && p.Close == 120.5m);
         chart.Prices.Should().Contain(p => p.Date == new DateOnly(2024, 7, 1) && p.Close == 122.5m);
     }
 
@@ -91,7 +93,8 @@ public class YahooSplitParsingTests
         var prices = await client.GetHistoricalPrices("NVDA", WindowStart, WindowEnd);
 
         prices.Should().HaveCount(2);
-        prices.Select(p => p.Date)
+        prices
+            .Select(p => p.Date)
             .Should()
             .BeEquivalentTo([new DateOnly(2024, 6, 28), new DateOnly(2024, 7, 1)]);
     }

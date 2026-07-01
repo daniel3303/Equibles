@@ -1386,7 +1386,11 @@ public class InstitutionalHoldingsTools
         foreach (var a in activity)
         {
             var splits = SplitsFor(splitsByStock, a.CommonStockId);
-            a.CurrentShares = SplitAdjustment.AdjustShareCount(a.CurrentShares, currentDate, splits);
+            a.CurrentShares = SplitAdjustment.AdjustShareCount(
+                a.CurrentShares,
+                currentDate,
+                splits
+            );
             a.PreviousShares = SplitAdjustment.AdjustShareCount(
                 a.PreviousShares,
                 previousDate,

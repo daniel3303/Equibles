@@ -107,7 +107,9 @@ public static class InvestorRelationsPageValidator
         {
             var key = (
                 meta.GetAttributeValue("property", null) ?? meta.GetAttributeValue("name", "")
-            ).Trim().ToLowerInvariant();
+            )
+                .Trim()
+                .ToLowerInvariant();
 
             if (ArticleTimestampProperties.Contains(key))
                 return true;

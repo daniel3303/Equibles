@@ -263,7 +263,9 @@ public class YahooPriceImportService
 
         // Same GH-1591 guard as the incremental flush: the parent CommonStock can be removed
         // between selection and now, which would trip the FK on insert.
-        var stockExists = await stockRepo.GetAll().AnyAsync(s => s.Id == commonStockId, cancellationToken);
+        var stockExists = await stockRepo
+            .GetAll()
+            .AnyAsync(s => s.Id == commonStockId, cancellationToken);
         if (!stockExists)
         {
             _logger.LogWarning(
@@ -439,8 +441,7 @@ public class YahooPriceImportService
         if (stock == null)
             return;
 
-        var captureManager =
-            scope.ServiceProvider.GetRequiredService<StockSplitCaptureManager>();
+        var captureManager = scope.ServiceProvider.GetRequiredService<StockSplitCaptureManager>();
         var count = await captureManager.Capture(stock, captured);
         if (count > 0)
             _logger.LogInformation(
