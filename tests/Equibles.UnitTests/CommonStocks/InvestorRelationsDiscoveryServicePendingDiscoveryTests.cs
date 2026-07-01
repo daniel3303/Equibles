@@ -69,19 +69,48 @@ public class InvestorRelationsDiscoveryServicePendingDiscoveryTests
     public void PendingDiscovery_OlderVersion_IsEligibleWhileBackingOff(int version, bool expected)
     {
         // Contract: a probe-logic improvement (version bump) re-opens the backlog of misses
-        // immediately, bypassing the backoff — even a stock still mid-backoff is reconsidered when it
-        // was probed under an older version.
+        // immediately, bypassing the multi-day conclusive backoff — even a stock still mid-backoff is
+        // reconsidered when it was probed under an older version.
         var stock = new CommonStock
         {
             Website = "https://acme.com",
             InvestorRelationsCheckedAt = Utc("2026-06-14"),
-            InvestorRelationsRetryAfter = Utc("2026-06-20"), // still backing off
+            InvestorRelationsRetryAfter = Utc("2026-06-20"), // 6-day conclusive backoff, mid-flight
             WebsiteCheckedAt = Utc("2026-06-14"),
             InvestorRelationsDiscoveryVersion = version,
         };
 
         var eligible = InvestorRelationsDiscoveryService
             .PendingDiscovery(Now, CurrentVersion)
+            .Compile();
+
+        eligible(stock).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("2026-06-14T20:00:00Z", false)] // 6h transient cooldown still running → hold
+    [InlineData("2026-06-16T00:00:00Z", true)] // 34h gap is a conclusive backoff → bypass now
+    public void PendingDiscovery_OlderVersionInTransientCooldown_WaitsOutTheCooldown(
+        string retryAfter,
+        bool expected
+    )
+    {
+        // Contract: a transient (engine-unavailable) miss keeps the stock's OLD version stamp so a
+        // version bump can still re-sweep it — but the bump must not bypass the short transient
+        // cooldown itself, or a saturated sidecar would make every old-version stock immediately
+        // re-eligible and livelock the sweep on the same top-priority names. Only a standing backoff
+        // longer than the transient ceiling (a conclusive miss) is bypassed.
+        var stock = new CommonStock
+        {
+            Website = "https://acme.com",
+            InvestorRelationsCheckedAt = Utc("2026-06-14T14:00:00Z"),
+            InvestorRelationsRetryAfter = Utc(retryAfter), // both still in the future at Now
+            WebsiteCheckedAt = Utc("2026-06-01"),
+            InvestorRelationsDiscoveryVersion = CurrentVersion - 1,
+        };
+
+        var eligible = InvestorRelationsDiscoveryService
+            .PendingDiscovery(Utc("2026-06-14T15:00:00Z"), CurrentVersion)
             .Compile();
 
         eligible(stock).Should().Be(expected);
