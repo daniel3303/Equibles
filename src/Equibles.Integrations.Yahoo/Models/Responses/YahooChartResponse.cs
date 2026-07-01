@@ -28,6 +28,31 @@ public class ChartResult
 
     [JsonProperty("indicators")]
     public ChartIndicators Indicators { get; set; }
+
+    [JsonProperty("events")]
+    public ChartEvents Events { get; set; }
+}
+
+public class ChartEvents
+{
+    // Keyed by the split's epoch-second string (e.g. "1718022600").
+    [JsonProperty("splits")]
+    public Dictionary<string, ChartSplit> Splits { get; set; } = [];
+}
+
+public class ChartSplit
+{
+    [JsonProperty("date")]
+    public long Date { get; set; }
+
+    [JsonProperty("numerator")]
+    public decimal Numerator { get; set; }
+
+    [JsonProperty("denominator")]
+    public decimal Denominator { get; set; }
+
+    [JsonProperty("splitRatio")]
+    public string SplitRatio { get; set; }
 }
 
 public class ChartMeta

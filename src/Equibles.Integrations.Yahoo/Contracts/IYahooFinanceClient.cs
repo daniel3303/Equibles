@@ -9,6 +9,7 @@ public interface IYahooFinanceClient
         DateOnly startDate,
         DateOnly endDate
     );
+    Task<YahooChartData> GetChart(string ticker, DateOnly startDate, DateOnly endDate);
     Task<List<RecommendationTrend>> GetRecommendationTrends(string ticker);
     Task<KeyStatistics> GetKeyStatistics(string ticker);
     Task<CompanyProfile> GetCompanyProfile(string ticker);
