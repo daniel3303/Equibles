@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Repositories;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Mcp.Tools;
 using Equibles.InsiderTrading.Repositories;
@@ -73,6 +74,7 @@ public class InsiderTradingToolsGetRoleOfficerBlankTitleTests : ParadeDbMcpTestB
             new InsiderOwnerRepository(DbContext),
             new Form144FilingRepository(DbContext),
             new CommonStockRepository(DbContext),
+            new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<InsiderTradingTools>()
         );

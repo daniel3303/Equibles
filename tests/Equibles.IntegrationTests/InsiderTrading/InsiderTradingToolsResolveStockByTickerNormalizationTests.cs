@@ -2,6 +2,7 @@ using System.Reflection;
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.InsiderTrading.Data;
 using Equibles.InsiderTrading.Mcp.Tools;
@@ -34,6 +35,7 @@ public class InsiderTradingToolsResolveStockByTickerNormalizationTests : IDispos
             new InsiderOwnerRepository(_dbContext),
             new Form144FilingRepository(_dbContext),
             new CommonStockRepository(_dbContext),
+            new StockSplitRepository(_dbContext),
             errorManager: null,
             NullLogger<InsiderTradingTools>.Instance
         );
