@@ -94,4 +94,79 @@ public class SplitAdjustmentTests
 
         SplitAdjustment.ShareCountFactor(new DateOnly(2023, 1, 1), splits).Should().Be(1m);
     }
+
+    [Fact]
+    public void AdjustShareCount_NoSplits_ReturnsCountUnchanged()
+    {
+        SplitAdjustment.AdjustShareCount(1_000, new DateOnly(2020, 1, 1), []).Should().Be(1_000);
+    }
+
+    [Fact]
+    public void AdjustShareCount_BeforeBothSplits_RestatesOntoTodaysBasis()
+    {
+        // 100 pre-split shares × 40 (NVDA 4:1 then 10:1) = 4,000 on today's basis.
+        SplitAdjustment
+            .AdjustShareCount(100, new DateOnly(2021, 1, 1), NvdaSplits)
+            .Should()
+            .Be(4_000);
+    }
+
+    [Fact]
+    public void AdjustShareCount_ReverseSplit_ShrinksAndRoundsToNearestShare()
+    {
+        StockSplit[] splits =
+        [
+            new()
+            {
+                EffectiveDate = new DateOnly(2024, 1, 1),
+                Numerator = 1m,
+                Denominator = 3m,
+            },
+        ];
+
+        // 100 / 3 = 33.33… → rounds to the nearest whole share.
+        SplitAdjustment.AdjustShareCount(100, new DateOnly(2023, 1, 1), splits).Should().Be(33);
+    }
+
+    [Fact]
+    public void AdjustShareCount_NegativeCount_PreservesSign()
+    {
+        // A change/delta can be negative; the 4:1 split still restates it correctly.
+        SplitAdjustment
+            .AdjustShareCount(-250, new DateOnly(2022, 1, 1), NvdaSplits)
+            .Should()
+            .Be(-2_500);
+    }
+
+    [Fact]
+    public void AdjustShareCount_QuarterOverQuarterAcrossASplit_ShowsNoPhantomChange()
+    {
+        // A 2:1 split falls between two 13F report dates. 1,000 shares held before the split
+        // and 2,000 after are the SAME economic position; once both are restated onto today's
+        // basis the quarter-over-quarter change must be zero, not +100%.
+        StockSplit[] splits =
+        [
+            new()
+            {
+                EffectiveDate = new DateOnly(2024, 3, 1),
+                Numerator = 2m,
+                Denominator = 1m,
+            },
+        ];
+
+        var priorQuarter = SplitAdjustment.AdjustShareCount(
+            1_000,
+            new DateOnly(2024, 2, 15),
+            splits
+        );
+        var currentQuarter = SplitAdjustment.AdjustShareCount(
+            2_000,
+            new DateOnly(2024, 3, 31),
+            splits
+        );
+
+        priorQuarter.Should().Be(2_000);
+        currentQuarter.Should().Be(2_000);
+        (currentQuarter - priorQuarter).Should().Be(0, "the split is not a real ownership change");
+    }
 }

@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.InsiderTrading.Data;
 using Equibles.InsiderTrading.Data.Models;
@@ -27,6 +28,7 @@ public class Form144ProposedSalesToolTests : IDisposable
             new InsiderOwnerRepository(_dbContext),
             new Form144FilingRepository(_dbContext),
             new CommonStockRepository(_dbContext),
+            new StockSplitRepository(_dbContext),
             errorManager: null,
             NullLogger<InsiderTradingTools>.Instance
         );

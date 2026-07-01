@@ -1,6 +1,8 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data;
@@ -39,6 +41,7 @@ public class InstitutionalHoldingsToolsTopBuyersSellersExcludes13DGTests
             new IModuleConfiguration[]
             {
                 new CommonStocksModuleConfiguration(),
+                new CorporateActionsModuleConfiguration(),
                 new HoldingsModuleConfiguration(),
                 new ErrorsModuleConfiguration(),
             }
@@ -114,6 +117,7 @@ public class InstitutionalHoldingsToolsTopBuyersSellersExcludes13DGTests
             new InstitutionalHoldingRepository(db),
             new InstitutionalHolderRepository(db),
             new CommonStockRepository(db),
+            new StockSplitRepository(db),
             new ErrorManager(new ErrorRepository(db)),
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );

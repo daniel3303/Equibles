@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Mcp.Tools;
 using Equibles.Holdings.Repositories;
@@ -150,6 +151,7 @@ public class InstitutionalHoldingsToolsGetConsensusHoldingsTests : ParadeDbMcpTe
             new InstitutionalHoldingRepository(ctx),
             new InstitutionalHolderRepository(ctx),
             new CommonStockRepository(ctx),
+            new StockSplitRepository(ctx),
             ErrorManager,
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );

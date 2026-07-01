@@ -6,5 +6,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Equibles.Finra.Repositories\Equibles.Finra.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.CorporateActions.Repositories\Equibles.CorporateActions.Repositories.csproj" />
   </ItemGroup>
 </Project>

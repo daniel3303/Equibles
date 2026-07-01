@@ -7,6 +7,7 @@
     <ProjectReference Include="..\Equibles.Mcp\Equibles.Mcp.csproj" />
     <ProjectReference Include="..\Equibles.InsiderTrading.Repositories\Equibles.InsiderTrading.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.CorporateActions.Repositories\Equibles.CorporateActions.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
   </ItemGroup>
 </Project>

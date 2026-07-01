@@ -5,6 +5,9 @@ using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
@@ -44,12 +47,14 @@ public class InstitutionalHoldingsTools
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly InstitutionalHolderRepository _holderRepository;
     private readonly CommonStockRepository _commonStockRepository;
+    private readonly StockSplitRepository _stockSplitRepository;
     private readonly McpToolRunner _runner;
 
     public InstitutionalHoldingsTools(
         InstitutionalHoldingRepository holdingRepository,
         InstitutionalHolderRepository holderRepository,
         CommonStockRepository commonStockRepository,
+        StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
         ILogger<InstitutionalHoldingsTools> logger
     )
@@ -57,6 +62,7 @@ public class InstitutionalHoldingsTools
         _holdingRepository = holdingRepository;
         _holderRepository = holderRepository;
         _commonStockRepository = commonStockRepository;
+        _stockSplitRepository = stockSplitRepository;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -103,6 +109,12 @@ public class InstitutionalHoldingsTools
                 if (holdings.Count == 0)
                     return $"No institutional holdings found for {ticker} as of {FormatDate(targetDate)}.";
 
+                // All rows share the target report date, so a single factor restates every
+                // share count onto today's basis (matching the web). The % of Total is a
+                // same-date ratio and is split-invariant (the factor cancels top and bottom).
+                var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
+                var shareFactor = SplitAdjustment.ShareCountFactor(targetDate, splits);
+
                 return RenderTopHoldersTable(
                     stock,
                     ticker,
@@ -110,7 +122,8 @@ public class InstitutionalHoldingsTools
                     totalInstitutions,
                     totalSharesAll,
                     totalValueAll,
-                    holdings
+                    holdings,
+                    shareFactor
                 );
             },
             "GetTopHolders",
@@ -125,13 +138,15 @@ public class InstitutionalHoldingsTools
         int totalInstitutions,
         long totalSharesAll,
         long totalValueAll,
-        List<InstitutionalHolding> holdings
+        List<InstitutionalHolding> holdings,
+        decimal shareFactor
     )
     {
+        var adjustedTotalShares = SplitAdjustment.AdjustShareCount(totalSharesAll, shareFactor);
         var result = MarkdownTable.Start(
             $"Top institutional holders of {stock.Name} ({ticker}) as of {FormatDate(targetDate)}:",
             $"Showing {holdings.Count} of {totalInstitutions} institutions. Total: "
-                + $"{McpFormat.WholeNumber(totalSharesAll)} shares, "
+                + $"{McpFormat.WholeNumber(adjustedTotalShares)} shares, "
                 + $"${FormatMillions(totalValueAll)}M value",
             "| # | Institution | Shares | Value ($M) | % of Total |",
             "|---|------------|--------|-----------|-----------|"
@@ -141,9 +156,12 @@ public class InstitutionalHoldingsTools
             holdings,
             (rank, h) =>
             {
+                // Ratio computed from raw shares (split-invariant); only the displayed
+                // absolute share count is restated onto today's basis.
                 var pct = Percentage.Of(h.Shares, totalSharesAll);
+                var adjustedShares = SplitAdjustment.AdjustShareCount(h.Shares, shareFactor);
                 return $"| {rank} | {h.InstitutionalHolder.Name} | "
-                    + $"{McpFormat.WholeNumber(h.Shares)} | "
+                    + $"{McpFormat.WholeNumber(adjustedShares)} | "
                     + $"{FormatMillions(h.Value)} | "
                     + $"{McpFormat.Invariant(pct, "F2")}% |";
             }
@@ -196,11 +214,20 @@ public class InstitutionalHoldingsTools
             "|------------|-------------|-------------|-----------------|--------|"
         );
 
+        // Restate each quarter's total shares onto today's split basis before the
+        // quarter-over-quarter change so a split between two report dates does not read as a
+        // real change in institutional ownership (a 2:1 split would otherwise show +100%).
+        var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
+
         long previousShares = 0;
         foreach (var date in reportDates.OrderBy(d => d))
         {
             var holdings = await _holdingRepository.Get13FByStock(stock, date).ToListAsync();
-            var totalShares = holdings.Sum(h => h.Shares);
+            var totalShares = SplitAdjustment.AdjustShareCount(
+                holdings.Sum(h => h.Shares),
+                date,
+                splits
+            );
             var totalValue = holdings.Sum(h => h.Value);
             var institutionCount = holdings.Select(h => h.InstitutionalHolderId).Distinct().Count();
 
@@ -384,17 +411,35 @@ public class InstitutionalHoldingsTools
                 var currentByHolder = AggregateByHolder(currentHoldings);
                 var previousByHolder = AggregateByHolder(previousHoldings);
 
+                // Restate each quarter's share counts onto today's split basis (the two
+                // quarters sit on different bases if a split fell between them) so Δ Shares
+                // and the Prior → New column reflect a real position change, not the split.
+                // Δ Value is a dollar figure and is split-invariant — left as reported.
+                var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
+                var currentFactor = SplitAdjustment.ShareCountFactor(targetDate, splits);
+                var previousFactor = previousDate.HasValue
+                    ? SplitAdjustment.ShareCountFactor(previousDate.Value, splits)
+                    : 1m;
+
                 var allHolderIds = currentByHolder.Keys.Union(previousByHolder.Keys);
                 var movers = allHolderIds
                     .Select(id =>
                     {
                         currentByHolder.TryGetValue(id, out var c);
                         previousByHolder.TryGetValue(id, out var p);
+                        var currentShares = SplitAdjustment.AdjustShareCount(
+                            c?.Shares ?? 0,
+                            currentFactor
+                        );
+                        var previousShares = SplitAdjustment.AdjustShareCount(
+                            p?.Shares ?? 0,
+                            previousFactor
+                        );
                         return (
                             Name: c?.Name ?? p?.Name ?? "Unknown",
-                            CurrentShares: c?.Shares ?? 0,
-                            PreviousShares: p?.Shares ?? 0,
-                            DeltaShares: (c?.Shares ?? 0) - (p?.Shares ?? 0),
+                            CurrentShares: currentShares,
+                            PreviousShares: previousShares,
+                            DeltaShares: currentShares - previousShares,
                             DeltaValue: (c?.Value ?? 0) - (p?.Value ?? 0)
                         );
                     })

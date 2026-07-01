@@ -3,6 +3,9 @@ using System.Globalization;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
@@ -24,6 +27,7 @@ public class InsiderTradingTools
     private readonly InsiderOwnerRepository _ownerRepository;
     private readonly Form144FilingRepository _form144Repository;
     private readonly CommonStockRepository _commonStockRepository;
+    private readonly StockSplitRepository _stockSplitRepository;
     private readonly McpToolRunner _runner;
 
     public InsiderTradingTools(
@@ -31,6 +35,7 @@ public class InsiderTradingTools
         InsiderOwnerRepository ownerRepository,
         Form144FilingRepository form144Repository,
         CommonStockRepository commonStockRepository,
+        StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
         ILogger<InsiderTradingTools> logger
     )
@@ -39,6 +44,7 @@ public class InsiderTradingTools
         _ownerRepository = ownerRepository;
         _form144Repository = form144Repository;
         _commonStockRepository = commonStockRepository;
+        _stockSplitRepository = stockSplitRepository;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -67,6 +73,11 @@ public class InsiderTradingTools
                     .Take(maxResults)
                     .ToListAsync();
 
+                // Restate the transaction and post-transaction share counts onto today's
+                // split basis so figures are comparable across dates. Value (Shares × Price)
+                // and the per-share Price are split-invariant and computed from raw figures.
+                var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
+
                 return MarkdownTable.Render(
                     transactions,
                     $"No insider transactions found for {ticker}.",
@@ -86,7 +97,17 @@ public class InsiderTradingTools
                         };
 
                         var value = t.Shares * t.PricePerShare;
-                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.InsiderOwner.Name} | {role} | {type} | {McpFormat.WholeNumber(t.Shares)} | ${McpFormat.Invariant(t.PricePerShare, "N2")} | ${McpFormat.WholeNumber(value)} | {McpFormat.WholeNumber(t.SharesOwnedAfter)} |";
+                        var shares = SplitAdjustment.AdjustShareCount(
+                            t.Shares,
+                            t.TransactionDate,
+                            splits
+                        );
+                        var ownedAfter = SplitAdjustment.AdjustShareCount(
+                            t.SharesOwnedAfter,
+                            t.TransactionDate,
+                            splits
+                        );
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.InsiderOwner.Name} | {role} | {type} | {McpFormat.WholeNumber(shares)} | ${McpFormat.Invariant(t.PricePerShare, "N2")} | ${McpFormat.WholeNumber(value)} | {McpFormat.WholeNumber(ownedAfter)} |";
                     }
                 );
             },
@@ -127,18 +148,38 @@ public class InsiderTradingTools
                     .Take(30)
                     .ToListAsync();
 
+                // Each insider's most recent position is reported as-of its own transaction
+                // date, so different rows sit on different split bases; restate them all onto
+                // today's basis and re-rank by the adjusted holding so the ordering is correct.
+                var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
+                var ranked = latestTransactions
+                    .OrderByDescending(t =>
+                        SplitAdjustment.AdjustShareCount(
+                            t.SharesOwnedAfter,
+                            t.TransactionDate,
+                            splits
+                        )
+                    )
+                    .ToList();
+
                 return MarkdownTable.Render(
-                    latestTransactions,
+                    ranked,
                     $"No insider ownership data found for {ticker}.",
                     $"Insider ownership summary for {stock.Name} ({ticker}):",
-                    $"Showing {latestTransactions.Count} insiders with most recent data",
+                    $"Showing {ranked.Count} insiders with most recent data",
                     "| Insider | Role | Shares Owned | Last Transaction | Last Date |",
                     "|---------|------|-------------|-----------------|-----------|",
                     t =>
                     {
                         var role = GetRole(t.InsiderOwner);
                         var lastType = t.TransactionCode.ToString();
-                        var sharesOwned = McpFormat.WholeNumber(t.SharesOwnedAfter);
+                        var sharesOwned = McpFormat.WholeNumber(
+                            SplitAdjustment.AdjustShareCount(
+                                t.SharesOwnedAfter,
+                                t.TransactionDate,
+                                splits
+                            )
+                        );
                         return $"| {t.InsiderOwner.Name} | {role} | {sharesOwned} | {lastType} | {t.TransactionDate:yyyy-MM-dd} |";
                     }
                 );
@@ -170,6 +211,11 @@ public class InsiderTradingTools
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
+                // Restate the proposed share count onto today's split basis so notices filed
+                // before a split are comparable with later ones. Aggregate market value is a
+                // dollar figure and is split-invariant — left as reported.
+                var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
+
                 return MarkdownTable.Render(
                     filings,
                     $"No Form 144 proposed sales found for {ticker}.",
@@ -182,7 +228,12 @@ public class InsiderTradingTools
                         var approxSaleDate =
                             f.ApproxSaleDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
                             ?? "-";
-                        return $"| {f.FilingDate:yyyy-MM-dd} | {f.SellerName} | {f.RelationshipToIssuer} | {McpFormat.WholeNumber(f.SharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {approxSaleDate} | {f.BrokerName} |";
+                        var sharesToBeSold = SplitAdjustment.AdjustShareCount(
+                            f.SharesToBeSold,
+                            f.FilingDate,
+                            splits
+                        );
+                        return $"| {f.FilingDate:yyyy-MM-dd} | {f.SellerName} | {f.RelationshipToIssuer} | {McpFormat.WholeNumber(sharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {approxSaleDate} | {f.BrokerName} |";
                     }
                 );
             },

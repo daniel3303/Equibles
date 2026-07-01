@@ -1,6 +1,7 @@
 using System.Globalization;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Finra.BusinessLogic;
 using Equibles.Finra.Data.Models;
 using Equibles.Finra.Mcp.Tools;
@@ -21,8 +22,10 @@ public class ShortDataToolsGetShortInterestSnapshotCultureInvarianceTests : Para
             new ShortSqueezeScoreManager(
                 new ShortInterestRepository(DbContext),
                 new DailyShortVolumeRepository(DbContext),
-                new CommonStockRepository(DbContext)
+                new CommonStockRepository(DbContext),
+                new StockSplitRepository(DbContext)
             ),
+            new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<ShortDataTools>()
         );

@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Finra.BusinessLogic;
 using Equibles.Finra.Data;
@@ -28,7 +29,8 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         _manager = new ShortSqueezeScoreManager(
             new ShortInterestRepository(_dbContext),
             new DailyShortVolumeRepository(_dbContext),
-            new CommonStockRepository(_dbContext)
+            new CommonStockRepository(_dbContext),
+            new StockSplitRepository(_dbContext)
         );
     }
 
