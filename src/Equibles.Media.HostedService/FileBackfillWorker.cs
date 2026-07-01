@@ -151,7 +151,11 @@ public class FileBackfillWorker : BackgroundService
             }
 
             // Write to disk first (durable), then flip the row and drop the DB bytes.
-            await fileSystemProvider.Save(file, content.Bytes, FileStorageTiers.Blob);
+            // Audio goes to its own durability tier so a future mirrored mount at
+            // <root>/audio covers the precious, hard-to-recapture recordings; everything
+            // else is re-scrapable and lands on the bulk blob tier.
+            var tier = IsAudio(file) ? FileStorageTiers.Audio : FileStorageTiers.Blob;
+            await fileSystemProvider.Save(file, content.Bytes, tier);
             dbContext.Remove(content);
             moved++;
         }
@@ -162,5 +166,11 @@ public class FileBackfillWorker : BackgroundService
             moved
         );
         return moved;
+    }
+
+    private static bool IsAudio(File file)
+    {
+        return file.ContentType != null
+            && file.ContentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase);
     }
 }
