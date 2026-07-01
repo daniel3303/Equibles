@@ -37,6 +37,7 @@ public class FileBackfillWorkerDrainTests : ParadeDbMcpTestBase
         );
 
         var eligibleBytes = "gzip-xbrl-envelope"u8.ToArray();
+        var audioBytes = "webcast-m4a-recording"u8.ToArray();
         var imageBytes = "headshot-jpeg"u8.ToArray();
 
         var eligible = new File
@@ -47,6 +48,15 @@ public class FileBackfillWorkerDrainTests : ParadeDbMcpTestBase
             StorageProvider = StorageProvider.Database,
         };
         eligible.FileContent = new FileContent { File = eligible, Bytes = eligibleBytes };
+
+        var audio = new File
+        {
+            Name = "webcast-recording",
+            Extension = "m4a",
+            ContentType = "audio/mp4",
+            StorageProvider = StorageProvider.Database,
+        };
+        audio.FileContent = new FileContent { File = audio, Bytes = audioBytes };
 
         var image = new Image
         {
@@ -68,7 +78,7 @@ public class FileBackfillWorkerDrainTests : ParadeDbMcpTestBase
         };
         byteless.FileContent = new FileContent { File = byteless, Bytes = null };
 
-        DbContext.AddRange(eligible, image, byteless);
+        DbContext.AddRange(eligible, audio, image, byteless);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
@@ -91,7 +101,7 @@ public class FileBackfillWorkerDrainTests : ParadeDbMcpTestBase
 
             var moved = await worker.DrainOnce(CancellationToken.None);
 
-            moved.Should().Be(1);
+            moved.Should().Be(2);
 
             await using var verify = Fixture.CreateDbContext();
 
@@ -110,6 +120,21 @@ public class FileBackfillWorkerDrainTests : ParadeDbMcpTestBase
             );
             System.IO.File.Exists(onDisk).Should().BeTrue();
             (await System.IO.File.ReadAllBytesAsync(onDisk)).Should().Equal(eligibleBytes);
+
+            // Audio routes to its own durability tier so a future mirrored mount at
+            // <root>/audio covers the hard-to-recapture recordings.
+            var audioAfter = await verify
+                .Set<File>()
+                .Include(f => f.FileContent)
+                .FirstAsync(f => f.Id == audio.Id);
+            audioAfter.StorageProvider.Should().Be(StorageProvider.FileSystem);
+            audioAfter.RelativePath.Should().StartWith("audio/sha256/");
+            audioAfter.FileContent.Should().BeNull();
+            var audioOnDisk = Path.Combine(
+                root,
+                audioAfter.RelativePath.Replace('/', Path.DirectorySeparatorChar)
+            );
+            (await System.IO.File.ReadAllBytesAsync(audioOnDisk)).Should().Equal(audioBytes);
 
             var imageAfter = await verify
                 .Set<File>()
