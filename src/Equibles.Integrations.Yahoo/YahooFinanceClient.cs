@@ -57,9 +57,10 @@ public class YahooFinanceClient : IYahooFinanceClient
     ) => (await GetChart(ticker, startDate, endDate)).Prices;
 
     // Single chart fetch that parses BOTH the daily price bars and any split
-    // events Yahoo returns for the window (events=split). Callers that need
-    // only prices go through GetHistoricalPrices; the split capture piggybacks
-    // on this same request so it costs no extra HTTP round-trip.
+    // and dividend events Yahoo returns for the window (events=div|split).
+    // Callers that need only prices go through GetHistoricalPrices; the split
+    // and dividend captures piggyback on this same request so they cost no
+    // extra HTTP round-trip.
     public async Task<YahooChartData> GetChart(string ticker, DateOnly startDate, DateOnly endDate)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
@@ -74,7 +75,7 @@ public class YahooFinanceClient : IYahooFinanceClient
 
         var url =
             $"{ChartBaseUrl}/{Uri.EscapeDataString(ticker)}"
-            + $"?period1={period1}&period2={period2}&interval=1d&events=split";
+            + $"?period1={period1}&period2={period2}&interval=1d&events=div%7Csplit";
 
         var content = await SendWithRetry(url);
         var response = JsonConvert.DeserializeObject<YahooChartResponse>(content);
@@ -92,6 +93,7 @@ public class YahooFinanceClient : IYahooFinanceClient
         {
             Prices = BuildPrices(result, ticker, offsetSeconds, startDate, endDate),
             Splits = BuildSplits(result.Events?.Splits, offsetSeconds, startDate, endDate),
+            Dividends = BuildDividends(result.Events?.Dividends, offsetSeconds, startDate, endDate),
         };
     }
 
@@ -179,6 +181,37 @@ public class YahooFinanceClient : IYahooFinanceClient
                     Denominator = split.Denominator,
                 }
             );
+        }
+
+        return events;
+    }
+
+    // Parse the dividend events into the requested window. Dividend timestamps
+    // are dated on the same exchange-local calendar as the price bars (offset
+    // added to the UTC epoch), trimmed to [startDate, endDate], and a dividend
+    // with a non-positive amount is dropped as unusable (a cash dividend is a
+    // strictly-positive payout).
+    private static List<CashDividendEvent> BuildDividends(
+        Dictionary<string, ChartDividend> dividends,
+        long offsetSeconds,
+        DateOnly startDate,
+        DateOnly endDate
+    )
+    {
+        var events = new List<CashDividendEvent>();
+        if (dividends == null)
+            return events;
+
+        foreach (var dividend in dividends.Values)
+        {
+            if (dividend.Amount <= 0)
+                continue;
+
+            var date = FromUnixTimestamp(dividend.Date + offsetSeconds);
+            if (date < startDate || date > endDate)
+                continue;
+
+            events.Add(new CashDividendEvent { Date = date, Amount = dividend.Amount });
         }
 
         return events;

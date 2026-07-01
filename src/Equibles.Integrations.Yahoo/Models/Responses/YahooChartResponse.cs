@@ -38,6 +38,19 @@ public class ChartEvents
     // Keyed by the split's epoch-second string (e.g. "1718022600").
     [JsonProperty("splits")]
     public Dictionary<string, ChartSplit> Splits { get; set; } = [];
+
+    // Keyed by the dividend's epoch-second string, like splits.
+    [JsonProperty("dividends")]
+    public Dictionary<string, ChartDividend> Dividends { get; set; } = [];
+}
+
+public class ChartDividend
+{
+    [JsonProperty("date")]
+    public long Date { get; set; }
+
+    [JsonProperty("amount")]
+    public decimal Amount { get; set; }
 }
 
 public class ChartSplit

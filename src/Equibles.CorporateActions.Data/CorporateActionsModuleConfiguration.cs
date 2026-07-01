@@ -8,5 +8,6 @@ public class CorporateActionsModuleConfiguration : Equibles.Data.IFinancialModul
     public void ConfigureEntities(ModelBuilder builder)
     {
         builder.Entity<StockSplit>().Property(s => s.Source).HasConversion<string>();
+        builder.Entity<CashDividend>().Property(d => d.Source).HasConversion<string>();
     }
 }

@@ -361,8 +361,9 @@ public class YahooPriceImportService
         if (startDate >= today)
             return 0;
 
-        // One chart fetch yields both the price bars and any split events for the
-        // window — capture the splits off the same response, no extra HTTP.
+        // One chart fetch yields the price bars plus any split and dividend
+        // events for the window — capture both off the same response, no extra
+        // HTTP.
         var chartData = await _yahooClient.GetChart(ticker, startDate, today);
 
         var inserted = await PersistPrices(
@@ -373,6 +374,7 @@ public class YahooPriceImportService
         );
 
         await CaptureSplits(commonStockId, chartData.Splits);
+        await CaptureDividends(commonStockId, chartData.Dividends);
 
         return inserted;
     }
@@ -446,6 +448,46 @@ public class YahooPriceImportService
         if (count > 0)
             _logger.LogInformation(
                 "Captured {Count} stock split(s) for {StockId}",
+                count,
+                commonStockId
+            );
+    }
+
+    // Upserts the dividend events Yahoo returned for this ticker into
+    // CashDividend via the CorporateActions capture manager. Mirrors
+    // CaptureSplits: its own scope, and skipped when there are no dividends so
+    // the common no-dividend path costs nothing.
+    private async Task CaptureDividends(
+        Guid commonStockId,
+        IReadOnlyCollection<CashDividendEvent> dividends
+    )
+    {
+        if (dividends.Count == 0)
+            return;
+
+        // Map Yahoo's dividend shape onto the source-neutral capture DTO at the
+        // worker boundary, stamping Yahoo as the source, so the domain manager
+        // stays decoupled from this integration.
+        var captured = dividends
+            .Select(d => new CapturedDividend
+            {
+                ExDate = d.Date,
+                AmountPerShare = d.Amount,
+                Source = CashDividendSource.Yahoo,
+            })
+            .ToList();
+
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var stock = await stockRepo.Get(commonStockId);
+        if (stock == null)
+            return;
+
+        var captureManager = scope.ServiceProvider.GetRequiredService<CashDividendCaptureManager>();
+        var count = await captureManager.Capture(stock, captured);
+        if (count > 0)
+            _logger.LogInformation(
+                "Captured {Count} cash dividend(s) for {StockId}",
                 count,
                 commonStockId
             );
