@@ -2,6 +2,7 @@ using System.Reflection;
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.Mcp.Tools;
@@ -36,6 +37,7 @@ public class InstitutionalHoldingsToolsResolveStockByTickerNormalizationTests : 
             new InstitutionalHoldingRepository(_dbContext),
             new InstitutionalHolderRepository(_dbContext),
             new CommonStockRepository(_dbContext),
+            new StockSplitRepository(_dbContext),
             errorManager: null,
             NullLogger<InstitutionalHoldingsTools>.Instance
         );
