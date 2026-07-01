@@ -12,6 +12,7 @@ using Equibles.InsiderTrading.Data;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Mcp.Tools;
 using Equibles.InsiderTrading.Repositories;
+using Equibles.Media.Data;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -44,6 +45,10 @@ public class InsiderTradingToolsSplitAdjustmentTests
                 new CorporateActionsModuleConfiguration(),
                 new InsiderTradingModuleConfiguration(),
                 new ErrorsModuleConfiguration(),
+                // InsiderFiling navigates to Media's File (Content), so the model pulls the File
+                // entity in and needs Media's configuration (the StorageProvider conversion) or
+                // model finalization fails.
+                new MediaModuleConfiguration(),
             }
         );
         ctx.Database.EnsureCreated();
