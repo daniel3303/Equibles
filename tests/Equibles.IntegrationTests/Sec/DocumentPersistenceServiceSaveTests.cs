@@ -80,7 +80,14 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase
 
         var fileManager = Substitute.For<IFileManager>();
         fileManager
-            .SaveFile(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<bool>())
+            .SaveInternalFile(
+                Arg.Any<byte[]>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<Equibles.Media.Data.Models.StorageProvider>(),
+                Arg.Any<string>()
+            )
             .Returns(_ => Task.FromResult(savedFile));
 
         var bus = Substitute.For<IBus>();

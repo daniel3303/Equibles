@@ -94,7 +94,14 @@ public class DocumentPersistenceServiceTests : IDisposable
         };
         var fileManager = Substitute.For<IFileManager>();
         fileManager
-            .SaveFile(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<bool>())
+            .SaveInternalFile(
+                Arg.Any<byte[]>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<Equibles.Media.Data.Models.StorageProvider>(),
+                Arg.Any<string>()
+            )
             .Returns(savedFile);
 
         var documentRepo = new DocumentRepository(_dbContext);
