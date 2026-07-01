@@ -19,9 +19,11 @@ namespace Equibles.Integrations.Sec;
 [Service(ServiceLifetime.Scoped, typeof(ISecEdgarClient))]
 public class SecEdgarClient : ISecEdgarClient
 {
-    // SEC has undocumented rolling-window rate limits beyond the 10 req/s rule; use 4 req/s for sustained scraping
+    // SEC has undocumented rolling-window rate limits beyond the 10 req/s rule; 5 req/s stays
+    // comfortably under the documented ceiling while still leaving headroom before the 403
+    // "Request Rate Threshold Exceeded" page (handled below via the penalty pause).
     private static readonly IRateLimiter RateLimiter = new RateLimiter(
-        maxRequests: 4,
+        maxRequests: 5,
         timeWindow: TimeSpan.FromSeconds(1)
     );
     private const int MaxRetries = 10;
