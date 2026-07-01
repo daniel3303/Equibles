@@ -5,6 +5,7 @@ using Equibles.Data;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Sec.Repositories;
 using Equibles.Web.Controllers;
 using Microsoft.AspNetCore.Http;
@@ -52,6 +53,7 @@ public class StocksControllerShowHolderNotFoundTests : IDisposable
             // service is intentionally null — a regression that dropped the
             // holder guard would NRE here instead of returning NotFound.
             stockTabService: null!,
+            Substitute.For<IFileManager>(),
             Substitute.For<ILogger<StocksController>>()
         )
         {

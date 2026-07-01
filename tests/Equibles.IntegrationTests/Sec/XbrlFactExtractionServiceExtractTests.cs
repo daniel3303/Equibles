@@ -9,6 +9,7 @@ using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.HostedService.Services;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
 using Xunit;
 using File = Equibles.Media.Data.Models.File;
 
@@ -89,10 +90,13 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
             (typeof(EquiblesFinancialDbContext), DbContext),
             (typeof(FinancialConceptRepository), new FinancialConceptRepository(DbContext))
         );
+        var fileManager = Substitute.For<IFileManager>();
+        fileManager.GetContent(Arg.Any<File>()).Returns(ci => ((File)ci[0]).FileContent.Bytes);
         return new XbrlFactExtractionService(
             scopeFactory,
             new InlineXbrlParser(),
             new StandaloneXbrlParser(),
+            fileManager,
             NullLogger<XbrlFactExtractionService>()
         );
     }

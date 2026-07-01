@@ -6,6 +6,7 @@ using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
 using Microsoft.Extensions.Logging;
@@ -17,15 +18,18 @@ namespace Equibles.Sec.Mcp.Tools;
 public class DocumentTextTools
 {
     private readonly DocumentRepository _documentRepository;
+    private readonly IFileManager _fileManager;
     private readonly McpToolRunner _runner;
 
     public DocumentTextTools(
         DocumentRepository documentRepository,
         ErrorManager errorManager,
+        IFileManager fileManager,
         ILogger<DocumentTextTools> logger
     )
     {
         _documentRepository = documentRepository;
+        _fileManager = fileManager;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -144,10 +148,14 @@ public class DocumentTextTools
         var document = await _documentRepository.GetWithContent(documentId);
         if (document == null)
             return (null, null, $"Document {documentId} not found.");
-        if (document.Content?.FileContent?.Bytes == null)
+        if (document.Content == null)
             return (null, null, $"Document {documentId} has no content.");
 
-        var text = Encoding.UTF8.GetString(document.Content.FileContent.Bytes);
+        var bytes = await _fileManager.GetContent(document.Content);
+        if (bytes == null)
+            return (null, null, $"Document {documentId} has no content.");
+
+        var text = Encoding.UTF8.GetString(bytes);
         return (document, text.Split('\n'), null);
     }
 

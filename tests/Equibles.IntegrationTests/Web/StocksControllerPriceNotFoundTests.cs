@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Data;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Web.Controllers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -46,6 +47,7 @@ public class StocksControllerPriceNotFoundTests : IDisposable
             // Must 404 before any tab load — a dropped null-stock guard would
             // NRE here instead of returning NotFound.
             stockTabService: null!,
+            Substitute.For<IFileManager>(),
             Substitute.For<ILogger<StocksController>>()
         )
         {

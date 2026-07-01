@@ -2,6 +2,7 @@ using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.Data.Models;
@@ -68,12 +69,15 @@ public class StocksControllerShowDocumentHappyTests
         ctx.Set<Document>().Add(document);
         await ctx.SaveChangesAsync();
 
+        var fileManager = Substitute.For<IFileManager>();
+        fileManager.GetContent(Arg.Any<File>()).Returns(ci => ((File)ci[0]).FileContent.Bytes);
         var sut = new StocksController(
             new CommonStockRepository(ctx),
             institutionalHolderRepository: null!,
             institutionalHoldingRepository: null!,
             new DocumentRepository(ctx),
             stockTabService: null!,
+            fileManager,
             Substitute.For<ILogger<StocksController>>()
         );
 

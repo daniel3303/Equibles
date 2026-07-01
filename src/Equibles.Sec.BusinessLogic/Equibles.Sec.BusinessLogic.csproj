@@ -24,5 +24,6 @@
     <ProjectReference Include="..\Equibles.Sec.Repositories\Equibles.Sec.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Search.Abstractions\Equibles.Search.Abstractions.csproj" />
+    <ProjectReference Include="..\Equibles.Media.BusinessLogic\Equibles.Media.BusinessLogic.csproj" />
   </ItemGroup>
 </Project>

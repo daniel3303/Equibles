@@ -335,7 +335,7 @@ public class InsiderFilingReprocessManager
 
         if (filing is { CaptureStatus: InsiderFilingCaptureStatus.Captured, ContentId: not null })
         {
-            var raw = GzipCompressor.Decompress(filing.Content.FileContent.Bytes);
+            var raw = GzipCompressor.Decompress(await _fileManager.GetContent(filing.Content));
             var cachedRoot = InsiderFilingParser.TryGetOwnershipRoot(Encoding.UTF8.GetString(raw));
             if (cachedRoot != null)
                 return cachedRoot;

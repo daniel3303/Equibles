@@ -4,6 +4,7 @@ using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
@@ -52,6 +53,7 @@ public class StocksControllerLoadStockTurkishCultureTests
             institutionalHoldingRepository: null!,
             new DocumentRepository(ctx),
             stockTabService: null!,
+            Substitute.For<IFileManager>(),
             Substitute.For<ILogger<StocksController>>()
         );
 

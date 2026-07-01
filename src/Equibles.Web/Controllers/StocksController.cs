@@ -2,6 +2,7 @@ using System.Text;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Repositories;
+using Equibles.Media.BusinessLogic;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.Repositories;
 using Equibles.Web.Controllers.Abstract;
@@ -22,6 +23,7 @@ public class StocksController : BaseController
     private readonly InstitutionalHoldingRepository _institutionalHoldingRepository;
     private readonly DocumentRepository _documentRepository;
     private readonly StockTabService _stockTabService;
+    private readonly IFileManager _fileManager;
 
     public StocksController(
         CommonStockRepository commonStockRepository,
@@ -29,6 +31,7 @@ public class StocksController : BaseController
         InstitutionalHoldingRepository institutionalHoldingRepository,
         DocumentRepository documentRepository,
         StockTabService stockTabService,
+        IFileManager fileManager,
         ILogger<StocksController> logger
     )
         : base(logger)
@@ -38,6 +41,7 @@ public class StocksController : BaseController
         _institutionalHoldingRepository = institutionalHoldingRepository;
         _documentRepository = documentRepository;
         _stockTabService = stockTabService;
+        _fileManager = fileManager;
     }
 
     [HttpGet]
@@ -296,10 +300,13 @@ public class StocksController : BaseController
             return NotFound();
         }
 
-        var content =
-            document.Content?.FileContent?.Bytes != null
-                ? Encoding.UTF8.GetString(document.Content.FileContent.Bytes)
-                : string.Empty;
+        var content = string.Empty;
+        if (document.Content != null)
+        {
+            var bytes = await _fileManager.GetContent(document.Content);
+            if (bytes != null)
+                content = Encoding.UTF8.GetString(bytes);
+        }
 
         var viewModel = new DocumentViewModel
         {

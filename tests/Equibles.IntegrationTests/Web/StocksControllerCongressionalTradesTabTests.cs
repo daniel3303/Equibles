@@ -11,6 +11,7 @@ using Equibles.Holdings.Repositories;
 using Equibles.InsiderTrading.Data;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data;
 using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Repositories;
@@ -87,6 +88,7 @@ public class StocksControllerCongressionalTradesTabTests : IDisposable
             new InstitutionalHoldingRepository(_dbContext),
             new DocumentRepository(_dbContext),
             stockTabService,
+            Substitute.For<IFileManager>(),
             Substitute.For<ILogger<StocksController>>()
         )
         {

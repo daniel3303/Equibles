@@ -1,3 +1,4 @@
+using Equibles.Media.BusinessLogic;
 using Equibles.Sec.BusinessLogic.Embeddings;
 using Equibles.Sec.BusinessLogic.Processing;
 using Equibles.Sec.BusinessLogic.Tokenization;
@@ -48,6 +49,7 @@ public class DocumentProcessorSystemicFailureBackoffTests
             embeddingClient,
             new ChunkingStrategy(new TokenCounter()),
             Options.Create(new EmbeddingConfig { ModelName = "nomic-embed-text" }),
+            Substitute.For<IFileManager>(),
             Substitute.For<ILogger<DocumentProcessor>>()
         );
 

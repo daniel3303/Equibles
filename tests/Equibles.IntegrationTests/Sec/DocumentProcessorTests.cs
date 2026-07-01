@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data.Models;
+using Equibles.Media.BusinessLogic;
 using Equibles.Sec.BusinessLogic.Embeddings;
 using Equibles.Sec.BusinessLogic.Processing;
 using Equibles.Sec.BusinessLogic.Tokenization;
@@ -24,6 +25,7 @@ public class DocumentProcessorTests
             embeddingClient,
             new ChunkingStrategy(new TokenCounter()),
             Options.Create(new EmbeddingConfig { ModelName = "test-model" }),
+            Substitute.For<IFileManager>(),
             logger ?? Substitute.For<ILogger<DocumentProcessor>>()
         );
     }
@@ -119,6 +121,7 @@ public class DocumentProcessorTests
             embeddingClient,
             new ChunkingStrategy(new TokenCounter()),
             Options.Create(new EmbeddingConfig { ModelName = "test-model" }),
+            Substitute.For<IFileManager>(),
             Substitute.For<ILogger<DocumentProcessor>>()
         );
         return (sut, embeddingRepository);
