@@ -368,7 +368,8 @@ public class InsiderFilingReprocessManager
             compressed,
             accession,
             "gz",
-            "application/gzip"
+            "application/gzip",
+            storage: Equibles.Media.Data.Models.StorageProvider.FileSystem
         );
 
         if (filing == null)

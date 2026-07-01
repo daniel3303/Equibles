@@ -140,7 +140,8 @@ public class ReportedStatementsCaptureService
             compressed,
             accession,
             "gz",
-            "application/gzip"
+            "application/gzip",
+            storage: Equibles.Media.Data.Models.StorageProvider.FileSystem
         );
 
         document.ReportedStatementsContent = file;

@@ -23,6 +23,7 @@ using Equibles.Holdings.Data.Extensions;
 using Equibles.Holdings.HostedService.Extensions;
 using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.Media.Data.Extensions;
+using Equibles.Media.HostedService.Extensions;
 using Equibles.Messaging.Extensions;
 using Equibles.Sec.Data.Extensions;
 using Equibles.Sec.FinancialFacts.HostedService.Configuration;
@@ -141,6 +142,9 @@ builder.Services.Configure<Equibles.Sec.BusinessLogic.Embeddings.EmbeddingConfig
 builder.Services.Configure<Equibles.Media.BusinessLogic.Configuration.FileStorageOptions>(
     builder.Configuration.GetSection("FileStorage")
 );
+builder.Services.Configure<Equibles.Media.HostedService.Configuration.FileBackfillOptions>(
+    builder.Configuration.GetSection("FileBackfill")
+);
 
 builder.Services.AddHttpClient();
 
@@ -162,6 +166,7 @@ builder.Services.AddCftcWorker();
 builder.Services.AddCboeWorker();
 builder.Services.AddCongressWorker();
 builder.Services.AddHoldingsWorker();
+builder.Services.AddMediaWorker();
 builder.Services.AddCommonStocksWorker();
 
 // Reads the stealth browser registered by AddCommonStocksWorker above to render the

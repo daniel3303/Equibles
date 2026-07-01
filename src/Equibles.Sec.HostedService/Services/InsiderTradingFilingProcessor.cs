@@ -185,7 +185,8 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             compressed,
             filing.AccessionNumber,
             "gz",
-            "application/gzip"
+            "application/gzip",
+            storage: Equibles.Media.Data.Models.StorageProvider.FileSystem
         );
 
         filingRepository.Add(
