@@ -71,6 +71,9 @@ public partial class Program
 
         builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();
         builder.Services.AutoWireServicesFrom<Equibles.Sec.BusinessLogic.Search.RagManager>();
+        // Media file access: DocumentTextTools resolves IFileManager to read document
+        // content regardless of storage backend.
+        builder.Services.AutoWireServicesFrom<Equibles.Media.BusinessLogic.FileManager>();
 
         // Required for RAG search to embed the query at request time; without this
         // bind EmbeddingConfig is default (Enabled=false) and semantic search is inert.

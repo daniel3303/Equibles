@@ -116,7 +116,7 @@ public class InsiderFilingReprocessManagerRepairTests : ParadeDbMcpTestBase
         DbContext.ChangeTracker.Clear();
 
         var edgar = Substitute.For<ISecEdgarClient>();
-        var fileManager = Substitute.For<IFileManager>();
+        var fileManager = InsiderReprocessTestSupport.NewFileManager();
 
         await using var runCtx = Fixture.CreateDbContext();
         var manager = new InsiderFilingReprocessManager(

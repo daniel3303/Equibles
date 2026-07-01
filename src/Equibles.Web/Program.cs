@@ -74,6 +74,9 @@ public partial class Program
 
         builder.Services.AutoWireServicesFrom<Equibles.Errors.BusinessLogic.ErrorManager>();
         builder.Services.AutoWireServicesFrom<Equibles.Web.Services.StockTabService>();
+        // Media file access: readers (DocumentProcessor, the document viewer) resolve
+        // IFileManager to load blob content regardless of storage backend.
+        builder.Services.AutoWireServicesFrom<Equibles.Media.BusinessLogic.FileManager>();
         // Holdings business-logic services the portal consumes directly (e.g. the smart-money
         // index manager). Repositories these depend on are registered by AddAllRepositories.
         builder.Services.AutoWireServicesFrom<Equibles.Holdings.BusinessLogic.SmartMoneyIndexManager>();

@@ -104,12 +104,14 @@ public class InsiderFilingReprocessManagerFetchedTests : ParadeDbMcpTestBase
         // ownership XML and the file manager stands in for the cache write.
         var edgar = Substitute.For<ISecEdgarClient>();
         edgar.GetDocumentContent(accession, Arg.Any<string>()).Returns(ownershipXml);
-        var fileManager = Substitute.For<IFileManager>();
+        var fileManager = InsiderReprocessTestSupport.NewFileManager();
         fileManager
             .SaveInternalFile(
                 Arg.Any<byte[]>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<Equibles.Media.Data.Models.StorageProvider>(),
                 Arg.Any<string>()
             )
             .Returns(ci => new File
@@ -137,9 +139,18 @@ public class InsiderFilingReprocessManagerFetchedTests : ParadeDbMcpTestBase
         result.Reclassified.Should().Be(1);
         result.Failed.Should().Be(0);
         await edgar.Received().GetDocumentContent(accession, Arg.Any<string>());
+        // The re-fetched cache blob is written through the filesystem store request
+        // (falls back to the database while the store is disabled).
         await fileManager
             .Received()
-            .SaveInternalFile(Arg.Any<byte[]>(), accession, Arg.Any<string>(), Arg.Any<string>());
+            .SaveInternalFile(
+                Arg.Any<byte[]>(),
+                accession,
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Equibles.Media.Data.Models.StorageProvider.FileSystem,
+                Arg.Any<string>()
+            );
 
         await using var verify = Fixture.CreateDbContext();
         var row = await verify.Set<InsiderTransaction>().FindAsync(stale.Id);
