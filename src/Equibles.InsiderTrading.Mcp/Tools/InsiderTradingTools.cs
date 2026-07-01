@@ -73,9 +73,12 @@ public class InsiderTradingTools
                     .Take(maxResults)
                     .ToListAsync();
 
-                // Restate the transaction and post-transaction share counts onto today's
-                // split basis so figures are comparable across dates. Value (Shares × Price)
-                // and the per-share Price are split-invariant and computed from raw figures.
+                // Each row is an as-filed record: the per-row Shares, Price, and Value stay
+                // exactly as reported so Shares × Price = Value holds within the row (the total
+                // value is split-invariant, and a filed quantity is only ever read next to its
+                // own price/value — never compared across dates). Only the running
+                // post-transaction balance (Owned After) is compared across dates and insiders,
+                // so it alone is restated onto today's split basis.
                 var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
 
                 return MarkdownTable.Render(
@@ -97,17 +100,12 @@ public class InsiderTradingTools
                         };
 
                         var value = t.Shares * t.PricePerShare;
-                        var shares = SplitAdjustment.AdjustShareCount(
-                            t.Shares,
-                            t.TransactionDate,
-                            splits
-                        );
                         var ownedAfter = SplitAdjustment.AdjustShareCount(
                             t.SharesOwnedAfter,
                             t.TransactionDate,
                             splits
                         );
-                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.InsiderOwner.Name} | {role} | {type} | {McpFormat.WholeNumber(shares)} | ${McpFormat.Invariant(t.PricePerShare, "N2")} | ${McpFormat.WholeNumber(value)} | {McpFormat.WholeNumber(ownedAfter)} |";
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.InsiderOwner.Name} | {role} | {type} | {McpFormat.WholeNumber(t.Shares)} | ${McpFormat.Invariant(t.PricePerShare, "N2")} | ${McpFormat.WholeNumber(value)} | {McpFormat.WholeNumber(ownedAfter)} |";
                     }
                 );
             },
@@ -211,11 +209,10 @@ public class InsiderTradingTools
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
-                // Restate the proposed share count onto today's split basis so notices filed
-                // before a split are comparable with later ones. Aggregate market value is a
-                // dollar figure and is split-invariant — left as reported.
-                var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
-
+                // Each Form 144 is an as-filed notice: the proposed Shares pair with the
+                // notice's own Aggregate Market Value, so both stay exactly as reported. The
+                // list is ordered by filing date, not by an adjusted quantity, so a filed share
+                // count is never compared across a split here.
                 return MarkdownTable.Render(
                     filings,
                     $"No Form 144 proposed sales found for {ticker}.",
@@ -228,12 +225,7 @@ public class InsiderTradingTools
                         var approxSaleDate =
                             f.ApproxSaleDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
                             ?? "-";
-                        var sharesToBeSold = SplitAdjustment.AdjustShareCount(
-                            f.SharesToBeSold,
-                            f.FilingDate,
-                            splits
-                        );
-                        return $"| {f.FilingDate:yyyy-MM-dd} | {f.SellerName} | {f.RelationshipToIssuer} | {McpFormat.WholeNumber(sharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {approxSaleDate} | {f.BrokerName} |";
+                        return $"| {f.FilingDate:yyyy-MM-dd} | {f.SellerName} | {f.RelationshipToIssuer} | {McpFormat.WholeNumber(f.SharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {approxSaleDate} | {f.BrokerName} |";
                     }
                 );
             },
