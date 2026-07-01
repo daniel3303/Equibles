@@ -1,3 +1,4 @@
+using System.Data;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
@@ -57,6 +58,13 @@ public class YahooPriceImportService
         _logger.LogInformation("Starting Yahoo price sync for {Count} stocks", tickerMap.Count);
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        // Before the forward-only incremental append: reconcile any stock whose stored history is
+        // on a pre-split basis. GetSyncStartDate only appends, so a split that landed after the
+        // last sync leaves the old rows on the wrong basis (a discontinuity in the series). Re-pull
+        // those stocks' full, fully-adjusted history and overwrite the stored rows (#2879).
+        await ReconcilePendingSplits(today, cancellationToken);
+
         var totalInserted = 0;
 
         foreach (var (ticker, commonStockId) in tickerMap)
@@ -90,6 +98,254 @@ public class YahooPriceImportService
             "Yahoo price sync complete. Inserted {Count} new price records",
             totalInserted
         );
+    }
+
+    // Re-syncs the full price history of every stock that has an unreconciled split, capped per
+    // cycle. Yahoo serves the whole history already split-adjusted, so the fix is to overwrite the
+    // stored rows with a fresh pull rather than doing ratio arithmetic — self-healing, since the
+    // next split re-marks the stock pending and re-syncs it again (#2879).
+    private async Task ReconcilePendingSplits(DateOnly today, CancellationToken cancellationToken)
+    {
+        PendingSplitSelection selection;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var manager =
+                scope.ServiceProvider.GetRequiredService<SplitPriceReconciliationManager>();
+            selection = await manager.SelectPendingStocks(
+                _workerOptions.MaxSplitPriceReconciliationsPerCycle
+            );
+        }
+
+        if (selection.StockIds.Count == 0)
+            return;
+
+        _logger.LogInformation(
+            "Re-syncing split-adjusted price history for {Count} stock(s) with pending splits",
+            selection.StockIds.Count
+        );
+        if (selection.Skipped > 0)
+            _logger.LogInformation(
+                "{Remaining} more stock(s) with pending splits exceed the per-cycle cap "
+                    + "and will be reconciled on a later cycle",
+                selection.Skipped
+            );
+
+        var tickers = await ResolveTickers(selection.StockIds, cancellationToken);
+        var floor = _workerOptions.MinSyncDate.HasValue
+            ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
+            : new DateOnly(2020, 1, 1);
+
+        foreach (var commonStockId in selection.StockIds)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!tickers.TryGetValue(commonStockId, out var ticker))
+            {
+                _logger.LogWarning(
+                    "No ticker resolved for stock {StockId} with a pending split; leaving it pending",
+                    commonStockId
+                );
+                continue;
+            }
+
+            try
+            {
+                await ReconcileStock(ticker, commonStockId, floor, today, cancellationToken);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to fetch split-adjusted history for {Ticker}; leaving its split(s) pending",
+                    ticker
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Error reconciling split-adjusted history for {Ticker}",
+                    ticker
+                );
+                await _errorReporter.Report(
+                    ErrorSource.YahooPriceScraper,
+                    $"ReconcilePendingSplits({ticker})",
+                    ex.Message,
+                    ex.StackTrace
+                );
+            }
+        }
+    }
+
+    private async Task<Dictionary<Guid, string>> ResolveTickers(
+        IReadOnlyList<Guid> stockIds,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        return await stockRepo
+            .GetByIds(stockIds)
+            .ToDictionaryAsync(s => s.Id, s => s.Ticker, cancellationToken);
+    }
+
+    private async Task ReconcileStock(
+        string ticker,
+        Guid commonStockId,
+        DateOnly floor,
+        DateOnly today,
+        CancellationToken cancellationToken
+    )
+    {
+        var chartData = await _yahooClient.GetChart(ticker, floor, today);
+
+        // A delisted/unresolved ticker returns no prices. Do NOT wipe the existing series in that
+        // case — leave the split pending so a later run or another source can handle it.
+        if (chartData.Prices.Count == 0)
+        {
+            _logger.LogWarning(
+                "Yahoo returned no prices for {Ticker}; keeping existing rows and leaving its split(s) pending",
+                ticker
+            );
+            return;
+        }
+
+        var replaced = await ReplaceStoredPrices(
+            ticker,
+            commonStockId,
+            floor,
+            today,
+            chartData.Prices,
+            cancellationToken
+        );
+        if (!replaced)
+            return;
+
+        // Refresh the authoritative current share count + market cap by refetch, not arithmetic —
+        // this is #2879's shares-outstanding requirement.
+        await SyncKeyStatistics(ticker, commonStockId, cancellationToken);
+
+        using var scope = _scopeFactory.CreateScope();
+        var manager = scope.ServiceProvider.GetRequiredService<SplitPriceReconciliationManager>();
+        var stamped = await manager.StampApplied(commonStockId, DateTime.UtcNow);
+        _logger.LogInformation(
+            "Reconciled {Ticker}: replaced stored price history and stamped {Count} split(s) applied",
+            ticker,
+            stamped
+        );
+    }
+
+    // Transactionally swaps a stock's stored rows in [floor, today] for the fresh fully-adjusted
+    // series. Returns false without touching the stored rows when there is nothing usable to store
+    // (all rows overflowed the numeric ceiling, or the parent CommonStock was removed) so a stock
+    // is never left with an empty series.
+    private async Task<bool> ReplaceStoredPrices(
+        string ticker,
+        Guid commonStockId,
+        DateOnly floor,
+        DateOnly today,
+        List<HistoricalPrice> prices,
+        CancellationToken cancellationToken
+    )
+    {
+        var freshRows = MapFreshRows(commonStockId, prices, ticker);
+        if (freshRows.Count == 0)
+        {
+            _logger.LogWarning(
+                "No storable prices for {Ticker} after the numeric range guard; keeping existing rows",
+                ticker
+            );
+            return false;
+        }
+
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+
+        // Same GH-1591 guard as the incremental flush: the parent CommonStock can be removed
+        // between selection and now, which would trip the FK on insert.
+        var stockExists = await stockRepo.GetAll().AnyAsync(s => s.Id == commonStockId, cancellationToken);
+        if (!stockExists)
+        {
+            _logger.LogWarning(
+                "Skipping reconcile for CommonStock {Id}: parent row was removed",
+                commonStockId
+            );
+            return false;
+        }
+
+        var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+        await ReplacePriceRows(repo, commonStockId, floor, today, freshRows, cancellationToken);
+        return true;
+    }
+
+    // The transactional core of the replacement: delete the stock's rows in [floor, today], then
+    // bulk-insert the fresh rows in batches, all in one transaction so the stock is never left with
+    // a partial series on failure. Takes the repo so it is unit-testable without a live worker.
+    private static async Task ReplacePriceRows(
+        DailyStockPriceRepository repo,
+        Guid commonStockId,
+        DateOnly floor,
+        DateOnly today,
+        List<DailyStockPrice> freshRows,
+        CancellationToken cancellationToken
+    )
+    {
+        // Never delete the stored series when there is nothing to replace it with. The caller
+        // already guards empty fetches upstream; keeping the invariant local too means the
+        // transaction (and its delete) is never opened for an empty replacement.
+        if (freshRows.Count == 0)
+            return;
+
+        await using var transaction = await repo.CreateTransaction(
+            IsolationLevel.ReadCommitted,
+            cancellationToken
+        );
+        try
+        {
+            var existing = await repo.GetByStocks([commonStockId], floor, today)
+                .ToListAsync(cancellationToken);
+            if (existing.Count > 0)
+            {
+                repo.Delete(existing);
+                await repo.SaveChanges();
+            }
+
+            foreach (var batch in freshRows.Chunk(InsertBatchSize))
+            {
+                repo.AddRange(batch);
+                await repo.SaveChanges();
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    private List<DailyStockPrice> MapFreshRows(
+        Guid commonStockId,
+        List<HistoricalPrice> prices,
+        string ticker
+    )
+    {
+        var overflowDates = WarnAndCollectOverflowDates(prices, ticker);
+        return prices
+            .Where(p => !overflowDates.Contains(p.Date))
+            .Select(p => new DailyStockPrice
+            {
+                CommonStockId = commonStockId,
+                Date = p.Date,
+                Open = p.Open,
+                High = p.High,
+                Low = p.Low,
+                Close = p.Close,
+                AdjustedClose = p.AdjustedClose,
+                Volume = p.Volume,
+            })
+            .ToList();
     }
 
     private async Task<int> ImportTicker(
@@ -139,21 +395,8 @@ public class YahooPriceImportService
             cancellationToken
         );
 
-        var overflowDates = WarnAndCollectOverflowDates(prices, ticker);
-
-        var newPrices = prices
-            .Where(p => !existingDates.Contains(p.Date) && !overflowDates.Contains(p.Date))
-            .Select(p => new DailyStockPrice
-            {
-                CommonStockId = commonStockId,
-                Date = p.Date,
-                Open = p.Open,
-                High = p.High,
-                Low = p.Low,
-                Close = p.Close,
-                AdjustedClose = p.AdjustedClose,
-                Volume = p.Volume,
-            })
+        var newPrices = MapFreshRows(commonStockId, prices, ticker)
+            .Where(p => !existingDates.Contains(p.Date))
             .ToList();
 
         if (newPrices.Count == 0)
