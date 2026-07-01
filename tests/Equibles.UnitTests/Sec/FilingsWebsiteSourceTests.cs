@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.BusinessLogic.Websites;
 using Equibles.CommonStocks.Data;
 using Equibles.Data;
+using Equibles.Media.Data;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
 using Equibles.Sec.HostedService.Services;
@@ -40,6 +41,10 @@ public class FilingsWebsiteSourceTests
             {
                 new CommonStocksModuleConfiguration(),
                 new DocumentAndChunkModuleConfiguration(),
+                // Document navigates to Media's File (Content/XbrlContent/…), so the model pulls the
+                // File entity in and needs Media's configuration (the StorageProvider conversion) or
+                // model finalization fails.
+                new MediaModuleConfiguration(),
             }
         );
         ctx.Database.EnsureCreated();
