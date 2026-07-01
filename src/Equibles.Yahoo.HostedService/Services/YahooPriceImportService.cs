@@ -2,6 +2,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.CorporateActions.BusinessLogic;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Yahoo.Contracts;
@@ -176,6 +177,19 @@ public class YahooPriceImportService
         if (splits.Count == 0)
             return;
 
+        // Map Yahoo's split shape onto the source-neutral capture DTO at the
+        // worker boundary, stamping Yahoo as the source, so the domain manager
+        // stays decoupled from this integration.
+        var captured = splits
+            .Select(s => new CapturedSplit
+            {
+                EffectiveDate = s.Date,
+                Numerator = s.Numerator,
+                Denominator = s.Denominator,
+                Source = StockSplitSource.Yahoo,
+            })
+            .ToList();
+
         using var scope = _scopeFactory.CreateScope();
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var stock = await stockRepo.Get(commonStockId);
@@ -184,7 +198,7 @@ public class YahooPriceImportService
 
         var captureManager =
             scope.ServiceProvider.GetRequiredService<StockSplitCaptureManager>();
-        var count = await captureManager.Capture(stock, splits);
+        var count = await captureManager.Capture(stock, captured);
         if (count > 0)
             _logger.LogInformation(
                 "Captured {Count} stock split(s) for {StockId}",

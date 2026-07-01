@@ -2,7 +2,6 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.AutoWiring;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
-using Equibles.Integrations.Yahoo.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CorporateActions.BusinessLogic;
@@ -21,41 +20,40 @@ public class StockSplitCaptureManager
         _splitRepository = splitRepository;
     }
 
-    public async Task<int> Capture(CommonStock stock, IReadOnlyCollection<StockSplitEvent> events)
+    public async Task<int> Capture(CommonStock stock, IReadOnlyCollection<CapturedSplit> splits)
     {
-        if (events == null || events.Count == 0)
+        if (splits == null || splits.Count == 0)
             return 0;
 
         var existing = await _splitRepository.GetByStock(stock.Id).ToListAsync();
         var changes = 0;
 
-        foreach (var splitEvent in events)
+        foreach (var split in splits)
         {
-            if (splitEvent.Denominator <= 0)
+            if (split.Denominator <= 0)
                 continue;
 
-            var match = existing.FirstOrDefault(s => s.EffectiveDate == splitEvent.Date);
+            var match = existing.FirstOrDefault(s => s.EffectiveDate == split.EffectiveDate);
             if (match == null)
             {
                 _splitRepository.Add(
                     new StockSplit
                     {
                         CommonStockId = stock.Id,
-                        EffectiveDate = splitEvent.Date,
-                        Numerator = splitEvent.Numerator,
-                        Denominator = splitEvent.Denominator,
-                        Source = StockSplitSource.Yahoo,
+                        EffectiveDate = split.EffectiveDate,
+                        Numerator = split.Numerator,
+                        Denominator = split.Denominator,
+                        Source = split.Source,
                     }
                 );
                 changes++;
             }
             else if (
-                match.Numerator != splitEvent.Numerator
-                || match.Denominator != splitEvent.Denominator
+                match.Numerator != split.Numerator || match.Denominator != split.Denominator
             )
             {
-                match.Numerator = splitEvent.Numerator;
-                match.Denominator = splitEvent.Denominator;
+                match.Numerator = split.Numerator;
+                match.Denominator = split.Denominator;
                 // Prices were adjusted for the old ratio — force a re-reconcile.
                 match.PriceAdjustmentAppliedTime = null;
                 changes++;
