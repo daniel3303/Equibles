@@ -182,7 +182,8 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             compressed,
             name,
             "gz",
-            "application/gzip"
+            "application/gzip",
+            storage: Equibles.Media.Data.Models.StorageProvider.FileSystem
         );
 
         document.XbrlContent = xbrlFile;
@@ -221,7 +222,8 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             compressed,
             name,
             "gz",
-            "application/gzip"
+            "application/gzip",
+            storage: Equibles.Media.Data.Models.StorageProvider.FileSystem
         );
 
         document.AsFiledHtmlContent = htmlFile;
