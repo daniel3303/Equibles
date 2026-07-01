@@ -100,7 +100,7 @@ public class InsiderFilingReprocessManagerCancellationTests : ParadeDbMcpTestBas
                 cts.Cancel();
                 return ownershipXml;
             });
-        var fileManager = Substitute.For<IFileManager>();
+        var fileManager = InsiderReprocessTestSupport.NewFileManager();
         fileManager
             .SaveInternalFile(
                 Arg.Any<byte[]>(),

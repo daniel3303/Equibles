@@ -125,7 +125,7 @@ public class InsiderFilingReprocessManagerCorruptCacheTests : ParadeDbMcpTestBas
 
         // Mirror the real file manager: it tracks the new File as Added on the same
         // context the manager saves, so the re-cache write satisfies the ContentId FK.
-        var fileManager = Substitute.For<IFileManager>();
+        var fileManager = InsiderReprocessTestSupport.NewFileManager();
         fileManager
             .SaveInternalFile(
                 Arg.Any<byte[]>(),
