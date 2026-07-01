@@ -54,6 +54,11 @@ public class InlineXbrlParser
     private const char NarrowNoBreakSpace = '\u202F';
     private const char ThinSpace = '\u2009';
 
+    // Apostrophe thousands grouping (Swiss style, the TR4+ "-apos" transform
+    // variants); the typographic right single quote is its common rendering.
+    private const char Apostrophe = '\'';
+    private const char RightSingleQuote = '\u2019';
+
     private readonly HtmlParser _parser = new(
         new HtmlParserOptions { IsAcceptingCustomElementsEverywhere = true }
     );
@@ -283,12 +288,14 @@ public class InlineXbrlParser
 
         var format = element.GetAttribute("format") ?? string.Empty;
 
-        // Format hints that the value is a hard-coded zero (numdash → "—",
-        // fixed-zero → literal 0). The Inline XBRL Transformations spec
-        // emits these for placeholders; consumers expect 0, not a parse
-        // failure on the dash glyph.
+        // Format hints that the value is a hard-coded zero (numdash /
+        // zerodash → "—", fixed-zero → literal 0). Every transformation
+        // registry spells it differently (TR1 numdash, TR2/TR3 zerodash,
+        // TR4+ fixed-zero); consumers expect 0, not a parse failure on the
+        // dash glyph.
         if (
             format.EndsWith("numdash", StringComparison.OrdinalIgnoreCase)
+            || format.EndsWith("zerodash", StringComparison.OrdinalIgnoreCase)
             || format.EndsWith("fixed-zero", StringComparison.OrdinalIgnoreCase)
             || format.EndsWith("fixedzero", StringComparison.OrdinalIgnoreCase)
         )
@@ -300,7 +307,13 @@ public class InlineXbrlParser
         if (parenthesised)
             raw = raw.Substring(1, raw.Length - 2).Trim();
 
-        var commaDecimal = format.EndsWith("numcommadecimal", StringComparison.OrdinalIgnoreCase);
+        // European decimal notation: TR2/TR3 call it "numcommadecimal", TR4+
+        // renamed it "num-comma-decimal" (plus the "-apos" grouping variant).
+        // Missing the hyphenated spellings routes "1.234,56" through the
+        // comma-grouping path, silently misreading it as 1.23456.
+        var commaDecimal =
+            format.EndsWith("numcommadecimal", StringComparison.OrdinalIgnoreCase)
+            || format.Contains("num-comma-decimal", StringComparison.OrdinalIgnoreCase);
 
         var cleaned = NormaliseDigits(raw, commaDecimal);
         if (string.IsNullOrEmpty(cleaned))
@@ -333,10 +346,11 @@ public class InlineXbrlParser
 
     private static string NormaliseDigits(string raw, bool commaDecimal)
     {
-        // Strip currency / spacing glyphs filers routinely use ($, NBSP,
-        // narrow NBSP, thin spaces). Then collapse thousands separators
-        // and align the decimal separator to '.' so InvariantCulture
-        // parsing succeeds regardless of the document's locale.
+        // Strip currency / spacing / apostrophe-grouping glyphs filers
+        // routinely use ($, NBSP, narrow NBSP, thin spaces, Swiss-style
+        // apostrophes). Then collapse thousands separators and align the
+        // decimal separator to '.' so InvariantCulture parsing succeeds
+        // regardless of the document's locale.
         var buffer = new System.Text.StringBuilder(raw.Length);
         foreach (var ch in raw)
         {
@@ -346,6 +360,8 @@ public class InlineXbrlParser
                 case NoBreakSpace:
                 case NarrowNoBreakSpace:
                 case ThinSpace:
+                case Apostrophe:
+                case RightSingleQuote:
                 case '$':
                 case '€':
                 case '£':
@@ -372,7 +388,15 @@ public class InlineXbrlParser
     {
         value = 0m;
         var scaleAttribute = element.GetAttribute("scale");
-        if (!string.IsNullOrEmpty(scaleAttribute) && int.TryParse(scaleAttribute, out var scale))
+        if (
+            !string.IsNullOrEmpty(scaleAttribute)
+            && int.TryParse(
+                scaleAttribute,
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var scale
+            )
+        )
         {
             // Positive scale shifts the value up; negative shifts down.
             // We use Pow over a literal multiplier so non-trivial scales
