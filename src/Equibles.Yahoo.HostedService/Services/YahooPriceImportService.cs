@@ -1,6 +1,8 @@
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
+using Equibles.CorporateActions.BusinessLogic;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Yahoo.Contracts;
@@ -101,7 +103,29 @@ public class YahooPriceImportService
         if (startDate >= today)
             return 0;
 
-        var prices = await _yahooClient.GetHistoricalPrices(ticker, startDate, today);
+        // One chart fetch yields both the price bars and any split events for the
+        // window — capture the splits off the same response, no extra HTTP.
+        var chartData = await _yahooClient.GetChart(ticker, startDate, today);
+
+        var inserted = await PersistPrices(
+            ticker,
+            commonStockId,
+            chartData.Prices,
+            cancellationToken
+        );
+
+        await CaptureSplits(commonStockId, chartData.Splits);
+
+        return inserted;
+    }
+
+    private async Task<int> PersistPrices(
+        string ticker,
+        Guid commonStockId,
+        List<HistoricalPrice> prices,
+        CancellationToken cancellationToken
+    )
+    {
         if (prices.Count == 0)
             return 0;
 
@@ -139,6 +163,48 @@ public class YahooPriceImportService
 
         _logger.LogDebug("Inserted {Count} prices for {Ticker}", inserted, ticker);
         return inserted;
+    }
+
+    // Upserts the split events Yahoo returned for this ticker into StockSplit via
+    // the CorporateActions capture manager. Resolved in its own scope (mirrors
+    // the other per-write scopes); skipped when there are no splits so the common
+    // no-split path costs nothing.
+    private async Task CaptureSplits(
+        Guid commonStockId,
+        IReadOnlyCollection<StockSplitEvent> splits
+    )
+    {
+        if (splits.Count == 0)
+            return;
+
+        // Map Yahoo's split shape onto the source-neutral capture DTO at the
+        // worker boundary, stamping Yahoo as the source, so the domain manager
+        // stays decoupled from this integration.
+        var captured = splits
+            .Select(s => new CapturedSplit
+            {
+                EffectiveDate = s.Date,
+                Numerator = s.Numerator,
+                Denominator = s.Denominator,
+                Source = StockSplitSource.Yahoo,
+            })
+            .ToList();
+
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var stock = await stockRepo.Get(commonStockId);
+        if (stock == null)
+            return;
+
+        var captureManager =
+            scope.ServiceProvider.GetRequiredService<StockSplitCaptureManager>();
+        var count = await captureManager.Capture(stock, captured);
+        if (count > 0)
+            _logger.LogInformation(
+                "Captured {Count} stock split(s) for {StockId}",
+                count,
+                commonStockId
+            );
     }
 
     private async Task FlushPriceBatch(List<DailyStockPrice> batch)

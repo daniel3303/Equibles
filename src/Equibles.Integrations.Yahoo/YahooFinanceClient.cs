@@ -54,6 +54,16 @@ public class YahooFinanceClient : IYahooFinanceClient
         string ticker,
         DateOnly startDate,
         DateOnly endDate
+    ) => (await GetChart(ticker, startDate, endDate)).Prices;
+
+    // Single chart fetch that parses BOTH the daily price bars and any split
+    // events Yahoo returns for the window (events=split). Callers that need
+    // only prices go through GetHistoricalPrices; the split capture piggybacks
+    // on this same request so it costs no extra HTTP round-trip.
+    public async Task<YahooChartData> GetChart(
+        string ticker,
+        DateOnly startDate,
+        DateOnly endDate
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
@@ -68,13 +78,36 @@ public class YahooFinanceClient : IYahooFinanceClient
 
         var url =
             $"{ChartBaseUrl}/{Uri.EscapeDataString(ticker)}"
-            + $"?period1={period1}&period2={period2}&interval=1d";
+            + $"?period1={period1}&period2={period2}&interval=1d&events=split";
 
         var content = await SendWithRetry(url);
         var response = JsonConvert.DeserializeObject<YahooChartResponse>(content);
 
         var result = response?.Chart?.Result?.FirstOrDefault();
-        if (result?.Timestamp == null || result.Timestamp.Count == 0)
+        if (result == null)
+            return new YahooChartData();
+
+        // Exchange-local offset (seconds). Adding it to a UTC epoch shifts the
+        // instant into exchange-local time, so the existing UTC-based
+        // FromUnixTimestamp then yields the correct trading-day calendar date.
+        var offsetSeconds = result.Meta?.GmtOffset ?? 0;
+
+        return new YahooChartData
+        {
+            Prices = BuildPrices(result, ticker, offsetSeconds, startDate, endDate),
+            Splits = BuildSplits(result.Events?.Splits, offsetSeconds, startDate, endDate),
+        };
+    }
+
+    private List<HistoricalPrice> BuildPrices(
+        ChartResult result,
+        string ticker,
+        long offsetSeconds,
+        DateOnly startDate,
+        DateOnly endDate
+    )
+    {
+        if (result.Timestamp == null || result.Timestamp.Count == 0)
             return [];
 
         var quote = result.Indicators?.Quote?.FirstOrDefault();
@@ -82,10 +115,6 @@ public class YahooFinanceClient : IYahooFinanceClient
             return [];
 
         var adjCloseList = result.Indicators?.AdjClose?.FirstOrDefault()?.AdjustedClose;
-        // Exchange-local offset (seconds). Adding it to a UTC epoch shifts the
-        // instant into exchange-local time, so the existing UTC-based
-        // FromUnixTimestamp then yields the correct trading-day calendar date.
-        var offsetSeconds = result.Meta?.GmtOffset ?? 0;
         var prices = new List<HistoricalPrice>();
         var skipped = 0;
         var outsideWindow = 0;
@@ -120,6 +149,43 @@ public class YahooFinanceClient : IYahooFinanceClient
             outsideWindow
         );
         return prices;
+    }
+
+    // Parse the split events into the requested window. Split timestamps are
+    // dated on the same exchange-local calendar as the price bars (offset added
+    // to the UTC epoch), trimmed to [startDate, endDate], and a split with a
+    // non-positive denominator is dropped as unusable (it can't form a ratio).
+    private static List<StockSplitEvent> BuildSplits(
+        Dictionary<string, ChartSplit> splits,
+        long offsetSeconds,
+        DateOnly startDate,
+        DateOnly endDate
+    )
+    {
+        var events = new List<StockSplitEvent>();
+        if (splits == null)
+            return events;
+
+        foreach (var split in splits.Values)
+        {
+            if (split.Denominator <= 0)
+                continue;
+
+            var date = FromUnixTimestamp(split.Date + offsetSeconds);
+            if (date < startDate || date > endDate)
+                continue;
+
+            events.Add(
+                new StockSplitEvent
+                {
+                    Date = date,
+                    Numerator = split.Numerator,
+                    Denominator = split.Denominator,
+                }
+            );
+        }
+
+        return events;
     }
 
     // Build one HistoricalPrice from row i of the chart columns, or null when the row is
