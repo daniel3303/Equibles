@@ -126,7 +126,7 @@ public class FileBackfillWorker : BackgroundService
             .Set<File>()
             .Where(f =>
                 !(f is Image)
-                && EF.Property<string>(f, nameof(File.StorageProvider)) == "Database"
+                && f.StorageProvider == StorageProvider.Database
                 && f.FileContent != null
                 && f.FileContent.Bytes != null
             )
