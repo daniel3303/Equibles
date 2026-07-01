@@ -2,6 +2,9 @@ using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
+using Equibles.CorporateActions.BusinessLogic;
+using Equibles.CorporateActions.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
@@ -27,6 +30,7 @@ public class YahooPriceImportServiceTests : IDisposable
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly DailyStockPriceRepository _priceRepo;
     private readonly CommonStockRepository _stockRepo;
+    private readonly StockSplitRepository _splitRepo;
     private readonly IYahooFinanceClient _yahooClient;
     private readonly ISharesOutstandingProvider _sharesProvider;
     private readonly ErrorReporter _errorReporter;
@@ -41,6 +45,7 @@ public class YahooPriceImportServiceTests : IDisposable
         );
         _priceRepo = new DailyStockPriceRepository(_dbContext);
         _stockRepo = new CommonStockRepository(_dbContext);
+        _splitRepo = new StockSplitRepository(_dbContext);
 
         _yahooClient = Substitute.For<IYahooFinanceClient>();
         _errorReporter = Substitute.For<ErrorReporter>(
@@ -53,10 +58,17 @@ public class YahooPriceImportServiceTests : IDisposable
 
         // The service resolves DailyStockPriceRepository from scoped DI.
         // TickerMapService resolves CommonStockRepository from scoped DI.
+        // The split-reconciliation pass (#2879) resolves SplitPriceReconciliationManager
+        // and the per-ticker split capture resolves StockSplitCaptureManager.
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(DailyStockPriceRepository), _priceRepo),
             (typeof(CommonStockRepository), _stockRepo),
-            (typeof(ISharesOutstandingProvider), _sharesProvider)
+            (typeof(ISharesOutstandingProvider), _sharesProvider),
+            (
+                typeof(SplitPriceReconciliationManager),
+                new SplitPriceReconciliationManager(_splitRepo)
+            ),
+            (typeof(StockSplitCaptureManager), new StockSplitCaptureManager(_splitRepo))
         );
 
         var tickerMapService = new TickerMapService(scopeFactory);
@@ -133,6 +145,13 @@ public class YahooPriceImportServiceTests : IDisposable
             .ToList();
     }
 
+    // Import fetches prices AND split events through the single chart call (#4049);
+    // most facts only exercise the price leg, so default the splits to empty.
+    private static YahooChartData CreateChartData(params (DateOnly date, decimal close)[] entries)
+    {
+        return new YahooChartData { Prices = CreateHistoricalPrices(entries) };
+    }
+
     // ── Empty ticker map ──────────────────────────────────────────────
 
     [Fact]
@@ -144,7 +163,7 @@ public class YahooPriceImportServiceTests : IDisposable
         prices.Should().BeEmpty();
         await _yahooClient
             .DidNotReceive()
-            .GetHistoricalPrices(Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
+            .GetChart(Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
     }
 
     // ── Creates new price records ─────────────────────────────────────
@@ -155,15 +174,13 @@ public class YahooPriceImportServiceTests : IDisposable
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
-        var historicalPrices = CreateHistoricalPrices(
+        var chartData = CreateChartData(
             (new DateOnly(2026, 3, 25), 180m),
             (new DateOnly(2026, 3, 26), 182m),
             (new DateOnly(2026, 3, 27), 185m)
         );
 
-        _yahooClient
-            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns(historicalPrices);
+        _yahooClient.GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>()).Returns(chartData);
 
         await _service.Import(CancellationToken.None);
 
@@ -181,12 +198,12 @@ public class YahooPriceImportServiceTests : IDisposable
         await SeedStocks(apple, msft);
 
         _yahooClient
-            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns(CreateHistoricalPrices((new DateOnly(2026, 3, 25), 180m)));
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(CreateChartData((new DateOnly(2026, 3, 25), 180m)));
 
         _yahooClient
-            .GetHistoricalPrices("MSFT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns(CreateHistoricalPrices((new DateOnly(2026, 3, 25), 400m)));
+            .GetChart("MSFT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(CreateChartData((new DateOnly(2026, 3, 25), 400m)));
 
         await _service.Import(CancellationToken.None);
 
@@ -204,19 +221,25 @@ public class YahooPriceImportServiceTests : IDisposable
 
         var date = new DateOnly(2026, 3, 25);
         _yahooClient
-            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns([
-                new HistoricalPrice
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(
+                new YahooChartData
                 {
-                    Date = date,
-                    Open = 178m,
-                    High = 186m,
-                    Low = 176m,
-                    Close = 184m,
-                    AdjustedClose = 183m,
-                    Volume = 42_000_000,
-                },
-            ]);
+                    Prices =
+                    [
+                        new HistoricalPrice
+                        {
+                            Date = date,
+                            Open = 178m,
+                            High = 186m,
+                            Low = 176m,
+                            Close = 184m,
+                            AdjustedClose = 183m,
+                            Volume = 42_000_000,
+                        },
+                    ],
+                }
+            );
 
         await _service.Import(CancellationToken.None);
 
@@ -229,6 +252,46 @@ public class YahooPriceImportServiceTests : IDisposable
         price.Close.Should().Be(184m);
         price.AdjustedClose.Should().Be(183m);
         price.Volume.Should().Be(42_000_000);
+    }
+
+    // ── Split capture (#4049) ─────────────────────────────────────────
+
+    [Fact]
+    public async Task Import_ChartReturnsSplitEvents_CapturesThemAsStockSplits()
+    {
+        var apple = CreateStock("AAPL", "Apple Inc.");
+        await SeedStocks(apple);
+
+        _yahooClient
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(
+                new YahooChartData
+                {
+                    Prices = CreateHistoricalPrices((new DateOnly(2026, 3, 25), 180m)),
+                    Splits =
+                    [
+                        new StockSplitEvent
+                        {
+                            Date = new DateOnly(2026, 3, 24),
+                            Numerator = 4m,
+                            Denominator = 1m,
+                        },
+                    ],
+                }
+            );
+
+        await _service.Import(CancellationToken.None);
+
+        // Prices still land, and the split event from the same chart payload is
+        // persisted as an unreconciled StockSplit (Yahoo-sourced).
+        _priceRepo.GetAll().Should().ContainSingle();
+        var split = _splitRepo.GetAll().Should().ContainSingle().Which;
+        split.CommonStockId.Should().Be(apple.Id);
+        split.EffectiveDate.Should().Be(new DateOnly(2026, 3, 24));
+        split.Numerator.Should().Be(4m);
+        split.Denominator.Should().Be(1m);
+        split.Source.Should().Be(StockSplitSource.Yahoo);
+        split.PriceAdjustmentAppliedTime.Should().BeNull();
     }
 
     // ── Skips stocks with existing recent data ────────────────────────
@@ -247,7 +310,7 @@ public class YahooPriceImportServiceTests : IDisposable
 
         await _yahooClient
             .DidNotReceive()
-            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
     }
 
     [Fact]
@@ -261,14 +324,12 @@ public class YahooPriceImportServiceTests : IDisposable
 
         var expectedStartDate = existingDate.AddDays(1); // 2026-03-21
         _yahooClient
-            .GetHistoricalPrices("AAPL", expectedStartDate, Arg.Any<DateOnly>())
-            .Returns(CreateHistoricalPrices((new DateOnly(2026, 3, 21), 178m)));
+            .GetChart("AAPL", expectedStartDate, Arg.Any<DateOnly>())
+            .Returns(CreateChartData((new DateOnly(2026, 3, 21), 178m)));
 
         await _service.Import(CancellationToken.None);
 
-        await _yahooClient
-            .Received(1)
-            .GetHistoricalPrices("AAPL", expectedStartDate, Arg.Any<DateOnly>());
+        await _yahooClient.Received(1).GetChart("AAPL", expectedStartDate, Arg.Any<DateOnly>());
     }
 
     // ── Deduplication of existing dates ───────────────────────────────
@@ -284,10 +345,8 @@ public class YahooPriceImportServiceTests : IDisposable
 
         // API returns both the existing date and a new date
         _yahooClient
-            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns(
-                CreateHistoricalPrices((existingDate, 175m), (new DateOnly(2026, 3, 21), 178m))
-            );
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(CreateChartData((existingDate, 175m), (new DateOnly(2026, 3, 21), 178m)));
 
         await _service.Import(CancellationToken.None);
 
@@ -307,8 +366,8 @@ public class YahooPriceImportServiceTests : IDisposable
         await SeedPrices(CreatePrice(apple, date1, 175m), CreatePrice(apple, date2, 178m));
 
         _yahooClient
-            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns(CreateHistoricalPrices((date1, 175m), (date2, 178m)));
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(CreateChartData((date1, 175m), (date2, 178m)));
 
         await _service.Import(CancellationToken.None);
 
@@ -325,8 +384,8 @@ public class YahooPriceImportServiceTests : IDisposable
         await SeedStocks(apple);
 
         _yahooClient
-            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns(new List<HistoricalPrice>());
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
 
         await _service.Import(CancellationToken.None);
 
@@ -344,12 +403,12 @@ public class YahooPriceImportServiceTests : IDisposable
         await SeedStocks(apple, msft);
 
         _yahooClient
-            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Throws(new HttpRequestException("Network error"));
 
         _yahooClient
-            .GetHistoricalPrices("MSFT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns(CreateHistoricalPrices((new DateOnly(2026, 3, 25), 400m)));
+            .GetChart("MSFT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(CreateChartData((new DateOnly(2026, 3, 25), 400m)));
 
         await _service.Import(CancellationToken.None);
 
@@ -365,7 +424,7 @@ public class YahooPriceImportServiceTests : IDisposable
         await SeedStocks(apple);
 
         _yahooClient
-            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Throws(new HttpRequestException("Timeout"));
 
         await _service.Import(CancellationToken.None);
@@ -388,12 +447,12 @@ public class YahooPriceImportServiceTests : IDisposable
         await SeedStocks(apple, msft);
 
         _yahooClient
-            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Throws(new InvalidOperationException("Unexpected error"));
 
         _yahooClient
-            .GetHistoricalPrices("MSFT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns(CreateHistoricalPrices((new DateOnly(2026, 3, 25), 400m)));
+            .GetChart("MSFT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(CreateChartData((new DateOnly(2026, 3, 25), 400m)));
 
         await _service.Import(CancellationToken.None);
 
@@ -441,14 +500,12 @@ public class YahooPriceImportServiceTests : IDisposable
 
         var expectedStart = new DateOnly(2025, 6, 1);
         _yahooClient
-            .GetHistoricalPrices("AAPL", expectedStart, Arg.Any<DateOnly>())
-            .Returns(CreateHistoricalPrices((new DateOnly(2025, 6, 2), 170m)));
+            .GetChart("AAPL", expectedStart, Arg.Any<DateOnly>())
+            .Returns(CreateChartData((new DateOnly(2025, 6, 2), 170m)));
 
         await _service.Import(CancellationToken.None);
 
-        await _yahooClient
-            .Received(1)
-            .GetHistoricalPrices("AAPL", expectedStart, Arg.Any<DateOnly>());
+        await _yahooClient.Received(1).GetChart("AAPL", expectedStart, Arg.Any<DateOnly>());
     }
 
     [Fact]
@@ -461,14 +518,12 @@ public class YahooPriceImportServiceTests : IDisposable
 
         var expectedStart = new DateOnly(2020, 1, 1);
         _yahooClient
-            .GetHistoricalPrices("AAPL", expectedStart, Arg.Any<DateOnly>())
-            .Returns(CreateHistoricalPrices((new DateOnly(2020, 1, 2), 75m)));
+            .GetChart("AAPL", expectedStart, Arg.Any<DateOnly>())
+            .Returns(CreateChartData((new DateOnly(2020, 1, 2), 75m)));
 
         await _service.Import(CancellationToken.None);
 
-        await _yahooClient
-            .Received(1)
-            .GetHistoricalPrices("AAPL", expectedStart, Arg.Any<DateOnly>());
+        await _yahooClient.Received(1).GetChart("AAPL", expectedStart, Arg.Any<DateOnly>());
     }
 
     // ── Batch insertion ───────────────────────────────────────────────
@@ -496,8 +551,8 @@ public class YahooPriceImportServiceTests : IDisposable
             .ToList();
 
         _yahooClient
-            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns(historicalPrices);
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData { Prices = historicalPrices });
 
         await _service.Import(CancellationToken.None);
 
@@ -535,8 +590,8 @@ public class YahooPriceImportServiceTests : IDisposable
             Volume = 1,
         };
         _yahooClient
-            .GetHistoricalPrices("OVR", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns([valid, overflow]);
+            .GetChart("OVR", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData { Prices = [valid, overflow] });
 
         await _service.Import(CancellationToken.None);
 
@@ -553,8 +608,8 @@ public class YahooPriceImportServiceTests : IDisposable
 
         // No prices → ImportTicker returns early; SyncKeyStatistics still runs.
         _yahooClient
-            .GetHistoricalPrices("KST", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns([]);
+            .GetChart("KST", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
         _yahooClient
             .GetKeyStatistics("KST")
             .Returns(new KeyStatistics { SharesOutstanding = 5_000_000 });
@@ -572,8 +627,8 @@ public class YahooPriceImportServiceTests : IDisposable
         await SeedStocks(stock);
 
         _yahooClient
-            .GetHistoricalPrices("MKT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns([]);
+            .GetChart("MKT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
         _yahooClient
             .GetKeyStatistics("MKT")
             .Returns(
@@ -601,8 +656,8 @@ public class YahooPriceImportServiceTests : IDisposable
         await SeedStocks(stock);
 
         _yahooClient
-            .GetHistoricalPrices("MKT0", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns([]);
+            .GetChart("MKT0", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
         _yahooClient
             .GetKeyStatistics("MKT0")
             .Returns(new KeyStatistics { SharesOutstanding = 42, MarketCapitalization = 0 });
@@ -626,8 +681,8 @@ public class YahooPriceImportServiceTests : IDisposable
         await SeedStocks(stock);
 
         _yahooClient
-            .GetHistoricalPrices("SHS0", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns([]);
+            .GetChart("SHS0", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
         _yahooClient
             .GetKeyStatistics("SHS0")
             .Returns(
@@ -651,12 +706,12 @@ public class YahooPriceImportServiceTests : IDisposable
         var stock = CreateStock("LTM", "Latam Airlines Group S.A.");
         await SeedStocks(stock);
 
-        _sharesProvider.GetReportedSharesOutstanding(stock).Returns(574_215_983_709L);
+        _sharesProvider.GetCurrentSharesOutstanding(stock).Returns(574_215_983_709L);
         _sharesProvider.IsForeignPrivateIssuer(stock).Returns(true);
 
         _yahooClient
-            .GetHistoricalPrices("LTM", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns([]);
+            .GetChart("LTM", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
         _yahooClient
             .GetKeyStatistics("LTM")
             .Returns(
@@ -683,12 +738,12 @@ public class YahooPriceImportServiceTests : IDisposable
         var stock = CreateStock("DOM", "Domestic Multi-Class Co.");
         await SeedStocks(stock);
 
-        _sharesProvider.GetReportedSharesOutstanding(stock).Returns(10_000_000L);
+        _sharesProvider.GetCurrentSharesOutstanding(stock).Returns(10_000_000L);
         _sharesProvider.IsForeignPrivateIssuer(stock).Returns(false);
 
         _yahooClient
-            .GetHistoricalPrices("DOM", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns([]);
+            .GetChart("DOM", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
         _yahooClient
             .GetKeyStatistics("DOM")
             .Returns(
@@ -714,8 +769,8 @@ public class YahooPriceImportServiceTests : IDisposable
         await SeedStocks(stock);
 
         _yahooClient
-            .GetHistoricalPrices("ZERO", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns([]);
+            .GetChart("ZERO", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
         _yahooClient
             .GetKeyStatistics("ZERO")
             .Returns(new KeyStatistics { SharesOutstanding = 0, MarketCapitalization = 0 });

@@ -3,6 +3,8 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Data.Models.Taxonomies;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
+using Equibles.CorporateActions.BusinessLogic;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Yahoo.Contracts;
@@ -52,11 +54,19 @@ public class YahooPriceImportServiceCompanyProfileTests : IDisposable
             Substitute.For<ILogger<ErrorReporter>>()
         );
 
+        // Import's split-reconciliation pass (#2879) resolves SplitPriceReconciliationManager
+        // from the scope, and the per-ticker split capture resolves StockSplitCaptureManager.
+        var splitRepo = new StockSplitRepository(_dbContext);
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(DailyStockPriceRepository), priceRepo),
             (typeof(CommonStockRepository), _stockRepo),
             (typeof(IndustryRepository), _industryRepo),
-            (typeof(SectorRepository), _sectorRepo)
+            (typeof(SectorRepository), _sectorRepo),
+            (
+                typeof(SplitPriceReconciliationManager),
+                new SplitPriceReconciliationManager(splitRepo)
+            ),
+            (typeof(StockSplitCaptureManager), new StockSplitCaptureManager(splitRepo))
         );
 
         _service = new YahooPriceImportService(
@@ -69,8 +79,8 @@ public class YahooPriceImportServiceCompanyProfileTests : IDisposable
         );
 
         _yahooClient
-            .GetHistoricalPrices(Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns([]);
+            .GetChart(Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
         _yahooClient.GetKeyStatistics(Arg.Any<string>()).Returns((KeyStatistics)null);
     }
 

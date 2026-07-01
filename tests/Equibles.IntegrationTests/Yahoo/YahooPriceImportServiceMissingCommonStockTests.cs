@@ -2,6 +2,8 @@ using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
+using Equibles.CorporateActions.BusinessLogic;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Yahoo.Contracts;
@@ -50,9 +52,17 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
             Substitute.For<ILogger<ErrorReporter>>()
         );
 
+        // Import's split-reconciliation pass (#2879) resolves SplitPriceReconciliationManager
+        // from the scope, and the per-ticker split capture resolves StockSplitCaptureManager.
+        var splitRepo = new StockSplitRepository(_dbContext);
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(DailyStockPriceRepository), _priceRepo),
-            (typeof(CommonStockRepository), _stockRepo)
+            (typeof(CommonStockRepository), _stockRepo),
+            (
+                typeof(SplitPriceReconciliationManager),
+                new SplitPriceReconciliationManager(splitRepo)
+            ),
+            (typeof(StockSplitCaptureManager), new StockSplitCaptureManager(splitRepo))
         );
 
         _sut = new YahooPriceImportService(
@@ -89,23 +99,26 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
         // captured apple.Id and before FlushPriceBatch — exactly the window where
         // the parent row can vanish in production.
         _yahooClient
-            .GetHistoricalPrices("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(_ =>
             {
                 _dbContext.Remove(apple);
                 _dbContext.SaveChanges();
-                return new List<HistoricalPrice>
+                return new YahooChartData
                 {
-                    new()
-                    {
-                        Date = new DateOnly(2026, 3, 25),
-                        Open = 178m,
-                        High = 186m,
-                        Low = 176m,
-                        Close = 184m,
-                        AdjustedClose = 183m,
-                        Volume = 42_000_000,
-                    },
+                    Prices =
+                    [
+                        new HistoricalPrice
+                        {
+                            Date = new DateOnly(2026, 3, 25),
+                            Open = 178m,
+                            High = 186m,
+                            Low = 176m,
+                            Close = 184m,
+                            AdjustedClose = 183m,
+                            Volume = 42_000_000,
+                        },
+                    ],
                 };
             });
 
