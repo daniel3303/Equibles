@@ -277,7 +277,7 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
-        var freshRows = MapFreshRows(commonStockId, prices, ticker);
+        var freshRows = MapFreshRows(commonStockId, prices, ticker, today);
         if (freshRows.Count == 0)
         {
             _logger.LogWarning(
@@ -359,12 +359,14 @@ public class YahooPriceImportService
     private List<DailyStockPrice> MapFreshRows(
         Guid commonStockId,
         List<HistoricalPrice> prices,
-        string ticker
+        string ticker,
+        DateOnly today
     )
     {
         var overflowDates = WarnAndCollectOverflowDates(prices, ticker);
         return prices
             .Where(p => !overflowDates.Contains(p.Date))
+            .Where(p => IsSettledDailyBar(p.Date, today))
             .Select(p => new DailyStockPrice
             {
                 CommonStockId = commonStockId,
@@ -378,6 +380,15 @@ public class YahooPriceImportService
             })
             .ToList();
     }
+
+    // Yahoo's daily chart includes the current, still-open trading day as a live candle: a partial
+    // OHLC quartet and partial volume that keep changing until the session closes. Persisting it is
+    // wrong twice over — the "Close" is really an intraday snapshot, and the importer is insert-only
+    // (a date already present is never updated, see PersistPrices), so that partial bar freezes and
+    // the real close never overwrites it. Only store bars strictly before the current UTC date; the
+    // day's settled bar is appended on the next cycle once the date has rolled over (always after a
+    // US market close), so the daily series holds settled closes only.
+    private static bool IsSettledDailyBar(DateOnly barDate, DateOnly today) => barDate < today;
 
     private async Task<int> ImportTicker(
         string ticker,
@@ -399,6 +410,7 @@ public class YahooPriceImportService
             ticker,
             commonStockId,
             chartData.Prices,
+            today,
             cancellationToken
         );
 
@@ -412,6 +424,7 @@ public class YahooPriceImportService
         string ticker,
         Guid commonStockId,
         List<HistoricalPrice> prices,
+        DateOnly today,
         CancellationToken cancellationToken
     )
     {
@@ -428,7 +441,7 @@ public class YahooPriceImportService
             cancellationToken
         );
 
-        var newPrices = MapFreshRows(commonStockId, prices, ticker)
+        var newPrices = MapFreshRows(commonStockId, prices, ticker, today)
             .Where(p => !existingDates.Contains(p.Date))
             .ToList();
 
