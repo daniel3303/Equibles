@@ -1,5 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.AutoWiring;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
@@ -20,10 +22,15 @@ namespace Equibles.Holdings.BusinessLogic;
 public class StockCombinedQuarterService
 {
     private readonly InstitutionalHoldingRepository _holdingRepository;
+    private readonly StockSplitRepository _stockSplitRepository;
 
-    public StockCombinedQuarterService(InstitutionalHoldingRepository holdingRepository)
+    public StockCombinedQuarterService(
+        InstitutionalHoldingRepository holdingRepository,
+        StockSplitRepository stockSplitRepository
+    )
     {
         _holdingRepository = holdingRepository;
+        _stockSplitRepository = stockSplitRepository;
     }
 
     /// <summary>Resolves the stock's newest 13F quarter and how it must be presented.</summary>
@@ -102,6 +109,12 @@ public class StockCombinedQuarterService
         CancellationToken cancellationToken = default
     )
     {
+        if (!anchor.IsCombined)
+            throw new InvalidOperationException(
+                "Reported activity is only defined for a combined anchor (open filing window "
+                    + "with a previous quarter to compare against)."
+            );
+
         var current = await _holdingRepository
             .Get13FByStock(stock, anchor.ReportDate)
             .Select(h => new
@@ -135,6 +148,33 @@ public class StockCombinedQuarterService
             .Where(h => !filedPreviousHolders.Contains(h.InstitutionalHolderId))
             .ToList();
 
+        // Restate both quarters' share counts onto today's post-split basis before any sum —
+        // a split falling between the two quarters while the window is open would otherwise
+        // read as every continuing filer doubling/halving its position (the same restatement
+        // every other 13F comparison surface applies). Dollar values are split-invariant.
+        var splits = await _stockSplitRepository
+            .GetByStock(stock.Id)
+            .ToListAsync(cancellationToken);
+        var currentFactor = SplitAdjustment.ShareCountFactor(anchor.ReportDate, splits);
+        var previousFactor = SplitAdjustment.ShareCountFactor(
+            anchor.PreviousReportDate.Value,
+            splits
+        );
+        var currentShares = SplitAdjustment.AdjustShareCount(
+            current.Sum(h => h.Shares),
+            currentFactor
+        );
+        var reportedPreviousShares = SplitAdjustment.AdjustShareCount(
+            previous
+                .Where(h => filedPreviousHolders.Contains(h.InstitutionalHolderId))
+                .Sum(h => h.Shares),
+            previousFactor
+        );
+        var carriedShares = SplitAdjustment.AdjustShareCount(
+            carried.Sum(h => h.Shares),
+            previousFactor
+        );
+
         return new StockReportedActivity
         {
             PreviousHolderCount = previousHolders.Count,
@@ -143,15 +183,11 @@ public class StockCombinedQuarterService
             SoldOutFilerCount = filedPreviousHolders.Count(id => !currentHolders.Contains(id)),
             // Net over reporters only: their new shares (zero for exits) minus their previous
             // shares (zero for new positions). Carried positions contribute nothing.
-            NetReportedShareDelta =
-                current.Sum(h => h.Shares)
-                - previous
-                    .Where(h => filedPreviousHolders.Contains(h.InstitutionalHolderId))
-                    .Sum(h => h.Shares),
+            NetReportedShareDelta = currentShares - reportedPreviousShares,
             CombinedHolderCount = currentHolders
                 .Union(carried.Select(h => h.InstitutionalHolderId))
                 .Count(),
-            CombinedShares = current.Sum(h => h.Shares) + carried.Sum(h => h.Shares),
+            CombinedShares = currentShares + carriedShares,
             CombinedValue = current.Sum(h => h.Value) + carried.Sum(h => h.Value),
         };
     }

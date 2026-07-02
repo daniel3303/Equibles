@@ -108,7 +108,10 @@ public class InstitutionalHoldingsToolsGetTopHoldersExcludes13DGTests
             new InstitutionalHolderRepository(db),
             new CommonStockRepository(db),
             new StockSplitRepository(db),
-            new StockCombinedQuarterService(new InstitutionalHoldingRepository(db)),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(db),
+                new StockSplitRepository(db)
+            ),
             new ErrorManager(new ErrorRepository(db)),
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );

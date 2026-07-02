@@ -143,7 +143,10 @@ public class InstitutionalHoldingsToolsGetFundOverlapTests : ParadeDbMcpTestBase
             new InstitutionalHolderRepository(ctx),
             new CommonStockRepository(ctx),
             new StockSplitRepository(ctx),
-            new StockCombinedQuarterService(new InstitutionalHoldingRepository(ctx)),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(ctx),
+                new StockSplitRepository(ctx)
+            ),
             ErrorManager,
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );

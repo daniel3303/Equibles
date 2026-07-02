@@ -78,7 +78,10 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivitySplitAdjus
             new InstitutionalHolderRepository(verify),
             new CommonStockRepository(verify),
             new StockSplitRepository(verify),
-            new StockCombinedQuarterService(new InstitutionalHoldingRepository(verify)),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
             ErrorManager,
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );

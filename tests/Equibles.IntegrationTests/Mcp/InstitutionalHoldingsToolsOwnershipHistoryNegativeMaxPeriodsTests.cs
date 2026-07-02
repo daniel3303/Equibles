@@ -25,7 +25,10 @@ public class InstitutionalHoldingsToolsOwnershipHistoryNegativeMaxPeriodsTests :
             new InstitutionalHolderRepository(DbContext),
             new CommonStockRepository(DbContext),
             new StockSplitRepository(DbContext),
-            new StockCombinedQuarterService(new InstitutionalHoldingRepository(DbContext)),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(DbContext),
+                new StockSplitRepository(DbContext)
+            ),
             ErrorManager,
             NullLogger<InstitutionalHoldingsTools>()
         );

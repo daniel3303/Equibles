@@ -39,7 +39,10 @@ public class InstitutionalHoldingsToolsResolveStockByTickerNormalizationTests : 
             new InstitutionalHolderRepository(_dbContext),
             new CommonStockRepository(_dbContext),
             new StockSplitRepository(_dbContext),
-            new StockCombinedQuarterService(new InstitutionalHoldingRepository(_dbContext)),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(_dbContext),
+                new StockSplitRepository(_dbContext)
+            ),
             errorManager: null,
             NullLogger<InstitutionalHoldingsTools>.Instance
         );

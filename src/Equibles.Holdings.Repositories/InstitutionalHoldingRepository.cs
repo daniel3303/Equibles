@@ -572,20 +572,34 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             );
     }
 
-    // Combined view scoped to one stock, 13F-only. The global non-filer test stays UNSCOPED on
-    // purpose: a fund that filed this quarter without this stock proved it sold out, so its
-    // prior row must not carry forward. Is13F is applied on top (unlike the market-wide
-    // GetCombinedQuarter) because per-stock holder lists double-count a filer whose 13D/G
-    // event date coincides with the quarter end (GH-4449).
+    // Combined view scoped to one stock, 13F-only on BOTH sides (rows and the has-filed test —
+    // unlike the market-wide GetCombinedQuarter): per-stock holder lists double-count a filer
+    // whose 13D/G event date coincides with the quarter end, and that same coincidence must
+    // not mark the fund as "filed" and drop its carried prior 13F row (GH-4449). The has-filed
+    // test stays UNSCOPED by stock on purpose: a fund that filed this quarter without this
+    // stock proved it sold out, so its prior row must not carry forward.
     public IQueryable<InstitutionalHolding> GetCombinedQuarterByStock(
         CommonStock stock,
         DateOnly current,
         DateOnly previous
     )
     {
-        return GetCombinedQuarter(current, previous)
+        return GetAll()
             .Where(Is13F)
-            .Where(h => h.CommonStockId == stock.Id);
+            .Where(h => h.CommonStockId == stock.Id)
+            .Where(h =>
+                h.ReportDate == current
+                || (
+                    h.ReportDate == previous
+                    && !DbContext
+                        .Set<InstitutionalHolding>()
+                        .Any(c =>
+                            c.ReportDate == current
+                            && c.FilingType == FilingType.Form13F
+                            && c.InstitutionalHolderId == h.InstitutionalHolderId
+                        )
+                )
+            );
     }
 
     // Same combined per-stock view with the holder navigation eagerly loaded for rendering.
