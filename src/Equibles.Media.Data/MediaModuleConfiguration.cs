@@ -25,8 +25,13 @@ public class MediaModuleConfiguration : Equibles.Data.IFinancialModule
 
             // Lets the migration drain worker cheaply find rows still stored in the database.
             b.HasIndex(e => e.StorageProvider);
+
+            // The deletion sweep checks whether any live row still references a queued
+            // blob by its content hash, and the reconciliation pass does the same in bulk.
+            b.HasIndex(e => e.ContentHash);
         });
         builder.Entity<FileContent>();
         builder.Entity<Image>();
+        builder.Entity<PendingBlobDeletion>();
     }
 }

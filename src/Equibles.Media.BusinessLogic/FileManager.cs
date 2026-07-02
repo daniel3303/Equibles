@@ -33,18 +33,21 @@ public class FileManager : IFileManager
     }
 
     private readonly FileRepository _fileRepository;
+    private readonly PendingBlobDeletionRepository _pendingBlobDeletionRepository;
     private readonly DatabaseFileStorageProvider _databaseProvider;
     private readonly FileSystemFileStorageProvider _fileSystemProvider;
     private readonly FileStorageOptions _options;
 
     public FileManager(
         FileRepository fileRepository,
+        PendingBlobDeletionRepository pendingBlobDeletionRepository,
         DatabaseFileStorageProvider databaseProvider,
         FileSystemFileStorageProvider fileSystemProvider,
         IOptions<FileStorageOptions> options
     )
     {
         _fileRepository = fileRepository;
+        _pendingBlobDeletionRepository = pendingBlobDeletionRepository;
         _databaseProvider = databaseProvider;
         _fileSystemProvider = fileSystemProvider;
         _options = options.Value;
@@ -141,14 +144,33 @@ public class FileManager : IFileManager
 
     /// <summary>
     /// Deletes a file from the database. The db context is not saved. Filesystem-stored
-    /// bytes are reclaimed by the orphan sweep, not deleted inline — content addressing
-    /// means another row may reference the same path.
+    /// bytes are not deleted inline — content addressing means another row may reference
+    /// the same path, and an inline unlink can race an identical re-upload that dedup-skips
+    /// onto the existing blob. Instead the blob is queued and the deletion sweep retires it
+    /// after re-checking references, in the same SaveChanges as the row delete so the mark
+    /// can never outlive a rolled-back delete.
     /// </summary>
     /// <param name="file">The file to delete</param>
     public void DeleteFile(File file)
     {
         if (file == null)
             return;
+
+        if (
+            file.StorageProvider == StorageProvider.FileSystem
+            && file.ContentHash != null
+            && file.RelativePath != null
+        )
+        {
+            _pendingBlobDeletionRepository.Add(
+                new PendingBlobDeletion
+                {
+                    ContentHash = file.ContentHash,
+                    RelativePath = file.RelativePath,
+                }
+            );
+        }
+
         _fileRepository.Delete(file);
     }
 
