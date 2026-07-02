@@ -12,7 +12,7 @@ namespace Equibles.CommonStocks.HostedService;
 /// <summary>
 /// Periodically discovers each company's website from the registered
 /// <c>IWebsiteSource</c> implementations, filling in <c>CommonStock.Website</c>
-/// incrementally. Runs upstream of <see cref="InvestorRelationsDiscoveryWorker"/>,
+/// incrementally. Runs upstream of the enrichment that consumes the website,
 /// which needs the website to probe for an IR page.
 /// </summary>
 public class WebsiteDiscoveryWorker : BaseScraperWorker

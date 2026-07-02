@@ -10,7 +10,7 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddCommonStocksWorker(this IServiceCollection services)
     {
-        services.AutoWireServicesFrom<InvestorRelationsDiscoveryService>();
+        services.AutoWireServicesFrom<WebsiteDiscoveryService>();
         services.AutoWireServicesFrom<Equibles.Integrations.Wikidata.WikidataClient>();
 
         // Shared, process-wide politeness gate for outbound scraping (per-host throttle + rate-limit
@@ -40,13 +40,9 @@ public static class ServiceCollectionExtensions
         // registered IWebsiteSource implementations (filings, Wikidata, Yahoo, ...).
         services.AddHostedService<WebsiteDiscoveryWorker>();
 
-        // Typed client: short timeout and a contact User-Agent, following many
-        // redirects to land on the real IR page. Response size is capped so a
-        // IR-page discovery probes through the stealth sidecar only (no plain-HTTP client): IR hosts
-        // are bot-protected, so plain HTTP only ever returned challenge pages that failed validation.
-        services.AddScoped<InvestorRelationsProbeClient>();
-
-        services.AddHostedService<InvestorRelationsDiscoveryWorker>();
+        // Standalone builds bundle no stealth engine; TryAdd so a host that ships one
+        // (registering its own IStealthBrowserClient first) keeps its implementation.
+        services.TryAddSingleton<IStealthBrowserClient, NoStealthBrowserClient>();
 
         return services;
     }

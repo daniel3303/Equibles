@@ -52,7 +52,7 @@ public class FdaAdvisoryCommitteeCalendarImportService : IImporter
             // is no way to read its rows — degrade to a no-op rather than scraping chrome.
             _logger.LogWarning(
                 "FDA advisory-committee import skipped: no stealth browser configured "
-                    + "(InvestorRelationsDiscovery:StealthFetch:SidecarUrl)."
+                    + "(no IStealthBrowserClient engine is registered)."
             );
             return;
         }
