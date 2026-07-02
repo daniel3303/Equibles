@@ -7,6 +7,7 @@ using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data;
 using Equibles.Errors.Repositories;
+using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Mcp.Tools;
@@ -107,6 +108,10 @@ public class InstitutionalHoldingsToolsGetTopHoldersExcludes13DGTests
             new InstitutionalHolderRepository(db),
             new CommonStockRepository(db),
             new StockSplitRepository(db),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(db),
+                new StockSplitRepository(db)
+            ),
             new ErrorManager(new ErrorRepository(db)),
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );

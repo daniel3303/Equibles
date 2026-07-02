@@ -74,6 +74,9 @@ public partial class Program
         // Media file access: DocumentTextTools resolves IFileManager to read document
         // content regardless of storage backend.
         builder.Services.AutoWireServicesFrom<Equibles.Media.BusinessLogic.FileManager>();
+        // Holdings tools resolve StockCombinedQuarterService to present the in-progress 13F
+        // quarter as the combined view.
+        builder.Services.AutoWireServicesFrom<Equibles.Holdings.BusinessLogic.StockCombinedQuarterService>();
 
         // Required for RAG search to embed the query at request time; without this
         // bind EmbeddingConfig is default (Enabled=false) and semantic search is inert.

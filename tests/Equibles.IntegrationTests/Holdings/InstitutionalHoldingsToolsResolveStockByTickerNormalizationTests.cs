@@ -4,6 +4,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
+using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.Mcp.Tools;
 using Equibles.Holdings.Repositories;
@@ -38,6 +39,10 @@ public class InstitutionalHoldingsToolsResolveStockByTickerNormalizationTests : 
             new InstitutionalHolderRepository(_dbContext),
             new CommonStockRepository(_dbContext),
             new StockSplitRepository(_dbContext),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(_dbContext),
+                new StockSplitRepository(_dbContext)
+            ),
             errorManager: null,
             NullLogger<InstitutionalHoldingsTools>.Instance
         );

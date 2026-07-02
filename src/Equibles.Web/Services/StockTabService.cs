@@ -100,6 +100,14 @@ public class StockTabService
         _commonStockRepository = commonStockRepository;
     }
 
+    // Whether the holdings tab should OPEN in the combined view: the newest quarter's filing
+    // window is still open and a prior quarter exists to carry non-filers forward from.
+    public async Task<bool> ShouldDefaultToCombined(CommonStock stock)
+    {
+        var reportDates = await LoadClampedReportDates(stock);
+        return reportDates.Count >= 2 && CombinedQuarterHelper.IsFilingWindowOpen(reportDates[0]);
+    }
+
     public async Task<HoldingsTabViewModel> LoadHoldingsTab(CommonStock stock, DateOnly? date)
     {
         var reportDates = await LoadClampedReportDates(stock);

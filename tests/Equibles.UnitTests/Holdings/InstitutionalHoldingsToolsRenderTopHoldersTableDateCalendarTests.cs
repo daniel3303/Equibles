@@ -45,6 +45,7 @@ public class InstitutionalHoldingsToolsRenderTopHoldersTableDateCalendarTests
             9_876_543_210L,
             holdings,
             1m,
+            null,
         ];
 
         var original = CultureInfo.CurrentCulture;

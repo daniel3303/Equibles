@@ -6,6 +6,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
     <ProjectReference Include="..\Equibles.Holdings.Repositories\Equibles.Holdings.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.CorporateActions.Repositories\Equibles.CorporateActions.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Yahoo.Repositories\Equibles.Yahoo.Repositories.csproj" />
   </ItemGroup>

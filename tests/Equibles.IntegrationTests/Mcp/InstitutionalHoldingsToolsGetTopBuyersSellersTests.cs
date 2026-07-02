@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Repositories;
+using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Mcp.Tools;
 using Equibles.Holdings.Repositories;
@@ -67,6 +68,10 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
             new InstitutionalHolderRepository(verify),
             new CommonStockRepository(verify),
             new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
             ErrorManager,
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
@@ -129,6 +134,10 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
             new InstitutionalHolderRepository(verify),
             new CommonStockRepository(verify),
             new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
             ErrorManager,
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
@@ -160,6 +169,10 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
             new InstitutionalHolderRepository(verify),
             new CommonStockRepository(verify),
             new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
             ErrorManager,
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
@@ -188,6 +201,10 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
             new InstitutionalHolderRepository(verify),
             new CommonStockRepository(verify),
             new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
             ErrorManager,
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
@@ -224,6 +241,10 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
             new InstitutionalHolderRepository(verify),
             new CommonStockRepository(verify),
             new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
             ErrorManager,
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
@@ -262,6 +283,10 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
             new InstitutionalHolderRepository(verify),
             new CommonStockRepository(verify),
             new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
             ErrorManager,
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );

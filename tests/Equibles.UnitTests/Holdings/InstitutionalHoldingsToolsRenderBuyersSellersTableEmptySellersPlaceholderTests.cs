@@ -46,7 +46,15 @@ public class InstitutionalHoldingsToolsRenderBuyersSellersTableEmptySellersPlace
         var rendered = (string)
             RenderBuyersSellersTableMethod.Invoke(
                 null,
-                [stock, "AAPL", new DateOnly(2024, 9, 30), (DateOnly?)null, topBuyers, topSellers]
+                [
+                    stock,
+                    "AAPL",
+                    new DateOnly(2024, 9, 30),
+                    (DateOnly?)null,
+                    topBuyers,
+                    topSellers,
+                    null,
+                ]
             );
 
         rendered.Should().Contain("_No sellers this quarter._");

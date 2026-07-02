@@ -120,7 +120,7 @@ public class StocksController : BaseController
     public Task<IActionResult> Holdings(
         string ticker,
         DateOnly? date,
-        bool combined = false,
+        bool? combined = null,
         [FromQuery(Name = "types")] string types = null
     ) =>
         ShowStockTab(
@@ -128,7 +128,12 @@ public class StocksController : BaseController
             "holdings",
             async s =>
             {
-                var vm = combined
+                // No explicit choice → open in the combined view while the newest quarter's
+                // filing window is open, so the tab never presents a half-filed quarter's
+                // early filers as the whole institutional picture.
+                var useCombined =
+                    combined ?? (date == null && await _stockTabService.ShouldDefaultToCombined(s));
+                var vm = useCombined
                     ? await _stockTabService.LoadHoldingsCombinedTab(s)
                     : await _stockTabService.LoadHoldingsTab(s, date);
                 vm.ActiveTypes = ParsePositionTypes(types);
