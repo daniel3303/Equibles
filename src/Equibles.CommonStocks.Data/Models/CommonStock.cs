@@ -36,59 +36,6 @@ public class CommonStock
     /// </summary>
     public DateTime? WebsiteCheckedAt { get; set; }
 
-    /// <summary>
-    /// Absolute URL of the company's investor-relations page, discovered by
-    /// probing common IR paths and subdomains of <see cref="Website"/>. Null
-    /// until discovered (or when no IR page could be validated). Foundation for
-    /// downstream IR scraping (press releases, earnings calendars, transcripts).
-    /// </summary>
-    [MaxLength(256)]
-    public string InvestorRelationsUrl { get; set; }
-
-    /// <summary>
-    /// Platform/CMS the company's investor-relations website runs on, detected from
-    /// the <see cref="InvestorRelationsUrl"/> page HTML. <see cref="IrPlatformType.Unknown"/>
-    /// until an IR page is discovered and classified. Determines which IR scraper
-    /// handles the company.
-    /// </summary>
-    public IrPlatformType IrPlatformType { get; set; }
-
-    /// <summary>
-    /// When IR discovery last probed this stock's website (UTC), stamped on every
-    /// definitive outcome — an IR page found, or every candidate validated as a miss.
-    /// Null until first probed. Stocks probed within the configured cooldown are
-    /// skipped, so persistent misses back off instead of being re-probed every cycle.
-    /// </summary>
-    public DateTime? InvestorRelationsCheckedAt { get; set; }
-
-    /// <summary>
-    /// The IR-discovery code generation under which this stock was last probed (see
-    /// <c>InvestorRelationsDiscoveryVersion</c>). Defaults to 0 so the whole pre-existing corpus
-    /// counts as the oldest generation; when the probe logic improves and the version is bumped, a
-    /// stock stamped with an older version becomes eligible for re-probe immediately, without waiting
-    /// out its cooldown — so an improvement reaches the backlog of misses on deploy, not over 30 days.
-    /// </summary>
-    public int InvestorRelationsDiscoveryVersion { get; set; }
-
-    /// <summary>
-    /// Earliest time (UTC) this stock may be re-probed after a definitive miss. Each miss backs off
-    /// exponentially — the wait doubles from the initial backoff up to the configured cap — so a
-    /// transiently-blocked site (a Cloudflare "access denied", a one-off render failure) is retried
-    /// within a day rather than written off for weeks, while a persistently-missing site still settles
-    /// at the cap. Null until the first miss; a row stamped before this field existed (or eligible by
-    /// version / website-changed) is re-probed immediately, then gets its own backoff schedule.
-    /// </summary>
-    public DateTime? InvestorRelationsRetryAfter { get; set; }
-
-    /// <summary>
-    /// When an IR content scraper (news/events) last worked through this stock (UTC),
-    /// stamped on every cycle the stock is scraped — whether or not new rows were
-    /// found. Null until first scraped. Scrapers order their cohort least-recently
-    /// -scraped first (never-scraped stocks lead), so each bounded cycle advances
-    /// through the whole platform cohort and then refreshes it oldest-first, instead
-    /// of re-scraping the same alphabetical head every cycle.
-    /// </summary>
-    public DateTime? IrContentScrapedAt { get; set; }
 
     public double MarketCapitalization { get; set; }
     public long SharesOutStanding { get; set; }
