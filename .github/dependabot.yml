@@ -33,6 +33,12 @@ updates:
       # 9.0.x patches are still allowed.
       - dependency-name: "Microsoft.Bcl.Memory"
         update-types: ["version-update:semver-major"]
+      # Microsoft.Playwright is deliberately pinned at 1.60.0: the 1.61.0 driver
+      # dies on a service-worker target attach (unhandled assert in
+      # _CRBrowser._onAttachedToTarget), which killed every production browser
+      # lane. Block all bumps until a release fixes that crash and is soaked
+      # against the cloakbrowser sidecars, then remove this ignore.
+      - dependency-name: "Microsoft.Playwright"
     groups:
       microsoft-extensions:
         patterns:
