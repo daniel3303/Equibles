@@ -46,6 +46,11 @@ public class BlobDeletionSweepWorker : BackgroundService
     protected virtual TimeSpan StartupDelay => TimeSpan.FromMinutes(10);
     protected virtual TimeSpan TickInterval => TimeSpan.FromHours(24);
 
+    // A misconfigured tiny grace (e.g. 0) would let the sweep race blobs whose rows are
+    // still inside an uncommitted write window, causing hours-long read outages until the
+    // purge restores them. Clamp to a floor no configuration can go below.
+    internal const int MinimumGraceHours = 6;
+
     public BlobDeletionSweepWorker(
         IServiceScopeFactory scopeFactory,
         IOptions<FileStorageOptions> storageOptions,
@@ -59,6 +64,8 @@ public class BlobDeletionSweepWorker : BackgroundService
         _logger = logger;
     }
 
+    private int EffectiveGraceHours => Math.Max(_sweepOptions.GraceHours, MinimumGraceHours);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!_sweepOptions.Enabled || !_storageOptions.Enabled)
@@ -71,11 +78,19 @@ public class BlobDeletionSweepWorker : BackgroundService
             return;
         }
 
+        try
+        {
+            await Task.Delay(StartupDelay, stoppingToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await Task.Delay(StartupDelay, stoppingToken);
                 await SweepOnce(stoppingToken);
             }
             catch (OperationCanceledException)
@@ -150,7 +165,7 @@ public class BlobDeletionSweepWorker : BackgroundService
         CancellationToken cancellationToken
     )
     {
-        var cutoff = now.AddHours(-_sweepOptions.GraceHours);
+        var cutoff = now.AddHours(-EffectiveGraceHours);
         var due = await dbContext
             .Set<PendingBlobDeletion>()
             .Where(p => p.QueuedAt < cutoff)
@@ -161,27 +176,34 @@ public class BlobDeletionSweepWorker : BackgroundService
         }
 
         var trashed = 0;
-        // Duplicate queue rows for the same hash collapse into one decision.
+        // Duplicate queue rows for the same hash collapse into one reference decision;
+        // every distinct path is still processed, since identical bytes could in
+        // principle have been stored under more than one tier.
         foreach (var group in due.GroupBy(p => p.ContentHash))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var relativePath = group.First().RelativePath;
-            if (
-                !await IsReferencedByAny(checkers, group.Key, cancellationToken)
-                && TryTrashBlob(root, relativePath, now)
-            )
+            if (!await IsReferencedByAny(checkers, group.Key, cancellationToken))
             {
-                // A row may have committed between the check and the rename (an identical
-                // re-upload that dedup-skipped just before the blob moved). The rename made
-                // later writes self-sufficient; restore covers the one that raced us.
-                if (await IsReferencedByAny(checkers, group.Key, cancellationToken))
+                foreach (var relativePath in group.Select(p => p.RelativePath).Distinct())
                 {
-                    RestoreBlob(root, relativePath);
-                }
-                else
-                {
-                    trashed++;
+                    if (!TryTrashBlob(root, relativePath, now))
+                    {
+                        continue;
+                    }
+
+                    // A row may have committed between the check and the rename (an
+                    // identical re-upload that dedup-skipped just before the blob moved).
+                    // The rename made later writes self-sufficient; restore covers the
+                    // one that raced us.
+                    if (await IsReferencedByAny(checkers, group.Key, cancellationToken))
+                    {
+                        RestoreBlob(root, relativePath);
+                    }
+                    else
+                    {
+                        trashed++;
+                    }
                 }
             }
 
@@ -251,11 +273,14 @@ public class BlobDeletionSweepWorker : BackgroundService
         CancellationToken cancellationToken
     )
     {
-        var graceCutoff = now.AddHours(-_sweepOptions.GraceHours);
+        var graceCutoff = now.AddHours(-EffectiveGraceHours);
         var todaySlot = (int)now.DayOfWeek;
         var trashed = 0;
 
-        foreach (var tier in new[] { FileStorageTiers.Blob, FileStorageTiers.Audio })
+        var tiers = _sweepOptions.ReconciliationIncludesAudioTier
+            ? new[] { FileStorageTiers.Blob, FileStorageTiers.Audio }
+            : new[] { FileStorageTiers.Blob };
+        foreach (var tier in tiers)
         {
             var algorithmRoot = Path.Combine(root, tier, ContentAddressedPath.Algorithm);
             if (!Directory.Exists(algorithmRoot))
@@ -364,11 +389,44 @@ public class BlobDeletionSweepWorker : BackgroundService
     }
 
     /// <summary>
+    /// Rejects any relative path that resolves outside the store root or does not name a
+    /// 64-hex digest. Queue paths are self-produced, but this worker moves and deletes
+    /// files — a corrupted row must never let it reach outside the store.
+    /// </summary>
+    private bool IsSafeStorePath(string root, string relativePath)
+    {
+        if (string.IsNullOrEmpty(relativePath) || !HexName.IsMatch(Path.GetFileName(relativePath)))
+        {
+            return false;
+        }
+
+        var rootFull = Path.GetFullPath(root) + Path.DirectorySeparatorChar;
+        var resolved = Path.GetFullPath(
+            Path.Combine(root, ContentAddressedPath.ToOsPath(relativePath))
+        );
+        if (!resolved.StartsWith(rootFull, StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "Refusing to touch blob path {RelativePath} outside the store root",
+                relativePath
+            );
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Atomically moves a blob into the mirrored trash tree and stamps its trash time.
     /// Returns false when the blob is already gone (queued twice, or removed earlier).
     /// </summary>
     private bool TryTrashBlob(string root, string relativePath, DateTime now)
     {
+        if (!IsSafeStorePath(root, relativePath))
+        {
+            return false;
+        }
+
         var source = Path.Combine(root, ContentAddressedPath.ToOsPath(relativePath));
         if (!System.IO.File.Exists(source))
         {
@@ -407,6 +465,11 @@ public class BlobDeletionSweepWorker : BackgroundService
     /// </summary>
     private void RestoreBlob(string root, string relativePath)
     {
+        if (!IsSafeStorePath(root, relativePath))
+        {
+            return;
+        }
+
         var trashPath = Path.Combine(
             root,
             TrashDirectoryName,

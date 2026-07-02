@@ -28,4 +28,11 @@ public class BlobSweepOptions
     /// run covers one seventh of the shard space, so the whole store is reconciled weekly.
     /// </summary>
     public bool ReconciliationEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Whether reconciliation also covers the audio tier. Audio is the one content class
+    /// that cannot be re-captured, so a deployment can exclude it and rely on the delete
+    /// queue alone for audio while reconciliation handles the re-scrapable bulk tiers.
+    /// </summary>
+    public bool ReconciliationIncludesAudioTier { get; set; } = true;
 }
