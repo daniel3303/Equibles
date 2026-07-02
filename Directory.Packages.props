@@ -7,7 +7,10 @@
     <PackageVersion Include="Equibles.Core.AutoWiring" Version="1.0.1" />
     <!-- Browser Automation -->
     <PackageVersion Include="MathNet.Numerics" Version="5.0.0" />
-    <PackageVersion Include="Microsoft.Playwright" Version="1.61.0" />
+    <!-- Playwright is pinned at 1.60.0: the 1.61.0 driver dies on a service-worker target attach
+         (unhandled assert in _CRBrowser._onAttachedToTarget), which killed every browser lane in
+         production. Do not bump until a release fixes that crash and soaks against the sidecars. -->
+    <PackageVersion Include="Microsoft.Playwright" Version="1.60.0" />
     <!-- HTML / Markdown -->
     <PackageVersion Include="AngleSharp" Version="1.5.1" />
     <PackageVersion Include="FlexLabs.EntityFrameworkCore.Upsert" Version="10.0.0" />

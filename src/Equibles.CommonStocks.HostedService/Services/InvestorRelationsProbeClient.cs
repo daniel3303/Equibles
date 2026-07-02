@@ -48,10 +48,13 @@ public class InvestorRelationsProbeClient
     /// Probes <paramref name="website"/> for an investor-relations page and returns a classified
     /// <see cref="IrProbeResult"/>: <c>Found</c> with the validated URL + platform; <c>NoIrPageFound</c>
     /// when every candidate was assessed and none was an IR page; or <c>Inconclusive</c> when the
-    /// stealth engine was unavailable for one or more candidates, so a real IR page may have been
-    /// missed. With no sidecar configured the probe reports <c>Inconclusive</c>: nothing was assessed,
-    /// and a conclusive miss here would stamp the stock checked-at-current-version — a sidecar
-    /// misconfiguration would silently poison the whole backlog.
+    /// stealth engine was unavailable for a candidate, so a real IR page may have been missed.
+    /// Candidates are probed in priority order (subdomains before paths), and a transient miss ends
+    /// the sweep immediately: a lower-priority candidate must never win while a better one is
+    /// unassessed — that is how a dead render engine once stored <c>www.example.com/investor</c> over
+    /// the real <c>investors.example.com</c>. With no sidecar configured the probe reports
+    /// <c>Inconclusive</c>: nothing was assessed, and a conclusive miss here would stamp the stock
+    /// checked-at-current-version — a sidecar misconfiguration would silently poison the whole backlog.
     /// </summary>
     public async Task<IrProbeResult> Discover(
         string website,
@@ -65,10 +68,9 @@ public class InvestorRelationsProbeClient
 
         var candidates = InvestorRelationsCandidateBuilder.Build(website, paths, subdomains);
 
-        // Render each guessed path/subdomain through the sidecar; the first that validates wins. Track
-        // whether any candidate couldn't be assessed (engine unavailable) so a transient failure isn't
-        // reported as a conclusive "no IR page".
-        var anyTransient = false;
+        // Render each guessed path/subdomain through the sidecar; the first that validates wins. A
+        // candidate that couldn't be assessed (engine unavailable) aborts the sweep: any later match
+        // would be a lower-priority URL that only wins because the better candidate went unassessed.
         foreach (var candidate in candidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -76,18 +78,19 @@ public class InvestorRelationsProbeClient
             var (page, transient) = await ProbeCandidate(candidate, candidate, cancellationToken);
             if (page != null)
                 return IrProbeResult.Found(page);
-            anyTransient |= transient;
+            if (transient)
+                return IrProbeResult.Inconclusive;
         }
 
-        // None of the guesses validated. Crawl the homepage and follow the investor-relations link it
-        // exposes — the IR page is often at a location guessing can't reach (a Q4 / GCS host, a
-        // regional or locale path, a deeper path), and the homepage URL itself is sometimes the IR site.
+        // Every guess was conclusively assessed and none validated. Crawl the homepage and follow the
+        // investor-relations link it exposes — the IR page is often at a location guessing can't reach
+        // (a Q4 / GCS host, a regional or locale path, a deeper path), and the homepage URL itself is
+        // sometimes the IR site.
         var (homepageResult, homepageTransient) = await CrawlHomepage(website, cancellationToken);
         if (homepageResult != null)
             return IrProbeResult.Found(homepageResult);
-        anyTransient |= homepageTransient;
 
-        return anyTransient ? IrProbeResult.Inconclusive : IrProbeResult.NoIrPage;
+        return homepageTransient ? IrProbeResult.Inconclusive : IrProbeResult.NoIrPage;
     }
 
     // Renders one candidate and classifies it: a validated page; a non-validating render or a
@@ -219,7 +222,9 @@ public class InvestorRelationsProbeClient
         if (self != null && await IsConfirmedIrPage(self.Url, html, cancellationToken))
             return (self, false);
 
-        var anyTransient = false;
+        // Same rule as the guessed sweep: a link that couldn't be assessed ends the crawl as
+        // transient, so a later link can't win only because an earlier (page-order) one went
+        // unassessed — the whole attempt retries on the short backoff instead.
         foreach (var link in InvestorRelationsLinkExtractor.Extract(html, homepage))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -234,10 +239,11 @@ public class InvestorRelationsProbeClient
                 );
                 return (page, false);
             }
-            anyTransient |= transient;
+            if (transient)
+                return (null, true);
         }
 
-        return (null, anyTransient);
+        return (null, false);
     }
 
     // Turns a possibly-scheme-less website into an absolute http(s) URL, or null when it can't be

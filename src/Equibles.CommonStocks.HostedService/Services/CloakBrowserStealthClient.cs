@@ -117,9 +117,10 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
 
             IBrowser browser = null;
             IBrowserContext context = null;
+            IPlaywright playwright = null;
             try
             {
-                var playwright = await EnsureDriver(opToken);
+                playwright = await EnsureDriver(opToken);
 
                 // cloakserve speaks CDP over WebSocket; connect, work, disconnect. A tighter connect
                 // timeout fails a dead sidecar faster than the overall ceiling.
@@ -153,6 +154,10 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
                 // A navigation/render/connection failure. Classify it: a host that does not exist is a
                 // conclusive miss for this URL, everything else is a transient sidecar-side failure.
                 _logger.LogWarning(ex, "Stealth fetch failed for {Url}", url);
+                // A dead driver process fails every future call instantly and Playwright never
+                // respawns it — without this, the client stays dead until the host restarts.
+                if (IsDriverProcessDead(ex))
+                    await DropDeadDriver(playwright);
                 return ClassifyPlaywrightFailure(ex);
             }
             finally
@@ -291,6 +296,42 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
         {
             _playwright ??= await Playwright.CreateAsync();
             return _playwright;
+        }
+        finally
+        {
+            _driverLock.Release();
+        }
+    }
+
+    // The driver's node process has exited (e.g. an unhandled exception inside the driver, like the
+    // Playwright 1.61 service-worker target-attach assert): every call on the cached IPlaywright then
+    // fails instantly with a "Process exited" TargetClosedException, forever. Message-matched because
+    // no dedicated exception type distinguishes it from an ordinary browser-side target close
+    // ("Target closed" / "Browser closed"), which must NOT drop the driver.
+    private static bool IsDriverProcessDead(PlaywrightException ex) =>
+        ex.Message.Contains("Process exited", StringComparison.OrdinalIgnoreCase);
+
+    // Drops the cached driver so the next EnsureDriver spawns a fresh node process. Identity-guarded:
+    // a concurrent fetch may already have replaced it, and disposing the fresh driver would re-break
+    // the client. Disposing aborts every in-flight render on the dropped driver — an accepted trade:
+    // they were failing against a dead driver anyway, and each folds into a transient miss and
+    // retries on the caller's schedule.
+    private async Task DropDeadDriver(IPlaywright dead)
+    {
+        if (dead == null)
+            return;
+
+        await _driverLock.WaitAsync();
+        try
+        {
+            if (!ReferenceEquals(_playwright, dead))
+                return;
+
+            _logger.LogWarning(
+                "Stealth Playwright driver process died; dropping it so the next fetch respawns a fresh driver"
+            );
+            _playwright.Dispose();
+            _playwright = null;
         }
         finally
         {
