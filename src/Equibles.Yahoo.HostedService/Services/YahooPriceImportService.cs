@@ -67,7 +67,14 @@ public class YahooPriceImportService
 
         var totalInserted = 0;
 
-        foreach (var (ticker, commonStockId) in tickerMap)
+        // Crawl stalest-first: the ticker map's DB order is stable across cycles, so with a
+        // multi-hour crawl any interruption (deploy, crash, rate-limit stall) starves the same
+        // tail stocks for days while head stocks re-sync every cycle. Ordering by each stock's
+        // last stored price date spends every partial cycle on the most out-of-date stocks;
+        // never-synced stocks lead.
+        var crawlOrder = await OrderByStalestPrice(tickerMap, cancellationToken);
+
+        foreach (var (ticker, commonStockId) in crawlOrder)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -98,6 +105,28 @@ public class YahooPriceImportService
             "Yahoo price sync complete. Inserted {Count} new price records",
             totalInserted
         );
+    }
+
+    // Orders the ticker map by each stock's most recent stored price date, oldest first (stocks
+    // with no prices at all lead). One grouped MAX(Date) query over the price table per cycle.
+    private async Task<List<KeyValuePair<string, Guid>>> OrderByStalestPrice(
+        Dictionary<string, Guid> tickerMap,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var priceRepo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+        var lastDates = await priceRepo
+            .GetAll()
+            .GroupBy(p => p.CommonStockId)
+            .Select(g => new { StockId = g.Key, LastDate = g.Max(p => p.Date) })
+            .ToDictionaryAsync(x => x.StockId, x => x.LastDate, cancellationToken);
+
+        return tickerMap
+            .OrderBy(kv =>
+                lastDates.TryGetValue(kv.Value, out var lastDate) ? lastDate : DateOnly.MinValue
+            )
+            .ToList();
     }
 
     // Re-syncs the full price history of every stock that has an unreconciled split, capped per
