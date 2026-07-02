@@ -7,12 +7,14 @@ using NSubstitute;
 namespace Equibles.UnitTests.CommonStocks;
 
 /// <summary>
-/// Contract: the IR probe resolves entirely through the stealth sidecar — every candidate (and the
-/// homepage crawl) is rendered, the first that validates as an IR page wins, and the probe reports a
-/// classified outcome: <c>Found</c>, <c>NoIrPageFound</c> (every candidate was assessed and none was an
-/// IR page), or <c>Inconclusive</c> (the engine was unavailable for a candidate, so a real IR page may
-/// have been missed). With no sidecar configured it reports <c>Inconclusive</c> — nothing was
-/// assessed, and a conclusive miss would stamp the backlog as checked. There is no plain-HTTP path.
+/// Contract: the IR probe resolves entirely through the stealth sidecar — candidates are rendered in
+/// priority order, the first that validates as an IR page wins, and the probe reports a classified
+/// outcome: <c>Found</c>, <c>NoIrPageFound</c> (every candidate was assessed and none was an IR
+/// page), or <c>Inconclusive</c> (the engine was unavailable for a candidate, so a real IR page may
+/// have been missed). A transient miss aborts the sweep — a lower-priority candidate must never win
+/// while a higher-priority one is unassessed. With no sidecar configured it reports
+/// <c>Inconclusive</c> — nothing was assessed, and a conclusive miss would stamp the backlog as
+/// checked. There is no plain-HTTP path.
 /// </summary>
 public class InvestorRelationsProbeClientTests
 {
@@ -97,15 +99,20 @@ public class InvestorRelationsProbeClientTests
     }
 
     [Fact]
-    public async Task Discover_ValidPageWinsEvenWhenAnotherCandidateWasTransient()
+    public async Task Discover_TransientOnHigherPriorityCandidate_AbortsInsteadOfStoringLowerPriorityMatch()
     {
-        // A transient failure on one candidate must not prevent a later candidate from validating — a
-        // found page always wins over an inconclusive signal.
+        // Candidates are probed in priority order. When a higher-priority candidate couldn't be
+        // assessed (engine unavailable), a lower-priority candidate that validates must NOT win —
+        // that is how a dead render engine once stored www.example.com/investor over the real
+        // investors.example.com. The sweep aborts as inconclusive and retries on the short backoff.
+        var probed = new List<string>();
         var stealth = EnabledStealthResults(url =>
-            url == "https://acme.com/ir" ? StealthFetchResult.SidecarUnavailable
-            : url == "https://acme.com/investors" ? StealthFetchResult.Rendered(IrPage)
-            : StealthFetchResult.Rendered(NotIr)
-        );
+        {
+            probed.Add(url);
+            return url == "https://acme.com/ir" ? StealthFetchResult.SidecarUnavailable
+                : url == "https://acme.com/investors" ? StealthFetchResult.Rendered(IrPage)
+                : StealthFetchResult.Rendered(NotIr);
+        });
 
         var client = NewClient(stealth);
 
@@ -116,8 +123,36 @@ public class InvestorRelationsProbeClientTests
             CancellationToken.None
         );
 
-        result.Outcome.Should().Be(IrProbeOutcome.Found);
-        result.Page!.Url.Should().Be("https://acme.com/investors");
+        result.Outcome.Should().Be(IrProbeOutcome.Inconclusive);
+        result.Page.Should().BeNull();
+        // The sweep must stop at the unassessed candidate — probing (and possibly persisting) the
+        // rest would be answering with a better candidate still unknown.
+        probed.Should().Equal("https://acme.com/ir");
+    }
+
+    [Fact]
+    public async Task Discover_TransientOnHomepageIrLink_IsInconclusiveNotLaterLinkMatch()
+    {
+        // Same rule inside the homepage crawl: when an earlier IR link couldn't be assessed, a later
+        // link that validates must not be stored — the whole attempt is inconclusive and retries.
+        const string homepage =
+            "<html><head><title>Acme Corp</title></head><body>"
+            + "<a href=\"/investor-relations\">Investor Relations</a>"
+            + "<a href=\"/investors-home\">Investors</a></body></html>";
+
+        var stealth = EnabledStealthResults(url =>
+            url == "https://acme.com" ? StealthFetchResult.Rendered(homepage)
+            : url == "https://acme.com/investor-relations" ? StealthFetchResult.SidecarUnavailable
+            : url == "https://acme.com/investors-home" ? StealthFetchResult.Rendered(IrPage)
+            : StealthFetchResult.Rendered(NotIr)
+        );
+
+        var client = NewClient(stealth);
+
+        var result = await client.Discover("acme.com", ["ir"], [], CancellationToken.None);
+
+        result.Outcome.Should().Be(IrProbeOutcome.Inconclusive);
+        result.Page.Should().BeNull();
     }
 
     [Fact]
