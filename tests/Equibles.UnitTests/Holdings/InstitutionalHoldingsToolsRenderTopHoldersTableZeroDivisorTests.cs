@@ -38,7 +38,7 @@ public class InstitutionalHoldingsToolsRenderTopHoldersTableZeroDivisorTests
         var rendered = (string)
             RenderTopHoldersTableMethod.Invoke(
                 null,
-                [stock, "AAPL", new DateOnly(2024, 9, 30), 1, 0L, 0L, holdings, 1m]
+                [stock, "AAPL", new DateOnly(2024, 9, 30), 1, 0L, 0L, holdings, 1m, null]
             );
 
         rendered.Should().NotContain("NaN");

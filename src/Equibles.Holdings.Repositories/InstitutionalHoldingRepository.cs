@@ -572,6 +572,47 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             );
     }
 
+    // Combined view scoped to one stock, 13F-only. The global non-filer test stays UNSCOPED on
+    // purpose: a fund that filed this quarter without this stock proved it sold out, so its
+    // prior row must not carry forward. Is13F is applied on top (unlike the market-wide
+    // GetCombinedQuarter) because per-stock holder lists double-count a filer whose 13D/G
+    // event date coincides with the quarter end (GH-4449).
+    public IQueryable<InstitutionalHolding> GetCombinedQuarterByStock(
+        CommonStock stock,
+        DateOnly current,
+        DateOnly previous
+    )
+    {
+        return GetCombinedQuarter(current, previous)
+            .Where(Is13F)
+            .Where(h => h.CommonStockId == stock.Id);
+    }
+
+    // Same combined per-stock view with the holder navigation eagerly loaded for rendering.
+    public IQueryable<InstitutionalHolding> GetCombinedQuarterByStockWithHolder(
+        CommonStock stock,
+        DateOnly current,
+        DateOnly previous
+    )
+    {
+        return GetCombinedQuarterByStock(stock, current, previous)
+            .Include(h => h.InstitutionalHolder);
+    }
+
+    // Distinct holder ids among the given set that filed ANY 13F at reportDate — the "has this
+    // fund reported yet?" test behind the combined view's reported-so-far counts.
+    public IQueryable<Guid> GetFiledHolderIdsAmong(
+        DateOnly reportDate,
+        IReadOnlyCollection<Guid> holderIds
+    )
+    {
+        return GetAll()
+            .Where(Is13F)
+            .Where(h => h.ReportDate == reportDate && holderIds.Contains(h.InstitutionalHolderId))
+            .Select(h => h.InstitutionalHolderId)
+            .Distinct();
+    }
+
     // Combined-quarter variant of GetQuarterlyActivity. The "current" side aggregates
     // the combined view (current filers + previous-quarter fallback for non-filers).
     // The "previous" side uses the actual previous quarter for delta comparison. For

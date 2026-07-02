@@ -54,6 +54,7 @@ public class InstitutionalHoldingsToolsRenderBuyersSellersTableCultureInvariance
             (DateOnly?)new DateOnly(2024, 9, 30),
             buyers,
             sellers,
+            null,
         ];
 
         var original = CultureInfo.CurrentCulture;

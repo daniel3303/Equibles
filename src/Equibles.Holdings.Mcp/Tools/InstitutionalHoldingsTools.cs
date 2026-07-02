@@ -11,6 +11,8 @@ using Equibles.CorporateActions.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
+using Equibles.Holdings.BusinessLogic;
+using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Extensions;
@@ -48,6 +50,7 @@ public class InstitutionalHoldingsTools
     private readonly InstitutionalHolderRepository _holderRepository;
     private readonly CommonStockRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
+    private readonly StockCombinedQuarterService _combinedQuarterService;
     private readonly McpToolRunner _runner;
 
     public InstitutionalHoldingsTools(
@@ -55,6 +58,7 @@ public class InstitutionalHoldingsTools
         InstitutionalHolderRepository holderRepository,
         CommonStockRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
+        StockCombinedQuarterService combinedQuarterService,
         ErrorManager errorManager,
         ILogger<InstitutionalHoldingsTools> logger
     )
@@ -63,6 +67,7 @@ public class InstitutionalHoldingsTools
         _holderRepository = holderRepository;
         _commonStockRepository = commonStockRepository;
         _stockSplitRepository = stockSplitRepository;
+        _combinedQuarterService = combinedQuarterService;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -91,7 +96,19 @@ public class InstitutionalHoldingsTools
                 if (!found)
                     return $"No institutional holdings data available for {ticker}.";
 
-                var allHoldings = _holdingRepository.Get13FByStock(stock, targetDate);
+                // While the newest quarter's filing window is open it only holds the early
+                // filers, so it is presented as the combined view (carry-forward for funds
+                // yet to file) — the same rule every web surface applies.
+                var anchor = await _combinedQuarterService.Resolve(stock);
+                var presentCombined =
+                    anchor is { IsCombined: true } && targetDate == anchor.ReportDate;
+                var allHoldings = presentCombined
+                    ? _holdingRepository.GetCombinedQuarterByStock(
+                        stock,
+                        anchor.ReportDate,
+                        anchor.PreviousReportDate.Value
+                    )
+                    : _holdingRepository.Get13FByStock(stock, targetDate);
                 var totalInstitutions = await allHoldings
                     .Select(h => h.InstitutionalHolderId)
                     .Distinct()
@@ -123,13 +140,21 @@ public class InstitutionalHoldingsTools
                     totalSharesAll,
                     totalValueAll,
                     holdings,
-                    shareFactor
+                    shareFactor,
+                    presentCombined ? CombinedViewNote(targetDate, anchor) : null
                 );
             },
             "GetTopHolders",
             $"ticker: {ticker}"
         );
     }
+
+    // The one wording every combined-view tool output carries, so agents and users always see
+    // WHY the newest quarter is presented as a merge of two filing sets.
+    private static string CombinedViewNote(DateOnly targetDate, StockQuarterAnchor anchor) =>
+        $"Note: the {FormatDate(targetDate)} filing window is still open (13Fs are due 45 days "
+        + $"after quarter end). Combined view: funds that have not filed yet carry their "
+        + $"{FormatDate(anchor.PreviousReportDate.Value)} positions.";
 
     private static string RenderTopHoldersTable(
         CommonStock stock,
@@ -139,15 +164,20 @@ public class InstitutionalHoldingsTools
         long totalSharesAll,
         long totalValueAll,
         List<InstitutionalHolding> holdings,
-        decimal shareFactor
+        decimal shareFactor,
+        string combinedNote
     )
     {
         var adjustedTotalShares = SplitAdjustment.AdjustShareCount(totalSharesAll, shareFactor);
+        var subtitle =
+            $"Showing {holdings.Count} of {totalInstitutions} institutions. Total: "
+            + $"{McpFormat.WholeNumber(adjustedTotalShares)} shares, "
+            + $"${FormatMillions(totalValueAll)}M value";
+        if (combinedNote != null)
+            subtitle = $"{subtitle}\n{combinedNote}";
         var result = MarkdownTable.Start(
             $"Top institutional holders of {stock.Name} ({ticker}) as of {FormatDate(targetDate)}:",
-            $"Showing {holdings.Count} of {totalInstitutions} institutions. Total: "
-                + $"{McpFormat.WholeNumber(adjustedTotalShares)} shares, "
-                + $"${FormatMillions(totalValueAll)}M value",
+            subtitle,
             "| # | Institution | Shares | Value ($M) | % of Total |",
             "|---|------------|--------|-----------|-----------|"
         );
@@ -195,7 +225,8 @@ public class InstitutionalHoldingsTools
                 if (reportDates.Count == 0)
                     return $"No institutional holdings history available for {ticker}.";
 
-                return await RenderOwnershipHistory(stock, ticker, reportDates);
+                var anchor = await _combinedQuarterService.Resolve(stock);
+                return await RenderOwnershipHistory(stock, ticker, reportDates, anchor);
             },
             "GetOwnershipHistory",
             $"ticker: {ticker}"
@@ -205,7 +236,8 @@ public class InstitutionalHoldingsTools
     private async Task<string> RenderOwnershipHistory(
         CommonStock stock,
         string ticker,
-        List<DateOnly> reportDates
+        List<DateOnly> reportDates,
+        StockQuarterAnchor anchor
     )
     {
         var result = MarkdownTable.Start(
@@ -220,9 +252,23 @@ public class InstitutionalHoldingsTools
         var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
 
         long previousShares = 0;
+        var combinedRowShown = false;
         foreach (var date in reportDates.OrderBy(d => d))
         {
-            var holdings = await _holdingRepository.Get13FByStock(stock, date).ToListAsync();
+            // The newest quarter is presented as the combined view while its filing window is
+            // open — its as-filed totals would only cover the early filers and the trend would
+            // end on a fabricated collapse.
+            var isCombinedRow = anchor is { IsCombined: true } && date == anchor.ReportDate;
+            var holdings = isCombinedRow
+                ? await _holdingRepository
+                    .GetCombinedQuarterByStock(
+                        stock,
+                        anchor.ReportDate,
+                        anchor.PreviousReportDate.Value
+                    )
+                    .ToListAsync()
+                : await _holdingRepository.Get13FByStock(stock, date).ToListAsync();
+            combinedRowShown |= isCombinedRow;
             var totalShares = SplitAdjustment.AdjustShareCount(
                 holdings.Sum(h => h.Shares),
                 date,
@@ -237,10 +283,16 @@ public class InstitutionalHoldingsTools
                     : "—";
 
             result.AppendLine(
-                $"| {FormatDate(date)} | {McpFormat.WholeNumber(institutionCount)} | {McpFormat.WholeNumber(totalShares)} | {FormatMillions(totalValue)} | {change} |"
+                $"| {FormatDate(date)}{(isCombinedRow ? " \\*" : "")} | {McpFormat.WholeNumber(institutionCount)} | {McpFormat.WholeNumber(totalShares)} | {FormatMillions(totalValue)} | {change} |"
             );
 
             previousShares = totalShares;
+        }
+
+        if (combinedRowShown)
+        {
+            result.AppendLine();
+            result.AppendLine($"\\* {CombinedViewNote(anchor.ReportDate, anchor)}");
         }
 
         return result.ToString();
@@ -425,6 +477,24 @@ public class InstitutionalHoldingsTools
                 var currentByHolder = AggregateByHolder(currentHoldings);
                 var previousByHolder = AggregateByHolder(previousHoldings);
 
+                // While the target quarter's filing window is open, funds that simply have not
+                // filed yet would read as full sellers (previous position → 0). Restrict the
+                // comparison to REPORTERS: the quarter's filers plus previous holders who filed
+                // elsewhere (proven exits). Carried non-filers are excluded.
+                var windowOpen =
+                    previousDate.HasValue
+                    && targetDate == reportDates[0]
+                    && CombinedQuarterHelper.IsFilingWindowOpen(targetDate);
+                HashSet<Guid> filedPreviousHolders = null;
+                if (windowOpen)
+                {
+                    filedPreviousHolders = (
+                        await _holdingRepository
+                            .GetFiledHolderIdsAmong(targetDate, previousByHolder.Keys.ToList())
+                            .ToListAsync()
+                    ).ToHashSet();
+                }
+
                 // Restate each quarter's share counts onto today's split basis (the two
                 // quarters sit on different bases if a split fell between them) so Δ Shares
                 // and the Prior → New column reflect a real position change, not the split.
@@ -435,7 +505,13 @@ public class InstitutionalHoldingsTools
                     ? SplitAdjustment.ShareCountFactor(previousDate.Value, splits)
                     : 1m;
 
-                var allHolderIds = currentByHolder.Keys.Union(previousByHolder.Keys);
+                var allHolderIds = currentByHolder
+                    .Keys.Union(previousByHolder.Keys)
+                    .Where(id =>
+                        filedPreviousHolders == null
+                        || currentByHolder.ContainsKey(id)
+                        || filedPreviousHolders.Contains(id)
+                    );
                 var movers = allHolderIds
                     .Select(id =>
                     {
@@ -479,7 +555,11 @@ public class InstitutionalHoldingsTools
                     targetDate,
                     previousDate,
                     topBuyers,
-                    topSellers
+                    topSellers,
+                    windowOpen
+                        ? $"Note: the {FormatDate(targetDate)} filing window is still open — "
+                            + "movement is computed only across funds that have already filed."
+                        : null
                 );
             },
             "GetTopBuyersSellers",
@@ -505,7 +585,8 @@ public class InstitutionalHoldingsTools
             long PreviousShares,
             long DeltaShares,
             long DeltaValue
-        )> topSellers
+        )> topSellers,
+        string windowNote
     )
     {
         var result = new StringBuilder();
@@ -514,6 +595,8 @@ public class InstitutionalHoldingsTools
         );
         if (previousDate.HasValue)
             result.AppendLine(PriorQuarterSubtitle(previousDate.Value));
+        if (windowNote != null)
+            result.AppendLine(windowNote);
         result.AppendLine();
 
         AppendMoverSection(result, "## Top Buyers", "_No buyers this quarter._", topBuyers);
@@ -572,9 +655,8 @@ public class InstitutionalHoldingsTools
 
                 maxResults = McpLimit.Clamp(maxResults);
 
-                var (targetDate, previousDate, error) = await ResolveMarketActivityDates(
-                    reportDate
-                );
+                var (targetDate, previousDate, windowOpen, error) =
+                    await ResolveMarketActivityDates(reportDate);
                 if (error != null)
                     return error;
 
@@ -584,6 +666,11 @@ public class InstitutionalHoldingsTools
                     $"Market-wide 13F **{normalizedBucket}** for {FormatDate(targetDate)}"
                 );
                 result.AppendLine(PriorQuarterSubtitle(previousDate));
+                if (windowOpen)
+                    result.AppendLine(
+                        $"Note: the {FormatDate(targetDate)} filing window is still open — "
+                            + "figures cover only the funds that have already filed."
+                    );
                 result.AppendLine();
 
                 if (normalizedBucket is "top-buys" or "top-sells")
@@ -592,6 +679,7 @@ public class InstitutionalHoldingsTools
                         normalizedBucket,
                         targetDate,
                         previousDate,
+                        windowOpen,
                         maxResults,
                         result
                     );
@@ -602,6 +690,7 @@ public class InstitutionalHoldingsTools
                         normalizedBucket,
                         targetDate,
                         previousDate,
+                        windowOpen,
                         maxResults,
                         result
                     );
@@ -615,6 +704,7 @@ public class InstitutionalHoldingsTools
     private async Task<(
         DateOnly Target,
         DateOnly Previous,
+        bool WindowOpen,
         string Error
     )> ResolveMarketActivityDates(string reportDate)
     {
@@ -623,7 +713,7 @@ public class InstitutionalHoldingsTools
         // compare a quarter-end portfolio against a single-day stake.
         var reportDates = await _holdingRepository.Get13FAvailableReportDates().ToListAsync();
         if (reportDates.Count == 0)
-            return (default, default, "No 13F holdings data available.");
+            return (default, default, false, "No 13F holdings data available.");
 
         var targetDate = TryParseReportDate(reportDate, out var parsed) ? parsed : reportDates[0];
         var targetIndex = reportDates.IndexOf(targetDate);
@@ -631,6 +721,7 @@ public class InstitutionalHoldingsTools
             return (
                 default,
                 default,
+                false,
                 $"Report date {FormatDate(targetDate)} not found. Available dates: {string.Join(", ", reportDates.Take(5).Select(d => FormatDate(d)))}{(reportDates.Count > 5 ? "…" : "")}."
             );
 
@@ -638,16 +729,21 @@ public class InstitutionalHoldingsTools
             return (
                 default,
                 default,
+                false,
                 $"No prior quarter to compare against for {FormatDate(targetDate)}."
             );
 
-        return (targetDate, reportDates[targetIndex + 1], null);
+        // While the newest quarter's filing window is open its leaderboards must use the
+        // combined queries, or every fund that has not filed yet reads as a mass seller.
+        var windowOpen = targetIndex == 0 && CombinedQuarterHelper.IsFilingWindowOpen(targetDate);
+        return (targetDate, reportDates[targetIndex + 1], windowOpen, null);
     }
 
     private async Task<string> RenderMarketActivityMovers(
         string normalizedBucket,
         DateOnly targetDate,
         DateOnly previousDate,
+        bool windowOpen,
         int maxResults,
         StringBuilder result
     )
@@ -657,9 +753,13 @@ public class InstitutionalHoldingsTools
         // report dates sits the quarters on different bases, so a flat position would otherwise
         // read as a phantom buyer/seller. Δ Value is a dollar figure and is split-invariant (it
         // drives the ordering). The restatement is per-stock, so it cannot translate to SQL.
-        var activity = await _holdingRepository
-            .GetQuarterlyActivity(targetDate, previousDate)
-            .ToListAsync();
+        // While the filing window is open the combined variant carries non-filers forward at a
+        // zero delta, so only real reported moves rank.
+        var activity = await (
+            windowOpen
+                ? _holdingRepository.GetQuarterlyActivityCombined(targetDate, previousDate)
+                : _holdingRepository.GetQuarterlyActivity(targetDate, previousDate)
+        ).ToListAsync();
         await RestateActivitySharesToTodaysBasis(activity, targetDate, previousDate);
 
         var movers = activity.Where(a => a.CurrentShares != a.PreviousShares);
@@ -689,11 +789,16 @@ public class InstitutionalHoldingsTools
         string normalizedBucket,
         DateOnly targetDate,
         DateOnly previousDate,
+        bool windowOpen,
         int maxResults,
         StringBuilder result
     )
     {
-        var churn = _holdingRepository.GetQuarterlyNewSoldOutPositions(targetDate, previousDate);
+        // Combined while the window is open: the plain variant counts every fund that has not
+        // filed yet as "exited", so sold-out-positions would rank by non-filers, not exits.
+        var churn = windowOpen
+            ? _holdingRepository.GetQuarterlyNewSoldOutPositionsCombined(targetDate, previousDate)
+            : _holdingRepository.GetQuarterlyNewSoldOutPositions(targetDate, previousDate);
         var rows =
             normalizedBucket == "new-positions"
                 ? await churn.NewPositions().Take(maxResults).ToListAsync()
@@ -743,13 +848,16 @@ public class InstitutionalHoldingsTools
                 if (!ValidMostHeldSorts.Contains(normalizedSort))
                     return $"Unknown sort. Use one of: {string.Join(", ", ValidMostHeldSorts)}.";
 
-                var (targetDate, previousDate, error) = await ResolveMarketActivityDates(
-                    reportDate
-                );
+                var (targetDate, previousDate, windowOpen, error) =
+                    await ResolveMarketActivityDates(reportDate);
                 if (error != null)
                     return error;
 
-                var ranking = _holdingRepository.GetMostHeld(targetDate, previousDate);
+                // Combined while the window is open — the as-filed ranking would order the
+                // whole market by which funds happened to file early.
+                var ranking = windowOpen
+                    ? _holdingRepository.GetMostHeldCombined(targetDate, previousDate)
+                    : _holdingRepository.GetMostHeld(targetDate, previousDate);
                 ranking = normalizedSort switch
                 {
                     "filersdelta" => ranking
@@ -766,12 +874,14 @@ public class InstitutionalHoldingsTools
                 if (rows.Count == 0)
                     return $"No stocks were held by 13F filers as of {FormatDate(targetDate)}.";
 
-                var universeFilers = await _holdingRepository
-                    .GetUniqueFilerIds(targetDate)
-                    .CountAsync();
+                var universeFilers = await (
+                    windowOpen
+                        ? _holdingRepository.GetUniqueFilerIdsCombined(targetDate, previousDate)
+                        : _holdingRepository.GetUniqueFilerIds(targetDate)
+                ).CountAsync();
                 var stocks = await LoadStocksByIds(rows.Select(r => r.CommonStockId).ToList());
 
-                return RenderMostHeldStocksTable(
+                var table = RenderMostHeldStocksTable(
                     targetDate,
                     previousDate,
                     normalizedSort,
@@ -779,6 +889,10 @@ public class InstitutionalHoldingsTools
                     rows,
                     stocks
                 );
+                return windowOpen
+                    ? $"{table}\nNote: the {FormatDate(targetDate)} filing window is still open — "
+                        + "funds that have not filed yet carry their prior-quarter positions."
+                    : table;
             },
             "GetMostHeldStocks",
             $"sort: {sort}, max: {maxResults}"
