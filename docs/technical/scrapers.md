@@ -115,15 +115,6 @@ These sources publish a continuous time series rather than discrete filings. Eac
 
 The cursor pattern means re-running is cheap (a single query for `max(date)` per cycle); duplicate ingestion is prevented by the per-source unique index (`[Index(nameof(CommonStockId), nameof(Date), IsUnique = true)]` etc.).
 
-### Investor relations discovery — pending-column backlog
-
-[`InvestorRelationsDiscoveryWorker`](../../src/Equibles.CommonStocks.HostedService/InvestorRelationsDiscoveryWorker.cs) fills `CommonStock.InvestorRelationsUrl` without a feed, a ledger, or a date cursor — its work queue is the set of rows where the column is still null.
-
-- Idempotency comes from the candidate query itself: [`InvestorRelationsDiscoveryService.LoadCandidates`](../../src/Equibles.CommonStocks.HostedService/Services/InvestorRelationsDiscoveryService.cs) selects `Website != null && InvestorRelationsUrl == null`, ordered by ticker, capped at `BatchSize` (default 100). A filled row drops out of the backlog automatically; re-runs never re-do solved stocks.
-- Discovery is a probe, not a fetch: [`InvestorRelationsProbeClient`](../../src/Equibles.CommonStocks.HostedService/Services/InvestorRelationsProbeClient.cs) tries `CandidatePaths` against the company website (`/investor-relations`, `/investors`, …) then `CandidateSubdomains` (`ir.`, `investors.`), and [`InvestorRelationsPageValidator`](../../src/Equibles.CommonStocks.HostedService/Services/InvestorRelationsPageValidator.cs) confirms the HTML is a real IR page — title/body keyword signals reject soft-404s and homepages a guessed path redirected to.
-- `Persist` re-loads the row and writes only when `InvestorRelationsUrl` is still null, so an overlapping run or manual edit is never clobbered.
-- A stock that has no discoverable IR page stays null and is re-probed every cycle — there is no last-attempted timestamp yet, so persistent misses are not yet suppressed.
-
 ### FDA catalysts — watermark-less re-read + upsert
 
 [`FdaCatalystScraperWorker`](../../src/Equibles.FdaCatalysts.HostedService/FdaCatalystScraperWorker.cs) reconciles the forward-looking FDA advisory-committee calendar, which carries no historical watermark — every cycle re-reads the whole calendar rather than resuming from a `max(date)` cursor.
