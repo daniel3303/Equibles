@@ -1,8 +1,10 @@
+using Equibles.Data;
 using Equibles.Media.BusinessLogic;
 using Equibles.Media.BusinessLogic.Configuration;
 using Equibles.Media.BusinessLogic.Storage;
 using Equibles.Media.Repositories;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 
 namespace Equibles.UnitTests.Media;
 
@@ -18,6 +20,7 @@ internal static class FileManagerTestFactory
         var wrapped = Options.Create(options ?? new FileStorageOptions());
         return new FileManager(
             repository,
+            Substitute.For<PendingBlobDeletionRepository>((EquiblesFinancialDbContext)null),
             new DatabaseFileStorageProvider(),
             new FileSystemFileStorageProvider(wrapped),
             wrapped

@@ -145,6 +145,9 @@ builder.Services.Configure<Equibles.Media.BusinessLogic.Configuration.FileStorag
 builder.Services.Configure<Equibles.Media.HostedService.Configuration.FileBackfillOptions>(
     builder.Configuration.GetSection("FileBackfill")
 );
+builder.Services.Configure<Equibles.Media.HostedService.Configuration.BlobSweepOptions>(
+    builder.Configuration.GetSection("BlobSweep")
+);
 
 builder.Services.AddHttpClient();
 
