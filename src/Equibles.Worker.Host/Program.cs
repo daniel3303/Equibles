@@ -120,12 +120,6 @@ builder.Services.Configure<Equibles.Cboe.HostedService.Configuration.CboeScraper
 builder.Services.Configure<WebsiteDiscoveryOptions>(
     builder.Configuration.GetSection("WebsiteDiscovery")
 );
-builder.Services.Configure<InvestorRelationsDiscoveryOptions>(
-    builder.Configuration.GetSection("InvestorRelationsDiscovery")
-);
-builder.Services.Configure<Equibles.CommonStocks.HostedService.Configuration.StealthFetchOptions>(
-    builder.Configuration.GetSection("InvestorRelationsDiscovery:StealthFetch")
-);
 builder.Services.Configure<FdaCatalystScraperOptions>(
     builder.Configuration.GetSection("FdaCatalystScraper")
 );

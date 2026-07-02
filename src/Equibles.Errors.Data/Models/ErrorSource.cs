@@ -27,18 +27,26 @@ public sealed class ErrorSource
     public static readonly ErrorSource NportReprocess = new("NportReprocess");
     public static readonly ErrorSource NportSweep = new("NportSweep");
     public static readonly ErrorSource WebsiteDiscovery = new("WebsiteDiscovery");
-    public static readonly ErrorSource InvestorRelationsDiscovery = new(
-        "InvestorRelationsDiscovery"
-    );
-    public static readonly ErrorSource InvestorRelationsScraper = new("InvestorRelationsScraper");
     public static readonly ErrorSource FdaCatalystScraper = new("FdaCatalystScraper");
     public static readonly ErrorSource Authentication = new("Authentication");
     public static readonly ErrorSource Alvis = new("Alvis");
     public static readonly ErrorSource WebRequest = new("WebRequest");
     public static readonly ErrorSource Other = new("Other");
 
+    // Host-registered sources (a commercial module's own error buckets) appended by Register;
+    // GetAll unions them so dashboards and filters see every source the deployment writes.
+    private static readonly List<ErrorSource> Registered = [];
+
+    public static void Register(ErrorSource source)
+    {
+        if (!Registered.Contains(source))
+        {
+            Registered.Add(source);
+        }
+    }
+
     public static IEnumerable<ErrorSource> GetAll() =>
-        [
+        Registered.Concat<ErrorSource>([
             McpTool,
             DocumentScraper,
             HoldingsScraper,
@@ -58,14 +66,12 @@ public sealed class ErrorSource
             NportReprocess,
             NportSweep,
             WebsiteDiscovery,
-            InvestorRelationsDiscovery,
-            InvestorRelationsScraper,
             FdaCatalystScraper,
             Authentication,
             Alvis,
             WebRequest,
             Other,
-        ];
+        ]);
 
     public override string ToString() => Value;
 
