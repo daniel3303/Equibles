@@ -127,7 +127,17 @@ public class CloakBrowserStealthClient : IStealthBrowserClient, IAsyncDisposable
                 browser = await playwright
                     .Chromium.ConnectOverCDPAsync(_options.SidecarUrl)
                     .WaitAsync(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), opToken);
-                context = await browser.NewContextAsync().WaitAsync(opToken);
+                // Service workers are blocked: a page that registers one attaches a service_worker
+                // target, and the Playwright driver (1.60 and 1.61 alike) dies on that attach with an
+                // unhandled assert in _CRBrowser._onAttachedToTarget — one news page with a service
+                // worker killed the driver for every lane sharing it. Scraping never needs offline
+                // caching or push, so blocking removes the crash trigger outright; the driver-respawn
+                // in RunInStealthPage remains the backstop for any other driver death.
+                context = await browser
+                    .NewContextAsync(
+                        new BrowserNewContextOptions { ServiceWorkers = ServiceWorkerPolicy.Block }
+                    )
+                    .WaitAsync(opToken);
                 var page = await context.NewPageAsync().WaitAsync(opToken);
                 var html = await action(page).WaitAsync(opToken);
                 return StealthFetchResult.Rendered(html);
