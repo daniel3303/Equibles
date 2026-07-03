@@ -1,4 +1,3 @@
-using Equibles.Media.Data.Models;
 using File = Equibles.Media.Data.Models.File;
 
 namespace Equibles.Media.BusinessLogic;
@@ -12,9 +11,9 @@ public interface IFileManager
     /// extension and content type, bypassing the <see cref="FileManager.AcceptedExtensions"/>
     /// upload allowlist. Use only for content the application itself produces — e.g. a
     /// gzip-compressed XBRL envelope captured during SEC ingest — never for inbound files.
-    /// <paramref name="storage"/> selects the backend (default Database preserves the original
-    /// behavior; SEC ingest passes FileSystem). A FileSystem request falls back to Database when
-    /// the store is disabled. <paramref name="tier"/> selects the filesystem durability partition
+    /// The backend is chosen by <see cref="Storage.FileStorageRouter"/>: the filesystem store
+    /// when it is enabled, otherwise the database — a caller cannot request the database while
+    /// the store is enabled. <paramref name="tier"/> selects the filesystem durability partition
     /// (see <see cref="Storage.FileStorageTiers"/>).
     /// </summary>
     public Task<File> SaveInternalFile(
@@ -22,7 +21,6 @@ public interface IFileManager
         string name,
         string extension,
         string contentType,
-        StorageProvider storage = null,
         string tier = null
     );
 

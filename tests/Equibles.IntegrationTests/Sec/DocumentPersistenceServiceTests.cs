@@ -99,7 +99,6 @@ public class DocumentPersistenceServiceTests : IDisposable
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
-                Arg.Any<Equibles.Media.Data.Models.StorageProvider>(),
                 Arg.Any<string>()
             )
             .Returns(savedFile);

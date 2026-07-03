@@ -1,4 +1,5 @@
 using Equibles.Core.AutoWiring;
+using Equibles.Media.BusinessLogic.Storage;
 using Equibles.Media.Data.Models;
 using Equibles.Media.Repositories;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,10 +13,12 @@ namespace Equibles.Media.BusinessLogic;
 public class ImageManager : IImageManager
 {
     private readonly ImageRepository _imageRepository;
+    private readonly FileStorageRouter _storageRouter;
 
-    public ImageManager(ImageRepository imageRepository)
+    public ImageManager(ImageRepository imageRepository, FileStorageRouter storageRouter)
     {
         _imageRepository = imageRepository;
+        _storageRouter = storageRouter;
     }
 
     /**
@@ -70,13 +73,14 @@ public class ImageManager : IImageManager
         {
             Extension = fileExtension,
             Name = fileNameWithoutExtension,
-            Size = content.Length,
             ContentType = contentType,
             Height = imageProcessor.Height,
             Width = imageProcessor.Width,
         };
 
-        image.FileContent = new FileContent() { File = image, Bytes = content };
+        // Routes to the filesystem store when enabled, otherwise the database — the router
+        // stamps Size/StorageProvider and the content location on the image.
+        await _storageRouter.Save(image, content, FileStorageTiers.Blob);
         _imageRepository.Add(image);
         return image;
     }

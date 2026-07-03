@@ -18,12 +18,15 @@ internal static class FileManagerTestFactory
     public static FileManager Create(FileRepository repository, FileStorageOptions options = null)
     {
         var wrapped = Options.Create(options ?? new FileStorageOptions());
-        return new FileManager(
-            repository,
-            Substitute.For<PendingBlobDeletionRepository>((EquiblesFinancialDbContext)null),
+        var router = new FileStorageRouter(
             new DatabaseFileStorageProvider(),
             new FileSystemFileStorageProvider(wrapped),
             wrapped
+        );
+        return new FileManager(
+            repository,
+            Substitute.For<PendingBlobDeletionRepository>((EquiblesFinancialDbContext)null),
+            router
         );
     }
 }

@@ -85,7 +85,6 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
-                Arg.Any<Equibles.Media.Data.Models.StorageProvider>(),
                 Arg.Any<string>()
             )
             .Returns(_ => Task.FromResult(savedFile));

@@ -1,10 +1,8 @@
 using Equibles.Core.AutoWiring;
-using Equibles.Media.BusinessLogic.Configuration;
 using Equibles.Media.BusinessLogic.Storage;
 using Equibles.Media.Data.Models;
 using Equibles.Media.Repositories;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using MimeTypes;
 using File = Equibles.Media.Data.Models.File;
 
@@ -34,23 +32,17 @@ public class FileManager : IFileManager
 
     private readonly FileRepository _fileRepository;
     private readonly PendingBlobDeletionRepository _pendingBlobDeletionRepository;
-    private readonly DatabaseFileStorageProvider _databaseProvider;
-    private readonly FileSystemFileStorageProvider _fileSystemProvider;
-    private readonly FileStorageOptions _options;
+    private readonly FileStorageRouter _storageRouter;
 
     public FileManager(
         FileRepository fileRepository,
         PendingBlobDeletionRepository pendingBlobDeletionRepository,
-        DatabaseFileStorageProvider databaseProvider,
-        FileSystemFileStorageProvider fileSystemProvider,
-        IOptions<FileStorageOptions> options
+        FileStorageRouter storageRouter
     )
     {
         _fileRepository = fileRepository;
         _pendingBlobDeletionRepository = pendingBlobDeletionRepository;
-        _databaseProvider = databaseProvider;
-        _fileSystemProvider = fileSystemProvider;
-        _options = options.Value;
+        _storageRouter = storageRouter;
     }
 
     /**
@@ -95,8 +87,7 @@ public class FileManager : IFileManager
             ContentType = contentType,
         };
 
-        // User uploads always stay in the database (small, hot, served directly).
-        await _databaseProvider.Save(file, content, FileStorageTiers.Blob);
+        await _storageRouter.Save(file, content, FileStorageTiers.Blob);
 
         _fileRepository.Add(file);
         return file;
@@ -114,7 +105,6 @@ public class FileManager : IFileManager
         string name,
         string extension,
         string contentType,
-        StorageProvider storage = null,
         string tier = null
     )
     {
@@ -125,8 +115,7 @@ public class FileManager : IFileManager
             ContentType = contentType,
         };
 
-        var provider = ResolveWriteProvider(storage);
-        await provider.Save(file, content, tier ?? FileStorageTiers.Blob);
+        await _storageRouter.Save(file, content, tier);
 
         _fileRepository.Add(file);
         return file;
@@ -134,12 +123,12 @@ public class FileManager : IFileManager
 
     public Task<byte[]> GetContent(File file)
     {
-        return ResolveProvider(file.StorageProvider).GetContent(file);
+        return _storageRouter.ReadProvider(file.StorageProvider).GetContent(file);
     }
 
     public Task<Stream> OpenRead(File file)
     {
-        return ResolveProvider(file.StorageProvider).OpenRead(file);
+        return _storageRouter.ReadProvider(file.StorageProvider).OpenRead(file);
     }
 
     /// <summary>
@@ -172,28 +161,5 @@ public class FileManager : IFileManager
         }
 
         _fileRepository.Delete(file);
-    }
-
-    // Filesystem writes are opt-in: when the store is disabled, fall back to the database
-    // so a deployment without a configured root keeps working unchanged.
-    private IFileStorageProvider ResolveWriteProvider(StorageProvider requested)
-    {
-        var target = requested ?? StorageProvider.Database;
-        if (target == StorageProvider.FileSystem && !_options.Enabled)
-        {
-            target = StorageProvider.Database;
-        }
-
-        return ResolveProvider(target);
-    }
-
-    private IFileStorageProvider ResolveProvider(StorageProvider provider)
-    {
-        if (provider == StorageProvider.FileSystem)
-        {
-            return _fileSystemProvider;
-        }
-
-        return _databaseProvider;
     }
 }

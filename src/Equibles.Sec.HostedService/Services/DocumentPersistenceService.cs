@@ -178,8 +178,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             content,
             Path.GetFileNameWithoutExtension(fileName),
             extension,
-            "text/plain",
-            storage: Media.Data.Models.StorageProvider.FileSystem
+            "text/plain"
         );
     }
 
@@ -202,8 +201,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             compressed,
             name,
             "gz",
-            "application/gzip",
-            storage: Equibles.Media.Data.Models.StorageProvider.FileSystem
+            "application/gzip"
         );
 
         document.XbrlContent = xbrlFile;
@@ -242,8 +240,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             compressed,
             name,
             "gz",
-            "application/gzip",
-            storage: Equibles.Media.Data.Models.StorageProvider.FileSystem
+            "application/gzip"
         );
 
         document.AsFiledHtmlContent = htmlFile;

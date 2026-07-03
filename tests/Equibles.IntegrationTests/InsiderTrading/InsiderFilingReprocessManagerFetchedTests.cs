@@ -111,7 +111,6 @@ public class InsiderFilingReprocessManagerFetchedTests : ParadeDbMcpTestBase
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
-                Arg.Any<Equibles.Media.Data.Models.StorageProvider>(),
                 Arg.Any<string>()
             )
             .Returns(ci => new File
@@ -148,7 +147,6 @@ public class InsiderFilingReprocessManagerFetchedTests : ParadeDbMcpTestBase
                 accession,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
-                Equibles.Media.Data.Models.StorageProvider.FileSystem,
                 Arg.Any<string>()
             );
 

@@ -21,13 +21,12 @@ public class FileManagerDeleteFileQueueTests
         var files = Substitute.For<FileRepository>((EquiblesFinancialDbContext)null);
         var queue = Substitute.For<PendingBlobDeletionRepository>((EquiblesFinancialDbContext)null);
         var options = Options.Create(new FileStorageOptions());
-        var manager = new FileManager(
-            files,
-            queue,
+        var router = new FileStorageRouter(
             new DatabaseFileStorageProvider(),
             new FileSystemFileStorageProvider(options),
             options
         );
+        var manager = new FileManager(files, queue, router);
         return (manager, files, queue);
     }
 
