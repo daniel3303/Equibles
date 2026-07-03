@@ -56,7 +56,7 @@ public class FinancialFactsImportServiceTryBuildParsedFactFiscalYearWireFyTests
 
         var parsed = method!.Invoke(
             null,
-            [FactTaxonomy.UsGaap, "Assets", "Assets", "USD", value, stock]
+            [FactTaxonomy.UsGaap, "Assets", "Assets", null, "USD", value, stock]
         );
 
         parsed.Should().NotBeNull();

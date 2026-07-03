@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Equibles.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    partial class EquiblesDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260703144330_FinancialConceptDescriptionAndBalance")]
+    partial class FinancialConceptDescriptionAndBalance
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1335,7 +1338,7 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasIndex("InstitutionalHolderId", "ReportDate");
 
-                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("InstitutionalHolderId", "ReportDate"), new[] { "CommonStockId", "Value", "Shares", "FilingDate", "FilingType" });
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("InstitutionalHolderId", "ReportDate"), new[] { "CommonStockId", "Value", "Shares", "FilingDate" });
 
                     b.HasIndex("ReportDate", "CommonStockId", "InstitutionalHolderId");
 
@@ -1918,8 +1921,6 @@ namespace Equibles.Migrations.Migrations
                         .HasColumnType("character varying(20)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("CreationTime");
 
                     b.HasIndex("DocumentType");
 

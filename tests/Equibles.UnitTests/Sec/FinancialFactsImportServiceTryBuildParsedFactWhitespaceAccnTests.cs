@@ -45,7 +45,7 @@ public class FinancialFactsImportServiceTryBuildParsedFactWhitespaceAccnTests
 
         var result = TryBuildParsedFactMethod.Invoke(
             null,
-            [FactTaxonomy.UsGaap, "Revenues", "Revenues", "USD", value, stock]
+            [FactTaxonomy.UsGaap, "Revenues", "Revenues", null, "USD", value, stock]
         );
 
         result.Should().BeNull();

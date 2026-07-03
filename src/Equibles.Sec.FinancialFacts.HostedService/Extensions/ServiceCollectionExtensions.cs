@@ -14,6 +14,7 @@ public static class ServiceCollectionExtensions
         // dimensional-fact extraction sweep can resolve them.
         services.AutoWireServicesFrom<InlineXbrlParser>();
         services.AddHostedService<FinancialFactsScraperWorker>();
+        services.AddHostedService<ConceptMetadataWorker>();
         services.AddHostedService<XbrlFactsExtractionWorker>();
         services.AddHostedService<ReportedStatementsCaptureWorker>();
         services.AddHostedService<ReportedStatementsParseWorker>();

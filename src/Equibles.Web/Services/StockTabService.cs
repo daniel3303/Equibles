@@ -549,8 +549,9 @@ public class StockTabService
         var statementLines = Enum.GetValues<FinancialStatementType>()
             .SelectMany(FinancialStatementConcepts.For)
             .ToList();
-        var statementTaxonomies = statementLines.Select(l => l.Taxonomy).Distinct().ToList();
-        var statementTags = statementLines.Select(l => l.Tag).Distinct().ToList();
+        var (statementTaxonomies, statementTags) = StatementLineFacts.CollectConceptPairs(
+            statementLines
+        );
         var statementConceptIds = await _financialConceptRepository
             .GetMatching(statementTaxonomies, statementTags)
             .Select(c => c.Id)
@@ -591,8 +592,7 @@ public class StockTabService
     )
     {
         var statementLines = FinancialStatementConcepts.For(statementType);
-        var taxonomies = statementLines.Select(l => l.Taxonomy).Distinct().ToList();
-        var tags = statementLines.Select(l => l.Tag).Distinct().ToList();
+        var (taxonomies, tags) = StatementLineFacts.CollectConceptPairs(statementLines);
 
         var concepts = await _financialConceptRepository
             .GetMatching(taxonomies, tags)
@@ -625,10 +625,8 @@ public class StockTabService
             .Select(line =>
             {
                 var row = new FinancialsLineViewModel { Label = line.Label };
-                if (
-                    conceptIdByKey.TryGetValue((line.Taxonomy, line.Tag), out var conceptId)
-                    && latestByConcept.TryGetValue(conceptId, out var fact)
-                )
+                var fact = StatementLineFacts.PickFact(line, conceptIdByKey, latestByConcept);
+                if (fact != null)
                 {
                     row.HasValue = true;
                     row.Value = fact.Value;

@@ -227,6 +227,7 @@ public class FinancialFactsImportService
                             taxonomy,
                             tag,
                             concept.Label,
+                            concept.Description,
                             unit,
                             value,
                             stock
@@ -243,6 +244,7 @@ public class FinancialFactsImportService
         FactTaxonomy taxonomy,
         string tag,
         string label,
+        string description,
         string unit,
         CompanyFactValue value,
         CommonStock stock
@@ -271,6 +273,7 @@ public class FinancialFactsImportService
             Taxonomy = taxonomy,
             Tag = tag,
             Label = label,
+            Description = description,
             Unit = unit,
             PeriodType = isInstant ? FactPeriodType.Instant : FactPeriodType.Duration,
             PeriodStart = periodStart,
@@ -300,15 +303,19 @@ public class FinancialFactsImportService
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
         // Compound write (insert-or-update) — kept out of the repository by
-        // design; only update Label when the incoming one is non-empty so a
-        // later filing with a missing label can't blank a good one.
+        // design; only update Label/Description when the incoming one is
+        // non-empty so a later filing with a missing text can't blank a good one.
         await dbContext
             .Set<FinancialConcept>()
             .UpsertRange(concepts)
             .On(c => new { c.Taxonomy, c.Tag })
             .WhenMatched(
                 (existing, incoming) =>
-                    new FinancialConcept { Label = incoming.Label ?? existing.Label }
+                    new FinancialConcept
+                    {
+                        Label = incoming.Label ?? existing.Label,
+                        Description = incoming.Description ?? existing.Description,
+                    }
             )
             .RunAsync(cancellationToken);
 
@@ -338,12 +345,16 @@ public class FinancialFactsImportService
     {
         var pairs = parsed.Select(p => (p.Taxonomy, p.Tag)).ToHashSet();
 
-        // Pre-index labels in one pass so the per-pair lookup is O(1); the
+        // Pre-index labels/descriptions in one pass so the per-pair lookup is O(1); the
         // prior per-pair scan was O(pairs * parsed) on multi-thousand-fact filings.
         var firstLabelByPair = parsed
             .Where(p => !string.IsNullOrEmpty(p.Label))
             .GroupBy(p => (p.Taxonomy, p.Tag))
             .ToDictionary(g => g.Key, g => g.First().Label);
+        var firstDescriptionByPair = parsed
+            .Where(p => !string.IsNullOrEmpty(p.Description))
+            .GroupBy(p => (p.Taxonomy, p.Tag))
+            .ToDictionary(g => g.Key, g => g.First().Description);
 
         var concepts = pairs
             .Select(pair => new FinancialConcept
@@ -351,6 +362,7 @@ public class FinancialFactsImportService
                 Taxonomy = pair.Taxonomy,
                 Tag = pair.Tag,
                 Label = firstLabelByPair.GetValueOrDefault(pair),
+                Description = firstDescriptionByPair.GetValueOrDefault(pair),
             })
             .ToList();
 
@@ -575,6 +587,7 @@ public class FinancialFactsImportService
         public FactTaxonomy Taxonomy { get; init; }
         public string Tag { get; init; }
         public string Label { get; init; }
+        public string Description { get; init; }
         public string Unit { get; init; }
         public FactPeriodType PeriodType { get; init; }
         public DateOnly PeriodStart { get; init; }
