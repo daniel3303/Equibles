@@ -6,6 +6,7 @@ namespace Equibles.Sec.Data.Models.Chunks;
 
 [Index(nameof(DocumentId), nameof(Index), IsUnique = true)]
 [Index(nameof(DocumentType), IsUnique = false)]
+[Index(nameof(CreationTime))]
 [Bm25Index(
     nameof(Id),
     nameof(Content),

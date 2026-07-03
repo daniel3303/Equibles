@@ -20,6 +20,12 @@ public class DocumentProcessorWorker : BaseScraperWorker
     // visibility comes from the System Health probe + activity feed, not these rows.
     protected override int ErrorReportThreshold => 20;
 
+    // Backfill frontiers for the two phases. They live on the worker (a singleton) because the
+    // DocumentManager is re-resolved from a fresh scope per batch; a process restart resets
+    // them, which just costs one full scan before the floored fast path takes over again.
+    private readonly BackfillCursor _chunkCursor = new();
+    private readonly BackfillCursor _embeddingCursor = new();
+
     public DocumentProcessorWorker(
         ILogger<DocumentProcessorWorker> logger,
         IServiceScopeFactory scopeFactory,
@@ -34,7 +40,7 @@ public class DocumentProcessorWorker : BaseScraperWorker
         {
             await using var chunkScope = ScopeFactory.CreateAsyncScope();
             var documentManager = chunkScope.ServiceProvider.GetRequiredService<DocumentManager>();
-            var workDone = await documentManager.ChunkDocumentBatch(stoppingToken);
+            var workDone = await documentManager.ChunkDocumentBatch(_chunkCursor, stoppingToken);
             if (!workDone)
                 break;
         }
@@ -45,7 +51,10 @@ public class DocumentProcessorWorker : BaseScraperWorker
         {
             await using var embedScope = ScopeFactory.CreateAsyncScope();
             var documentManager = embedScope.ServiceProvider.GetRequiredService<DocumentManager>();
-            var workDone = await documentManager.GenerateEmbeddingBatch(stoppingToken);
+            var workDone = await documentManager.GenerateEmbeddingBatch(
+                _embeddingCursor,
+                stoppingToken
+            );
             if (!workDone)
                 break;
         }

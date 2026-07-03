@@ -25,7 +25,7 @@ public class DocumentManagerTests
 
         var sut = new DocumentManager(null, null, processor, embeddingConfig, logger);
 
-        var result = await sut.GenerateEmbeddingBatch(CancellationToken.None);
+        var result = await sut.GenerateEmbeddingBatch(new BackfillCursor(), CancellationToken.None);
 
         result.Should().BeFalse();
         await processor
@@ -49,7 +49,7 @@ public class DocumentManagerTests
 
         var sut = new DocumentManager(null, null, processor, embeddingConfig, logger);
 
-        var result = await sut.GenerateEmbeddingBatch(CancellationToken.None);
+        var result = await sut.GenerateEmbeddingBatch(new BackfillCursor(), CancellationToken.None);
 
         result.Should().BeFalse();
     }
@@ -70,7 +70,7 @@ public class DocumentManagerTests
 
         var sut = new DocumentManager(null, null, processor, embeddingConfig, logger);
 
-        var result = await sut.GenerateEmbeddingBatch(CancellationToken.None);
+        var result = await sut.GenerateEmbeddingBatch(new BackfillCursor(), CancellationToken.None);
 
         result.Should().BeFalse();
     }
