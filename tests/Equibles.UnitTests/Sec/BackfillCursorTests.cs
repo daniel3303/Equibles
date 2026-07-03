@@ -32,7 +32,9 @@ public class BackfillCursorTests
         var frontier = new DateTime(2026, 7, 3, 12, 0, 0, DateTimeKind.Utc);
         cursor.Advance(frontier);
 
-        var allowed = cursor.TryStartFullRescan(new DateTime(2026, 7, 3, 13, 0, 0, DateTimeKind.Utc));
+        var allowed = cursor.TryStartFullRescan(
+            new DateTime(2026, 7, 3, 13, 0, 0, DateTimeKind.Utc)
+        );
 
         allowed.Should().BeTrue();
         cursor.Floor.Should().Be(frontier);

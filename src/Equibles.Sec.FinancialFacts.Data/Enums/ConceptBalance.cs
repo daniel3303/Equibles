@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace Equibles.Sec.FinancialFacts.Data.Enums;
 
 /// <summary>

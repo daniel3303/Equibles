@@ -615,11 +615,16 @@ public class StockTabService
             )
             .ToListAsync();
 
-        // SEC re-emits a concept across filings (restatements); the latest-filed
-        // value is the currently-reported one.
+        // The currently-reported fact per concept: span-aware so a quarter never
+        // shows the 10-Q's year-to-date figure, latest-ending so a comparative
+        // column never stands in for the current one, latest-filed on
+        // restatements — the same pick the MCP statement tool applies (#1546).
         var latestByConcept = facts
-            .LatestPerGroup(f => f.FinancialConceptId, f => f.FiledDate)
-            .ToDictionary(f => f.FinancialConceptId);
+            .GroupBy(f => f.FinancialConceptId)
+            .ToDictionary(
+                g => g.Key,
+                g => StatementLineFacts.PickCurrentlyReported(g, fiscalPeriod)
+            );
 
         // The catalog is deliberately broad (71 lines across sectors); lines
         // whose concepts the company has NEVER reported are hidden entirely,

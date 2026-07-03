@@ -26,6 +26,49 @@ public static class StatementLineFacts
         );
     }
 
+    // The longest span a discrete fiscal quarter can cover — 13 weeks on a
+    // 4-4-5 calendar plus the occasional 14-week quarter, with headroom.
+    private const int MaxDiscreteQuarterDays = 100;
+
+    // The shortest span a fiscal year can cover — 52 weeks on a 52/53-week
+    // calendar, with headroom for short transition years.
+    private const int MinAnnualSpanDays = 350;
+
+    /// <summary>
+    /// The currently-reported fact among a fiscal period's candidates. A 10-Q
+    /// reports each flow line twice under that identity — the discrete quarter
+    /// and the fiscal year-to-date — and a balance-sheet line carries the
+    /// period-end instant alongside re-stated comparative instants. Prefer the
+    /// span matching the period's granularity (instants span zero days and
+    /// always qualify), then the candidate ending latest so a comparative
+    /// column never stands in for the current one, then the latest restatement
+    /// among same-ending candidates (#1546).
+    /// </summary>
+    public static FinancialFact PickCurrentlyReported(
+        IEnumerable<FinancialFact> facts,
+        SecFiscalPeriod fiscalPeriod
+    )
+    {
+        var candidates = facts.ToList();
+
+        var preferred = candidates
+            .Where(f =>
+            {
+                var spanDays = f.PeriodEnd.DayNumber - f.PeriodStart.DayNumber;
+                return fiscalPeriod == SecFiscalPeriod.FullYear
+                    ? spanDays == 0 || spanDays >= MinAnnualSpanDays
+                    : spanDays <= MaxDiscreteQuarterDays;
+            })
+            .ToList();
+        if (preferred.Count > 0)
+            candidates = preferred;
+
+        return candidates
+            .OrderByDescending(f => f.PeriodEnd)
+            .ThenByDescending(f => f.FiledDate)
+            .First();
+    }
+
     /// <summary>
     /// The fact to render for a line: its first variant with a fact for the
     /// period, or null when the company reported none of them.

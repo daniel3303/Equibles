@@ -75,13 +75,14 @@ public class ConceptMetadataWorker : BaseScraperWorker
                 .Where(s =>
                     s.ConceptMetadataCheckedAt == null
                     || s.ConceptMetadataCheckedAt < refreshCutoff
+                    // End of the filed DAY, not its midnight: a filing landing
+                    // later on the same calendar day as the last sweep must
+                    // still re-trigger, or its new concepts wait out RefreshDays.
                     || (
                         s.LastFiledDateSeen != null
                         && s.ConceptMetadataCheckedAt
-                            < s.LastFiledDateSeen.Value.ToDateTime(
-                                TimeOnly.MinValue,
-                                DateTimeKind.Utc
-                            )
+                            < s.LastFiledDateSeen.Value.AddDays(1)
+                                .ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc)
                     )
                 )
                 // Never-swept companies first, then stalest sweeps.
