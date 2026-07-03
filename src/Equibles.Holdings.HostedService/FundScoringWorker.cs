@@ -112,13 +112,16 @@ public class FundScoringWorker : BackgroundService
     }
 
     // The incremental selection: one grouped pass over the holdings table yields the filer
-    // universe together with each filer's latest data-import time (row CreationTime — exact,
-    // unlike FilingDate, which a late backfill of old filings would not bump), and one small
-    // read yields the existing scores' last-computed times. A filer is due when it has no
-    // score for this (window, benchmark), its data changed after the score, or the score has
-    // aged past MaxScoreAge. FundScore.CreationTime is refreshed on every upsert, so it is
-    // the "last scored at" marker; a transiently unscoreable filer keeps its old timestamps
-    // and is naturally retried next cycle.
+    // universe together with two change signals per filer, and one small read yields the
+    // existing scores' last-computed times. A filer is due when it has no score for this
+    // (window, benchmark), its data changed after the score, or the score has aged past
+    // MaxScoreAge. Two signals because neither alone sees every change: row CreationTime
+    // catches new inserts (new quarters, late backfills of old filings) but not in-place
+    // amendment restatements — the importer's upsert rewrites values without touching
+    // CreationTime — while the latest FilingDate catches those restatements (it IS rewritten
+    // on match) but not backfills of old-dated filings. FundScore.CreationTime is refreshed
+    // on every upsert, so it is the "last scored at" marker; a transiently unscoreable filer
+    // keeps its old timestamps and is retried by the staleness floor.
     private async Task<List<Guid>> SelectHoldersNeedingScore(CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
@@ -127,7 +130,12 @@ public class FundScoringWorker : BackgroundService
         var holders = await dbContext
             .Set<InstitutionalHolding>()
             .GroupBy(h => h.InstitutionalHolderId)
-            .Select(g => new { HolderId = g.Key, LastImported = g.Max(h => h.CreationTime) })
+            .Select(g => new
+            {
+                HolderId = g.Key,
+                LastImported = g.Max(h => h.CreationTime),
+                LastFiled = g.Max(h => h.FilingDate),
+            })
             .ToListAsync(cancellationToken);
 
         var benchmark = TickerNormalizer.Normalize(BenchmarkTicker);
@@ -149,6 +157,7 @@ public class FundScoringWorker : BackgroundService
                         ? lastScored
                         : (DateTime?)null,
                     h.LastImported,
+                    h.LastFiled,
                     staleBefore
                 )
             )
@@ -164,16 +173,21 @@ public class FundScoringWorker : BackgroundService
     }
 
     // The pure due-decision behind the incremental cycle: unscored filers are always due;
-    // scored filers are due when new holdings data was imported after the score, or the
-    // score has aged past the staleness floor. Internal so tests can pin the rule directly.
+    // scored filers are due when new holdings data was imported after the score, when the
+    // latest filing is dated on or after the score's day (in-place amendment restatements
+    // rewrite rows without a new CreationTime, so the filing date is the only tell — using
+    // its end-of-day costs at most one extra re-score right after a filing lands), or when
+    // the score has aged past the staleness floor. Internal so tests can pin the rule.
     internal static bool IsScoreDue(
         DateTime? lastScoredAt,
         DateTime lastImportedAt,
+        DateOnly lastFiledOn,
         DateTime staleBefore
     ) =>
         lastScoredAt is not { } lastScored
         || lastScored < staleBefore
-        || lastImportedAt > lastScored;
+        || lastImportedAt > lastScored
+        || lastFiledOn.ToDateTime(TimeOnly.MaxValue) > lastScored;
 
     private async Task<bool> ScoreHolder(
         Guid holderId,
