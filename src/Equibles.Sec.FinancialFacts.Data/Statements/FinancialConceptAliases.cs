@@ -39,11 +39,19 @@ public static class FinancialConceptAliases
         [
             G("Revenues"),
             G("RevenueFromContractWithCustomerExcludingAssessedTax"),
+            // Some filers (REITs like ARE) tag their total-revenue line with the
+            // assessed-tax-inclusive ASC 606 variant and never file the excluding
+            // form; it only fills periods the preferred tags lack.
+            G("RevenueFromContractWithCustomerIncludingAssessedTax"),
             // The dominant pre-ASC 606 total-revenue tag (AAPL, MSFT, … filed it
             // through ~FY2017; deprecated 2018). Last so it only fills periods
             // the modern tags lack — without it those companies' revenue series
             // start mid-history.
             G("SalesRevenueNet"),
+            // Pre-2019 real-estate total revenue (deprecated with ASC 842):
+            // REITs filed it instead of SalesRevenueNet, so without it their
+            // revenue series starts at the ASC 606 transition.
+            G("RealEstateRevenueNet"),
         ],
         // Financial-sector top lines: banks, broker-dealers and insurers never
         // file the operating-company revenue tags above.
@@ -52,6 +60,17 @@ public static class FinancialConceptAliases
         ["noninterest-income"] = [G("NoninterestIncome")],
         ["total-net-revenue"] = [G("RevenuesNetOfInterestExpense")],
         ["premiums-earned"] = [G("PremiumsEarnedNet")],
+        // REIT top-line detail: lessors report rental revenue under the lease
+        // tags, not the contract-with-customer tags. LeaseIncome (operating +
+        // sales-type/direct-financing income) is the broadest; the operating
+        // component fills filers that never report the total; the pre-ASC 842
+        // tag covers history before 2019.
+        ["rental-income"] =
+        [
+            G("LeaseIncome"),
+            G("OperatingLeaseLeaseIncome"),
+            G("OperatingLeasesIncomeStatementLeaseRevenue"),
+        ],
         ["cost-of-revenue"] =
         [
             G("CostOfRevenue"),
