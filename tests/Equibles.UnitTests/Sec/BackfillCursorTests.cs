@@ -24,15 +24,18 @@ public class BackfillCursorTests
     }
 
     [Fact]
-    public void TryStartFullRescan_FirstCall_AllowsAndClearsFloor()
+    public void TryStartFullRescan_FirstCall_AllowsAndKeepsFloor()
     {
+        // The frontier must survive a rescan: an empty full scan that discarded it would leave
+        // rows arriving right afterwards invisible until the next rescan window.
         var cursor = new BackfillCursor();
-        cursor.Advance(new DateTime(2026, 7, 3, 12, 0, 0, DateTimeKind.Utc));
+        var frontier = new DateTime(2026, 7, 3, 12, 0, 0, DateTimeKind.Utc);
+        cursor.Advance(frontier);
 
         var allowed = cursor.TryStartFullRescan(new DateTime(2026, 7, 3, 13, 0, 0, DateTimeKind.Utc));
 
         allowed.Should().BeTrue();
-        cursor.Floor.Should().BeNull();
+        cursor.Floor.Should().Be(frontier);
     }
 
     [Fact]
@@ -61,6 +64,5 @@ public class BackfillCursorTests
         var allowed = cursor.TryStartFullRescan(firstScan.AddMinutes(61));
 
         allowed.Should().BeTrue();
-        cursor.Floor.Should().BeNull();
     }
 }
