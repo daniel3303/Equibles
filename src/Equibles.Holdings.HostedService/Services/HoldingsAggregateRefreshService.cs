@@ -127,8 +127,13 @@ public class HoldingsAggregateRefreshService
             dbContext.Database.SetCommandTimeout(commandTimeout.Value);
         }
 
+        // 13F quarter ends only: Schedule 13D/G rows carry per-day event dates,
+        // so without the filter the "N most recent report dates" the daily
+        // safety net rebuilds are the last N business days of 13D/G activity —
+        // not the recent 13F quarters it exists to protect.
         var distinctDates = dbContext
             .Set<InstitutionalHolding>()
+            .Where(h => h.FilingType == FilingType.Form13F)
             .Select(h => h.ReportDate)
             .Distinct();
         return await orderAndLimit(distinctDates).ToListAsync(cancellationToken);
@@ -292,10 +297,14 @@ public class HoldingsAggregateRefreshService
         // Filtering by ReportDate first narrows the scan via the existing
         // [Index(ReportDate)] btree, so the multi-distinct aggregate only
         // touches one quarter's slice. GroupBy on the same column then folds
-        // to a single output row.
+        // to a single output row. Form 13F only: a 13G/A whose event date lands
+        // exactly on a 13F quarter end (the common annual-amendment case)
+        // stores a Schedule row alongside the same holder+stock's 13F row, and
+        // without the filter that overlapping stake double counts into the
+        // market-wide totals.
         var aggregate = await dbContext
             .Set<InstitutionalHolding>()
-            .Where(h => h.ReportDate == reportDate)
+            .Where(h => h.ReportDate == reportDate && h.FilingType == FilingType.Form13F)
             .GroupBy(h => h.ReportDate)
             .Select(g => new
             {
@@ -359,10 +368,11 @@ public class HoldingsAggregateRefreshService
     {
         // Same quarter-bounded shape: filter holdings first, then join the
         // stock/industry/sector taxonomy. The aggregate produces one row per
-        // (ReportDate, SectorId).
+        // (ReportDate, SectorId). Form 13F only — see UpsertAumSnapshot for the
+        // quarter-end 13G/A double-count this filter prevents.
         var rows = await dbContext
             .Set<InstitutionalHolding>()
-            .Where(h => h.ReportDate == reportDate)
+            .Where(h => h.ReportDate == reportDate && h.FilingType == FilingType.Form13F)
             .Join(
                 dbContext.Set<CommonStock>(),
                 h => h.CommonStockId,

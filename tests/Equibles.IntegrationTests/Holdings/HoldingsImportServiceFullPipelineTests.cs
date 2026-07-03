@@ -630,6 +630,124 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         holdings[0].IsAmendment.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task ImportDataSet_Schedule13GAmendment_DeletesOnlyTheAmendedIssuersHoldings()
+    {
+        // A Schedule 13D/G filing covers a SINGLE issuer, unlike a 13F-HR which
+        // covers the whole portfolio. Passive filers submit many 13G/As whose
+        // event dates collide on the same year/quarter end, one per issuer. The
+        // restatement delete must therefore be scoped to the issuer(s) the
+        // amendment itself reports — an unscoped (holder, reportDate,
+        // filingType) delete lets each 13G/A wipe every OTHER issuer's stake at
+        // that event date, and because the wiped filings stay recorded as
+        // processed (and 13D/G has no quarterly bulk data set), the loss is
+        // permanent and silent.
+        var stockAmended = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "META",
+            Name = "Meta",
+            Cik = "0001326801",
+            Cusip = "30303M102",
+        };
+        var stockOther = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple",
+            Cik = "0000320193",
+            Cusip = "037833100",
+        };
+        var holder = new InstitutionalHolder
+        {
+            Id = Guid.NewGuid(),
+            Cik = "1067983",
+            Name = "Passive Fund Advisors",
+        };
+        var eventDate = new DateOnly(2024, 12, 31);
+        var amendedIssuerHolding = new InstitutionalHolding
+        {
+            Id = Guid.NewGuid(),
+            CommonStockId = stockAmended.Id,
+            InstitutionalHolderId = holder.Id,
+            ReportDate = eventDate,
+            FilingDate = new DateOnly(2025, 1, 10),
+            Shares = 999,
+            Value = 99_900,
+            ShareType = ShareType.Shares,
+            InvestmentDiscretion = InvestmentDiscretion.Sole,
+            FilingType = FilingType.Schedule13G,
+            AccessionNumber = "ACC-13G-META",
+            Cusip = "30303M102",
+        };
+        var otherIssuerHolding = new InstitutionalHolding
+        {
+            Id = Guid.NewGuid(),
+            CommonStockId = stockOther.Id,
+            InstitutionalHolderId = holder.Id,
+            ReportDate = eventDate,
+            FilingDate = new DateOnly(2025, 1, 11),
+            Shares = 555,
+            Value = 55_500,
+            ShareType = ShareType.Shares,
+            InvestmentDiscretion = InvestmentDiscretion.Sole,
+            FilingType = FilingType.Schedule13G,
+            AccessionNumber = "ACC-13G-AAPL",
+            Cusip = "037833100",
+        };
+        using (var seed = FreshContext())
+        {
+            seed.Set<CommonStock>().AddRange(stockAmended, stockOther);
+            seed.Set<InstitutionalHolder>().Add(holder);
+            seed.Set<InstitutionalHolding>().AddRange(amendedIssuerHolding, otherIssuerHolding);
+            await seed.SaveChangesAsync();
+        }
+
+        // A 13G/A restating ONLY the META stake at the same event date.
+        var submission =
+            "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
+            + "SC 13G/A\tACC-13G-META-A\t2025-02-14\t2024-12-31\t0001067983\n";
+        var coverPage =
+            "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\n"
+            + "ACC-13G-META-A\tY\tPassive Fund Advisors\n";
+        var infoTable =
+            "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMT\tSSHPRNAMTTYPE\tINVESTMENTDISCRETION\n"
+            + "ACC-13G-META-A\t30303M102\t42\tSH\tSOLE\n";
+
+        using var archive = BuildArchive(
+            ("SUBMISSION.tsv", submission),
+            ("COVERPAGE.tsv", coverPage),
+            ("INFOTABLE.tsv", infoTable)
+        );
+
+        var sut = CreateImporter(
+            PriceProviderReturning(
+                new Dictionary<(Guid, DateOnly), decimal>
+                {
+                    [(stockAmended.Id, eventDate)] = 200m,
+                }
+            )
+        );
+
+        await sut.ImportDataSet(archive, new DateOnly(2024, 1, 1), CancellationToken.None);
+
+        using var verify = FreshContext();
+        var holdings = await verify
+            .Set<InstitutionalHolding>()
+            .Where(h => h.InstitutionalHolderId == holder.Id && h.ReportDate == eventDate)
+            .ToListAsync();
+
+        holdings
+            .Should()
+            .HaveCount(2, "the 13G/A must replace only its own issuer's stake");
+        var meta = holdings.Single(h => h.CommonStockId == stockAmended.Id);
+        meta.Shares.Should().Be(42);
+        meta.AccessionNumber.Should().Be("ACC-13G-META-A");
+        var aapl = holdings.Single(h => h.CommonStockId == stockOther.Id);
+        aapl.Shares.Should().Be(555, "the other issuer's stake must survive the amendment");
+        aapl.AccessionNumber.Should().Be("ACC-13G-AAPL");
+    }
+
     // ── Resilience / parser-branch coverage ─────────────────────────────
 
     [Fact]

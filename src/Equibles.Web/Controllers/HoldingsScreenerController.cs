@@ -177,7 +177,9 @@ public class HoldingsScreenerController : BaseController
         DateOnly? Comparison
     )> ResolveScreenerDates(DateOnly? date, DateOnly? compareDate)
     {
-        var reportDates = await _holdingRepository.GetAvailableReportDates().ToListAsync();
+        // 13F quarter ends only — a 13D/G event date as the default "quarter"
+        // degrades the screener's comparison to quarter-vs-single-day.
+        var reportDates = await _holdingRepository.Get13FAvailableReportDates().ToListAsync();
         if (reportDates.Count < 2)
             return (reportDates, null, null);
         var selected = reportDates.ResolveSelectedDateOrFirst(date);
