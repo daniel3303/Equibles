@@ -488,8 +488,10 @@ public class HoldingsAggregateRefreshService
             })
             .ToListAsync(cancellationToken);
 
-        var churn = (await BuildChurnQuery(dbContext, reportDate, previousReportDate)
-            .ToListAsync(cancellationToken)).ToDictionary(c => c.CommonStockId);
+        var churn = (
+            await BuildChurnQuery(dbContext, reportDate, previousReportDate)
+                .ToListAsync(cancellationToken)
+        ).ToDictionary(c => c.CommonStockId);
 
         var computedAt = DateTime.UtcNow;
         var rows = activity
