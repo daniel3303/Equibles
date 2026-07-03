@@ -366,22 +366,34 @@ public class XbrlFactExtractionService
         CancellationToken cancellationToken
     )
     {
+        // Emit the rows in a stable (Taxonomy, Tag) order. Standard concepts
+        // (us-gaap:Revenues, …) recur in nearly every filing, so this extractor
+        // and the Company Facts importer routinely upsert an overlapping set
+        // concurrently. INSERT … ON CONFLICT locks the touched rows in list
+        // order; from an unordered HashSet the two writers would grab the same
+        // shared rows in opposite orders and deadlock (40P01). A single global
+        // order — matched by the importer — makes an ABBA cycle impossible.
         var pairs = persistable.Select(c => (c.Taxonomy, c.Tag)).ToHashSet();
         var concepts = pairs
+            .OrderBy(pair => pair.Item1)
+            .ThenBy(pair => pair.Item2, StringComparer.Ordinal)
             .Select(pair => new FinancialConcept { Taxonomy = pair.Item1, Tag = pair.Item2 })
             .ToList();
 
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
+        // Raw XBRL carries no labels, so this path only ever needs the concept
+        // rows to exist — it has nothing to write. DO NOTHING (rather than a
+        // Label = existing.Label no-op update) skips taking write locks on the
+        // hundreds of already-present shared concept rows, shrinking the window
+        // in which this hot table contends with the importer; the importer path
+        // still fills labels/descriptions in.
         await dbContext
             .Set<FinancialConcept>()
             .UpsertRange(concepts)
             .On(c => new { c.Taxonomy, c.Tag })
-            .WhenMatched(
-                (existing, incoming) =>
-                    new FinancialConcept { Label = incoming.Label ?? existing.Label }
-            )
+            .NoUpdate()
             .RunAsync(cancellationToken);
 
         var conceptRepository =

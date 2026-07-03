@@ -356,7 +356,14 @@ public class FinancialFactsImportService
             .GroupBy(p => (p.Taxonomy, p.Tag))
             .ToDictionary(g => g.Key, g => g.First().Description);
 
+        // Emit the rows in a stable (Taxonomy, Tag) order so the ON CONFLICT
+        // row locks are taken in the same order as every other writer of this
+        // shared table (notably the XBRL extractor). Without a common order,
+        // two workers upserting an overlapping set of standard concepts lock
+        // the same rows in opposite orders and deadlock (40P01).
         var concepts = pairs
+            .OrderBy(pair => pair.Taxonomy)
+            .ThenBy(pair => pair.Tag, StringComparer.Ordinal)
             .Select(pair => new FinancialConcept
             {
                 Taxonomy = pair.Taxonomy,
