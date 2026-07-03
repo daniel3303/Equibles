@@ -30,6 +30,20 @@ public class FinancialConcept
     [MaxLength(512)]
     public string Label { get; set; }
 
+    /// <summary>
+    /// The concept's authoritative documentation text: FASB's definition for
+    /// standard-taxonomy tags, the filer's own documentation label for
+    /// extension (<see cref="FactTaxonomy.Custom"/>) tags. Sourced from SEC
+    /// Company Facts and filings' MetaLinks; null until ingested.
+    /// </summary>
+    public string Description { get; set; }
+
+    /// <summary>
+    /// The concept's normal accounting balance (XBRL <c>crdr</c>); null for
+    /// concepts without one or not yet ingested.
+    /// </summary>
+    public ConceptBalance? Balance { get; set; }
+
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 
     public virtual List<FinancialFact> Facts { get; set; } = [];

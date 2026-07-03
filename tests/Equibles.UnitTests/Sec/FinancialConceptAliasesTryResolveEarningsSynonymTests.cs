@@ -22,8 +22,9 @@ public class FinancialConceptAliasesTryResolveEarningsSynonymTests
         var matched = FinancialConceptAliases.TryResolve("earnings", out var concepts);
 
         matched.Should().BeTrue();
-        var concept = concepts.Should().ContainSingle().Subject;
-        concept.Taxonomy.Should().Be(FactTaxonomy.UsGaap);
-        concept.Tag.Should().Be("NetIncomeLoss");
+        // The preferred (first) concept is the parent-attributable net income;
+        // ProfitLoss trails as a gap-filler for filers that never report it.
+        concepts[0].Taxonomy.Should().Be(FactTaxonomy.UsGaap);
+        concepts[0].Tag.Should().Be("NetIncomeLoss");
     }
 }

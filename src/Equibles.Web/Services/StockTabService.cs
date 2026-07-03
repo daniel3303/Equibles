@@ -549,8 +549,9 @@ public class StockTabService
         var statementLines = Enum.GetValues<FinancialStatementType>()
             .SelectMany(FinancialStatementConcepts.For)
             .ToList();
-        var statementTaxonomies = statementLines.Select(l => l.Taxonomy).Distinct().ToList();
-        var statementTags = statementLines.Select(l => l.Tag).Distinct().ToList();
+        var (statementTaxonomies, statementTags) = StatementLineFacts.CollectConceptPairs(
+            statementLines
+        );
         var statementConceptIds = await _financialConceptRepository
             .GetMatching(statementTaxonomies, statementTags)
             .Select(c => c.Id)
@@ -591,8 +592,7 @@ public class StockTabService
     )
     {
         var statementLines = FinancialStatementConcepts.For(statementType);
-        var taxonomies = statementLines.Select(l => l.Taxonomy).Distinct().ToList();
-        var tags = statementLines.Select(l => l.Tag).Distinct().ToList();
+        var (taxonomies, tags) = StatementLineFacts.CollectConceptPairs(statementLines);
 
         var concepts = await _financialConceptRepository
             .GetMatching(taxonomies, tags)
@@ -615,20 +615,41 @@ public class StockTabService
             )
             .ToListAsync();
 
-        // SEC re-emits a concept across filings (restatements); the latest-filed
-        // value is the currently-reported one.
+        // The currently-reported fact per concept: span-aware so a quarter never
+        // shows the 10-Q's year-to-date figure, latest-ending so a comparative
+        // column never stands in for the current one, latest-filed on
+        // restatements — the same pick the MCP statement tool applies (#1546).
         var latestByConcept = facts
-            .LatestPerGroup(f => f.FinancialConceptId, f => f.FiledDate)
-            .ToDictionary(f => f.FinancialConceptId);
+            .GroupBy(f => f.FinancialConceptId)
+            .ToDictionary(
+                g => g.Key,
+                g => StatementLineFacts.PickCurrentlyReported(g, fiscalPeriod)
+            );
+
+        // The catalog is deliberately broad (71 lines across sectors); lines
+        // whose concepts the company has NEVER reported are hidden entirely,
+        // while a line reported in other periods keeps its dash for this one.
+        var everReportedConceptIds = (
+            await _financialFactRepository
+                .GetConsolidatedByStock(stock)
+                .Where(f => conceptIds.Contains(f.FinancialConceptId))
+                .Select(f => f.FinancialConceptId)
+                .Distinct()
+                .ToListAsync()
+        ).ToHashSet();
 
         return statementLines
+            .Where(line =>
+                line.Concepts.Any(r =>
+                    conceptIdByKey.TryGetValue((r.Taxonomy, r.Tag), out var id)
+                    && everReportedConceptIds.Contains(id)
+                )
+            )
             .Select(line =>
             {
                 var row = new FinancialsLineViewModel { Label = line.Label };
-                if (
-                    conceptIdByKey.TryGetValue((line.Taxonomy, line.Tag), out var conceptId)
-                    && latestByConcept.TryGetValue(conceptId, out var fact)
-                )
+                var fact = StatementLineFacts.PickFact(line, conceptIdByKey, latestByConcept);
+                if (fact != null)
                 {
                     row.HasValue = true;
                     row.Value = fact.Value;

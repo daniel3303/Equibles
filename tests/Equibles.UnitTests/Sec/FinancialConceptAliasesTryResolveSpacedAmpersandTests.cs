@@ -15,7 +15,6 @@ public class FinancialConceptAliasesTryResolveSpacedAmpersandTests
         var resolved = FinancialConceptAliases.TryResolve("R & D", out var concepts);
 
         resolved.Should().BeTrue();
-        concepts.Should().ContainSingle();
         concepts[0].Taxonomy.Should().Be(FactTaxonomy.UsGaap);
         concepts[0].Tag.Should().Be("ResearchAndDevelopmentExpense");
     }

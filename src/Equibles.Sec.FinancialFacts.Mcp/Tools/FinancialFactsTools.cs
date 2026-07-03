@@ -370,10 +370,16 @@ public class FinancialFactsTools
         if (preferredSpan.Count > 0)
             candidates = preferredSpan;
 
-        var byPriority = candidates.OrderBy(f => conceptPriority[f.FinancialConceptId]);
+        // Latest period end first: a filing re-reports comparative prior periods (the
+        // prior-year quarter, prior fiscal years, the prior year-end balance instant)
+        // under its own fiscal identity, and those tie the current figure on span and
+        // filed date — ignoring the period end surfaces a comparative column (#1546).
+        var byPeriod = candidates
+            .OrderByDescending(f => f.PeriodEnd)
+            .ThenBy(f => conceptPriority[f.FinancialConceptId]);
         return asOriginallyReported
-            ? byPriority.ThenBy(f => f.FiledDate).ThenBy(f => f.AccessionNumber).First()
-            : byPriority
+            ? byPeriod.ThenBy(f => f.FiledDate).ThenBy(f => f.AccessionNumber).First()
+            : byPeriod
                 .ThenByDescending(f => f.FiledDate)
                 .ThenByDescending(f => f.AccessionNumber)
                 .First();

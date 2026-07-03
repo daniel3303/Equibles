@@ -53,7 +53,7 @@ public class FinancialFactsImportServiceTryBuildParsedFactDurationPeriodStartTes
 
         var parsed = method.Invoke(
             null,
-            [FactTaxonomy.UsGaap, "Revenues", "Revenues", "USD", value, stock]
+            [FactTaxonomy.UsGaap, "Revenues", "Revenues", null, "USD", value, stock]
         );
 
         parsed.Should().NotBeNull();

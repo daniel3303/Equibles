@@ -24,4 +24,12 @@ public class FinancialFactsSyncStatus
 
     /// <summary>Newest filed date ingested so far; null until the first run.</summary>
     public DateOnly? LastFiledDateSeen { get; set; }
+
+    /// <summary>
+    /// When the concept-metadata sweep (labels, descriptions, balance from the
+    /// company's recent filings' MetaLinks) last ran for this company; null
+    /// until the first run. A <see cref="LastFiledDateSeen"/> newer than this
+    /// marks the company due again — a new filing can introduce new concepts.
+    /// </summary>
+    public DateTime? ConceptMetadataCheckedAt { get; set; }
 }

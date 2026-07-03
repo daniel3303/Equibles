@@ -186,7 +186,10 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
             NullLogger<DocumentManager>()
         );
 
-        var workDone = await sut.GenerateEmbeddingBatch(new BackfillCursor(), CancellationToken.None);
+        var workDone = await sut.GenerateEmbeddingBatch(
+            new BackfillCursor(),
+            CancellationToken.None
+        );
 
         workDone
             .Should()

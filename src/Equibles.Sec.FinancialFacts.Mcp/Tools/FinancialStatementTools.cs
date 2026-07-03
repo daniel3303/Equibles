@@ -97,8 +97,7 @@ public class FinancialStatementTools
                     return periodError;
 
                 var statementLines = FinancialStatementConcepts.For(statementType);
-                var taxonomies = statementLines.Select(l => l.Taxonomy).Distinct().ToList();
-                var tags = statementLines.Select(l => l.Tag).Distinct().ToList();
+                var (taxonomies, tags) = StatementLineFacts.CollectConceptPairs(statementLines);
 
                 var concepts = await _financialConceptRepository
                     .GetMatching(taxonomies, tags)
@@ -171,10 +170,8 @@ public class FinancialStatementTools
         var rendered = 0;
         foreach (var line in statementLines)
         {
-            if (
-                !conceptIdByKey.TryGetValue((line.Taxonomy, line.Tag), out var conceptId)
-                || !latestByConcept.TryGetValue(conceptId, out var fact)
-            )
+            var fact = StatementLineFacts.PickFact(line, conceptIdByKey, latestByConcept);
+            if (fact == null)
             {
                 result.AppendLine($"| {FactMarkdown.Cell(line.Label)} | — | | | | |");
                 continue;
@@ -296,27 +293,7 @@ public class FinancialStatementTools
     internal static FinancialFact PickCurrentlyReportedFact(
         IEnumerable<FinancialFact> facts,
         SecFiscalPeriod fiscalPeriod
-    )
-    {
-        var candidates = facts.ToList();
-
-        var preferred = candidates
-            .Where(f =>
-            {
-                var spanDays = f.PeriodEnd.DayNumber - f.PeriodStart.DayNumber;
-                return fiscalPeriod == SecFiscalPeriod.FullYear
-                    ? spanDays == 0 || spanDays >= MinAnnualSpanDays
-                    : spanDays <= MaxDiscreteQuarterDays;
-            })
-            .ToList();
-        if (preferred.Count > 0)
-            candidates = preferred;
-
-        return candidates
-            .OrderByDescending(f => f.PeriodEnd)
-            .ThenByDescending(f => f.FiledDate)
-            .First();
-    }
+    ) => StatementLineFacts.PickCurrentlyReported(facts, fiscalPeriod);
 
     // Chronological order within a fiscal year: Q1 < Q2 < Q3 < Q4 < FullYear.
     private static int ChronologicalRank(SecFiscalPeriod period) =>
