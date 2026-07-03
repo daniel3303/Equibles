@@ -36,7 +36,6 @@ public class DocumentPersistenceServiceUpdateXbrlSurrogateFileNameTests : Parade
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
-                Arg.Any<Equibles.Media.Data.Models.StorageProvider>(),
                 Arg.Any<string>()
             )
             .Returns(ci =>

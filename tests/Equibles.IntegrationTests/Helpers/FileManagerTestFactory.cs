@@ -24,13 +24,16 @@ internal static class FileManagerTestFactory
     )
     {
         var wrapped = Options.Create(options ?? new FileStorageOptions());
+        var router = new FileStorageRouter(
+            new DatabaseFileStorageProvider(),
+            new FileSystemFileStorageProvider(wrapped),
+            wrapped
+        );
         return new FileManager(
             repository,
             pendingBlobDeletionRepository
                 ?? Substitute.For<PendingBlobDeletionRepository>((EquiblesFinancialDbContext)null),
-            new DatabaseFileStorageProvider(),
-            new FileSystemFileStorageProvider(wrapped),
-            wrapped
+            router
         );
     }
 }

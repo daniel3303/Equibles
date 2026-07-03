@@ -57,8 +57,7 @@ public class DocumentImageService
                 image.Bytes,
                 FileNameWithoutExtension(image.FileName).TruncateToFit(MaxFileNameLength),
                 Extension(image.FileName).TruncateToFit(MaxExtensionLength),
-                image.ContentType,
-                storage: Equibles.Media.Data.Models.StorageProvider.FileSystem
+                image.ContentType
             );
 
             _documentImageRepository.Add(

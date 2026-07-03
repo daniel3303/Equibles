@@ -16,7 +16,8 @@ public class ImageManagerTests
     {
         var context = TestDbContextFactory.Create(new MediaModuleConfiguration());
         _repository = new ImageRepository(context);
-        _sut = new ImageManager(_repository);
+        // Store disabled → the router persists images in the database, matching these assertions.
+        _sut = new ImageManager(_repository, FileStorageRouterTestFactory.Disabled());
     }
 
     private static byte[] CreateMinimalPng(int width = 10, int height = 10)

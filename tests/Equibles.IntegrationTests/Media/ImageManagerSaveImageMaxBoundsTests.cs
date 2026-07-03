@@ -14,7 +14,10 @@ public class ImageManagerSaveImageMaxBoundsTests
     public ImageManagerSaveImageMaxBoundsTests()
     {
         var context = TestDbContextFactory.Create(new MediaModuleConfiguration());
-        _sut = new ImageManager(new ImageRepository(context));
+        _sut = new ImageManager(
+            new ImageRepository(context),
+            FileStorageRouterTestFactory.Disabled()
+        );
     }
 
     private static byte[] CreateMinimalPng(int width, int height)
