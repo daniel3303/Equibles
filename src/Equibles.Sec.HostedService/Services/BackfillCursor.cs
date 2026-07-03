@@ -33,9 +33,12 @@ public class BackfillCursor
     }
 
     /// <summary>
-    /// Clears the floor for a full rescan when one hasn't run within the rescan interval.
-    /// Returns false when the fallback is still rate-limited — the caller should treat the
-    /// backfill as drained for this poll.
+    /// Rate-limits the unfloored fallback scan to one per rescan interval. Returns false when
+    /// still rate-limited — the caller should treat the backfill as drained for this poll. The
+    /// floor itself is left untouched: an empty rescan must not discard the frontier, or new
+    /// rows arriving right after it would wait out the full interval instead of being picked
+    /// up by the next floored poll. A rescan that does find stragglers moves the floor back
+    /// via Advance, and the floored path then works itself forward again.
     /// </summary>
     public bool TryStartFullRescan(DateTime utcNow)
     {
@@ -43,7 +46,6 @@ public class BackfillCursor
             return false;
 
         _lastFullScanUtc = utcNow;
-        Floor = null;
         return true;
     }
 }
