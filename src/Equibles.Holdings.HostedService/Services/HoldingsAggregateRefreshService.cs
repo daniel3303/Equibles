@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models.Taxonomies;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.Repositories.Models;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
 
@@ -487,51 +488,8 @@ public class HoldingsAggregateRefreshService
             })
             .ToListAsync(cancellationToken);
 
-        // Per-stock churn via two NOT-EXISTS subqueries, identical to
-        // GetQuarterlyNewSoldOutPositions. Keyed by stock so it merges with the
-        // activity rows above.
-        var churn = (
-            await dbContext
-                .Set<InstitutionalHolding>()
-                .Where(h =>
-                    (h.ReportDate == reportDate || h.ReportDate == previousReportDate)
-                    && h.FilingType == FilingType.Form13F
-                )
-                .GroupBy(h => h.CommonStockId)
-                .Select(g => new
-                {
-                    CommonStockId = g.Key,
-                    NewFilerCount = g.Where(h =>
-                            h.ReportDate == reportDate
-                            && !dbContext
-                                .Set<InstitutionalHolding>()
-                                .Any(p =>
-                                    p.ReportDate == previousReportDate
-                                    && p.FilingType == FilingType.Form13F
-                                    && p.CommonStockId == h.CommonStockId
-                                    && p.InstitutionalHolderId == h.InstitutionalHolderId
-                                )
-                        )
-                        .Select(h => h.InstitutionalHolderId)
-                        .Distinct()
-                        .Count(),
-                    SoldOutFilerCount = g.Where(h =>
-                            h.ReportDate == previousReportDate
-                            && !dbContext
-                                .Set<InstitutionalHolding>()
-                                .Any(c =>
-                                    c.ReportDate == reportDate
-                                    && c.FilingType == FilingType.Form13F
-                                    && c.CommonStockId == h.CommonStockId
-                                    && c.InstitutionalHolderId == h.InstitutionalHolderId
-                                )
-                        )
-                        .Select(h => h.InstitutionalHolderId)
-                        .Distinct()
-                        .Count(),
-                })
-                .ToListAsync(cancellationToken)
-        ).ToDictionary(c => c.CommonStockId);
+        var churn = (await BuildChurnQuery(dbContext, reportDate, previousReportDate)
+            .ToListAsync(cancellationToken)).ToDictionary(c => c.CommonStockId);
 
         var computedAt = DateTime.UtcNow;
         var rows = activity
@@ -589,4 +547,39 @@ public class HoldingsAggregateRefreshService
             .Where(s => s.ReportDate == reportDate && !currentStockIds.Contains(s.CommonStockId))
             .ExecuteDeleteAsync(cancellationToken);
     }
+
+    // Per-stock churn: the same numbers GetQuarterlyNewSoldOutPositions defines ("new" =
+    // holder holds the stock this quarter but not last; "sold-out" = the reverse), computed
+    // as two grouped passes instead of that method's correlated NOT-EXISTS probes. The inner
+    // grouping collapses the two-quarter slice to one row per (stock, holder) with presence
+    // flags; the outer grouping counts the flag combinations per stock. The probe-based shape
+    // re-seeked the index once per scanned row — millions of lookups, ~35s per rebuild at
+    // prod scale — while this shape is one index-only scan plus two hash aggregates (~8x
+    // faster), and a rebuild runs on every dirty-quarter drain. Internal so the translation
+    // test can pin that the chained-GroupBy shape stays translatable on the Npgsql provider.
+    internal static IQueryable<MarketWideStockChurn> BuildChurnQuery(
+        EquiblesFinancialDbContext dbContext,
+        DateOnly reportDate,
+        DateOnly previousReportDate
+    ) =>
+        dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h =>
+                (h.ReportDate == reportDate || h.ReportDate == previousReportDate)
+                && h.FilingType == FilingType.Form13F
+            )
+            .GroupBy(h => new { h.CommonStockId, h.InstitutionalHolderId })
+            .Select(g => new
+            {
+                g.Key.CommonStockId,
+                HasCurrent = g.Max(h => h.ReportDate == reportDate ? 1 : 0),
+                HasPrevious = g.Max(h => h.ReportDate == previousReportDate ? 1 : 0),
+            })
+            .GroupBy(p => p.CommonStockId)
+            .Select(g => new MarketWideStockChurn
+            {
+                CommonStockId = g.Key,
+                NewFilerCount = g.Count(p => p.HasCurrent == 1 && p.HasPrevious == 0),
+                SoldOutFilerCount = g.Count(p => p.HasPrevious == 1 && p.HasCurrent == 0),
+            });
 }
