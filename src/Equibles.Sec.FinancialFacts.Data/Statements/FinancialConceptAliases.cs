@@ -31,6 +31,11 @@ public static class FinancialConceptAliases
         [
             new(FactTaxonomy.UsGaap, "Revenues"),
             new(FactTaxonomy.UsGaap, "RevenueFromContractWithCustomerExcludingAssessedTax"),
+            // The dominant pre-ASC 606 total-revenue tag (AAPL, MSFT, … filed it
+            // through ~FY2017; deprecated 2018). Last so it only fills periods
+            // the modern tags lack — without it those companies' revenue series
+            // start mid-history.
+            new(FactTaxonomy.UsGaap, "SalesRevenueNet"),
         ],
         ["cost-of-revenue"] = [new(FactTaxonomy.UsGaap, "CostOfRevenue")],
         ["gross-profit"] = [new(FactTaxonomy.UsGaap, "GrossProfit")],
