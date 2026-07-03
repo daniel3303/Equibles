@@ -96,7 +96,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
             NullLogger<DocumentManager>()
         );
 
-        var workDone = await sut.ChunkDocumentBatch(CancellationToken.None);
+        var workDone = await sut.ChunkDocumentBatch(new BackfillCursor(), CancellationToken.None);
 
         workDone
             .Should()
@@ -186,7 +186,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
             NullLogger<DocumentManager>()
         );
 
-        var workDone = await sut.GenerateEmbeddingBatch(CancellationToken.None);
+        var workDone = await sut.GenerateEmbeddingBatch(new BackfillCursor(), CancellationToken.None);
 
         workDone
             .Should()

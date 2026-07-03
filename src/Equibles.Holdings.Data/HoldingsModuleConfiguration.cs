@@ -59,6 +59,12 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         // filtered out millions of rows before finding the match and hit the 30s
         // command timeout — a hard 500 on /institutions/{id} and
         // /stocks/{ticker}/holders/{cik} (#3605).
+        //
+        // FilingType rides along so the 13F-only per-holder rollups (Only13F():
+        // quarterly TotalValue/PositionCount trend, distinct report dates) stay
+        // index-only. FilingType is in no holder-leading index, so its filter
+        // forced a heap fetch for every index row — ~5s and 100k+ buffer reads
+        // per trend query for a mega-filer, thousands of times a day.
         builder
             .Entity<InstitutionalHolding>()
             .HasIndex(h => new { h.InstitutionalHolderId, h.ReportDate })
@@ -68,6 +74,7 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
                 h.Value,
                 h.Shares,
                 h.FilingDate,
+                h.FilingType,
             });
 
         // Covering index for the per-stock 13F ranking pages (Most-Held Stocks,
