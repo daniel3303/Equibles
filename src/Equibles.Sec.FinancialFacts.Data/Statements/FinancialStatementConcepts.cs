@@ -44,6 +44,9 @@ public static class FinancialStatementConcepts
         Line("noninterest-income", "Noninterest Income"),
         Line("total-net-revenue", "Total Net Revenue"),
         Line("premiums-earned", "Premiums Earned (Net)"),
+        // REIT top-line detail: lessors report rental revenue under the lease-income
+        // tags; renders alongside Revenue (the total) for real-estate filers only.
+        Line("rental-income", "Rental Income"),
         Line("cost-of-revenue", "Cost of Revenue"),
         Line("gross-profit", "Gross Profit"),
         Line("research-and-development", "Research & Development"),
