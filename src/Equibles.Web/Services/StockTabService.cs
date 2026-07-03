@@ -621,7 +621,25 @@ public class StockTabService
             .LatestPerGroup(f => f.FinancialConceptId, f => f.FiledDate)
             .ToDictionary(f => f.FinancialConceptId);
 
+        // The catalog is deliberately broad (71 lines across sectors); lines
+        // whose concepts the company has NEVER reported are hidden entirely,
+        // while a line reported in other periods keeps its dash for this one.
+        var everReportedConceptIds = (
+            await _financialFactRepository
+                .GetConsolidatedByStock(stock)
+                .Where(f => conceptIds.Contains(f.FinancialConceptId))
+                .Select(f => f.FinancialConceptId)
+                .Distinct()
+                .ToListAsync()
+        ).ToHashSet();
+
         return statementLines
+            .Where(line =>
+                line.Concepts.Any(r =>
+                    conceptIdByKey.TryGetValue((r.Taxonomy, r.Tag), out var id)
+                    && everReportedConceptIds.Contains(id)
+                )
+            )
             .Select(line =>
             {
                 var row = new FinancialsLineViewModel { Label = line.Label };
