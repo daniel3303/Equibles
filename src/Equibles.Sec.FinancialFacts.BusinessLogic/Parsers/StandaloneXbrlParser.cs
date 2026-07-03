@@ -259,6 +259,7 @@ public class StandaloneXbrlParser
         {
             Taxonomy = taxonomy,
             Tag = element.Name.LocalName,
+            Namespace = element.Name.NamespaceName,
             Unit = unit,
             Value = value,
             IsInstant = context.IsInstant,

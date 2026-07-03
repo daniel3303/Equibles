@@ -36,7 +36,6 @@ public class CommonStock
     /// </summary>
     public DateTime? WebsiteCheckedAt { get; set; }
 
-
     public double MarketCapitalization { get; set; }
     public long SharesOutStanding { get; set; }
 

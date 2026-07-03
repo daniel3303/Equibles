@@ -74,14 +74,41 @@ public class InlineXbrlParser
 
         var contexts = BuildContextMap(document);
         var units = BuildUnitMap(document);
+        var namespaces = BuildNamespaceMap(document);
 
         var facts = new List<ParsedXbrlFact>();
         foreach (var element in FindByLocalName(document, NonFractionLocalName))
         {
-            if (TryParseFact(element, contexts, units, out var fact))
+            if (TryParseFact(element, contexts, units, namespaces, out var fact))
                 facts.Add(fact);
         }
         return facts;
+    }
+
+    /// <summary>
+    /// Prefix → namespace URI map from every <c>xmlns:*</c> declaration in the
+    /// document (filers declare them on <c>html</c>, but nothing forbids deeper
+    /// placement). Case-insensitive because the HTML parser lowercases attribute
+    /// names while <c>name</c> attribute values keep the author's prefix casing.
+    /// Duplicate declarations keep the first URI seen — scoped redefinition of a
+    /// taxonomy prefix does not occur in EDGAR filings.
+    /// </summary>
+    private static Dictionary<string, string> BuildNamespaceMap(IDocument document)
+    {
+        var namespaces = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var element in document.All)
+        {
+            foreach (var attribute in element.Attributes)
+            {
+                if (!attribute.Name.StartsWith("xmlns:", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var prefix = attribute.Name.Substring("xmlns:".Length);
+                if (prefix.Length == 0 || string.IsNullOrEmpty(attribute.Value))
+                    continue;
+                namespaces.TryAdd(prefix, attribute.Value.Trim());
+            }
+        }
+        return namespaces;
     }
 
     private static IEnumerable<IElement> FindByLocalName(IParentNode root, string localName) =>
@@ -227,6 +254,7 @@ public class InlineXbrlParser
         IElement element,
         Dictionary<string, ParsedContext> contexts,
         Dictionary<string, string> units,
+        Dictionary<string, string> namespaces,
         out ParsedXbrlFact fact
     )
     {
@@ -267,6 +295,7 @@ public class InlineXbrlParser
         {
             Taxonomy = taxonomy,
             Tag = tag,
+            Namespace = namespaces.GetValueOrDefault(taxonomy),
             Unit = unit,
             Value = value,
             IsInstant = context.IsInstant,

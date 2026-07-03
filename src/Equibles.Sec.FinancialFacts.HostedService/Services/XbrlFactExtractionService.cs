@@ -25,13 +25,19 @@ namespace Equibles.Sec.FinancialFacts.HostedService.Services;
 /// the SEC Company Facts API drops (see #877).
 ///
 /// <para>
-/// The API stays authoritative for the consolidated (no-dimension) context:
-/// this extractor persists facts that carry at least one explicit dimension,
-/// so its rows (non-empty <see cref="FinancialFact.DimensionsKey"/>) can never
-/// collide with API-sourced rows (empty key) on the natural-key unique index.
-/// Filer-extension <em>members</em> ride through as QName strings; facts whose
-/// <em>concept</em> lives in a filer-extension taxonomy are skipped until
-/// <see cref="FinancialConcept"/> can represent them (follow-up to #877).
+/// The API stays authoritative for the consolidated (no-dimension) context of
+/// <em>standard-taxonomy</em> concepts: for those this extractor persists only
+/// facts carrying at least one explicit dimension, so its rows (non-empty
+/// <see cref="FinancialFact.DimensionsKey"/>) can never collide with
+/// API-sourced rows (empty key) on the natural-key unique index.
+/// <em>Filer-extension</em> concepts (<see cref="FactTaxonomy.Custom"/> — the
+/// company's own KPI tags like subscriber counts or ARR) never appear in the
+/// API at all, so they are persisted at every dimensionality, consolidated
+/// context included; classification is by namespace ownership (a concept
+/// namespace not hosted by a standards body is the filer's), never by prefix
+/// spelling. Their stored tag keeps the QName shape (<c>adbe:Subscribers</c>)
+/// so extension concepts from different companies never share a
+/// <see cref="FinancialConcept"/> row.
 /// </para>
 ///
 /// <para>
@@ -50,7 +56,9 @@ public class XbrlFactExtractionService
     /// </summary>
     // Version 2: TR2/TR3 zerodash + TR4/TR5 num-comma-decimal(-apos) format
     // coverage in InlineXbrlParser.
-    public const int CurrentVersion = 2;
+    // Version 3: filer-extension (company-specific) concepts persisted under
+    // FactTaxonomy.Custom, consolidated contexts included.
+    public const int CurrentVersion = 3;
 
     private const int InsertBatchSize = 1000;
 
@@ -118,9 +126,7 @@ public class XbrlFactExtractionService
         );
         foreach (var candidate in persistable)
         {
-            if (
-                !conceptIds.TryGetValue((candidate.Taxonomy, candidate.Fact.Tag), out var conceptId)
-            )
+            if (!conceptIds.TryGetValue((candidate.Taxonomy, candidate.Tag), out var conceptId))
                 continue;
             facts.Add(BuildFact(document, stock, candidate, conceptId));
             dimensionsByKey.TryAdd(candidate.DimensionsKey, candidate.Fact.Dimensions);
@@ -133,22 +139,24 @@ public class XbrlFactExtractionService
     }
 
     /// <summary>
-    /// Keeps the facts this extractor is allowed to persist: at least one
-    /// explicit dimension (the API owns the consolidated context), a concept
-    /// in a known taxonomy, and values that fit their columns.
+    /// Keeps the facts this extractor is allowed to persist: a concept in a
+    /// standard taxonomy with at least one explicit dimension (the API owns
+    /// standard concepts' consolidated context) or a filer-extension concept at
+    /// any dimensionality (the API never carries those), and values that fit
+    /// their columns.
     /// </summary>
     internal static List<PersistableXbrlFact> SelectPersistable(List<ParsedXbrlFact> parsed)
     {
         var selected = new List<PersistableXbrlFact>();
         foreach (var fact in parsed)
         {
-            if (fact.Dimensions.Count == 0)
+            if (!TryResolveConcept(fact, out var taxonomy, out var tag))
                 continue;
-            if (!TryMapTaxonomy(fact.Taxonomy, out var taxonomy))
+            if (taxonomy != FactTaxonomy.Custom && fact.Dimensions.Count == 0)
                 continue;
             if (string.IsNullOrEmpty(fact.Unit) || fact.Unit.Length > UnitMaxLength)
                 continue;
-            if (string.IsNullOrEmpty(fact.Tag) || fact.Tag.Length > QNameMaxLength)
+            if (tag.Length > QNameMaxLength)
                 continue;
             if (
                 fact.Dimensions.Any(d =>
@@ -165,11 +173,81 @@ public class XbrlFactExtractionService
                 {
                     Fact = fact,
                     Taxonomy = taxonomy,
+                    Tag = tag,
                     DimensionsKey = XbrlDimensionsKey.Compute(fact.Dimensions),
                 }
             );
         }
         return selected;
+    }
+
+    /// <summary>
+    /// Resolves a parsed fact's concept identity: standard-taxonomy prefixes
+    /// map to their enum arm with the tag as-is; anything else is a
+    /// filer-extension concept (<see cref="FactTaxonomy.Custom"/>, tag stored
+    /// as <c>prefix:Tag</c>) when its namespace URI is owned by neither a
+    /// standards body nor the SEC — namespace ownership is authoritative, the
+    /// prefix spelling is not. Facts whose prefix is undeclared or whose
+    /// namespace belongs to a reference taxonomy (country, currency, exch, …,
+    /// all standards-body-hosted) resolve to nothing and are skipped.
+    /// </summary>
+    internal static bool TryResolveConcept(
+        ParsedXbrlFact fact,
+        out FactTaxonomy taxonomy,
+        out string tag
+    )
+    {
+        tag = fact.Tag;
+        if (string.IsNullOrEmpty(fact.Tag) || string.IsNullOrEmpty(fact.Taxonomy))
+        {
+            taxonomy = default;
+            return false;
+        }
+        if (TryMapTaxonomy(fact.Taxonomy, out taxonomy))
+            return true;
+        if (!IsFilerExtensionNamespace(fact.Namespace))
+            return false;
+
+        taxonomy = FactTaxonomy.Custom;
+        // Prefix casing follows the filer's whim; lowercase it so the same
+        // concept lands on one FinancialConcept row across filings.
+        tag = $"{fact.Taxonomy.ToLowerInvariant()}:{fact.Tag}";
+        return true;
+    }
+
+    // Registrable domains that host the standard and reference XBRL
+    // taxonomies (FASB us-gaap/srt, SEC dei/country/currency/exch/…, IFRS,
+    // XBRL spec/utility namespaces, legacy xbrl.us, W3C schema machinery).
+    // A concept namespace under any other domain is, per the EDGAR filer
+    // manual, the registrant's own extension taxonomy.
+    private static readonly string[] StandardsBodyDomains =
+    [
+        "fasb.org",
+        "sec.gov",
+        "xbrl.org",
+        "ifrs.org",
+        "xbrl.us",
+        "w3.org",
+    ];
+
+    /// <summary>
+    /// True when the namespace URI parses and its host is owned by none of the
+    /// standards bodies. Unparseable or missing namespaces return false — a
+    /// concept that cannot be attributed is skipped, never misfiled.
+    /// </summary>
+    internal static bool IsFilerExtensionNamespace(string namespaceUri)
+    {
+        if (string.IsNullOrWhiteSpace(namespaceUri))
+            return false;
+        if (!Uri.TryCreate(namespaceUri, UriKind.Absolute, out var uri))
+            return false;
+        var host = uri.Host;
+        if (string.IsNullOrEmpty(host))
+            return false;
+        return !StandardsBodyDomains.Any(domain =>
+            host.Equals(domain, StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase)
+        );
     }
 
     /// <summary>
@@ -185,7 +263,7 @@ public class XbrlFactExtractionService
             .GroupBy(c =>
                 (
                     c.Taxonomy,
-                    c.Fact.Tag,
+                    c.Tag,
                     c.Fact.Unit,
                     c.Fact.PeriodStart,
                     c.Fact.PeriodEnd,
@@ -278,7 +356,7 @@ public class XbrlFactExtractionService
         CancellationToken cancellationToken
     )
     {
-        var pairs = persistable.Select(c => (c.Taxonomy, c.Fact.Tag)).ToHashSet();
+        var pairs = persistable.Select(c => (c.Taxonomy, c.Tag)).ToHashSet();
         var concepts = pairs
             .Select(pair => new FinancialConcept { Taxonomy = pair.Item1, Tag = pair.Item2 })
             .ToList();
@@ -431,11 +509,16 @@ public class XbrlFactExtractionService
         }
     }
 
-    /// <summary>A parsed fact admitted for persistence, with its resolved taxonomy and canonical dimensions key.</summary>
+    /// <summary>
+    /// A parsed fact admitted for persistence, with its resolved taxonomy, its
+    /// storage tag (the raw tag for standard concepts, <c>prefix:Tag</c> for
+    /// filer-extension ones) and canonical dimensions key.
+    /// </summary>
     internal sealed class PersistableXbrlFact
     {
         public ParsedXbrlFact Fact { get; init; }
         public FactTaxonomy Taxonomy { get; init; }
+        public string Tag { get; init; }
         public string DimensionsKey { get; init; }
     }
 }

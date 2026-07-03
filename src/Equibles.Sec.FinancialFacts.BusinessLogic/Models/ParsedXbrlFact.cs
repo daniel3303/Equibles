@@ -21,6 +21,15 @@ public class ParsedXbrlFact
     public string Tag { get; init; }
 
     /// <summary>
+    /// Namespace URI the concept's prefix resolves to (e.g.
+    /// <c>http://fasb.org/us-gaap/2023</c>, <c>http://www.apple.com/20230930</c>);
+    /// null when the source document does not declare the prefix. Lets consumers
+    /// classify filer-extension concepts by namespace ownership instead of
+    /// guessing from the prefix spelling.
+    /// </summary>
+    public string Namespace { get; init; }
+
+    /// <summary>
     /// Resolved unit string — single measures collapse to their local name
     /// (<c>iso4217:USD</c> → <c>USD</c>); divide units are emitted as
     /// <c>numerator/denominator</c> (e.g. <c>USD/shares</c>).
