@@ -211,6 +211,16 @@ public class XbrlFactExtractionService
         taxonomy = FactTaxonomy.Custom;
         // Prefix casing follows the filer's whim; lowercase it so the same
         // concept lands on one FinancialConcept row across filings.
+        //
+        // Keying on the PREFIX (not the namespace URI) is a deliberate
+        // trade-off: extension namespace URIs are re-dated every filing
+        // (http://www.adobe.com/20231201 → …/20241129), so a URI key would
+        // split one company's concept history across rows, while the prefix
+        // is stable for a filer. Two filers sharing a generic prefix + local
+        // name would share a concept row — harmless for values (facts are
+        // stock-scoped, and extension concepts carry no SEC label; display
+        // labels are humanized from the local name), so meaning cannot leak
+        // across companies.
         tag = $"{fact.Taxonomy.ToLowerInvariant()}:{fact.Tag}";
         return true;
     }
