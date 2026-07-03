@@ -542,12 +542,27 @@ public class StockTabService
 
     private async Task<List<FinancialsPeriodOption>> BuildAvailablePeriods(CommonStock stock)
     {
+        // Only periods with an actual STATEMENT fact qualify: filer-extension
+        // (Custom) KPI facts also live in the consolidated context now, and a
+        // KPI-only (year, period) would otherwise offer a dropdown option whose
+        // statement table renders empty.
+        var statementLines = Enum.GetValues<FinancialStatementType>()
+            .SelectMany(FinancialStatementConcepts.For)
+            .ToList();
+        var statementTaxonomies = statementLines.Select(l => l.Taxonomy).Distinct().ToList();
+        var statementTags = statementLines.Select(l => l.Tag).Distinct().ToList();
+        var statementConceptIds = await _financialConceptRepository
+            .GetMatching(statementTaxonomies, statementTags)
+            .Select(c => c.Id)
+            .ToListAsync();
+
         // Distinct (year, period) pairs the company actually reported. This is a
         // separate round trip from the per-period fact query below — both are
         // covered by the [CommonStockId, FiscalYear, FiscalPeriod] index, and
         // keeping them separate avoids loading every fact just to list periods.
         var periodKeys = await _financialFactRepository
             .GetConsolidatedByStock(stock)
+            .Where(f => statementConceptIds.Contains(f.FinancialConceptId))
             .Select(f => new { f.FiscalYear, f.FiscalPeriod })
             .Distinct()
             .ToListAsync();
