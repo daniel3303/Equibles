@@ -101,10 +101,20 @@ public static class FinancialConceptAliases
         ["comprehensive-income"] = [G("ComprehensiveIncomeNetOfTax")],
         ["eps-basic"] = [G("EarningsPerShareBasic")],
         ["eps-diluted"] = [G("EarningsPerShareDiluted")],
-        ["weighted-average-shares-basic"] = [G("WeightedAverageNumberOfSharesOutstandingBasic")],
+        ["weighted-average-shares-basic"] =
+        [
+            G("WeightedAverageNumberOfSharesOutstandingBasic"),
+            // Filers whose basic and diluted share counts are equal (no dilutive
+            // securities) report only the combined tag; it fills the basic series
+            // where the split-out basic tag is absent.
+            G("WeightedAverageNumberOfShareOutstandingBasicAndDiluted"),
+        ],
         ["weighted-average-shares-diluted"] =
         [
             G("WeightedAverageNumberOfDilutedSharesOutstanding"),
+            // The same combined tag fills the diluted series for those filers, so
+            // the basic-and-diluted vintage never lists as its own picker entry.
+            G("WeightedAverageNumberOfShareOutstandingBasicAndDiluted"),
         ],
 
         // ── Balance sheet ───────────────────────────────────────────────────
@@ -172,10 +182,17 @@ public static class FinancialConceptAliases
             G("StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"),
         ],
         ["total-liabilities-and-equity"] = [G("LiabilitiesAndStockholdersEquity")],
-        // The issuer's cover-page common shares outstanding. Single-class filers report it
-        // consolidated (no dimension); multi-class filers report it only per share class, so a
-        // consolidated fact is absent and the entity total is the sum across classes.
-        ["shares-outstanding"] = [new(FactTaxonomy.Dei, "EntityCommonStockSharesOutstanding")],
+        // The issuer's common shares outstanding at a point in time. The dei cover-page
+        // count (as of the filing date) leads; the us-gaap balance-sheet count fills the
+        // periods the cover-page tag lacks. Both name the same measure — one line, not two
+        // near-duplicate picker entries. Single-class filers report the cover-page tag
+        // consolidated (no dimension); multi-class filers report it only per share class,
+        // so a consolidated fact is absent and the entity total is the sum across classes.
+        ["shares-outstanding"] =
+        [
+            new(FactTaxonomy.Dei, "EntityCommonStockSharesOutstanding"),
+            G("CommonStockSharesOutstanding"),
+        ],
 
         // ── Cash flow ───────────────────────────────────────────────────────
         ["depreciation-and-amortization"] =
