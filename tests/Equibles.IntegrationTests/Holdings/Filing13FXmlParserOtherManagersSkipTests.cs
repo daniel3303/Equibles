@@ -7,7 +7,6 @@ public class Filing13FXmlParserOtherManagersSkipTests
     [Fact]
     public void ParseCoverPage_OtherManager2WithNonNumericSequence_IsSkippedNotPoisoningTheMap()
     {
-        // The existing cover-page pin only feeds a well-formed otherManager2.
         // ParseCoverPage keys OtherManagers by the parsed integer sequence and
         // skips entries whose sequenceNumber isn't an int. One malformed block
         // must not abort cover-page parsing (dropping the whole filing) nor
@@ -25,6 +24,8 @@ public class Filing13FXmlParserOtherManagersSkipTests
                   <isAmendment>false</isAmendment>
                   <filingManager><name>BIG FUND</name></filingManager>
                   <form13FFileNumber>028-1</form13FFileNumber>
+                </coverPage>
+                <summaryPage>
                   <otherManagers2Info>
                     <otherManager2>
                       <sequenceNumber>ABC</sequenceNumber>
@@ -35,7 +36,7 @@ public class Filing13FXmlParserOtherManagersSkipTests
                       <otherManager><cik>0008888888</cik><name>GOOD ADVISORS</name></otherManager>
                     </otherManager2>
                   </otherManagers2Info>
-                </coverPage>
+                </summaryPage>
               </formData>
             </edgarSubmission>
             """;

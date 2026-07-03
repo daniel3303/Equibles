@@ -59,8 +59,13 @@ public class Filing13FXmlParser
             ),
         };
 
-        var otherManagersScope = coverPage ?? root;
-        foreach (var otherManager2 in Descendants(otherManagersScope, "otherManager2"))
+        // otherManager2 entries live under formData/summaryPage/otherManagers2Info,
+        // NOT under coverPage (which only carries the sequence-less otherManagersInfo
+        // list). Scan from the root: the local name is unique to the summary page, so
+        // a root-wide scan can never grab a wrong element, while a coverPage-scoped
+        // scan finds nothing on every real filing and silently drops all co-manager
+        // names from the realtime path.
+        foreach (var otherManager2 in Descendants(root, "otherManager2"))
         {
             var seqText = Value(Child(otherManager2, "sequenceNumber"));
             if (!int.TryParse(seqText, out var seq))
