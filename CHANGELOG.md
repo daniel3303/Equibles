@@ -7,6 +7,38 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-07-03
+
+### Added
+
+- Filesystem-backed blob storage — binary file content (zipped XBRL envelopes, as-filed HTML, 8-K exhibit images, filing text bodies) can now be stored on a content-addressed, sharded filesystem tree (`<root>/<tier>/sha256/<aa>/<bb>/<hash>`) instead of inline in the database, with byte-level deduplication and crash-safe writes (temp → fsync → atomic rename → fsync dir). A `FileBackfill` drain worker migrates existing database blobs to disk continuously and memory-bounded, then self-disables. Reads dispatch transparently through `IFileManager.GetContent`/`OpenRead` on the provider recorded per row, so old (database) and new (filesystem) rows both stay readable. Opt-in via the `FileStorage` config section (off by default — existing installs keep database blobs until they enable the store and run the backfill). PRs #4050, #4052, #4053, #4061, #4062, #4063.
+- Filesystem-only write chokepoint — with the store enabled, `FileStorageRouter` is the single decision point for where new bytes land: the filesystem, always. No code path (and no API) persists new blob bytes in the database while the store is on; it falls back to the database only when the store is disabled. PR #4086.
+- Staged, reversible blob deletion — deleting a file queues its content hash and a daily sweep retires unreferenced blobs through a reversible trash phase (grace window → move to `.trash` → restore if re-referenced → purge), backed by a rolling weekly disk-vs-database reconciliation that catches deletions the queue cannot see (cascades, direct deletes). Off by default via `BlobSweep`. PR #4077.
+- Corporate actions module — captures historical stock splits and cash dividends from the Yahoo chart-events payload into new `StockSplit`/dividend entities, with one-time historical backfills and a split-adjustment factor helper. MCP holdings, short-interest and insider tools (and the short-squeeze score) are now split-adjusted so cross-sectional comparisons hold across split boundaries. PRs #4048, #4049, #4066, #4067, #4071.
+- As-reported financial statements — the worker captures EDGAR R-files, parses them into as-reported statement models (income statement, balance sheet, cash flow) with a richer statement catalog and tag variants, persists filer-extension (company-specific) XBRL concepts, and surfaces financial-sector top lines on the income statement. PRs #4083, #4088, #4899, and the financial-facts series.
+- FDA catalysts module — ingests and parses the FDA.gov advisory-committee calendar and exposes upcoming catalysts through the `GetFdaCatalysts` MCP tool.
+- Government contracts module — a USAspending federal-contracts module surfacing awards data.
+- Fund directory (SEC Form NPORT-P) — materialises a `FundSeries` directory from NPORT-P, adds series-scoped NPORT queries and fund-directory MCP tools, and discovers NPORT-P filings from multi-series fund trusts. Plus a `GetFundCloneBacktest` MCP tool that backtests cloning a single filer's 13F portfolio.
+- As-filed 8-K viewer — builds an as-filed HTML rendering of 8-K filings with their exhibits, downloads and stores exhibit images, and backfills `Document.Items` onto historical 8-Ks from the submissions feed.
+- Hybrid SEC search — BM25 + semantic (vector) retrieval with reciprocal-rank fusion and a pluggable embedding provider. PRs #4930–#4940.
+- Website & investor-relations discovery — a discovery worker fed by prioritised sources (SEC filings first, then Wikidata joined on CIK, then the Yahoo asset profile), probing IR pages over plain HTTP first and falling back to a stealth-browser sidecar for bot-walled sites, with version-gated re-probes and exponential backoff. Refs #3683, #3700.
+- Per-host outbound rate limiting with a Cloudflare-1015 cooldown for scrapers, and finer market-close polling for FINRA short volume.
+- Miscellaneous: Form 4 Rule 10b5-1 checkbox capture; SEC cover-page shares-outstanding (summed per share class for multi-class issuers); in-place document content replacement that keeps the document id; new `Authentication`, `WebRequest` and Alvis error sources; a frosted-glass sticky navbar.
+
+### Changed
+
+- Investor-relations discovery and IR news/events content were extracted out of the open-source tree into the commercial tier; the retired `CommonStock` IR-discovery columns were dropped. PRs #4078, #4079, #4096.
+- 13F reconciliation now runs on demand rather than via a dedicated worker, sharing the backfill work-set through `DocumentRepository`; the one-time XBRL backfill worker was likewise removed in favour of an adaptive-cadence drain. Closes #3741.
+- SEC ingest, XBRL capture and R-file capture were parallelised and the SEC request rate raised to 5/s; NPORT holdings and document ingestion-stats scans gained covering indexes.
+
+### Fixed
+
+- Holdings/13F correctness — per-stock and market-wide activity windows are computed over Form 13F only (13D/G daily-dated rows no longer pollute quarter math); Schedule 13D/G stakes are excluded from portfolio summaries, fund scoring and the smart-money index; submissions are de-duplicated by parsed filing date; cross-type amendments no longer wipe 13F holdings (with self-healing gaps); and share-value casts are range-checked against corrupt oversized rows. Closes #3732, #3738, #3685.
+- Financial facts — `GetFinancialFact` returns the discrete quarter (not YTD) and the currently-reported instant; early-January fiscal-year-ends are treated as December-anchored; the revenue alias reaches back past ASC 606 via `SalesRevenueNet`; additional iXBRL number formats (zerodash, hyphenated comma-decimal) are parsed; and decimal→long share-count casts are range-checked. Closes #3836.
+- Yahoo pricing & market cap — market capitalisation is reconciled onto the authoritative EDGAR ordinary-share base (no longer inflating foreign-issuer caps), recomputed from EDGAR shares × price when Yahoo's own value is unusable; the in-progress trading day is no longer stored as a settled close; non-positive OHLC bars are skipped; and the daily price sync crawls stalest-first so interrupted cycles stop starving tail stocks.
+- SEC — the backfill frontier is preserved across empty full rescans; all pending XBRL backfill drains regardless of the live-scraper sync floor; oversized stitched as-filed HTML is dropped at capture with hardened attribute escaping; chunking separates adjacent block-element text and tokenises Part/Item headings on em/en-dash separators; Form D investor counts are clamped before narrowing to int. Closes #3839, #3842, #3866.
+- Numerous congress, government-contracts, insider-trading, common-stocks, CBOE, FINRA and worker fixes; see the commit history for the full list.
+
 ## [1.3.0] — 2026-06-11
 
 ### Added
@@ -598,7 +630,8 @@ First tagged release.
 - Background worker — scrapers and document processor.
 - Docker Compose stack (ParadeDB + web + MCP + worker), with an optional vector-embedding profile.
 
-[Unreleased]: https://github.com/daniel3303/Equibles/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/daniel3303/Equibles/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/daniel3303/Equibles/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/daniel3303/Equibles/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/daniel3303/Equibles/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/daniel3303/Equibles/compare/v1.1.0...v1.1.1
