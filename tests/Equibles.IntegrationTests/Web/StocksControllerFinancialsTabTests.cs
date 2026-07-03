@@ -182,9 +182,10 @@ public class StocksControllerFinancialsTabTests : IDisposable
         revenueLine.Value.Should().Be(400_000_000_000m, "the latest-filed restatement wins");
         revenueLine.Unit.Should().Be("USD");
 
-        // A curated concept the company never reported still renders, valueless,
-        // so the statement keeps its shape.
-        tab.Lines.Should().Contain(l => l.Label == "Net Income" && !l.HasValue);
+        // A curated concept the company NEVER reported is hidden entirely — the
+        // catalog spans 71 cross-sector lines, and rendering them all would
+        // drown a software company's statement in bank/insurer dashes.
+        tab.Lines.Should().NotContain(l => l.Label == "Net Income");
     }
 
     [Fact]
