@@ -9,12 +9,14 @@ namespace Equibles.Holdings.Data.Models;
 // quarter on each 13F import and the request path scans this small table in
 // quarter order.
 //
-// DirtyAt is the coalescing signal between Filings13FImportedConsumer (sets it
-// on every import) and AumSnapshotDrainWorker (rebuilds the quarter once the
-// cooldown has elapsed since the first event of a wave, then clears it).
-// Holding the timestamp instead of a bool lets the drain worker clear the
-// flag via optimistic concurrency (clear only if DirtyAt still matches the
-// value seen at claim time), so an event that lands mid-rebuild isn't lost.
+// DirtyAt is the coalescing signal between Filings13FImportedConsumer (stamps
+// it only when currently null, preserving the wave's first-event timestamp)
+// and AumSnapshotDrainWorker (claims — clears — the flag once the cooldown has
+// elapsed, then rebuilds). The claim happens BEFORE the rebuild: an import
+// landing mid-rebuild finds the flag null and re-dirties the row, so its
+// signal triggers another rebuild instead of being lost. Holding a timestamp
+// instead of a bool lets the claim use optimistic concurrency (clear only if
+// DirtyAt still matches the value seen when the drain selected the row).
 // The partial index on DirtyAt is declared in HoldingsModuleConfiguration —
 // the attribute form can't express the WHERE filter.
 public class AumQuarterlySnapshot
