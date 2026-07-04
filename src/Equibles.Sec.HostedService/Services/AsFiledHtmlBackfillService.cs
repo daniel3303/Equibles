@@ -65,15 +65,23 @@ public class AsFiledHtmlBackfillService
             query = query.Where(d => d.ReportingDate >= minReportingDate.Value);
         }
 
-        var batch = await query
-            .Include(d => d.CommonStock)
+        // Ids only: each document is loaded fresh inside the loop, so a failed capture's
+        // half-applied change-tracker state can be discarded wholesale without detaching
+        // the rest of the batch mid-flight.
+        var batchIds = await query
             .OrderByDescending(d => d.ReportingDate)
             .Take(batchSize)
+            .Select(d => d.Id)
             .ToListAsync(cancellationToken);
 
-        foreach (var document in batch)
+        foreach (var documentId in batchIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            var document = await _documentRepository.Get(documentId);
+            if (document == null)
+                continue;
+
             result.Processed++;
             // Count the attempt up front so a fetch/stitch failure still advances the retry
             // ceiling and the document eventually drops out of the working set.
@@ -88,7 +96,7 @@ public class AsFiledHtmlBackfillService
                     document.SourceUrl,
                     document.Id
                 );
-                await PersistAttempt();
+                await RevertAndPersistAttempt(document, cancellationToken);
                 continue;
             }
 
@@ -131,7 +139,7 @@ public class AsFiledHtmlBackfillService
                     document.Id,
                     document.AccessionNumber
                 );
-                await PersistAttempt();
+                await RevertAndPersistAttempt(document, cancellationToken);
             }
         }
 
@@ -149,13 +157,21 @@ public class AsFiledHtmlBackfillService
         return match.Success ? match.Groups[1].Value : null;
     }
 
-    // Saves the bumped attempt count after a failure. Best-effort: a save failure here must not
-    // abort the rest of the batch.
-    private async Task PersistAttempt()
+    // Discards whatever the failed attempt left in the change tracker, then persists ONLY
+    // the attempt bookkeeping. A failed UpdateAsFiledHtml can leave a half-applied capture
+    // tracked (version stamp, added image/file rows) whose paired image-clear rolled back
+    // with its transaction; the previous bare SaveChanges committed that mix and stamped
+    // the document current with stale+new images, never to be retried. Best-effort: a
+    // persistence failure here must not abort the rest of the batch.
+    private async Task RevertAndPersistAttempt(
+        Document document,
+        CancellationToken cancellationToken
+    )
     {
+        _documentRepository.ClearChangeTracker();
         try
         {
-            await _documentRepository.SaveChanges();
+            await _documentRepository.PersistAsFiledHtmlAttempt(document, cancellationToken);
         }
         catch (Exception ex)
         {

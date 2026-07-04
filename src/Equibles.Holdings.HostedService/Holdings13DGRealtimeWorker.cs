@@ -1,3 +1,4 @@
+using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Holdings.Data.Models;
@@ -29,6 +30,7 @@ public class Holdings13DGRealtimeWorker : BaseScraperWorker
     private const string WorkerStateName = "Holdings13DGRealtime";
 
     private readonly IConfiguration _configuration;
+    private readonly WorkerOptions _workerOptions;
 
     protected override string WorkerName => "13D/13G real-time ingestion";
     protected override TimeSpan SleepInterval => TimeSpan.FromHours(6);
@@ -42,11 +44,13 @@ public class Holdings13DGRealtimeWorker : BaseScraperWorker
         ILogger<Holdings13DGRealtimeWorker> logger,
         IServiceScopeFactory scopeFactory,
         ErrorReporter errorReporter,
-        IConfiguration configuration
+        IConfiguration configuration,
+        IOptions<WorkerOptions> workerOptions
     )
         : base(logger, scopeFactory, errorReporter)
     {
         _configuration = configuration;
+        _workerOptions = workerOptions.Value;
     }
 
     protected override bool ValidateConfiguration() =>
@@ -76,10 +80,21 @@ public class Holdings13DGRealtimeWorker : BaseScraperWorker
             windowStart
         );
 
+        // The event-date floor is the pipeline's general MinSyncDate (matching the
+        // 13F path), NOT the XML-inception date: inception is a property of the
+        // FILING date and is already enforced by the sweep window above. Flooring
+        // the EVENT date at inception dropped any 13D/A restating an event first
+        // reported before 2024-12-18 even though the filing itself is fully
+        // machine-readable — losing a current-stake disclosure with no bulk data
+        // set to recover it from.
+        var minEventDate = DateOnly.FromDateTime(
+            _workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1)
+        );
+
         var result = await ingestionService.IngestRecentFilings(
             today,
             lookbackDays,
-            ScheduleXmlInception,
+            minEventDate,
             stoppingToken
         );
 

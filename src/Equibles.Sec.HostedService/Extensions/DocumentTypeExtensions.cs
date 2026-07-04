@@ -19,6 +19,8 @@ public static class DocumentTypeExtensions
             { DocumentType.FortyF, DocumentTypeFilter.FortyF },
             { DocumentType.FormFour, DocumentTypeFilter.FormFour },
             { DocumentType.FormThree, DocumentTypeFilter.FormThree },
+            { DocumentType.FormFourA, DocumentTypeFilter.FormFourA },
+            { DocumentType.FormThreeA, DocumentTypeFilter.FormThreeA },
             { DocumentType.Form144, DocumentTypeFilter.Form144 },
             { DocumentType.FormD, DocumentTypeFilter.FormD },
             { DocumentType.FormDa, DocumentTypeFilter.FormDa },

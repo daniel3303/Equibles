@@ -690,6 +690,10 @@ public class CompanySyncService : ICompanySyncService
         return secondaryCikToParent;
     }
 
+    // Test seam: the memo is static (it must outlive the per-cycle service), so
+    // suites that exercise the refill path reset it to stay order-independent.
+    internal static void ClearBlankWebsiteMemoForTests() => BlankWebsiteCheckedAt.Clear();
+
     private static bool ShouldAttemptWebsiteFetch(string cik) =>
         !BlankWebsiteCheckedAt.TryGetValue(cik, out var checkedAt)
         || DateTime.UtcNow - checkedAt >= BlankWebsiteRecheckInterval;

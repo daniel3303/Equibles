@@ -41,6 +41,7 @@ public static class InsiderFilingParser
         // element, so it applies to every row this filing contributes — stamp it
         // on each as they are added.
         var rule10b5One = ParseRule10b5One(root);
+        var originalFilingDate = isAmendment ? ParseDateOfOriginalSubmission(root) : null;
 
         void AddParsed(InsiderTransaction tx)
         {
@@ -54,6 +55,7 @@ public static class InsiderFilingParser
                 return;
             tx.TransactionOrder = transactions.Count;
             tx.IsRule10b5One = rule10b5One;
+            tx.OriginalFilingDate = originalFilingDate;
             transactions.Add(tx);
         }
 
@@ -123,6 +125,28 @@ public static class InsiderFilingParser
 
     // Form 3 initial statements set <noSecuritiesOwned> to 1 when the reporting owner
     // holds none of the issuer's securities; both ownership tables are then empty.
+    /// <summary>
+    /// The filing date of the original report a Form 4/A or 3/A restates — the
+    /// document-level <c>dateOfOriginalSubmission</c> element (a plain value, not
+    /// wrapped like transaction fields). Null when absent or unparseable, which
+    /// disables supersession for that amendment rather than guessing.
+    /// </summary>
+    public static DateOnly? ParseDateOfOriginalSubmission(XElement root)
+    {
+        var raw = root.Element("dateOfOriginalSubmission")?.Value?.Trim();
+        if (string.IsNullOrEmpty(raw))
+            return null;
+
+        return DateOnly.TryParse(
+            raw,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None,
+            out var date
+        )
+            ? date
+            : null;
+    }
+
     internal static bool DeclaresNoSecuritiesOwned(XElement root) =>
         ParseBool(root.Element("noSecuritiesOwned")?.Value);
 

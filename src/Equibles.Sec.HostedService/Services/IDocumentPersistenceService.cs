@@ -14,6 +14,20 @@ public interface IDocumentPersistenceService
         string accessionNumber = null
     );
 
+    /// <summary>
+    /// Batched form of <see cref="Exists"/> for one (company, type) scrape pass —
+    /// see DocumentRepository.GetKnownFilingKeys.
+    /// </summary>
+    Task<(
+        HashSet<string> KnownAccessions,
+        HashSet<(DateOnly FilingDate, DateOnly ReportDate)> LegacyKeys
+    )> GetKnownFilingKeys(
+        CommonStock company,
+        DocumentType documentType,
+        IReadOnlyCollection<string> accessionNumbers,
+        CancellationToken cancellationToken = default
+    );
+
     Task Save(
         CommonStock company,
         byte[] content,

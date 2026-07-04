@@ -2,7 +2,10 @@ namespace Equibles.Integrations.Common.RateLimiter;
 
 public interface IRateLimiter
 {
-    Task WaitAsync();
+    // The token matters most during a PauseFor penalty window (SEC blocks run 10
+    // minutes): an uncancellable wait there holds worker shutdown hostage for the
+    // whole pause.
+    Task WaitAsync(CancellationToken cancellationToken = default);
     void PauseFor(TimeSpan duration);
 
     // True while a PauseFor window is still in effect. The single source of truth

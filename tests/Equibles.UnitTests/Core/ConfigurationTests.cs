@@ -144,13 +144,18 @@ public class ConfigurationTests
         options
             .DocumentTypesToSync.Should()
             .NotBeNull()
-            .And.HaveCount(13)
+            .And.HaveCount(18)
             .And.ContainInOrder(
                 DocumentType.TenK,
                 DocumentType.TenQ,
                 DocumentType.EightK,
+                DocumentType.TenKa,
+                DocumentType.TenQa,
+                DocumentType.EightKa,
                 DocumentType.FormFour,
                 DocumentType.FormThree,
+                DocumentType.FormFourA,
+                DocumentType.FormThreeA,
                 DocumentType.Form144,
                 DocumentType.FormD,
                 DocumentType.FormDa,

@@ -43,7 +43,45 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
 
     public bool CanProcess(DocumentType documentType)
     {
-        return documentType == DocumentType.FormFour || documentType == DocumentType.FormThree;
+        return documentType == DocumentType.FormFour
+            || documentType == DocumentType.FormThree
+            || documentType == DocumentType.FormFourA
+            || documentType == DocumentType.FormThreeA;
+    }
+
+    public async Task<HashSet<string>> FilterKnownAccessions(
+        IReadOnlyCollection<string> accessionNumbers
+    )
+    {
+        if (accessionNumbers.Count == 0)
+            return [];
+
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var transactionRepository =
+            scope.ServiceProvider.GetRequiredService<InsiderTransactionRepository>();
+
+        // An accession is "known" both when its own rows exist and when an
+        // amendment has superseded (or claimed) it — a superseded original has
+        // no rows of its own, and without the claim column every sweep would
+        // re-fetch it from EDGAR forever just to re-skip it.
+        var candidates = accessionNumbers.ToList();
+        var known = await transactionRepository
+            .GetAll()
+            .Where(t =>
+                candidates.Contains(t.AccessionNumber)
+                || candidates.Contains(t.SupersededAccessionNumber)
+            )
+            .Select(t => new { t.AccessionNumber, t.SupersededAccessionNumber })
+            .ToListAsync();
+
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in known)
+        {
+            result.Add(row.AccessionNumber);
+            if (row.SupersededAccessionNumber != null)
+                result.Add(row.SupersededAccessionNumber);
+        }
+        return result;
     }
 
     public async Task<bool> Process(FilingData filing, CommonStock companyOutContext)
@@ -104,6 +142,72 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
 
         var isAmendment = filing.Form.Contains("/A", StringComparison.OrdinalIgnoreCase);
 
+        // A late-arriving original whose amendment already ingested must not
+        // re-insert the rows that amendment replaced (EDGAR lists newest-first,
+        // so during history sweeps the 4/A routinely lands before its Form 4).
+        if (
+            !isAmendment
+            && await TrySkipSupersededOriginal(
+                transactionRepository,
+                owner,
+                companyId,
+                filing,
+                companyTicker
+            )
+        )
+            return false;
+
+        var originalFilingDate = isAmendment
+            ? InsiderFilingParser.ParseDateOfOriginalSubmission(root)
+            : null;
+        string supersededAccession = null;
+
+        if (isAmendment && originalFilingDate.HasValue)
+        {
+            // Stale amendment: a NEWER amendment of the same original already
+            // ingested — its rows are the current truth, so skip this one.
+            // Same-day chains break the tie on accession number (SEC assigns
+            // them monotonically per filer agent).
+            if (
+                await transactionRepository
+                    .GetAmendmentsOfOriginal(owner, companyId, originalFilingDate.Value)
+                    .AnyAsync(t =>
+                        t.FilingDate > filing.FilingDate
+                        || (
+                            t.FilingDate == filing.FilingDate
+                            && string.Compare(t.AccessionNumber, filing.AccessionNumber) > 0
+                        )
+                    )
+            )
+            {
+                _logger.LogInformation(
+                    "Skipping {Form} {AccessionNumber} for {Ticker}: a newer amendment of the same original is already ingested",
+                    filing.Form,
+                    filing.AccessionNumber,
+                    companyTicker
+                );
+                return false;
+            }
+
+            supersededAccession = await SupersedeOriginal(
+                transactionRepository,
+                owner,
+                companyId,
+                filing,
+                originalFilingDate.Value,
+                companyTicker
+            );
+        }
+        else if (isAmendment)
+        {
+            _logger.LogWarning(
+                "{Form} {AccessionNumber} for {Ticker} carries no parseable dateOfOriginalSubmission; ingesting without superseding the original",
+                filing.Form,
+                filing.AccessionNumber,
+                companyTicker
+            );
+        }
+
         // Cache the raw ownership XML so the filing can be re-parsed locally
         // when the parser changes, without re-fetching from EDGAR.
         await CaptureFilingXml(root, filing, filingRepository, fileManager);
@@ -123,7 +227,10 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
                 owner,
                 companyId,
                 filing,
-                companyTicker
+                companyTicker,
+                isAmendment,
+                originalFilingDate,
+                supersededAccession
             );
             return true;
         }
@@ -141,6 +248,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         // GetByAccessionNumber(...).AnyAsync() check at the top of Process().
         foreach (var tx in transactions)
         {
+            tx.SupersededAccessionNumber = supersededAccession;
             transactionRepository.Add(tx);
         }
 
@@ -155,6 +263,164 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         );
 
         return true;
+    }
+
+    // EDGAR indexes an after-17:30 submission on the next business day, so the feed
+    // FilingDate of an original can trail the amendment's filer-entered
+    // dateOfOriginalSubmission by a weekend (+ a holiday).
+    private const int OriginalDateShiftToleranceDays = 4;
+
+    // Whether an incoming ORIGINAL was already replaced by an ingested amendment.
+    // Two signals, strongest first: an amendment that explicitly claimed this
+    // accession (re-listed original), or an unresolved amendment whose
+    // filer-entered original date falls within the indexing-shift window of this
+    // filing date — which then claims it, so the scraper's known-accession
+    // prefilter drops the original from every future sweep without a fetch.
+    private async Task<bool> TrySkipSupersededOriginal(
+        InsiderTransactionRepository transactionRepository,
+        InsiderOwner owner,
+        Guid companyId,
+        FilingData filing,
+        string companyTicker
+    )
+    {
+        if (await transactionRepository.GetAmendmentsClaiming(filing.AccessionNumber).AnyAsync())
+        {
+            _logger.LogInformation(
+                "Skipping {Form} {AccessionNumber} for {Ticker}: an amendment already claimed and superseded it",
+                filing.Form,
+                filing.AccessionNumber,
+                companyTicker
+            );
+            return true;
+        }
+
+        var windowStart = filing.FilingDate.AddDays(-OriginalDateShiftToleranceDays);
+        var orphans = await transactionRepository
+            .GetUnresolvedAmendments(owner, companyId, windowStart, filing.FilingDate)
+            .ToListAsync();
+        if (orphans.Count == 0)
+            return false;
+
+        // Several unresolved amendments (of DIFFERENT originals) can sit in the
+        // window; pair this original with exactly one group — the exact-date
+        // match when present, else the closest original date — so a sibling
+        // amendment stays unresolved for ITS original instead of being consumed
+        // by the wrong one.
+        var targetDate = orphans.Any(t => t.OriginalFilingDate == filing.FilingDate)
+            ? filing.FilingDate
+            : orphans.Max(t => t.OriginalFilingDate!.Value);
+        var claimed = orphans.Where(t => t.OriginalFilingDate == targetDate).ToList();
+
+        foreach (var row in claimed)
+        {
+            row.SupersededAccessionNumber = filing.AccessionNumber;
+        }
+        await transactionRepository.SaveChanges();
+
+        _logger.LogInformation(
+            "Skipping {Form} {AccessionNumber} for {Ticker}: claimed by the already-ingested amendment dated {OriginalDate:yyyy-MM-dd}",
+            filing.Form,
+            filing.AccessionNumber,
+            companyTicker,
+            targetDate
+        );
+        return true;
+    }
+
+    // Replaces what an incoming amendment restates: the original filing's rows —
+    // resolved to a SINGLE accession via the filer-entered original date plus the
+    // indexing-shift window — and any older amendment of the same original.
+    // Returns the accession this amendment now supersedes (its own resolution, or
+    // one inherited from a replaced older amendment), or null when the original
+    // is not ingested (pre-MinSyncDate history, or it arrives later and is
+    // claimed by TrySkipSupersededOriginal). Ambiguity (several candidate
+    // accessions) deletes nothing: a visible duplicate beats silently deleting a
+    // legitimate sibling filing.
+    private async Task<string> SupersedeOriginal(
+        InsiderTransactionRepository transactionRepository,
+        InsiderOwner owner,
+        Guid companyId,
+        FilingData filing,
+        DateOnly originalFilingDate,
+        string companyTicker
+    )
+    {
+        var windowEnd = originalFilingDate.AddDays(OriginalDateShiftToleranceDays);
+        var candidates = await transactionRepository
+            .GetOriginalCandidates(owner, companyId, originalFilingDate, windowEnd)
+            .Select(t => new { t.AccessionNumber, t.FilingDate })
+            .Distinct()
+            .ToListAsync();
+
+        var exactAccessions = candidates
+            .Where(c => c.FilingDate == originalFilingDate)
+            .Select(c => c.AccessionNumber)
+            .Distinct()
+            .ToList();
+        var pool =
+            exactAccessions.Count > 0
+                ? exactAccessions
+                : candidates.Select(c => c.AccessionNumber).Distinct().ToList();
+
+        string resolvedAccession = null;
+        if (pool.Count == 1)
+        {
+            resolvedAccession = pool[0];
+            var originalRows = await transactionRepository
+                .GetByAccessionNumber(resolvedAccession)
+                .ToListAsync();
+            transactionRepository.Delete(originalRows);
+            _logger.LogInformation(
+                "Amendment {AccessionNumber} supersedes {Count} transaction(s) of original {OriginalAccession} for {Ticker}",
+                filing.AccessionNumber,
+                originalRows.Count,
+                resolvedAccession,
+                companyTicker
+            );
+        }
+        else if (pool.Count > 1)
+        {
+            _logger.LogWarning(
+                "Amendment {AccessionNumber} for {Ticker} matches {Count} candidate originals around {OriginalDate:yyyy-MM-dd}; superseding none to avoid deleting a sibling filing",
+                filing.AccessionNumber,
+                companyTicker,
+                pool.Count,
+                originalFilingDate
+            );
+        }
+
+        // Chained amendments: an older amendment of the same original is replaced
+        // wholesale, and its resolution (which original accession it consumed or
+        // claimed) is inherited so the prefilter keeps dropping that original.
+        var olderAmendments = await transactionRepository
+            .GetAmendmentsOfOriginal(owner, companyId, originalFilingDate)
+            .Where(t =>
+                t.AccessionNumber != filing.AccessionNumber
+                && (
+                    t.FilingDate < filing.FilingDate
+                    || (
+                        t.FilingDate == filing.FilingDate
+                        && string.Compare(t.AccessionNumber, filing.AccessionNumber) < 0
+                    )
+                )
+            )
+            .ToListAsync();
+        if (olderAmendments.Count > 0)
+        {
+            resolvedAccession ??= olderAmendments
+                .Select(t => t.SupersededAccessionNumber)
+                .FirstOrDefault(a => a != null);
+            transactionRepository.Delete(olderAmendments);
+            _logger.LogInformation(
+                "Amendment {AccessionNumber} replaces {Count} row(s) from older amendment(s) of the same original for {Ticker}",
+                filing.AccessionNumber,
+                olderAmendments.Count,
+                companyTicker
+            );
+        }
+
+        return resolvedAccession;
     }
 
     // Stores the parsed ownership XML as a gzip-compressed internal File so the
@@ -383,7 +649,10 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         InsiderOwner owner,
         Guid companyId,
         FilingData filing,
-        string companyTicker
+        string companyTicker,
+        bool isAmendment = false,
+        DateOnly? originalFilingDate = null,
+        string supersededAccessionNumber = null
     )
     {
         _logger.LogDebug(
@@ -403,6 +672,9 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
                 AccessionNumber = filing.AccessionNumber,
                 SecurityTitle = "No Securities Owned",
                 TransactionOrder = 0,
+                IsAmendment = isAmendment,
+                OriginalFilingDate = originalFilingDate,
+                SupersededAccessionNumber = supersededAccessionNumber,
                 // 0-price holding sentinel: nothing to validate or repair.
                 IsPriceValid = true,
                 // No security exists on a noSecuritiesOwned filing, so SecurityKind
