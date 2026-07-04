@@ -20,7 +20,7 @@ public class RateLimiter : IRateLimiter
         _requestTimes = new Queue<DateTime>();
     }
 
-    public async Task WaitAsync()
+    public async Task WaitAsync(CancellationToken cancellationToken = default)
     {
         while (true)
         {
@@ -44,7 +44,7 @@ public class RateLimiter : IRateLimiter
                 }
             }
 
-            await Task.Delay(waitTime);
+            await Task.Delay(waitTime, cancellationToken);
         }
     }
 

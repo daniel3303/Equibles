@@ -19,12 +19,13 @@ public static class HttpRetry
         int maxRetries,
         string exhaustedMessage,
         Action<int, TimeSpan> onRateLimited,
-        Action<int, int, TimeSpan> onServerError
+        Action<int, int, TimeSpan> onServerError,
+        CancellationToken cancellationToken = default
     )
     {
         for (var attempt = 0; attempt <= maxRetries; attempt++)
         {
-            await rateLimiter.WaitAsync();
+            await rateLimiter.WaitAsync(cancellationToken);
 
             var response = await send();
 
@@ -34,7 +35,7 @@ public static class HttpRetry
                 onRateLimited(attempt, delay);
                 rateLimiter.PauseFor(delay);
                 response.Dispose();
-                await Task.Delay(delay);
+                await Task.Delay(delay, cancellationToken);
                 continue;
             }
 
@@ -43,7 +44,7 @@ public static class HttpRetry
                 var delay = RetryBackoff.Exponential(attempt);
                 onServerError((int)response.StatusCode, attempt, delay);
                 response.Dispose();
-                await Task.Delay(delay);
+                await Task.Delay(delay, cancellationToken);
                 continue;
             }
 

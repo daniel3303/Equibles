@@ -702,7 +702,7 @@ public class SecEdgarClient : ISecEdgarClient
     {
         for (var attempt = 0; attempt <= MaxRetries; attempt++)
         {
-            await RateLimiter.WaitAsync();
+            await RateLimiter.WaitAsync(cancellationToken);
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
             HttpResponseMessage response;
