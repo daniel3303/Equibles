@@ -41,6 +41,7 @@ public class SecEdgarClient : ISecEdgarClient
     private readonly HttpClient _httpClient;
     private readonly ILogger<SecEdgarClient> _logger;
     private readonly ISecRateLimitNotifier _rateLimitNotifier;
+
     // Caches the current company's submissions artifacts (main CIK*.json plus its
     // paginated CIK*-submissions-*.json archive pages) keyed by URL. The scraper
     // calls GetCompanyFilings once per synced document type (~13×) for the same
@@ -1152,5 +1153,4 @@ public class SecEdgarClient : ISecEdgarClient
     // Padded CIK works too but triggers a 301 redirect; skip the extra hop.
     private static string BuildArchiveUrl(string cik, string accessionNumber, string suffix) =>
         $"{FilesBaseUrl}/Archives/edgar/data/{cik.TrimStart('0')}/{accessionNumber.Replace("-", string.Empty)}/{suffix}";
-
 }
