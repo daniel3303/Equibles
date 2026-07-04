@@ -344,7 +344,20 @@ public class DocumentScraper : IDocumentScraper
 
             result.DocumentsFound += filings.Count;
 
-            foreach (var filing in filings)
+            // The filing list re-enumerates history from MinSyncDate every cycle,
+            // so dedup it in one batched lookup instead of one DB round-trip (and,
+            // for processor forms, one DI scope) per already-ingested filing. The
+            // per-filing checks inside ProcessFiling stay as the race guard for
+            // the few filings that survive the prefilter.
+            var newFilings = await FilterAlreadyIngested(
+                company,
+                documentType,
+                filings,
+                persistenceService
+            );
+            result.DocumentsSkipped += filings.Count - newFilings.Count;
+
+            foreach (var filing in newFilings)
             {
                 await ProcessFiling(company, filing, documentType, result, persistenceService);
             }
@@ -364,6 +377,56 @@ public class DocumentScraper : IDocumentScraper
                 $"ticker: {company.Ticker}, type: {documentType}"
             );
         }
+    }
+
+    // Drops the filings this pass has already ingested, using one batched lookup per
+    // (company, type): the processor's known-accession set for processor forms, or the
+    // document store's known accessions + legacy pre-accession keys for plain forms.
+    private async Task<List<FilingData>> FilterAlreadyIngested(
+        CommonStock company,
+        DocumentType documentType,
+        List<FilingData> filings,
+        IDocumentPersistenceService persistenceService
+    )
+    {
+        if (filings.Count == 0)
+            return filings;
+
+        var accessions = filings
+            .Select(f => f.AccessionNumber)
+            .Where(a => !string.IsNullOrEmpty(a))
+            .Distinct()
+            .ToList();
+
+        var processor = _filingProcessors.FirstOrDefault(p => p.CanProcess(documentType));
+        if (processor != null)
+        {
+            var known = await processor.FilterKnownAccessions(accessions) ?? [];
+            return filings
+                .Where(f =>
+                    string.IsNullOrEmpty(f.AccessionNumber) || !known.Contains(f.AccessionNumber)
+                )
+                .ToList();
+        }
+
+        var (knownAccessions, legacyKeys) = await persistenceService.GetKnownFilingKeys(
+            company,
+            documentType,
+            accessions
+        );
+        knownAccessions ??= [];
+        legacyKeys ??= [];
+
+        return filings
+            .Where(f =>
+                !(
+                    (
+                        !string.IsNullOrEmpty(f.AccessionNumber)
+                        && knownAccessions.Contains(f.AccessionNumber)
+                    ) || legacyKeys.Contains((f.FilingDate, f.ReportDate))
+                )
+            )
+            .ToList();
     }
 
     // Subsidiary CIKs share the parent's public ticker (e.g. parent + co-registrant

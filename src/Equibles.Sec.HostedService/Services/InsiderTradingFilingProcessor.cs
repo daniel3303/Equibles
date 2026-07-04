@@ -46,6 +46,28 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         return documentType == DocumentType.FormFour || documentType == DocumentType.FormThree;
     }
 
+    public async Task<HashSet<string>> FilterKnownAccessions(
+        IReadOnlyCollection<string> accessionNumbers
+    )
+    {
+        if (accessionNumbers.Count == 0)
+            return [];
+
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var transactionRepository =
+            scope.ServiceProvider.GetRequiredService<InsiderTransactionRepository>();
+
+        var candidates = accessionNumbers.ToList();
+        var known = await transactionRepository
+            .GetAll()
+            .Where(t => candidates.Contains(t.AccessionNumber))
+            .Select(t => t.AccessionNumber)
+            .Distinct()
+            .ToListAsync();
+
+        return known.ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
     public async Task<bool> Process(FilingData filing, CommonStock companyOutContext)
     {
         // Capture IDs from the outer-scope entity to avoid leaking untracked entities into inner scope

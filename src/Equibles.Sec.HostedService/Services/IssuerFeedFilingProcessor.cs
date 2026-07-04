@@ -58,6 +58,29 @@ public abstract class IssuerFeedFilingProcessor<TEntity, TRepository> : IFilingP
 
     protected abstract void LogImported(TEntity entity, string ticker, string accessionNumber);
 
+    public async Task<HashSet<string>> FilterKnownAccessions(
+        IReadOnlyCollection<string> accessionNumbers
+    )
+    {
+        if (accessionNumbers.Count == 0)
+            return [];
+
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var repository = scope.ServiceProvider.GetRequiredService<TRepository>();
+
+        // Every issuer-feed entity stores the filing's accession number under a
+        // unique index; EF.Property keeps the lookup generic without forcing a
+        // per-form abstract member alongside GetByAccessionNumber.
+        var candidates = accessionNumbers.ToList();
+        var known = await repository
+            .GetAll()
+            .Where(e => candidates.Contains(EF.Property<string>(e, "AccessionNumber")))
+            .Select(e => EF.Property<string>(e, "AccessionNumber"))
+            .ToListAsync();
+
+        return known.ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
     public async Task<bool> Process(FilingData filing, CommonStock companyOutContext)
     {
         // Capture IDs from the outer-scope entity to avoid leaking untracked entities into inner scope.

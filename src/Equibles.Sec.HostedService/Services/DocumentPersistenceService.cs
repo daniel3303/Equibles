@@ -54,6 +54,24 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         );
     }
 
+    public Task<(
+        HashSet<string> KnownAccessions,
+        HashSet<(DateOnly FilingDate, DateOnly ReportDate)> LegacyKeys
+    )> GetKnownFilingKeys(
+        CommonStock company,
+        DocumentType documentType,
+        IReadOnlyCollection<string> accessionNumbers,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return _documentRepository.GetKnownFilingKeys(
+            company,
+            documentType,
+            accessionNumbers,
+            cancellationToken
+        );
+    }
+
     public async Task Save(
         CommonStock company,
         byte[] content,

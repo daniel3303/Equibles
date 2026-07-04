@@ -108,6 +108,55 @@ public class DocumentRepository : BaseRepository<Document>
     }
 
     /// <summary>
+    /// One-batch dedup lookup for a (company, type) scrape pass: the subset of
+    /// <paramref name="accessionNumbers"/> already stored, plus the (filing date,
+    /// report date) keys of legacy rows stored before accession stamping. Together
+    /// they answer <see cref="Exists"/> for a whole filing list in two queries
+    /// instead of one round-trip per filing.
+    /// </summary>
+    public async Task<(
+        HashSet<string> KnownAccessions,
+        HashSet<(DateOnly FilingDate, DateOnly ReportDate)> LegacyKeys
+    )> GetKnownFilingKeys(
+        CommonStock company,
+        DocumentType documentType,
+        IReadOnlyCollection<string> accessionNumbers,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var candidates = accessionNumbers.ToList();
+        var knownAccessions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (candidates.Count > 0)
+        {
+            var stored = await GetAll()
+                .Where(d => d.CommonStock == company && candidates.Contains(d.AccessionNumber))
+                .Select(d => d.AccessionNumber)
+                .ToListAsync(cancellationToken);
+            foreach (var accession in stored)
+            {
+                knownAccessions.Add(accession);
+            }
+        }
+
+        var legacyPairs = await GetAll()
+            .Where(d =>
+                d.CommonStock == company
+                && d.DocumentType == documentType
+                && (d.AccessionNumber == null || d.AccessionNumber == "")
+            )
+            .Select(d => new { d.ReportingDate, d.ReportingForDate })
+            .ToListAsync(cancellationToken);
+
+        var legacyKeys = new HashSet<(DateOnly, DateOnly)>();
+        foreach (var pair in legacyPairs)
+        {
+            legacyKeys.Add((pair.ReportingDate, pair.ReportingForDate));
+        }
+
+        return (knownAccessions, legacyKeys);
+    }
+
+    /// <summary>
     /// Persists ONLY the as-filed backfill attempt bookkeeping (attempt count and any
     /// accession derived from the source URL) for one document. Set-based so it can
     /// never flush unrelated tracked changes from the caller's context — the backfill

@@ -162,6 +162,76 @@ public class DocumentScraperTests
     }
 
     [Fact]
+    public async Task ScrapeDocuments_FilingKnownToBatchPrefilter_SkipsWithoutPerFilingChecks()
+    {
+        // Covers: FilterAlreadyIngested's plain-document branch. The batched
+        // GetKnownFilingKeys lookup reports the filing's accession as already stored, so
+        // the filing must be counted skipped WITHOUT reaching the per-filing Exists check
+        // or the ingest flow — that per-filing round-trip is exactly what the prefilter
+        // exists to remove for re-enumerated history.
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
+
+        harness
+            .SecEdgarClient.GetCompanyFilings("0000123456", DocumentTypeFilter.TenK, null)
+            .Returns([
+                new FilingData
+                {
+                    Cik = "0000123456",
+                    AccessionNumber = "0000123456-25-000001",
+                    FilingDate = FilingDateAlpha,
+                    ReportDate = ReportDateAlpha,
+                    Form = "10-K",
+                    PrimaryDocument = "acme-10k.htm",
+                    DocumentUrl = "https://sec.gov/acme-10k.htm",
+                },
+            ]);
+        harness
+            .Persistence.GetKnownFilingKeys(
+                Arg.Any<CommonStock>(),
+                Arg.Any<DocumentType>(),
+                Arg.Any<IReadOnlyCollection<string>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                (
+                    new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        "0000123456-25-000001",
+                    },
+                    new HashSet<(DateOnly, DateOnly)>()
+                )
+            );
+
+        var options = new DocumentScraperOptions { DocumentTypesToSync = [DocumentType.TenK] };
+        var result = await harness.BuildScraper(dbContext, options: options).ScrapeDocuments();
+
+        result.DocumentsFound.Should().Be(1);
+        result.DocumentsSkipped.Should().Be(1);
+        result.DocumentsAdded.Should().Be(0);
+        await harness
+            .Persistence.DidNotReceiveWithAnyArgs()
+            .Exists(default, default, default, default, default);
+        await harness
+            .Persistence.DidNotReceiveWithAnyArgs()
+            .Save(
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default
+            );
+    }
+
+    [Fact]
     public async Task ScrapeDocuments_FilingHandledByCustomProcessor_DelegatesToProcessorAndSkipsDefaultFlow()
     {
         // Covers: ProcessFiling's specialized-processor branch. The InsiderTrading filing
