@@ -41,7 +41,15 @@ public class SecEdgarClient : ISecEdgarClient
     private readonly HttpClient _httpClient;
     private readonly ILogger<SecEdgarClient> _logger;
     private readonly ISecRateLimitNotifier _rateLimitNotifier;
-    private CachedResponse _cachedContent; // Used to cache the latest fetched list of documents
+    // Caches the current company's submissions artifacts (main CIK*.json plus its
+    // paginated CIK*-submissions-*.json archive pages) keyed by URL. The scraper
+    // calls GetCompanyFilings once per synced document type (~13×) for the same
+    // company; only the main JSON used to be cached, so every archive page of a
+    // long-history filer was re-downloaded ~13× per company per cycle through the
+    // shared rate-limit budget. The cache is scoped to one company: a main-URL
+    // change clears it, so it never grows past a single filer's pages.
+    private readonly Dictionary<string, string> _submissionsCache = new();
+    private string _submissionsCacheMainUrl;
     private const string BaseUrl = "https://data.sec.gov";
     private const string FilesBaseUrl = "https://www.sec.gov";
 
@@ -132,7 +140,12 @@ public class SecEdgarClient : ISecEdgarClient
             // /submissions/CIK*.json URL — reuses it instead of re-fetching.
             // This keeps fiscal-year detection in the scraper net-zero extra
             // SEC requests on the common path.
-            _cachedContent = new CachedResponse(url, content);
+            if (_submissionsCacheMainUrl != url)
+            {
+                _submissionsCache.Clear();
+                _submissionsCacheMainUrl = url;
+            }
+            _submissionsCache[url] = content;
 
             return new CompanyMetadata
             {
@@ -191,20 +204,34 @@ public class SecEdgarClient : ISecEdgarClient
         }
     }
 
-    // Returns the submissions payload for a URL from the single-entry cache when it
-    // matches, otherwise fetches it and caches it. logCacheHit preserves the cache-hit
-    // log line that GetCompanyFilings emitted before this was extracted.
+    // Returns the MAIN submissions payload for a company. A main-URL change means
+    // a different company: drop the previous company's cached pages first so the
+    // cache stays bounded to one filer. logCacheHit preserves the cache-hit log
+    // line that GetCompanyFilings emitted before this was extracted.
     private async Task<string> GetCachedSubmissions(string url, bool logCacheHit = false)
     {
-        if (_cachedContent != null && _cachedContent.Url == url)
+        if (_submissionsCacheMainUrl != url)
+        {
+            _submissionsCache.Clear();
+            _submissionsCacheMainUrl = url;
+        }
+
+        return await GetCachedSubmissionsArtifact(url, logCacheHit);
+    }
+
+    // Returns any submissions artifact (main JSON or a paginated archive page)
+    // within the current company scope, fetching and caching on first use.
+    private async Task<string> GetCachedSubmissionsArtifact(string url, bool logCacheHit = false)
+    {
+        if (_submissionsCache.TryGetValue(url, out var cached))
         {
             if (logCacheHit)
                 _logger.LogInformation("Using cached content for URL: {Url}", url);
-            return _cachedContent.Content;
+            return cached;
         }
 
         var content = await FetchStringAsync(url);
-        _cachedContent = new CachedResponse(url, content);
+        _submissionsCache[url] = content;
         return content;
     }
 
@@ -334,12 +361,14 @@ public class SecEdgarClient : ISecEdgarClient
 
             var archiveUrl = BuildUrl($"/submissions/{archiveFile.Name}");
             _logger.LogInformation(
-                "Fetching archive filings from {File} ({Count} filings)",
+                "Loading archive filings from {File} ({Count} filings)",
                 archiveFile.Name,
                 archiveFile.FilingCount
             );
 
-            var content = await FetchStringAsync(archiveUrl);
+            // Cached within the current company scope: the scraper re-enumerates
+            // the same archives once per synced document type.
+            var content = await GetCachedSubmissionsArtifact(archiveUrl);
             var archiveFilings = JsonConvert.DeserializeObject<RecentFilings>(content);
             result.AddRange(MapToFilingData(archiveFilings, cik));
         }
@@ -1124,5 +1153,4 @@ public class SecEdgarClient : ISecEdgarClient
     private static string BuildArchiveUrl(string cik, string accessionNumber, string suffix) =>
         $"{FilesBaseUrl}/Archives/edgar/data/{cik.TrimStart('0')}/{accessionNumber.Replace("-", string.Empty)}/{suffix}";
 
-    private record CachedResponse(string Url, string Content);
 }
