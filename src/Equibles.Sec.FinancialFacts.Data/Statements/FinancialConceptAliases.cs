@@ -218,6 +218,9 @@ public static class FinancialConceptAliases
         [
             G("DepreciationDepletionAndAmortization"),
             G("DepreciationAmortizationAndAccretionNet"),
+            // Capital-heavy filers (REITs) tag the cash-flow add-back with the
+            // plain income-statement element instead of the DD&A variants.
+            G("DepreciationAndAmortization"),
         ],
         ["share-based-compensation"] = [G("ShareBasedCompensation")],
         ["deferred-income-taxes"] =
