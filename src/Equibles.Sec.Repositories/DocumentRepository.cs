@@ -107,6 +107,27 @@ public class DocumentRepository : BaseRepository<Document>
             );
     }
 
+    /// <summary>
+    /// Persists ONLY the as-filed backfill attempt bookkeeping (attempt count and any
+    /// accession derived from the source URL) for one document. Set-based so it can
+    /// never flush unrelated tracked changes from the caller's context — the backfill
+    /// calls this after a failed capture whose half-applied mutations must be discarded.
+    /// </summary>
+    public Task PersistAsFiledHtmlAttempt(
+        Document document,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return GetAll()
+            .Where(d => d.Id == document.Id)
+            .ExecuteUpdateAsync(
+                s =>
+                    s.SetProperty(x => x.AsFiledHtmlAttempts, document.AsFiledHtmlAttempts)
+                        .SetProperty(x => x.AccessionNumber, document.AccessionNumber),
+                cancellationToken
+            );
+    }
+
     public async Task<Document> GetWithContent(Guid id)
     {
         // The content bytes ride along eagerly: leaving File.FileContent to a lazy load
