@@ -84,6 +84,29 @@ public class InsiderTransaction
     public bool IsAmendment { get; set; }
 
     /// <summary>
+    /// For rows from a Form 4/A or 3/A: the filing date of the ORIGINAL report the
+    /// amendment restates (the XML's <c>dateOfOriginalSubmission</c>). Drives
+    /// supersession — an amendment replaces the original filing's rows, and a
+    /// late-arriving original (or an older chained amendment) is skipped when a row
+    /// referencing its filing date already exists. Null on non-amendment rows and
+    /// on amendments whose XML omits the element.
+    /// </summary>
+    public DateOnly? OriginalFilingDate { get; set; }
+
+    /// <summary>
+    /// For amendment rows: the accession number of the original filing this
+    /// amendment replaced — or claimed, when the original arrived after the
+    /// amendment (EDGAR lists newest-first). Resolved at ingest rather than
+    /// parsed: the XML only names the original's submission DATE, which can trail
+    /// the feed's filing date (an after-17:30 submission indexes the next
+    /// business day), so the accession is the durable link. Also feeds the
+    /// scraper's known-accession prefilter, so a superseded original stops being
+    /// re-fetched from EDGAR every cycle. Null until resolved.
+    /// </summary>
+    [MaxLength(32)]
+    public string SupersededAccessionNumber { get; set; }
+
+    /// <summary>
     /// Whether this row concerns the issuer's actual shares or a derivative
     /// instrument, taken from the Form 4 table it was parsed from (not the
     /// title text). <see cref="InsiderSecurityKind.Unknown"/> for rows ingested

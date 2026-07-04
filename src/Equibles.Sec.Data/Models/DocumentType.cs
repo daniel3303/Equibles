@@ -26,6 +26,8 @@ public sealed class DocumentType
     public static readonly DocumentType FortyF = new("FortyF", "40-F");
     public static readonly DocumentType FormFour = new("FormFour", "4");
     public static readonly DocumentType FormThree = new("FormThree", "3");
+    public static readonly DocumentType FormFourA = new("FormFourA", "4/A");
+    public static readonly DocumentType FormThreeA = new("FormThreeA", "3/A");
     public static readonly DocumentType Form144 = new("Form144", "144");
     public static readonly DocumentType FormD = new("FormD", "D");
     public static readonly DocumentType FormDa = new("FormDa", "D/A");
@@ -50,6 +52,8 @@ public sealed class DocumentType
             new KeyValuePair<string, DocumentType>(FortyF.Value, FortyF),
             new KeyValuePair<string, DocumentType>(FormFour.Value, FormFour),
             new KeyValuePair<string, DocumentType>(FormThree.Value, FormThree),
+            new KeyValuePair<string, DocumentType>(FormFourA.Value, FormFourA),
+            new KeyValuePair<string, DocumentType>(FormThreeA.Value, FormThreeA),
             new KeyValuePair<string, DocumentType>(Form144.Value, Form144),
             new KeyValuePair<string, DocumentType>(FormD.Value, FormD),
             new KeyValuePair<string, DocumentType>(FormDa.Value, FormDa),
@@ -77,6 +81,8 @@ public sealed class DocumentType
             new KeyValuePair<string, DocumentType>(FortyF.DisplayName, FortyF),
             new KeyValuePair<string, DocumentType>(FormFour.DisplayName, FormFour),
             new KeyValuePair<string, DocumentType>(FormThree.DisplayName, FormThree),
+            new KeyValuePair<string, DocumentType>(FormFourA.DisplayName, FormFourA),
+            new KeyValuePair<string, DocumentType>(FormThreeA.DisplayName, FormThreeA),
             new KeyValuePair<string, DocumentType>(Form144.DisplayName, Form144),
             new KeyValuePair<string, DocumentType>(FormD.DisplayName, FormD),
             new KeyValuePair<string, DocumentType>(FormDa.DisplayName, FormDa),

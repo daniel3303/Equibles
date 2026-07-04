@@ -487,7 +487,16 @@ public class DocumentScraper : IDocumentScraper
             ciks.Count
         );
 
-        return filings;
+        // Oldest first (accession breaks same-day ties — SEC assigns them
+        // monotonically per filer agent): EDGAR lists newest-first, and pipelines
+        // with supersession semantics (a Form 4/A replacing its original's
+        // transactions) want the original ingested before its amendment whenever
+        // both are in one pass — the out-of-order guards then only cover
+        // cross-cycle arrivals.
+        return filings
+            .OrderBy(f => f.FilingDate)
+            .ThenBy(f => f.AccessionNumber, StringComparer.Ordinal)
+            .ToList();
     }
 
     private async Task ProcessFiling(
