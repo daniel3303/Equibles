@@ -722,10 +722,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
 
         var sut = CreateImporter(
             PriceProviderReturning(
-                new Dictionary<(Guid, DateOnly), decimal>
-                {
-                    [(stockAmended.Id, eventDate)] = 200m,
-                }
+                new Dictionary<(Guid, DateOnly), decimal> { [(stockAmended.Id, eventDate)] = 200m }
             )
         );
 
@@ -737,9 +734,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
             .Where(h => h.InstitutionalHolderId == holder.Id && h.ReportDate == eventDate)
             .ToListAsync();
 
-        holdings
-            .Should()
-            .HaveCount(2, "the 13G/A must replace only its own issuer's stake");
+        holdings.Should().HaveCount(2, "the 13G/A must replace only its own issuer's stake");
         var meta = holdings.Single(h => h.CommonStockId == stockAmended.Id);
         meta.Shares.Should().Be(42);
         meta.AccessionNumber.Should().Be("ACC-13G-META-A");

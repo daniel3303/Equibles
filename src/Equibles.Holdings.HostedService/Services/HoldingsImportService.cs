@@ -704,9 +704,7 @@ public class HoldingsImportService
                     continue;
 
                 var issuerStockIds = issuerStocks.ToList();
-                existingQuery = existingQuery.Where(h =>
-                    issuerStockIds.Contains(h.CommonStockId)
-                );
+                existingQuery = existingQuery.Where(h => issuerStockIds.Contains(h.CommonStockId));
             }
 
             // Set-based delete: materialising a large filer's whole portfolio

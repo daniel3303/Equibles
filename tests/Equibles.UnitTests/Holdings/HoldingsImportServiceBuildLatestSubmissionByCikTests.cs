@@ -17,9 +17,7 @@ public class HoldingsImportServiceBuildLatestSubmissionByCikTests
         var latest = Submission("0000000000-25-000002", "14-FEB-2025", "1000");
         var otherCik = Submission("0000000000-25-000003", "01-JAN-2025", "2000");
 
-        var result = HoldingsImportService.BuildLatestSubmissionByCik(
-            [latest, older, otherCik]
-        );
+        var result = HoldingsImportService.BuildLatestSubmissionByCik([latest, older, otherCik]);
 
         result.Should().HaveCount(2);
         result["1000"].Should().BeSameAs(latest);
