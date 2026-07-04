@@ -129,7 +129,8 @@ public class DocumentScraperTests
                 Arg.Any<CommonStock>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
-                Arg.Any<DateOnly>()
+                Arg.Any<DateOnly>(),
+                Arg.Any<string>()
             )
             .Returns(false);
 
@@ -204,7 +205,7 @@ public class DocumentScraperTests
             );
         await harness
             .Persistence.DidNotReceiveWithAnyArgs()
-            .Exists(default, default, default, default);
+            .Exists(default, default, default, default, default);
         await harness
             .Persistence.DidNotReceiveWithAnyArgs()
             .Save(
@@ -261,7 +262,8 @@ public class DocumentScraperTests
                 Arg.Any<CommonStock>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
-                Arg.Any<DateOnly>()
+                Arg.Any<DateOnly>(),
+                Arg.Any<string>()
             )
             .Returns(false);
 
@@ -380,7 +382,8 @@ public class DocumentScraperTests
                 Arg.Any<CommonStock>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
-                Arg.Any<DateOnly>()
+                Arg.Any<DateOnly>(),
+                Arg.Any<string>()
             )
             .Returns<bool>(_ => throw new Exception("persistence down"));
 
@@ -439,7 +442,8 @@ public class DocumentScraperTests
                 Arg.Any<CommonStock>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
-                Arg.Any<DateOnly>()
+                Arg.Any<DateOnly>(),
+                Arg.Any<string>()
             )
             .Returns<bool>(_ => throw new HttpRequestException("persistence HTTP fault"));
 

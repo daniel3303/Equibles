@@ -125,6 +125,7 @@ public class DocumentScraper : IDocumentScraper
         {
             return await commonStockRepository
                 .GetByTickers(_workerOptions.TickersToSync)
+                .AsNoTracking()
                 .ToListAsync();
         }
 
@@ -466,7 +467,8 @@ public class DocumentScraper : IDocumentScraper
                     company,
                     documentType,
                     filing.FilingDate,
-                    filing.ReportDate
+                    filing.ReportDate,
+                    filing.AccessionNumber
                 )
             )
             {
@@ -592,6 +594,25 @@ public class DocumentScraper : IDocumentScraper
                     scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
 
                 var company = await companyRepository.Get(companyOutContext.Id);
+
+                // The caller's dedup check runs OUTSIDE this retry pipeline, and
+                // Save commits its transaction before the post-commit publish.
+                // A transient failure after the commit (bus hiccup, commit-ack
+                // timeout where the commit actually landed) re-runs this whole
+                // callback, and with no unique index on AccessionNumber each
+                // retry inserted a duplicate Document row. Re-check inside the
+                // retried callback so a retry after a committed save is a no-op.
+                if (
+                    await persistenceService.Exists(
+                        company,
+                        documentType,
+                        filing.FilingDate,
+                        filing.ReportDate,
+                        filing.AccessionNumber
+                    )
+                )
+                    return;
+
                 var content = await secEdgarClient.GetDocumentContent(filing);
 
                 // Resolve the raw XBRL envelope from the submission we already fetched

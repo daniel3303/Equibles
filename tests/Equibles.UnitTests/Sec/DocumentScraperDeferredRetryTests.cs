@@ -91,7 +91,8 @@ public class DocumentScraperDeferredRetryTests
                 Arg.Any<CommonStock>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
-                Arg.Any<DateOnly>()
+                Arg.Any<DateOnly>(),
+                Arg.Any<string>()
             )
             .Returns<bool>(_ => throw new InvalidOperationException("normalizer unavailable"));
         // Step 3: CreateDocument's content fetch throws → retry exhausts and the

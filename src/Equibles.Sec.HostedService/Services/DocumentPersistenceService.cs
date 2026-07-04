@@ -41,10 +41,17 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         CommonStock company,
         DocumentType documentType,
         DateOnly reportingDate,
-        DateOnly reportingForDate
+        DateOnly reportingForDate,
+        string accessionNumber = null
     )
     {
-        return _documentRepository.Exists(company, documentType, reportingDate, reportingForDate);
+        return _documentRepository.Exists(
+            company,
+            documentType,
+            reportingDate,
+            reportingForDate,
+            accessionNumber
+        );
     }
 
     public async Task Save(
@@ -68,7 +75,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         );
 
         var file = await SaveTextContent(content, fileName);
-        var lineCount = Encoding.UTF8.GetString(content).Split('\n').Length;
+        var lineCount = CountLines(content);
 
         var document = new Document
         {
@@ -149,7 +156,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         var fileName = document.Content?.NameWithExtension ?? $"{document.Id}.txt";
         var file = await SaveTextContent(content, fileName);
         document.Content = file;
-        document.LineCount = Encoding.UTF8.GetString(content).Split('\n').Length;
+        document.LineCount = CountLines(content);
         _documentRepository.Update(document);
 
         // Drop the stale chunks (their embeddings cascade at the DB level) so the chunking worker,
@@ -161,6 +168,20 @@ public class DocumentPersistenceService : IDocumentPersistenceService
 
         await _documentRepository.SaveChanges();
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    // Line count = newline bytes + 1 — identical to the previous
+    // GetString(content).Split('\n').Length, without decoding a multi-MB filing
+    // into a throwaway string plus a string[] of every line.
+    private static int CountLines(byte[] content)
+    {
+        var newlines = 0;
+        foreach (var b in content)
+        {
+            if (b == (byte)'\n')
+                newlines++;
+        }
+        return newlines + 1;
     }
 
     // The filing text body is system-generated (never a user upload), so it goes through the
