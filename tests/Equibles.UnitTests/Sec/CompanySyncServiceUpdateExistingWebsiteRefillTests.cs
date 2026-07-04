@@ -28,6 +28,13 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class CompanySyncServiceUpdateExistingWebsiteRefillTests
 {
+    public CompanySyncServiceUpdateExistingWebsiteRefillTests()
+    {
+        // The blank-website memo is static process state; earlier tests sharing a
+        // CIK would otherwise suppress the refill fetch these tests pin.
+        CompanySyncService.ClearBlankWebsiteMemoForTests();
+    }
+
     private static EquiblesFinancialDbContext NewDb()
     {
         var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
