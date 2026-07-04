@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Equibles.CommonStocks.BusinessLogic;
@@ -15,6 +16,16 @@ namespace Equibles.Sec.HostedService.Services;
 
 public class CompanySyncService : ICompanySyncService
 {
+    // CIK → when its website lookup last came back blank. SEC's submissions
+    // metadata leaves the website field empty for most companies and the scrape
+    // cycle repeats every ~15s, so without this memo every blank-website company
+    // costs one full EDGAR metadata request per cycle, forever — thousands of
+    // requests through the shared rate-limit budget that all return blank again.
+    // Static because the service is resolved per cycle; the recheck interval
+    // keeps a company that later publishes a website eligible for a refill.
+    private static readonly ConcurrentDictionary<string, DateTime> BlankWebsiteCheckedAt = new();
+    private static readonly TimeSpan BlankWebsiteRecheckInterval = TimeSpan.FromDays(7);
+
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly WorkerOptions _workerOptions;
@@ -142,8 +153,17 @@ public class CompanySyncService : ICompanySyncService
 
         // Build the ticker → stock lookup over every row so ReplaceObsoleteStock can find
         // a ticker holder whose own CIK dropped out of SEC's feed but who still owns the
-        // primary ticker our incoming company wants.
-        var primaryTickerToStock = allExistingStocks.ToDictionary(s => s.Ticker, s => s);
+        // primary ticker our incoming company wants. Case-insensitive to match
+        // ExistingPrimaryTickers (a casing mismatch made the holder unfindable, wedging
+        // the incoming company forever), and last-wins so a duplicate-ticker data
+        // anomaly can't throw and abort every future sync cycle.
+        var primaryTickerToStock = new Dictionary<string, CommonStock>(
+            StringComparer.OrdinalIgnoreCase
+        );
+        foreach (var stock in allExistingStocks)
+        {
+            primaryTickerToStock[stock.Ticker] = stock;
+        }
 
         var secondaryCikToParent = BuildSecondaryCikToParent(allExistingStocks);
 
@@ -175,8 +195,11 @@ public class CompanySyncService : ICompanySyncService
         var existingStock = state.ExistingStocks.First(cs => cs.Cik == secCompany.Cik);
         var normalizedName = NormalizeCompanyName(secCompany.Name);
         // Empty string counts as missing: the SEC metadata website field is blank for most
-        // companies, and rows that captured that blank must stay eligible for a refill.
-        var missingWebsite = string.IsNullOrEmpty(existingStock.Website);
+        // companies, and rows that captured that blank must stay eligible for a refill —
+        // but only re-ask EDGAR once per recheck interval, not once per 15s cycle.
+        var missingWebsite =
+            string.IsNullOrEmpty(existingStock.Website)
+            && ShouldAttemptWebsiteFetch(secCompany.Cik);
         var needsUpdate =
             existingStock.Ticker != primaryTicker
             || existingStock.Name != normalizedName
@@ -667,6 +690,10 @@ public class CompanySyncService : ICompanySyncService
         return secondaryCikToParent;
     }
 
+    private static bool ShouldAttemptWebsiteFetch(string cik) =>
+        !BlankWebsiteCheckedAt.TryGetValue(cik, out var checkedAt)
+        || DateTime.UtcNow - checkedAt >= BlankWebsiteRecheckInterval;
+
     private async Task<string> FetchWebsite(string cik)
     {
         try
@@ -674,11 +701,20 @@ public class CompanySyncService : ICompanySyncService
             var metadata = await _secEdgarClient.GetCompanyMetadata(cik);
             var website = metadata?.Website?.Trim();
             // Normalise the SEC's usual blank answer to null so it is stored as "still
-            // missing" rather than masquerading as a captured website.
-            return string.IsNullOrEmpty(website) ? null : website;
+            // missing" rather than masquerading as a captured website. Remember blanks
+            // so the next cycles skip the request until the recheck interval elapses.
+            if (string.IsNullOrEmpty(website))
+            {
+                BlankWebsiteCheckedAt[cik] = DateTime.UtcNow;
+                return null;
+            }
+
+            BlankWebsiteCheckedAt.TryRemove(cik, out _);
+            return website;
         }
         catch (HttpRequestException ex)
         {
+            // Transient: leave the memo untouched so the next cycle retries.
             _logger.LogWarning(ex, "Failed to fetch website for CIK {Cik}, skipping", cik);
             return null;
         }

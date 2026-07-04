@@ -14,15 +14,42 @@ public class DocumentRepository : BaseRepository<Document>
         CommonStock company,
         DocumentType documentType,
         DateOnly reportingDate,
-        DateOnly reportingForDate
+        DateOnly reportingForDate,
+        string accessionNumber = null
     )
     {
+        // Without an accession the only possible key is (type, filing date,
+        // report date) — the pre-accession behaviour.
+        if (string.IsNullOrEmpty(accessionNumber))
+        {
+            return await GetAll()
+                .AnyAsync(d =>
+                    d.CommonStock == company
+                    && d.DocumentType == documentType
+                    && d.ReportingDate == reportingDate
+                    && d.ReportingForDate == reportingForDate
+                );
+        }
+
+        // Dedup by accession when the filing carries one: two DISTINCT filings
+        // of the same form can share (filing date, report date) — e.g. two 8-Ks
+        // filed the same day for the same period — and the 4-field key silently
+        // dropped the second forever. A row with the same 4-field key but a
+        // different non-empty accession is therefore NOT a duplicate. Legacy
+        // rows ingested before the accession was stamped (null/empty) still
+        // match on the 4-field key so history is never re-ingested.
         return await GetAll()
             .AnyAsync(d =>
                 d.CommonStock == company
-                && d.DocumentType == documentType
-                && d.ReportingDate == reportingDate
-                && d.ReportingForDate == reportingForDate
+                && (
+                    d.AccessionNumber == accessionNumber
+                    || (
+                        d.DocumentType == documentType
+                        && d.ReportingDate == reportingDate
+                        && d.ReportingForDate == reportingForDate
+                        && (d.AccessionNumber == null || d.AccessionNumber == "")
+                    )
+                )
             );
     }
 

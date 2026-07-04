@@ -10,7 +10,8 @@ public interface IDocumentPersistenceService
         CommonStock company,
         DocumentType documentType,
         DateOnly reportingDate,
-        DateOnly reportingForDate
+        DateOnly reportingForDate,
+        string accessionNumber = null
     );
 
     Task Save(

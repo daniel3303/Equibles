@@ -88,7 +88,8 @@ public class DocumentScraperProcessFilingTests
                 Arg.Any<CommonStock>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
-                Arg.Any<DateOnly>()
+                Arg.Any<DateOnly>(),
+                Arg.Any<string>()
             )
             .Returns(true);
 
@@ -121,7 +122,8 @@ public class DocumentScraperProcessFilingTests
                 Arg.Any<CommonStock>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
-                Arg.Any<DateOnly>()
+                Arg.Any<DateOnly>(),
+                Arg.Any<string>()
             )
             .Returns<bool>(_ => throw new InvalidOperationException("normalizer blew up"));
 
@@ -140,7 +142,8 @@ public class DocumentScraperProcessFilingTests
                 Arg.Any<CommonStock>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
-                Arg.Any<DateOnly>()
+                Arg.Any<DateOnly>(),
+                Arg.Any<string>()
             )
             .Returns<bool>(_ => throw new HttpRequestException("SEC timeout"));
 

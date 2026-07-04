@@ -20,23 +20,23 @@ namespace Equibles.IntegrationTests.Sec;
 
 /// <summary>
 /// <see cref="CompanySyncServiceReplaceObsoleteTests"/> pins the replace path
-/// (obsolete row deleted, new one created). This pins the defensive
-/// holder-could-not-be-loaded arm of <c>ReplaceObsoleteStock</c>: the routing
-/// guard <c>ExistingPrimaryTickers</c> is <c>OrdinalIgnoreCase</c> while
-/// <c>PrimaryTickerToStock</c> is a case-sensitive dictionary, so a SEC payload
-/// whose ticker differs only in case from a stored ticker is routed into
-/// <c>ReplaceObsoleteStock</c> but fails the dictionary lookup. The method must
-/// log and skip — never delete the stored row or create a duplicate — leaving
-/// the database untouched.
+/// (obsolete row deleted, new one created). This pins that the path also fires
+/// when the incoming ticker differs from the stored one only by CASE: the
+/// routing guard <c>ExistingPrimaryTickers</c> is <c>OrdinalIgnoreCase</c>, and
+/// <c>PrimaryTickerToStock</c> must match it — a case-SENSITIVE lookup routed
+/// the company into <c>ReplaceObsoleteStock</c> but then failed to resolve the
+/// ticker holder, so the incoming company was skipped on every sync cycle
+/// forever (and an exact-duplicate ticker would have thrown and aborted the
+/// whole cycle).
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class CompanySyncServiceReplaceObsoleteHolderNullTests : ParadeDbMcpTestBase
+public class CompanySyncServiceReplaceObsoleteCaseMismatchTests : ParadeDbMcpTestBase
 {
-    public CompanySyncServiceReplaceObsoleteHolderNullTests(ParadeDbFixture fixture)
+    public CompanySyncServiceReplaceObsoleteCaseMismatchTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
     [Fact]
-    public async Task SyncCompaniesFromSecApi_TickerCaseMismatchHolderNotResolvable_LogsAndLeavesDbUntouched()
+    public async Task SyncCompaniesFromSecApi_TickerCaseMismatch_ResolvesHolderAndReplacesObsoleteStock()
     {
         var stored = new CommonStock
         {
@@ -50,8 +50,8 @@ public class CompanySyncServiceReplaceObsoleteHolderNullTests : ParadeDbMcpTestB
 
         // New CIK (not in DB) whose ticker matches "REUSED" only case-
         // insensitively. ExistingPrimaryTickers (OrdinalIgnoreCase) routes this
-        // to ReplaceObsoleteStock; PrimaryTickerToStock (case-sensitive, keyed
-        // "REUSED") then can't resolve "reused" → obsoleteStock == null.
+        // to ReplaceObsoleteStock; the case-insensitive PrimaryTickerToStock
+        // resolves the stored holder so the replace proceeds.
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
         secEdgarClient
             .GetActiveCompanies()
@@ -92,9 +92,11 @@ public class CompanySyncServiceReplaceObsoleteHolderNullTests : ParadeDbMcpTestB
 
         await using var verify = Fixture.CreateDbContext();
         var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
-        stocks.Should().ContainSingle("the stored row must be neither deleted nor duplicated");
-        stocks[0].Cik.Should().Be("0000000999");
-        stocks[0].Ticker.Should().Be("REUSED");
-        stocks[0].Name.Should().Be("Stored Stock Inc.");
+        stocks
+            .Should()
+            .ContainSingle("the obsolete holder must be replaced, not kept alongside a duplicate");
+        stocks[0].Cik.Should().Be("0000000111");
+        stocks[0].Ticker.Should().Be("reused");
+        stocks[0].Name.Should().Be("Acquirer Inc.");
     }
 }
