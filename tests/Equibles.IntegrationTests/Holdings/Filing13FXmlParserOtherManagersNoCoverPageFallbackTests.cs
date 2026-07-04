@@ -4,14 +4,13 @@ namespace Equibles.IntegrationTests.Holdings;
 
 public class Filing13FXmlParserOtherManagersNoCoverPageFallbackTests
 {
-    // ParseCoverPage scopes otherManager2 lookups via `coverPage ?? root` — the
-    // null-coalescing fallback (line 58) is uncovered. A malformed primary_doc
-    // that omits the <coverPage> wrapper but still ships <otherManagers2Info>
-    // (e.g., a partial filing or future schema variant) must still pick up
-    // the manager seq → name pairs by widening the scope to the root.
-    // A regression that hard-coded `Descendants(coverPage, "otherManager2")`
-    // would compile, pass every cover-page test, and silently lose every
-    // co-manager for filings missing the coverPage wrapper.
+    // ParseCoverPage scans otherManager2 from the document root, because real
+    // filings carry them under formData/summaryPage while a malformed or
+    // future-variant primary_doc may omit wrappers entirely. A regression that
+    // re-scopes the scan to coverPage would compile and pass any test that
+    // co-locates the managers with the cover page, yet silently lose every
+    // co-manager on real filings — this pin (managers with no coverPage at
+    // all) fails for any scope narrower than the root.
     [Fact]
     public void ParseCoverPage_OtherManagers2InfoSiblingOfCoverPageAbsent_FallsBackToRootScope()
     {

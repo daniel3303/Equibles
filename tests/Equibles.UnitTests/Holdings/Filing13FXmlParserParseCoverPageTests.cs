@@ -30,15 +30,21 @@ public class Filing13FXmlParserParseCoverPageTests
             + "    </filingManager>"
             + "    <form13FFileNumber>028-00338</form13FFileNumber>"
             + "    <crdNumber>314159</crdNumber>"
-            + "    <otherManager2>"
-            + "      <sequenceNumber>1</sequenceNumber>"
-            + "      <otherManager><name>General Re-New England Asset Mgmt</name></otherManager>"
-            + "    </otherManager2>"
-            + "    <otherManager2>"
-            + "      <sequenceNumber>3</sequenceNumber>"
-            + "      <otherManager><name>New England Asset Management</name></otherManager>"
-            + "    </otherManager2>"
             + "  </coverPage>"
+            // Real filings carry otherManager2 under summaryPage/otherManagers2Info,
+            // outside coverPage — the parser must find them there.
+            + "  <summaryPage>"
+            + "    <otherManagers2Info>"
+            + "      <otherManager2>"
+            + "        <sequenceNumber>1</sequenceNumber>"
+            + "        <otherManager><name>General Re-New England Asset Mgmt</name></otherManager>"
+            + "      </otherManager2>"
+            + "      <otherManager2>"
+            + "        <sequenceNumber>3</sequenceNumber>"
+            + "        <otherManager><name>New England Asset Management</name></otherManager>"
+            + "      </otherManager2>"
+            + "    </otherManagers2Info>"
+            + "  </summaryPage>"
             + "</edgarSubmission>";
 
         var result = _sut.ParseCoverPage(

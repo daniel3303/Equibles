@@ -34,13 +34,15 @@ public class Filing13FXmlParserParseCoverPageTests
                     </address>
                   </filingManager>
                   <form13FFileNumber>028-12345</form13FFileNumber>
+                </coverPage>
+                <summaryPage>
                   <otherManagers2Info>
                     <otherManager2>
                       <sequenceNumber>1</sequenceNumber>
                       <otherManager><cik>0009999999</cik><name>DECOY ADVISORS LLC</name></otherManager>
                     </otherManager2>
                   </otherManagers2Info>
-                </coverPage>
+                </summaryPage>
               </formData>
             </edgarSubmission>
             """;

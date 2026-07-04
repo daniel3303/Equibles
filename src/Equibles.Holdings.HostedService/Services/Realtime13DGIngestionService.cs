@@ -149,6 +149,27 @@ public class Realtime13DGIngestionService
             if (!importResult.IsComplete)
                 continue;
 
+            // A filing that imported "complete" yet inserted zero holdings is
+            // suspect: recording it would consume the accession forever even
+            // though we hold none of its position (e.g. a blank filer CIK made
+            // the holder upsert skip it). Unlike 13F there is no quarterly bulk
+            // data set to reconcile the loss, so retry instead — and every
+            // 13D/G archive row carries the issuer position (an amendment
+            // re-reports it, a final exit reports zero shares), so zero inserts
+            // is never legitimate here, amendments included.
+            if (importResult.InsertedHoldings == 0)
+            {
+                _logger.LogWarning(
+                    "{Form} {Accession} (CIK {Cik}) imported as complete but inserted no holdings; not recording so a later cycle retries",
+                    filing.SubmissionType,
+                    entry.AccessionNumber,
+                    entry.Cik
+                );
+                if (earliestRetryDate == null || entry.DateFiled < earliestRetryDate)
+                    earliestRetryDate = entry.DateFiled;
+                continue;
+            }
+
             await RecordProcessed([entry.AccessionNumber], cancellationToken);
             totalImported++;
         }

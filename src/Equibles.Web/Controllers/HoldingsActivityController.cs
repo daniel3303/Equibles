@@ -402,8 +402,12 @@ public class HoldingsActivityController : BaseController
         return View(viewModel);
     }
 
+    // 13F quarter ends only: including Schedule 13D/G event dates makes the
+    // newest "quarter" an arbitrary business day where almost nothing has a
+    // holding, so the default selection (and the quarter-over-quarter compare)
+    // silently degrades to quarter-vs-single-day.
     private Task<List<DateOnly>> LoadAvailableReportDates() =>
-        _holdingRepository.GetAvailableReportDates().ToListAsync();
+        _holdingRepository.Get13FAvailableReportDates().ToListAsync();
 
     private Task<Dictionary<Guid, StockLabel>> LoadStockLabels(List<Guid> stockIds) =>
         _commonStockRepository

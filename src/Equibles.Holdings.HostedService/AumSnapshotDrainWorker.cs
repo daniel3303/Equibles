@@ -13,11 +13,14 @@ namespace Equibles.Holdings.HostedService;
 /// <c>DirtyAt = UtcNow</c> on each import — many events for the same quarter
 /// in the same cooldown window coalesce into a single rebuild here.
 ///
-/// Clearing the dirty flag uses optimistic concurrency: we capture the
-/// <c>DirtyAt</c> value at claim time and clear it only if it still matches
-/// after the rebuild finishes. If a new event arrived mid-rebuild it updated
-/// <c>DirtyAt</c> to a different (more recent) timestamp; the conditional
-/// clear is a no-op and the next tick rebuilds again, so no signal is lost.
+/// The dirty flag is CLAIMED (cleared) before the rebuild runs, not after.
+/// The consumer only stamps <c>DirtyAt</c> when it is currently null, so a
+/// clear-after-rebuild could never observe a mid-rebuild import — the flag
+/// would test unchanged and the signal be silently dropped. Clearing first
+/// means an import landing mid-rebuild finds the flag null, re-dirties the
+/// row with a fresh timestamp, and the next cooldown rebuilds again — no
+/// signal lost. If the rebuild fails, the claim is re-armed with the original
+/// timestamp so the next tick retries immediately.
 /// </summary>
 public class AumSnapshotDrainWorker : BackgroundService
 {
@@ -111,10 +114,19 @@ public class AumSnapshotDrainWorker : BackgroundService
         foreach (var entry in due)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            // Claim BEFORE rebuilding: the consumer only stamps DirtyAt when it
+            // is null, so an import landing mid-rebuild can only be observed if
+            // the flag is already cleared — it then re-dirties the row with a
+            // fresh timestamp and the next cooldown rebuilds again. A skipped
+            // claim means another racer (or a fresh event) moved the flag;
+            // leave this entry for the next tick.
+            if (!await TryClaimDirtyFlag(entry, cancellationToken))
+                continue;
+
             try
             {
                 await _refreshService.RebuildQuarterAsync(entry.ReportDate, cancellationToken);
-                await ClearDirtyFlag(entry, cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -127,20 +139,22 @@ public class AumSnapshotDrainWorker : BackgroundService
                     "Failed to drain dirty AUM snapshot for {ReportDate}; will retry on next tick",
                     entry.ReportDate
                 );
+                await RearmDirtyFlag(entry, cancellationToken);
             }
         }
     }
 
-    private async Task ClearDirtyFlag(DueRebuild entry, CancellationToken cancellationToken)
+    // Clears DirtyAt only if it still matches the claim-time value, returning
+    // whether this worker won the claim.
+    private async Task<bool> TryClaimDirtyFlag(
+        DueRebuild entry,
+        CancellationToken cancellationToken
+    )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
-        // Optimistic concurrency clear: only nullify DirtyAt if it still
-        // matches the timestamp we captured at claim time. If a new event
-        // landed mid-rebuild, DirtyAt was overwritten and this is a no-op,
-        // so the next tick rebuilds again — no signal lost.
-        var cleared = await dbContext
+        var claimed = await dbContext
             .Set<AumQuarterlySnapshot>()
             .Where(s => s.ReportDate == entry.ReportDate && s.DirtyAt == entry.DirtyAt)
             .ExecuteUpdateAsync(
@@ -148,10 +162,34 @@ public class AumSnapshotDrainWorker : BackgroundService
                 cancellationToken
             );
 
-        if (cleared == 0)
+        return claimed > 0;
+    }
+
+    // Restores the original claim timestamp after a failed rebuild — unless an
+    // import already re-dirtied the row (a fresh timestamp supersedes ours).
+    // The restored value is already past the cooldown, so the retry is immediate.
+    private async Task RearmDirtyFlag(DueRebuild entry, CancellationToken cancellationToken)
+    {
+        try
         {
-            _logger.LogDebug(
-                "DirtyAt for {ReportDate} changed during rebuild; leaving it set for the next drain tick",
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+
+            await dbContext
+                .Set<AumQuarterlySnapshot>()
+                .Where(s => s.ReportDate == entry.ReportDate && s.DirtyAt == null)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(x => x.DirtyAt, entry.DirtyAt),
+                    cancellationToken
+                );
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Losing the re-arm only delays this quarter until its next import
+            // event or the daily safety-net rebuild; never abort the drain loop.
+            _logger.LogWarning(
+                ex,
+                "Failed to re-arm DirtyAt for {ReportDate} after a failed rebuild",
                 entry.ReportDate
             );
         }

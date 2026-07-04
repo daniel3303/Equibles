@@ -19,6 +19,12 @@ public class ImportContext
     // Other managers: AccessionNumber → (SequenceNumber → ManagerName)
     public Dictionary<string, Dictionary<int, string>> OtherManagers { get; set; } = [];
 
+    // For Schedule 13D/13G submissions only: AccessionNumber → tracked stock ids
+    // of the issuer(s) the filing reports. A 13D/G covers a single issuer, so its
+    // amendment delete must be scoped to that issuer rather than the holder's
+    // whole (reportDate, filingType) slice.
+    public Dictionary<string, HashSet<Guid>> ScheduleAccessionStockIds { get; set; } = [];
+
     // Yahoo stock prices: (CommonStockId, ReportDate) → closing price
     public Dictionary<(Guid, DateOnly), decimal> StockPrices { get; set; } = [];
 }

@@ -106,6 +106,13 @@ public class HoldingsImportService
         var byQuarter = new Dictionary<DateOnly, int>();
         foreach (var submission in context.Submissions.Values)
         {
+            // 13F submissions only: a Schedule 13D/G carries an event DATE, not a
+            // quarter end. Publishing it would seed a stub AumQuarterlySnapshot
+            // (and downstream sector/activity snapshot rows) keyed to that
+            // arbitrary day, polluting every market-wide quarterly surface.
+            if (submission.FormType.ToHoldingsFilingType() != FilingType.Form13F)
+                continue;
+
             if (TryParseDateOnly(submission.PeriodOfReport, out var reportDate))
             {
                 byQuarter[reportDate] = byQuarter.GetValueOrDefault(reportDate) + 1;
@@ -316,16 +323,32 @@ public class HoldingsImportService
             return CusipMappingOutcome.NoInfoTable;
 
         var uniqueCusips = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var scheduleCusipsByAccession = new Dictionary<string, HashSet<string>>(
+            StringComparer.OrdinalIgnoreCase
+        );
         await foreach (var row in context.TsvParser.ParseEntry(infoTableEntry))
         {
             var accession = GetValue(row, AccessionNumberColumn);
-            if (!context.Submissions.ContainsKey(accession))
+            if (!context.Submissions.TryGetValue(accession, out var submission))
                 continue;
 
             var cusip = GetValue(row, "CUSIP");
-            if (!string.IsNullOrEmpty(cusip))
+            if (string.IsNullOrEmpty(cusip))
+                continue;
+
+            uniqueCusips.Add(cusip);
+
+            // Remember which issuer(s) each Schedule 13D/G filing reports —
+            // HandleAmendments scopes those filings' restatement delete to them.
+            var filingType = submission.FormType.ToHoldingsFilingType();
+            if (filingType is FilingType.Schedule13D or FilingType.Schedule13G)
             {
-                uniqueCusips.Add(cusip);
+                if (!scheduleCusipsByAccession.TryGetValue(accession, out var cusips))
+                {
+                    cusips = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    scheduleCusipsByAccession[accession] = cusips;
+                }
+                cusips.Add(cusip);
             }
         }
 
@@ -366,6 +389,18 @@ public class HoldingsImportService
         }
 
         context.CusipMapping = cusipMapping;
+
+        foreach (var (accession, cusips) in scheduleCusipsByAccession)
+        {
+            var stockIds = new HashSet<Guid>();
+            foreach (var cusip in cusips)
+            {
+                if (cusipMapping.TryGetValue(cusip, out var stockId))
+                    stockIds.Add(stockId);
+            }
+            context.ScheduleAccessionStockIds[accession] = stockIds;
+        }
+
         return CusipMappingOutcome.Mapped;
     }
 
@@ -430,23 +465,58 @@ public class HoldingsImportService
     }
 
     // Refresh the confidential-treatment flag on holders we already track from
-    // the current filing's cover page; their identity columns stay as first seen.
+    // their latest filing's cover page; their identity columns stay as first seen.
+    // Keyed by CIK up front: a linear scan per holder is O(holders × submissions),
+    // which a quarterly bulk data set (~8k of each) turns into tens of millions of
+    // comparisons — and its first-match pick was import-order-arbitrary when a
+    // filer has several submissions (multiple quarters) in one data set.
     private void RefreshExistingHolderConfidentialTreatment(
         ImportContext context,
         List<InstitutionalHolder> existingHolders
     )
     {
+        var latestByCik = BuildLatestSubmissionByCik(context.Submissions.Values);
+
         foreach (var holder in existingHolders)
         {
-            var submission = context.Submissions.Values.FirstOrDefault(s =>
-                string.Equals(s.Cik, holder.Cik, StringComparison.OrdinalIgnoreCase)
-            );
-            if (submission == null)
+            if (!latestByCik.TryGetValue(holder.Cik, out var submission))
                 continue;
             context.CoverPages.TryGetValue(submission.AccessionNumber, out var cp);
             if (cp != null)
                 holder.ConfidentialTreatmentRequested = IsYes(cp.ConfidentialTreatment);
         }
+    }
+
+    // The most recently filed submission per CIK — same ordering contract as
+    // DeduplicateSubmissions (parsed FilingDate, accession breaks same-day ties).
+    internal static Dictionary<string, SubmissionRow> BuildLatestSubmissionByCik(
+        IEnumerable<SubmissionRow> submissions
+    )
+    {
+        var latestByCik = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase);
+        foreach (var submission in submissions)
+        {
+            if (string.IsNullOrEmpty(submission.Cik))
+                continue;
+            if (
+                !latestByCik.TryGetValue(submission.Cik, out var current)
+                || CompareByFilingDateThenAccession(submission, current) > 0
+            )
+            {
+                latestByCik[submission.Cik] = submission;
+            }
+        }
+        return latestByCik;
+    }
+
+    private static int CompareByFilingDateThenAccession(SubmissionRow left, SubmissionRow right)
+    {
+        TryParseDateOnly(left.FilingDate, out var leftDate);
+        TryParseDateOnly(right.FilingDate, out var rightDate);
+        var byDate = leftDate.CompareTo(rightDate);
+        return byDate != 0
+            ? byDate
+            : string.CompareOrdinal(left.AccessionNumber, right.AccessionNumber);
     }
 
     // Submissions whose CIK has no holder row yet become new InstitutionalHolder
@@ -609,28 +679,51 @@ public class HoldingsImportService
             // let a 13G/A restatement wipe the entire 13F-HR portfolio at that
             // quarter (#3738), so a $5T filer vanished from the AUM rankings.
             // Restatements only ever replace their own form's rows.
-            var existingHoldings = await holdingRepo
+            var existingQuery = holdingRepo
                 .GetAll()
                 .Where(h =>
                     h.InstitutionalHolderId == holderId
                     && h.ReportDate == reportDate
                     && h.FilingType == filingType
-                )
-                .ToListAsync(cancellationToken);
+                );
 
-            if (existingHoldings.Count > 0)
+            // A 13F restatement replaces the holder's whole portfolio for the
+            // quarter, but a Schedule 13D/G filing covers a SINGLE issuer — its
+            // delete must be scoped to the issuer(s) the amendment itself
+            // reports. Passive filers amend many issuers with the same event
+            // date (year/quarter end); an unscoped delete let each 13G/A wipe
+            // every other issuer's stake at that date, and since the wiped
+            // accessions stay recorded as processed and no bulk data set exists
+            // for 13D/G, the loss was permanent and silent.
+            if (filingType != FilingType.Form13F)
             {
-                holdingRepo.Delete(existingHoldings);
+                if (
+                    !context.ScheduleAccessionStockIds.TryGetValue(accession, out var issuerStocks)
+                    || issuerStocks.Count == 0
+                )
+                    continue;
+
+                var issuerStockIds = issuerStocks.ToList();
+                existingQuery = existingQuery.Where(h => issuerStockIds.Contains(h.CommonStockId));
+            }
+
+            // Set-based delete: materialising a large filer's whole portfolio
+            // into the change tracker (and deleting row-by-id) accumulated
+            // hundreds of thousands of tracked entities across a bulk data
+            // set's restatements; one DELETE statement per amendment does the
+            // same work with zero materialisation.
+            var deleted = await existingQuery.ExecuteDeleteAsync(cancellationToken);
+
+            if (deleted > 0)
+            {
                 _logger.LogInformation(
                     "Deleted {Count} {FilingType} holdings for RESTATEMENT amendment {Accession}",
-                    existingHoldings.Count,
+                    deleted,
                     filingType,
                     accession
                 );
             }
         }
-
-        await holdingRepo.SaveChanges();
     }
 
     private static bool IsNewHoldingsAmendment(string accession, ImportContext context)
