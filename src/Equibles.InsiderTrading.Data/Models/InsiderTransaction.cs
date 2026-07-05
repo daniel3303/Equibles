@@ -7,6 +7,10 @@ namespace Equibles.InsiderTrading.Data.Models;
 [Index(nameof(CommonStockId), nameof(TransactionDate))]
 [Index(nameof(InsiderOwnerId), nameof(TransactionDate))]
 [Index(nameof(AccessionNumber), nameof(TransactionOrder), IsUnique = true)]
+// The scraper's known-accession prefilter probes SupersededAccessionNumber with the same
+// candidate list as AccessionNumber; without its own index that arm falls back to a
+// sequential scan of the table on every sweep batch.
+[Index(nameof(SupersededAccessionNumber))]
 [Index(nameof(FilingDate))]
 [Index(nameof(TransactionDate))]
 [Index(nameof(IsPriceValid), nameof(TransactionDate))]
