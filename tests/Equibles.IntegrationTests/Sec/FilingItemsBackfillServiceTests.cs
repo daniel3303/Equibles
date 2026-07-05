@@ -219,6 +219,9 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
 
         first.NotFound.Should().Be(1);
         second.Companies.Should().Be(0);
+        second
+            .Selected.Should()
+            .Be(0, "a drained corpus selects nothing — the worker's idle signal");
         await client
             .Received(1)
             .GetCompanyFilings(
@@ -253,6 +256,12 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
 
         result.Failed.Should().Be(1);
         result.Companies.Should().Be(0);
+        result
+            .Selected.Should()
+            .Be(
+                1,
+                "a fully-failed batch still SELECTED work — it must not read as drained, or an EDGAR outage would idle the worker for a day with a backlog pending"
+            );
 
         await using (var verify = Fixture.CreateDbContext())
         {

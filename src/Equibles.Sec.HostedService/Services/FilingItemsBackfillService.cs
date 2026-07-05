@@ -71,6 +71,7 @@ public class FilingItemsBackfillService
             .OrderByDescending(x => x.LatestReportingDate)
             .Take(companyBatchSize)
             .ToListAsync(cancellationToken);
+        result.Selected = companies.Count;
 
         foreach (var company in companies)
         {
