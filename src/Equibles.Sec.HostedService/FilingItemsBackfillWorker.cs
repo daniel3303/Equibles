@@ -76,24 +76,29 @@ public class FilingItemsBackfillWorker : BaseScraperWorker
         var result = await backfillService.Backfill(_options.BatchSize, stoppingToken);
 
         Logger.LogInformation(
-            "Filing-items backfill cycle complete. Companies: {Companies}, Stamped: {Stamped}, "
-                + "NotFound: {NotFound}, Failed: {Failed}",
+            "Filing-items backfill cycle complete. Selected: {Selected}, Companies: {Companies}, "
+                + "Stamped: {Stamped}, NotFound: {NotFound}, Failed: {Failed}",
+            result.Selected,
             result.Companies,
             result.Stamped,
             result.NotFound,
             result.Failed
         );
 
-        var drainedNow = result.Companies == 0;
+        // Drained means the sweep SELECTED nothing — not that nothing completed. During
+        // an EDGAR outage every selected company throws and completes zero work; that
+        // cycle must stay on the fast cadence so the backlog resumes when the block
+        // clears, not idle for a day.
+        var drainedNow = result.Selected == 0;
         if (drainedNow && !_drained)
         {
             Logger.LogInformation("Filing-items backfill drained; idling on the daily cadence.");
         }
         _drained = drainedNow;
 
-        // A full batch means a backlog is still queued — burst through it instead of
-        // spending a whole SleepInterval between batch-sized slices.
-        if (!drainedNow && result.Companies >= _options.BatchSize)
+        // A full batch was drawn, so a backlog is still queued — burst through it instead
+        // of spending a whole SleepInterval between batch-sized slices.
+        if (result.Selected >= _options.BatchSize)
         {
             RequestImmediateContinuation();
         }
