@@ -288,6 +288,134 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ExecuteAsync_Schedule13DGEventDates_DoNotRetriggerFullBackfill()
+    {
+        // Schedule 13D/G rows carry per-day EVENT dates as ReportDate, so the
+        // all-types distinct-quarter count always exceeds what the rebuild can
+        // ever materialise (it enumerates 13F quarters only). The coverage
+        // gate must ignore them — otherwise every boot re-runs the full
+        // backfill forever. Five fully-covered 13F quarters are seeded so the
+        // oldest lies beyond the 4-quarter daily safety-net: a sentinel there
+        // survives iff the full backfill did NOT run.
+        var quarters = Enumerable
+            .Range(0, 5)
+            .Select(i => new DateOnly(2023, 12, 31).AddMonths(3 * i))
+            .ToList();
+        var oldest = quarters[0];
+        var recent = quarters.Skip(1).ToList();
+        InstitutionalHolder holder;
+        CommonStock aapl;
+        await using (var seed = FreshContext())
+        {
+            var tech = new Sector { Name = "Technology" };
+            seed.Add(tech);
+            await seed.SaveChangesAsync();
+            var industry = new Industry { Name = "Software", SectorId = tech.Id };
+            seed.Add(industry);
+            await seed.SaveChangesAsync();
+            aapl = new CommonStock
+            {
+                Ticker = "AAPL",
+                Name = "Apple",
+                Cik = "C0000320193",
+                IndustryId = industry.Id,
+            };
+            seed.Add(aapl);
+            holder = new InstitutionalHolder { Cik = "H001", Name = "Holder H001" };
+            seed.Add(holder);
+            await seed.SaveChangesAsync();
+            foreach (var quarter in quarters)
+            {
+                seed.Add(MakeHolding(aapl, holder, quarter, 100_000, $"acc-{quarter}"));
+                seed.Add(
+                    new AumQuarterlySnapshot
+                    {
+                        ReportDate = quarter,
+                        TotalValue = 999_999_999, // sentinel — only the safety-net window may overwrite it
+                        FilerCount = 1,
+                        PositionCount = 1,
+                        StockCount = 1,
+                        FilingCount = 1,
+                    }
+                );
+                seed.Add(
+                    new StockQuarterlyActivity
+                    {
+                        CommonStockId = aapl.Id,
+                        ReportDate = quarter,
+                        CurrentShares = 1_000,
+                        CurrentValue = 100_000,
+                        CurrentFilerCount = 1,
+                    }
+                );
+                seed.Add(
+                    new HolderQuarterlySnapshot
+                    {
+                        InstitutionalHolderId = holder.Id,
+                        ReportDate = quarter,
+                        FilingDate = quarter.AddDays(45),
+                        Aum = 100_000,
+                        PositionCount = 1,
+                        StockCount = 1,
+                    }
+                );
+            }
+            // 13D/G event dates that are not 13F quarter ends — these must not
+            // count towards the coverage the gate expects the rebuild to reach.
+            seed.Add(
+                MakeHolding(
+                    aapl,
+                    holder,
+                    new DateOnly(2024, 2, 14),
+                    50_000,
+                    "acc-13d",
+                    FilingType.Schedule13D
+                )
+            );
+            seed.Add(
+                MakeHolding(
+                    aapl,
+                    holder,
+                    new DateOnly(2024, 11, 15),
+                    60_000,
+                    "acc-13g",
+                    FilingType.Schedule13G
+                )
+            );
+            await seed.SaveChangesAsync();
+        }
+
+        var scopeFactory = ScopeFactory();
+        var refreshService = new HoldingsAggregateRefreshService(
+            scopeFactory,
+            NullLogger<HoldingsAggregateRefreshService>.Instance
+        );
+        var worker = new InstantTickWorker(scopeFactory, refreshService);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await worker.StartAsync(cts.Token);
+        // Wait until the daily safety-net has rebuilt the 4 recent quarters
+        // (their sentinels replaced by the true 100k total) so "the backfill
+        // didn't run" is asserted after the worker has demonstrably cycled.
+        await WaitForSnapshots(async ctx =>
+            await ctx.Set<AumQuarterlySnapshot>()
+                .CountAsync(s => recent.Contains(s.ReportDate) && s.TotalValue == 100_000)
+            >= recent.Count
+        );
+        await worker.StopAsync(CancellationToken.None);
+
+        await using var read = FreshContext();
+        var oldestSnapshot = await read.Set<AumQuarterlySnapshot>()
+            .SingleAsync(s => s.ReportDate == oldest);
+        oldestSnapshot
+            .TotalValue.Should()
+            .Be(
+                999_999_999,
+                "the oldest quarter is outside the safety-net window, so only the full backfill could rewrite it — and full coverage of the 13F quarters means it must not have run"
+            );
+    }
+
+    [Fact]
     public async Task ExecuteAsync_NoHoldings_DoesNotCreatePhantomSnapshotRows()
     {
         // No holdings seeded — the worker should not invent rows out of nothing.
@@ -339,12 +467,14 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
         InstitutionalHolder holder,
         DateOnly reportDate,
         long value,
-        string accession
+        string accession,
+        FilingType filingType = FilingType.Form13F
     ) =>
         new()
         {
             CommonStockId = stock.Id,
             InstitutionalHolderId = holder.Id,
+            FilingType = filingType,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,
             Shares = value / 100,

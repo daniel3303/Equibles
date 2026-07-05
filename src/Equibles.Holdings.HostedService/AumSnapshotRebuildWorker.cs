@@ -121,12 +121,19 @@ public class AumSnapshotRebuildWorker : BackgroundService
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
-        var holdingQuarters = await dbContext
+        // Coverage is measured against distinct Form-13F quarters only — the
+        // same set RebuildAllAsync enumerates. Schedule 13D/G rows carry
+        // per-day event dates that inflate the all-types distinct count but
+        // can never produce a snapshot row, so a gate comparing against it
+        // could never be satisfied and would re-run the full backfill on
+        // every boot, forever.
+        var form13FQuarters = await dbContext
             .Set<InstitutionalHolding>()
+            .Where(h => h.FilingType == FilingType.Form13F)
             .Select(h => h.ReportDate)
             .Distinct()
             .CountAsync(cancellationToken);
-        if (holdingQuarters == 0)
+        if (form13FQuarters == 0)
         {
             return;
         }
@@ -134,23 +141,13 @@ public class AumSnapshotRebuildWorker : BackgroundService
         var snapshotQuarters = await dbContext
             .Set<AumQuarterlySnapshot>()
             .CountAsync(cancellationToken);
-        // RebuildQuarter also materialises StockQuarterlyActivity, so a quarter
-        // isn't fully covered until both snapshots exist for it — otherwise a
-        // newly-added activity table would never backfill once AUM is complete.
+        // RebuildQuarter also materialises StockQuarterlyActivity and
+        // HolderQuarterlySnapshot, so a quarter isn't fully covered until all
+        // three snapshots exist for it — otherwise a newly-added snapshot
+        // table would never backfill once AUM is complete.
         var activityQuarters = await dbContext
             .Set<StockQuarterlyActivity>()
             .Select(s => s.ReportDate)
-            .Distinct()
-            .CountAsync(cancellationToken);
-        // HolderQuarterlySnapshot is Form-13F-only, so its coverage is measured
-        // against distinct 13F quarters — Schedule 13D/G event dates inflate
-        // holdingQuarters but can never produce a holder snapshot row, and
-        // comparing against the all-types count would re-trigger the backfill
-        // on every boot.
-        var holder13FQuarters = await dbContext
-            .Set<InstitutionalHolding>()
-            .Where(h => h.FilingType == FilingType.Form13F)
-            .Select(h => h.ReportDate)
             .Distinct()
             .CountAsync(cancellationToken);
         var holderQuarters = await dbContext
@@ -159,21 +156,20 @@ public class AumSnapshotRebuildWorker : BackgroundService
             .Distinct()
             .CountAsync(cancellationToken);
         if (
-            snapshotQuarters >= holdingQuarters
-            && activityQuarters >= holdingQuarters
-            && holderQuarters >= holder13FQuarters
+            snapshotQuarters >= form13FQuarters
+            && activityQuarters >= form13FQuarters
+            && holderQuarters >= form13FQuarters
         )
         {
             return;
         }
 
         _logger.LogInformation(
-            "Holdings snapshot coverage incomplete (AUM {Snapshots}, activity {Activity} of {Holdings} quarters; holder {HolderQuarters} of {Holder13FQuarters} 13F quarters) — running backfill with {Timeout}s command timeout",
+            "Holdings snapshot coverage incomplete (AUM {Snapshots}, activity {Activity}, holder {HolderQuarters} of {Form13FQuarters} 13F quarters) — running backfill with {Timeout}s command timeout",
             snapshotQuarters,
             activityQuarters,
-            holdingQuarters,
             holderQuarters,
-            holder13FQuarters,
+            form13FQuarters,
             BackfillCommandTimeout.TotalSeconds
         );
 
