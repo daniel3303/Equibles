@@ -10,11 +10,12 @@ using Microsoft.Extensions.Logging;
 namespace Equibles.Sec.HostedService.Services;
 
 /// <summary>
-/// Stamps <c>Document.Items</c> onto 8-K rows ingested before item capture went live, so the
-/// earnings-release consumers (Item 2.02) can match historical filings. Each cycle picks the
-/// companies with pending 8-Ks (newest filings first), re-fetches each company's submissions
-/// feed once — <see cref="ISecEdgarClient.GetCompanyFilings"/> already walks the archive pages,
-/// so the whole filing history is covered — and stamps every pending 8-K by accession number.
+/// Stamps <c>Document.Items</c> onto 8-K and 8-K/A rows ingested before item capture went
+/// live, so the earnings-release consumers (Item 2.02) can match historical filings. Each
+/// cycle picks the companies with pending documents (newest filings first), re-fetches each
+/// company's submissions feed once — <see cref="ISecEdgarClient.GetCompanyFilings"/> already
+/// walks the archive pages, so the whole filing history is covered — and stamps every pending
+/// document by accession number.
 /// </summary>
 /// <remarks>
 /// A document whose accession is absent from the feed (or carries no items there) is stamped
@@ -111,7 +112,9 @@ public class FilingItemsBackfillService
         }
 
         var stock = documents[0].CommonStock;
-        var filings = await _secEdgarClient.GetCompanyFilings(stock.Cik, DocumentTypeFilter.EightK);
+        // Unfiltered on purpose: the exact-form filter would drop 8-K/A rows (form "8-K/A"),
+        // and the accession lookup below only ever matches the 8-K-family rows anyway.
+        var filings = await _secEdgarClient.GetCompanyFilings(stock.Cik);
         var itemsByAccession = filings
             .Where(f => !string.IsNullOrEmpty(f.AccessionNumber))
             .DistinctBy(f => f.AccessionNumber)
@@ -157,8 +160,12 @@ public class FilingItemsBackfillService
 
     private IQueryable<Document> PendingEightKs() =>
         _documentRepository
-            .GetByDocumentType(DocumentType.EightK)
-            .Where(d => d.Items == null && d.CommonStock.Cik != null);
+            .GetAll()
+            .Where(d =>
+                (d.DocumentType == DocumentType.EightK || d.DocumentType == DocumentType.EightKa)
+                && d.Items == null
+                && d.CommonStock.Cik != null
+            );
 
     private static string DeriveAccessionNumber(string sourceUrl)
     {

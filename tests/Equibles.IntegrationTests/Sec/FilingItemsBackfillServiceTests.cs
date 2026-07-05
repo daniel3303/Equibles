@@ -45,7 +45,8 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
         string accessionNumber,
         DateOnly reportingDate,
         string sourceUrl = null,
-        string items = null
+        string items = null,
+        DocumentType documentType = null
     )
     {
         await using var seed = Fixture.CreateDbContext();
@@ -64,7 +65,7 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
             Id = Guid.NewGuid(),
             CommonStockId = companyId,
             Content = content,
-            DocumentType = DocumentType.EightK,
+            DocumentType = documentType ?? DocumentType.EightK,
             ReportingDate = reportingDate,
             ReportingForDate = reportingDate,
             AccessionNumber = accessionNumber,
@@ -97,12 +98,16 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
         return client;
     }
 
-    private static FilingData EightKFiling(string accessionNumber, string items) =>
+    private static FilingData EightKFiling(
+        string accessionNumber,
+        string items,
+        string form = "8-K"
+    ) =>
         new()
         {
             Cik = "0000320193",
             AccessionNumber = accessionNumber,
-            Form = "8-K",
+            Form = form,
             Items = items,
             FilingDate = new DateOnly(2024, 2, 1),
             ReportDate = new DateOnly(2024, 2, 1),
@@ -135,6 +140,43 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
             .SingleAsync(d => d.AccessionNumber == "0000320193-24-000002");
         stampedDoc.Items.Should().Be("2.02,9.01");
         feedlessDoc.Items.Should().Be(string.Empty);
+    }
+
+    [Fact]
+    public async Task Backfill_StampsPendingEightKAmendmentsFromTheUnfilteredFeed()
+    {
+        // 8-K/A rows carry form "8-K/A" in the submissions feed, so an exact-form
+        // "8-K" filter would drop them and the amendment would be stamped not-found.
+        // The sweep must select pending amendments AND walk the feed unfiltered.
+        var company = await SeedCompany("ITMA", "0000320193");
+        var documentId = await SeedEightK(
+            company.Id,
+            "0000320193-24-000003",
+            new DateOnly(2024, 3, 1),
+            documentType: DocumentType.EightKa
+        );
+        DbContext.ChangeTracker.Clear();
+
+        var client = StubClient(EightKFiling("0000320193-24-000003", "2.02,9.01", form: "8-K/A"));
+        var result = await BuildSut(client).Backfill(companyBatchSize: 10);
+
+        result.Companies.Should().Be(1);
+        result.Stamped.Should().Be(1);
+
+        await using var verify = Fixture.CreateDbContext();
+        var document = await verify.Set<Document>().SingleAsync(d => d.Id == documentId);
+        document.Items.Should().Be("2.02,9.01");
+
+        // Pin the unfiltered walk itself — a form-filtered stub would still return the
+        // amendment row above, so assert the service passed no document-type filter.
+        await client
+            .Received(1)
+            .GetCompanyFilings(
+                Arg.Any<string>(),
+                Arg.Is<DocumentTypeFilter?>(f => f == null),
+                Arg.Any<DateOnly?>(),
+                Arg.Any<DateOnly?>()
+            );
     }
 
     [Fact]
