@@ -64,18 +64,32 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         // amendment has superseded (or claimed) it — a superseded original has
         // no rows of its own, and without the claim column every sweep would
         // re-fetch it from EDGAR forever just to re-skip it.
+        //
+        // Deliberately TWO single-column probes instead of one cross-column OR:
+        // EF translates the OR (plus null-compensation branches for the nullable
+        // columns) into a shape Postgres plans as a bitmap heap scan — ~230 ms
+        // per call at the sweep's batch rate, the single largest query cost on
+        // the box — while each single-column ANY probe walks its own index in
+        // well under a millisecond. The union is semantically identical: feed
+        // accession numbers are never null, so the dropped null-match branches
+        // could never fire.
         var candidates = accessionNumbers.ToList();
-        var known = await transactionRepository
+        var knownByOwnRows = await transactionRepository
+            .GetAll()
+            .Where(t => candidates.Contains(t.AccessionNumber))
+            .Select(t => new { t.AccessionNumber, t.SupersededAccessionNumber })
+            .ToListAsync();
+        var knownBySupersededClaim = await transactionRepository
             .GetAll()
             .Where(t =>
-                candidates.Contains(t.AccessionNumber)
-                || candidates.Contains(t.SupersededAccessionNumber)
+                t.SupersededAccessionNumber != null
+                && candidates.Contains(t.SupersededAccessionNumber)
             )
             .Select(t => new { t.AccessionNumber, t.SupersededAccessionNumber })
             .ToListAsync();
 
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var row in known)
+        foreach (var row in knownByOwnRows.Concat(knownBySupersededClaim))
         {
             result.Add(row.AccessionNumber);
             if (row.SupersededAccessionNumber != null)
