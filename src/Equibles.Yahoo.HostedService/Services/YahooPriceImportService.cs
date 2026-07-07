@@ -89,6 +89,12 @@ public class YahooPriceImportService
             {
                 _logger.LogWarning(ex, "Failed to fetch data for {Ticker}, skipping", ticker);
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Shutdown, not a per-ticker fault — rethrow so the worker's cancellation
+                // handling sees it instead of recording a phantom error row per deploy.
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error importing data for {Ticker}", ticker);
@@ -188,6 +194,12 @@ public class YahooPriceImportService
                     "Failed to fetch split-adjusted history for {Ticker}; leaving its split(s) pending",
                     ticker
                 );
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Shutdown, not a per-stock fault — rethrow so the worker's cancellation
+                // handling sees it instead of recording a phantom error row per deploy.
+                throw;
             }
             catch (Exception ex)
             {

@@ -488,6 +488,81 @@ public class YahooPriceImportServiceTests : IDisposable
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
+    [Fact]
+    public async Task Import_CancelledMidTicker_RethrowsWithoutReportingPhantomError()
+    {
+        // A deploy's SIGTERM cancels the stopping token while a ticker is mid-import. The
+        // per-ticker catch-all must NOT record that OperationCanceledException as an error
+        // row ("The operation was canceled.") — it rethrows so the worker's cancellation
+        // handling sees an orderly shutdown instead of a phantom per-deploy error.
+        var apple = CreateStock("AAPL", "Apple Inc.");
+        await SeedStocks(apple);
+
+        var cts = new CancellationTokenSource();
+        _yahooClient
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Throws(_ =>
+            {
+                cts.Cancel();
+                return new OperationCanceledException(cts.Token);
+            });
+
+        var act = () => _service.Import(cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        await _errorReporter
+            .DidNotReceive()
+            .Report(
+                Arg.Any<ErrorSource>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>()
+            );
+    }
+
+    [Fact]
+    public async Task Import_CancelledMidSplitReconcile_RethrowsWithoutReportingPhantomError()
+    {
+        // Same shutdown-cancellation contract for the split-reconciliation pass (the loop
+        // that produced the prod "ReconcilePendingSplits(JILL)" phantom): cancellation
+        // mid-reconcile propagates instead of landing in the per-stock error report.
+        var apple = CreateStock("AAPL", "Apple Inc.");
+        await SeedStocks(apple);
+
+        _splitRepo.Add(
+            new StockSplit
+            {
+                CommonStockId = apple.Id,
+                EffectiveDate = new DateOnly(2026, 3, 24),
+                Numerator = 4m,
+                Denominator = 1m,
+                Source = StockSplitSource.Yahoo,
+            }
+        );
+        await _splitRepo.SaveChanges();
+
+        var cts = new CancellationTokenSource();
+        _yahooClient
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Throws(_ =>
+            {
+                cts.Cancel();
+                return new OperationCanceledException(cts.Token);
+            });
+
+        var act = () => _service.Import(cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        await _errorReporter
+            .DidNotReceive()
+            .Report(
+                Arg.Any<ErrorSource>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>()
+            );
+    }
+
     // ── MinSyncDate configuration ─────────────────────────────────────
 
     [Fact]
