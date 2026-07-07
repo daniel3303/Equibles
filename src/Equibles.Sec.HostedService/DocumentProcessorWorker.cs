@@ -21,10 +21,11 @@ public class DocumentProcessorWorker : BaseScraperWorker
     protected override int ErrorReportThreshold => 20;
 
     // Backfill frontiers for the two phases. They live on the worker (a singleton) because the
-    // DocumentManager is re-resolved from a fresh scope per batch; a process restart resets
-    // them, which just costs one full scan before the floored fast path takes over again.
-    private readonly BackfillCursor _chunkCursor = new();
-    private readonly BackfillCursor _embeddingCursor = new();
+    // DocumentManager is re-resolved from a fresh scope per batch; each hydrates from its
+    // persisted BackfillState row on first use, so a process restart resumes at the frontier
+    // instead of paying the unfloored corpus scan.
+    private readonly BackfillCursor _chunkCursor = new("document-chunking");
+    private readonly BackfillCursor _embeddingCursor = new("chunk-embedding");
 
     public DocumentProcessorWorker(
         ILogger<DocumentProcessorWorker> logger,

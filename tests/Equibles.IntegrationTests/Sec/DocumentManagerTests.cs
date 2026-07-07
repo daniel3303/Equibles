@@ -7,6 +7,7 @@ using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Pgvector;
@@ -91,12 +92,16 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         var sut = new DocumentManager(
             new DocumentRepository(DbContext),
             new ChunkRepository(DbContext),
+            new BackfillStateRepository(DbContext),
             _processor,
             Options.Create(new EmbeddingConfig { Enabled = false }),
             NullLogger<DocumentManager>()
         );
 
-        var workDone = await sut.ChunkDocumentBatch(new BackfillCursor(), CancellationToken.None);
+        var workDone = await sut.ChunkDocumentBatch(
+            new BackfillCursor("document-chunking"),
+            CancellationToken.None
+        );
 
         workDone
             .Should()
@@ -172,6 +177,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         var sut = new DocumentManager(
             new DocumentRepository(DbContext),
             new ChunkRepository(DbContext),
+            new BackfillStateRepository(DbContext),
             _processor,
             // IsConfigured is computed from Enabled + BaseUrl + ModelName; without these
             // the guard returns false before the query runs and the test pins nothing.
@@ -187,7 +193,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         );
 
         var workDone = await sut.GenerateEmbeddingBatch(
-            new BackfillCursor(),
+            new BackfillCursor("chunk-embedding"),
             CancellationToken.None
         );
 
@@ -213,7 +219,122 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
                 id => id == pendingChunk.Id,
                 "only the embedding-less chunk survives the !c.Embeddings.Any() filter"
             );
+
+        // The advance is persisted so a restarted worker hydrates this frontier instead of
+        // re-running the unfloored corpus scan.
+        var state = await new BackfillStateRepository(DbContext).GetByName("chunk-embedding");
+        state.Should().NotBeNull();
+        state!.Floor.Should().Be(pendingChunk.CreationTime);
     }
+
+    [Fact]
+    public async Task GenerateEmbeddingBatch_RestartAfterAdvance_ResumesFromPersistedFloorAndUpdatesInPlace()
+    {
+        // Simulates a worker restart between two batches: the second batch runs on a FRESH
+        // cursor that must hydrate the persisted frontier, resume via the floored path (no
+        // corpus re-scan), and persist the next advance as an in-place UPDATE of the single
+        // BackfillState row. Reverting PersistCursor to lean on implicit change tracking, or
+        // dropping hydration, would fail this — the floor would stay stale and the daily scan
+        // would re-run on every restart, the exact regression this fix prevents.
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+        };
+        var file = MakeFile();
+        var document = MakeDocument(
+            stock,
+            file,
+            contentId: file.Id,
+            createdAt: DateTime.UtcNow.AddMinutes(-10)
+        );
+        var firstChunk = MakeChunk(
+            document,
+            content: "first",
+            index: 0,
+            createdAt: DateTime.UtcNow.AddMinutes(-5)
+        );
+
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<File>().Add(file);
+        DbContext.Set<Document>().Add(document);
+        DbContext.Set<Chunk>().Add(firstChunk);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        // First batch on a fresh cursor: no state row yet, so it full-scans, processes the
+        // chunk, and persists floor = firstChunk.CreationTime.
+        await NewEmbeddingManager()
+            .GenerateEmbeddingBatch(new BackfillCursor("chunk-embedding"), CancellationToken.None);
+
+        var afterFirst = await new BackfillStateRepository(DbContext).GetByName("chunk-embedding");
+        afterFirst.Should().NotBeNull();
+        afterFirst!.Floor.Should().Be(firstChunk.CreationTime);
+        var stampAfterFirst = afterFirst.LastFullRescanAt;
+        stampAfterFirst.Should().NotBeNull("the first drained-frontier scan stamped the cursor");
+        DbContext.ChangeTracker.Clear();
+
+        // Mark the first chunk embedded so it leaves the pending filter, then seed a newer
+        // pending chunk that only a floored resume from the persisted frontier will reach.
+        DbContext
+            .Set<Embedding>()
+            .Add(
+                new Embedding
+                {
+                    Id = Guid.NewGuid(),
+                    ChunkId = firstChunk.Id,
+                    Model = "test-model",
+                    Vector = new Vector(new ReadOnlyMemory<float>(new[] { 1f, 0f, 0f })),
+                    VectorDimension = 3,
+                }
+            );
+        var secondChunk = MakeChunk(
+            document,
+            content: "second",
+            index: 1,
+            createdAt: DateTime.UtcNow.AddMinutes(-2)
+        );
+        DbContext.Set<Chunk>().Add(secondChunk);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        // Second batch on a brand-new cursor (the restart): hydrate → floored resume → advance.
+        await NewEmbeddingManager()
+            .GenerateEmbeddingBatch(new BackfillCursor("chunk-embedding"), CancellationToken.None);
+
+        var rows = await new BackfillStateRepository(DbContext)
+            .GetAll()
+            .Where(s => s.Name == "chunk-embedding")
+            .ToListAsync();
+        rows.Should().ContainSingle("the advance is an in-place UPDATE, never a second row");
+        rows[0]
+            .Floor.Should()
+            .Be(secondChunk.CreationTime, "the UPDATE persisted the new frontier");
+        rows[0]
+            .LastFullRescanAt.Should()
+            .Be(
+                stampAfterFirst,
+                "the restart hydrated the frontier and resumed via the floored path, so no new full scan ran"
+            );
+    }
+
+    private DocumentManager NewEmbeddingManager() =>
+        new(
+            new DocumentRepository(DbContext),
+            new ChunkRepository(DbContext),
+            new BackfillStateRepository(DbContext),
+            _processor,
+            Options.Create(
+                new EmbeddingConfig
+                {
+                    Enabled = true,
+                    BaseUrl = "http://localhost:11434",
+                    ModelName = "test-model",
+                }
+            ),
+            NullLogger<DocumentManager>()
+        );
 
     private static Chunk MakeChunk(
         Document document,

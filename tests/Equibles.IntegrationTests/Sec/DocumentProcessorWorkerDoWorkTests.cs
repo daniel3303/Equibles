@@ -35,6 +35,7 @@ public class DocumentProcessorWorkerDoWorkTests : ParadeDbMcpTestBase
         var documentManager = new DocumentManager(
             new DocumentRepository(DbContext),
             new ChunkRepository(DbContext),
+            new BackfillStateRepository(DbContext),
             Substitute.For<IDocumentProcessor>(),
             Options.Create(new EmbeddingConfig { Enabled = false }),
             Substitute.For<ILogger<DocumentManager>>()
