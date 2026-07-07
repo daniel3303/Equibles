@@ -615,6 +615,102 @@ public class SharesOutstandingProviderTests
         isForeign.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task GetCurrentSharesOutstanding_UsGaapBalanceSheetPlaceholder_PrefersDeiPerClassSum()
+    {
+        await using var db = NewDb();
+        // A multi-class filer (e.g. XNDU, BRUN) whose latest 10-Q reports the real count only per
+        // share class via the dei cover-page tag, while the us-gaap balance-sheet
+        // CommonStockSharesOutstanding line carries a nominal placeholder of 1 — filed the SAME day.
+        // The placeholder must never be chosen as the entity total; the per-class cover-page sum is
+        // authoritative, else SharesOutStanding is pinned to 1 and short interest % of shares explodes.
+        var stock = new CommonStock
+        {
+            Ticker = "BRUN",
+            Name = "Boost Run Inc.",
+            Cik = "0001999001",
+        };
+        var deiCoverPage = new FinancialConcept
+        {
+            Taxonomy = FactTaxonomy.Dei,
+            Tag = "EntityCommonStockSharesOutstanding",
+        };
+        var usGaapBalanceSheet = new FinancialConcept
+        {
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "CommonStockSharesOutstanding",
+        };
+        db.AddRange(stock, deiCoverPage, usGaapBalanceSheet);
+
+        const string acc = "0001493152-26-026667";
+        db.Add(
+            ClassFact(
+                stock,
+                deiCoverPage,
+                31_895_656m,
+                new(2026, 6, 1),
+                new(2026, 6, 1),
+                acc,
+                "us-gaap:CommonClassAMember"
+            )
+        );
+        db.Add(
+            ClassFact(
+                stock,
+                deiCoverPage,
+                29_533_018m,
+                new(2026, 6, 1),
+                new(2026, 6, 1),
+                acc,
+                "us-gaap:CommonClassBMember"
+            )
+        );
+        // The balance-sheet placeholder: consolidated (no class dimension), same filing date.
+        db.Add(Fact(stock, usGaapBalanceSheet, 1m, new(2026, 6, 1), new(2026, 6, 1)));
+        await db.SaveChangesAsync();
+
+        var provider = new SharesOutstandingProvider(
+            new FinancialFactRepository(db),
+            new FinancialConceptRepository(db)
+        );
+
+        var shares = await provider.GetCurrentSharesOutstanding(stock);
+
+        shares.Should().Be(61_428_674);
+    }
+
+    [Fact]
+    public async Task GetCurrentSharesOutstanding_OnlyUsGaapBalanceSheetConsolidated_FallsBackToIt()
+    {
+        await using var db = NewDb();
+        // An issuer that reports no dei cover-page count at all — only the us-gaap balance-sheet
+        // CommonStockSharesOutstanding consolidated line. With no authoritative cover-page figure to
+        // prefer, the balance-sheet count is the best available and must still be returned.
+        var stock = new CommonStock
+        {
+            Ticker = "OLD",
+            Name = "Legacy Filer",
+            Cik = "0007777001",
+        };
+        var usGaapBalanceSheet = new FinancialConcept
+        {
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "CommonStockSharesOutstanding",
+        };
+        db.AddRange(stock, usGaapBalanceSheet);
+        db.Add(Fact(stock, usGaapBalanceSheet, 5_000_000m, new(2026, 5, 1), new(2026, 4, 26)));
+        await db.SaveChangesAsync();
+
+        var provider = new SharesOutstandingProvider(
+            new FinancialFactRepository(db),
+            new FinancialConceptRepository(db)
+        );
+
+        var shares = await provider.GetCurrentSharesOutstanding(stock);
+
+        shares.Should().Be(5_000_000);
+    }
+
     private static FinancialFact ClassFact(
         CommonStock stock,
         FinancialConcept concept,
