@@ -88,6 +88,13 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
                     // the envelope simply carries none worth re-reading.
                     document.XbrlFactsVersion = XbrlFactExtractionService.CurrentVersion;
                 }
+                // Shutdown mid-batch is not a document failure: let it surface
+                // so the base loop winds down quietly instead of burning one of
+                // the document's attempts and landing a phantom row in Errors.
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    throw;
+                }
                 // Per-document fault isolation: count the attempt and keep the
                 // cycle going for the rest of the batch.
                 catch (Exception ex)

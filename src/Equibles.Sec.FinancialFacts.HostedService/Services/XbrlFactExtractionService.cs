@@ -62,6 +62,19 @@ public class XbrlFactExtractionService
 
     private const int InsertBatchSize = 1000;
 
+    /// <summary>
+    /// Envelopes above this uncompressed size are skipped instead of parsed.
+    /// The parsers materialise the whole document in memory (the DOM costs a
+    /// large multiple of the source size), so a nine-figure envelope — rare
+    /// foreign-issuer filings attach 100+ MB of inline-XBRL exhibits, while
+    /// the p99.9 of successfully parsed envelopes is ~21 MB — can OOM the
+    /// whole worker process under memory pressure. A skipped document
+    /// completes its sweep normally (the caller stamps <see cref="CurrentVersion"/>),
+    /// so it is only revisited on a version bump, where the guard re-skips it
+    /// before any content is loaded.
+    /// </summary>
+    internal const long MaxParseableEnvelopeBytes = 50 * 1024 * 1024;
+
     // Column limits the parsed values must fit (FinancialFact.Unit,
     // FinancialFactDimension.Axis/Member). Facts that exceed them are skipped
     // rather than truncated — a truncated QName would corrupt the key.
@@ -103,6 +116,18 @@ public class XbrlFactExtractionService
         // legacy/paper rows the capture path never marks Captured anyway.
         if (string.IsNullOrEmpty(document.AccessionNumber))
             return 0;
+        if (document.XbrlUncompressedSize > MaxParseableEnvelopeBytes)
+        {
+            _logger.LogWarning(
+                "Skipping dimensional-fact extraction for document {DocumentId} ({Accession}): "
+                    + "envelope is {Size} bytes, above the {Limit}-byte parse ceiling.",
+                document.Id,
+                document.AccessionNumber,
+                document.XbrlUncompressedSize,
+                MaxParseableEnvelopeBytes
+            );
+            return 0;
+        }
 
         var envelope = Encoding.UTF8.GetString(
             GzipCompressor.Decompress(await _fileManager.GetContent(document.XbrlContent))
