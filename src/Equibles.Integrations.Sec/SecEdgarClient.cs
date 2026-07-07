@@ -117,6 +117,68 @@ public class SecEdgarClient : ISecEdgarClient
         }
     }
 
+    public async Task<List<FundClassTicker>> GetFundClassTickers()
+    {
+        try
+        {
+            var url = $"{FilesBaseUrl}/files/company_tickers_mf.json";
+            _logger.LogInformation("Requesting: {Url}", url);
+
+            var content = await FetchStringAsync(url);
+            var response = JsonConvert.DeserializeObject<CompanyTickersResponse>(content);
+            var tickers = ParseFundClassTickers(response);
+
+            _logger.LogInformation(
+                "Successfully retrieved {Count} fund class tickers",
+                tickers.Count
+            );
+            return tickers;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving fund class tickers");
+            throw;
+        }
+    }
+
+    // Expected fields: ["cik","seriesId","classId","symbol"]. Positional like the company file;
+    // a row missing its series id or symbol carries nothing usable and is skipped.
+    internal static List<FundClassTicker> ParseFundClassTickers(CompanyTickersResponse response)
+    {
+        if (response?.Fields == null || response.Data == null)
+            return [];
+
+        var cikIndex = response.Fields.IndexOf("cik");
+        var seriesIndex = response.Fields.IndexOf("seriesId");
+        var classIndex = response.Fields.IndexOf("classId");
+        var symbolIndex = response.Fields.IndexOf("symbol");
+        if (seriesIndex == -1 || symbolIndex == -1)
+            return [];
+
+        var tickers = new List<FundClassTicker>(response.Data.Count);
+        foreach (var row in response.Data)
+        {
+            var seriesId = ValueAt(row, seriesIndex);
+            var symbol = ValueAt(row, symbolIndex);
+            if (string.IsNullOrWhiteSpace(seriesId) || string.IsNullOrWhiteSpace(symbol))
+                continue;
+
+            tickers.Add(
+                new FundClassTicker
+                {
+                    Cik = ValueAt(row, cikIndex),
+                    SeriesId = seriesId.Trim(),
+                    ClassId = ValueAt(row, classIndex),
+                    Symbol = symbol.Trim().ToUpperInvariant(),
+                }
+            );
+        }
+        return tickers;
+    }
+
+    private static string ValueAt(List<object> row, int index) =>
+        index >= 0 && index < row.Count ? row[index]?.ToString() : null;
+
     public async Task<string> GetEntityType(string cik)
     {
         var metadata = await GetCompanyMetadata(cik);
