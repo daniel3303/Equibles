@@ -91,12 +91,16 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         var sut = new DocumentManager(
             new DocumentRepository(DbContext),
             new ChunkRepository(DbContext),
+            new BackfillStateRepository(DbContext),
             _processor,
             Options.Create(new EmbeddingConfig { Enabled = false }),
             NullLogger<DocumentManager>()
         );
 
-        var workDone = await sut.ChunkDocumentBatch(new BackfillCursor(), CancellationToken.None);
+        var workDone = await sut.ChunkDocumentBatch(
+            new BackfillCursor("document-chunking"),
+            CancellationToken.None
+        );
 
         workDone
             .Should()
@@ -172,6 +176,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         var sut = new DocumentManager(
             new DocumentRepository(DbContext),
             new ChunkRepository(DbContext),
+            new BackfillStateRepository(DbContext),
             _processor,
             // IsConfigured is computed from Enabled + BaseUrl + ModelName; without these
             // the guard returns false before the query runs and the test pins nothing.
@@ -187,7 +192,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         );
 
         var workDone = await sut.GenerateEmbeddingBatch(
-            new BackfillCursor(),
+            new BackfillCursor("chunk-embedding"),
             CancellationToken.None
         );
 
@@ -213,6 +218,12 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
                 id => id == pendingChunk.Id,
                 "only the embedding-less chunk survives the !c.Embeddings.Any() filter"
             );
+
+        // The advance is persisted so a restarted worker hydrates this frontier instead of
+        // re-running the unfloored corpus scan.
+        var state = await new BackfillStateRepository(DbContext).GetByName("chunk-embedding");
+        state.Should().NotBeNull();
+        state!.Floor.Should().Be(pendingChunk.CreationTime);
     }
 
     private static Chunk MakeChunk(

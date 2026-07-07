@@ -38,6 +38,7 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        builder.Entity<BackfillState>();
         builder.Entity<FailToDeliver>();
         builder.Entity<FormAdvAdviser>();
         builder.Entity<FormDFiling>();

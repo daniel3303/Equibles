@@ -23,9 +23,12 @@ public class DocumentManagerTests
         var logger = Substitute.For<ILogger<DocumentManager>>();
         var processor = Substitute.For<IDocumentProcessor>();
 
-        var sut = new DocumentManager(null, null, processor, embeddingConfig, logger);
+        var sut = new DocumentManager(null, null, null, processor, embeddingConfig, logger);
 
-        var result = await sut.GenerateEmbeddingBatch(new BackfillCursor(), CancellationToken.None);
+        var result = await sut.GenerateEmbeddingBatch(
+            new BackfillCursor("test"),
+            CancellationToken.None
+        );
 
         result.Should().BeFalse();
         await processor
@@ -47,9 +50,12 @@ public class DocumentManagerTests
         var logger = Substitute.For<ILogger<DocumentManager>>();
         var processor = Substitute.For<IDocumentProcessor>();
 
-        var sut = new DocumentManager(null, null, processor, embeddingConfig, logger);
+        var sut = new DocumentManager(null, null, null, processor, embeddingConfig, logger);
 
-        var result = await sut.GenerateEmbeddingBatch(new BackfillCursor(), CancellationToken.None);
+        var result = await sut.GenerateEmbeddingBatch(
+            new BackfillCursor("test"),
+            CancellationToken.None
+        );
 
         result.Should().BeFalse();
     }
@@ -68,9 +74,12 @@ public class DocumentManagerTests
         var logger = Substitute.For<ILogger<DocumentManager>>();
         var processor = Substitute.For<IDocumentProcessor>();
 
-        var sut = new DocumentManager(null, null, processor, embeddingConfig, logger);
+        var sut = new DocumentManager(null, null, null, processor, embeddingConfig, logger);
 
-        var result = await sut.GenerateEmbeddingBatch(new BackfillCursor(), CancellationToken.None);
+        var result = await sut.GenerateEmbeddingBatch(
+            new BackfillCursor("test"),
+            CancellationToken.None
+        );
 
         result.Should().BeFalse();
     }

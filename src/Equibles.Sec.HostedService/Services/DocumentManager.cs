@@ -2,6 +2,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Sec.BusinessLogic.Embeddings;
 using Equibles.Sec.BusinessLogic.Processing;
+using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -15,6 +16,7 @@ public class DocumentManager
 
     private readonly DocumentRepository _documentRepository;
     private readonly ChunkRepository _chunkRepository;
+    private readonly BackfillStateRepository _backfillStateRepository;
     private readonly IDocumentProcessor _documentProcessor;
     private readonly EmbeddingConfig _embeddingConfig;
     private readonly int _loadSize;
@@ -23,6 +25,7 @@ public class DocumentManager
     public DocumentManager(
         DocumentRepository documentRepository,
         ChunkRepository chunkRepository,
+        BackfillStateRepository backfillStateRepository,
         IDocumentProcessor documentProcessor,
         IOptions<EmbeddingConfig> embeddingConfig,
         ILogger<DocumentManager> logger
@@ -30,6 +33,7 @@ public class DocumentManager
     {
         _documentRepository = documentRepository;
         _chunkRepository = chunkRepository;
+        _backfillStateRepository = backfillStateRepository;
         _documentProcessor = documentProcessor;
         _embeddingConfig = embeddingConfig.Value;
         _loadSize = Math.Max(DefaultLoadSize, _embeddingConfig.BatchSize);
@@ -71,6 +75,7 @@ public class DocumentManager
         _logger.LogInformation("Chunking {Count} documents", pendingDocuments.Count);
         await _documentProcessor.ProcessDocuments(pendingDocuments, cancellationToken);
         cursor.Advance(pendingDocuments[^1].CreationTime);
+        await PersistCursor(cursor);
         return true;
     }
 
@@ -105,16 +110,22 @@ public class DocumentManager
         );
         await _documentProcessor.GenerateEmbeddings(chunksWithoutEmbeddings, cancellationToken);
         cursor.Advance(chunksWithoutEmbeddings[^1].CreationTime);
+        await PersistCursor(cursor);
         return true;
     }
 
-    // Floored batch first; when the frontier drains, at most one rate-limited full scan so
-    // stragglers behind the cursor (failed items, re-queued work) are eventually retried.
-    private static async Task<List<T>> LoadBatch<T>(
+    // Floored batch first; when the frontier drains, an hourly rescan bounded a week behind the
+    // floor catches near-frontier stragglers cheaply, and an unfloored corpus scan runs at most
+    // daily as the backstop for re-queued work older than the bounded window. The cursor
+    // hydrates from its persisted BackfillState row on first use per process, so a restart
+    // resumes at the frontier instead of paying the corpus scan.
+    private async Task<List<T>> LoadBatch<T>(
         Func<DateTime?, Task<List<T>>> query,
         BackfillCursor cursor
     )
     {
+        await HydrateCursor(cursor);
+
         if (cursor.Floor is { } floor)
         {
             var batch = await query(floor);
@@ -122,9 +133,44 @@ public class DocumentManager
                 return batch;
         }
 
-        if (!cursor.TryStartFullRescan(DateTime.UtcNow))
+        var utcNow = DateTime.UtcNow;
+        if (cursor.Floor is { } drainedFloor && cursor.TryStartBoundedRescan(utcNow))
+        {
+            var batch = await query(drainedFloor - BackfillCursor.BoundedRescanLookback);
+            if (batch.Count > 0)
+                return batch;
+        }
+
+        if (!cursor.TryStartFullRescan(utcNow))
             return [];
 
+        // Stamp before scanning: an interrupted scan then waits out the interval instead of a
+        // crash-loop re-running the minutes-long scan on every boot; fresh work still flows
+        // through the floored and bounded tiers regardless.
+        await PersistCursor(cursor);
         return await query(null);
+    }
+
+    private async Task HydrateCursor(BackfillCursor cursor)
+    {
+        if (cursor.IsHydrated)
+            return;
+
+        var state = await _backfillStateRepository.GetByName(cursor.Name);
+        cursor.Hydrate(state?.Floor, state?.LastFullRescanAt);
+    }
+
+    private async Task PersistCursor(BackfillCursor cursor)
+    {
+        var state = await _backfillStateRepository.GetByName(cursor.Name);
+        if (state == null)
+        {
+            state = new BackfillState { Name = cursor.Name };
+            _backfillStateRepository.Add(state);
+        }
+
+        state.Floor = cursor.Floor;
+        state.LastFullRescanAt = cursor.LastFullRescanAt;
+        await _backfillStateRepository.SaveChanges();
     }
 }
