@@ -836,6 +836,108 @@ public class YahooPriceImportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Import_DomesticAdsIssuer_KeepsYahooPairInsteadOfRescalingOntoOrdinaryBase()
+    {
+        // AKTX: a former foreign private issuer that lost FPI status — it files 10-K/10-Q, so the
+        // form-based guard says "domestic" — while its US listing is still an ADS. EDGAR's cover
+        // page counts 91.57B *ordinary* shares against ~2.5M listed ADSs (80,000 ordinary per
+        // ADS). Rescaling Yahoo's correct ~$27M cap onto that base stored $998B, and the damage
+        // was invisible downstream because the pair stayed self-consistent. The unit-mismatch
+        // guard must keep Yahoo's listed-security figures verbatim, exactly like the FPI path.
+        var stock = CreateStock("AKTX", "Akari Therapeutics Plc");
+        await SeedStocks(stock);
+
+        _sharesProvider.GetCurrentSharesOutstanding(stock).Returns(91_567_009_533L);
+        _sharesProvider.IsForeignPrivateIssuer(stock).Returns(false);
+
+        _yahooClient
+            .GetChart("AKTX", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+        _yahooClient
+            .GetKeyStatistics("AKTX")
+            .Returns(
+                new KeyStatistics
+                {
+                    SharesOutstanding = 2_477_000,
+                    ImpliedSharesOutstanding = 2_477_000,
+                    MarketCapitalization = 27_000_000d,
+                }
+            );
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "AKTX");
+        updated.MarketCapitalization.Should().Be(27_000_000d);
+        updated.SharesOutStanding.Should().Be(2_477_000);
+    }
+
+    [Fact]
+    public async Task Import_GarbageSmallEdgarCount_KeepsYahooPairInsteadOfRescaling()
+    {
+        // ABTC's shape: the EDGAR-side count is orders of magnitude below any real basis (a
+        // dropped digit / thousands-scaled cover-page entry). Rescaling Yahoo's cap onto it
+        // collapses market cap by the same factor; the guard is direction-agnostic and keeps
+        // Yahoo's self-consistent pair.
+        var stock = CreateStock("ABTC", "Garbage Count Co.");
+        await SeedStocks(stock);
+
+        _sharesProvider.GetCurrentSharesOutstanding(stock).Returns(1_000L);
+        _sharesProvider.IsForeignPrivateIssuer(stock).Returns(false);
+
+        _yahooClient
+            .GetChart("ABTC", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+        _yahooClient
+            .GetKeyStatistics("ABTC")
+            .Returns(
+                new KeyStatistics
+                {
+                    SharesOutstanding = 458_000_000,
+                    MarketCapitalization = 45_800_000d,
+                }
+            );
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "ABTC");
+        updated.MarketCapitalization.Should().Be(45_800_000d);
+        updated.SharesOutStanding.Should().Be(458_000_000);
+    }
+
+    [Fact]
+    public async Task Import_DomesticIssuer_StoresEdgarShareCountAlongsideRescaledCap()
+    {
+        // When the EDGAR count is the authoritative base, the key-stats sync stores it together
+        // with the market cap rescaled onto it, so the stored pair always moves as one — the
+        // share count can't sit on Yahoo's base for a cycle while the cap is already on EDGAR's.
+        var stock = CreateStock("PAIR", "Paired Write Co.");
+        stock.SharesOutStanding = 5_000_000;
+        await SeedStocks(stock);
+
+        _sharesProvider.GetCurrentSharesOutstanding(stock).Returns(10_000_000L);
+        _sharesProvider.IsForeignPrivateIssuer(stock).Returns(false);
+
+        _yahooClient
+            .GetChart("PAIR", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+        _yahooClient
+            .GetKeyStatistics("PAIR")
+            .Returns(
+                new KeyStatistics
+                {
+                    SharesOutstanding = 5_000_000,
+                    MarketCapitalization = 1_000_000_000d,
+                }
+            );
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "PAIR");
+        updated.SharesOutStanding.Should().Be(10_000_000L);
+        updated.MarketCapitalization.Should().Be(2_000_000_000d);
+    }
+
+    [Fact]
     public async Task Import_KeyStatisticsBothZero_LeavesStockUntouched()
     {
         var stock = CreateStock("ZERO", "All Zero Co.");
