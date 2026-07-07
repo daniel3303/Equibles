@@ -38,9 +38,10 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     // A cover-page count this many times smaller than BOTH the issuer's previous cover-page count
     // and the same filing's balance-sheet count is treated as a filing artifact (see
     // IsCollapsedCoverPageCount). Observed artifacts are 10x-1000x off (a dropped digit or a
-    // thousands-scaled entry); a genuine reduction this large inside one filing window is a
-    // reverse split or going-private event, for which abstaining — letting the price feed's
-    // listed-security count stand — is also the correct outcome.
+    // thousands-scaled entry). A genuine reduction this large in one filing window (a reverse
+    // split, going private) resolves safely either way: a balance sheet stated on the new share
+    // basis agrees with the reduced cover page and the count is kept, while a contradicted one
+    // abstains and the price feed's listed-security count stands.
     private const decimal CoverPageCollapseFactor = 5m;
 
     private readonly FinancialFactRepository _financialFactRepository;
@@ -140,8 +141,25 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
 
     // The single source of truth for "the issuer's current share count and the filing that stated
     // it", shared by GetCurrentSharesOutstanding and IsForeignPrivateIssuer so the two can never
-    // disagree about which fact is authoritative.
+    // disagree about which fact is authoritative. Callers pair the two accessors on the same
+    // stock and the resolution costs several queries, so the result (including an abstention) is
+    // memoized per stock for this scoped instance's lifetime — one import scope, single consumer.
+    private readonly Dictionary<Guid, SharesFact> _currentFactByStock = [];
+
     private async Task<SharesFact> ResolveCurrentSharesFact(
+        CommonStock stock,
+        CancellationToken cancellationToken
+    )
+    {
+        if (_currentFactByStock.TryGetValue(stock.Id, out var cached))
+            return cached;
+
+        var resolved = await ResolveCurrentSharesFactUncached(stock, cancellationToken);
+        _currentFactByStock[stock.Id] = resolved;
+        return resolved;
+    }
+
+    private async Task<SharesFact> ResolveCurrentSharesFactUncached(
         CommonStock stock,
         CancellationToken cancellationToken
     )
@@ -308,6 +326,9 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         var latest = perClassFacts
             .OrderByDescending(f => f.FiledDate)
             .ThenByDescending(f => f.PeriodEnd)
+            // Deterministic axis pick when a filer double-tags the same filing's classes on two
+            // class axes — without it the pinned axis depends on list order among equal keys.
+            .ThenBy(f => Array.IndexOf(ClassOfStockAxes, f.Dimensions[0].Axis))
             .First();
 
         var total = perClassFacts
