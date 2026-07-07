@@ -390,6 +390,10 @@ public partial class HouseDisclosureClient
         // mistaken for a ticker when the asset has no parenthesised symbol.
         assetText = AssetTypeCodeRegex().Replace(assetText, " ").Trim();
 
+        // The PDF's row checkboxes extract as "gfedc"/"gfedcb" glued onto the asset name — strip
+        // them before the name is stored or mined for a ticker (see CleanAssetName).
+        assetText = CleanAssetName(assetText);
+
         var ticker = ExtractTickerFromAssetName(assetText);
         if (string.IsNullOrEmpty(assetText) && string.IsNullOrEmpty(ticker))
             return null;
