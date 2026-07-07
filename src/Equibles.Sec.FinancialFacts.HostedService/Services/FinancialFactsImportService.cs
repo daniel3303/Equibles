@@ -173,6 +173,28 @@ public class FinancialFactsImportService
         if (tracked == null || tracked.SharesOutStanding == shares.Value)
             return;
 
+        // The FPI guard above can't see a DOMESTIC filer whose US listing is still an ADS (a
+        // former FPI that lost the status files 10-K/10-Q while its cover page keeps counting
+        // ordinary shares — AKTX: 91.6B ordinary against ~1.1M listed ADSs). Writing that count
+        // would put the share count back on the ordinary base while the market cap the Yahoo
+        // importer maintains stays on the ADS base, re-breaking the pair every facts cycle. So
+        // when the stored figures credibly sit on the listed-security basis (their implied
+        // per-share price is one a real listing could trade at) and the cover-page count is too
+        // far from the stored count to be the same unit, leave the stored count alone. A stored
+        // count that is itself garbage (nominal 1/100/1000-share placeholder, or a count whose
+        // implied price collapses to fractions of a cent) fails the plausibility test and is
+        // still repaired here, and a refusal that goes stale after a large legitimate issuance is
+        // corrected by the Yahoo importer, which writes the EDGAR count once Yahoo's own share
+        // base confirms it plausible.
+        if (
+            ShareBasisPlausibility.IsUnitMismatch(shares.Value, tracked.SharesOutStanding)
+            && ShareBasisPlausibility.ImpliesPlausibleSharePrice(
+                tracked.MarketCapitalization,
+                tracked.SharesOutStanding
+            )
+        )
+            return;
+
         tracked.SharesOutStanding = shares.Value;
         await stockRepository.SaveChanges();
     }

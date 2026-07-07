@@ -615,6 +615,26 @@ public class YahooPriceImportService
         )
             edgarShares = null;
 
+        // The form-based guard above can't see a DOMESTIC filer whose US listing is still an ADS:
+        // a former foreign private issuer that lost FPI status files 10-K/10-Q while its cover
+        // page keeps counting ordinary shares — AKTX filed 10-Q covers of 91.6B ordinary shares
+        // against ~1.1M listed ADSs (80,000 ordinary per ADS). Rescaling onto that base inflates
+        // market cap by the full ADS ratio, and the damage is undetectable downstream because the
+        // stored pair stays self-consistent (cap ÷ shares == the close). No ingested API exposes
+        // the registered security's title to flag these issuers authoritatively, so detect the
+        // unit mismatch from the figures themselves: when the EDGAR count and Yahoo's own share
+        // base are too far apart to be statements of the same unit, keep Yahoo's self-consistent
+        // listed-security figures verbatim, exactly like the FPI path. Also stops a garbage EDGAR
+        // count (ABTC 458x, CNDA 768x off any real basis) from poisoning the rescale. The
+        // threshold is deliberately far above any corporate-action lag (see
+        // MaxPlausibleSameUnitRatio), so a lagging reverse split — where EDGAR is right and the
+        // rescale must proceed (#3575) — cannot trip it.
+        if (
+            edgarShares is > 0
+            && ShareBasisPlausibility.IsUnitMismatch(edgarShares.Value, YahooShareBase(stats))
+        )
+            edgarShares = null;
+
         // Per-field conservative writes: only update on actual change, and never
         // overwrite a known value with 0 (treated as Yahoo "unknown" by the rest of
         // the codebase).
@@ -626,6 +646,19 @@ public class YahooPriceImportService
         )
         {
             stock.SharesOutStanding = stats.SharesOutstanding;
+            changed = true;
+        }
+        // When the EDGAR count is the authoritative base (not dropped above), store it here too —
+        // not only in the financial-facts importer — so the share count and the market cap
+        // rescaled onto it below always land together and the stored pair is never split across
+        // two bases between worker cycles. This is also the arbiter behind the facts importer's
+        // own unit-mismatch guard: that guard refuses to overwrite a stored count that is credibly
+        // on the listed-security basis, and when such a refusal goes stale (a large legitimate
+        // issuance moved the true count), it is corrected here, where Yahoo's agreeing share base
+        // proves the EDGAR count plausible.
+        if (edgarShares is > 0 && stock.SharesOutStanding != edgarShares.Value)
+        {
+            stock.SharesOutStanding = edgarShares.Value;
             changed = true;
         }
         // Reconcile Yahoo's market cap onto the authoritative EDGAR share base so it never
@@ -677,7 +710,9 @@ public class YahooPriceImportService
     // base to rescale from. The caller passes edgarShares == null for foreign private issuers
     // (20-F/40-F), whose EDGAR count is in ordinary shares — a different unit from the US-listed
     // ADR — so they keep Yahoo's self-consistent ADR market cap rather than being rescaled onto
-    // the ordinary base.
+    // the ordinary base, and likewise whenever the EDGAR count and Yahoo's share base are too far
+    // apart to be statements of the same unit (a domestic filer still listing ADSs, a garbage
+    // cover-page count — see ShareBasisPlausibility).
     //
     // The rescale must divide by the share base Yahoo actually built its market cap on. That is
     // impliedSharesOutstanding (the entity-wide count, all classes) when Yahoo provides it — NOT
@@ -701,13 +736,23 @@ public class YahooPriceImportService
         decimal? currentPrice = null
     )
     {
-        var yahooShareBase = yahooImpliedShares > 0 ? yahooImpliedShares : yahooShares;
+        var yahooShareBase = YahooShareBase(yahooImpliedShares, yahooShares);
         if (edgarShares is > 0 && yahooShareBase > 0 && yahooMarketCap > 0)
             return yahooMarketCap * ((double)edgarShares.Value / yahooShareBase);
         if (edgarShares is > 0 && currentPrice is > 0)
             return (double)edgarShares.Value * (double)currentPrice.Value;
         return yahooMarketCap;
     }
+
+    private static long YahooShareBase(KeyStatistics stats) =>
+        YahooShareBase(stats.ImpliedSharesOutstanding, stats.SharesOutstanding);
+
+    // The share base Yahoo built its published market cap on: the entity-wide implied count when
+    // provided, else the quoted-class count. The single definition shared by the unit-mismatch
+    // guard and ReconcileMarketCap — the base the guard vets must always be the base the rescale
+    // divides by, or a mismatch could be vetted against one figure and rescaled from another.
+    private static long YahooShareBase(long yahooImpliedShares, long yahooShares) =>
+        yahooImpliedShares > 0 ? yahooImpliedShares : yahooShares;
 
     private async Task SyncCompanyProfile(
         string ticker,
