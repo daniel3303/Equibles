@@ -95,9 +95,10 @@ public class ReportedFinancialStatement
     public string Currency { get; set; }
 
     /// <summary>
-    /// The "$ in Thousands/Millions" multiplier SEC noted on the statement (1, 1000, 1000000).
-    /// The values in <see cref="Payload"/> are already de-scaled to whole units; this is kept
-    /// for reference and to round-trip the issuer's stated presentation scale.
+    /// The MONEY multiplier from SEC's scale note ("$ in Thousands/Millions" → 1000 / 1000000;
+    /// 1 when money is presented unscaled). Values in <see cref="Payload"/> stay exactly as
+    /// filed, so a consumer needing whole-unit figures multiplies money cells by this. Share
+    /// counts and per-share amounts scale independently and are NOT covered by it.
     /// </summary>
     public long Scale { get; set; } = 1;
 

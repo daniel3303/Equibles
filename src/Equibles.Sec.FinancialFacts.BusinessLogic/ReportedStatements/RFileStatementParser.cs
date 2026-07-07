@@ -31,6 +31,20 @@ public static class RFileStatementParser
         RegexOptions.Compiled | RegexOptions.IgnoreCase
     );
 
+    // One "<subject> in <magnitude>" segment of the scale note; segments are
+    // comma-separated, so the subject is everything since the last comma.
+    private static readonly Regex ScaleSegmentPattern = new(
+        @"([^,]*?)\s*\bin\s+(Thousands|Millions|Billions)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase
+    );
+
+    // The note's leading ISO currency code, rendered as "<code> (<symbol>)" —
+    // "USD ($)", "EUR (€)", "CAD ($)".
+    private static readonly Regex CurrencyCodePattern = new(
+        @"^([A-Za-z]{3})\s*\(",
+        RegexOptions.Compiled
+    );
+
     public static RFileStatement Parse(string html)
     {
         var result = new RFileStatement();
@@ -80,17 +94,36 @@ public static class RFileStatementParser
         var note = dash >= 0 ? title[(dash + 3)..].Trim() : null;
         var haystack = note ?? title;
 
-        var currency = haystack.Contains("USD", StringComparison.OrdinalIgnoreCase) ? "USD" : null;
-        var scale = haystack switch
+        return (note, ParseCurrency(haystack), ParseMoneyScale(haystack));
+    }
+
+    private static string ParseCurrency(string haystack)
+    {
+        var match = CurrencyCodePattern.Match(haystack);
+        return match.Success ? match.Groups[1].Value.ToUpperInvariant() : null;
+    }
+
+    // The note scales each unit family in its own segment — "$ in Thousands",
+    // "shares in Millions", "$ / shares in Thousands" — and only the money segment may
+    // set the statement scale: "USD ($) shares in Thousands" presents dollars UNSCALED,
+    // so treating any "in Thousands" as the money scale inflates every money cell 1000×
+    // downstream. A subject-less "(In Thousands)" (old-style title) applies to money.
+    private static long ParseMoneyScale(string haystack)
+    {
+        foreach (Match match in ScaleSegmentPattern.Matches(haystack))
         {
-            _ when haystack.Contains("in Billions", StringComparison.OrdinalIgnoreCase) =>
-                1_000_000_000L,
-            _ when haystack.Contains("in Millions", StringComparison.OrdinalIgnoreCase) =>
-                1_000_000L,
-            _ when haystack.Contains("in Thousands", StringComparison.OrdinalIgnoreCase) => 1_000L,
-            _ => 1L,
-        };
-        return (note, currency, scale);
+            if (match.Groups[1].Value.Contains("share", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            return match.Groups[2].Value.ToLowerInvariant() switch
+            {
+                "billions" => 1_000_000_000L,
+                "millions" => 1_000_000L,
+                _ => 1_000L,
+            };
+        }
+        return 1L;
     }
 
     // Columns come from the header rows: the row of period-end dates is the column set; an earlier

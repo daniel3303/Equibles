@@ -24,7 +24,7 @@ public class RFileStatement
     /// <summary>Reporting currency, e.g. <c>USD</c>; null if not stated in the title.</summary>
     public string Currency { get; set; }
 
-    /// <summary>The "$ in Thousands/Millions" presentation multiplier (1 / 1000 / 1000000) from the title.</summary>
+    /// <summary>The money presentation multiplier (1 / 1000 / 1000000) from the title's "$ in Thousands/Millions" segment; share and per-share scales are separate.</summary>
     public long Scale { get; set; } = 1;
 
     /// <summary>True when no statement table or no data rows were found — the R-file carried nothing usable.</summary>
