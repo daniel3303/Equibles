@@ -633,6 +633,7 @@ public class YahooPriceImportService
         var marketCap = ReconcileMarketCap(
             edgarShares,
             stats.SharesOutstanding,
+            stats.ImpliedSharesOutstanding,
             stats.MarketCapitalization,
             currentPrice
         );
@@ -654,17 +655,26 @@ public class YahooPriceImportService
         );
     }
 
-    // Yahoo's market cap is its own (per-share-class / stale) share count times price. When EDGAR
-    // is the authoritative share source the importer keeps EDGAR's SharesOutStanding, so storing
-    // Yahoo's market cap verbatim leaves the two figures on different share bases — they disagree
-    // by the share-count ratio (a reverse-split lag inflates market cap ~20x, COPR #3575; a
-    // multi-class issuer understates Yahoo's shares ~2x, #2503). Rescale Yahoo's market cap onto
-    // the EDGAR base (== EDGAR shares × the same implied price) so market cap stays consistent with
-    // SharesOutStanding and the screener's derived price (market cap ÷ shares) holds. Falls back to
-    // Yahoo's figure when there is no EDGAR count or no usable Yahoo share base to rescale from.
-    // The caller passes edgarShares == null for foreign private issuers (20-F/40-F), whose EDGAR
-    // count is in ordinary shares — a different unit from the US-listed ADR — so they keep Yahoo's
-    // self-consistent ADR market cap rather than being rescaled onto the ordinary base.
+    // When EDGAR is the authoritative share source the importer keeps EDGAR's SharesOutStanding,
+    // so storing Yahoo's market cap verbatim leaves the two figures on different share bases —
+    // they disagree by the share-count ratio (a reverse-split lag inflates market cap ~20x, COPR
+    // #3575; a multi-class issuer understates Yahoo's shares ~2x, #2503). Rescale Yahoo's market
+    // cap onto the EDGAR base (== EDGAR shares × the same implied price) so market cap stays
+    // consistent with SharesOutStanding and the screener's derived price (market cap ÷ shares)
+    // holds. Falls back to Yahoo's figure when there is no EDGAR count or no usable Yahoo share
+    // base to rescale from. The caller passes edgarShares == null for foreign private issuers
+    // (20-F/40-F), whose EDGAR count is in ordinary shares — a different unit from the US-listed
+    // ADR — so they keep Yahoo's self-consistent ADR market cap rather than being rescaled onto
+    // the ordinary base.
+    //
+    // The rescale must divide by the share base Yahoo actually built its market cap on. That is
+    // impliedSharesOutstanding (the entity-wide count, all classes) when Yahoo provides it — NOT
+    // sharesOutstanding, which covers only the quoted class. Dividing a full-company market cap
+    // by a single-class count inflates every multi-class issuer by the class ratio (GOOGL stored
+    // 9.23T against a true ~4.4T, DELL ~2x, UHAL ~10x). Only when Yahoo omits the implied count
+    // is sharesOutstanding assumed to be the base, which keeps the #3575 reverse-split correction:
+    // there the whole Yahoo quote lags the split, so cap ÷ (either stale base) × EDGAR shares
+    // still lands on EDGAR shares × price.
     //
     // Yahoo sometimes returns no market cap at all (summaryDetail.marketCap missing — common for
     // multi-class issuers it hasn't reconciled, #5238): with no Yahoo market cap there is nothing
@@ -674,12 +684,14 @@ public class YahooPriceImportService
     private static double ReconcileMarketCap(
         long? edgarShares,
         long yahooShares,
+        long yahooImpliedShares,
         double yahooMarketCap,
         decimal? currentPrice = null
     )
     {
-        if (edgarShares is > 0 && yahooShares > 0 && yahooMarketCap > 0)
-            return yahooMarketCap * ((double)edgarShares.Value / yahooShares);
+        var yahooShareBase = yahooImpliedShares > 0 ? yahooImpliedShares : yahooShares;
+        if (edgarShares is > 0 && yahooShareBase > 0 && yahooMarketCap > 0)
+            return yahooMarketCap * ((double)edgarShares.Value / yahooShareBase);
         if (edgarShares is > 0 && currentPrice is > 0)
             return (double)edgarShares.Value * (double)currentPrice.Value;
         return yahooMarketCap;

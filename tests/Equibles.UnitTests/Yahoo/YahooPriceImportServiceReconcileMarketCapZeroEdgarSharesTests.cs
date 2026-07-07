@@ -20,13 +20,18 @@ public class YahooPriceImportServiceReconcileMarketCapZeroEdgarSharesTests
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
+    // Pins the legacy feed shape where Yahoo omits impliedSharesOutstanding (0), so
+    // sharesOutstanding is the only candidate share base.
     private static double ReconcileMarketCap(
         long? edgarShares,
         long yahooShares,
         double yahooMarketCap
     ) =>
         (double)
-            ReconcileMarketCapMethod.Invoke(null, [edgarShares, yahooShares, yahooMarketCap, null]);
+            ReconcileMarketCapMethod.Invoke(
+                null,
+                [edgarShares, yahooShares, 0L, yahooMarketCap, null]
+            );
 
     [Fact]
     public void ReconcileMarketCap_EdgarShareCountZero_KeepsYahooMarketCap()

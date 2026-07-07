@@ -24,13 +24,18 @@ public class YahooPriceImportServiceReconcileMarketCapTests
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
+    // Pins the legacy feed shape where Yahoo omits impliedSharesOutstanding (0), so
+    // sharesOutstanding is taken as the market cap's share base.
     private static double ReconcileMarketCap(
         long? edgarShares,
         long yahooShares,
         double yahooMarketCap
     ) =>
         (double)
-            ReconcileMarketCapMethod.Invoke(null, [edgarShares, yahooShares, yahooMarketCap, null]);
+            ReconcileMarketCapMethod.Invoke(
+                null,
+                [edgarShares, yahooShares, 0L, yahooMarketCap, null]
+            );
 
     [Fact]
     public void ReconcileMarketCap_EdgarSharesDifferFromYahoo_RescalesOntoEdgarBase()
