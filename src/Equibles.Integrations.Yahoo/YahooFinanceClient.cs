@@ -306,6 +306,8 @@ public class YahooFinanceClient : IYahooFinanceClient
         return new KeyStatistics
         {
             SharesOutstanding = result.DefaultKeyStatistics?.SharesOutstanding?.Raw ?? 0,
+            ImpliedSharesOutstanding =
+                result.DefaultKeyStatistics?.ImpliedSharesOutstanding?.Raw ?? 0,
             MarketCapitalization = result.SummaryDetail?.MarketCap?.Raw ?? 0,
         };
     }

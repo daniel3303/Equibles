@@ -59,6 +59,12 @@ public class DefaultKeyStatisticsContainer
     [JsonProperty("sharesOutstanding")]
     public YahooRawValue SharesOutstanding { get; set; }
 
+    // The share base Yahoo builds summaryDetail.marketCap on: the entity-wide count with every
+    // share class converted into the quoted listing's units. For a multi-class issuer this is
+    // larger than sharesOutstanding (which covers only the quoted class).
+    [JsonProperty("impliedSharesOutstanding")]
+    public YahooRawValue ImpliedSharesOutstanding { get; set; }
+
     [JsonProperty("enterpriseValue")]
     public YahooRawValue EnterpriseValue { get; set; }
 }
