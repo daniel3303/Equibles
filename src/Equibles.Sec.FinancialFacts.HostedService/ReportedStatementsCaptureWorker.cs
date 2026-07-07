@@ -95,6 +95,13 @@ public class ReportedStatementsCaptureWorker : BaseScraperWorker
                     captured++;
                 }
             }
+            // Shutdown mid-batch is not a document failure: let it surface so the
+            // base loop winds down quietly instead of burning one of the document's
+            // attempts and landing a phantom row in Errors.
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                throw;
+            }
             // Per-document fault isolation: count the attempt and keep the cycle going.
             catch (Exception ex)
             {
