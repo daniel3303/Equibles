@@ -38,7 +38,11 @@ public interface ISharesOutstandingProvider
     /// per-class reporting — the stale consolidated value must not win, so the figure from the
     /// most recent filing is used. The us-gaap:CommonStockSharesOutstanding balance-sheet count
     /// (frequently a nominal placeholder for shells and multi-class filers) is used only as a
-    /// fallback when the issuer never reported the cover-page tag. Null when neither is on record.
+    /// fallback when the issuer never reported the cover-page tag. Null when neither is on
+    /// record, or when the latest cover-page count is a filing artifact — contradicted as a
+    /// collapse by both the issuer's previous cover-page count and the same filing's
+    /// balance-sheet count — in which case EDGAR abstains and the caller's fallback source (the
+    /// price feed's listed-security count) stands.
     /// </summary>
     Task<long?> GetCurrentSharesOutstanding(
         CommonStock stock,
@@ -46,11 +50,13 @@ public interface ISharesOutstandingProvider
     );
 
     /// <summary>
-    /// True when the authoritative shares-outstanding fact comes from a foreign-private-issuer
-    /// annual form (20-F or 40-F). Such issuers report the cover-page count in <em>ordinary</em>
-    /// shares, a different unit from the US-listed ADR a price feed quotes, so the reported count
-    /// must not be reconciled against an ADR market cap / price (it would inflate it by the ADR
-    /// ratio). False for domestic 10-K/10-Q filers and when no shares fact is on record.
+    /// True when the fact backing <see cref="GetCurrentSharesOutstanding"/> — the latest
+    /// consolidated cover-page fact or the latest per-class filing, whichever wins the pick —
+    /// comes from a foreign-private-issuer annual form (20-F or 40-F). Such issuers report the
+    /// cover-page count in <em>ordinary</em> shares, a different unit from the US-listed ADR a
+    /// price feed quotes, so the reported count must not be reconciled against an ADR market cap
+    /// / price (it would inflate it by the ADR ratio). False for domestic 10-K/10-Q filers and
+    /// when no shares fact is on record.
     /// </summary>
     Task<bool> IsForeignPrivateIssuer(
         CommonStock stock,
