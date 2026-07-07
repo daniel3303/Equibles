@@ -171,6 +171,29 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         scores.Select(s => s.Ticker).Should().Equal("KNOWN");
     }
 
+    [Fact]
+    public async Task Compute_ImpossibleShortInterestRatio_ExcludesStockFromUniverse()
+    {
+        // A listing whose issuer's common-stock record cannot back the reported short
+        // position — e.g. exchange-traded notes whose issuer's common stock is a nominal
+        // one-share count held by its parent — yields a ratio no real stock has ever had.
+        // Such a stock must drop out of the universe (the unknown-share-count treatment),
+        // not rank as top squeeze risk on a meaningless figure, while an extreme-but-genuine
+        // reading (the 2021 GameStop peak was ~1.4x) is still scored.
+        var typical = SeedStock("TYP", sharesOutstanding: 1_000_000);
+        var extreme = SeedStock("EXTR", sharesOutstanding: 1_000_000);
+        var impossible = SeedStock("NOTE", sharesOutstanding: 1);
+        SeedShortInterest(typical, shortPosition: 100_000, daysToCover: 2m);
+        SeedShortInterest(extreme, shortPosition: 1_400_000, daysToCover: 8m);
+        SeedShortInterest(impossible, shortPosition: 15_566, daysToCover: 1m);
+        await _dbContext.SaveChangesAsync();
+
+        var scores = await _manager.Compute();
+
+        scores.Select(s => s.Ticker).Should().BeEquivalentTo(["EXTR", "TYP"]);
+        scores.Should().OnlyContain(s => s.ShortInterestPercentOfShares <= 2m);
+    }
+
     private CommonStock SeedStock(string ticker, long sharesOutstanding)
     {
         var stock = new CommonStock

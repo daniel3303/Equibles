@@ -22,13 +22,25 @@ namespace Equibles.Finra.BusinessLogic;
 /// The composite is the equal-weight mean of the factor percentiles a stock has data
 /// for — weights are deliberate and documented rather than tuned. The universe is every
 /// stock reporting short interest at the latest settlement date with a known
-/// shares-outstanding count.
+/// shares-outstanding count and a physically credible short-interest ratio (see
+/// <see cref="MaxCredibleShortInterestRatio"/>).
 /// </summary>
 [Service]
 public class ShortSqueezeScoreManager
 {
     /// <summary>Each trend window pools two calendar weeks of daily short-volume rows.</summary>
     public const int TrendWindowDays = 14;
+
+    /// <summary>
+    /// Highest short-interest-to-shares-outstanding ratio accepted as a real measurement. No
+    /// genuine reading has ever approached this bound (the January 2021 GameStop peak, the most
+    /// extreme on record, was ~1.4x); a ratio beyond it proves the inputs are inconsistent — a
+    /// wrong shares-outstanding record (e.g. a listed note's issuer whose common stock is one
+    /// share held by its parent), a cover-page filing artifact, or a short position and share
+    /// count on different split bases — so the stock is dropped from the scored universe, the
+    /// same treatment as an unknown share count, rather than ranked on a meaningless figure.
+    /// </summary>
+    public const decimal MaxCredibleShortInterestRatio = 2m;
 
     private readonly ShortInterestRepository _shortInterestRepository;
     private readonly DailyShortVolumeRepository _dailyShortVolumeRepository;
@@ -132,18 +144,26 @@ public class ShortSqueezeScoreManager
                     / (decimal)shortInterest.AverageDailyVolume.Value;
             }
 
+            var shortInterestPercentOfShares = ShortInterestPercentOfShares(
+                shortInterest.CurrentShortPosition,
+                stock.SharesOutStanding,
+                settlementDate,
+                splitsByStock.TryGetValue(stock.Id, out var stockSplits) ? stockSplits : []
+            );
+            if (shortInterestPercentOfShares > MaxCredibleShortInterestRatio)
+            {
+                // Physically impossible reading — the share count or split basis is wrong for
+                // this listing, so no honest score exists for it (see the constant's doc).
+                continue;
+            }
+
             scores.Add(
                 new ShortSqueezeScore
                 {
                     CommonStockId = stock.Id,
                     Ticker = stock.Ticker,
                     SettlementDate = settlementDate,
-                    ShortInterestPercentOfShares = ShortInterestPercentOfShares(
-                        shortInterest.CurrentShortPosition,
-                        stock.SharesOutStanding,
-                        settlementDate,
-                        splitsByStock.TryGetValue(stock.Id, out var stockSplits) ? stockSplits : []
-                    ),
+                    ShortInterestPercentOfShares = shortInterestPercentOfShares,
                     DaysToCover = daysToCover,
                     // TryGetValue, not GetValueOrDefault: a stock with no volume data
                     // must carry a null trend (factor drops out), never a zero trend.
