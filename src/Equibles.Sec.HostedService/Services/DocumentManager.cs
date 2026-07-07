@@ -163,14 +163,20 @@ public class DocumentManager
     private async Task PersistCursor(BackfillCursor cursor)
     {
         var state = await _backfillStateRepository.GetByName(cursor.Name);
-        if (state == null)
-        {
+        var isNew = state == null;
+        if (isNew)
             state = new BackfillState { Name = cursor.Name };
-            _backfillStateRepository.Add(state);
-        }
 
         state.Floor = cursor.Floor;
         state.LastFullRescanAt = cursor.LastFullRescanAt;
+
+        // Mark the write explicitly rather than leaning on change tracking: a floor advance
+        // that silently failed to persist would re-hydrate the stale floor on the next restart
+        // and re-run the corpus scan this fix exists to prevent, with no test catching it.
+        if (isNew)
+            _backfillStateRepository.Add(state);
+        else
+            _backfillStateRepository.Update(state);
         await _backfillStateRepository.SaveChanges();
     }
 }
