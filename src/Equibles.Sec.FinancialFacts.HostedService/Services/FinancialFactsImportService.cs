@@ -155,6 +155,17 @@ public class FinancialFactsImportService
         if (shares == null)
             return;
 
+        // A foreign private issuer (20-F/40-F filer) reports its cover-page count in ordinary
+        // shares — a different unit from the US-listed ADR that price feeds quote and that FINRA
+        // reports short interest against. Writing that count here would overwrite the correct ADR
+        // share base the Yahoo importer maintains (which drops the EDGAR figure for these issuers
+        // for exactly this reason, #3575/#2503) with an ordinary count off by the ADR ratio —
+        // inflating shares outstanding e.g. ~2000x for Latam Airlines and burying (or exploding)
+        // every ratio derived from it. Leave the ADR figure in place; the reconciliation stays in
+        // force for domestic 10-K/10-Q filers.
+        if (await sharesProvider.IsForeignPrivateIssuer(stock, cancellationToken))
+            return;
+
         var stockRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var tracked = await stockRepository
             .GetByIds([stock.Id])
