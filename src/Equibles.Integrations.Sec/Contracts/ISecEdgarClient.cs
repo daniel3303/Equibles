@@ -6,6 +6,13 @@ namespace Equibles.Integrations.Sec.Contracts;
 public interface ISecEdgarClient
 {
     Task<List<CompanyInfo>> GetActiveCompanies();
+
+    /// <summary>
+    /// Fetches SEC's fund-class ticker directory (company_tickers_mf.json): one row per registered
+    /// fund share class with its series id and trading symbol. The authoritative ticker source for
+    /// mutual funds and ETFs, whose NPORT-P filings carry no trading symbol of their own.
+    /// </summary>
+    Task<List<FundClassTicker>> GetFundClassTickers();
     Task<string> GetEntityType(string cik);
     Task<CompanyMetadata> GetCompanyMetadata(string cik);
     Task<List<FilingData>> GetCompanyFilings(

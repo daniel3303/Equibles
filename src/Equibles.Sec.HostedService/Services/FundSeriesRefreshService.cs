@@ -1,6 +1,8 @@
 using System.Text;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
+using Equibles.Integrations.Sec.Contracts;
+using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
 using FlexLabs.EntityFrameworkCore.Upsert;
@@ -80,11 +82,12 @@ public class FundSeriesRefreshService
             .ToListAsync(cancellationToken);
 
         var fundTypeByStock = await LoadFundTypesByStock(dbContext, cancellationToken);
+        var tickerBySeries = await LoadSeriesTickers(scope.ServiceProvider, cancellationToken);
 
         var computedAt = DateTime.UtcNow;
         var rows = aggregates
             .Where(a => a.CommonStockId != null || !string.IsNullOrEmpty(a.RegistrantCik))
-            .Select(a => BuildRow(a, fundTypeByStock, computedAt))
+            .Select(a => BuildRow(a, fundTypeByStock, tickerBySeries, computedAt))
             .ToList();
 
         _logger.LogInformation("Rebuilding fund-series directory: {Count} series", rows.Count);
@@ -155,9 +158,53 @@ public class FundSeriesRefreshService
             );
     }
 
+    // Series → trading symbol from SEC's fund-class ticker directory, kept only where the series
+    // is unambiguous (exactly one distinct symbol across its share classes). ETFs — the funds a
+    // user looks up by ticker — have a single class, so they resolve; a multi-class mutual fund
+    // has no single ticker and honestly stays null. Best-effort: the directory being unreachable
+    // must never fail the rebuild, so a fetch error degrades to no enrichment.
+    private async Task<Dictionary<string, string>> LoadSeriesTickers(
+        IServiceProvider services,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var edgarClient = services.GetRequiredService<ISecEdgarClient>();
+            var classTickers = await edgarClient.GetFundClassTickers();
+            cancellationToken.ThrowIfCancellationRequested();
+            return BuildSeriesTickerMap(classTickers);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Fund-class ticker directory unavailable; rebuilding without ticker enrichment"
+            );
+            return [];
+        }
+    }
+
+    internal static Dictionary<string, string> BuildSeriesTickerMap(
+        List<FundClassTicker> classTickers
+    )
+    {
+        return classTickers
+            .GroupBy(t => t.SeriesId, StringComparer.OrdinalIgnoreCase)
+            .Where(g =>
+                g.Select(t => t.Symbol).Distinct(StringComparer.OrdinalIgnoreCase).Count() == 1
+            )
+            .ToDictionary(g => g.Key, g => g.First().Symbol, StringComparer.OrdinalIgnoreCase);
+    }
+
     private static FundSeries BuildRow(
         FundSeriesAggregate a,
         Dictionary<Guid, string> fundTypeByStock,
+        Dictionary<string, string> tickerBySeries,
         DateTime computedAt
     )
     {
@@ -180,6 +227,15 @@ public class FundSeriesRefreshService
             fundTypeByStock.TryGetValue(a.CommonStockId.Value, out fundType);
         }
 
+        // A tracked fund's ticker comes from its own stock row; a trust series (null here) gets
+        // the SEC fund-class directory's symbol when the series maps to exactly one. The slug
+        // discriminator above deliberately stays the series id so existing trust URLs never move.
+        var ticker = a.Ticker;
+        if (string.IsNullOrEmpty(ticker) && !string.IsNullOrEmpty(seriesId))
+        {
+            tickerBySeries.TryGetValue(seriesId, out ticker);
+        }
+
         return new FundSeries
         {
             IdentityKey = identityKey,
@@ -189,7 +245,7 @@ public class FundSeriesRefreshService
             SeriesId = seriesId,
             SeriesName = a.SeriesName,
             RegistrantName = a.RegistrantName,
-            Ticker = a.Ticker,
+            Ticker = ticker,
             LatestReportPeriodDate = a.LatestReportPeriodDate,
             LatestFilingDate = a.LatestFilingDate,
             NetAssets = a.NetAssets,
