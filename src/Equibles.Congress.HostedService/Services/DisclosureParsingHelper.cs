@@ -224,6 +224,9 @@ public static partial class DisclosureParsingHelper
         if (string.IsNullOrEmpty(ticker) && string.IsNullOrEmpty(assetName))
             return null;
 
+        // The House PDF checkbox artifact must go before the name is stored or mined for a ticker.
+        assetName = CleanAssetName(assetName);
+
         // Fall back to extracting ticker from asset name (parentheses pattern)
         if (string.IsNullOrEmpty(ticker) && !string.IsNullOrEmpty(assetName))
             ticker = ExtractTickerFromAssetName(assetName);
@@ -304,6 +307,19 @@ public static partial class DisclosureParsingHelper
         )
             return d;
         return null;
+    }
+
+    // Strips the PDF checkbox artifact from an asset name. The House disclosure PDFs draw each
+    // row's checkboxes with a symbol font whose glyphs extract as the letter runs "gfedc" /
+    // "gfedcb"; the text extractor glues those tokens onto the asset name ("Weyerhaeuser Company
+    // (WY) gfedcb"). Case-sensitive on purpose — the artifact is always lowercase, and a real
+    // uppercase word must never be eaten. Collapses the whitespace the removal leaves behind.
+    public static string CleanAssetName(string assetName)
+    {
+        if (string.IsNullOrEmpty(assetName))
+            return assetName;
+        var cleaned = CheckboxArtifactRegex().Replace(assetName, " ");
+        return RepeatedWhitespaceRegex().Replace(cleaned, " ").Trim();
     }
 
     public static string ExtractTickerFromAssetName(string assetName)
@@ -397,6 +413,14 @@ public static partial class DisclosureParsingHelper
     // Matches href attribute in anchor tags
     [GeneratedRegex(@"href=[""']([^""']+)[""']")]
     public static partial Regex HrefRegex();
+
+    // The PDF checkbox glyph runs ("gfedc", "gfedcb") that leak into House asset names — see
+    // CleanAssetName. Word-bounded so a legitimate word containing the letters is never touched.
+    [GeneratedRegex(@"\bgfedcb?\b")]
+    private static partial Regex CheckboxArtifactRegex();
+
+    [GeneratedRegex(@"\s{2,}")]
+    private static partial Regex RepeatedWhitespaceRegex();
 
     private record ColumnIndices(
         int Date,
