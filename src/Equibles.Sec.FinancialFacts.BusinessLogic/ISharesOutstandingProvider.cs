@@ -29,13 +29,16 @@ public interface ISharesOutstandingProvider
     );
 
     /// <summary>
-    /// The issuer's current entity-wide share count: the more-recently-filed of the latest
+    /// The issuer's current entity-wide share count, taken from the authoritative
+    /// dei:EntityCommonStockSharesOutstanding cover-page tag: the more-recently-filed of the latest
     /// consolidated cover-page fact and the latest per-class sum. A single-class issuer (only a
     /// consolidated fact) or a multi-class issuer that never reported a consolidated count (only
     /// per-class facts) returns that one figure. When an issuer reports <em>both</em> — e.g. a
     /// dual-class filer whose classless cover-page series ended years ago when it switched to
     /// per-class reporting — the stale consolidated value must not win, so the figure from the
-    /// most recent filing is used. Null when the issuer has neither on record.
+    /// most recent filing is used. The us-gaap:CommonStockSharesOutstanding balance-sheet count
+    /// (frequently a nominal placeholder for shells and multi-class filers) is used only as a
+    /// fallback when the issuer never reported the cover-page tag. Null when neither is on record.
     /// </summary>
     Task<long?> GetCurrentSharesOutstanding(
         CommonStock stock,

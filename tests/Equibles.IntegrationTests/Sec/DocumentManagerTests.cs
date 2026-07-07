@@ -224,7 +224,9 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         // re-running the unfloored corpus scan.
         var state = await new BackfillStateRepository(DbContext).GetByName("chunk-embedding");
         state.Should().NotBeNull();
-        state!.Floor.Should().Be(pendingChunk.CreationTime);
+        // Postgres timestamp keeps microsecond precision, so the persisted floor matches the
+        // chunk's 100ns-tick CreationTime only within a microsecond — assert with that tolerance.
+        state!.Floor.Should().BeCloseTo(pendingChunk.CreationTime, TimeSpan.FromMicroseconds(1));
     }
 
     [Fact]
@@ -270,7 +272,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
 
         var afterFirst = await new BackfillStateRepository(DbContext).GetByName("chunk-embedding");
         afterFirst.Should().NotBeNull();
-        afterFirst!.Floor.Should().Be(firstChunk.CreationTime);
+        afterFirst!.Floor.Should().BeCloseTo(firstChunk.CreationTime, TimeSpan.FromMicroseconds(1));
         var stampAfterFirst = afterFirst.LastFullRescanAt;
         stampAfterFirst.Should().NotBeNull("the first drained-frontier scan stamped the cursor");
         DbContext.ChangeTracker.Clear();
@@ -310,11 +312,16 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         rows.Should().ContainSingle("the advance is an in-place UPDATE, never a second row");
         rows[0]
             .Floor.Should()
-            .Be(secondChunk.CreationTime, "the UPDATE persisted the new frontier");
+            .BeCloseTo(
+                secondChunk.CreationTime,
+                TimeSpan.FromMicroseconds(1),
+                "the UPDATE persisted the new frontier"
+            );
         rows[0]
             .LastFullRescanAt.Should()
-            .Be(
-                stampAfterFirst,
+            .BeCloseTo(
+                stampAfterFirst!.Value,
+                TimeSpan.FromMicroseconds(1),
                 "the restart hydrated the frontier and resumed via the floored path, so no new full scan ran"
             );
     }
