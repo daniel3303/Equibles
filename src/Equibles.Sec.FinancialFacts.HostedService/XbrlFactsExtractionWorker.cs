@@ -109,8 +109,7 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
                     await ErrorReporter.Report(
                         ErrorSource,
                         "XbrlFactsExtraction.Extract",
-                        ex.Message,
-                        ex.StackTrace,
+                        ex,
                         $"documentId: {document.Id}, accession: {document.AccessionNumber}"
                     );
                 }

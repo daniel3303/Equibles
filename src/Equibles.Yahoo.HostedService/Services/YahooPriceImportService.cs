@@ -211,8 +211,7 @@ public class YahooPriceImportService
                 await _errorReporter.Report(
                     ErrorSource.YahooPriceScraper,
                     $"ReconcilePendingSplits({ticker})",
-                    ex.Message,
-                    ex.StackTrace
+                    ex
                 );
             }
         }

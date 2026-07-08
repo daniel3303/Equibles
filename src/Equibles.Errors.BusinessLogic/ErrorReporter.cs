@@ -19,6 +19,30 @@ public class ErrorReporter
         _logger = logger;
     }
 
+    /// <summary>
+    /// Records an exception, skipping cancellations. A cancelled operation is not a
+    /// fault worth surfacing on the Errors page: a graceful shutdown or deploy winds
+    /// in-flight work down, and an inner command/HTTP timeout aborts a single item the
+    /// caller retries next cycle. Recording "The operation was canceled" only buries
+    /// real errors, so — like <c>GlobalExceptionHandler</c> does for aborted requests —
+    /// an <see cref="OperationCanceledException"/> (including <see cref="TaskCanceledException"/>,
+    /// which derives from it) is dropped by type here instead of at each catch site.
+    /// </summary>
+    public Task Report(
+        ErrorSource source,
+        string context,
+        Exception exception,
+        string requestSummary = null
+    )
+    {
+        if (exception is OperationCanceledException)
+        {
+            return Task.CompletedTask;
+        }
+
+        return Report(source, context, exception.Message, exception.StackTrace, requestSummary);
+    }
+
     public async Task Report(
         ErrorSource source,
         string context,

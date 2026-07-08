@@ -90,6 +90,75 @@ public class ErrorReporterTests
     }
 
     [Fact]
+    public async Task Report_Exception_Cancellation_IsSkippedEntirely()
+    {
+        // A cancelled operation (graceful shutdown/deploy, or an inner command/HTTP
+        // timeout that aborts one item) is not a fault worth an Errors row — recording
+        // "The operation was canceled" only buries real errors. The typed overload drops
+        // it by type before touching the scope factory or the activity feed. Pin that:
+        // no scope is created (so ErrorManager is never asked to persist) and nothing is
+        // published. TaskCanceledException derives from OperationCanceledException, so the
+        // most common shape (a timed-out awaited task) is covered by the same check.
+        var bus = Substitute.For<IBus>();
+        var scope = Substitute.For<IServiceScope>();
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        serviceProvider.GetService(typeof(IBus)).Returns(bus);
+        scope.ServiceProvider.Returns(serviceProvider);
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        scopeFactory.CreateScope().Returns(scope);
+
+        var sut = new ErrorReporter(scopeFactory, Substitute.For<ILogger<ErrorReporter>>());
+
+        await sut.Report(
+            ErrorSource.YahooPriceScraper,
+            context: "ReconcilePendingSplits(JILL)",
+            exception: new TaskCanceledException("The operation was canceled.")
+        );
+
+        scopeFactory.DidNotReceive().CreateScope();
+        bus.ReceivedCalls()
+            .Where(c => c.GetMethodInfo().Name == nameof(IBus.Publish))
+            .Should()
+            .BeEmpty();
+    }
+
+    [Fact]
+    public async Task Report_Exception_NonCancellation_RecordsAndPublishes()
+    {
+        // A genuine fault still flows through: the typed overload forwards the exception's
+        // message and stack trace to the string-based Report, which publishes the same
+        // activity-feed signal the happy-path test pins above. This guards against the skip
+        // check being widened to swallow every exception.
+        var bus = Substitute.For<IBus>();
+        var scope = Substitute.For<IServiceScope>();
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        serviceProvider.GetService(typeof(IBus)).Returns(bus);
+        scope.ServiceProvider.Returns(serviceProvider);
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        scopeFactory.CreateScope().Returns(scope);
+
+        var sut = new ErrorReporter(scopeFactory, Substitute.For<ILogger<ErrorReporter>>());
+
+        await sut.Report(
+            ErrorSource.FinancialFactsScraper,
+            context: "FinancialFactsImport.Import",
+            exception: new InvalidOperationException("XBRL envelope too large")
+        );
+
+        var captured = bus.ReceivedCalls()
+            .Where(c => c.GetMethodInfo().Name == nameof(IBus.Publish))
+            .Select(c => (ScraperActivity)c.GetArguments()[0]!)
+            .ToList();
+
+        captured.Should().HaveCount(1);
+        captured[0].Severity.Should().Be(ScraperActivitySeverity.Error);
+        captured[0]
+            .Message.Should()
+            .Contain("FinancialFactsImport.Import")
+            .And.Contain("XBRL envelope too large");
+    }
+
+    [Fact]
     public async Task Report_ScopeFactoryThrows_DoesNotPropagate()
     {
         // ErrorReporter.Report is called from inside `catch` blocks across every scraper

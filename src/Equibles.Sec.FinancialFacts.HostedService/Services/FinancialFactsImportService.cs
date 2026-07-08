@@ -131,8 +131,7 @@ public class FinancialFactsImportService
             await _errorReporter.Report(
                 ErrorSource.FinancialFactsScraper,
                 "FinancialFactsImport.Import",
-                ex.Message,
-                ex.StackTrace,
+                ex,
                 $"ticker: {stock.Ticker}, cik: {stock.Cik}"
             );
         }
