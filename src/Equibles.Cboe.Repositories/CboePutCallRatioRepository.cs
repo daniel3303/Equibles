@@ -30,8 +30,11 @@ public class CboePutCallRatioRepository : BaseRepository<CboePutCallRatio>
 
     public IQueryable<CboePutCallRatio> GetLatestPerType()
     {
+        // The latest row for each ratio type. Expressed as a correlated max-date filter rather than
+        // GroupBy(...).Select(g => g.OrderByDescending(...).First()), which EF Core cannot translate — it
+        // throws KeyNotFoundException "EmptyProjectionMember" at runtime. (RatioType, Date) is unique, so
+        // matching the max date per type yields exactly one row per type.
         return GetAll()
-            .GroupBy(r => r.RatioType)
-            .Select(g => g.OrderByDescending(r => r.Date).First());
+            .Where(r => r.Date == GetAll().Where(x => x.RatioType == r.RatioType).Max(x => x.Date));
     }
 }
