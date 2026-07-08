@@ -141,9 +141,30 @@ public class XbrlFactExtractionService
             return 0;
         }
 
-        var envelope = Encoding.UTF8.GetString(
-            GzipCompressor.Decompress(await _fileManager.GetContent(document.XbrlContent))
+        var content = GzipCompressor.Decompress(
+            await _fileManager.GetContent(document.XbrlContent)
         );
+
+        // XbrlUncompressedSize is nullable and populated at capture time, so a row that never
+        // recorded it (legacy/backfilled captures) slips past the pre-decompress check above.
+        // Re-check the actual decompressed length — the authoritative value that size approximates —
+        // before the parse materialises the envelope string (2x) and the DOM (many x) that OOM the
+        // worker on a nine-figure envelope. A skipped document completes its sweep normally, exactly
+        // as the size pre-check does.
+        if (content.LongLength > MaxParseableEnvelopeBytes)
+        {
+            _logger.LogWarning(
+                "Skipping dimensional-fact extraction for document {DocumentId} ({Accession}): "
+                    + "decompressed envelope is {Size} bytes, above the {Limit}-byte parse ceiling.",
+                document.Id,
+                document.AccessionNumber,
+                content.LongLength,
+                MaxParseableEnvelopeBytes
+            );
+            return 0;
+        }
+
+        var envelope = Encoding.UTF8.GetString(content);
 
         // Standalone (pre-inline) instances predate the 2019 cover-page
         // taxonomy, so only inline envelopes can carry 12(b) listings.
