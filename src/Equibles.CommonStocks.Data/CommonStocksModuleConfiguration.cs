@@ -9,6 +9,7 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
     public void ConfigureEntities(ModelBuilder builder)
     {
         builder.Entity<CommonStock>();
+        builder.Entity<CommonStockCusipAlias>();
         builder.Entity<Industry>();
         builder.Entity<Sector>();
     }

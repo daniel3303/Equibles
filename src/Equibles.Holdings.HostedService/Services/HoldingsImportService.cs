@@ -368,15 +368,35 @@ public class HoldingsImportService
             .Select(cs => new { cs.Id, cs.Cusip })
             .ToListAsync(cancellationToken);
 
+        // Retired CUSIPs must keep resolving: after an issuer-level CUSIP change,
+        // laggard filers reference the old CUSIP for a quarter or two and every
+        // historical data set does forever. Map the union of current CUSIPs and
+        // aliases, with the current CUSIP winning a collision — otherwise a
+        // re-import (the backfill a CUSIP change itself triggers) would drop
+        // old-CUSIP lines wherever a restatement amendment rebuilds a quarter.
+        var stockIdsQuery = query.Select(cs => cs.Id);
+        var cusipAliases = await stockRepo
+            .GetCusipAliases()
+            .Where(a =>
+                uniqueCusipsList.Contains(a.Cusip) && stockIdsQuery.Contains(a.CommonStockId)
+            )
+            .Select(a => new { a.CommonStockId, a.Cusip })
+            .ToListAsync(cancellationToken);
+
         var cusipMapping = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        foreach (var alias in cusipAliases)
+        {
+            cusipMapping[alias.Cusip] = alias.CommonStockId;
+        }
         foreach (var stock in stocksWithCusip)
         {
             cusipMapping[stock.Cusip] = stock.Id;
         }
 
         _logger.LogInformation(
-            "Mapped {Count} CUSIPs to tracked stocks (out of {Total} in data set)",
+            "Mapped {Count} CUSIPs to tracked stocks ({AliasCount} retired aliases, out of {Total} in data set)",
             cusipMapping.Count,
+            cusipAliases.Count,
             uniqueCusips.Count
         );
 
