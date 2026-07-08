@@ -44,12 +44,12 @@ public abstract class BaseScraperWorker : BackgroundService
         CancellationToken cancellationToken
     )
     {
-        var bus = TryGetBus();
-        if (bus is null)
-            return;
-
         try
         {
+            var bus = TryGetBus();
+            if (bus is null)
+                return;
+
             await bus.Publish(
                 new ScraperActivity(
                     Source: WorkerName,
@@ -68,7 +68,9 @@ public abstract class BaseScraperWorker : BackgroundService
         catch (Exception ex)
         {
             // The activity feed is best-effort. A failure here must never
-            // crash the scraper; log at Debug so it shows under verbose
+            // crash the scraper — this also covers the ObjectDisposedException
+            // CreateScope() throws when the host is tearing down the root
+            // provider during shutdown. Log at Debug so it shows under verbose
             // logging but doesn't pollute normal runs.
             Logger.LogDebug(ex, "Failed to publish ScraperActivity for {Worker}", WorkerName);
         }
