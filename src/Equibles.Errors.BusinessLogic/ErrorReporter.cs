@@ -1,4 +1,5 @@
 using Equibles.Core.AutoWiring;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Messaging.Contracts.Activity;
 using MassTransit;
@@ -40,7 +41,17 @@ public class ErrorReporter
             return Task.CompletedTask;
         }
 
-        return Report(source, context, exception.Message, exception.StackTrace, requestSummary);
+        // Message: flattened inner-exception chain so the Errors list shows the real cause, not a
+        // wrapper's "See the inner exception for details". StackTrace: ToString(), which carries the
+        // full inner chain (type, message and each inner stack) — StackTrace alone is the outer
+        // frames only. This mirrors what GlobalExceptionHandler already records for HTTP requests.
+        return Report(
+            source,
+            context,
+            exception.ToSummaryMessage(),
+            exception.ToString(),
+            requestSummary
+        );
     }
 
     public async Task Report(
