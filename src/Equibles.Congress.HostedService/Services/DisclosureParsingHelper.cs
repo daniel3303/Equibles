@@ -314,6 +314,12 @@ public static partial class DisclosureParsingHelper
     // "gfedcb"; the text extractor glues those tokens onto the asset name ("Weyerhaeuser Company
     // (WY) gfedcb"). Case-sensitive on purpose — the artifact is always lowercase, and a real
     // uppercase word must never be eaten. Collapses the whitespace the removal leaves behind.
+    //
+    // INVARIANT: the output is stored as CongressionalTrade.AssetName, which is part of the
+    // trade upsert unique key. Any change to what this method emits makes re-scraped trades
+    // miss their stored rows and re-insert as duplicates (the original rollout of this cleanup
+    // duplicated 8,104 production trades that way). A semantic change here MUST ship with a
+    // data repair that re-normalizes and dedupes already-stored rows.
     public static string CleanAssetName(string assetName)
     {
         if (string.IsNullOrEmpty(assetName))

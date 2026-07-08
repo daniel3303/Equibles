@@ -189,7 +189,7 @@ public class CongressionalTradeSyncService
             .ToDictionaryAsync(m => m.Name, ct);
     }
 
-    private List<CongressionalTrade> BuildTrades(
+    internal List<CongressionalTrade> BuildTrades(
         List<DisclosureTransaction> matched,
         Dictionary<string, CongressMember> members,
         Dictionary<string, CommonStock> stocks
@@ -233,7 +233,12 @@ public class CongressionalTradeSyncService
                     FilingDate = tx.FilingDate,
                     TransactionType = tx.TransactionType,
                     OwnerType = tx.OwnerType,
-                    AssetName = tx.AssetName ?? "",
+                    // The stored name is part of the trade upsert key (see PersistTrades), so it
+                    // must be normalized here no matter which scraper emitted the transaction —
+                    // an unnormalized variant would re-insert the same trade as a new row. Every
+                    // source already cleans at emission; doing it here too makes this the single
+                    // choke point, mirroring NormalizeMemberName above (GH-3374).
+                    AssetName = DisclosureParsingHelper.CleanAssetName(tx.AssetName) ?? "",
                     AmountFrom = tx.AmountFrom,
                     AmountTo = tx.AmountTo,
                 }
@@ -249,6 +254,8 @@ public class CongressionalTradeSyncService
         CancellationToken ct
     )
     {
+        // AssetName participates in this key, so dedup only works while stored names equal the
+        // current CleanAssetName output — see the invariant note on CleanAssetName.
         await dbContext
             .Set<CongressionalTrade>()
             .UpsertRange(trades)
