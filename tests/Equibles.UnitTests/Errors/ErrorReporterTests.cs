@@ -159,6 +159,38 @@ public class ErrorReporterTests
     }
 
     [Fact]
+    public async Task Report_Exception_WrappedInnerCause_SurfacesTheInnerMessage()
+    {
+        // A DbUpdateException's own message is "...See the inner exception for details." — useless
+        // on the Errors list. The typed overload flattens the inner chain into the recorded message
+        // (which the activity feed echoes), so the real cause is visible without expanding the stack.
+        var bus = Substitute.For<IBus>();
+        var scope = Substitute.For<IServiceScope>();
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        serviceProvider.GetService(typeof(IBus)).Returns(bus);
+        scope.ServiceProvider.Returns(serviceProvider);
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        scopeFactory.CreateScope().Returns(scope);
+
+        var sut = new ErrorReporter(scopeFactory, Substitute.For<ILogger<ErrorReporter>>());
+
+        var wrapped = new InvalidOperationException(
+            "An error occurred while saving the entity changes. See the inner exception for details.",
+            new Exception(
+                "23505: duplicate key value violates unique constraint \"IX_IrEvent_Url\""
+            )
+        );
+
+        await sut.Report(ErrorSource.Other, context: "IrEventFlow.Plan(FASLF)", exception: wrapped);
+
+        var captured = bus.ReceivedCalls()
+            .Where(c => c.GetMethodInfo().Name == nameof(IBus.Publish))
+            .Select(c => (ScraperActivity)c.GetArguments()[0]!)
+            .Single();
+        captured.Message.Should().Contain("duplicate key value violates unique constraint");
+    }
+
+    [Fact]
     public async Task Report_ScopeFactoryThrows_DoesNotPropagate()
     {
         // ErrorReporter.Report is called from inside `catch` blocks across every scraper
