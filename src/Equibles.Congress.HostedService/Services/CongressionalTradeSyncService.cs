@@ -232,7 +232,9 @@ public class CongressionalTradeSyncService
                     TransactionDate = tx.TransactionDate,
                     FilingDate = tx.FilingDate,
                     TransactionType = tx.TransactionType,
-                    OwnerType = tx.OwnerType,
+                    // '' rather than null: OwnerType is part of the upsert key, and Postgres
+                    // treats NULLs as distinct in unique indexes, which would disable dedup.
+                    OwnerType = tx.OwnerType ?? "",
                     // The stored name is part of the trade upsert key (see PersistTrades), so it
                     // must be normalized here no matter which scraper emitted the transaction —
                     // an unnormalized variant would re-insert the same trade as a new row. Every
@@ -254,8 +256,10 @@ public class CongressionalTradeSyncService
         CancellationToken ct
     )
     {
-        // AssetName participates in this key, so dedup only works while stored names equal the
-        // current CleanAssetName output — see the invariant note on CleanAssetName.
+        // Must match the unique index on CongressionalTrade exactly (see the identity note on
+        // the entity) or ON CONFLICT has no arbiter and the upsert throws. AssetName
+        // participates, so dedup only works while stored names equal the current
+        // CleanAssetName output — see the invariant note on CleanAssetName.
         await dbContext
             .Set<CongressionalTrade>()
             .UpsertRange(trades)
@@ -266,6 +270,9 @@ public class CongressionalTradeSyncService
                 t.TransactionDate,
                 t.TransactionType,
                 t.AssetName,
+                t.OwnerType,
+                t.AmountFrom,
+                t.AmountTo,
             })
             .NoUpdate()
             .RunAsync(ct);

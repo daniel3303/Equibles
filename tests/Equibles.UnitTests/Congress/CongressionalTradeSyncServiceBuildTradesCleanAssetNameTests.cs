@@ -76,6 +76,33 @@ public class CongressionalTradeSyncServiceBuildTradesCleanAssetNameTests
         trades.Should().ContainSingle().Which.AssetName.Should().Be("");
     }
 
+    // OwnerType joined the upsert unique key, and Postgres treats NULLs as distinct in unique
+    // indexes — a null slipping through here would disable dedup for that trade entirely.
+    [Fact]
+    public void BuildTrades_NullOwnerType_StoresEmptyString()
+    {
+        var sut = CreateService();
+        var member = new CongressMember { Name = "Jane Doe" };
+        var transaction = new DisclosureTransaction
+        {
+            MemberName = "Jane Doe",
+            Ticker = "WY",
+            AssetName = "Weyerhaeuser Company (WY)",
+            OwnerType = null,
+            TransactionDate = new DateOnly(2026, 6, 18),
+            FilingDate = new DateOnly(2026, 7, 2),
+            TransactionType = CongressTransactionType.Purchase,
+        };
+
+        var trades = sut.BuildTrades(
+            [transaction],
+            new Dictionary<string, CongressMember> { ["Jane Doe"] = member },
+            new Dictionary<string, CommonStock> { ["WY"] = new CommonStock() }
+        );
+
+        trades.Should().ContainSingle().Which.OwnerType.Should().Be("");
+    }
+
     private static CongressionalTradeSyncService CreateService()
     {
         var scope = Substitute.For<IServiceScope>();
