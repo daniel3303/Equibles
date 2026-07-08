@@ -24,12 +24,19 @@ public class XbrlFactExtractionServiceOversizedEnvelopeTests
     /// </summary>
     private sealed class RecordingFileManager : IFileManager
     {
+        private readonly byte[] _uncompressedContent;
+
+        public RecordingFileManager(byte[] uncompressedContent = null)
+        {
+            _uncompressedContent = uncompressedContent ?? "<html></html>"u8.ToArray();
+        }
+
         public bool ContentLoaded { get; private set; }
 
         public Task<byte[]> GetContent(File file)
         {
             ContentLoaded = true;
-            return Task.FromResult(GzipCompressor.Compress("<html></html>"u8.ToArray()));
+            return Task.FromResult(GzipCompressor.Compress(_uncompressedContent));
         }
 
         public Task<File> SaveFile(byte[] content, string fileName, bool protect = false) =>
@@ -48,9 +55,11 @@ public class XbrlFactExtractionServiceOversizedEnvelopeTests
         public void DeleteFile(File file) => throw new NotSupportedException();
     }
 
-    private static (XbrlFactExtractionService Service, RecordingFileManager Files) BuildService()
+    private static (XbrlFactExtractionService Service, RecordingFileManager Files) BuildService(
+        byte[] uncompressedContent = null
+    )
     {
-        var files = new RecordingFileManager();
+        var files = new RecordingFileManager(uncompressedContent);
         var service = new XbrlFactExtractionService(
             scopeFactory: null,
             new InlineXbrlParser(),
@@ -102,5 +111,21 @@ public class XbrlFactExtractionServiceOversizedEnvelopeTests
         await service.Extract(document, CancellationToken.None);
 
         files.ContentLoaded.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Extract_UnknownSizeButDecompressedContentAboveCeiling_SkipsBeforeParsing()
+    {
+        // A row with no recorded size slips past the pre-decompress guard, so the actual
+        // decompressed length is the safety net: an unknown-size envelope that turns out to be
+        // nine-figure must still be refused (returning 0, terminal) rather than OOM the parse.
+        // The bytes compress to almost nothing, so the fixture stays cheap.
+        var oversized = new byte[XbrlFactExtractionService.MaxParseableEnvelopeBytes + 1];
+        var (service, _) = BuildService(oversized);
+        var document = CapturedDocument(uncompressedSize: null);
+
+        var persisted = await service.Extract(document, CancellationToken.None);
+
+        persisted.Should().Be(0);
     }
 }
