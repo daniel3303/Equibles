@@ -40,12 +40,22 @@ internal static class FiscalPeriodResolver
     /// <c>null</c> when the FYE is unknown or the period duration doesn't
     /// match any recognised shape — callers fall back to the filing-supplied
     /// identity in that case.
+    /// <para>
+    /// <paramref name="classifyInterimInstants"/> opts an instant that is NOT at the
+    /// fiscal-year end into quarter classification (which fiscal quarter contains the
+    /// date). Off by default: callers with an SEC-supplied fp rely on the null
+    /// fallback there, and re-labelling their instants would rewrite fiscal
+    /// identities corpus-wide. Only fp-less values (6-K interim balance sheets,
+    /// which SEC serves with <c>fp = null</c>) opt in — for them the date is the
+    /// only identity available.
+    /// </para>
     /// </summary>
     public static (int Year, SecFiscalPeriod Period)? Resolve(
         DateOnly periodStart,
         DateOnly periodEnd,
         int? fyeMonth,
-        int? fyeDay
+        int? fyeDay,
+        bool classifyInterimInstants = false
     )
     {
         if (fyeMonth is null || fyeDay is null)
@@ -78,16 +88,20 @@ internal static class FiscalPeriodResolver
         if (isAnnual || isInstant)
         {
             var closest = ClosestTo(candidates, periodEnd);
-            if (Math.Abs(closest.DayNumber - periodEnd.DayNumber) > FyeMatchWindowDays)
+            if (Math.Abs(closest.DayNumber - periodEnd.DayNumber) <= FyeMatchWindowDays)
+                return (closest.Year, SecFiscalPeriod.FullYear);
+            // An opted-in interim instant falls through to the quarter classification
+            // below; everything else keeps the null fallback (see the summary).
+            if (!isInstant || !classifyInterimInstants)
                 return null;
-            return (closest.Year, SecFiscalPeriod.FullYear);
         }
 
         var isQuarter = IsWithinDays(durationDays, QuarterMinDays, QuarterMaxDays);
         var isHalfYear = IsWithinDays(durationDays, HalfYearMinDays, HalfYearMaxDays);
         var isNineMonths = IsWithinDays(durationDays, NineMonthMinDays, NineMonthMaxDays);
 
-        if (!isQuarter && !isHalfYear && !isNineMonths)
+        var interimInstant = isInstant && classifyInterimInstants;
+        if (!interimInstant && !isQuarter && !isHalfYear && !isNineMonths)
             return null;
 
         // The fiscal year containing periodEnd is the one whose FYE is on or

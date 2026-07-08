@@ -283,24 +283,35 @@ public class FinancialFactsImportService
         CommonStock stock
     )
     {
-        if (!TryMapFiscalPeriod(value.Fp, out var fiscalPeriod))
-            return null;
         if (string.IsNullOrWhiteSpace(value.Accn))
             return null;
 
         var isInstant = value.Start == null;
         var periodStart = value.Start ?? value.End;
+        // SEC serves foreign private issuers' 6-K interim values with fp = null, so an
+        // unmappable fp must not drop the value outright — dropping them left every
+        // FPI's interim facts missing platform-wide. The date-derived identity below is
+        // the primary source anyway; the SEC-supplied fp is only its fallback.
+        var hasMappedFp = TryMapFiscalPeriod(value.Fp, out var fiscalPeriod);
         // Derive (FiscalYear, FiscalPeriod) from the period the fact actually
         // measures — the filing's fy/fp identifies the filing, not each
         // comparable-year value inside it (#982). Resolver returns null when
         // FYE info is missing or the duration shape is unrecognised; the
-        // original SEC-supplied identity is the fallback.
+        // original SEC-supplied identity is the fallback. Interim-instant
+        // classification is opted into only on the fp-less path, so fp-carrying
+        // values keep the exact identities they have always had.
         var resolved = FiscalPeriodResolver.Resolve(
             periodStart,
             value.End,
             stock.FiscalYearEndMonth,
-            stock.FiscalYearEndDay
+            stock.FiscalYearEndDay,
+            classifyInterimInstants: !hasMappedFp
         );
+        // With neither a mappable fp nor a date-derived identity the period cannot be
+        // placed — defaulting would route the fact into the annual bucket (the
+        // zero-valued enum member) and corrupt the dashboards, so it is dropped.
+        if (!hasMappedFp && resolved == null)
+            return null;
         return new ParsedFact
         {
             Taxonomy = taxonomy,
