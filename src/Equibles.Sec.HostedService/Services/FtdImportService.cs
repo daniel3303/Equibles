@@ -128,12 +128,18 @@ public class FtdImportService
 
         if (cusipsSeeded > 0)
         {
-            _logger.LogInformation("Seeded {Count} new CUSIPs from FTD data", cusipsSeeded);
+            _logger.LogInformation("Seeded or updated {Count} CUSIPs from FTD data", cusipsSeeded);
         }
     }
 
     /// <summary>
-    /// Seeds CUSIP values on CommonStock records by matching FTD ticker→CUSIP pairs.
+    /// Seeds and updates CUSIP values on CommonStock records by matching FTD
+    /// ticker→CUSIP pairs. Beyond filling stocks that have no CUSIP yet, this is
+    /// the pipeline's only detector for issuer-level CUSIP changes (share-class
+    /// conversions, reincorporations): the CNS feed keys rows by trading symbol,
+    /// so when a symbol's CUSIP moves, the stored stock must follow — otherwise
+    /// every new 13F line for the stock references a CUSIP nothing maps and the
+    /// stock's holders silently collapse to the laggards still filing the old one.
     /// </summary>
     private async Task<int> SeedCusips(
         List<FtdRecord> records,
@@ -142,14 +148,25 @@ public class FtdImportService
     )
     {
         var strippedAliases = BuildStrippedTickerAliases(tickerMap);
-        var tickerToCusip = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // Latest settlement date wins: during a CUSIP transition a single FTD
+        // file can carry both the retiring and the replacement CUSIP for one
+        // symbol, and the most recent trading day reflects the current security.
+        var tickerToCusip = new Dictionary<string, (string Cusip, DateOnly SettlementDate)>(
+            StringComparer.OrdinalIgnoreCase
+        );
         foreach (var record in records)
         {
             if (string.IsNullOrEmpty(record.Cusip) || string.IsNullOrEmpty(record.Symbol))
                 continue;
             if (!TryResolveSymbol(record.Symbol, tickerMap, strippedAliases, out var ticker))
                 continue;
-            tickerToCusip.TryAdd(ticker, record.Cusip);
+            if (
+                !tickerToCusip.TryGetValue(ticker, out var current)
+                || record.SettlementDate > current.SettlementDate
+            )
+            {
+                tickerToCusip[ticker] = (record.Cusip, record.SettlementDate);
+            }
         }
 
         if (tickerToCusip.Count == 0)
@@ -160,22 +177,50 @@ public class FtdImportService
         var stockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
 
         var tickers = tickerToCusip.Keys.ToList();
-        var stocks = await stockRepo
-            .GetByTickers(tickers)
-            .Where(s => s.Cusip == null)
+        var stocks = await stockRepo.GetByTickers(tickers).ToListAsync(cancellationToken);
+
+        // Guard against ticker recycling: if a delisted issuer's symbol is
+        // reassigned to a different company before CompanySync retires the
+        // stale stock, the FTD feed maps the freed symbol to the NEW issuer's
+        // CUSIP. Adopting a CUSIP that is currently another tracked stock's
+        // identity would leave two stocks sharing one CUSIP (the CommonStock
+        // Cusip index is non-unique) and misroute that CUSIP's 13F lines, so
+        // such rows are skipped — CompanySync owns ticker reassignment.
+        var resolvedCusips = tickerToCusip.Values.Select(v => v.Cusip).Distinct().ToList();
+        var cusipOwners = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var owners = await stockRepo
+            .GetAll()
+            .Where(s => s.Cusip != null && resolvedCusips.Contains(s.Cusip))
+            .Select(s => new { s.Id, s.Cusip })
             .ToListAsync(cancellationToken);
+        foreach (var owner in owners)
+        {
+            cusipOwners[owner.Cusip] = owner.Id;
+        }
 
         var seeded = 0;
         foreach (var stock in stocks)
         {
-            if (tickerToCusip.TryGetValue(stock.Ticker, out var cusip))
+            if (!tickerToCusip.TryGetValue(stock.Ticker, out var resolved))
+                continue;
+            if (string.Equals(stock.Cusip, resolved.Cusip, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (cusipOwners.TryGetValue(resolved.Cusip, out var ownerId) && ownerId != stock.Id)
             {
-                // Route through the manager so a StockCusipChanged event is
-                // published (outbox) — lets Holdings backfill any 13F data
-                // sets processed before this stock had a CUSIP.
-                await stockManager.SetCusip(stock, cusip);
-                seeded++;
+                _logger.LogWarning(
+                    "FTD maps {Ticker} to CUSIP {Cusip}, but that CUSIP already identifies another tracked stock — skipping (possible ticker reuse)",
+                    stock.Ticker,
+                    resolved.Cusip
+                );
+                continue;
             }
+
+            // Route through the manager so a StockCusipChanged event is
+            // published (outbox) — lets Holdings backfill any 13F data
+            // sets processed before this stock had a CUSIP (or while it
+            // still carried the retired one, kept as an alias).
+            await stockManager.SetCusip(stock, resolved.Cusip);
+            seeded++;
         }
 
         return seeded;

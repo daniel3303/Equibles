@@ -128,4 +128,20 @@ public class CommonStockRepository : BaseRepository<CommonStock>
             .Where(cs => cs.SecondaryTickers.Count > 0)
             .SelectMany(cs => cs.SecondaryTickers);
     }
+
+    /// <summary>
+    /// Retired CUSIPs recorded when a stock's CUSIP changed. They belong to the
+    /// CommonStock aggregate (no independent lifecycle), so access lives here
+    /// rather than in a dedicated repository.
+    /// </summary>
+    public IQueryable<CommonStockCusipAlias> GetCusipAliases()
+    {
+        return DbContext.Set<CommonStockCusipAlias>().AsQueryable();
+    }
+
+    public CommonStockCusipAlias AddCusipAlias(CommonStockCusipAlias alias)
+    {
+        DbContext.Set<CommonStockCusipAlias>().Add(alias);
+        return alias;
+    }
 }

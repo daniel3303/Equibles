@@ -4,6 +4,7 @@ using Equibles.Core.AutoWiring;
 using Equibles.Core.Exceptions;
 using Equibles.Messaging.Contracts.CommonStocks;
 using MassTransit;
+using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.BusinessLogic;
 
@@ -25,13 +26,25 @@ public class CommonStockManager
     /// backfill quarterly 13F data sets that were processed while this stock
     /// was still unresolvable. A no-op change publishes nothing.
     /// <para>
+    /// Replacing a non-null CUSIP (an issuer-level CUSIP change) also records the
+    /// retired value as a <see cref="CommonStockCusipAlias"/>. Filings keep
+    /// referencing the old CUSIP — laggard 13F filers for a quarter or two, and
+    /// historical data sets forever — so import-time resolution must keep mapping
+    /// it to this stock. Without the alias, the backfill triggered by the change
+    /// would silently drop old-CUSIP lines wherever a restatement amendment
+    /// deletes and re-inserts a quarter.
+    /// </para>
+    /// <para>
     /// This is a financial-domain event, so it publishes via the root
     /// <see cref="IBus"/> rather than the scoped <c>IPublishEndpoint</c>. A host
     /// that enables a bus outbox on a different context (e.g. the commercial
     /// customer database) would otherwise capture this publish into that context
     /// and never deliver it, since this flow only saves the financial context.
-    /// Delivery is at-least-once; the consumer is idempotent, so a publish lost to
-    /// a crash is recovered on the next resolve.
+    /// The consumer is idempotent; a publish lost after the save committed is
+    /// not retried here (the next resolve sees the stored value and no-ops), but
+    /// the consumer's ledger clear is global, so any later
+    /// <see cref="StockCusipChanged"/> from any stock re-imports the missed
+    /// data sets and heals the gap.
     /// </para>
     /// </summary>
     public async Task SetCusip(CommonStock commonStock, string cusip)
@@ -44,6 +57,25 @@ public class CommonStockManager
         }
 
         var previousCusip = commonStock.Cusip;
+
+        // The alias table enforces one CUSIP → one stock, ever (global unique
+        // index): a retired CUSIP already recorded — even for another stock —
+        // is left with its first owner rather than reassigned. The existence
+        // check is case-insensitive so a case-variant CUSIP can't slip past
+        // the index as a duplicate row.
+        var normalizedPrevious = previousCusip?.ToUpperInvariant();
+        if (
+            previousCusip != null
+            && !await _commonStockRepository
+                .GetCusipAliases()
+                .AnyAsync(a => a.Cusip.ToUpper() == normalizedPrevious)
+        )
+        {
+            _commonStockRepository.AddCusipAlias(
+                new CommonStockCusipAlias { CommonStockId = commonStock.Id, Cusip = previousCusip }
+            );
+        }
+
         commonStock.Cusip = cusip;
 
         await _commonStockRepository.SaveChanges();
