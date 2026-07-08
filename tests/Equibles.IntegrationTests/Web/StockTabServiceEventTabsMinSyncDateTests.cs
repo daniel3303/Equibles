@@ -205,6 +205,7 @@ public class StockTabServiceEventTabsMinSyncDateTests : IDisposable
             FilingDate = date.AddDays(10),
             TransactionType = CongressTransactionType.Purchase,
             AssetName = "Apple Inc. Common Stock",
+            OwnerType = "self",
             AmountFrom = 1_001,
             AmountTo = 15_000,
         };

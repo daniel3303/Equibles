@@ -28,7 +28,7 @@
                             <td class="max-w-xs truncate">@(t.CongressMember?.Name ?? "Unknown")</td>
                             <td class="hidden md:table-cell text-sm text-base-content/60">@position</td>
                             <td><span class="badge @badgeClass badge-sm">@typeLabel</span></td>
-                            <td class="hidden md:table-cell text-sm text-base-content/60">@(t.OwnerType ?? "—")</td>
+                            <td class="hidden md:table-cell text-sm text-base-content/60">@(string.IsNullOrEmpty(t.OwnerType) ? "—" : t.OwnerType)</td>
                             <td class="text-right font-mono">@FormatAmount(t.AmountFrom, t.AmountTo)</td>
                             <td class="hidden lg:table-cell text-sm text-base-content/60">@t.FilingDate.ToString("yyyy-MM-dd")</td>
                         </tr>

@@ -91,7 +91,7 @@ public class CongressTools
                         var position = t.CongressMember.Position.NameForHumans();
                         var type = t.TransactionType.NameForHumans();
                         var amount = FormatAmountRange(t);
-                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.CongressMember.Name} | {position} | {type} | {amount} | {t.OwnerType ?? "—"} |";
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.CongressMember.Name} | {position} | {type} | {amount} | {(string.IsNullOrEmpty(t.OwnerType) ? "—" : t.OwnerType)} |";
                     }
                 );
             },
@@ -151,7 +151,7 @@ public class CongressTools
                     {
                         var type = t.TransactionType.NameForHumans();
                         var amount = FormatAmountRange(t);
-                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.CommonStock.Ticker} | {type} | {amount} | {t.AssetName} | {t.OwnerType ?? "—"} |";
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.CommonStock.Ticker} | {type} | {amount} | {t.AssetName} | {(string.IsNullOrEmpty(t.OwnerType) ? "—" : t.OwnerType)} |";
                     }
                 );
             },

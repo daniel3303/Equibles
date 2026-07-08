@@ -56,7 +56,13 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         );
     }
 
-    private static DisclosureTransaction Txn(string member, string ticker) =>
+    private static DisclosureTransaction Txn(
+        string member,
+        string ticker,
+        string ownerType = "self",
+        long amountFrom = 1_001,
+        long amountTo = 15_000
+    ) =>
         new()
         {
             MemberName = member,
@@ -66,9 +72,9 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             TransactionDate = new DateOnly(2024, 6, 1),
             FilingDate = new DateOnly(2024, 6, 15),
             TransactionType = CongressTransactionType.Purchase,
-            OwnerType = "self",
-            AmountFrom = 1_001,
-            AmountTo = 15_000,
+            OwnerType = ownerType,
+            AmountFrom = amountFrom,
+            AmountTo = amountTo,
         };
 
     [Fact]
@@ -92,6 +98,38 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         var trades = await verify.Set<CongressionalTrade>().AsNoTracking().ToListAsync();
         trades.Should().ContainSingle();
         trades[0].CongressMemberId.Should().Be(member.Id);
+    }
+
+    // A member can file several same-day purchases of the same stock that differ only in the
+    // amount bracket or in who holds them (self vs. a dependent child). OwnerType and the
+    // amount bounds are part of the upsert unique key precisely so those are distinct trades;
+    // before they were added, the second one silently collapsed into the first (NoUpdate).
+    // Re-processing the same batch must still insert nothing new.
+    [Fact]
+    public async Task ProcessTransactions_DistinctSameDayTrades_AllPersistAndReprocessAddsNothing()
+    {
+        DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var transactions = new List<DisclosureTransaction>
+        {
+            Txn("Jane Doe", "AAPL"),
+            Txn("Jane Doe", "AAPL", amountFrom: 15_001, amountTo: 50_000),
+            Txn("Jane Doe", "AAPL", ownerType: "DC"),
+        };
+        var sut = BuildSut();
+
+        await (Task)ProcessTransactionsMethod.Invoke(sut, [transactions, CancellationToken.None]);
+        await (Task)ProcessTransactionsMethod.Invoke(sut, [transactions, CancellationToken.None]);
+
+        await using var verify = Fixture.CreateDbContext();
+        var trades = await verify.Set<CongressionalTrade>().AsNoTracking().ToListAsync();
+        trades.Should().HaveCount(3);
+        trades
+            .Select(t => (t.OwnerType, t.AmountFrom))
+            .Should()
+            .BeEquivalentTo([("self", 1_001L), ("self", 15_001L), ("DC", 1_001L)]);
     }
 
     [Fact]

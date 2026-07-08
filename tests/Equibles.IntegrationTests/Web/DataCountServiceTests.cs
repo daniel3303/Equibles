@@ -317,6 +317,7 @@ public class DataCountServiceTests : IDisposable
                     TransactionType = CongressTransactionType.Purchase,
                     AssetName = "Apple Inc. Common Stock",
                     AmountFrom = 1001,
+                    OwnerType = "self",
                     AmountTo = 15000,
                 },
                 new CongressionalTrade
@@ -328,6 +329,7 @@ public class DataCountServiceTests : IDisposable
                     TransactionType = CongressTransactionType.Sale,
                     AssetName = "Apple Inc. Options",
                     AmountFrom = 15001,
+                    OwnerType = "self",
                     AmountTo = 50000,
                 }
             );

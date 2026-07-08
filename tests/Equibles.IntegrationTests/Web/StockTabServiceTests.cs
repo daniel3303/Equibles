@@ -627,6 +627,7 @@ public class StockTabServiceTests : IDisposable
                     TransactionType = CongressTransactionType.Purchase,
                     AssetName = "Apple Inc. Common Stock",
                     AmountFrom = 1_001,
+                    OwnerType = "self",
                     AmountTo = 15_000,
                 },
                 new CongressionalTrade
@@ -638,6 +639,7 @@ public class StockTabServiceTests : IDisposable
                     TransactionType = CongressTransactionType.Sale,
                     AssetName = "Apple Inc. Options",
                     AmountFrom = 15_001,
+                    OwnerType = "self",
                     AmountTo = 50_000,
                 }
             );
@@ -680,6 +682,7 @@ public class StockTabServiceTests : IDisposable
                     TransactionType = CongressTransactionType.Purchase,
                     AssetName = "Apple Inc.",
                     AmountFrom = 1_001,
+                    OwnerType = "self",
                     AmountTo = 15_000,
                 }
             );

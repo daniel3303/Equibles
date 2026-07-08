@@ -7,12 +7,21 @@ namespace Equibles.Congress.Data.Models;
 
 [Index(nameof(CommonStockId), nameof(TransactionDate))]
 [Index(nameof(CongressMemberId), nameof(TransactionDate))]
+// The trade identity / upsert key (see CongressionalTradeSyncService.PersistTrades). OwnerType
+// and the amount bracket are part of a trade's identity: a member can file two same-day
+// purchases of the same stock that differ only in bracket or in who holds them (self vs.
+// spouse vs. dependent child), and without those columns the second one is silently dropped.
+// FilingDate is deliberately EXCLUDED — the disclosure feeds re-date the same filing between
+// scrapes, so keying on it would re-insert existing trades as duplicates.
 [Index(
     nameof(CommonStockId),
     nameof(CongressMemberId),
     nameof(TransactionDate),
     nameof(TransactionType),
     nameof(AssetName),
+    nameof(OwnerType),
+    nameof(AmountFrom),
+    nameof(AmountTo),
     IsUnique = true
 )]
 [Index(nameof(FilingDate))]
@@ -33,6 +42,10 @@ public class CongressionalTrade
 
     public CongressTransactionType TransactionType { get; set; }
 
+    // Not-null with a '' default (see CongressModuleConfiguration): OwnerType is part of the
+    // unique key above, and Postgres treats NULLs as distinct in unique indexes — a nullable
+    // column here would silently disable dedup for every trade without an owner annotation.
+    [Required]
     [MaxLength(64)]
     public string OwnerType { get; set; }
 
