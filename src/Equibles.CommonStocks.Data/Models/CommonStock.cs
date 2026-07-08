@@ -39,6 +39,22 @@ public class CommonStock
     public double MarketCapitalization { get; set; }
     public long SharesOutStanding { get; set; }
 
+    /// <summary>
+    /// What kind of security this row's ticker is, classified from the issuer's SEC
+    /// cover-page 12(b) registration table (see <see cref="ListedSecurityType"/>).
+    /// <see cref="ListedSecurityType.Unknown"/> until a filing whose 12(b) table
+    /// carries the ticker has been extracted.
+    /// </summary>
+    public ListedSecurityType ListedSecurityType { get; set; }
+
+    /// <summary>
+    /// The <c>dei:Security12bTitle</c> the classification came from (e.g.
+    /// "6.875% Senior Secured Notes due 2068"), verbatim from the filing; null
+    /// while <see cref="ListedSecurityType"/> is <see cref="ListedSecurityType.Unknown"/>.
+    /// </summary>
+    [MaxLength(500)]
+    public string ListedSecurityTitle { get; set; }
+
     public List<string> SecondaryTickers
     {
         get => field ?? [];

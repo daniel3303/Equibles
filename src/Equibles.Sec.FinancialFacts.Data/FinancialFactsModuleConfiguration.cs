@@ -31,5 +31,7 @@ public class FinancialFactsModuleConfiguration : Equibles.Data.IFinancialModule
         });
 
         builder.Entity<FinancialFactsSyncStatus>();
+
+        builder.Entity<ListedSecurity>();
     }
 }

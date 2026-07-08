@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.CorporateActions.Data;
@@ -30,6 +31,24 @@ public class ShortSqueezeScoreManager
 {
     /// <summary>Each trend window pools two calendar weeks of daily short-volume rows.</summary>
     public const int TrendWindowDays = 14;
+
+    /// <summary>
+    /// The listed-security kinds that can never be squeeze candidates: FINRA
+    /// reports short interest on these tickers (exchange-traded notes,
+    /// preferred series, warrants, rights), but the issuer's common-share
+    /// record is the wrong denominator for them, so no honest ratio exists.
+    /// Classified from the SEC 12(b) cover-page title (see
+    /// <see cref="ListedSecurityType"/>); Unknown/Other/Units stay in — MLP
+    /// common units are genuine operating equity, and exclusion requires
+    /// positive evidence.
+    /// </summary>
+    private static readonly ListedSecurityType[] NonEquityListingTypes =
+    [
+        ListedSecurityType.PreferredShares,
+        ListedSecurityType.DebtSecurities,
+        ListedSecurityType.Warrants,
+        ListedSecurityType.Rights,
+    ];
 
     /// <summary>
     /// Highest short-interest-to-shares-outstanding ratio accepted as a real measurement. No
@@ -95,7 +114,11 @@ public class ShortSqueezeScoreManager
         var stockIds = shortInterests.Select(s => s.CommonStockId).Distinct().ToList();
         var stocks = await _commonStockRepository
             .GetAll()
-            .Where(s => stockIds.Contains(s.Id) && s.SharesOutStanding > 0)
+            .Where(s =>
+                stockIds.Contains(s.Id)
+                && s.SharesOutStanding > 0
+                && !NonEquityListingTypes.Contains(s.ListedSecurityType)
+            )
             .Select(s => new
             {
                 s.Id,

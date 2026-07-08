@@ -194,7 +194,39 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         scores.Should().OnlyContain(s => s.ShortInterestPercentOfShares <= 2m);
     }
 
-    private CommonStock SeedStock(string ticker, long sharesOutstanding)
+    [Fact]
+    public async Task Compute_NonEquityListing_ExcludesStockFromUniverse()
+    {
+        // A ticker classified from its 12(b) cover-page title as an
+        // exchange-traded note (a baby bond) can never be a squeeze candidate —
+        // the issuer's common-share record is the wrong denominator for it.
+        // Units stay in: MLP common units are genuine operating equity.
+        var equity = SeedStock("EQTY", sharesOutstanding: 1_000_000);
+        var note = SeedStock(
+            "NOTE",
+            sharesOutstanding: 1_000_000,
+            listedSecurityType: ListedSecurityType.DebtSecurities
+        );
+        var mlp = SeedStock(
+            "MLP",
+            sharesOutstanding: 1_000_000,
+            listedSecurityType: ListedSecurityType.Units
+        );
+        SeedShortInterest(equity, shortPosition: 100_000, daysToCover: 2m);
+        SeedShortInterest(note, shortPosition: 150_000, daysToCover: 3m);
+        SeedShortInterest(mlp, shortPosition: 120_000, daysToCover: 2m);
+        await _dbContext.SaveChangesAsync();
+
+        var scores = await _manager.Compute();
+
+        scores.Select(s => s.Ticker).Should().BeEquivalentTo(["EQTY", "MLP"]);
+    }
+
+    private CommonStock SeedStock(
+        string ticker,
+        long sharesOutstanding,
+        ListedSecurityType listedSecurityType = ListedSecurityType.Unknown
+    )
     {
         var stock = new CommonStock
         {
@@ -202,6 +234,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
             Name = $"{ticker} Corp.",
             Cik = ticker,
             SharesOutStanding = sharesOutstanding,
+            ListedSecurityType = listedSecurityType,
         };
         _dbContext.Set<CommonStock>().Add(stock);
         return stock;

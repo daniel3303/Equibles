@@ -1,9 +1,11 @@
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Media.BusinessLogic;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Sec.FinancialFacts.BusinessLogic.Models;
 using Equibles.Sec.FinancialFacts.BusinessLogic.Parsers;
 using Equibles.Sec.FinancialFacts.Data.Enums;
@@ -58,7 +60,9 @@ public class XbrlFactExtractionService
     // coverage in InlineXbrlParser.
     // Version 3: filer-extension (company-specific) concepts persisted under
     // FactTaxonomy.Custom, consolidated contexts included.
-    public const int CurrentVersion = 3;
+    // Version 4: cover-page 12(b) security listings extracted from inline
+    // envelopes; the re-drain classifies every stock's ListedSecurityType.
+    public const int CurrentVersion = 4;
 
     private const int InsertBatchSize = 1000;
 
@@ -80,6 +84,14 @@ public class XbrlFactExtractionService
     // rather than truncated — a truncated QName would corrupt the key.
     private const int UnitMaxLength = 32;
     private const int QNameMaxLength = 256;
+
+    // Column limits for cover-page listing text (ListedSecurity.Title /
+    // ExchangeName). Unlike QNames these are display strings, so an
+    // over-length value is truncated rather than dropped — the leading text
+    // carries the security kind the classifier reads.
+    private const int ListingTitleMaxLength = 500;
+    private const int ListingExchangeMaxLength = 100;
+    private const int ListingSymbolMaxLength = 32;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly InlineXbrlParser _inlineParser;
@@ -133,10 +145,21 @@ public class XbrlFactExtractionService
             GzipCompressor.Decompress(await _fileManager.GetContent(document.XbrlContent))
         );
 
-        var parsed =
-            document.XbrlType == XbrlType.StandaloneXbrl
-                ? _standaloneParser.Parse(envelope)
-                : _inlineParser.Parse(envelope);
+        // Standalone (pre-inline) instances predate the 2019 cover-page
+        // taxonomy, so only inline envelopes can carry 12(b) listings.
+        List<ParsedXbrlFact> parsed;
+        if (document.XbrlType == XbrlType.StandaloneXbrl)
+        {
+            parsed = _standaloneParser.Parse(envelope);
+        }
+        else
+        {
+            var result = _inlineParser.ParseEnvelope(envelope);
+            parsed = result.Facts;
+            // Before the numeric early-return: a filing whose numeric facts
+            // are all API-covered still states the 12(b) table.
+            await PersistCoverListings(document, result.CoverListings, cancellationToken);
+        }
 
         var persistable = CollapseToNaturalKey(SelectPersistable(parsed));
         if (persistable.Count == 0)
@@ -438,6 +461,122 @@ public class XbrlFactExtractionService
 
         return rows.Where(r => pairs.Contains((r.Taxonomy, r.Tag)))
             .ToDictionary(r => (r.Taxonomy, r.Tag), r => r.Id);
+    }
+
+    /// <summary>
+    /// Upserts the filing's cover-page 12(b) rows into <see cref="ListedSecurity"/>
+    /// (per-symbol, newer filing wins — the historical drain visits old filings
+    /// after new ones, so an older statement never overwrites a newer row) and
+    /// re-materializes the stock's <see cref="CommonStock.ListedSecurityType"/>
+    /// from the row matching its ticker. A filing with no usable 12(b) rows
+    /// leaves both untouched: absence of the table is not evidence the
+    /// previously-stated rows stopped being true (many report types omit the
+    /// cover), and delisted symbols keep their last authoritative statement.
+    /// </summary>
+    internal async Task PersistCoverListings(
+        Document document,
+        List<ParsedSecurityListing> listings,
+        CancellationToken cancellationToken
+    )
+    {
+        // One candidate per normalized symbol; the first rendering in the
+        // filing wins when a symbol repeats.
+        var incoming = new Dictionary<string, ParsedSecurityListing>(StringComparer.Ordinal);
+        foreach (var listing in listings)
+        {
+            var symbol = NormalizeTradingSymbol(listing.TradingSymbol);
+            if (symbol == null || string.IsNullOrWhiteSpace(listing.Title))
+                continue;
+            incoming.TryAdd(symbol, listing);
+        }
+        if (incoming.Count == 0)
+            return;
+
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var listedRepository = scope.ServiceProvider.GetRequiredService<ListedSecurityRepository>();
+
+        var stock = await stockRepository
+            .GetByIds([document.CommonStockId])
+            .FirstOrDefaultAsync(cancellationToken);
+        if (stock == null)
+            return;
+
+        var existingBySymbol = await listedRepository
+            .GetByStock(stock)
+            .ToDictionaryAsync(row => row.TradingSymbol, StringComparer.Ordinal, cancellationToken);
+
+        foreach (var (symbol, listing) in incoming)
+        {
+            if (existingBySymbol.TryGetValue(symbol, out var row))
+            {
+                if (document.ReportingDate < row.FiledDate)
+                    continue;
+            }
+            else
+            {
+                row = listedRepository.Add(
+                    new ListedSecurity { CommonStockId = stock.Id, TradingSymbol = symbol }
+                );
+                existingBySymbol[symbol] = row;
+            }
+
+            row.Title = Truncate(listing.Title, ListingTitleMaxLength);
+            row.ExchangeName = Truncate(listing.ExchangeName, ListingExchangeMaxLength);
+            row.AccessionNumber = document.AccessionNumber;
+            row.FiledDate = document.ReportingDate;
+        }
+
+        // Classification is derived state: recompute from the freshest statement
+        // about the stock's own ticker, whichever filing this pass processed.
+        var tickerSymbol = NormalizeTradingSymbol(stock.Ticker);
+        if (tickerSymbol != null && existingBySymbol.TryGetValue(tickerSymbol, out var tickerRow))
+        {
+            stock.ListedSecurityType = ListedSecurityClassifier.Classify(tickerRow.Title);
+            stock.ListedSecurityTitle = tickerRow.Title;
+        }
+
+        await listedRepository.SaveChanges();
+    }
+
+    /// <summary>
+    /// A filed <c>dei:TradingSymbol</c> normalized for matching: uppercased with
+    /// class separators removed, because filings write "BRK.B" where ticker
+    /// feeds use "BRK-B". Placeholders filers type when a security has no
+    /// symbol ("N/A", "None") and over-length values resolve to null — checked
+    /// before separator stripping so the "N/A" placeholder can never collide
+    /// with a genuine ticker "NA".
+    /// </summary>
+    internal static string NormalizeTradingSymbol(string symbol)
+    {
+        if (string.IsNullOrWhiteSpace(symbol))
+            return null;
+
+        var trimmed = symbol.Trim();
+        if (
+            trimmed.Equals("n/a", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("none", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("not applicable", StringComparison.OrdinalIgnoreCase)
+        )
+            return null;
+
+        var normalized = trimmed
+            .ToUpperInvariant()
+            .Replace(".", string.Empty)
+            .Replace("-", string.Empty)
+            .Replace("/", string.Empty)
+            .Replace(" ", string.Empty);
+        if (normalized.Length == 0 || normalized.Length > ListingSymbolMaxLength)
+            return null;
+
+        return normalized;
+    }
+
+    private static string Truncate(string value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value))
+            return value;
+        return value.Length <= maxLength ? value : value.Substring(0, maxLength);
     }
 
     private async Task FlushFacts(List<FinancialFact> items)

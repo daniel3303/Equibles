@@ -26,16 +26,27 @@ namespace Equibles.Sec.FinancialFacts.BusinessLogic.Parsers;
 /// </para>
 ///
 /// <para>
-/// Scope: <c>ix:nonFraction</c> (numeric) only. Narrative
-/// <c>ix:nonNumeric</c>, <c>continuation</c> elements, fragmented values,
-/// and <c>typedMember</c> dimensions are out of scope for this first
-/// iteration; <c>decimals="INF"</c> resolves to <see cref="int.MaxValue"/>.
+/// Scope: <c>ix:nonFraction</c> (numeric) facts, plus exactly one narrative
+/// use of <c>ix:nonNumeric</c> — the three cover-page 12(b) registration tags
+/// (<c>dei:Security12bTitle</c> / <c>dei:TradingSymbol</c> /
+/// <c>dei:SecurityExchangeName</c>), whose short text values pair into
+/// security listings by shared context. General narrative text,
+/// <c>continuation</c> elements, fragmented values, and <c>typedMember</c>
+/// dimensions remain out of scope; <c>decimals="INF"</c> resolves to
+/// <see cref="int.MaxValue"/>.
 /// </para>
 /// </summary>
 [Service]
 public class InlineXbrlParser
 {
     private const string NonFractionLocalName = "ix:nonfraction";
+    private const string NonNumericLocalName = "ix:nonnumeric";
+
+    // The cover-page 12(b) registration tags. The only ix:nonNumeric names this
+    // parser reads — a whitelist, so narrative text blocks are never touched.
+    private const string Security12bTitleName = "dei:Security12bTitle";
+    private const string TradingSymbolName = "dei:TradingSymbol";
+    private const string SecurityExchangeName = "dei:SecurityExchangeName";
     private const string ContextLocalName = "xbrli:context";
     private const string UnitLocalName = "xbrli:unit";
     private const string PeriodLocalName = "xbrli:period";
@@ -63,14 +74,20 @@ public class InlineXbrlParser
         new HtmlParserOptions { IsAcceptingCustomElementsEverywhere = true }
     );
 
-    public List<ParsedXbrlFact> Parse(string html)
+    public List<ParsedXbrlFact> Parse(string html) => ParseEnvelope(html).Facts;
+
+    /// <summary>
+    /// One pass over the envelope yielding both the numeric facts and the
+    /// cover-page 12(b) listings — the document is DOM-parsed once for both.
+    /// </summary>
+    public InlineXbrlParseResult ParseEnvelope(string html)
     {
         if (string.IsNullOrWhiteSpace(html))
-            return [];
+            return new InlineXbrlParseResult();
 
         var document = _parser.ParseDocument(html);
         if (document?.DocumentElement == null)
-            return [];
+            return new InlineXbrlParseResult();
 
         var contexts = BuildContextMap(document);
         var units = BuildUnitMap(document);
@@ -82,7 +99,89 @@ public class InlineXbrlParser
             if (TryParseFact(element, contexts, units, namespaces, out var fact))
                 facts.Add(fact);
         }
-        return facts;
+        return new InlineXbrlParseResult
+        {
+            Facts = facts,
+            CoverListings = ExtractCoverListings(document),
+        };
+    }
+
+    /// <summary>
+    /// Pairs the cover page's 12(b) registration facts into listings. Each
+    /// registered security's title / symbol / exchange share one XBRL context
+    /// (the per-security member on a class-of-stock axis, or the dimensionless
+    /// context when only one security is registered), so grouping the three
+    /// whitelisted <c>ix:nonNumeric</c> tags by <c>contextRef</c> reassembles
+    /// the table's rows without resolving contexts at all. Only groups that
+    /// carry a title become listings; a repeated rendering of the same fact in
+    /// a context keeps the first non-empty value.
+    /// </summary>
+    private static List<ParsedSecurityListing> ExtractCoverListings(IDocument document)
+    {
+        var byContext = new Dictionary<string, ParsedSecurityListing>(StringComparer.Ordinal);
+        var contextOrder = new List<string>();
+
+        foreach (var element in FindByLocalName(document, NonNumericLocalName))
+        {
+            var name = element.GetAttribute("name");
+            if (string.IsNullOrEmpty(name))
+                continue;
+
+            var isTitle = string.Equals(
+                name,
+                Security12bTitleName,
+                StringComparison.OrdinalIgnoreCase
+            );
+            var isSymbol = string.Equals(
+                name,
+                TradingSymbolName,
+                StringComparison.OrdinalIgnoreCase
+            );
+            var isExchange = string.Equals(
+                name,
+                SecurityExchangeName,
+                StringComparison.OrdinalIgnoreCase
+            );
+            if (!isTitle && !isSymbol && !isExchange)
+                continue;
+
+            var contextRef =
+                element.GetAttribute("contextRef") ?? element.GetAttribute("contextref");
+            if (string.IsNullOrEmpty(contextRef))
+                continue;
+
+            var text = CollapseWhitespace(element.TextContent);
+            if (string.IsNullOrEmpty(text))
+                continue;
+
+            if (!byContext.TryGetValue(contextRef, out var listing))
+            {
+                listing = new ParsedSecurityListing();
+                byContext[contextRef] = listing;
+                contextOrder.Add(contextRef);
+            }
+
+            if (isTitle)
+                listing.Title ??= text;
+            else if (isSymbol)
+                listing.TradingSymbol ??= text;
+            else
+                listing.ExchangeName ??= text;
+        }
+
+        return contextOrder
+            .Select(id => byContext[id])
+            .Where(listing => listing.Title != null)
+            .ToList();
+    }
+
+    // Cover-page text values are short strings, but escaped titles can carry
+    // nested markup whose TextContent folds in newlines and runs of spaces.
+    private static string CollapseWhitespace(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        return string.Join(' ', value.Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
     }
 
     /// <summary>
