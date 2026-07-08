@@ -115,8 +115,7 @@ public class ReportedStatementsCaptureWorker : BaseScraperWorker
                 await ErrorReporter.Report(
                     ErrorSource,
                     "ReportedStatementsCapture.Capture",
-                    ex.Message,
-                    ex.StackTrace,
+                    ex,
                     $"documentId: {document.Id}, accession: {document.AccessionNumber}"
                 );
             }
