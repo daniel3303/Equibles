@@ -95,7 +95,11 @@ public class FilingDiscoveryService : IFilingDiscoveryService
                     cancellationToken
                 );
             }
-            catch (Exception ex) when (ex is HttpRequestException or System.Xml.XmlException)
+            // Best-effort layer: any fetch/parse failure (HTTP error, timeout —
+            // which surfaces as TaskCanceledException, not HttpRequestException —
+            // transport IO, malformed XML) must not abort the cycle and discard
+            // the dirty set; only a genuine shutdown propagates.
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
                 _logger.LogWarning(
                     ex,
@@ -194,10 +198,13 @@ public class FilingDiscoveryService : IFilingDiscoveryService
                     cancellationToken
                 );
             }
-            catch (HttpRequestException ex)
+            // NEVER advance past a day that failed to fetch — that would
+            // silently drop its filings until the reconciliation sweep. Broad
+            // by design (timeouts surface as TaskCanceledException, transport
+            // failures as IOException) with a guard so a genuine shutdown still
+            // propagates; the watermark held below makes the failure safe.
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
-                // NEVER advance past a day that failed to fetch — that would
-                // silently drop its filings until the reconciliation sweep.
                 _logger.LogWarning(
                     ex,
                     "Daily index fetch failed for {Day:yyyy-MM-dd}; holding discovery watermark at {Floor:yyyy-MM-dd}",
