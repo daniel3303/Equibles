@@ -518,6 +518,94 @@ public class SecEdgarClient : ISecEdgarClient
         return await response.Content.ReadAsStreamAsync();
     }
 
+    public async Task<List<EdgarRecentFilingEntry>> GetRecentFilings(
+        int start = 0,
+        int count = 100,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var url =
+            $"{FilesBaseUrl}/cgi-bin/browse-edgar?action=getcurrent&type=&company=&dateb=&owner=include&start={start}&count={count}&output=atom";
+        var content = await FetchStringAsync(url);
+        return ParseRecentFilingsAtom(content);
+    }
+
+    /// <summary>
+    /// Parses the "Latest Filings" ATOM payload. Entry shape:
+    /// title "144 - Company Name (0001995137) (Reporting)", form type in the
+    /// category term, accession in the id tag
+    /// ("urn:tag:sec.gov,2008:accession-number=0001995137-26-000012").
+    /// Entries missing a parseable CIK, form or accession are skipped rather
+    /// than failing the page — the daily-index layer backstops anything lost.
+    /// </summary>
+    internal static List<EdgarRecentFilingEntry> ParseRecentFilingsAtom(string xml)
+    {
+        var entries = new List<EdgarRecentFilingEntry>();
+        if (string.IsNullOrWhiteSpace(xml))
+            return entries;
+
+        System.Xml.Linq.XNamespace atom = "http://www.w3.org/2005/Atom";
+        var feed = System.Xml.Linq.XDocument.Parse(xml);
+
+        foreach (var entry in feed.Descendants(atom + "entry"))
+        {
+            var title = entry.Element(atom + "title")?.Value ?? string.Empty;
+            var formType = entry
+                .Elements(atom + "category")
+                .FirstOrDefault()
+                ?.Attribute("term")
+                ?.Value;
+            var id = entry.Element(atom + "id")?.Value ?? string.Empty;
+
+            var accessionMarkerIndex = id.LastIndexOf('=');
+            var accession =
+                accessionMarkerIndex >= 0 && accessionMarkerIndex < id.Length - 1
+                    ? id[(accessionMarkerIndex + 1)..].Trim()
+                    : null;
+
+            var cikMatch = RecentFilingCikPattern.Match(title);
+            if (
+                string.IsNullOrEmpty(formType)
+                || string.IsNullOrEmpty(accession)
+                || !cikMatch.Success
+            )
+                continue;
+
+            // "144 - Camerana Niccolo (0001995137) (Reporting)" → name sits between
+            // the first " - " and the CIK parenthesis.
+            var nameStart = title.IndexOf(" - ", StringComparison.Ordinal);
+            var companyName = nameStart >= 0 ? title[(nameStart + 3)..cikMatch.Index].Trim() : null;
+
+            DateTimeOffset? updated = DateTimeOffset.TryParse(
+                entry.Element(atom + "updated")?.Value,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out var parsedUpdated
+            )
+                ? parsedUpdated
+                : null;
+
+            entries.Add(
+                new EdgarRecentFilingEntry
+                {
+                    Cik = cikMatch.Groups[1].Value,
+                    FormType = formType,
+                    AccessionNumber = accession,
+                    CompanyName = companyName,
+                    Updated = updated,
+                }
+            );
+        }
+
+        return entries;
+    }
+
+    // Matches the CIK parenthesis in a feed entry title, e.g. "(0001995137)".
+    private static readonly System.Text.RegularExpressions.Regex RecentFilingCikPattern = new(
+        @"\((\d{5,10})\)",
+        System.Text.RegularExpressions.RegexOptions.Compiled
+    );
+
     // 13F-HR and 13F-HR/A both start with this; the default form set for the
     // back-compatible GetDailyIndex.
     private static readonly string[] ThirteenFFormPrefixes = ["13F-HR"];

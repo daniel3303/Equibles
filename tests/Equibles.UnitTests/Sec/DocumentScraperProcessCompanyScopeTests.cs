@@ -78,6 +78,7 @@ public class DocumentScraperProcessCompanyScopeTests
         return new DocumentScraper(
             scopeFactory,
             Substitute.For<ICompanySyncService>(),
+            Substitute.For<IFilingDiscoveryService>(),
             new List<IFilingProcessor>(),
             Options.Create(options),
             Options.Create(new WorkerOptions()),
@@ -121,7 +122,11 @@ public class DocumentScraperProcessCompanyScopeTests
         // == null branch logs a warning and continues, no error recorded.
         var scraper = BuildScraper(
             db,
-            new DocumentScraperOptions { DocumentTypesToSync = [DocumentType.Other] }
+            new DocumentScraperOptions
+            {
+                UseEventDrivenDiscovery = false,
+                DocumentTypesToSync = [DocumentType.Other],
+            }
         );
         var result = new ScrapingResult();
 
@@ -138,7 +143,14 @@ public class DocumentScraperProcessCompanyScopeTests
         // Null DocumentTypesToSync makes the foreach throw; the per-company
         // catch must convert that into a recorded error (company is loaded, so
         // the catch's company.Ticker access is safe) rather than propagating.
-        var scraper = BuildScraper(db, new DocumentScraperOptions { DocumentTypesToSync = null });
+        var scraper = BuildScraper(
+            db,
+            new DocumentScraperOptions
+            {
+                UseEventDrivenDiscovery = false,
+                DocumentTypesToSync = null,
+            }
+        );
         var result = new ScrapingResult();
 
         await InvokeProcess(scraper, company, result);

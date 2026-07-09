@@ -32,6 +32,7 @@ public class DocumentScraperBuildRetryPipelineFinalAttemptErrorLogTests
         var scraper = new DocumentScraper(
             Substitute.For<IServiceScopeFactory>(),
             Substitute.For<ICompanySyncService>(),
+            Substitute.For<IFilingDiscoveryService>(),
             new List<IFilingProcessor>(),
             Options.Create(new DocumentScraperOptions()),
             Options.Create(new WorkerOptions()),

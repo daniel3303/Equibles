@@ -39,8 +39,9 @@ public class DocumentScraperCompanySyncFailureTests
         var sut = new DocumentScraper(
             Substitute.For<IServiceScopeFactory>(),
             companySync,
+            Substitute.For<IFilingDiscoveryService>(),
             Enumerable.Empty<IFilingProcessor>(),
-            Options.Create(new DocumentScraperOptions()),
+            Options.Create(new DocumentScraperOptions { UseEventDrivenDiscovery = false }),
             Options.Create(new WorkerOptions()),
             Substitute.For<ILogger<DocumentScraper>>(),
             errorReporter
