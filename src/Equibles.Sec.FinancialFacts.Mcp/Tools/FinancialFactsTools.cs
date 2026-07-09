@@ -28,15 +28,6 @@ public class FinancialFactsTools
     private const int MaxResultsCap = 200;
     private const int MaxTickers = 25;
 
-    // A 10-Q tags each flow line twice under the same fiscal (year, period): the
-    // discrete three-month quarter and the fiscal year-to-date (6 months at Q2,
-    // 9 at Q3). A quarterly query must surface the discrete quarter, so prefer a
-    // duration spanning at most one quarter; the annual period symmetrically
-    // prefers a full-year span. The longest a discrete quarter runs (14-week
-    // 4-4-5 quarter, with headroom) and the shortest a fiscal year runs (52 weeks).
-    private const int MaxDiscreteQuarterDays = 100;
-    private const int MinAnnualSpanDays = 350;
-
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
     private readonly CommonStockRepository _commonStockRepository;
@@ -123,10 +114,16 @@ public class FinancialFactsTools
                     .Where(f => conceptPriority.Keys.Contains(f.FinancialConceptId))
                     .ToListAsync();
 
+                // Reported discrete fourth quarters hide under fp=FY — the same
+                // fiscal identity as the annual figure — so grouping by stamp
+                // alone never surfaces them as Q4 rows. Promote them first (see
+                // ReportedQuarterPromotion; a full-year total can never qualify).
+                var allFacts = ReportedQuarterPromotion.WithPromotedFourthQuarters(facts);
+
                 // Form / period-end filtering in memory: a single concept's
                 // history is small, and DocumentType is a value-converted type
                 // so equality is kept off the SQL side for provider safety.
-                var filtered = facts.Where(f =>
+                var filtered = allFacts.Where(f =>
                     (formFilter == null || f.Form == formFilter)
                     && (fromBound == null || f.PeriodEnd >= fromBound.Value)
                     && (toBound == null || f.PeriodEnd <= toBound.Value)
@@ -221,14 +218,40 @@ public class FinancialFactsTools
                 }
 
                 var stockIds = stocks.Select(s => s.Id).ToList();
+                // A Q4 request must also load the year's fp=FY rows: filers whose
+                // Company Facts carry Q4 frames report the discrete fourth quarter
+                // under the FullYear stamp (see ReportedQuarterPromotion).
+                var includeFullYearForQ4 = period == SecFiscalPeriod.Q4;
                 var facts = await _financialFactRepository
                     .GetConsolidatedByStocks(stockIds)
                     .Where(f =>
                         f.FiscalYear == fiscalYear
-                        && f.FiscalPeriod == period
+                        && (
+                            f.FiscalPeriod == period
+                            || (includeFullYearForQ4 && f.FiscalPeriod == SecFiscalPeriod.FullYear)
+                        )
                         && conceptPriority.Keys.Contains(f.FinancialConceptId)
                     )
                     .ToListAsync();
+
+                if (includeFullYearForQ4)
+                {
+                    // Promote per company: only a quarter-span row ending exactly
+                    // where the company's own year does is that year's fourth
+                    // quarter — comparative re-filings in the slice end earlier
+                    // and belong to the prior year. The remaining fp=FY rows
+                    // (the annual totals) are dropped, never compared as Q4.
+                    facts = facts
+                        .Where(f => f.FiscalPeriod == SecFiscalPeriod.Q4)
+                        .Concat(
+                            facts
+                                .GroupBy(f => f.CommonStockId)
+                                .SelectMany(
+                                    ReportedQuarterPromotion.PromotedFourthQuartersForYearSlice
+                                )
+                        )
+                        .ToList();
+                }
 
                 // Same deterministic pick as GetFinancialFact: the alias's
                 // primary tag wins, then the latest filing, then accession as a
@@ -363,8 +386,8 @@ public class FinancialFactsTools
                     return true;
                 var spanDays = f.PeriodEnd.DayNumber - f.PeriodStart.DayNumber;
                 return fiscalPeriod == SecFiscalPeriod.FullYear
-                    ? spanDays >= MinAnnualSpanDays
-                    : spanDays <= MaxDiscreteQuarterDays;
+                    ? spanDays >= FiscalPeriodSpanDays.MinAnnualSpanDays
+                    : spanDays <= FiscalPeriodSpanDays.MaxDiscreteQuarterDays;
             })
             .ToList();
         if (preferredSpan.Count > 0)
