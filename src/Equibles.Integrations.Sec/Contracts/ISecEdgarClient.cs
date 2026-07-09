@@ -83,6 +83,19 @@ public interface ISecEdgarClient
     );
 
     /// <summary>
+    /// Fetches one page of EDGAR's "Latest Filings" ATOM feed — the real-time
+    /// stream of accepted submissions across all filers. The feed is a rolling
+    /// window of the most recent entries only, so callers that must not miss a
+    /// filing have to reconcile against the daily index; this is the
+    /// low-latency discovery layer, never the source of truth.
+    /// </summary>
+    Task<List<EdgarRecentFilingEntry>> GetRecentFilings(
+        int start = 0,
+        int count = 100,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Returns the most recent <c>reportDate</c> for a given form type from the
     /// SEC submissions feed's <c>filings.recent</c> section. Uses the cached
     /// submissions payload when available (zero extra SEC requests after

@@ -56,6 +56,7 @@ public class DocumentScraperProcessFilingTests
         return new DocumentScraper(
             scopeFactory,
             Substitute.For<ICompanySyncService>(),
+            Substitute.For<IFilingDiscoveryService>(),
             processor == null ? new List<IFilingProcessor>() : [processor],
             Options.Create(new DocumentScraperOptions()),
             Options.Create(new WorkerOptions()),

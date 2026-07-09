@@ -84,8 +84,15 @@ public class DocumentScraperUpdateCompanyMetadataErrorIsolationTests
         var scraper = new DocumentScraper(
             scopeFactory,
             Substitute.For<ICompanySyncService>(),
+            Substitute.For<IFilingDiscoveryService>(),
             [],
-            Options.Create(new DocumentScraperOptions { DocumentTypesToSync = [] }),
+            Options.Create(
+                new DocumentScraperOptions
+                {
+                    UseEventDrivenDiscovery = false,
+                    DocumentTypesToSync = [],
+                }
+            ),
             Options.Create(new WorkerOptions()),
             Substitute.For<ILogger<DocumentScraper>>(),
             errorReporter

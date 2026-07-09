@@ -121,9 +121,14 @@ public class DocumentScraperDeferredRetryTests
         var scraper = new DocumentScraper(
             scopeFactory,
             Substitute.For<ICompanySyncService>(),
+            Substitute.For<IFilingDiscoveryService>(),
             new List<IFilingProcessor>(),
             Options.Create(
-                new DocumentScraperOptions { DocumentTypesToSync = [DocumentType.TenK] }
+                new DocumentScraperOptions
+                {
+                    UseEventDrivenDiscovery = false,
+                    DocumentTypesToSync = [DocumentType.TenK],
+                }
             ),
             Options.Create(new WorkerOptions()),
             Substitute.For<ILogger<DocumentScraper>>(),

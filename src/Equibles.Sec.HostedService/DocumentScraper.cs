@@ -26,6 +26,7 @@ public class DocumentScraper : IDocumentScraper
 {
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ICompanySyncService _companySyncService;
+    private readonly IFilingDiscoveryService _filingDiscoveryService;
     private readonly IEnumerable<IFilingProcessor> _filingProcessors;
     private readonly DocumentScraperOptions _options;
     private readonly WorkerOptions _workerOptions;
@@ -44,9 +45,15 @@ public class DocumentScraper : IDocumentScraper
         (DocumentTypeFilter.FortyF, "40-F"),
     ];
 
+    // When the company directory was last synced from SEC. Static because the
+    // scraper is resolved per cycle and event-driven cycles run every few
+    // seconds — an unthrottled sync would re-fetch company_tickers each time.
+    private static DateTime _lastCompanySyncAtUtc;
+
     public DocumentScraper(
         IServiceScopeFactory serviceScopeFactory,
         ICompanySyncService companySyncService,
+        IFilingDiscoveryService filingDiscoveryService,
         IEnumerable<IFilingProcessor> filingProcessors,
         IOptions<DocumentScraperOptions> options,
         IOptions<WorkerOptions> workerOptions,
@@ -56,6 +63,7 @@ public class DocumentScraper : IDocumentScraper
     {
         _serviceScopeFactory = serviceScopeFactory;
         _companySyncService = companySyncService;
+        _filingDiscoveryService = filingDiscoveryService;
         _filingProcessors = filingProcessors;
         _options = options.Value;
         _workerOptions = workerOptions.Value;
@@ -73,20 +81,32 @@ public class DocumentScraper : IDocumentScraper
         {
             _logger.LogInformation("Starting document scraping process...");
 
-            await _companySyncService.SyncCompaniesFromSecApi();
+            if (ShouldSyncCompanies())
+            {
+                await _companySyncService.SyncCompaniesFromSecApi();
+                _lastCompanySyncAtUtc = DateTime.UtcNow;
+            }
 
             var companiesUntracked = await GetAllCompaniesWithNoTracking();
+
+            var targets = _options.UseEventDrivenDiscovery
+                ? await SelectEventDrivenTargets(companiesUntracked, cancellationToken)
+                : companiesUntracked;
+
             _logger.LogInformation(
                 "Found {CompanyCount} companies to process for documents",
-                companiesUntracked.Count
+                targets.Count
             );
 
-            foreach (var companyUntracked in companiesUntracked)
+            foreach (var companyUntracked in targets)
             {
                 if (cancellationToken.IsCancellationRequested)
                     break;
 
                 await ProcessCompanyDocumentsWithScope(companyUntracked, result);
+
+                if (_options.UseEventDrivenDiscovery)
+                    await StampFilingSyncState(companyUntracked);
 
                 result.CompaniesProcessed++;
             }
@@ -113,6 +133,148 @@ public class DocumentScraper : IDocumentScraper
         }
 
         return result;
+    }
+
+    // Test seam: the throttle stamp is static (it must outlive the per-cycle
+    // scraper), so suites reset it to stay order-independent.
+    internal static void ResetCompanySyncThrottleForTests() => _lastCompanySyncAtUtc = default;
+
+    // Legacy mode syncs every cycle (one multi-hour full sweep per cycle keeps
+    // that cheap); event-driven mode throttles to the configured interval.
+    private bool ShouldSyncCompanies() =>
+        !_options.UseEventDrivenDiscovery
+        || DateTime.UtcNow - _lastCompanySyncAtUtc
+            >= TimeSpan.FromMinutes(_options.CompanySyncIntervalMinutes);
+
+    /// <summary>
+    /// The cycle's work list under event-driven discovery: companies flagged by
+    /// the real-time feeds, plus the reconciliation batch — never-synced
+    /// companies (fresh onboarding, full historical backfill) and companies
+    /// whose last enumeration went stale. Discovery targets come first so a
+    /// fresh filing is never queued behind a long reconciliation batch.
+    /// </summary>
+    private async Task<List<CommonStock>> SelectEventDrivenTargets(
+        List<CommonStock> companies,
+        CancellationToken cancellationToken
+    )
+    {
+        var discovered = await _filingDiscoveryService.DiscoverCompaniesWithNewFilings(
+            companies,
+            cancellationToken
+        );
+
+        var reconciliation = await SelectReconciliationBatch(
+            companies,
+            discovered,
+            cancellationToken
+        );
+
+        if (discovered.Count > 0 || reconciliation.Count > 0)
+        {
+            _logger.LogInformation(
+                "Event-driven discovery: {Discovered} companies with new filings, {Reconciliation} due for reconciliation",
+                discovered.Count,
+                reconciliation.Count
+            );
+        }
+
+        return [.. discovered, .. reconciliation];
+    }
+
+    private async Task<List<CommonStock>> SelectReconciliationBatch(
+        List<CommonStock> companies,
+        List<CommonStock> alreadySelected,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var syncStateRepository =
+            scope.ServiceProvider.GetRequiredService<CompanyFilingSyncStateRepository>();
+
+        var lastSyncedByCompany = await syncStateRepository
+            .GetAll()
+            .AsNoTracking()
+            .ToDictionaryAsync(s => s.CommonStockId, s => s.LastSyncedAt, cancellationToken);
+
+        return SelectDueCompanies(
+            companies,
+            lastSyncedByCompany,
+            alreadySelected.Select(c => c.Id).ToHashSet(),
+            DateTime.UtcNow.AddHours(-_options.ReconciliationHours),
+            _options.MaxReconciliationsPerCycle
+        );
+    }
+
+    /// <summary>
+    /// Companies due for a reconciliation sweep: never synced (no stamp) or
+    /// stamped before the cutoff. Never-synced first, then stalest first, so a
+    /// cold start drains as an ordered rolling backfill under the cap.
+    /// </summary>
+    internal static List<CommonStock> SelectDueCompanies(
+        List<CommonStock> companies,
+        Dictionary<Guid, DateTime> lastSyncedByCompany,
+        HashSet<Guid> excludedIds,
+        DateTime cutoff,
+        int maxCompanies
+    ) =>
+        companies
+            .Where(c => !excludedIds.Contains(c.Id))
+            .Where(c =>
+                !lastSyncedByCompany.TryGetValue(c.Id, out var lastSynced) || lastSynced < cutoff
+            )
+            .OrderBy(c =>
+                lastSyncedByCompany.TryGetValue(c.Id, out var lastSynced)
+                    ? lastSynced
+                    : DateTime.MinValue
+            )
+            .Take(maxCompanies)
+            .ToList();
+
+    /// <summary>
+    /// Records that this company's filings were fully enumerated now. Stamped
+    /// even after a partial failure — the company is retried by the next
+    /// reconciliation window (or the next discovery event) rather than every
+    /// cycle, which bounds how much budget a persistently failing company burns.
+    /// </summary>
+    private async Task StampFilingSyncState(CommonStock company)
+    {
+        try
+        {
+            await using var scope = _serviceScopeFactory.CreateAsyncScope();
+            var syncStateRepository =
+                scope.ServiceProvider.GetRequiredService<CompanyFilingSyncStateRepository>();
+
+            var state = await syncStateRepository
+                .GetByCommonStockId(company.Id)
+                .FirstOrDefaultAsync();
+
+            if (state == null)
+            {
+                syncStateRepository.Add(
+                    new CompanyFilingSyncState
+                    {
+                        CommonStockId = company.Id,
+                        LastSyncedAt = DateTime.UtcNow,
+                    }
+                );
+            }
+            else
+            {
+                state.LastSyncedAt = DateTime.UtcNow;
+            }
+
+            await syncStateRepository.SaveChanges();
+        }
+        catch (Exception ex)
+        {
+            // A missed stamp only means the company re-enters the next
+            // reconciliation batch (or vanished mid-cycle via company sync).
+            _logger.LogWarning(
+                ex,
+                "Could not stamp filing sync state for {Ticker}",
+                company.Ticker
+            );
+        }
     }
 
     private async Task<List<CommonStock>> GetAllCompaniesWithNoTracking()

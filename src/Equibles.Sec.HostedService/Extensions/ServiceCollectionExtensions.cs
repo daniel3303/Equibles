@@ -26,6 +26,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<DocumentImageService>();
         services.AddScoped<FilingItemsBackfillService>();
         services.AddScoped<IDocumentScraper, DocumentScraper>();
+        services.AddScoped<IFilingDiscoveryService, FilingDiscoveryService>();
         // Primary IWebsiteSource (consumed by the CommonStocks website discovery
         // worker): the website disclosure mandated in the stocks' own stored filings.
         services.AddScoped<IWebsiteSource, FilingsWebsiteSource>();

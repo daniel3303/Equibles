@@ -4,7 +4,7 @@ using Equibles.Integrations.Sec.Models;
 
 namespace Equibles.Integrations.Sec.Extensions;
 
-internal static class DocumentTypeExtensions
+public static class DocumentTypeExtensions
 {
     public static string GetFormName(this DocumentTypeFilter documentType)
     {

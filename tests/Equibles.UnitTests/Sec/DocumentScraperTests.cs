@@ -134,7 +134,11 @@ public class DocumentScraperTests
             )
             .Returns(false);
 
-        var options = new DocumentScraperOptions { DocumentTypesToSync = [DocumentType.TenK] };
+        var options = new DocumentScraperOptions
+        {
+            UseEventDrivenDiscovery = false,
+            DocumentTypesToSync = [DocumentType.TenK],
+        };
         var result = await harness.BuildScraper(dbContext, options: options).ScrapeDocuments();
 
         result.CompaniesProcessed.Should().Be(1);
@@ -204,7 +208,11 @@ public class DocumentScraperTests
                 )
             );
 
-        var options = new DocumentScraperOptions { DocumentTypesToSync = [DocumentType.TenK] };
+        var options = new DocumentScraperOptions
+        {
+            UseEventDrivenDiscovery = false,
+            DocumentTypesToSync = [DocumentType.TenK],
+        };
         var result = await harness.BuildScraper(dbContext, options: options).ScrapeDocuments();
 
         result.DocumentsFound.Should().Be(1);
@@ -262,7 +270,11 @@ public class DocumentScraperTests
                 },
             ]);
 
-        var options = new DocumentScraperOptions { DocumentTypesToSync = [DocumentType.FormFour] };
+        var options = new DocumentScraperOptions
+        {
+            UseEventDrivenDiscovery = false,
+            DocumentTypesToSync = [DocumentType.FormFour],
+        };
         var result = await harness.BuildScraper(dbContext, options: options).ScrapeDocuments();
 
         result.DocumentsFound.Should().Be(1);
@@ -337,7 +349,11 @@ public class DocumentScraperTests
             )
             .Returns(false);
 
-        var options = new DocumentScraperOptions { DocumentTypesToSync = [DocumentType.TenK] };
+        var options = new DocumentScraperOptions
+        {
+            UseEventDrivenDiscovery = false,
+            DocumentTypesToSync = [DocumentType.TenK],
+        };
         var result = await harness.BuildScraper(dbContext, options: options).ScrapeDocuments();
 
         result.CompaniesProcessed.Should().Be(2);
@@ -410,7 +426,11 @@ public class DocumentScraperTests
             .SecEdgarClient.GetCompanyFilings("0000123456", DocumentTypeFilter.TenK, null)
             .Returns([BuildFiling("0000123456", "0000123456-25-000009", "NOT-A-FORM")]);
 
-        var options = new DocumentScraperOptions { DocumentTypesToSync = [DocumentType.TenK] };
+        var options = new DocumentScraperOptions
+        {
+            UseEventDrivenDiscovery = false,
+            DocumentTypesToSync = [DocumentType.TenK],
+        };
         var result = await harness.BuildScraper(dbContext, options: options).ScrapeDocuments();
 
         result.DocumentsFound.Should().Be(1);
@@ -457,7 +477,11 @@ public class DocumentScraperTests
             )
             .Returns<bool>(_ => throw new Exception("persistence down"));
 
-        var options = new DocumentScraperOptions { DocumentTypesToSync = [DocumentType.TenK] };
+        var options = new DocumentScraperOptions
+        {
+            UseEventDrivenDiscovery = false,
+            DocumentTypesToSync = [DocumentType.TenK],
+        };
         var result = await harness.BuildScraper(dbContext, options: options).ScrapeDocuments();
 
         result.DocumentsFound.Should().Be(1);
@@ -484,7 +508,11 @@ public class DocumentScraperTests
             .SecEdgarClient.GetCompanyFilings("0000123456", DocumentTypeFilter.TenK, null)
             .Returns<List<FilingData>>(_ => throw new HttpRequestException("SEC EDGAR 503"));
 
-        var options = new DocumentScraperOptions { DocumentTypesToSync = [DocumentType.TenK] };
+        var options = new DocumentScraperOptions
+        {
+            UseEventDrivenDiscovery = false,
+            DocumentTypesToSync = [DocumentType.TenK],
+        };
         var result = await harness.BuildScraper(dbContext, options: options).ScrapeDocuments();
 
         result.CompaniesProcessed.Should().Be(1);
@@ -517,7 +545,11 @@ public class DocumentScraperTests
             )
             .Returns<bool>(_ => throw new HttpRequestException("persistence HTTP fault"));
 
-        var options = new DocumentScraperOptions { DocumentTypesToSync = [DocumentType.TenK] };
+        var options = new DocumentScraperOptions
+        {
+            UseEventDrivenDiscovery = false,
+            DocumentTypesToSync = [DocumentType.TenK],
+        };
         var result = await harness.BuildScraper(dbContext, options: options).ScrapeDocuments();
 
         result.DocumentsFound.Should().Be(1);
@@ -773,8 +805,16 @@ public class DocumentScraperTests
             return new DocumentScraper(
                 ScopeFactory,
                 CompanySync,
+                Substitute.For<IFilingDiscoveryService>(),
                 FilingProcessors,
-                Options.Create(options ?? new DocumentScraperOptions { DocumentTypesToSync = [] }),
+                Options.Create(
+                    options
+                        ?? new DocumentScraperOptions
+                        {
+                            UseEventDrivenDiscovery = false,
+                            DocumentTypesToSync = [],
+                        }
+                ),
                 Options.Create(workerOptions ?? new WorkerOptions()),
                 Substitute.For<ILogger<DocumentScraper>>(),
                 errorReporter
