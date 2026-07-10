@@ -24,6 +24,8 @@ public static class CuratedSeriesRegistry
         // Inflation
         new("CPIAUCSL", FredSeriesCategory.Inflation),
         new("CPILFESL", FredSeriesCategory.Inflation),
+        new("PPIFIS", FredSeriesCategory.Inflation),
+        new("PPIFES", FredSeriesCategory.Inflation),
         new("PCEPILFE", FredSeriesCategory.Inflation),
         new("T10YIE", FredSeriesCategory.Inflation),
         new("T5YIFR", FredSeriesCategory.Inflation),

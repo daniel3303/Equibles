@@ -114,6 +114,9 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
         releases[0].ReleaseId.Should().Be(10);
         releases[0].Name.Should().Be("Consumer Price Index");
         releases[0].PressRelease.Should().BeTrue();
+        releases[0]
+            .Importance.Should()
+            .Be(FredReleaseImportance.High, "CPI is a curated tier-1 release");
 
         var series = _seriesRepo.GetAll().ToList();
         series.Should().OnlyContain(s => s.FredReleaseId == releases[0].Id);
@@ -246,6 +249,105 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
             .Select(d => d.Date)
             .Should()
             .BeEquivalentTo([new DateOnly(2026, 6, 11), new DateOnly(2026, 7, 14)]);
+    }
+
+    [Fact]
+    public async Task Import_StoredPhantomDatesOfCarryForwardRelease_ArePurged()
+    {
+        // Rows persisted BEFORE a release was recognized as carry-forward must not
+        // linger: the import is insert-only, so without an explicit purge the phantom
+        // daily "FOMC Press Release" rows stored by earlier cycles stay on the
+        // calendar forever even though new ones are skipped.
+        var fomc = new FredRelease { ReleaseId = 101, Name = "FOMC Press Release" };
+        var cpi = new FredRelease { ReleaseId = 10, Name = "Consumer Price Index" };
+        _releaseRepo.Add(fomc);
+        _releaseRepo.Add(cpi);
+        await _releaseRepo.SaveChanges();
+        _seriesRepo.Add(
+            new FredSeries
+            {
+                SeriesId = "DFEDTARU",
+                Title = "Fed Funds Upper",
+                FredReleaseId = fomc.Id,
+            }
+        );
+        _seriesRepo.Add(
+            new FredSeries
+            {
+                SeriesId = "CPIAUCSL",
+                Title = "CPI All Items",
+                FredReleaseId = cpi.Id,
+            }
+        );
+        await _seriesRepo.SaveChanges();
+        _dateRepo.Add(new FredReleaseDate { FredReleaseId = fomc.Id, Date = new(2026, 6, 1) });
+        _dateRepo.Add(new FredReleaseDate { FredReleaseId = fomc.Id, Date = new(2026, 6, 2) });
+        _dateRepo.Add(new FredReleaseDate { FredReleaseId = cpi.Id, Date = new(2026, 6, 11) });
+        await _dateRepo.SaveChanges();
+
+        _fredClient
+            .GetReleaseDates(Arg.Any<DateOnly?>())
+            .Returns(
+                Task.FromResult(
+                    new List<FredReleaseDateRecord>
+                    {
+                        new() { ReleaseId = 101, Date = "2026-06-19" }, // Fri
+                        new() { ReleaseId = 101, Date = "2026-06-20" }, // Sat — carry-forward tell
+                        new() { ReleaseId = 10, Date = "2026-07-14" },
+                    }
+                )
+            );
+
+        await _sut.Import(CancellationToken.None);
+
+        var dates = _dateRepo.GetAll().ToList();
+        dates
+            .Should()
+            .OnlyContain(
+                d => d.FredReleaseId == cpi.Id,
+                "every stored FOMC phantom row must be purged, not just new ones skipped"
+            );
+        dates
+            .Select(d => d.Date)
+            .Should()
+            .BeEquivalentTo([new DateOnly(2026, 6, 11), new DateOnly(2026, 7, 14)]);
+    }
+
+    [Fact]
+    public async Task Import_ReleaseStoredWithStaleImportance_IsRestampedFromTheCuratedMap()
+    {
+        // Releases created before the curated importance map existed (or before their
+        // entry changed) carry a stale tier; the importer re-stamps every cycle so the
+        // map is the single source of truth.
+        var cpi = new FredRelease
+        {
+            ReleaseId = 10,
+            Name = "Consumer Price Index",
+            Importance = FredReleaseImportance.Low,
+        };
+        _releaseRepo.Add(cpi);
+        await _releaseRepo.SaveChanges();
+        _seriesRepo.Add(
+            new FredSeries
+            {
+                SeriesId = "CPIAUCSL",
+                Title = "CPI All Items",
+                FredReleaseId = cpi.Id,
+            }
+        );
+        await _seriesRepo.SaveChanges();
+
+        _fredClient
+            .GetReleaseDates(Arg.Any<DateOnly?>())
+            .Returns(Task.FromResult(new List<FredReleaseDateRecord>()));
+
+        await _sut.Import(CancellationToken.None);
+
+        _releaseRepo
+            .GetAll()
+            .Single(r => r.ReleaseId == 10)
+            .Importance.Should()
+            .Be(FredReleaseImportance.High);
     }
 
     [Fact]

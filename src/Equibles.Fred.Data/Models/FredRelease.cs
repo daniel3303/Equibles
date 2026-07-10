@@ -20,6 +20,10 @@ public class FredRelease
 
     public bool PressRelease { get; set; }
 
+    // How market-moving this release's prints are; stamped by the calendar importer
+    // from the curated per-release map (unmapped releases stay Low).
+    public FredReleaseImportance Importance { get; set; }
+
     public virtual ICollection<FredSeries> Series { get; set; } = [];
 
     public virtual ICollection<FredReleaseDate> ReleaseDates { get; set; } = [];

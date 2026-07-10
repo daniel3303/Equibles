@@ -109,6 +109,7 @@ public class FredReleaseCalendarImportService : IImporter
                     Name = record.Name,
                     Link = record.Link,
                     PressRelease = record.PressRelease,
+                    Importance = CuratedReleaseImportanceRegistry.Resolve(record.Id),
                 };
                 releaseRepo.Add(release);
                 await releaseRepo.SaveChanges();
@@ -139,9 +140,29 @@ public class FredReleaseCalendarImportService : IImporter
         using (var scope = _scopeFactory.CreateScope())
         {
             var releaseRepo = scope.ServiceProvider.GetRequiredService<FredReleaseRepository>();
-            trackedReleases = await releaseRepo
-                .GetAll()
-                .ToDictionaryAsync(r => r.ReleaseId, r => r.Id, cancellationToken);
+            var releases = await releaseRepo.GetAll().ToListAsync(cancellationToken);
+
+            // Re-stamp importance from the curated map every cycle so editing the map
+            // heals releases that were stored before their entry existed (or changed).
+            var restamped = 0;
+            foreach (var release in releases)
+            {
+                var importance = CuratedReleaseImportanceRegistry.Resolve(release.ReleaseId);
+                if (release.Importance == importance)
+                    continue;
+                release.Importance = importance;
+                restamped++;
+            }
+            if (restamped > 0)
+            {
+                await releaseRepo.SaveChanges();
+                _logger.LogInformation(
+                    "Re-stamped the curated importance tier on {Count} FRED releases",
+                    restamped
+                );
+            }
+
+            trackedReleases = releases.ToDictionary(r => r.ReleaseId, r => r.Id);
         }
 
         if (trackedReleases.Count == 0)
@@ -206,6 +227,11 @@ public class FredReleaseCalendarImportService : IImporter
                 carriedForwardReleases.Count
             );
 
+            // The skip above only guards new inserts; phantom rows persisted before a
+            // release was recognized as carry-forward would otherwise stay on the
+            // calendar forever (the import is insert-only). Purge them here.
+            await PurgeStoredDates(carriedForwardReleases, cancellationToken);
+
             if (parsed.Count == 0)
             {
                 _logger.LogDebug(
@@ -247,6 +273,31 @@ public class FredReleaseCalendarImportService : IImporter
             "Imported {Count} FRED release dates across {Releases} tracked releases",
             totalInserted,
             trackedReleases.Count
+        );
+    }
+
+    private async Task PurgeStoredDates(
+        HashSet<Guid> releaseIds,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dateRepo = scope.ServiceProvider.GetRequiredService<FredReleaseDateRepository>();
+
+        var phantom = await dateRepo
+            .GetAll()
+            .Where(d => releaseIds.Contains(d.FredReleaseId))
+            .ToListAsync(cancellationToken);
+        if (phantom.Count == 0)
+            return;
+
+        dateRepo.Delete(phantom);
+        await dateRepo.SaveChanges();
+
+        _logger.LogInformation(
+            "Purged {Count} stored calendar dates of {Releases} carry-forward releases",
+            phantom.Count,
+            releaseIds.Count
         );
     }
 }
