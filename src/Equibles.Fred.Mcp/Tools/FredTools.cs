@@ -209,13 +209,17 @@ public class FredTools
 
     [McpServerTool(Name = "GetEconomicCalendar")]
     [Description(
-        "Get the economic release calendar — scheduled (upcoming) and recent publication dates of US macro data releases (CPI, Employment Situation, GDP, and the other tracked indicators), with the FRED series each release updates. Defaults to the next 30 days. Use GetEconomicIndicator to fetch a series' data after it prints."
+        "Get the economic release calendar — scheduled (upcoming) and recent publication dates of US macro data releases, with the FRED series each release updates and an importance tier per release (High = the tier-1 scheduled market movers: CPI, PPI, Employment Situation, GDP, PCE, retail sales, FOMC; Medium = other genuine scheduled prints; Low = daily rate/market levels like SOFR or VIX). Defaults to the next 30 days. Use minImportance=high to see only the market movers, and GetEconomicIndicator to fetch a series' data after it prints."
     )]
     public Task<string> GetEconomicCalendar(
         [Description("Start date in YYYY-MM-DD format (defaults to today, UTC)")]
             string startDate = null,
         [Description("End date in YYYY-MM-DD format (defaults to 30 days after the start date)")]
             string endDate = null,
+        [Description(
+            "Minimum importance tier to include: low, medium, or high (defaults to low = everything)"
+        )]
+            string minImportance = null,
         [Description("Maximum number of release dates to return (default: 100, chronological)")]
             int maxResults = 100
     )
@@ -223,6 +227,15 @@ public class FredTools
         return _runner.Execute(
             async () =>
             {
+                var minTier = FredReleaseImportance.Low;
+                if (
+                    !string.IsNullOrWhiteSpace(minImportance)
+                    && !Enum.TryParse(minImportance, true, out minTier)
+                )
+                {
+                    return $"Invalid minImportance '{minImportance}'. Valid tiers: low, medium, high.";
+                }
+
                 var today = DateOnly.FromDateTime(DateTime.UtcNow);
                 var start = McpToolExecutor.ParseDateOr(startDate, today);
                 var end = McpToolExecutor.ParseDateOr(endDate, start.AddDays(30));
@@ -231,13 +244,16 @@ public class FredTools
 
                 var entries = await _releaseDateRepository
                     .GetInRange(start, end)
+                    .Where(d => d.FredRelease.Importance >= minTier)
                     .OrderBy(d => d.Date)
+                    .ThenByDescending(d => d.FredRelease.Importance)
                     .ThenBy(d => d.FredRelease.Name)
                     .Take(maxResults)
                     .Select(d => new
                     {
                         d.Date,
                         ReleaseName = d.FredRelease.Name,
+                        d.FredRelease.Importance,
                         Series = d
                             .FredRelease.Series.OrderBy(s => s.SeriesId)
                             .Select(s => s.SeriesId)
@@ -249,14 +265,14 @@ public class FredTools
                     entries,
                     $"No economic releases between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
                     $"Economic release calendar ({start:yyyy-MM-dd} to {end:yyyy-MM-dd}):",
-                    "| Date | Release | Series Updated |",
-                    "|------|---------|----------------|",
+                    "| Date | Release | Importance | Series Updated |",
+                    "|------|---------|------------|----------------|",
                     e =>
-                        $"| {e.Date:yyyy-MM-dd} | {e.ReleaseName} | {string.Join(", ", e.Series)} |"
+                        $"| {e.Date:yyyy-MM-dd} | {e.ReleaseName} | {e.Importance} | {string.Join(", ", e.Series)} |"
                 );
             },
             "GetEconomicCalendar",
-            $"startDate: {startDate}, endDate: {endDate}"
+            $"startDate: {startDate}, endDate: {endDate}, minImportance: {minImportance}"
         );
     }
 }
