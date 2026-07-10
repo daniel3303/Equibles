@@ -243,6 +243,39 @@ public class InsiderTradingFilingProcessorSkipTombstoneTests
     }
 
     [Fact]
+    public async Task SuccessfulIngest_ClearsExistingTombstone()
+    {
+        await using var ctx = CreateContext();
+        // A previously-failing filing (e.g. tombstoned before a parser fix)
+        // whose backoff elapsed: the retry succeeds and must delete the row so
+        // the table stays meaningful as "currently failing".
+        ctx.Set<FailedFilingIngest>()
+            .Add(
+                new FailedFilingIngest
+                {
+                    AccessionNumber = Accession,
+                    Cik = IssuerCik,
+                    FormType = "4",
+                    FilingDate = new DateOnly(2023, 6, 1),
+                    AttemptCount = 2,
+                    LastAttemptAt = DateTime.UtcNow.AddDays(-3),
+                    NextRetryAt = DateTime.UtcNow.AddDays(-1),
+                    LastError = "malformed ownership XML",
+                }
+            );
+        await ctx.SaveChangesAsync();
+
+        // Valid ownership XML with no transaction tables → the 0-transaction
+        // sentinel path, which is a successful ingest (returns true).
+        var processor = BuildProcessor(ctx, OwnershipXml());
+
+        var processed = await processor.Process(Filing(), Issuer());
+
+        processed.Should().BeTrue();
+        (await ctx.Set<FailedFilingIngest>().CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
     public async Task MissingReportingOwnerIdentity_IsTombstoned()
     {
         await using var ctx = CreateContext();

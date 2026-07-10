@@ -14,6 +14,7 @@ using Equibles.Media.BusinessLogic;
 using Equibles.Messaging;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
+using Equibles.Sec.Repositories;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Repositories;
 using Microsoft.Extensions.DependencyInjection;
@@ -396,6 +397,7 @@ public class InsiderTradingFilingProcessorTests
             (typeof(InsiderOwnerRepository), ownerRepo),
             (typeof(InsiderTransactionRepository), txRepo),
             (typeof(InsiderFilingRepository), filingRepo),
+            (typeof(FailedFilingIngestRepository), new FailedFilingIngestRepository(dbContext)),
             (typeof(IFileManager), fileManager),
             (typeof(ErrorManager), errorManager),
             (typeof(DailyStockPriceRepository), dailyStockPriceRepo),
