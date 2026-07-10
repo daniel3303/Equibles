@@ -208,6 +208,43 @@ public class DocumentScraperFilingTombstoneTests
         (await ctx.Set<FailedFilingIngest>().SingleAsync()).AttemptCount.Should().Be(1);
     }
 
+    public static TheoryData<Exception> TransientFailures =>
+        new()
+        {
+            new HttpRequestException("edgar down"),
+            // HttpClient timeouts surface as TaskCanceledException.
+            new TaskCanceledException("timed out"),
+        };
+
+    [Theory]
+    [MemberData(nameof(TransientFailures))]
+    public async Task TransientRetryFailure_IsNeverTombstoned(Exception transient)
+    {
+        await using var ctx = await SeedCompany(CreateContext());
+        // Deterministic failure defers the filing, then the end-of-cycle retry
+        // hits a transient fault — the filing must retry next enumeration
+        // instead of being put on a multi-day backoff by an infra blip.
+        var persistence = Substitute.For<IDocumentPersistenceService>();
+        persistence
+            .Exists(
+                Arg.Any<CommonStock>(),
+                Arg.Any<DocumentType>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<string>()
+            )
+            .Returns<bool>(
+                _ => throw new InvalidOperationException("normalizer unavailable"),
+                _ => throw transient
+            );
+        var scraper = BuildScraper(ctx, EdgarWithOneFiling(), persistence);
+
+        var result = await scraper.ScrapeDocuments();
+
+        result.DocumentsSkipped.Should().Be(1);
+        (await ctx.Set<FailedFilingIngest>().CountAsync()).Should().Be(0);
+    }
+
     [Fact]
     public async Task DueRetryThatSucceeds_ClearsTombstone()
     {

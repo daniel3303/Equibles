@@ -716,7 +716,12 @@ public class DocumentScraper : IDocumentScraper
                 return;
             }
 
-            await CreateDocument(company, filing, documentType);
+            if (!await CreateDocument(company, filing, documentType))
+            {
+                result.DocumentsSkipped++;
+                return;
+            }
+
             result.DocumentsAdded++;
             await ClearFilingIngestTombstone(filing.AccessionNumber);
 
@@ -787,7 +792,12 @@ public class DocumentScraper : IDocumentScraper
 
             try
             {
-                await CreateDocument(filing.Company, filing.Filing, filing.DocumentType);
+                if (!await CreateDocument(filing.Company, filing.Filing, filing.DocumentType))
+                {
+                    result.DocumentsSkipped++;
+                    continue;
+                }
+
                 result.DocumentsAdded++;
                 await ClearFilingIngestTombstone(filing.Filing.AccessionNumber);
 
@@ -810,11 +820,12 @@ public class DocumentScraper : IDocumentScraper
                 );
                 result.DocumentsSkipped++;
 
-                // Transient HTTP failures retry on the next enumeration as
-                // before; anything else is the deterministic poison shape —
-                // tombstone it so retries follow the backoff schedule instead
-                // of re-downloading the submission every cycle.
-                if (ex is not HttpRequestException)
+                // Tombstone ONLY the deterministic poison shape — the same
+                // InvalidOperationException that deferred the filing. Anything
+                // else (HTTP faults, timeouts as TaskCanceledException, deploy
+                // -window DB errors) is transient: an infra blip must not put a
+                // whole batch of ingestable filings on a multi-day backoff.
+                if (ex is InvalidOperationException)
                     await RecordFilingIngestFailure(filing.Company, filing.Filing, ex);
             }
         }
@@ -956,13 +967,16 @@ public class DocumentScraper : IDocumentScraper
         }
     }
 
-    private async Task CreateDocument(
+    // Returns true when the document is persisted (or already was); false on
+    // the silent skip paths (no extractable content), so callers neither count
+    // an add nor clear a failure tombstone for a filing that stored nothing.
+    private async Task<bool> CreateDocument(
         CommonStock companyOutContext,
         FilingData filing,
         DocumentType documentType
     )
     {
-        await _retryPipeline.ExecuteAsync(
+        return await _retryPipeline.ExecuteAsync(
             async (cancellationToken) =>
             {
                 await using var scope = _serviceScopeFactory.CreateAsyncScope();
@@ -996,7 +1010,7 @@ public class DocumentScraper : IDocumentScraper
                         filing.AccessionNumber
                     )
                 )
-                    return;
+                    return true;
 
                 var content = await secEdgarClient.GetDocumentContent(filing);
 
@@ -1051,7 +1065,7 @@ public class DocumentScraper : IDocumentScraper
                         cancellationToken
                     );
                     if (markdownDocument == null)
-                        return;
+                        return false;
                 }
 
                 await persistenceService.Save(
@@ -1075,6 +1089,7 @@ public class DocumentScraper : IDocumentScraper
                     documentType,
                     filing.FilingDate
                 );
+                return true;
             }
         );
     }
