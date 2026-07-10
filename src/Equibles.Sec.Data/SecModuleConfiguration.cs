@@ -41,6 +41,7 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<BackfillState>();
         builder.Entity<CompanyFilingSyncState>();
         builder.Entity<FailToDeliver>();
+        builder.Entity<FailedFilingIngest>();
         builder.Entity<FormAdvAdviser>();
         builder.Entity<FormDFiling>();
         builder.Entity<FormDRelatedPerson>();
