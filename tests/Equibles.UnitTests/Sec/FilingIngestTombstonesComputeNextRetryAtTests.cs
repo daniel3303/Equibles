@@ -1,4 +1,4 @@
-using Equibles.Sec.HostedService;
+using Equibles.Sec.HostedService.Services;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -7,7 +7,7 @@ namespace Equibles.UnitTests.Sec;
 /// retries never stop, so a permanently poisonous filing costs at most one
 /// download a month while a later parser fix still eventually ingests it.
 /// </summary>
-public class DocumentScraperComputeNextRetryAtTests
+public class FilingIngestTombstonesComputeNextRetryAtTests
 {
     private static readonly DateTime Now = new(2026, 7, 10, 0, 0, 0, DateTimeKind.Utc);
 
@@ -20,7 +20,7 @@ public class DocumentScraperComputeNextRetryAtTests
     [InlineData(50, 30)]
     public void BackoffDoublesAndCapsAtThirtyDays(int attemptCount, int expectedDays)
     {
-        DocumentScraper
+        FilingIngestTombstones
             .ComputeNextRetryAt(attemptCount, Now)
             .Should()
             .Be(Now.AddDays(expectedDays));
@@ -29,6 +29,6 @@ public class DocumentScraperComputeNextRetryAtTests
     [Fact]
     public void ZeroAttempts_TreatedAsFirst()
     {
-        DocumentScraper.ComputeNextRetryAt(0, Now).Should().Be(Now.AddDays(1));
+        FilingIngestTombstones.ComputeNextRetryAt(0, Now).Should().Be(Now.AddDays(1));
     }
 }

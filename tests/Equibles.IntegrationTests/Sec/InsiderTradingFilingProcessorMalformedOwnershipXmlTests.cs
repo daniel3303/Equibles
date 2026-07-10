@@ -13,6 +13,7 @@ using Equibles.Media.BusinessLogic;
 using Equibles.Messaging;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
+using Equibles.Sec.Repositories;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Repositories;
 using Microsoft.Extensions.Logging;
@@ -50,6 +51,7 @@ public class InsiderTradingFilingProcessorMalformedOwnershipXmlTests
             (typeof(InsiderOwnerRepository), new InsiderOwnerRepository(dbContext)),
             (typeof(InsiderTransactionRepository), new InsiderTransactionRepository(dbContext)),
             (typeof(InsiderFilingRepository), new InsiderFilingRepository(dbContext)),
+            (typeof(FailedFilingIngestRepository), new FailedFilingIngestRepository(dbContext)),
             (typeof(IFileManager), Substitute.For<IFileManager>()),
             (typeof(ErrorManager), new ErrorManager(new ErrorRepository(dbContext))),
             (typeof(DailyStockPriceRepository), new DailyStockPriceRepository(dbContext)),

@@ -12,6 +12,7 @@ using Equibles.Integrations.Sec.Models;
 using Equibles.Media.BusinessLogic;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Contracts;
+using Equibles.Sec.Repositories;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
 
@@ -136,9 +137,31 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             return false;
         }
 
-        var root = await TryParseOwnershipRoot(xmlContent, filing, companyTicker);
+        var tombstoneRepository =
+            scope.ServiceProvider.GetRequiredService<FailedFilingIngestRepository>();
+
+        var (root, deterministicSkipReason) = await TryParseOwnershipRoot(
+            xmlContent,
+            filing,
+            companyTicker
+        );
         if (root == null)
+        {
+            // Only content-based verdicts (identical for every feed that
+            // surfaces this accession) are tombstoned; a possibly-transient
+            // parse failure retries next enumeration as before.
+            if (deterministicSkipReason != null)
+            {
+                await FilingIngestTombstones.Record(
+                    tombstoneRepository,
+                    companyOutContext.Cik,
+                    filing,
+                    deterministicSkipReason,
+                    _logger
+                );
+            }
             return false;
+        }
 
         // A Form 4 appears in the EDGAR submissions feed of every CIK it references —
         // the issuer and each reporting owner. When a tracked public company (e.g.
@@ -152,7 +175,18 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
 
         var owner = await TryResolveOwner(root, ownerRepository, filing, companyTicker);
         if (owner == null)
+        {
+            // Content-based verdict: the ownership XML itself lacks a usable
+            // reporting-owner identity, regardless of which feed surfaced it.
+            await FilingIngestTombstones.Record(
+                tombstoneRepository,
+                companyOutContext.Cik,
+                filing,
+                "ownership XML missing reporting-owner identity",
+                _logger
+            );
             return false;
+        }
 
         var isAmendment = filing.Form.Contains("/A", StringComparison.OrdinalIgnoreCase);
 
@@ -200,6 +234,18 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
                     filing.AccessionNumber,
                     companyTicker
                 );
+                // Nothing is persisted for a stale amendment, so without a
+                // tombstone every enumeration re-downloads it just to re-skip.
+                // The verdict is the issuer's own data (a mismatched issuer
+                // never reaches this branch), and the monthly retry
+                // re-evaluates it if the newer amendment's rows ever go away.
+                await FilingIngestTombstones.Record(
+                    tombstoneRepository,
+                    companyOutContext.Cik,
+                    filing,
+                    "superseded by a newer ingested amendment of the same original",
+                    _logger
+                );
                 return false;
             }
 
@@ -246,6 +292,11 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
                 originalFilingDate,
                 supersededAccession
             );
+            await FilingIngestTombstones.Clear(
+                tombstoneRepository,
+                filing.AccessionNumber,
+                _logger
+            );
             return true;
         }
 
@@ -267,6 +318,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         }
 
         await transactionRepository.SaveChanges();
+        await FilingIngestTombstones.Clear(tombstoneRepository, filing.AccessionNumber, _logger);
 
         _logger.LogInformation(
             "Imported {Count} insider transactions for {Ticker} from {Form} - {AccessionNumber}",
@@ -479,7 +531,11 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         );
     }
 
-    private async Task<XElement> TryParseOwnershipRoot(
+    // Returns the parsed ownership root, or (null, reason) when the content is
+    // deterministically unparseable — the reason marks it safe to tombstone
+    // (the verdict is identical for every feed that surfaces the accession).
+    // A possibly-transient failure returns (null, null): retry next enumeration.
+    private async Task<(XElement Root, string DeterministicSkipReason)> TryParseOwnershipRoot(
         string xmlContent,
         FilingData filing,
         string companyTicker
@@ -498,7 +554,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
                 companyTicker,
                 filing.AccessionNumber
             );
-            return null;
+            return (null, "legacy non-XML ownership filing (pre-2003, unsupported by design)");
         }
 
         XDocument doc;
@@ -518,7 +574,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
                 companyTicker,
                 filing.AccessionNumber
             );
-            return null;
+            return (null, $"malformed ownership XML: {ex.Message}");
         }
         catch (Exception ex)
         {
@@ -535,7 +591,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
                 ex.StackTrace,
                 $"ticker: {companyTicker}, accession: {filing.AccessionNumber}"
             );
-            return null;
+            return (null, null);
         }
 
         var root = doc.Root;
@@ -546,10 +602,10 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
                 companyTicker,
                 filing.AccessionNumber
             );
-            return null;
+            return (null, null);
         }
 
-        return root;
+        return (root, null);
     }
 
     // True when the filing's issuer is the company being processed (matched by primary
