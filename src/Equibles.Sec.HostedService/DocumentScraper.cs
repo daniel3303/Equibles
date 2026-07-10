@@ -831,16 +831,6 @@ public class DocumentScraper : IDocumentScraper
         }
     }
 
-    // Retry backoff for tombstoned filings: 1d, 2d, 4d, ... capped at 30d.
-    // Retries never stop — a later normalizer fix still ingests the filing —
-    // but the cap bounds a permanently poisonous filing to ~one download a month.
-    internal static DateTime ComputeNextRetryAt(int attemptCount, DateTime lastAttemptAt)
-    {
-        const int maxBackoffDays = 30;
-        var backoffDays = Math.Min(Math.Pow(2, Math.Max(attemptCount, 1) - 1), maxBackoffDays);
-        return lastAttemptAt.AddDays(backoffDays);
-    }
-
     // Drops filings whose failure tombstone says the retry backoff hasn't
     // elapsed. One batched lookup per (company, type); best-effort — a DB
     // hiccup falls back to processing everything, which is the old behavior.
@@ -891,39 +881,16 @@ public class DocumentScraper : IDocumentScraper
         Exception failure
     )
     {
-        if (string.IsNullOrEmpty(filing.AccessionNumber))
-            return;
-
         try
         {
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
-            var tombstoneRepository =
-                scope.ServiceProvider.GetRequiredService<FailedFilingIngestRepository>();
-
-            var tombstone = await tombstoneRepository
-                .GetByAccessionNumber(filing.AccessionNumber)
-                .FirstOrDefaultAsync();
-
-            if (tombstone == null)
-            {
-                tombstone = new FailedFilingIngest
-                {
-                    AccessionNumber = filing.AccessionNumber,
-                    Cik = string.IsNullOrEmpty(filing.Cik) ? company.Cik : filing.Cik,
-                    FormType = filing.Form,
-                    FilingDate = filing.FilingDate,
-                };
-                tombstoneRepository.Add(tombstone);
-            }
-
-            var now = DateTime.UtcNow;
-            tombstone.AttemptCount++;
-            tombstone.LastAttemptAt = now;
-            tombstone.NextRetryAt = ComputeNextRetryAt(tombstone.AttemptCount, now);
-            tombstone.LastError =
-                failure.Message?.Length > 2000 ? failure.Message[..2000] : failure.Message;
-
-            await tombstoneRepository.SaveChanges();
+            await FilingIngestTombstones.Record(
+                scope.ServiceProvider.GetRequiredService<FailedFilingIngestRepository>(),
+                company.Cik,
+                filing,
+                failure.Message,
+                _logger
+            );
         }
         catch (Exception ex)
         {
@@ -939,23 +906,14 @@ public class DocumentScraper : IDocumentScraper
     // table meaningful as "currently failing". Best-effort; usually a PK miss.
     private async Task ClearFilingIngestTombstone(string accessionNumber)
     {
-        if (string.IsNullOrEmpty(accessionNumber))
-            return;
-
         try
         {
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
-            var tombstoneRepository =
-                scope.ServiceProvider.GetRequiredService<FailedFilingIngestRepository>();
-
-            var tombstone = await tombstoneRepository
-                .GetByAccessionNumber(accessionNumber)
-                .FirstOrDefaultAsync();
-            if (tombstone == null)
-                return;
-
-            tombstoneRepository.Delete(tombstone);
-            await tombstoneRepository.SaveChanges();
+            await FilingIngestTombstones.Clear(
+                scope.ServiceProvider.GetRequiredService<FailedFilingIngestRepository>(),
+                accessionNumber,
+                _logger
+            );
         }
         catch (Exception ex)
         {

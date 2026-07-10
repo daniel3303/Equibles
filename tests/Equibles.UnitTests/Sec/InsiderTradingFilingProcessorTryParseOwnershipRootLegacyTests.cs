@@ -76,9 +76,14 @@ public class InsiderTradingFilingProcessorTryParseOwnershipRootLegacyTests
             Cik = "0000320193",
         };
 
-        var task = (Task<XElement>)method.Invoke(processor, [legacyEnvelope, filing, "AAPL"]);
-        var result = await task;
+        var task =
+            (Task<(XElement Root, string DeterministicSkipReason)>)
+                method.Invoke(processor, [legacyEnvelope, filing, "AAPL"]);
+        var (root, deterministicSkipReason) = await task;
 
-        result.Should().BeNull();
+        root.Should().BeNull();
+        // The legacy shape is a deterministic content verdict, so it also
+        // carries the tombstone reason that stops the per-cycle re-download.
+        deterministicSkipReason.Should().Contain("legacy non-XML");
     }
 }
