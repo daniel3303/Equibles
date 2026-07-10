@@ -323,9 +323,17 @@ public class ShortDataTools
 
     [McpServerTool(Name = "GetShortSqueezeScores")]
     [Description(
-        "Get the stocks with the highest composite short-squeeze score — a peer-relative 0-100 rank built from short interest as a percent of shares outstanding, days to cover, and the recent change in the short share of total volume, each as a percentile across every stock reporting short interest at the latest FINRA settlement date. Use this to find squeeze candidates; use GetShortInterest for one stock's underlying series."
+        "Get the stocks with the highest composite short-squeeze score — a peer-relative 0-100 rank built from short interest as a percent of shares outstanding, days to cover, and the recent change in the short share of total volume, each as a percentile across every stock reporting short interest at the latest FINRA settlement date. Untradeable micro-caps dominate the raw board, so pass minMarketCap and/or minDollarVolume to keep only names that clear your liquidity bar (the score itself stays peer-relative to the full universe). Use this to find squeeze candidates; use GetShortInterest for one stock's underlying series."
     )]
     public Task<string> GetShortSqueezeScores(
+        [Description(
+            "Minimum market capitalization in US dollars (e.g. 300000000 = $300M; default 0 = no floor). Stocks with an unknown market cap are excluded when set."
+        )]
+            double minMarketCap = 0,
+        [Description(
+            "Minimum average daily dollar volume in US dollars, approximated as the FINRA average daily share volume times the market-cap-implied share price (e.g. 5000000 = $5M/day; default 0 = no floor). Stocks with unknown volume or market cap are excluded when set."
+        )]
+            double minDollarVolume = 0,
         [Description("Maximum number of stocks to return (default: 25, highest score first)")]
             int maxResults = 25
     )
@@ -338,6 +346,20 @@ public class ShortDataTools
                     return "No short-squeeze scores available — no short interest data on file.";
 
                 var settlementDate = scores[0].SettlementDate;
+
+                // Liquidity gates are a view over the scored universe, applied after the
+                // peer-relative percentiles so a stock's score never depends on the
+                // caller's filter. Null (unknown) liquidity fails an active gate.
+                var filtered = scores;
+                if (minMarketCap > 0)
+                    filtered = filtered.Where(s => s.MarketCapitalization >= minMarketCap).ToList();
+                if (minDollarVolume > 0)
+                    filtered = filtered
+                        .Where(s => s.AverageDailyDollarVolume >= minDollarVolume)
+                        .ToList();
+                if (filtered.Count == 0)
+                    return $"No scored stocks clear the requested liquidity floor (of {scores.Count} scored at settlement {settlementDate:yyyy-MM-dd}). Lower minMarketCap/minDollarVolume.";
+
                 var take = Math.Clamp(maxResults, 1, 200);
                 var sb = new System.Text.StringBuilder();
                 sb.AppendLine(
@@ -345,17 +367,17 @@ public class ShortDataTools
                 );
                 sb.AppendLine();
                 sb.AppendLine(
-                    "Score = equal-weight mean of the available factor percentiles (0-100, peer-relative)."
+                    "Score = equal-weight mean of the available factor percentiles (0-100, peer-relative). Avg $ Volume is approximate (FINRA share volume × market-cap-implied price)."
                 );
                 sb.AppendLine();
                 sb.AppendLine(
-                    "| # | Ticker | Score | Short % of Shares | Days to Cover | Short-Volume Trend |"
+                    "| # | Ticker | Score | Short % of Shares | Days to Cover | Short-Volume Trend | Market Cap | Avg $ Volume |"
                 );
                 sb.AppendLine(
-                    "|---|--------|-------|-------------------|---------------|--------------------|"
+                    "|---|--------|-------|-------------------|---------------|--------------------|------------|--------------|"
                 );
                 sb.AppendNumberedRows(
-                    scores.Take(take).ToList(),
+                    filtered.Take(take).ToList(),
                     (rank, score) =>
                     {
                         var trend =
@@ -368,17 +390,18 @@ public class ShortDataTools
                                     );
                         return $"| {rank} | {score.Ticker} | {score.Score.ToString("0", CultureInfo.InvariantCulture)} | "
                             + $"{score.ShortInterestPercentOfShares.ToString("P1", CultureInfo.InvariantCulture)} | "
-                            + $"{score.DaysToCover?.ToString("0.0", CultureInfo.InvariantCulture) ?? "-"} | {trend} |";
+                            + $"{score.DaysToCover?.ToString("0.0", CultureInfo.InvariantCulture) ?? "-"} | {trend} | "
+                            + $"{McpFormat.CompactUsd(score.MarketCapitalization)} | {McpFormat.CompactUsd(score.AverageDailyDollarVolume)} |";
                     }
                 );
 
-                if (scores.Count > take)
-                    sb.AppendLine($"\n({scores.Count - take} more scored stocks not shown.)");
+                if (filtered.Count > take)
+                    sb.AppendLine($"\n({filtered.Count - take} more scored stocks not shown.)");
 
                 return sb.ToString();
             },
             "GetShortSqueezeScores",
-            $"maxResults: {maxResults}"
+            $"minMarketCap: {minMarketCap}, minDollarVolume: {minDollarVolume}, maxResults: {maxResults}"
         );
     }
 }

@@ -14,6 +14,17 @@ public class ShortSqueezeScore
 
     public DateOnly SettlementDate { get; set; }
 
+    /// <summary>Market capitalization in USD from the common-stock record; null when unknown.</summary>
+    public double? MarketCapitalization { get; set; }
+
+    /// <summary>
+    /// Approximate average daily dollar volume in USD: the FINRA-reported average daily
+    /// share volume (restated onto today's split basis) times the market-cap-implied
+    /// share price. Null when either input is unknown. An estimate for liquidity
+    /// gating, not a measured turnover figure.
+    /// </summary>
+    public double? AverageDailyDollarVolume { get; set; }
+
     /// <summary>Current short position as a fraction of shares outstanding (0–1 scale).</summary>
     public decimal ShortInterestPercentOfShares { get; set; }
 

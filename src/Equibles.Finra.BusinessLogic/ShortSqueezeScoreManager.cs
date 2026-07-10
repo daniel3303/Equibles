@@ -124,6 +124,7 @@ public class ShortSqueezeScoreManager
                 s.Id,
                 s.Ticker,
                 s.SharesOutStanding,
+                s.MarketCapitalization,
             })
             .ToDictionaryAsync(s => s.Id, cancellationToken);
 
@@ -167,11 +168,14 @@ public class ShortSqueezeScoreManager
                     / (decimal)shortInterest.AverageDailyVolume.Value;
             }
 
+            var stockSplits = splitsByStock.TryGetValue(stock.Id, out var splitList)
+                ? splitList
+                : [];
             var shortInterestPercentOfShares = ShortInterestPercentOfShares(
                 shortInterest.CurrentShortPosition,
                 stock.SharesOutStanding,
                 settlementDate,
-                splitsByStock.TryGetValue(stock.Id, out var stockSplits) ? stockSplits : []
+                stockSplits
             );
             if (shortInterestPercentOfShares > MaxCredibleShortInterestRatio)
             {
@@ -180,12 +184,31 @@ public class ShortSqueezeScoreManager
                 continue;
             }
 
+            // Liquidity context for consumers that gate the board (market cap and an
+            // approximate daily dollar turnover). The ADV is a share count as-of the
+            // settlement date, so restate it onto today's basis before multiplying by
+            // the market-cap-implied CURRENT share price.
+            double? marketCap = stock.MarketCapitalization > 0 ? stock.MarketCapitalization : null;
+            double? averageDailyDollarVolume = null;
+            if (marketCap != null && shortInterest.AverageDailyVolume > 0)
+            {
+                var advOnTodaysBasis = SplitAdjustment.AdjustShareCount(
+                    shortInterest.AverageDailyVolume.Value,
+                    settlementDate,
+                    stockSplits
+                );
+                averageDailyDollarVolume =
+                    advOnTodaysBasis * (marketCap.Value / stock.SharesOutStanding);
+            }
+
             scores.Add(
                 new ShortSqueezeScore
                 {
                     CommonStockId = stock.Id,
                     Ticker = stock.Ticker,
                     SettlementDate = settlementDate,
+                    MarketCapitalization = marketCap,
+                    AverageDailyDollarVolume = averageDailyDollarVolume,
                     ShortInterestPercentOfShares = shortInterestPercentOfShares,
                     DaysToCover = daysToCover,
                     // TryGetValue, not GetValueOrDefault: a stock with no volume data
