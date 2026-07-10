@@ -517,6 +517,12 @@ public class DocumentScraper : IDocumentScraper
                 filings,
                 persistenceService
             );
+
+            // Drop filings tombstoned by a previous deterministic ingest failure
+            // whose retry backoff hasn't elapsed — otherwise each enumeration
+            // re-downloads the multi-MB submission just to fail identically.
+            newFilings = await FilterTombstonedFilings(newFilings);
+
             result.DocumentsSkipped += filings.Count - newFilings.Count;
 
             foreach (var filing in newFilings)
@@ -710,8 +716,14 @@ public class DocumentScraper : IDocumentScraper
                 return;
             }
 
-            await CreateDocument(company, filing, documentType);
+            if (!await CreateDocument(company, filing, documentType))
+            {
+                result.DocumentsSkipped++;
+                return;
+            }
+
             result.DocumentsAdded++;
+            await ClearFilingIngestTombstone(filing.AccessionNumber);
 
             _logger.LogInformation(
                 "Added document for {Ticker} - {DocumentType} - {FilingDate}",
@@ -780,8 +792,14 @@ public class DocumentScraper : IDocumentScraper
 
             try
             {
-                await CreateDocument(filing.Company, filing.Filing, filing.DocumentType);
+                if (!await CreateDocument(filing.Company, filing.Filing, filing.DocumentType))
+                {
+                    result.DocumentsSkipped++;
+                    continue;
+                }
+
                 result.DocumentsAdded++;
+                await ClearFilingIngestTombstone(filing.Filing.AccessionNumber);
 
                 _logger.LogInformation(
                     "Deferred document succeeded for {Ticker} - {DocumentType} - {FilingDate}",
@@ -801,17 +819,164 @@ public class DocumentScraper : IDocumentScraper
                     ex.Message
                 );
                 result.DocumentsSkipped++;
+
+                // Tombstone ONLY the deterministic poison shape — the same
+                // InvalidOperationException that deferred the filing. Anything
+                // else (HTTP faults, timeouts as TaskCanceledException, deploy
+                // -window DB errors) is transient: an infra blip must not put a
+                // whole batch of ingestable filings on a multi-day backoff.
+                if (ex is InvalidOperationException)
+                    await RecordFilingIngestFailure(filing.Company, filing.Filing, ex);
             }
         }
     }
 
-    private async Task CreateDocument(
+    // Retry backoff for tombstoned filings: 1d, 2d, 4d, ... capped at 30d.
+    // Retries never stop — a later normalizer fix still ingests the filing —
+    // but the cap bounds a permanently poisonous filing to ~one download a month.
+    internal static DateTime ComputeNextRetryAt(int attemptCount, DateTime lastAttemptAt)
+    {
+        const int maxBackoffDays = 30;
+        var backoffDays = Math.Min(Math.Pow(2, Math.Max(attemptCount, 1) - 1), maxBackoffDays);
+        return lastAttemptAt.AddDays(backoffDays);
+    }
+
+    // Drops filings whose failure tombstone says the retry backoff hasn't
+    // elapsed. One batched lookup per (company, type); best-effort — a DB
+    // hiccup falls back to processing everything, which is the old behavior.
+    private async Task<List<FilingData>> FilterTombstonedFilings(List<FilingData> filings)
+    {
+        if (filings.Count == 0)
+            return filings;
+
+        try
+        {
+            await using var scope = _serviceScopeFactory.CreateAsyncScope();
+            var tombstoneRepository =
+                scope.ServiceProvider.GetRequiredService<FailedFilingIngestRepository>();
+
+            var accessions = filings
+                .Select(f => f.AccessionNumber)
+                .Where(a => !string.IsNullOrEmpty(a))
+                .ToList();
+
+            var now = DateTime.UtcNow;
+            var notDue = await tombstoneRepository
+                .GetByAccessionNumbers(accessions)
+                .Where(t => t.NextRetryAt > now)
+                .Select(t => t.AccessionNumber)
+                .ToListAsync();
+
+            if (notDue.Count == 0)
+                return filings;
+
+            var notDueSet = notDue.ToHashSet();
+            return filings.Where(f => !notDueSet.Contains(f.AccessionNumber)).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Tombstone prefilter failed; processing all filings");
+            return filings;
+        }
+    }
+
+    /// <summary>
+    /// Records a deterministic ingest failure so future enumerations skip the
+    /// filing until its backoff elapses. Best-effort: a failed write only means
+    /// the filing is re-attempted next cycle, exactly as before tombstones.
+    /// </summary>
+    private async Task RecordFilingIngestFailure(
+        CommonStock company,
+        FilingData filing,
+        Exception failure
+    )
+    {
+        if (string.IsNullOrEmpty(filing.AccessionNumber))
+            return;
+
+        try
+        {
+            await using var scope = _serviceScopeFactory.CreateAsyncScope();
+            var tombstoneRepository =
+                scope.ServiceProvider.GetRequiredService<FailedFilingIngestRepository>();
+
+            var tombstone = await tombstoneRepository
+                .GetByAccessionNumber(filing.AccessionNumber)
+                .FirstOrDefaultAsync();
+
+            if (tombstone == null)
+            {
+                tombstone = new FailedFilingIngest
+                {
+                    AccessionNumber = filing.AccessionNumber,
+                    Cik = string.IsNullOrEmpty(filing.Cik) ? company.Cik : filing.Cik,
+                    FormType = filing.Form,
+                    FilingDate = filing.FilingDate,
+                };
+                tombstoneRepository.Add(tombstone);
+            }
+
+            var now = DateTime.UtcNow;
+            tombstone.AttemptCount++;
+            tombstone.LastAttemptAt = now;
+            tombstone.NextRetryAt = ComputeNextRetryAt(tombstone.AttemptCount, now);
+            tombstone.LastError =
+                failure.Message?.Length > 2000 ? failure.Message[..2000] : failure.Message;
+
+            await tombstoneRepository.SaveChanges();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not tombstone failed filing {AccessionNumber}",
+                filing.AccessionNumber
+            );
+        }
+    }
+
+    // Removes a filing's failure tombstone once it finally ingests, keeping the
+    // table meaningful as "currently failing". Best-effort; usually a PK miss.
+    private async Task ClearFilingIngestTombstone(string accessionNumber)
+    {
+        if (string.IsNullOrEmpty(accessionNumber))
+            return;
+
+        try
+        {
+            await using var scope = _serviceScopeFactory.CreateAsyncScope();
+            var tombstoneRepository =
+                scope.ServiceProvider.GetRequiredService<FailedFilingIngestRepository>();
+
+            var tombstone = await tombstoneRepository
+                .GetByAccessionNumber(accessionNumber)
+                .FirstOrDefaultAsync();
+            if (tombstone == null)
+                return;
+
+            tombstoneRepository.Delete(tombstone);
+            await tombstoneRepository.SaveChanges();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not clear filing tombstone {AccessionNumber}",
+                accessionNumber
+            );
+        }
+    }
+
+    // Returns true when the document is persisted (or already was); false on
+    // the silent skip paths (no extractable content), so callers neither count
+    // an add nor clear a failure tombstone for a filing that stored nothing.
+    private async Task<bool> CreateDocument(
         CommonStock companyOutContext,
         FilingData filing,
         DocumentType documentType
     )
     {
-        await _retryPipeline.ExecuteAsync(
+        return await _retryPipeline.ExecuteAsync(
             async (cancellationToken) =>
             {
                 await using var scope = _serviceScopeFactory.CreateAsyncScope();
@@ -845,7 +1010,7 @@ public class DocumentScraper : IDocumentScraper
                         filing.AccessionNumber
                     )
                 )
-                    return;
+                    return true;
 
                 var content = await secEdgarClient.GetDocumentContent(filing);
 
@@ -900,7 +1065,7 @@ public class DocumentScraper : IDocumentScraper
                         cancellationToken
                     );
                     if (markdownDocument == null)
-                        return;
+                        return false;
                 }
 
                 await persistenceService.Save(
@@ -924,6 +1089,7 @@ public class DocumentScraper : IDocumentScraper
                     documentType,
                     filing.FilingDate
                 );
+                return true;
             }
         );
     }
