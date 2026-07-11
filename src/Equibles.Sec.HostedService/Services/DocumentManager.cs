@@ -73,7 +73,10 @@ public class DocumentManager
             return false;
 
         _logger.LogInformation("Chunking {Count} documents", pendingDocuments.Count);
-        await _documentProcessor.ProcessDocuments(pendingDocuments, cancellationToken);
+        await ProcessOrRewind(
+            () => _documentProcessor.ProcessDocuments(pendingDocuments, cancellationToken),
+            cursor
+        );
         cursor.Advance(pendingDocuments[^1].CreationTime);
         await PersistCursor(cursor);
         return true;
@@ -108,10 +111,33 @@ public class DocumentManager
             "Generating embeddings for {Count} chunks",
             chunksWithoutEmbeddings.Count
         );
-        await _documentProcessor.GenerateEmbeddings(chunksWithoutEmbeddings, cancellationToken);
+        await ProcessOrRewind(
+            () => _documentProcessor.GenerateEmbeddings(chunksWithoutEmbeddings, cancellationToken),
+            cursor
+        );
         cursor.Advance(chunksWithoutEmbeddings[^1].CreationTime);
         await PersistCursor(cursor);
         return true;
+    }
+
+    // An all-fail batch throws (systemic outage) and the cursor then never advances past it.
+    // If that batch came from the daily full rescan its slot was already stamped, so without
+    // a rewind the stranded rows wait a whole day per fault — the #4143 starvation, moved one
+    // step downstream from the scan to its processing. The caller can't tell which tier
+    // produced the batch, and rewinding unconditionally is safe: for floored/bounded batches
+    // it merely pulls the next full rescan earlier.
+    private async Task ProcessOrRewind(Func<Task> process, BackfillCursor cursor)
+    {
+        try
+        {
+            await process();
+        }
+        catch
+        {
+            cursor.MarkFullRescanFailed(DateTime.UtcNow);
+            await TryPersistCursor(cursor);
+            throw;
+        }
     }
 
     // Floored batch first; when the frontier drains, an hourly rescan bounded a week behind the

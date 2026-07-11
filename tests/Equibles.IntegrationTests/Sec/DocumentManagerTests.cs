@@ -326,6 +326,67 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
             );
     }
 
+    [Fact]
+    public async Task GenerateEmbeddingBatch_ProcessorThrows_RewindsTheFullRescanStampAndDoesNotAdvance()
+    {
+        // The all-fail guard in the processor throws on a systemic outage AFTER the batch was
+        // loaded — so when that batch came from the daily full rescan, the slot was already
+        // stamped and the stranded rows would wait a whole day per fault (the #4143 starvation
+        // moved downstream from the scan to its processing). The batch failure must rewind the
+        // persisted stamp to the short failure spacing and must not advance the floor.
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+        };
+        var file = MakeFile();
+        var document = MakeDocument(
+            stock,
+            file,
+            contentId: file.Id,
+            createdAt: DateTime.UtcNow.AddMinutes(-10)
+        );
+        var pendingChunk = MakeChunk(
+            document,
+            content: "needs embedding",
+            index: 0,
+            createdAt: DateTime.UtcNow.AddMinutes(-5)
+        );
+
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<File>().Add(file);
+        DbContext.Set<Document>().Add(document);
+        DbContext.Set<Chunk>().Add(pendingChunk);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        _processor
+            .GenerateEmbeddings(Arg.Any<List<Chunk>>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromException(
+                    new InvalidOperationException("No embeddings were produced for any chunks")
+                )
+            );
+
+        var cursor = new BackfillCursor("chunk-embedding");
+        var act = () =>
+            NewEmbeddingManager().GenerateEmbeddingBatch(cursor, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+
+        var state = await new BackfillStateRepository(DbContext).GetByName("chunk-embedding");
+        state.Should().NotBeNull();
+        state!.Floor.Should().BeNull("a failed batch must not advance past its rows");
+        state
+            .LastFullRescanAt.Should()
+            .BeCloseTo(
+                DateTime.UtcNow.AddDays(-1).AddMinutes(30),
+                TimeSpan.FromMinutes(2),
+                "the failed batch re-admits the full rescan after the short failure spacing, not a day"
+            );
+    }
+
     private DocumentManager NewEmbeddingManager() =>
         new(
             new DocumentRepository(DbContext),

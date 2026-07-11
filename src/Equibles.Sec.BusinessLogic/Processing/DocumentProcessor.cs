@@ -48,7 +48,7 @@ public class DocumentProcessor : IDocumentProcessor
     )
     {
         var attempted = 0;
-        var chunked = 0;
+        var progressed = 0;
 
         foreach (var document in documents)
         {
@@ -61,8 +61,8 @@ public class DocumentProcessor : IDocumentProcessor
             attempted++;
             try
             {
-                if (await ChunkDocument(document))
-                    chunked++;
+                await ChunkDocument(document);
+                progressed++;
             }
             catch (Exception ex)
             {
@@ -70,16 +70,19 @@ public class DocumentProcessor : IDocumentProcessor
             }
         }
 
-        // Same systemic-outage guard as GenerateEmbeddings: isolated failures above keep the
-        // batch draining, but a batch where NOTHING could be chunked (blob store unreachable,
-        // every document's content missing) must fault the cycle so the worker's error ladder
-        // reports it — instead of dissolving into per-document logs while the pending count
-        // sits frozen with no surfaced error.
-        if (attempted > 0 && chunked == 0)
+        // Same systemic-outage guard as GenerateEmbeddings, with one deliberate difference:
+        // deterministic non-outcomes (blank content, content that chunks to zero) count as
+        // progress — they are logged and can never succeed, so faulting on them would wedge
+        // the worker on a single poison document at the frontier. Only thrown failures count
+        // (blob store unreachable, content missing), and only when EVERY attempted document
+        // threw: that is a systemic outage the worker must back off from and eventually
+        // report — instead of dissolving into per-document logs while the pending count sits
+        // frozen with no surfaced error. A batch cut short by cancellation is not a signal.
+        if (!cancellationToken.IsCancellationRequested && attempted > 0 && progressed == 0)
         {
             throw new InvalidOperationException(
-                $"No chunks were produced for any of {attempted} documents — their content "
-                    + "could not be loaded or chunked. Backing off this cycle."
+                $"Chunking failed for all {attempted} documents in the batch — the content "
+                    + "store is likely unavailable. Backing off this cycle."
             );
         }
     }
@@ -131,8 +134,9 @@ public class DocumentProcessor : IDocumentProcessor
         // draining) from a systemic outage. If we attempted chunks but embedded
         // none, the embedding server is down: throw so the worker's base loop
         // logs it loudly, reports it, and backs off for a cycle — instead of
-        // hot-looping on the same batch with zero progress and no error.
-        if (totalChunks > 0 && totalEmbedded == 0)
+        // hot-looping on the same batch with zero progress and no error. A batch
+        // cut short by cancellation is shutdown, not an outage signal.
+        if (!cancellationToken.IsCancellationRequested && totalChunks > 0 && totalEmbedded == 0)
         {
             throw new InvalidOperationException(
                 $"No embeddings were produced for any of {totalChunks} chunks — "
@@ -141,21 +145,18 @@ public class DocumentProcessor : IDocumentProcessor
         }
     }
 
-    // True when the document ends the call with at least one chunk (created now, or already
-    // present from an earlier pass); false when nothing could be produced — content missing,
-    // empty, or chunking to zero — so the caller can tell a draining batch from a dead one.
-    private async Task<bool> ChunkDocument(Document document)
+    private async Task ChunkDocument(Document document)
     {
         if (document == null)
         {
             _logger.LogWarning("Document is null, skipping processing");
-            return false;
+            return;
         }
 
         if (document.Chunks.Any())
         {
             _logger.LogInformation("Document {DocumentId} already chunked, skipping", document.Id);
-            return true;
+            return;
         }
 
         _logger.LogInformation(
@@ -169,7 +170,7 @@ public class DocumentProcessor : IDocumentProcessor
         if (string.IsNullOrWhiteSpace(content))
         {
             _logger.LogWarning("Document {DocumentId} has no content", document.Id);
-            return false;
+            return;
         }
 
         var chunks = await CreateChunks(document, content);
@@ -178,7 +179,6 @@ public class DocumentProcessor : IDocumentProcessor
             chunks.Count,
             document.Id
         );
-        return chunks.Count > 0;
     }
 
     private async Task<string> GetDocumentContent(Document document)
