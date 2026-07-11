@@ -43,6 +43,36 @@ public class ShortSqueezeScoreManagerCatalystBoostTests
     }
 
     [Fact]
+    public void ApplyPercentiles_EarningsProximityAlone_AddsItsBoost()
+    {
+        var reporting = Score(0.5m);
+        reporting.HasEarningsProximityCatalyst = true;
+
+        InvokeApplyPercentiles([Score(0.1m), Score(0.9m), reporting]);
+
+        reporting
+            .CatalystBoost.Should()
+            .Be(ShortSqueezeScoreManager.EarningsProximityCatalystBoost);
+        reporting.Score.Should().Be(50 + ShortSqueezeScoreManager.EarningsProximityCatalystBoost);
+    }
+
+    [Fact]
+    public void ApplyPercentiles_AllThreeCatalysts_StillCappedAtTheMaximum()
+    {
+        // 3 × 10 rank points of raw boost must not exceed the +20 ceiling the
+        // published models cap event overlays at.
+        var everything = Score(0.5m);
+        everything.HasPriceSpikeCatalyst = true;
+        everything.HasVolumeSurgeCatalyst = true;
+        everything.HasEarningsProximityCatalyst = true;
+
+        InvokeApplyPercentiles([Score(0.1m), Score(0.9m), everything]);
+
+        everything.CatalystBoost.Should().Be(ShortSqueezeScoreManager.MaxCatalystBoost);
+        everything.Score.Should().Be(50 + ShortSqueezeScoreManager.MaxCatalystBoost);
+    }
+
+    [Fact]
     public void ApplyPercentiles_BoostOnTopOfTheUniverse_ClampsTheCompositeAt100()
     {
         // The top-percentile stock already sits at 100; catalysts must not push the

@@ -24,9 +24,12 @@ public class ShortSqueezeScoreManagerTests : IDisposable
 
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly ShortSqueezeScoreManager _manager;
+    private readonly StubEarningsProximitySource _earningsSource = new();
+    private readonly List<IEarningsProximitySource> _earningsProximitySources;
 
     public ShortSqueezeScoreManagerTests()
     {
+        _earningsProximitySources = [_earningsSource];
         _dbContext = TestDbContextFactory.Create(
             new FinraModuleConfiguration(),
             new CommonStocksModuleConfiguration(),
@@ -39,7 +42,8 @@ public class ShortSqueezeScoreManagerTests : IDisposable
             new CommonStockRepository(_dbContext),
             new StockSplitRepository(_dbContext),
             new FailToDeliverRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext)
+            new DailyStockPriceRepository(_dbContext),
+            _earningsProximitySources
         );
     }
 
@@ -396,6 +400,42 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         scores.Single().HasPriceSpikeCatalyst.Should().BeFalse();
         scores.Single().HasVolumeSurgeCatalyst.Should().BeFalse();
         scores.Single().CatalystBoost.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Compute_StockInsideTheEarningsWindow_GetsTheEarningsCatalystBoost()
+    {
+        // A source flags REPORT as near earnings; PEER is not flagged. The boost is
+        // additive on top of the weighted base and must mark the flag for consumers.
+        var reporting = SeedStock("REPORT", sharesOutstanding: 1_000_000);
+        var peer = SeedStock("PEER", sharesOutstanding: 1_000_000);
+        SeedShortInterest(reporting, shortPosition: 100_000, daysToCover: 2m);
+        SeedShortInterest(peer, shortPosition: 200_000, daysToCover: 4m);
+        _earningsSource.NearEarnings.Add(reporting.Id);
+        await _dbContext.SaveChangesAsync();
+
+        var scores = await _manager.Compute();
+
+        var flagged = scores.Single(s => s.Ticker == "REPORT");
+        var unflagged = scores.Single(s => s.Ticker == "PEER");
+        flagged.HasEarningsProximityCatalyst.Should().BeTrue();
+        flagged.CatalystBoost.Should().Be(ShortSqueezeScoreManager.EarningsProximityCatalystBoost);
+        flagged.Score.Should().Be(flagged.BaseScore + 10);
+        unflagged.HasEarningsProximityCatalyst.Should().BeFalse();
+        unflagged.CatalystBoost.Should().Be(0);
+    }
+
+    // Test double for the optional earnings-calendar seam: reports exactly the ids
+    // the test whitelists, intersected with the requested universe like a real
+    // implementation would.
+    private class StubEarningsProximitySource : IEarningsProximitySource
+    {
+        public HashSet<Guid> NearEarnings { get; } = [];
+
+        public Task<IReadOnlySet<Guid>> GetStocksNearEarnings(
+            IReadOnlyCollection<Guid> stockIds,
+            CancellationToken cancellationToken
+        ) => Task.FromResult<IReadOnlySet<Guid>>(NearEarnings.Where(stockIds.Contains).ToHashSet());
     }
 
     // The full Sec module registers pgvector-typed embedding entities the in-memory

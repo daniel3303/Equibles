@@ -78,6 +78,14 @@ public class ShortSqueezeScore
     /// </summary>
     public bool HasVolumeSurgeCatalyst { get; set; }
 
+    /// <summary>
+    /// True when a scheduled earnings event sits inside the squeeze window (a few
+    /// weekdays either side of the announcement — where squeezes cluster). Requires
+    /// a registered <see cref="IEarningsProximitySource"/>; without calendar data
+    /// the flag is simply false.
+    /// </summary>
+    public bool HasEarningsProximityCatalyst { get; set; }
+
     public double ShortInterestPercentile { get; set; }
 
     public double? DaysToCoverPercentile { get; set; }

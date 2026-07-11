@@ -26,7 +26,8 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
                 new CommonStockRepository(DbContext),
                 new StockSplitRepository(DbContext),
                 new FailToDeliverRepository(DbContext),
-                new DailyStockPriceRepository(DbContext)
+                new DailyStockPriceRepository(DbContext),
+                []
             ),
             new StockSplitRepository(DbContext),
             ErrorManager,

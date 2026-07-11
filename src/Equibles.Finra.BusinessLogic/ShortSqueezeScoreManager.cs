@@ -37,8 +37,11 @@ namespace Equibles.Finra.BusinessLogic;
 ///
 /// <para>Catalyst boosts (additive rank points, capped at <see cref="MaxCatalystBoost"/>,
 /// composite clamped to 100): a statistically extreme positive weekly return
-/// (+<see cref="PriceSpikeCatalystBoost"/>) and abnormal dollar turnover with the price
-/// moving against the shorts (+<see cref="VolumeSurgeCatalystBoost"/>).</para>
+/// (+<see cref="PriceSpikeCatalystBoost"/>), abnormal dollar turnover with the price
+/// moving against the shorts (+<see cref="VolumeSurgeCatalystBoost"/>), and a scheduled
+/// earnings event inside the squeeze window
+/// (+<see cref="EarningsProximityCatalystBoost"/>, via any registered
+/// <see cref="IEarningsProximitySource"/>).</para>
 ///
 /// <para>Factors a stock has no data for drop out and their weight is redistributed over
 /// the rest. The universe is every stock reporting short interest at the latest
@@ -83,6 +86,20 @@ public class ShortSqueezeScoreManager
     /// <summary>Rank points added for abnormal dollar turnover on a positive move.</summary>
     public const double VolumeSurgeCatalystBoost = 10;
 
+    /// <summary>
+    /// Rank points added when a scheduled earnings event is close — squeezes cluster
+    /// around earnings announcements, so a crowded short base near one is at elevated
+    /// risk. Fires only when a registered <see cref="IEarningsProximitySource"/>
+    /// knows the stock's earnings date; no calendar data simply means no boost.
+    /// </summary>
+    public const double EarningsProximityCatalystBoost = 10;
+
+    /// <summary>The earnings window opens this many weekdays before the event.</summary>
+    public const int EarningsProximityLeadWeekdays = 5;
+
+    /// <summary>The earnings window closes this many weekdays after the event.</summary>
+    public const int EarningsProximityTrailWeekdays = 3;
+
     /// <summary>Ceiling on the total catalyst boost, mirroring the published models.</summary>
     public const double MaxCatalystBoost = 20;
 
@@ -121,6 +138,7 @@ public class ShortSqueezeScoreManager
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly FailToDeliverRepository _failToDeliverRepository;
     private readonly DailyStockPriceRepository _dailyStockPriceRepository;
+    private readonly IEnumerable<IEarningsProximitySource> _earningsProximitySources;
 
     public ShortSqueezeScoreManager(
         ShortInterestRepository shortInterestRepository,
@@ -128,7 +146,8 @@ public class ShortSqueezeScoreManager
         CommonStockRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
         FailToDeliverRepository failToDeliverRepository,
-        DailyStockPriceRepository dailyStockPriceRepository
+        DailyStockPriceRepository dailyStockPriceRepository,
+        IEnumerable<IEarningsProximitySource> earningsProximitySources
     )
     {
         _shortInterestRepository = shortInterestRepository;
@@ -137,6 +156,7 @@ public class ShortSqueezeScoreManager
         _stockSplitRepository = stockSplitRepository;
         _failToDeliverRepository = failToDeliverRepository;
         _dailyStockPriceRepository = dailyStockPriceRepository;
+        _earningsProximitySources = earningsProximitySources;
     }
 
     public async Task<List<ShortSqueezeScore>> Compute(
@@ -219,6 +239,7 @@ public class ShortSqueezeScoreManager
         var scoredStockIds = stocks.Keys.ToList();
         var failsToDeliver = await LoadFailsToDeliver(scoredStockIds, cancellationToken);
         var priceFactors = await LoadPriceFactors(scoredStockIds, cancellationToken);
+        var nearEarnings = await LoadStocksNearEarnings(scoredStockIds, cancellationToken);
 
         var scores = new List<ShortSqueezeScore>();
         foreach (var shortInterest in shortInterests)
@@ -312,6 +333,7 @@ public class ShortSqueezeScoreManager
                     PriceAboveVwap = factors.PriceAboveVwap,
                     HasPriceSpikeCatalyst = factors.HasPriceSpikeCatalyst,
                     HasVolumeSurgeCatalyst = factors.HasVolumeSurgeCatalyst,
+                    HasEarningsProximityCatalyst = nearEarnings.Contains(stock.Id),
                 }
             );
         }
@@ -418,6 +440,25 @@ public class ShortSqueezeScoreManager
         }
 
         return quantities;
+    }
+
+    /// <summary>
+    /// Unions the stocks every registered <see cref="IEarningsProximitySource"/>
+    /// reports as inside the earnings window. With no sources registered (the
+    /// open-source default) the set is empty and the catalyst never fires.
+    /// </summary>
+    private async Task<HashSet<Guid>> LoadStocksNearEarnings(
+        List<Guid> stockIds,
+        CancellationToken cancellationToken
+    )
+    {
+        var nearEarnings = new HashSet<Guid>();
+        foreach (var source in _earningsProximitySources)
+        {
+            nearEarnings.UnionWith(await source.GetStocksNearEarnings(stockIds, cancellationToken));
+        }
+
+        return nearEarnings;
     }
 
     /// <summary>
@@ -644,6 +685,11 @@ public class ShortSqueezeScoreManager
             if (score.HasVolumeSurgeCatalyst)
             {
                 boost += VolumeSurgeCatalystBoost;
+            }
+
+            if (score.HasEarningsProximityCatalyst)
+            {
+                boost += EarningsProximityCatalystBoost;
             }
 
             score.CatalystBoost = Math.Min(boost, MaxCatalystBoost);

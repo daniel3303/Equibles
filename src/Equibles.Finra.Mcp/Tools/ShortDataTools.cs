@@ -327,13 +327,14 @@ public class ShortDataTools
 
     private static string FormatCatalysts(ShortSqueezeScore score)
     {
-        if (score.HasPriceSpikeCatalyst && score.HasVolumeSurgeCatalyst)
-            return "PriceSpike+VolumeSurge";
+        var active = new List<string>(3);
         if (score.HasPriceSpikeCatalyst)
-            return "PriceSpike";
+            active.Add("PriceSpike");
         if (score.HasVolumeSurgeCatalyst)
-            return "VolumeSurge";
-        return "-";
+            active.Add("VolumeSurge");
+        if (score.HasEarningsProximityCatalyst)
+            active.Add("EarningsSoon");
+        return active.Count == 0 ? "-" : string.Join("+", active);
     }
 
     // Thin forwarder so existing reflection-based normalization tests still find the method.
@@ -342,7 +343,7 @@ public class ShortDataTools
 
     [McpServerTool(Name = "GetShortSqueezeScores")]
     [Description(
-        "Get the stocks with the highest composite short-squeeze score — a peer-relative 0-100 rank built as the weighted mean of six factor percentiles across every stock reporting short interest at the latest FINRA settlement date (short interest % of shares 30%, days to cover 20%, price vs trailing VWAP — how far shorts are underwater — 15%, short-volume trend 15%, change in short interest 10%, fails-to-deliver pressure 10%), plus catalyst boosts (+10 for a statistically extreme weekly price spike, +10 for abnormal dollar volume on a positive move, capped at +20, clamped to 100). Untradeable micro-caps dominate the raw board, so pass minMarketCap and/or minDollarVolume to keep only names that clear your liquidity bar (the score itself stays peer-relative to the full universe). Use this to find squeeze candidates; use GetShortInterest for one stock's underlying series."
+        "Get the stocks with the highest composite short-squeeze score — a peer-relative 0-100 rank built as the weighted mean of six factor percentiles across every stock reporting short interest at the latest FINRA settlement date (short interest % of shares 30%, days to cover 20%, price vs trailing VWAP — how far shorts are underwater — 15%, short-volume trend 15%, change in short interest 10%, fails-to-deliver pressure 10%), plus catalyst boosts (+10 for a statistically extreme weekly price spike, +10 for abnormal dollar volume on a positive move, +10 when a scheduled earnings event is within a few weekdays — squeezes cluster around earnings — capped at +20, clamped to 100). Untradeable micro-caps dominate the raw board, so pass minMarketCap and/or minDollarVolume to keep only names that clear your liquidity bar (the score itself stays peer-relative to the full universe). Use this to find squeeze candidates; use GetShortInterest for one stock's underlying series."
     )]
     public Task<string> GetShortSqueezeScores(
         [Description(
