@@ -47,6 +47,9 @@ public class DocumentProcessor : IDocumentProcessor
         CancellationToken cancellationToken
     )
     {
+        var attempted = 0;
+        var chunked = 0;
+
         foreach (var document in documents)
         {
             if (cancellationToken.IsCancellationRequested)
@@ -55,14 +58,29 @@ public class DocumentProcessor : IDocumentProcessor
                 break;
             }
 
+            attempted++;
             try
             {
-                await ChunkDocument(document);
+                if (await ChunkDocument(document))
+                    chunked++;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error chunking document {DocumentId}", document.Id);
             }
+        }
+
+        // Same systemic-outage guard as GenerateEmbeddings: isolated failures above keep the
+        // batch draining, but a batch where NOTHING could be chunked (blob store unreachable,
+        // every document's content missing) must fault the cycle so the worker's error ladder
+        // reports it — instead of dissolving into per-document logs while the pending count
+        // sits frozen with no surfaced error.
+        if (attempted > 0 && chunked == 0)
+        {
+            throw new InvalidOperationException(
+                $"No chunks were produced for any of {attempted} documents — their content "
+                    + "could not be loaded or chunked. Backing off this cycle."
+            );
         }
     }
 
@@ -123,18 +141,21 @@ public class DocumentProcessor : IDocumentProcessor
         }
     }
 
-    private async Task ChunkDocument(Document document)
+    // True when the document ends the call with at least one chunk (created now, or already
+    // present from an earlier pass); false when nothing could be produced — content missing,
+    // empty, or chunking to zero — so the caller can tell a draining batch from a dead one.
+    private async Task<bool> ChunkDocument(Document document)
     {
         if (document == null)
         {
             _logger.LogWarning("Document is null, skipping processing");
-            return;
+            return false;
         }
 
         if (document.Chunks.Any())
         {
             _logger.LogInformation("Document {DocumentId} already chunked, skipping", document.Id);
-            return;
+            return true;
         }
 
         _logger.LogInformation(
@@ -148,7 +169,7 @@ public class DocumentProcessor : IDocumentProcessor
         if (string.IsNullOrWhiteSpace(content))
         {
             _logger.LogWarning("Document {DocumentId} has no content", document.Id);
-            return;
+            return false;
         }
 
         var chunks = await CreateChunks(document, content);
@@ -157,6 +178,7 @@ public class DocumentProcessor : IDocumentProcessor
             chunks.Count,
             document.Id
         );
+        return chunks.Count > 0;
     }
 
     private async Task<string> GetDocumentContent(Document document)

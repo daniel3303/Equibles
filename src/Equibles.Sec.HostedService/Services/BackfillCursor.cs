@@ -29,6 +29,13 @@ public class BackfillCursor
     // deploy bursts neither repeat the scan per boot nor dodge it indefinitely.
     private static readonly TimeSpan FullRescanInterval = TimeSpan.FromDays(1);
 
+    // Retry spacing after a full rescan that started but failed (query timeout, interrupted
+    // process). Rows older than the bounded window are reachable ONLY by the full rescan, and
+    // its stamp is written before the scan runs — so charging a failed scan the full daily
+    // interval starves those rows for a day per failure, indefinitely under a recurring
+    // timeout. Long enough to not crash-loop a minutes-long scan, far shorter than a day.
+    private static readonly TimeSpan FailedFullRescanRetryInterval = TimeSpan.FromMinutes(30);
+
     private DateTime _lastBoundedScanUtc = DateTime.MinValue;
 
     /// <summary>The BackfillState row key this cursor hydrates from and persists to.</summary>
@@ -111,5 +118,15 @@ public class BackfillCursor
 
         LastFullRescanAt = utcNow;
         return true;
+    }
+
+    /// <summary>
+    /// Rewinds the full-rescan stamp after a scan that was admitted but failed, so the next
+    /// attempt is admitted <see cref="FailedFullRescanRetryInterval"/> from <paramref name="utcNow"/>
+    /// instead of a full rescan interval later. The floor is left untouched.
+    /// </summary>
+    public void MarkFullRescanFailed(DateTime utcNow)
+    {
+        LastFullRescanAt = utcNow - FullRescanInterval + FailedFullRescanRetryInterval;
     }
 }

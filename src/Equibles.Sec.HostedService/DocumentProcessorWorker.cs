@@ -13,7 +13,8 @@ public class DocumentProcessorWorker : BaseScraperWorker
 
     // The embedding sidecar (vLLM) is recycled by autoheal and on every deploy, and then reloads
     // its model for a minute or two. During that window every embedding cycle faults ("no
-    // embeddings produced — server likely down"). A faulted cycle backs off ~15s (ErrorBackoff is
+    // embeddings produced — server likely down"); an all-fail chunking batch (blob store
+    // unreachable) faults the same way. A faulted cycle backs off ~15s (ErrorBackoff is
     // capped at SleepInterval), so this many consecutive faults is roughly five minutes of solid
     // outage — comfortably past a normal reload. Below it the faults are transient and stay out of
     // the Errors page; only a genuinely sustained outage records a single row. Live "is it down"

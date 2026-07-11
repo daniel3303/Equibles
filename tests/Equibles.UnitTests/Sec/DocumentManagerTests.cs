@@ -84,6 +84,51 @@ public class DocumentManagerTests
         result.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task GenerateEmbeddingBatch_FullRescanQueryThrows_RewindsTheStampAndRethrows()
+    {
+        // The full-rescan stamp is persisted BEFORE the unfloored scan runs (crash-loop
+        // protection), so without the rewind a scan that faults — the minutes-long chunk
+        // anti-join exceeding the command timeout — silently consumes the whole daily slot,
+        // and rows behind the bounded window starve a day per fault, indefinitely under a
+        // recurring timeout. A failed scan must be re-admitted after the short failure
+        // interval instead, and the fault must still reach the worker's error ladder.
+        var embeddingConfig = Options.Create(
+            new EmbeddingConfig
+            {
+                Enabled = true,
+                BaseUrl = "http://localhost:8080",
+                ModelName = "test-model",
+            }
+        );
+        var chunkRepository = Substitute.For<ChunkRepository>(
+            (Equibles.Data.EquiblesFinancialDbContext)null
+        );
+        chunkRepository
+            .When(r => r.GetAll())
+            .Do(_ => throw new InvalidOperationException("query timeout"));
+        var backfillStateRepository = Substitute.For<BackfillStateRepository>(
+            (Equibles.Data.EquiblesFinancialDbContext)null
+        );
+
+        var sut = new DocumentManager(
+            null,
+            chunkRepository,
+            backfillStateRepository,
+            Substitute.For<IDocumentProcessor>(),
+            embeddingConfig,
+            Substitute.For<ILogger<DocumentManager>>()
+        );
+        var cursor = new BackfillCursor("chunk-embedding");
+
+        var act = () => sut.GenerateEmbeddingBatch(cursor, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*query timeout*");
+        cursor
+            .LastFullRescanAt.Should()
+            .BeCloseTo(DateTime.UtcNow.AddDays(-1).AddMinutes(30), TimeSpan.FromMinutes(2));
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // EmbeddingConfig — IsConfigured logic
     // ═══════════════════════════════════════════════════════════════════

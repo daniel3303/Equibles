@@ -144,11 +144,43 @@ public class DocumentManager
         if (!cursor.TryStartFullRescan(utcNow))
             return [];
 
-        // Stamp before scanning: an interrupted scan then waits out the interval instead of a
+        // Stamp before scanning: an interrupted scan then waits out an interval instead of a
         // crash-loop re-running the minutes-long scan on every boot; fresh work still flows
         // through the floored and bounded tiers regardless.
         await PersistCursor(cursor);
-        return await query(null);
+        try
+        {
+            return await query(null);
+        }
+        catch
+        {
+            // A failed scan must not consume the whole daily slot: rows behind the bounded
+            // window are reachable only here, so charging every fault a full interval starves
+            // them indefinitely under a recurring query timeout. Rewind the stamp to a short
+            // retry spacing and let the fault propagate to the worker's error ladder.
+            cursor.MarkFullRescanFailed(utcNow);
+            await TryPersistCursor(cursor);
+            throw;
+        }
+    }
+
+    // Persist that must never mask an in-flight scan fault: if the store is down the original
+    // exception carries the diagnosis, and the rewound stamp still lives on the in-memory
+    // cursor for this process.
+    private async Task TryPersistCursor(BackfillCursor cursor)
+    {
+        try
+        {
+            await PersistCursor(cursor);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not persist the rewound full-rescan stamp for {Cursor}",
+                cursor.Name
+            );
+        }
     }
 
     private async Task HydrateCursor(BackfillCursor cursor)

@@ -124,6 +124,35 @@ public class BackfillCursorTests
     }
 
     [Fact]
+    public void MarkFullRescanFailed_ReadmitsAfterTheShortRetryInterval_NotTheFullDay()
+    {
+        // A full rescan that was admitted but failed (query timeout, interrupted process)
+        // must not cost the whole daily interval: rows behind the bounded window are
+        // reachable only by the full rescan, so charging every fault a day starves them
+        // indefinitely under a recurring timeout.
+        var cursor = new BackfillCursor("test");
+        cursor.TryStartFullRescan(Now);
+
+        cursor.MarkFullRescanFailed(Now);
+
+        cursor.TryStartFullRescan(Now.AddMinutes(29)).Should().BeFalse();
+        cursor.TryStartFullRescan(Now.AddMinutes(31)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void MarkFullRescanFailed_KeepsFloor()
+    {
+        var cursor = new BackfillCursor("test");
+        var frontier = Now.AddDays(-1);
+        cursor.Advance(frontier);
+        cursor.TryStartFullRescan(Now);
+
+        cursor.MarkFullRescanFailed(Now);
+
+        cursor.Floor.Should().Be(frontier);
+    }
+
+    [Fact]
     public void TryStartBoundedRescan_NoFloor_IsRefused()
     {
         // A floorless cursor has never processed anything — there is no frontier to look
