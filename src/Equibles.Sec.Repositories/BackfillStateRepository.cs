@@ -9,7 +9,7 @@ public class BackfillStateRepository : BaseRepository<BackfillState>
     public BackfillStateRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
-    public async Task<BackfillState> GetByName(string name)
+    public virtual async Task<BackfillState> GetByName(string name)
     {
         return await GetAll().FirstOrDefaultAsync(s => s.Name == name);
     }

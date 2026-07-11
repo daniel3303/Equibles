@@ -16,7 +16,8 @@ public class DocumentProcessorTests
 {
     private static DocumentProcessor CreateSut(
         IEmbeddingClient embeddingClient,
-        ILogger<DocumentProcessor> logger = null
+        ILogger<DocumentProcessor> logger = null,
+        IFileManager fileManager = null
     )
     {
         return new DocumentProcessor(
@@ -25,7 +26,7 @@ public class DocumentProcessorTests
             embeddingClient,
             new ChunkingStrategy(new TokenCounter()),
             Options.Create(new EmbeddingConfig { ModelName = "test-model" }),
-            Substitute.For<IFileManager>(),
+            fileManager ?? Substitute.For<IFileManager>(),
             logger ?? Substitute.For<ILogger<DocumentProcessor>>()
         );
     }
@@ -77,13 +78,16 @@ public class DocumentProcessorTests
         // forward-progressing past data anomalies (incomplete uploads,
         // corrupted blobs, FK orphans).
         //
-        // Setup: one Document with a CommonStock populated (so the leading
-        // LogInformation in ChunkDocument doesn't NRE before reaching the
-        // throw) but Content == null. Assert that ProcessDocuments
-        // completes without throwing AND that ILogger received exactly one
-        // Error call mentioning that document's Id.
+        // Setup: one Document with Content == null plus one healthy document
+        // (so the batch makes progress and the all-fail guard stays quiet).
+        // Assert that ProcessDocuments completes without throwing AND that
+        // ILogger received exactly one Error call for the bad document.
         var logger = Substitute.For<ILogger<DocumentProcessor>>();
-        var sut = CreateSut(Substitute.For<IEmbeddingClient>(), logger);
+        var fileManager = Substitute.For<IFileManager>();
+        fileManager
+            .GetContent(Arg.Any<Equibles.Media.Data.Models.File>())
+            .Returns(System.Text.Encoding.UTF8.GetBytes("real filing content"));
+        var sut = CreateSut(Substitute.For<IEmbeddingClient>(), logger, fileManager);
         var documentId = Guid.NewGuid();
         var documents = new List<Document>
         {
@@ -92,6 +96,13 @@ public class DocumentProcessorTests
                 Id = documentId,
                 CommonStock = new CommonStock { Name = "Test Co", Ticker = "TEST" },
                 Content = null,
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                DocumentType = DocumentType.TenK,
+                CommonStock = new CommonStock { Name = "Good Co", Ticker = "GOOD" },
+                Content = new Equibles.Media.Data.Models.File(),
             },
         };
 
@@ -106,6 +117,104 @@ public class DocumentProcessorTests
             )
             .Should()
             .ContainSingle();
+    }
+
+    [Fact]
+    public async Task ProcessDocuments_EveryDocumentFails_ThrowsSoTheWorkerCycleFaults()
+    {
+        // Sibling guard to GenerateEmbeddings' "no embeddings produced" throw: isolated
+        // failures keep the batch draining, but a batch where NOTHING could be chunked
+        // (blob store unreachable, every document's content missing) must fault the cycle
+        // so the worker's error ladder backs off and eventually reports — instead of the
+        // batch dissolving into per-document error logs while the pending count sits
+        // frozen with no surfaced error (the #4143 starvation signature).
+        var sut = CreateSut(Substitute.For<IEmbeddingClient>());
+        var documents = new List<Document>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                CommonStock = new CommonStock { Name = "Test Co", Ticker = "TEST" },
+                Content = null,
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                CommonStock = new CommonStock { Name = "Other Co", Ticker = "OTHR" },
+                Content = null,
+            },
+        };
+
+        var act = () => sut.ProcessDocuments(documents, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Chunking failed*");
+    }
+
+    [Fact]
+    public async Task ProcessDocuments_OnlyWhitespaceContent_IsProgressNotAFault()
+    {
+        // A document whose content loads but is blank can never gain chunks — it is a
+        // deterministic non-outcome, not a transient failure. It must NOT trip the all-fail
+        // guard: a single such poison document at the frontier would otherwise wedge the
+        // worker (the batch never advances past it, Phase 2 never runs again).
+        var fileManager = Substitute.For<IFileManager>();
+        fileManager
+            .GetContent(Arg.Any<Equibles.Media.Data.Models.File>())
+            .Returns(System.Text.Encoding.UTF8.GetBytes("   \n\t  "));
+        var sut = CreateSut(Substitute.For<IEmbeddingClient>(), fileManager: fileManager);
+        var documents = new List<Document>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                DocumentType = DocumentType.TenK,
+                CommonStock = new CommonStock { Name = "Test Co", Ticker = "TEST" },
+                Content = new Equibles.Media.Data.Models.File(),
+            },
+        };
+
+        var act = () => sut.ProcessDocuments(documents, CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task ProcessDocuments_CancelledMidBatch_DoesNotTreatThePartialBatchAsAnOutage()
+    {
+        // Cancellation after a failed first document leaves attempted=1, progressed=0 —
+        // indistinguishable from a systemic outage by the counters alone. Shutdown must not
+        // surface as a fault: the guard is gated on the token.
+        using var cts = new CancellationTokenSource();
+        var fileManager = Substitute.For<IFileManager>();
+        fileManager
+            .GetContent(Arg.Any<Equibles.Media.Data.Models.File>())
+            .Returns<byte[]>(_ =>
+            {
+                cts.Cancel();
+                throw new IOException("blob store gone");
+            });
+        var sut = CreateSut(Substitute.For<IEmbeddingClient>(), fileManager: fileManager);
+        var documents = new List<Document>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                DocumentType = DocumentType.TenK,
+                CommonStock = new CommonStock { Name = "Test Co", Ticker = "TEST" },
+                Content = new Equibles.Media.Data.Models.File(),
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                DocumentType = DocumentType.TenK,
+                CommonStock = new CommonStock { Name = "Other Co", Ticker = "OTHR" },
+                Content = new Equibles.Media.Data.Models.File(),
+            },
+        };
+
+        var act = () => sut.ProcessDocuments(documents, cts.Token);
+
+        await act.Should().NotThrowAsync();
     }
 
     private static (DocumentProcessor Sut, EmbeddingRepository Repo) CreateSutWithRepo(

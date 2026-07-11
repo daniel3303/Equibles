@@ -47,6 +47,9 @@ public class DocumentProcessor : IDocumentProcessor
         CancellationToken cancellationToken
     )
     {
+        var attempted = 0;
+        var progressed = 0;
+
         foreach (var document in documents)
         {
             if (cancellationToken.IsCancellationRequested)
@@ -55,14 +58,32 @@ public class DocumentProcessor : IDocumentProcessor
                 break;
             }
 
+            attempted++;
             try
             {
                 await ChunkDocument(document);
+                progressed++;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error chunking document {DocumentId}", document.Id);
             }
+        }
+
+        // Same systemic-outage guard as GenerateEmbeddings, with one deliberate difference:
+        // deterministic non-outcomes (blank content, content that chunks to zero) count as
+        // progress — they are logged and can never succeed, so faulting on them would wedge
+        // the worker on a single poison document at the frontier. Only thrown failures count
+        // (blob store unreachable, content missing), and only when EVERY attempted document
+        // threw: that is a systemic outage the worker must back off from and eventually
+        // report — instead of dissolving into per-document logs while the pending count sits
+        // frozen with no surfaced error. A batch cut short by cancellation is not a signal.
+        if (!cancellationToken.IsCancellationRequested && attempted > 0 && progressed == 0)
+        {
+            throw new InvalidOperationException(
+                $"Chunking failed for all {attempted} documents in the batch — the content "
+                    + "store is likely unavailable. Backing off this cycle."
+            );
         }
     }
 
@@ -113,8 +134,9 @@ public class DocumentProcessor : IDocumentProcessor
         // draining) from a systemic outage. If we attempted chunks but embedded
         // none, the embedding server is down: throw so the worker's base loop
         // logs it loudly, reports it, and backs off for a cycle — instead of
-        // hot-looping on the same batch with zero progress and no error.
-        if (totalChunks > 0 && totalEmbedded == 0)
+        // hot-looping on the same batch with zero progress and no error. A batch
+        // cut short by cancellation is shutdown, not an outage signal.
+        if (!cancellationToken.IsCancellationRequested && totalChunks > 0 && totalEmbedded == 0)
         {
             throw new InvalidOperationException(
                 $"No embeddings were produced for any of {totalChunks} chunks — "
