@@ -8,6 +8,11 @@ using Equibles.Finra.Data;
 using Equibles.Finra.Data.Models;
 using Equibles.Finra.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Sec.Data.Models;
+using Equibles.Sec.Repositories;
+using Equibles.Yahoo.Data;
+using Equibles.Yahoo.Data.Models;
+using Equibles.Yahoo.Repositories;
 using FluentAssertions;
 using Xunit;
 
@@ -24,13 +29,17 @@ public class ShortSqueezeScoreManagerTests : IDisposable
     {
         _dbContext = TestDbContextFactory.Create(
             new FinraModuleConfiguration(),
-            new CommonStocksModuleConfiguration()
+            new CommonStocksModuleConfiguration(),
+            new FailToDeliverOnlyModule(),
+            new YahooModuleConfiguration()
         );
         _manager = new ShortSqueezeScoreManager(
             new ShortInterestRepository(_dbContext),
             new DailyShortVolumeRepository(_dbContext),
             new CommonStockRepository(_dbContext),
-            new StockSplitRepository(_dbContext)
+            new StockSplitRepository(_dbContext),
+            new FailToDeliverRepository(_dbContext),
+            new DailyStockPriceRepository(_dbContext)
         );
     }
 
@@ -222,6 +231,181 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         scores.Select(s => s.Ticker).Should().BeEquivalentTo(["EQTY", "MLP"]);
     }
 
+    [Fact]
+    public async Task Compute_NoFailsToDeliverFeed_FactorIsNullForEveryone()
+    {
+        // An empty FTD table means the feed is absent, not that no stock ever fails
+        // to deliver — the factor must be unknowable (null) rather than a flattering
+        // universe-wide zero.
+        var stock = SeedStock("NOFTD", sharesOutstanding: 1_000_000);
+        SeedShortInterest(stock, shortPosition: 100_000, daysToCover: 2m);
+        await _dbContext.SaveChangesAsync();
+
+        var scores = await _manager.Compute();
+
+        scores.Single().FailsToDeliverPercentOfShares.Should().BeNull();
+        scores.Single().FailsToDeliverPercentile.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Compute_FailsToDeliverSpike_ScoresWorstDayAndZeroFillsCoveredPeers()
+    {
+        // FAILS has a 50k worst day on a 1M share count (5%); CLEAN appears nowhere
+        // in a live feed, which is a true zero — delivery is fine — not a missing
+        // factor. The zero must be scored, keeping CLEAN below FAILS on the factor.
+        var fails = SeedStock("FAILS", sharesOutstanding: 1_000_000);
+        var clean = SeedStock("CLEAN", sharesOutstanding: 1_000_000);
+        SeedShortInterest(fails, shortPosition: 100_000, daysToCover: 2m);
+        SeedShortInterest(clean, shortPosition: 100_000, daysToCover: 2m);
+        _dbContext
+            .Set<FailToDeliver>()
+            .AddRange(
+                new FailToDeliver
+                {
+                    CommonStockId = fails.Id,
+                    SettlementDate = SettlementDate.AddDays(-3),
+                    Quantity = 50_000,
+                    Price = 10m,
+                },
+                new FailToDeliver
+                {
+                    CommonStockId = fails.Id,
+                    SettlementDate = SettlementDate.AddDays(-10),
+                    Quantity = 20_000,
+                    Price = 10m,
+                }
+            );
+        await _dbContext.SaveChangesAsync();
+
+        var scores = await _manager.Compute();
+
+        var spiking = scores.Single(s => s.Ticker == "FAILS");
+        var covered = scores.Single(s => s.Ticker == "CLEAN");
+        spiking.FailsToDeliverPercentOfShares.Should().Be(0.05m, "the WORST day counts");
+        covered.FailsToDeliverPercentOfShares.Should().Be(0m);
+        spiking.FailsToDeliverPercentile.Should().Be(100);
+        covered.FailsToDeliverPercentile.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Compute_PreviousReportOnFile_YieldsShortInterestChange()
+    {
+        // BUILD grew its short position 50% versus the previous report; SHRINK cut
+        // it in half. The change factor must carry the signed fraction for both.
+        var build = SeedStock("BUILD", sharesOutstanding: 1_000_000);
+        var shrink = SeedStock("SHRINK", sharesOutstanding: 1_000_000);
+        SeedShortInterest(
+            build,
+            shortPosition: 150_000,
+            daysToCover: 2m,
+            previousPosition: 100_000
+        );
+        SeedShortInterest(
+            shrink,
+            shortPosition: 100_000,
+            daysToCover: 2m,
+            previousPosition: 200_000
+        );
+        // The previous settlement date must exist in the table for the change's
+        // split basis to be anchored — seed the previous cycle's rows.
+        _dbContext
+            .Set<ShortInterest>()
+            .AddRange(
+                new ShortInterest
+                {
+                    CommonStockId = build.Id,
+                    SettlementDate = SettlementDate.AddDays(-14),
+                    CurrentShortPosition = 100_000,
+                },
+                new ShortInterest
+                {
+                    CommonStockId = shrink.Id,
+                    SettlementDate = SettlementDate.AddDays(-14),
+                    CurrentShortPosition = 200_000,
+                }
+            );
+        await _dbContext.SaveChangesAsync();
+
+        var scores = await _manager.Compute();
+
+        scores.Single(s => s.Ticker == "BUILD").ShortInterestChangePercent.Should().Be(0.5m);
+        scores.Single(s => s.Ticker == "SHRINK").ShortInterestChangePercent.Should().Be(-0.5m);
+    }
+
+    [Fact]
+    public async Task Compute_NoPreviousPosition_ChangeFactorDropsOut()
+    {
+        var fresh = SeedStock("FRESH", sharesOutstanding: 1_000_000);
+        SeedShortInterest(fresh, shortPosition: 100_000, daysToCover: 2m);
+        await _dbContext.SaveChangesAsync();
+
+        var scores = await _manager.Compute();
+
+        scores.Single().ShortInterestChangePercent.Should().BeNull();
+        scores.Single().ShortInterestChangePercentile.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Compute_RecentPriceHistory_ProducesPriceFactors()
+    {
+        // Price factors anchor on the CURRENT price tape (squeeze pressure now),
+        // not the settlement date — so the seeded series must be recent relative
+        // to the wall clock the manager loads against.
+        var stock = SeedStock("PRICED", sharesOutstanding: 1_000_000);
+        SeedShortInterest(stock, shortPosition: 100_000, daysToCover: 2m);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        for (var i = 0; i < 65; i++)
+        {
+            var close = i == 64 ? 130m : 100m;
+            _dbContext
+                .Set<DailyStockPrice>()
+                .Add(
+                    new DailyStockPrice
+                    {
+                        CommonStockId = stock.Id,
+                        Date = today.AddDays(i - 64),
+                        Open = close,
+                        High = close,
+                        Low = close,
+                        Close = close,
+                        AdjustedClose = close,
+                        Volume = 1_000,
+                    }
+                );
+        }
+
+        await _dbContext.SaveChangesAsync();
+
+        var scores = await _manager.Compute();
+
+        scores.Single().PriceAboveVwap.Should().NotBeNull();
+        scores.Single().PriceAboveVwap.Should().BeGreaterThan(0.25m);
+    }
+
+    [Fact]
+    public async Task Compute_NoPriceHistory_PriceFactorsDropOut()
+    {
+        var stock = SeedStock("NOPX", sharesOutstanding: 1_000_000);
+        SeedShortInterest(stock, shortPosition: 100_000, daysToCover: 2m);
+        await _dbContext.SaveChangesAsync();
+
+        var scores = await _manager.Compute();
+
+        scores.Single().PriceAboveVwap.Should().BeNull();
+        scores.Single().PriceAboveVwapPercentile.Should().BeNull();
+        scores.Single().HasPriceSpikeCatalyst.Should().BeFalse();
+        scores.Single().HasVolumeSurgeCatalyst.Should().BeFalse();
+        scores.Single().CatalystBoost.Should().Be(0);
+    }
+
+    // The full Sec module registers pgvector-typed embedding entities the in-memory
+    // provider cannot model; the squeeze manager only needs the FailToDeliver table.
+    private class FailToDeliverOnlyModule : Equibles.Data.IFinancialModule
+    {
+        public void ConfigureEntities(Microsoft.EntityFrameworkCore.ModelBuilder builder) =>
+            builder.Entity<FailToDeliver>();
+    }
+
     private CommonStock SeedStock(
         string ticker,
         long sharesOutstanding,
@@ -240,7 +424,12 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         return stock;
     }
 
-    private void SeedShortInterest(CommonStock stock, long shortPosition, decimal daysToCover)
+    private void SeedShortInterest(
+        CommonStock stock,
+        long shortPosition,
+        decimal daysToCover,
+        long previousPosition = 0
+    )
     {
         _dbContext
             .Set<ShortInterest>()
@@ -250,6 +439,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
                     CommonStockId = stock.Id,
                     SettlementDate = SettlementDate,
                     CurrentShortPosition = shortPosition,
+                    PreviousShortPosition = previousPosition,
                     DaysToCover = daysToCover,
                 }
             );

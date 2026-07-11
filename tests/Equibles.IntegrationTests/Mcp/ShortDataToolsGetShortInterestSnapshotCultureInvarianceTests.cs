@@ -7,6 +7,8 @@ using Equibles.Finra.Data.Models;
 using Equibles.Finra.Mcp.Tools;
 using Equibles.Finra.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Sec.Repositories;
+using Equibles.Yahoo.Repositories;
 using Xunit;
 
 namespace Equibles.IntegrationTests.Mcp;
@@ -23,7 +25,9 @@ public class ShortDataToolsGetShortInterestSnapshotCultureInvarianceTests : Para
                 new ShortInterestRepository(DbContext),
                 new DailyShortVolumeRepository(DbContext),
                 new CommonStockRepository(DbContext),
-                new StockSplitRepository(DbContext)
+                new StockSplitRepository(DbContext),
+                new FailToDeliverRepository(DbContext),
+                new DailyStockPriceRepository(DbContext)
             ),
             new StockSplitRepository(DbContext),
             ErrorManager,
