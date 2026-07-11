@@ -14,7 +14,10 @@ public class DisclosureParsingHelperBrokenAmountTests
     [InlineData("$50,001 - $200, 000", 50001, 200000)]
     [InlineData("$1,000,\n001 - $5,000,000", 1000001, 5000000)]
     public void ParseAmountRange_ThousandsGroupBrokenByWhitespace_RejoinsTheNumber(
-        string text, long expectedFrom, long expectedTo)
+        string text,
+        long expectedFrom,
+        long expectedTo
+    )
     {
         var (from, to) = DisclosureParsingHelper.ParseAmountRange(text);
 
