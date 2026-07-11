@@ -10,6 +10,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Finra.BusinessLogic;
+using Equibles.Finra.BusinessLogic.Models;
 using Equibles.Finra.Data.Models;
 using Equibles.Finra.Repositories;
 using Equibles.Mcp;
@@ -317,13 +318,31 @@ public class ShortDataTools
     private static string FormatSignedChange(long change) =>
         change >= 0 ? $"+{McpFormat.WholeNumber(change)}" : McpFormat.WholeNumber(change);
 
+    // Fractions rendered as explicit-sign percentages ("+3.1%"), dash when unknown.
+    private static string FormatSignedPercent(decimal? fraction) =>
+        fraction == null
+            ? "-"
+            : (fraction > 0 ? "+" : "")
+                + fraction.Value.ToString("P1", CultureInfo.InvariantCulture);
+
+    private static string FormatCatalysts(ShortSqueezeScore score)
+    {
+        if (score.HasPriceSpikeCatalyst && score.HasVolumeSurgeCatalyst)
+            return "PriceSpike+VolumeSurge";
+        if (score.HasPriceSpikeCatalyst)
+            return "PriceSpike";
+        if (score.HasVolumeSurgeCatalyst)
+            return "VolumeSurge";
+        return "-";
+    }
+
     // Thin forwarder so existing reflection-based normalization tests still find the method.
     private Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker) =>
         _commonStockRepository.ResolveByTicker(ticker);
 
     [McpServerTool(Name = "GetShortSqueezeScores")]
     [Description(
-        "Get the stocks with the highest composite short-squeeze score — a peer-relative 0-100 rank built from short interest as a percent of shares outstanding, days to cover, and the recent change in the short share of total volume, each as a percentile across every stock reporting short interest at the latest FINRA settlement date. Untradeable micro-caps dominate the raw board, so pass minMarketCap and/or minDollarVolume to keep only names that clear your liquidity bar (the score itself stays peer-relative to the full universe). Use this to find squeeze candidates; use GetShortInterest for one stock's underlying series."
+        "Get the stocks with the highest composite short-squeeze score — a peer-relative 0-100 rank built as the weighted mean of six factor percentiles across every stock reporting short interest at the latest FINRA settlement date (short interest % of shares 30%, days to cover 20%, price vs trailing VWAP — how far shorts are underwater — 15%, short-volume trend 15%, change in short interest 10%, fails-to-deliver pressure 10%), plus catalyst boosts (+10 for a statistically extreme weekly price spike, +10 for abnormal dollar volume on a positive move, capped at +20, clamped to 100). Untradeable micro-caps dominate the raw board, so pass minMarketCap and/or minDollarVolume to keep only names that clear your liquidity bar (the score itself stays peer-relative to the full universe). Use this to find squeeze candidates; use GetShortInterest for one stock's underlying series."
     )]
     public Task<string> GetShortSqueezeScores(
         [Description(
@@ -367,30 +386,26 @@ public class ShortDataTools
                 );
                 sb.AppendLine();
                 sb.AppendLine(
-                    "Score = equal-weight mean of the available factor percentiles (0-100, peer-relative). Avg $ Volume is approximate (FINRA share volume × market-cap-implied price)."
+                    "Score = weighted mean of the available factor percentiles (0-100, peer-relative) plus catalyst boosts (price spike / volume surge, capped at +20). Avg $ Volume is approximate (FINRA share volume × market-cap-implied price)."
                 );
                 sb.AppendLine();
                 sb.AppendLine(
-                    "| # | Ticker | Score | Short % of Shares | Days to Cover | Short-Volume Trend | Market Cap | Avg $ Volume |"
+                    "| # | Ticker | Score | Short % of Shares | Days to Cover | Short-Volume Trend | Δ Short Interest | Worst FTD % | Price vs VWAP | Catalysts | Market Cap | Avg $ Volume |"
                 );
                 sb.AppendLine(
-                    "|---|--------|-------|-------------------|---------------|--------------------|------------|--------------|"
+                    "|---|--------|-------|-------------------|---------------|--------------------|------------------|-------------|---------------|-----------|------------|--------------|"
                 );
                 sb.AppendNumberedRows(
                     filtered.Take(take).ToList(),
                     (rank, score) =>
                     {
-                        var trend =
-                            score.ShortVolumeShareTrend == null
-                                ? "-"
-                                : (score.ShortVolumeShareTrend > 0 ? "+" : "")
-                                    + score.ShortVolumeShareTrend.Value.ToString(
-                                        "P1",
-                                        CultureInfo.InvariantCulture
-                                    );
                         return $"| {rank} | {score.Ticker} | {score.Score.ToString("0", CultureInfo.InvariantCulture)} | "
                             + $"{score.ShortInterestPercentOfShares.ToString("P1", CultureInfo.InvariantCulture)} | "
-                            + $"{score.DaysToCover?.ToString("0.0", CultureInfo.InvariantCulture) ?? "-"} | {trend} | "
+                            + $"{score.DaysToCover?.ToString("0.0", CultureInfo.InvariantCulture) ?? "-"} | "
+                            + $"{FormatSignedPercent(score.ShortVolumeShareTrend)} | "
+                            + $"{FormatSignedPercent(score.ShortInterestChangePercent)} | "
+                            + $"{McpFormat.OrDash(score.FailsToDeliverPercentOfShares, "P2")} | "
+                            + $"{FormatSignedPercent(score.PriceAboveVwap)} | {FormatCatalysts(score)} | "
                             + $"{McpFormat.CompactUsd(score.MarketCapitalization)} | {McpFormat.CompactUsd(score.AverageDailyDollarVolume)} |";
                     }
                 );

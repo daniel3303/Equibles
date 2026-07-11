@@ -6,31 +6,85 @@ using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Finra.BusinessLogic.Models;
 using Equibles.Finra.Repositories;
+using Equibles.Sec.Repositories;
+using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Finra.BusinessLogic;
 
 /// <summary>
 /// Computes a composite 0–100 short-squeeze score per stock from data already stored —
-/// no scraper and no per-ticker heuristics. Three factors, each normalized to a
-/// percentile across the scored universe so the score is peer-relative:
+/// no scraper and no per-ticker heuristics. The construction follows the structure of
+/// the published squeeze models (IHS Markit's US Short Squeeze Model most directly):
+/// a set of crowdedness / capital-constraint factors, each normalized to a percentile
+/// across the scored universe and combined as a weighted mean, plus additive catalyst
+/// boosts for event conditions that ignite squeezes.
+///
+/// <para>Crowdedness factors (weight — higher percentile = more squeeze-prone):</para>
 /// <list type="bullet">
-/// <item>short interest as a fraction of shares outstanding,</item>
-/// <item>days-to-cover (FINRA-reported, or short position ÷ average daily volume),</item>
+/// <item>short interest as a fraction of shares outstanding (30%),</item>
+/// <item>days-to-cover — FINRA-reported, or short position ÷ average daily volume (20%),</item>
+/// <item>price versus trailing VWAP — how far open shorts are underwater, the public-data
+/// analog of transaction-level out-of-the-money share measures (15%),</item>
 /// <item>the change in the short share of total volume between the last two weeks and
-/// the two before them (rising = pressure building).</item>
+/// the two before them — rising = pressure building (15%),</item>
+/// <item>the change in the short position versus the previous FINRA report — the crowd
+/// is still building (10%),</item>
+/// <item>fails-to-deliver pressure — the worst trailing single-day FTD quantity as a
+/// fraction of shares outstanding, the closest public proxy for hard-to-borrow
+/// conditions (10%).</item>
 /// </list>
-/// The composite is the equal-weight mean of the factor percentiles a stock has data
-/// for — weights are deliberate and documented rather than tuned. The universe is every
-/// stock reporting short interest at the latest settlement date with a known
-/// shares-outstanding count and a physically credible short-interest ratio (see
-/// <see cref="MaxCredibleShortInterestRatio"/>).
+///
+/// <para>Catalyst boosts (additive rank points, capped at <see cref="MaxCatalystBoost"/>,
+/// composite clamped to 100): a statistically extreme positive weekly return
+/// (+<see cref="PriceSpikeCatalystBoost"/>) and abnormal dollar turnover with the price
+/// moving against the shorts (+<see cref="VolumeSurgeCatalystBoost"/>).</para>
+///
+/// <para>Factors a stock has no data for drop out and their weight is redistributed over
+/// the rest. The universe is every stock reporting short interest at the latest
+/// settlement date with a known shares-outstanding count and a physically credible
+/// short-interest ratio (see <see cref="MaxCredibleShortInterestRatio"/>).</para>
 /// </summary>
 [Service]
 public class ShortSqueezeScoreManager
 {
     /// <summary>Each trend window pools two calendar weeks of daily short-volume rows.</summary>
     public const int TrendWindowDays = 14;
+
+    /// <summary>
+    /// Trailing calendar window over which fails-to-deliver pressure is measured,
+    /// ending at the SEC feed's latest settlement date (the feed publishes with a
+    /// multi-week lag, so "latest available" is the honest anchor).
+    /// </summary>
+    public const int FailsToDeliverWindowDays = 30;
+
+    /// <summary>
+    /// Calendar days of daily bars loaded per stock for the price factors — enough
+    /// for the 60-trading-day baseline plus the recent week plus market holidays.
+    /// </summary>
+    public const int PriceHistoryCalendarDays = 100;
+
+    /// <summary>
+    /// Factor weights, deliberate and documented rather than fitted: the two classic
+    /// crowdedness measures carry half the composite, the underwater proxy and the
+    /// short-volume trend (the "pressure is mounting" readings) 15% each, and the two
+    /// noisier corroborating signals 10% each.
+    /// </summary>
+    public const double ShortInterestWeight = 0.30;
+    public const double DaysToCoverWeight = 0.20;
+    public const double PriceAboveVwapWeight = 0.15;
+    public const double ShortVolumeTrendWeight = 0.15;
+    public const double ShortInterestChangeWeight = 0.10;
+    public const double FailsToDeliverWeight = 0.10;
+
+    /// <summary>Rank points added when the weekly return is a statistical outlier.</summary>
+    public const double PriceSpikeCatalystBoost = 10;
+
+    /// <summary>Rank points added for abnormal dollar turnover on a positive move.</summary>
+    public const double VolumeSurgeCatalystBoost = 10;
+
+    /// <summary>Ceiling on the total catalyst boost, mirroring the published models.</summary>
+    public const double MaxCatalystBoost = 20;
 
     /// <summary>
     /// The listed-security kinds that can never be squeeze candidates: FINRA
@@ -65,18 +119,24 @@ public class ShortSqueezeScoreManager
     private readonly DailyShortVolumeRepository _dailyShortVolumeRepository;
     private readonly CommonStockRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
+    private readonly FailToDeliverRepository _failToDeliverRepository;
+    private readonly DailyStockPriceRepository _dailyStockPriceRepository;
 
     public ShortSqueezeScoreManager(
         ShortInterestRepository shortInterestRepository,
         DailyShortVolumeRepository dailyShortVolumeRepository,
         CommonStockRepository commonStockRepository,
-        StockSplitRepository stockSplitRepository
+        StockSplitRepository stockSplitRepository,
+        FailToDeliverRepository failToDeliverRepository,
+        DailyStockPriceRepository dailyStockPriceRepository
     )
     {
         _shortInterestRepository = shortInterestRepository;
         _dailyShortVolumeRepository = dailyShortVolumeRepository;
         _commonStockRepository = commonStockRepository;
         _stockSplitRepository = stockSplitRepository;
+        _failToDeliverRepository = failToDeliverRepository;
+        _dailyStockPriceRepository = dailyStockPriceRepository;
     }
 
     public async Task<List<ShortSqueezeScore>> Compute(
@@ -104,6 +164,7 @@ public class ShortSqueezeScoreManager
             {
                 s.CommonStockId,
                 s.CurrentShortPosition,
+                s.PreviousShortPosition,
                 s.AverageDailyVolume,
                 DaysToCover = s.DaysToCover >= decimal.MinValue && s.DaysToCover <= decimal.MaxValue
                     ? s.DaysToCover
@@ -143,6 +204,21 @@ public class ShortSqueezeScoreManager
         )
             .GroupBy(s => s.CommonStockId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<StockSplit>)g.ToList());
+
+        // The previous settlement date anchors the split basis of PreviousShortPosition.
+        // FINRA publishes the whole market on one bi-monthly cycle, so the second-newest
+        // distinct date is every stock's previous report. (A few hundred dates, cheap.)
+        var settlementDates = await _shortInterestRepository
+            .GetAllSettlementDates()
+            .ToListAsync(cancellationToken);
+        var previousSettlementDate = settlementDates
+            .Where(d => d < settlementDate)
+            .OrderByDescending(d => d)
+            .FirstOrDefault();
+
+        var scoredStockIds = stocks.Keys.ToList();
+        var failsToDeliver = await LoadFailsToDeliver(scoredStockIds, cancellationToken);
+        var priceFactors = await LoadPriceFactors(scoredStockIds, cancellationToken);
 
         var scores = new List<ShortSqueezeScore>();
         foreach (var shortInterest in shortInterests)
@@ -201,6 +277,10 @@ public class ShortSqueezeScoreManager
                     advOnTodaysBasis * (marketCap.Value / stock.SharesOutStanding);
             }
 
+            var factors = priceFactors.TryGetValue(stock.Id, out var stockFactors)
+                ? stockFactors
+                : new ShortSqueezePriceFactors();
+
             scores.Add(
                 new ShortSqueezeScore
                 {
@@ -216,6 +296,22 @@ public class ShortSqueezeScoreManager
                     ShortVolumeShareTrend = trends.TryGetValue(stock.Id, out var trend)
                         ? trend
                         : null,
+                    ShortInterestChangePercent = ShortInterestChangePercent(
+                        shortInterest.CurrentShortPosition,
+                        settlementDate,
+                        shortInterest.PreviousShortPosition,
+                        previousSettlementDate,
+                        stockSplits
+                    ),
+                    FailsToDeliverPercentOfShares = FailsToDeliverPercentOfShares(
+                        stock.Id,
+                        stock.SharesOutStanding,
+                        failsToDeliver,
+                        stockSplits
+                    ),
+                    PriceAboveVwap = factors.PriceAboveVwap,
+                    HasPriceSpikeCatalyst = factors.HasPriceSpikeCatalyst,
+                    HasVolumeSurgeCatalyst = factors.HasVolumeSurgeCatalyst,
                 }
             );
         }
@@ -273,6 +369,105 @@ public class ShortSqueezeScoreManager
     }
 
     /// <summary>
+    /// Loads each scored stock's daily fails-to-deliver quantities over the trailing
+    /// window ending at the SEC feed's latest settlement date, each paired with its
+    /// date so it can be split-restated per observation. Returns null when the feed
+    /// holds no data at all — then the factor is unknowable and must drop out for
+    /// everyone, which is different from a covered stock reporting no fails (a true
+    /// zero).
+    /// </summary>
+    private async Task<Dictionary<Guid, List<(DateOnly Date, long Quantity)>>> LoadFailsToDeliver(
+        List<Guid> stockIds,
+        CancellationToken cancellationToken
+    )
+    {
+        var latestDate = await _failToDeliverRepository
+            .GetLatestDate()
+            .FirstOrDefaultAsync(cancellationToken);
+        if (latestDate == default)
+        {
+            return null;
+        }
+
+        var windowStart = latestDate.AddDays(-FailsToDeliverWindowDays);
+        var rows = await _failToDeliverRepository
+            .GetAll()
+            .Where(f =>
+                f.SettlementDate > windowStart
+                && f.SettlementDate <= latestDate
+                && stockIds.Contains(f.CommonStockId)
+            )
+            .Select(f => new
+            {
+                f.CommonStockId,
+                f.SettlementDate,
+                f.Quantity,
+            })
+            .ToListAsync(cancellationToken);
+
+        var quantities = new Dictionary<Guid, List<(DateOnly Date, long Quantity)>>();
+        foreach (var row in rows)
+        {
+            if (!quantities.TryGetValue(row.CommonStockId, out var list))
+            {
+                list = [];
+                quantities[row.CommonStockId] = list;
+            }
+
+            list.Add((row.SettlementDate, row.Quantity));
+        }
+
+        return quantities;
+    }
+
+    /// <summary>
+    /// Loads the trailing daily bars for the scored universe in one query and computes
+    /// each stock's price factors. The universe's latest price date anchors the
+    /// staleness check inside the calculator, so a halted or delisted series produces
+    /// no price factors instead of factors about the past.
+    /// </summary>
+    private async Task<Dictionary<Guid, ShortSqueezePriceFactors>> LoadPriceFactors(
+        List<Guid> stockIds,
+        CancellationToken cancellationToken
+    )
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var cutoff = today.AddDays(-PriceHistoryCalendarDays);
+        var bars = await _dailyStockPriceRepository
+            .GetByStocks(stockIds, cutoff, today)
+            .Select(p => new
+            {
+                p.CommonStockId,
+                p.Date,
+                p.AdjustedClose,
+                p.Close,
+                p.Volume,
+            })
+            .ToListAsync(cancellationToken);
+
+        var result = new Dictionary<Guid, ShortSqueezePriceFactors>();
+        if (bars.Count == 0)
+        {
+            return result;
+        }
+
+        var universeLatestDate = bars.Max(b => b.Date);
+        foreach (var group in bars.GroupBy(b => b.CommonStockId))
+        {
+            var series = group
+                .OrderBy(b => b.Date)
+                .Select(b => new ShortSqueezeDailyBar(b.Date, b.AdjustedClose, b.Close, b.Volume))
+                .ToList();
+            result[group.Key] = ShortSqueezePriceFactorCalculator.Compute(
+                series,
+                universeLatestDate
+            );
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Short interest as a fraction of shares outstanding, with the short position
     /// restated onto today's split basis first. The short position is a share COUNT
     /// as-of <paramref name="settlementDate"/>; the shares-outstanding denominator is
@@ -291,6 +486,78 @@ public class ShortSqueezeScoreManager
         return currentShortPosition * factor / sharesOutstanding;
     }
 
+    /// <summary>
+    /// Change in the short position versus the previous FINRA report as a fraction of
+    /// the previous position, with BOTH positions restated onto today's split basis —
+    /// a split between the two reports would otherwise masquerade as a position change
+    /// of the split factor. Null when the previous position or its date is unknown.
+    /// </summary>
+    private static decimal? ShortInterestChangePercent(
+        long currentPosition,
+        DateOnly settlementDate,
+        long previousPosition,
+        DateOnly previousSettlementDate,
+        IReadOnlyList<StockSplit> splits
+    )
+    {
+        if (previousPosition <= 0 || previousSettlementDate == default)
+        {
+            return null;
+        }
+
+        var currentOnTodaysBasis = SplitAdjustment.AdjustShareCount(
+            currentPosition,
+            settlementDate,
+            splits
+        );
+        var previousOnTodaysBasis = SplitAdjustment.AdjustShareCount(
+            previousPosition,
+            previousSettlementDate,
+            splits
+        );
+        if (previousOnTodaysBasis <= 0)
+        {
+            return null;
+        }
+
+        return (currentOnTodaysBasis - previousOnTodaysBasis) / (decimal)previousOnTodaysBasis;
+    }
+
+    /// <summary>
+    /// The stock's worst trailing single-day fails-to-deliver quantity — each daily
+    /// observation restated onto today's split basis as-of its own settlement date —
+    /// as a fraction of shares outstanding. A stock the live feed reports no fails
+    /// for scores a true zero; when the feed has no data at all
+    /// (<paramref name="failsToDeliver"/> is null) the factor is null and drops out
+    /// of the composite.
+    /// </summary>
+    private static decimal? FailsToDeliverPercentOfShares(
+        Guid stockId,
+        long sharesOutstanding,
+        Dictionary<Guid, List<(DateOnly Date, long Quantity)>> failsToDeliver,
+        IReadOnlyList<StockSplit> splits
+    )
+    {
+        if (failsToDeliver == null)
+        {
+            return null;
+        }
+
+        if (!failsToDeliver.TryGetValue(stockId, out var quantities))
+        {
+            return 0m;
+        }
+
+        var worst = 0L;
+        foreach (var (date, quantity) in quantities)
+        {
+            var onTodaysBasis = SplitAdjustment.AdjustShareCount(quantity, date, splits);
+            worst = Math.Max(worst, onTodaysBasis);
+        }
+
+        return (decimal)worst / sharesOutstanding;
+    }
+
     private static void ApplyPercentiles(List<ShortSqueezeScore> scores)
     {
         var shortInterestPercentiles = Percentiles(
@@ -306,40 +573,86 @@ public class ShortSqueezeScoreManager
                 .Where(s => s.ShortVolumeShareTrend != null)
                 .Select(s => (s.CommonStockId, s.ShortVolumeShareTrend.Value))
         );
+        var changePercentiles = Percentiles(
+            scores
+                .Where(s => s.ShortInterestChangePercent != null)
+                .Select(s => (s.CommonStockId, s.ShortInterestChangePercent.Value))
+        );
+        var failsToDeliverPercentiles = Percentiles(
+            scores
+                .Where(s => s.FailsToDeliverPercentOfShares != null)
+                .Select(s => (s.CommonStockId, s.FailsToDeliverPercentOfShares.Value))
+        );
+        var priceAboveVwapPercentiles = Percentiles(
+            scores
+                .Where(s => s.PriceAboveVwap != null)
+                .Select(s => (s.CommonStockId, s.PriceAboveVwap.Value))
+        );
 
         foreach (var score in scores)
         {
             score.ShortInterestPercentile = shortInterestPercentiles[score.CommonStockId];
-            score.DaysToCoverPercentile = daysToCoverPercentiles.TryGetValue(
-                score.CommonStockId,
-                out var daysToCover
-            )
-                ? daysToCover
-                : null;
-            score.ShortVolumeTrendPercentile = trendPercentiles.TryGetValue(
-                score.CommonStockId,
-                out var trend
-            )
-                ? trend
-                : null;
+            score.DaysToCoverPercentile = Lookup(daysToCoverPercentiles, score.CommonStockId);
+            score.ShortVolumeTrendPercentile = Lookup(trendPercentiles, score.CommonStockId);
+            score.ShortInterestChangePercentile = Lookup(changePercentiles, score.CommonStockId);
+            score.FailsToDeliverPercentile = Lookup(failsToDeliverPercentiles, score.CommonStockId);
+            score.PriceAboveVwapPercentile = Lookup(priceAboveVwapPercentiles, score.CommonStockId);
 
-            double total = score.ShortInterestPercentile;
-            var factors = 1;
+            // Weighted mean over the factors this stock has data for: a missing
+            // factor's weight is redistributed by dividing by the sum of the
+            // weights actually present.
+            var total = ShortInterestWeight * score.ShortInterestPercentile;
+            var weight = ShortInterestWeight;
             if (score.DaysToCoverPercentile != null)
             {
-                total += score.DaysToCoverPercentile.Value;
-                factors++;
+                total += DaysToCoverWeight * score.DaysToCoverPercentile.Value;
+                weight += DaysToCoverWeight;
             }
 
             if (score.ShortVolumeTrendPercentile != null)
             {
-                total += score.ShortVolumeTrendPercentile.Value;
-                factors++;
+                total += ShortVolumeTrendWeight * score.ShortVolumeTrendPercentile.Value;
+                weight += ShortVolumeTrendWeight;
             }
 
-            score.Score = Math.Round(total / factors, 2);
+            if (score.ShortInterestChangePercentile != null)
+            {
+                total += ShortInterestChangeWeight * score.ShortInterestChangePercentile.Value;
+                weight += ShortInterestChangeWeight;
+            }
+
+            if (score.FailsToDeliverPercentile != null)
+            {
+                total += FailsToDeliverWeight * score.FailsToDeliverPercentile.Value;
+                weight += FailsToDeliverWeight;
+            }
+
+            if (score.PriceAboveVwapPercentile != null)
+            {
+                total += PriceAboveVwapWeight * score.PriceAboveVwapPercentile.Value;
+                weight += PriceAboveVwapWeight;
+            }
+
+            score.BaseScore = Math.Round(total / weight, 2);
+
+            var boost = 0d;
+            if (score.HasPriceSpikeCatalyst)
+            {
+                boost += PriceSpikeCatalystBoost;
+            }
+
+            if (score.HasVolumeSurgeCatalyst)
+            {
+                boost += VolumeSurgeCatalystBoost;
+            }
+
+            score.CatalystBoost = Math.Min(boost, MaxCatalystBoost);
+            score.Score = Math.Round(Math.Min(100, score.BaseScore + score.CatalystBoost), 2);
         }
     }
+
+    private static double? Lookup(Dictionary<Guid, double> percentiles, Guid stockId) =>
+        percentiles.TryGetValue(stockId, out var value) ? value : null;
 
     /// <summary>
     /// Average-rank percentiles on a 0–100 scale: ties share the mean of the ranks
