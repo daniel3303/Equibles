@@ -362,10 +362,24 @@ public static partial class DisclosureParsingHelper
         if (string.IsNullOrWhiteSpace(amount))
             return (0, 0);
 
+        // PDF text extraction can break one number across lines ("$200,\n000"), and the digit
+        // regex stops at the whitespace — production stored a "$50,001 - $200,000" bracket as
+        // (50001, 200). Rejoin digit groups a comma+whitespace split before matching; only the
+        // exact thousands-group shape is touched, so genuinely separate numbers never merge.
+        amount = BrokenThousandsRegex().Replace(amount, ",");
+
         var matches = AmountRegex().Matches(amount);
 
         if (matches.Count >= 2)
-            return (ParseAmount(matches[0]), ParseAmount(matches[1]));
+        {
+            var from = ParseAmount(matches[0]);
+            var to = ParseAmount(matches[1]);
+            // A range whose upper bound parsed BELOW its lower bound is corrupt source text (an
+            // unrecoverable mid-number break). The honest representation is the module's own
+            // open-ended convention — "at least $from", i.e. (from, from) — never the corrupt
+            // pair, which downstream reads as a real (and impossible) bracket.
+            return to < from ? (from, from) : (from, to);
+        }
 
         if (matches.Count == 1)
         {
@@ -415,6 +429,11 @@ public static partial class DisclosureParsingHelper
     // Matches dollar amounts: $1,001 — requires $ prefix to avoid false positives
     [GeneratedRegex(@"\$([\d,]+)")]
     public static partial Regex AmountRegex();
+
+    // A thousands group broken by extracted-PDF whitespace: a digit, its comma, whitespace (incl.
+    // newlines), then exactly three digits ("200,\n000" / "200, 000"). Replaced with the bare comma.
+    [GeneratedRegex(@"(?<=\d),\s+(?=\d{3}(?!\d))")]
+    public static partial Regex BrokenThousandsRegex();
 
     // Matches href attribute in anchor tags
     [GeneratedRegex(@"href=[""']([^""']+)[""']")]
