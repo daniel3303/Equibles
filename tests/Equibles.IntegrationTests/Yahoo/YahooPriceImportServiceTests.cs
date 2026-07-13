@@ -872,6 +872,74 @@ public class YahooPriceImportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Import_ForeignAdrWithFullCompanyCap_StoresYahooImpliedShareBase()
+    {
+        // A foreign ADR where Yahoo's market cap is the FULL-COMPANY figure (built on
+        // impliedSharesOutstanding) while sharesOutstanding counts only the US listing.
+        // Storing the listing count against the full-company cap leaves the derived price
+        // (cap ÷ shares) off by the ADR ratio / listing mix — CYATY read 21x the close. The
+        // share count stored must be the base the cap was built on, so the pair stays
+        // self-consistent.
+        var stock = CreateStock("CYATY", "Cyient Limited");
+        await SeedStocks(stock);
+
+        _sharesProvider.GetCurrentSharesOutstanding(stock).Returns(1_400_000_000L);
+        _sharesProvider.IsForeignPrivateIssuer(stock).Returns(true);
+
+        _yahooClient
+            .GetChart("CYATY", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+        _yahooClient
+            .GetKeyStatistics("CYATY")
+            .Returns(
+                new KeyStatistics
+                {
+                    SharesOutstanding = 33_100_000,
+                    ImpliedSharesOutstanding = 700_000_000,
+                    MarketCapitalization = 16_380_000_000d,
+                }
+            );
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "CYATY");
+        updated.MarketCapitalization.Should().Be(16_380_000_000d);
+        updated.SharesOutStanding.Should().Be(700_000_000);
+    }
+
+    [Fact]
+    public async Task Import_NoEdgarFactWithFullCompanyCap_StoresYahooImpliedShareBase()
+    {
+        // Same listing-mix inconsistency for an OTC ordinary with no EDGAR fact at all (the
+        // provider returns null rather than the FPI guard dropping it): the stored share count
+        // must still be the base Yahoo built its cap on, not the single-listing count.
+        var stock = CreateStock("PCCYF", "PICC Property and Casualty Co.");
+        await SeedStocks(stock);
+
+        _sharesProvider.GetCurrentSharesOutstanding(stock).Returns((long?)null);
+
+        _yahooClient
+            .GetChart("PCCYF", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+        _yahooClient
+            .GetKeyStatistics("PCCYF")
+            .Returns(
+                new KeyStatistics
+                {
+                    SharesOutstanding = 1_900_000_000,
+                    ImpliedSharesOutstanding = 22_200_000_000,
+                    MarketCapitalization = 298_100_000_000d,
+                }
+            );
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "PCCYF");
+        updated.MarketCapitalization.Should().Be(298_100_000_000d);
+        updated.SharesOutStanding.Should().Be(22_200_000_000);
+    }
+
+    [Fact]
     public async Task Import_GarbageSmallEdgarCount_KeepsYahooPairInsteadOfRescaling()
     {
         // ABTC's shape: the EDGAR-side count is orders of magnitude below any real basis (a

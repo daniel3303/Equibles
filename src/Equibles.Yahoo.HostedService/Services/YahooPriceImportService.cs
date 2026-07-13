@@ -603,11 +603,11 @@ public class YahooPriceImportService
         );
 
         // A foreign private issuer (20-F/40-F filer) reports its cover-page count in ordinary
-        // shares, a different unit from the US-listed ADR Yahoo prices. Yahoo already returns a
-        // correct, self-consistent ADR market cap + ADR share count for the ticker, so reconciling
-        // it onto the EDGAR ordinary base would inflate market cap by the ADR ratio (e.g. Latam
-        // Airlines $16.7B -> $33T at ~2000x). Drop the EDGAR count for these issuers so Yahoo's ADR
-        // figures stand verbatim; the reconciliation stays in force for domestic 10-K/10-Q filers.
+        // shares, a different unit from the US-listed ADR Yahoo prices. Yahoo returns the correct
+        // market cap and the share base it was built on for the ticker, so reconciling it onto
+        // the EDGAR ordinary base would inflate market cap by the ADR ratio (e.g. Latam Airlines
+        // $16.7B -> $33T at ~2000x). Drop the EDGAR count for these issuers so Yahoo's figures
+        // stand verbatim; the reconciliation stays in force for domestic 10-K/10-Q filers.
         if (
             edgarShares != null
             && await sharesProvider.IsForeignPrivateIssuer(stock, cancellationToken)
@@ -628,23 +628,27 @@ public class YahooPriceImportService
         // threshold is deliberately far above any corporate-action lag (see
         // MaxPlausibleSameUnitRatio), so a lagging reverse split — where EDGAR is right and the
         // rescale must proceed (#3575) — cannot trip it.
+        var yahooShareBase = YahooShareBase(stats);
         if (
             edgarShares is > 0
-            && ShareBasisPlausibility.IsUnitMismatch(edgarShares.Value, YahooShareBase(stats))
+            && ShareBasisPlausibility.IsUnitMismatch(edgarShares.Value, yahooShareBase)
         )
             edgarShares = null;
 
         // Per-field conservative writes: only update on actual change, and never
         // overwrite a known value with 0 (treated as Yahoo "unknown" by the rest of
         // the codebase).
+        //
+        // Without an EDGAR base the stored pair comes entirely from Yahoo, and the share count
+        // must be the base Yahoo built its market cap on (impliedSharesOutstanding when provided
+        // — see YahooShareBase), NOT the quoted-listing sharesOutstanding. For a foreign ADR or
+        // OTC ordinary Yahoo's market cap is the full-company figure while sharesOutstanding
+        // counts only the US listing, so storing that count leaves the derived price
+        // (cap ÷ shares) off by the ADR ratio / listing mix (CYATY 21x, SNHIY 12.8x, JHPCY 26x).
         var changed = false;
-        if (
-            edgarShares == null
-            && stats.SharesOutstanding != 0
-            && stock.SharesOutStanding != stats.SharesOutstanding
-        )
+        if (edgarShares == null && yahooShareBase != 0 && stock.SharesOutStanding != yahooShareBase)
         {
-            stock.SharesOutStanding = stats.SharesOutstanding;
+            stock.SharesOutStanding = yahooShareBase;
             changed = true;
         }
         // When the EDGAR count is the authoritative base (not dropped above), store it here too —
