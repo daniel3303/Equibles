@@ -93,6 +93,32 @@ public class NportFundsHoldingStockToolTests : IDisposable
         result.Should().Contain("No fund reports a position in AAPL");
     }
 
+    [Fact]
+    public async Task GetFundsHoldingStock_PositionReportedUnderRetiredCusipAlias_IsResolved()
+    {
+        // The stock's issuer-level CUSIP changed: the current CUSIP is on the stock, the retired one
+        // is recorded as a CommonStockCusipAlias. A fund still reports the position under the OLD CUSIP
+        // (a laggard filer, and every historical report forever), so the reverse lookup must resolve it
+        // through the alias — mirroring the 13F import-time alias union — instead of showing the fund
+        // as having exited.
+        var stock = SeedStock("BBUC", cusip: "113006100");
+        _dbContext
+            .Set<CommonStockCusipAlias>()
+            .Add(new CommonStockCusipAlias { CommonStockId = stock.Id, Cusip = "11259V106" });
+        _dbContext.SaveChanges();
+
+        var fund = SeedStock("VOO", cusip: null, cik: "0000036405");
+        var filing = MakeFiling(fund.Id, "acc-current", new DateOnly(2025, 1, 31));
+        filing.Holdings.Add(MakeHolding("11259V106", 5_000_000m));
+        _dbContext.Set<NportFiling>().Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundsHoldingStock("BBUC");
+
+        result.Should().Contain("VANGUARD INDEX FUNDS");
+        result.Should().Contain("1 current fund positions");
+    }
+
     private CommonStock SeedStock(string ticker, string cusip, string cik = null)
     {
         var stock = new CommonStock
