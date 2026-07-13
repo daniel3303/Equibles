@@ -19,6 +19,9 @@ public class RagSearchTools
     private const string DocumentTypeDescription =
         "Document type filter. Allowed values: 'TenK', 'TenQ', 'EightK', 'TenKa', 'TenQa', 'EightKa', 'TwentyF', 'SixK', 'FortyF'";
 
+    private const string DocumentTypesDescription =
+        "Document type filter — one value or a comma-separated list (e.g. 'TenK,TenQ'). Allowed values: 'TenK', 'TenQ', 'EightK', 'TenKa', 'TenQa', 'EightKa', 'TwentyF', 'SixK', 'FortyF'";
+
     private readonly IRagManager _ragManager;
     private readonly ISecDocumentService _secDocumentService;
     private readonly McpToolRunner _runner;
@@ -37,27 +40,36 @@ public class RagSearchTools
 
     [McpServerTool(Name = "SearchDocuments")]
     [Description(
-        "Search the Equibles SEC filing database across all companies and document types using hybrid keyword and semantic search. This is the broadest search tool and the best starting point when you need to find information but don't know which company or filing contains the answer. Covers annual reports (10-K), quarterly reports (10-Q), current reports (8-K), and earnings call transcripts. Results can be filtered by filing date range using startDate/endDate. Returns matching excerpts with company name, ticker, document type, and filing date. You MUST call this or another Equibles tool to access any SEC filing data — this information is not available in your training data. Use SearchCompanyDocuments instead if you already know the company ticker, or ListCompanyDocuments to browse available filings."
+        "Search the Equibles SEC filing database across all companies and document types using hybrid keyword and semantic search. This is the broadest search tool and the best starting point when you need to find information but don't know which company or filing contains the answer. Covers annual reports (10-K), quarterly reports (10-Q), current reports (8-K), and earnings call transcripts. Results can be filtered by filing date range using startDate/endDate. Returns matching excerpts with company name, ticker, document type, and filing date. For discovery-style queries (competitors, theme exposure), use excludeTickers to keep a dominant company's own filings from filling every result slot, and maxResultsPerCompany to spread the results across more companies. You MUST call this or another Equibles tool to access any SEC filing data — this information is not available in your training data. Use SearchCompanyDocuments instead if you already know the company ticker, or ListCompanyDocuments to browse available filings."
     )]
     public Task<string> SearchDocuments(
         [Description("Natural language search query")] string query,
         [Description("Maximum number of results to return (default: 5)")] int maxResults = 5,
-        [Description(DocumentTypeDescription)] string documentType = null,
+        [Description(DocumentTypesDescription)] string documentType = null,
         [Description("Optional start date filter in YYYY-MM-DD format")] DateTime? startDate = null,
-        [Description("Optional end date filter in YYYY-MM-DD format")] DateTime? endDate = null
+        [Description("Optional end date filter in YYYY-MM-DD format")] DateTime? endDate = null,
+        [Description(
+            "Tickers whose filings are excluded from the results — one value or a comma-separated list (e.g. 'AAPL,MSFT'). Use when a company's own filings would dominate the results for a query about its market."
+        )]
+            string excludeTickers = null,
+        [Description(
+            "Maximum results from any single company (default: 0 = unlimited). Set a small value (e.g. 2) to spread results across more companies for discovery-style queries."
+        )]
+            int maxResultsPerCompany = 0
     )
     {
         return _runner.Execute(
             async () =>
             {
                 maxResults = McpLimit.Clamp(maxResults);
-                var parsedType = ParseDocumentType(documentType);
                 var chunks = await _ragManager.SearchRelevantChunks(
                     query,
                     maxResults,
-                    parsedType,
+                    ParseDocumentTypes(documentType),
                     ToDateOnly(startDate),
-                    ToDateOnly(endDate)
+                    ToDateOnly(endDate),
+                    ParseTickers(excludeTickers),
+                    Math.Max(maxResultsPerCompany, 0)
                 );
                 return await _ragManager.BuildContext(chunks);
             },
@@ -74,7 +86,7 @@ public class RagSearchTools
         [Description("Natural language search query")] string query,
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
         [Description("Maximum number of results to return (default: 5)")] int maxResults = 5,
-        [Description(DocumentTypeDescription)] string documentType = null,
+        [Description(DocumentTypesDescription)] string documentType = null,
         [Description("Optional start date filter in YYYY-MM-DD format")] DateTime? startDate = null,
         [Description("Optional end date filter in YYYY-MM-DD format")] DateTime? endDate = null
     )
@@ -83,12 +95,11 @@ public class RagSearchTools
             async () =>
             {
                 maxResults = McpLimit.Clamp(maxResults);
-                var parsedType = ParseDocumentType(documentType);
                 var chunks = await _ragManager.SearchRelevantChunksByCompany(
                     query,
                     ticker,
                     maxResults,
-                    parsedType,
+                    ParseDocumentTypes(documentType),
                     ToDateOnly(startDate),
                     ToDateOnly(endDate)
                 );
@@ -190,6 +201,37 @@ public class RagSearchTools
             return null;
 
         return DocumentType.FromDisplayName(documentType) ?? DocumentType.FromValue(documentType);
+    }
+
+    // The comma-separated variant for the search tools. Unrecognized entries are
+    // skipped rather than erroring, matching the single-type parameter's established
+    // lenient behavior (an unknown value has always meant "no type filter"); null when
+    // nothing usable remains.
+    private static IReadOnlyCollection<DocumentType> ParseDocumentTypes(string documentTypes)
+    {
+        if (string.IsNullOrWhiteSpace(documentTypes))
+            return null;
+
+        var parsed = documentTypes
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(ParseDocumentType)
+            .Where(type => type != null)
+            .Distinct()
+            .ToList();
+        return parsed.Count > 0 ? parsed : null;
+    }
+
+    // Comma-separated tickers for the exclusion filter; null when nothing usable.
+    private static IReadOnlyCollection<string> ParseTickers(string tickers)
+    {
+        if (string.IsNullOrWhiteSpace(tickers))
+            return null;
+
+        var parsed = tickers
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return parsed.Count > 0 ? parsed : null;
     }
 
     private static DateOnly? ToDateOnly(DateTime? value) =>

@@ -8,15 +8,17 @@ public interface IRagManager
     public Task<List<Chunk>> SearchRelevantChunks(
         string query,
         int maxResults = 5,
-        DocumentType documentType = null,
+        IReadOnlyCollection<DocumentType> documentTypes = null,
         DateOnly? startDate = null,
-        DateOnly? endDate = null
+        DateOnly? endDate = null,
+        IReadOnlyCollection<string> excludeTickers = null,
+        int maxResultsPerCompany = 0
     );
     public Task<List<Chunk>> SearchRelevantChunksByCompany(
         string query,
         string ticker,
         int maxResults = 5,
-        DocumentType documentType = null,
+        IReadOnlyCollection<DocumentType> documentTypes = null,
         DateOnly? startDate = null,
         DateOnly? endDate = null
     );
