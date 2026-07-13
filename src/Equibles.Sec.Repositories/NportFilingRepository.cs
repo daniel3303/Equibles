@@ -47,6 +47,24 @@ public class NportFilingRepository : BaseRepository<NportFiling>
     }
 
     /// <summary>
+    /// The reported holding rows carrying the stock's current CUSIP or any of its retired-CUSIP
+    /// aliases (<see cref="CommonStockCusipAlias"/>), across all NPORT filings. After an issuer-level
+    /// CUSIP change a fund keeps reporting the position under the old CUSIP — a laggard filer for a
+    /// quarter or two, and every historical report forever — so the reverse lookup must match the
+    /// alias too, mirroring the 13F import-time alias union, or the fund reads as having exited.
+    /// </summary>
+    public IQueryable<NportHolding> GetHoldingsByStockCusip(CommonStock stock)
+    {
+        var cusips = DbContext
+            .Set<CommonStockCusipAlias>()
+            .Where(a => a.CommonStockId == stock.Id)
+            .Select(a => a.Cusip);
+        return DbContext
+            .Set<NportHolding>()
+            .Where(h => h.Cusip == stock.Cusip || cusips.Contains(h.Cusip));
+    }
+
+    /// <summary>
     /// Filings of a sweep-discovered series, identified by registrant CIK and series id (an id-less
     /// registrant collapses to its single fund). Lets the sweep tell whether it has stored this
     /// series before, so a later report holding none of our tracked stocks is still recorded as the

@@ -105,7 +105,7 @@ public class NportTools
                     return $"No CUSIP is on record for {ticker}, so its fund ownership cannot be resolved from Form NPORT-P reports.";
 
                 var currentPositions = _nportRepository
-                    .GetHoldingsByCusip(stock.Cusip)
+                    .GetHoldingsByStockCusip(stock)
                     .Join(
                         _nportRepository.GetLatestPerSeries(DateOnly.MinValue),
                         h => h.NportFilingId,
