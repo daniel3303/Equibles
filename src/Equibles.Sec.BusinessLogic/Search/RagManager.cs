@@ -31,15 +31,19 @@ public class RagManager : IRagManager
     public async Task<List<Chunk>> SearchRelevantChunks(
         string query,
         int maxResults = 5,
-        DocumentType documentType = null,
+        IReadOnlyCollection<DocumentType> documentTypes = null,
         DateOnly? startDate = null,
-        DateOnly? endDate = null
+        DateOnly? endDate = null,
+        IReadOnlyCollection<string> excludeTickers = null,
+        int maxResultsPerCompany = 0
     )
     {
         var chunks = await _hybridChunkSearcher.Search(
             query,
             maxResults,
-            documentType: documentType,
+            excludeTickers: excludeTickers,
+            documentTypes: documentTypes,
+            maxResultsPerCompany: maxResultsPerCompany,
             startDate: startDate,
             endDate: endDate
         );
@@ -52,7 +56,7 @@ public class RagManager : IRagManager
         string query,
         string ticker,
         int maxResults = 5,
-        DocumentType documentType = null,
+        IReadOnlyCollection<DocumentType> documentTypes = null,
         DateOnly? startDate = null,
         DateOnly? endDate = null
     )
@@ -62,7 +66,7 @@ public class RagManager : IRagManager
             query,
             maxResults,
             ticker,
-            documentType: documentType,
+            documentTypes: documentTypes,
             startDate: startDate,
             endDate: endDate
         );
@@ -97,7 +101,7 @@ public class RagManager : IRagManager
         int maxResults = 5
     )
     {
-        return await SearchRelevantChunks(query, maxResults, documentType);
+        return await SearchRelevantChunks(query, maxResults, [documentType]);
     }
 
     public Task<string> BuildContext(List<Chunk> chunks)

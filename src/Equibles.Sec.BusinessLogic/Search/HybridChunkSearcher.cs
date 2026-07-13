@@ -44,40 +44,53 @@ public class HybridChunkSearcher
         _logger = logger;
     }
 
+    // How much deeper the BM25 pool goes when a per-company cap is active: the cap
+    // discards a dominant filer's surplus hits, so the pool must hold enough distinct
+    // companies to refill the requested result count.
+    private const int PerCompanyOverFetchFactor = 5;
+
     public async Task<List<Chunk>> Search(
         string query,
         int maxResults,
         string ticker = null,
+        IReadOnlyCollection<string> excludeTickers = null,
         Guid? documentId = null,
-        DocumentType documentType = null,
+        IReadOnlyCollection<DocumentType> documentTypes = null,
+        int maxResultsPerCompany = 0,
         DateOnly? startDate = null,
         DateOnly? endDate = null,
         CancellationToken cancellationToken = default
     )
     {
         // When the semantic arm is live, BM25 returns a deeper pool so RRF has more to reorder;
-        // otherwise it returns exactly what the caller asked for.
+        // otherwise it returns exactly what the caller asked for. A per-company cap also deepens
+        // the pool: capping discards surplus hits, and the pool must still fill maxResults.
         var semanticActive =
             _options.Enabled
             && _options.VectorSource != VectorSource.Off
             && _embeddingClient.IsEnabled;
-        var bm25Limit = semanticActive
-            ? Math.Max(maxResults, _options.CandidatePoolSize)
-            : maxResults;
+        var bm25Limit = maxResults;
+        if (semanticActive)
+            bm25Limit = Math.Max(bm25Limit, _options.CandidatePoolSize);
+        if (maxResultsPerCompany > 0)
+            bm25Limit = Math.Max(bm25Limit, maxResults * PerCompanyOverFetchFactor);
 
         var bm25 = await _chunkRepository.HybridSearch(
             query,
             bm25Limit,
             ticker,
+            excludeTickers,
             documentId,
-            documentType,
+            documentTypes,
             startDate,
             endDate,
             cancellationToken
         );
 
         if (!semanticActive || bm25.Count == 0)
-            return bm25.Take(maxResults).ToList();
+            return ApplyPoolControls(bm25, excludeTickers, documentTypes, maxResultsPerCompany)
+                .Take(maxResults)
+                .ToList();
 
         // Bound the whole semantic arm: the global search aggregator abandons a slow provider but
         // doesn't cancel it, and the embedding server is shared with the backfill — so cap the
@@ -85,26 +98,76 @@ public class HybridChunkSearcher
         using var semanticCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         semanticCts.CancelAfter(TimeSpan.FromSeconds(_options.SemanticTimeoutSeconds));
 
+        // The corpus-wide vector arm scopes by a single document type; with several
+        // requested it runs unscoped and the type filter is enforced post-fusion below.
         var vectorIds = await RankSemantically(
             query,
             bm25,
             ticker,
             documentId,
-            documentType,
+            documentTypes is { Count: 1 } ? documentTypes.First() : null,
             startDate,
             endDate,
             semanticCts.Token
         );
         if (vectorIds.Count == 0)
-            return bm25.Take(maxResults).ToList();
+            return ApplyPoolControls(bm25, excludeTickers, documentTypes, maxResultsPerCompany)
+                .Take(maxResults)
+                .ToList();
 
         var bm25Ids = bm25.Select(chunk => chunk.Id).ToList();
-        var fusedIds = RrfFusion
-            .Fuse([bm25Ids, vectorIds], _options.RrfK)
+        // Fuse the full pool (not just maxResults): the pool controls below discard
+        // hits, so the fused list must stay deep enough to refill the result count.
+        var fusedIds = RrfFusion.Fuse([bm25Ids, vectorIds], _options.RrfK).ToList();
+
+        var fused = await MaterializeInOrder(fusedIds, bm25, cancellationToken);
+        return ApplyPoolControls(fused, excludeTickers, documentTypes, maxResultsPerCompany)
             .Take(maxResults)
             .ToList();
+    }
 
-        return await MaterializeInOrder(fusedIds, bm25, cancellationToken);
+    // The pool controls, re-applied AFTER fusion: the BM25 arm already resolves
+    // exclusions and type filters inside the index, but the corpus vector arm knows
+    // neither, so a fused list can reintroduce an excluded ticker or an unrequested
+    // type. The per-company cap keeps each filer's best-ranked chunks in relevance
+    // order — one chatty filer must not fill the whole result set. Chunks without a
+    // ticker pass the cap untouched (they cannot flood by company).
+    //
+    // SINGLE-ENUMERATION ONLY: the cap closes over a mutable per-ticker counter, so a
+    // second enumeration of the same returned value would see spent counters and drop
+    // everything. Every caller consumes it exactly once via .Take(...).ToList().
+    private static IEnumerable<Chunk> ApplyPoolControls(
+        IEnumerable<Chunk> chunks,
+        IReadOnlyCollection<string> excludeTickers,
+        IReadOnlyCollection<DocumentType> documentTypes,
+        int maxResultsPerCompany
+    )
+    {
+        if (excludeTickers is { Count: > 0 })
+        {
+            var excluded = new HashSet<string>(excludeTickers, StringComparer.OrdinalIgnoreCase);
+            chunks = chunks.Where(chunk =>
+                chunk.Ticker == null || !excluded.Contains(chunk.Ticker)
+            );
+        }
+
+        if (documentTypes is { Count: > 1 })
+            chunks = chunks.Where(chunk => documentTypes.Contains(chunk.DocumentType));
+
+        if (maxResultsPerCompany <= 0)
+            return chunks;
+
+        var perTicker = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        return chunks.Where(chunk =>
+        {
+            if (chunk.Ticker == null)
+                return true;
+            var count = perTicker.GetValueOrDefault(chunk.Ticker);
+            if (count >= maxResultsPerCompany)
+                return false;
+            perTicker[chunk.Ticker] = count + 1;
+            return true;
+        });
     }
 
     // Produces a semantic ranking of chunk ids, swallowing any embedding-server failure into an
