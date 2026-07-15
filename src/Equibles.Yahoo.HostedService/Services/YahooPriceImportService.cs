@@ -49,21 +49,33 @@ public class YahooPriceImportService
         _workerOptions = workerOptions.Value;
     }
 
-    public async Task Import(CancellationToken cancellationToken)
+    public Task Import(CancellationToken cancellationToken) =>
+        Import(includeEnrichment: true, cancellationToken);
+
+    /// <summary>
+    /// One price-sync cycle over the tracked universe. With <paramref name="includeEnrichment"/>
+    /// false only the incremental chart fetch runs per stock (1 Yahoo call, and none at all for a
+    /// stock that is already current — see the settled-trading-day gate in ImportTicker), so the
+    /// worker can run frequent cheap price cycles and reserve the key-statistics + company-profile
+    /// calls (2 extra Yahoo calls per stock, the bulk of a cycle's traffic) for a slower cadence.
+    /// </summary>
+    public async Task Import(bool includeEnrichment, CancellationToken cancellationToken)
     {
         var tickerMap = await _tickerMapService.Build(
             _workerOptions.TickersToSync,
             cancellationToken
         );
-        _logger.LogInformation("Starting Yahoo price sync for {Count} stocks", tickerMap.Count);
-
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        _logger.LogInformation(
+            "Starting Yahoo price sync for {Count} stocks (enrichment: {Enrichment})",
+            tickerMap.Count,
+            includeEnrichment ? "on" : "off"
+        );
 
         // Before the forward-only incremental append: reconcile any stock whose stored history is
         // on a pre-split basis. GetSyncStartDate only appends, so a split that landed after the
         // last sync leaves the old rows on the wrong basis (a discontinuity in the series). Re-pull
         // those stocks' full, fully-adjusted history and overwrite the stored rows (#2879).
-        await ReconcilePendingSplits(today, cancellationToken);
+        await ReconcilePendingSplits(DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
 
         var totalInserted = 0;
 
@@ -78,12 +90,21 @@ public class YahooPriceImportService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            // Resolved per ticker, not once per cycle: a multi-hour crawl straddles the UTC
+            // midnight rollover, and a cycle-start snapshot would keep excluding the just-settled
+            // bar for every stock processed after midnight — a cycle starting 23:50 UTC used to
+            // ship a whole day late for the entire universe.
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
             try
             {
                 var inserted = await ImportTicker(ticker, commonStockId, today, cancellationToken);
                 totalInserted += inserted;
-                await SyncKeyStatistics(ticker, commonStockId, cancellationToken);
-                await SyncCompanyProfile(ticker, commonStockId, cancellationToken);
+                if (includeEnrichment)
+                {
+                    await SyncKeyStatistics(ticker, commonStockId, cancellationToken);
+                    await SyncCompanyProfile(ticker, commonStockId, cancellationToken);
+                }
             }
             catch (HttpRequestException ex)
             {
@@ -397,9 +418,26 @@ public class YahooPriceImportService
     // wrong twice over — the "Close" is really an intraday snapshot, and the importer is insert-only
     // (a date already present is never updated, see PersistPrices), so that partial bar freezes and
     // the real close never overwrites it. Only store bars strictly before the current UTC date; the
-    // day's settled bar is appended on the next cycle once the date has rolled over (always after a
-    // US market close), so the daily series holds settled closes only.
+    // day's settled bar is appended by the first pass over the stock after the date has rolled over
+    // (always after a US market close), so the daily series holds settled closes only.
     private static bool IsSettledDailyBar(DateOnly barDate, DateOnly today) => barDate < today;
+
+    // A chart fetch can only yield new rows when at least one NYSE trading day lies in
+    // [startDate, today) — the dates that are both unsynced and already settled. Gating the fetch
+    // on that keeps frequent price cycles cheap: a stock that is already current costs zero Yahoo
+    // calls until the next settled session exists, and weekend/holiday cycles are no-ops for the
+    // whole universe instead of ~8k fruitless chart calls each. An empty window (startDate >=
+    // today) is covered by the same rule. Full-day non-NYSE closures aren't modeled, so at worst a
+    // stock is fetched and yields nothing — never skipped when a settled bar could exist.
+    private static bool HasSettledTradingDay(DateOnly startDate, DateOnly today)
+    {
+        for (var date = startDate; date < today; date = date.AddDays(1))
+        {
+            if (UsMarketCalendar.IsTradingDay(date))
+                return true;
+        }
+        return false;
+    }
 
     private async Task<int> ImportTicker(
         string ticker,
@@ -409,7 +447,7 @@ public class YahooPriceImportService
     )
     {
         var startDate = await GetSyncStartDate(commonStockId, cancellationToken);
-        if (startDate >= today)
+        if (!HasSettledTradingDay(startDate, today))
             return 0;
 
         // One chart fetch yields the price bars plus any split and dividend
