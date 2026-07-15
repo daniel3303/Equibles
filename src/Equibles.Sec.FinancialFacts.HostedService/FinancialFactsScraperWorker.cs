@@ -3,6 +3,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Sec.FinancialFacts.HostedService.Configuration;
 using Equibles.Sec.FinancialFacts.HostedService.Services;
+using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Worker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -18,6 +19,7 @@ namespace Equibles.Sec.FinancialFacts.HostedService;
 public class FinancialFactsScraperWorker : BaseScraperWorker
 {
     private readonly IConfiguration _configuration;
+    private readonly TimeSpan _recheckInterval;
 
     protected override string WorkerName => "Financial facts scraper";
     protected override TimeSpan SleepInterval { get; }
@@ -37,6 +39,7 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
         : base(logger, scopeFactory, errorReporter)
     {
         SleepInterval = TimeSpan.FromHours(options.Value.SleepIntervalHours);
+        _recheckInterval = TimeSpan.FromHours(options.Value.RecheckIntervalHours);
         _configuration = configuration;
     }
 
@@ -49,19 +52,26 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
 
     protected override async Task DoWork(CancellationToken stoppingToken)
     {
-        List<Guid> stockIds;
+        List<Guid> allStockIds;
+        Dictionary<Guid, DateTime> lastCheckedByStock;
         using (var scope = ScopeFactory.CreateScope())
         {
             var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-            stockIds = await stockRepo
+            allStockIds = await stockRepo
                 .GetAll()
                 .Where(s => s.Cik != null && s.Cik != "")
-                .OrderBy(s => s.Id)
                 .Select(s => s.Id)
                 .ToListAsync(stoppingToken);
+
+            var syncStatusRepo =
+                scope.ServiceProvider.GetRequiredService<FinancialFactsSyncStatusRepository>();
+            lastCheckedByStock = await syncStatusRepo
+                .GetAll()
+                .AsNoTracking()
+                .ToDictionaryAsync(s => s.CommonStockId, s => s.LastCheckedAt, stoppingToken);
         }
 
-        if (stockIds.Count == 0)
+        if (allStockIds.Count == 0)
         {
             Logger.LogInformation(
                 "Financial facts scraper: no companies with a CIK yet (company sync pending) — will retry soon"
@@ -69,6 +79,25 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
             RequestRetrySoon();
             return;
         }
+
+        // Every visit downloads the company's full Company Facts JSON (the
+        // LastFiledDateSeen checkpoint can only say "nothing new" after the
+        // download), and the sweep restarts from scratch on every host restart.
+        // Skipping companies checked within the recheck window makes a restart
+        // resume where the aborted sweep left off — never-checked first, then
+        // stalest first — instead of re-downloading the whole universe.
+        var stockIds = SelectDueStocks(
+            allStockIds,
+            lastCheckedByStock,
+            DateTime.UtcNow - _recheckInterval
+        );
+
+        Logger.LogInformation(
+            "Financial facts scraper: {Due} of {Total} companies due (rest checked within {Window})",
+            stockIds.Count,
+            allStockIds.Count,
+            _recheckInterval
+        );
 
         foreach (var stockId in stockIds)
         {
@@ -85,4 +114,26 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
             await importService.Import(stock, stoppingToken);
         }
     }
+
+    /// <summary>
+    /// Companies due for a facts check: never checked (no sync-status row) or
+    /// checked before the cutoff. Never-checked first, then stalest first, so
+    /// an interrupted sweep resumes as an ordered rolling walk (mirrors
+    /// <c>DocumentScraper.SelectDueCompanies</c>).
+    /// </summary>
+    internal static List<Guid> SelectDueStocks(
+        List<Guid> stockIds,
+        Dictionary<Guid, DateTime> lastCheckedByStock,
+        DateTime cutoff
+    ) =>
+        stockIds
+            .Where(id =>
+                !lastCheckedByStock.TryGetValue(id, out var lastChecked) || lastChecked < cutoff
+            )
+            .OrderBy(id =>
+                lastCheckedByStock.TryGetValue(id, out var lastChecked)
+                    ? lastChecked
+                    : DateTime.MinValue
+            )
+            .ToList();
 }
