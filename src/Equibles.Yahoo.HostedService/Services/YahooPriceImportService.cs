@@ -616,12 +616,14 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
-        var stats = await _yahooClient.GetKeyStatistics(ticker);
-        if (stats == null)
-            return;
-        // Nothing to write if Yahoo returned both fields as zero (missing/unknown).
-        if (stats.SharesOutstanding == 0 && stats.MarketCapitalization == 0)
-            return;
+        // Yahoo has NOTHING for some listings (closed-end funds like PSUS, fresh IPOs): no stats
+        // modules at all, or every field zero. That used to end the sync, leaving the stored pair
+        // at 0/0 forever — even when EDGAR carries an authoritative cover-page count and this same
+        // cycle just stored a close to price it. Substitute an empty stats object and fall
+        // through: the EDGAR share count still lands, the market cap falls back to shares × the
+        // latest stored close (the #5238 branch), and a ticker with no EDGAR anchor either writes
+        // nothing, exactly as before (every write below is conditional).
+        var stats = await _yahooClient.GetKeyStatistics(ticker) ?? new KeyStatistics();
 
         using var scope = _scopeFactory.CreateScope();
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
