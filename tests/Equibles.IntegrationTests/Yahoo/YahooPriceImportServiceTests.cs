@@ -805,6 +805,103 @@ public class YahooPriceImportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Import_YahooHasNoKeyStatistics_FallsBackToEdgarSharesTimesLatestClose()
+    {
+        // A listing Yahoo carries prices for but no statistics at all (closed-end funds like
+        // PSUS, fresh IPOs): the sync used to end on the null stats, leaving 0/0 forever even
+        // though EDGAR has the cover-page count and the same cycle stored a close to price it.
+        var stock = CreateStock("CEF", "ClosedEnd Fund Co.");
+        await SeedStocks(stock);
+        await SeedPrices(CreatePrice(stock, new DateOnly(2024, 1, 2), close: 40m));
+
+        _sharesProvider.GetCurrentSharesOutstanding(stock).Returns(50_000_000L);
+        _sharesProvider.IsForeignPrivateIssuer(stock).Returns(false);
+
+        _yahooClient
+            .GetChart("CEF", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+        _yahooClient.GetKeyStatistics("CEF").Returns((KeyStatistics)null);
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "CEF");
+        updated.SharesOutStanding.Should().Be(50_000_000);
+        updated.MarketCapitalization.Should().Be(50_000_000d * 40d);
+    }
+
+    [Fact]
+    public async Task Import_YahooKeyStatisticsAllZero_FallsBackToEdgarSharesTimesLatestClose()
+    {
+        // Same fallback when the stats modules exist but every field is zero.
+        var stock = CreateStock("ZRO", "AllZero Stats Co.");
+        await SeedStocks(stock);
+        await SeedPrices(CreatePrice(stock, new DateOnly(2024, 1, 2), close: 25m));
+
+        _sharesProvider.GetCurrentSharesOutstanding(stock).Returns(8_000_000L);
+        _sharesProvider.IsForeignPrivateIssuer(stock).Returns(false);
+
+        _yahooClient
+            .GetChart("ZRO", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+        _yahooClient.GetKeyStatistics("ZRO").Returns(new KeyStatistics());
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "ZRO");
+        updated.SharesOutStanding.Should().Be(8_000_000);
+        updated.MarketCapitalization.Should().Be(8_000_000d * 25d);
+    }
+
+    [Fact]
+    public async Task Import_YahooHasNoKeyStatisticsAndNoEdgarAnchor_WritesNothing()
+    {
+        // No Yahoo stats AND no EDGAR cover-page count: exactly the old behavior — nothing to
+        // write, the stored pair stays untouched.
+        var stock = CreateStock("NON", "NoAnchor Co.");
+        await SeedStocks(stock);
+        await SeedPrices(CreatePrice(stock, new DateOnly(2024, 1, 2), close: 10m));
+
+        _sharesProvider.GetCurrentSharesOutstanding(stock).Returns((long?)null);
+        _sharesProvider.IsForeignPrivateIssuer(stock).Returns(false);
+
+        _yahooClient
+            .GetChart("NON", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+        _yahooClient.GetKeyStatistics("NON").Returns((KeyStatistics)null);
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "NON");
+        updated.SharesOutStanding.Should().Be(0);
+        updated.MarketCapitalization.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Import_YahooHasNoKeyStatistics_ForeignPrivateIssuerWritesNothing()
+    {
+        // An FPI's EDGAR count is in ordinary shares — a different unit from the US-listed ADR
+        // the stored close prices — so with no Yahoo figures the fallback must not run at all
+        // (shares × ADR close would inflate the cap by the ADS ratio).
+        var stock = CreateStock("FPI", "Foreign Private Issuer Co.");
+        await SeedStocks(stock);
+        await SeedPrices(CreatePrice(stock, new DateOnly(2024, 1, 2), close: 12m));
+
+        _sharesProvider.GetCurrentSharesOutstanding(stock).Returns(2_000_000_000L);
+        _sharesProvider.IsForeignPrivateIssuer(stock).Returns(true);
+
+        _yahooClient
+            .GetChart("FPI", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+        _yahooClient.GetKeyStatistics("FPI").Returns((KeyStatistics)null);
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "FPI");
+        updated.SharesOutStanding.Should().Be(0);
+        updated.MarketCapitalization.Should().Be(0);
+    }
+
+    [Fact]
     public async Task Import_DomesticIssuer_ReconcilesMarketCapOntoEdgarShareBase()
     {
         // A domestic multi-class issuer keeps the reconciliation: EDGAR's consolidated count (10M)
