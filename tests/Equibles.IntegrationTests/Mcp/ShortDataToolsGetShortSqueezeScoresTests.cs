@@ -248,7 +248,8 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
 
         result.Should().Contain("Short-squeeze score — COLD (Cold Corp)");
         result.Should().Contain("rank 2 of 2 scored stocks");
-        result.Should().Contain("Short interest: 5.0%");
+        // Invariant "P1" renders a space before the percent sign.
+        result.Should().Contain("Short interest: 5.0 % of shares outstanding");
         result.Should().Contain("settlement 2026-04-15");
     }
 
