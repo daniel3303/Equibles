@@ -97,17 +97,38 @@ public class CftcImportService : IImporter
     {
         using var scope = _scopeFactory.CreateScope();
         var contractRepo = scope.ServiceProvider.GetRequiredService<CftcContractRepository>();
-        var existingCodes = await contractRepo
-            .GetAll()
-            .Select(c => c.MarketCode)
-            .ToListAsync(cancellationToken);
+        var existing = await contractRepo.GetAll().ToListAsync(cancellationToken);
 
-        var existingSet = existingCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingByCode = new Dictionary<string, CftcContract>(StringComparer.OrdinalIgnoreCase);
+        foreach (var contract in existing)
+            existingByCode[contract.MarketCode.Trim()] = contract;
 
         foreach (var curated in curatedLookup.Values)
         {
-            if (existingSet.Contains(curated.MarketCode))
+            if (existingByCode.TryGetValue(curated.MarketCode.Trim(), out var contract))
+            {
+                // The registry is the source of truth for what a market code IS. An earlier
+                // registry revision mislabeled several codes (see CuratedContractRegistry),
+                // so drifted rows must be re-synced, not preserved — the position reports
+                // under the code are the CFTC's real data for that market either way.
+                if (
+                    contract.MarketName != curated.DisplayName
+                    || contract.Category != curated.Category
+                )
+                {
+                    _logger.LogInformation(
+                        "Re-syncing CFTC contract {MarketCode}: '{OldName}' ({OldCategory}) -> '{NewName}' ({NewCategory})",
+                        curated.MarketCode,
+                        contract.MarketName,
+                        contract.Category,
+                        curated.DisplayName,
+                        curated.Category
+                    );
+                    contract.MarketName = curated.DisplayName;
+                    contract.Category = curated.Category;
+                }
                 continue;
+            }
 
             contractRepo.Add(
                 new CftcContract
@@ -132,19 +153,31 @@ public class CftcImportService : IImporter
     {
         using var scope = _scopeFactory.CreateScope();
         var reportRepo = scope.ServiceProvider.GetRequiredService<CftcPositionReportRepository>();
-        var latestDate = await reportRepo
-            .GetGlobalLatestDate()
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (latestDate != default)
-            return latestDate.Year;
+        var contractRepo = scope.ServiceProvider.GetRequiredService<CftcContractRepository>();
 
         var minDate =
             _workerOptions.MinSyncDate != null
                 ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
                 : new DateOnly(2020, 1, 1);
+        var fullWalkYear = Math.Max(minDate.Year, EarliestCftcYear);
 
-        return Math.Max(minDate.Year, EarliestCftcYear);
+        var latestDate = await reportRepo
+            .GetGlobalLatestDate()
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (latestDate == default)
+            return fullWalkYear;
+
+        // A contract with no reports at all — i.e. a code newly added to the curated
+        // registry — needs a full-history walk, or it would only ever accumulate data
+        // from the current year's file onward. Re-walking already-imported years is
+        // insert-free thanks to the (contract, date) existence check, and the walk
+        // stops recurring as soon as the new contract's data lands.
+        var hasEmptyContract = await contractRepo
+            .GetAll()
+            .AnyAsync(c => c.LatestReportDate == null, cancellationToken);
+
+        return hasEmptyContract ? fullWalkYear : latestDate.Year;
     }
 
     private async Task ImportYear(

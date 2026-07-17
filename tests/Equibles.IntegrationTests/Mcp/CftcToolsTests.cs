@@ -205,14 +205,18 @@ public class CftcToolsTests : ParadeDbMcpTestBase
     // ── SearchCftcMarkets ────────────────────────────────────────────────
 
     [Fact]
-    public async Task SearchCftcMarkets_NoMatches_ReturnsNotFoundMessage()
+    public async Task SearchCftcMarkets_NoMatches_ExplainsCuratedUniverse()
     {
+        // The DB only holds a curated ~35-contract registry, so "no match" must not read
+        // as "no such market exists" — the message names the curated coverage and the
+        // way to enumerate it, or an LLM reports well-known markets as missing data.
         DbContext.Set<CftcContract>().Add(CrudeOilContract());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().SearchCftcMarkets("PLATINUM");
 
-        result.Should().Be("No contracts found matching 'PLATINUM'.");
+        result.Should().Contain("No tracked contracts match 'PLATINUM'");
+        result.Should().Contain("curated set");
     }
 
     [Fact]
