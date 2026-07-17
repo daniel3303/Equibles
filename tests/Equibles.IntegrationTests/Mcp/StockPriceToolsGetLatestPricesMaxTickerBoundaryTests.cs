@@ -39,6 +39,6 @@ public class StockPriceToolsGetLatestPricesMaxTickerBoundaryTests : ParadeDbMcpT
         var result = await Sut().GetLatestPrices(tickers);
 
         result.Should().NotContain("Maximum 25 tickers per request");
-        result.Should().Contain("| Ticker | Date | Close | Volume |");
+        result.Should().Contain("| Ticker | Date | Close | Change | Change % | Volume |");
     }
 }
