@@ -208,11 +208,32 @@ public class GovernmentContractsImportService : IImporter
     {
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<GovernmentContractRepository>();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        // Future action dates are excluded from the cursor: a single mis-dated row would
+        // otherwise push the resume point past today and freeze the import forever (this
+        // happened in prod when period-of-performance starts were stored as ActionDate).
         var latest = await repository
             .GetAll()
-            .Where(c => c.ActionDate != null)
+            .Where(c => c.ActionDate != null && c.ActionDate <= today)
             .MaxAsync(c => c.ActionDate, cancellationToken);
 
-        return SyncDateResolver.Resolve(latest ?? default, _workerOptions);
+        return ResolveStartDate(latest, today, _workerOptions);
+    }
+
+    /// <summary>
+    /// Resume the day after the newest credible action date, clamped to today so an
+    /// outlier can never push the incremental cursor into the future. Pure so the
+    /// cursor policy is unit-testable.
+    /// </summary>
+    public static DateOnly ResolveStartDate(
+        DateOnly? latestActionDate,
+        DateOnly today,
+        WorkerOptions workerOptions
+    )
+    {
+        if (latestActionDate > today)
+            latestActionDate = today;
+
+        return SyncDateResolver.Resolve(latestActionDate ?? default, workerOptions);
     }
 }

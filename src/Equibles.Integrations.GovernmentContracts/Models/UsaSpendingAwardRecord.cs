@@ -35,6 +35,14 @@ public class UsaSpendingAwardRecord
     [JsonProperty("Contract Award Type")]
     public string ContractAwardType { get; set; }
 
+    /// <summary>
+    /// The date the base award was signed/first obligated — the award's action date.
+    /// Unlike <see cref="StartDate"/> (period-of-performance start, which can sit years
+    /// in the future), this is never a future date.
+    /// </summary>
+    [JsonProperty("Base Obligation Date")]
+    public string BaseObligationDate { get; set; }
+
     [JsonProperty("Start Date")]
     public string StartDate { get; set; }
 

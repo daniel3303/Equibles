@@ -32,7 +32,12 @@ public static class UsaSpendingAwardMapper
             AwardingAgency = Truncate(record.AwardingAgency, 256),
             Amount = record.Amount ?? 0m,
             TotalOutlays = record.TotalOutlays,
-            ActionDate = ParseDate(record.StartDate),
+            // The award action date must come from Base Obligation Date (the date the base
+            // award was signed), never from Start Date: the period-of-performance start can
+            // sit years in the future, and a future ActionDate freezes the incremental
+            // import cursor (max(ActionDate)+1 overshoots today) — this stalled prod
+            // ingestion at Feb 2024.
+            ActionDate = ParseDate(record.BaseObligationDate),
             EndDate = ParseDate(record.EndDate),
             LastModifiedDate = ParseDate(record.LastModifiedDate),
             NaicsCode = LeadingToken(record.Naics, 8),
@@ -56,19 +61,26 @@ public static class UsaSpendingAwardMapper
         };
     }
 
+    // Date fields arrive as bare ISO dates, except Last Modified Date which carries a
+    // timestamp ("2026-07-07 17:57:06") — the date-only strict parse silently nulled it
+    // on every row, so both formats are accepted.
+    private static readonly string[] WireDateFormats = ["yyyy-MM-dd", "yyyy-MM-dd HH:mm:ss"];
+
+    // DateTime rather than DateOnly parsing: DateOnly.TryParseExact rejects any format
+    // that carries a time component, which would re-null the timestamped variant.
     private static DateOnly? ParseDate(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return null;
 
-        return DateOnly.TryParseExact(
+        return DateTime.TryParseExact(
             value.Trim(),
-            "yyyy-MM-dd",
+            WireDateFormats,
             CultureInfo.InvariantCulture,
             DateTimeStyles.None,
             out var date
         )
-            ? date
+            ? DateOnly.FromDateTime(date)
             : null;
     }
 

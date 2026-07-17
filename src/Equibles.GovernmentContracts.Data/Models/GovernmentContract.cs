@@ -53,13 +53,18 @@ public class GovernmentContract
     /// <summary>Total outlays disbursed against the award to date, in US dollars.</summary>
     public decimal? TotalOutlays { get; set; }
 
-    /// <summary>The award action date — the period-of-performance start.</summary>
+    /// <summary>
+    /// The award's action date — USAspending's base obligation date, i.e. the date the base
+    /// award was signed/first obligated. Drives the incremental import cursor, so it must
+    /// never hold a future date (the period-of-performance start, which can sit years in
+    /// the future, once poisoned this column and froze ingestion).
+    /// </summary>
     public DateOnly? ActionDate { get; set; }
 
     /// <summary>The period-of-performance current end date.</summary>
     public DateOnly? EndDate { get; set; }
 
-    /// <summary>USAspending's last-modified date for the award; drives incremental scraping.</summary>
+    /// <summary>USAspending's last-modified date for the award, for cross-reference.</summary>
     public DateOnly? LastModifiedDate { get; set; }
 
     [MaxLength(8)]
