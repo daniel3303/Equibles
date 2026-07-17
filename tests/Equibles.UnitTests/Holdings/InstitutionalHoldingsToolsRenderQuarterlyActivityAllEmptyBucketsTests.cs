@@ -37,7 +37,15 @@ public class InstitutionalHoldingsToolsRenderQuarterlyActivityAllEmptyBucketsTes
         var rendered = (string)
             RenderQuarterlyActivityMethod.Invoke(
                 null,
-                [holder, new DateOnly(2024, 9, 30), new DateOnly(2024, 6, 30), grouped, "", 20]
+                [
+                    holder,
+                    new DateOnly(2024, 9, 30),
+                    new DateOnly(2024, 6, 30),
+                    grouped,
+                    "",
+                    20,
+                    null,
+                ]
             );
 
         rendered.Should().Contain("_No matching buckets._");

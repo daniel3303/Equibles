@@ -37,7 +37,7 @@ public class InstitutionalHoldingsToolsRenderInstitutionSummaryCultureInvariance
             QoQTurnoverPercent = 9.87,
             QuartersReported = 8,
         };
-        object[] args = [holder, targetDate, (DateOnly?)new DateOnly(2024, 9, 30), summary];
+        object[] args = [holder, targetDate, (DateOnly?)new DateOnly(2024, 9, 30), summary, null];
 
         var original = CultureInfo.CurrentCulture;
         string invariantOutput;

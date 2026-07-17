@@ -61,7 +61,7 @@ public class InstitutionalHoldingsToolsRenderOverlapTableZeroSharesTests
         };
 
         var rendered = (string)
-            RenderOverlapTableMethod.Invoke(null, [holder1, holder2, selected, overlap, 20]);
+            RenderOverlapTableMethod.Invoke(null, [holder1, holder2, selected, overlap, 20, null]);
 
         // The A Shares + A % pair renders as two consecutive pipe-anchored "—"
         // cells when fund A holds no position in the stock. Culture-sensitive

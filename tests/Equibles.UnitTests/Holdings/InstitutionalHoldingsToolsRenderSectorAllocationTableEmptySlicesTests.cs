@@ -28,7 +28,7 @@ public class InstitutionalHoldingsToolsRenderSectorAllocationTableEmptySlicesTes
         var rendered = (string)
             RenderSectorAllocationTableMethod.Invoke(
                 null,
-                [holder, new DateOnly(2024, 9, 30), slices]
+                [holder, new DateOnly(2024, 9, 30), slices, "Industry", null]
             );
 
         rendered.Should().Contain("_No holdings reported for the selected quarter._");

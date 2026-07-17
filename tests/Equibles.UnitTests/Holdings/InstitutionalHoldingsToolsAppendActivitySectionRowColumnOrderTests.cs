@@ -38,7 +38,8 @@ public class InstitutionalHoldingsToolsAppendActivitySectionRowColumnOrderTests
             },
         };
 
-        var returned = (bool)AppendActivitySectionMethod.Invoke(null, [result, "Initiated", rows]);
+        var returned = (bool)
+            AppendActivitySectionMethod.Invoke(null, [result, "Initiated", rows, rows.Count]);
 
         returned.Should().BeTrue();
         result.ToString().Should().Contain("| 1 | TICK | NAME |");

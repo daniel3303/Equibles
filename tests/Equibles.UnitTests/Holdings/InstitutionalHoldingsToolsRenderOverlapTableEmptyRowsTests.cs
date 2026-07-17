@@ -35,7 +35,7 @@ public class InstitutionalHoldingsToolsRenderOverlapTableEmptyRowsTests
         };
 
         var rendered = (string)
-            method.Invoke(null, [holder1, holder2, new DateOnly(2024, 9, 30), overlap, 20]);
+            method.Invoke(null, [holder1, holder2, new DateOnly(2024, 9, 30), overlap, 20, null]);
 
         rendered.Should().Contain("Neither fund reports any positions for this date.");
     }

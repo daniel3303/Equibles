@@ -13,13 +13,12 @@ namespace Equibles.IntegrationTests.Mcp;
 
 /// <summary>
 /// Sibling pin to <see cref="InstitutionalHoldingsToolsResolveMarketActivityDatesNoPriorQuarterTests"/>.
-/// Covers the OTHER error arm of <c>ResolveMarketActivityDates</c>: when the
-/// user supplies a parseable <c>reportDate</c> that isn't in the available
-/// dates, the helper must return an error that NAMES the missing date and
-/// LISTS the available alternatives — never silently fall back to the latest
-/// (which would dump someone else's quarter under the user's requested date
-/// header) or index-out-of-range. A regression removing the
-/// <c>targetIndex &lt; 0</c> guard fails here.
+/// Covers the off-list arms of <c>ResolveMarketActivityDates</c>: a parseable
+/// <c>reportDate</c> that isn't an available 13F quarter end snaps to the nearest
+/// report ON OR BEFORE it and the substitution is stated in the output (standard
+/// as-of semantics — never a silent fallback); a date OLDER than the tracked
+/// history has nothing to snap to and returns an error listing the available
+/// dates; an unparseable date returns a format correction.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class InstitutionalHoldingsToolsResolveMarketActivityDatesNotFoundTests : ParadeDbMcpTestBase
@@ -61,11 +60,22 @@ public class InstitutionalHoldingsToolsResolveMarketActivityDatesNotFoundTests :
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
-        var output = await sut.GetMostHeldStocks(reportDate: "2099-12-31");
+        // A future off-list date snaps to the nearest report on or before it — the latest
+        // quarter — with an explicit substitution note.
+        var snapped = await sut.GetMostHeldStocks(reportDate: "2099-12-31");
+        snapped.Should().Contain("Most-held 13F stocks as of 2024-12-31");
+        snapped.Should().Contain("2099-12-31 is not a 13F report date");
 
-        output.Should().Contain("Report date 2099-12-31 not found");
-        output.Should().Contain("Available dates:");
-        output.Should().Contain("2024-12-31");
+        // A date older than the tracked history has nothing on or before it → an error that
+        // lists the available dates instead of silently serving another quarter.
+        var tooOld = await sut.GetMostHeldStocks(reportDate: "2001-03-31");
+        tooOld.Should().Contain("No 13F report on or before 2001-03-31");
+        tooOld.Should().Contain("2024-12-31");
+
+        // An unparseable date returns a format correction, never the latest quarter.
+        var unparseable = await sut.GetMostHeldStocks(reportDate: "Q4 2024");
+        unparseable.Should().Contain("Could not parse reportDate 'Q4 2024'");
+        unparseable.Should().NotContain("Most-held 13F stocks");
     }
 
     private static InstitutionalHolding MakeHolding(

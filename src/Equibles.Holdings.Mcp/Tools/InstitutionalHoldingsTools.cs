@@ -44,7 +44,13 @@ public class InstitutionalHoldingsTools
         "exited",
     ];
 
-    private static readonly string[] ValidMostHeldSorts = ["filers", "filersdelta", "value"];
+    private static readonly string[] ValidMostHeldSorts =
+    [
+        "filers",
+        "filersdelta",
+        "filersdeltaasc",
+        "value",
+    ];
 
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly InstitutionalHolderRepository _holderRepository;
@@ -73,13 +79,16 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "GetTopHolders")]
     [Description(
-        "Get the top institutional holders (fund managers) of a stock from SEC 13F-HR filings. Returns a ranked list of institutions by shares held, including market value and percentage of total institutional ownership. Data is sourced from quarterly 13F filings that large investment managers are required to file with the SEC. Use this to understand who the major institutional investors in a company are."
+        "Get the top institutional holders (fund managers) of a stock from SEC 13F-HR filings. Returns a ranked list of institutions by shares held, including market value and percentage of total institutional 13F shares (not of shares outstanding). Data is sourced from quarterly 13F filings that large investment managers are required to file with the SEC; while the newest quarter's filing window is open, funds that have not filed yet are carried at their prior-quarter positions (noted in the output). Use this to understand who the major institutional investors in a company are."
     )]
     public Task<string> GetTopHolders(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
-        [Description("Report date in YYYY-MM-DD format (defaults to latest available)")]
+        [Description(
+            "Quarter-end 13F report date in YYYY-MM-DD format, e.g. 2026-03-31 (defaults to the latest available; an off-quarter date snaps to the nearest report on or before it)"
+        )]
             string reportDate = null,
-        [Description("Maximum number of holders to return (default: 20)")] int maxResults = 20
+        [Description("Maximum number of holders to return (default: 20, clamped to 1-500)")]
+            int maxResults = 20
     )
     {
         return _runner.Execute(
@@ -89,12 +98,18 @@ public class InstitutionalHoldingsTools
                 if (stockError != null)
                     return stockError;
 
-                var (targetDate, found) = await TryResolveLatestReportDate(
-                    reportDate,
-                    _holdingRepository.Get13FReportDatesByStock(stock)
-                );
-                if (!found)
+                var reportDates = await _holdingRepository
+                    .Get13FReportDatesByStock(stock)
+                    .ToListAsync();
+                if (reportDates.Count == 0)
                     return $"No institutional holdings data available for {ticker}.";
+
+                var (targetDate, dateNote, dateError) = ResolveReportDateStrict(
+                    reportDate,
+                    reportDates
+                );
+                if (dateError != null)
+                    return dateError;
 
                 // While the newest quarter's filing window is open it only holds the early
                 // filers, so it is presented as the combined view (carry-forward for funds
@@ -141,12 +156,24 @@ public class InstitutionalHoldingsTools
                     totalValueAll,
                     holdings,
                     shareFactor,
-                    presentCombined ? CombinedViewNote(targetDate, anchor) : null
+                    JoinNotes(
+                        dateNote,
+                        presentCombined ? CombinedViewNote(targetDate, anchor) : null
+                    )
                 );
             },
             "GetTopHolders",
             $"ticker: {ticker}"
         );
+    }
+
+    // Joins the optional per-call annotation lines (report-date substitution, combined view,
+    // name-match diagnostics) into one block, dropping the nulls, so render sites can pass a
+    // single nullable note.
+    private static string JoinNotes(params string[] notes)
+    {
+        var present = notes.Where(n => !string.IsNullOrEmpty(n)).ToList();
+        return present.Count == 0 ? null : string.Join("\n", present);
     }
 
     // The one wording every combined-view tool output carries, so agents and users always see
@@ -178,7 +205,7 @@ public class InstitutionalHoldingsTools
         var result = MarkdownTable.Start(
             $"Top institutional holders of {stock.Name} ({ticker}) as of {FormatDate(targetDate)}:",
             subtitle,
-            "| # | Institution | Shares | Value ($M) | % of Total |",
+            "| # | Institution | Shares | Value ($M) | % of Inst. Total |",
             "|---|------------|--------|-----------|-----------|"
         );
 
@@ -197,16 +224,23 @@ public class InstitutionalHoldingsTools
             }
         );
 
+        result.AppendLine();
+        result.AppendLine(
+            "_% of Inst. Total = the position's share of all institutional 13F shares in the stock, not of shares outstanding._"
+        );
+
         return result.ToString();
     }
 
     [McpServerTool(Name = "GetOwnershipHistory")]
     [Description(
-        "Get the historical trend of institutional ownership for a stock across multiple quarters. Shows how total institutional shares, market value, and number of institutional holders have changed over time based on SEC 13F-HR filings. Use this to understand whether institutional interest in a company is growing or declining."
+        "Get the historical trend of institutional ownership for a stock across multiple quarters. Shows how total institutional shares, market value, and number of institutional holders have changed over time based on SEC 13F-HR filings. While the newest quarter's 13F filing window is open, that quarter is a provisional combined view (funds that have not filed yet carry their prior-quarter positions — flagged in the output). Use this to understand whether institutional interest in a company is growing or declining."
     )]
     public Task<string> GetOwnershipHistory(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
-        [Description("Maximum number of quarterly periods to return (default: 8)")]
+        [Description(
+            "Maximum number of quarterly periods to return (default: 8, clamped to 1-500)"
+        )]
             int maxPeriods = 8
     )
     {
@@ -242,7 +276,7 @@ public class InstitutionalHoldingsTools
     {
         var result = MarkdownTable.Start(
             $"Institutional ownership history for {stock.Name} ({ticker}):",
-            "| Report Date | Institutions | Total Shares | Total Value ($M) | Change |",
+            "| Report Date | Institutions | Total Shares | Total Value ($M) | Share Chg (QoQ) |",
             "|------------|-------------|-------------|-----------------|--------|"
         );
 
@@ -277,10 +311,7 @@ public class InstitutionalHoldingsTools
             var totalValue = holdings.Sum(h => h.Value);
             var institutionCount = holdings.Select(h => h.InstitutionalHolderId).Distinct().Count();
 
-            var change =
-                previousShares > 0
-                    ? $"{McpFormat.Invariant((double)(totalShares - previousShares) / previousShares * 100, "+0.0;-0.0")}%"
-                    : "—";
+            var change = FormatShareChange(totalShares, previousShares);
 
             result.AppendLine(
                 $"| {FormatDate(date)}{(isCombinedRow ? " \\*" : "")} | {McpFormat.WholeNumber(institutionCount)} | {McpFormat.WholeNumber(totalShares)} | {FormatMillions(totalValue)} | {change} |"
@@ -295,39 +326,67 @@ public class InstitutionalHoldingsTools
             result.AppendLine($"\\* {CombinedViewNote(anchor.ReportDate, anchor)}");
         }
 
+        result.AppendLine();
+        result.AppendLine(
+            "_Share Chg (QoQ) tracks the quarter-over-quarter change in total split-adjusted institutional shares._"
+        );
+
         return result.ToString();
     }
 
+    // Quarter-over-quarter share change. The three-section format is load-bearing: a negative
+    // change that rounds to zero re-formats through the zero section as "0.0", where the
+    // two-section "+0.0;-0.0" form emitted the garbled "-+0.0" (negative-zero double keeps its
+    // sign when re-formatted through the positive section) — which hit almost every combined
+    // current-quarter row, whose carried-forward share change is near-zero by construction.
+    private static string FormatShareChange(long totalShares, long previousShares) =>
+        previousShares > 0
+            ? $"{McpFormat.Invariant((double)(totalShares - previousShares) / previousShares * 100, "+0.0;-0.0;0.0")}%"
+            : "—";
+
     [McpServerTool(Name = "GetInstitutionPortfolio")]
     [Description(
-        "View the stock portfolio of a specific institutional investor (fund manager) from their SEC 13F-HR filing. Shows all tracked stocks held by the institution with share counts and market values. Use this to understand what stocks a particular fund manager or institution is investing in."
+        "View the stock portfolio of a specific institutional investor (fund manager) from their SEC 13F-HR filing. Shows the institution's largest tracked holdings by market value (default 20, max 500) with share counts, market values, and percent of the 13F-reported portfolio, plus the portfolio's total value and position count. Use this to understand what stocks a particular fund manager or institution is investing in; use SearchInstitutions first when the name is ambiguous."
     )]
     public Task<string> GetInstitutionPortfolio(
-        [Description("Institution name or partial name to search for")] string institutionName,
-        [Description("Report date in YYYY-MM-DD format (defaults to latest available)")]
+        [Description("Institution name, partial name, or SEC CIK to search for")]
+            string institutionName,
+        [Description(
+            "Quarter-end 13F report date in YYYY-MM-DD format (defaults to the holder's latest; an off-quarter date snaps to the nearest report on or before it)"
+        )]
             string reportDate = null,
-        [Description("Maximum number of holdings to return (default: 20)")] int maxResults = 20
+        [Description("Maximum number of holdings to return (default: 20, clamped to 1-500)")]
+            int maxResults = 20
     )
     {
         return _runner.Execute(
             async () =>
             {
-                var holders = await _holderRepository.Search(institutionName).Take(5).ToListAsync();
+                var (holder, matchNote, holderError) = await ResolveHolderByName(institutionName);
+                if (holderError != null)
+                    return holderError;
 
-                if (holders.Count == 0)
-                    return $"No institution found matching '{institutionName}'.";
-
-                var holder = holders.First();
-
-                var (targetDate, found) = await TryResolveLatestReportDate(
-                    reportDate,
-                    _holdingRepository.Get13FReportDatesByHolder(holder)
-                );
-                if (!found)
+                var reportDates = await _holdingRepository
+                    .Get13FReportDatesByHolder(holder)
+                    .ToListAsync();
+                if (reportDates.Count == 0)
                     return $"No holdings data for {holder.Name}.";
 
-                var holdings = await _holdingRepository
-                    .GetByHolder(holder, targetDate)
+                var (targetDate, dateNote, dateError) = ResolveReportDateStrict(
+                    reportDate,
+                    reportDates
+                );
+                if (dateError != null)
+                    return dateError;
+
+                var allHoldings = _holdingRepository.Get13FByHolderWithStock(holder, targetDate);
+                var totalPositions = await allHoldings
+                    .Select(h => h.CommonStockId)
+                    .Distinct()
+                    .CountAsync();
+                var totalValue = await allHoldings.SumAsync(h => (long?)h.Value) ?? 0L;
+
+                var holdings = await allHoldings
                     .OrderByDescending(h => h.Value)
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
@@ -341,7 +400,15 @@ public class InstitutionalHoldingsTools
                 // and stays as reported.
                 var splitsByStock = await LoadSplitsByStock(holdings.Select(h => h.CommonStockId));
 
-                return RenderInstitutionPortfolio(holder, targetDate, holdings, splitsByStock);
+                return RenderInstitutionPortfolio(
+                    holder,
+                    targetDate,
+                    holdings,
+                    splitsByStock,
+                    totalPositions,
+                    totalValue,
+                    JoinNotes(matchNote, dateNote)
+                );
             },
             "GetInstitutionPortfolio",
             $"institution: {institutionName}"
@@ -352,13 +419,23 @@ public class InstitutionalHoldingsTools
         InstitutionalHolder holder,
         DateOnly targetDate,
         List<InstitutionalHolding> holdings,
-        IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock
+        IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock,
+        int totalPositions,
+        long totalValue,
+        string notes
     )
     {
+        var subtitle =
+            $"Showing top {holdings.Count} of {McpFormat.WholeNumber(totalPositions)} positions. "
+            + $"Total 13F value: ${FormatMillions(totalValue)}M";
+        if (notes != null)
+            subtitle = $"{subtitle}\n{notes}";
+
         var result = MarkdownTable.Start(
             $"Portfolio of {holder.Name} (CIK: {holder.Cik}) as of {FormatDate(targetDate)}:",
-            "| # | Ticker | Company | Shares | Value ($M) |",
-            "|---|--------|---------|--------|-----------|"
+            subtitle,
+            "| # | Ticker | Company | Shares | Value ($M) | % of Portfolio |",
+            "|---|--------|---------|--------|-----------|----------------|"
         );
 
         result.AppendNumberedRows(
@@ -370,9 +447,11 @@ public class InstitutionalHoldingsTools
                     targetDate,
                     SplitsFor(splitsByStock, h.CommonStockId)
                 );
+                var pct = Percentage.Of(h.Value, totalValue);
                 return $"| {rank} | {h.CommonStock.Ticker} | {h.CommonStock.Name} | "
                     + $"{McpFormat.WholeNumber(shares)} | "
-                    + $"{FormatMillions(h.Value)} |";
+                    + $"{FormatMillions(h.Value)} | "
+                    + $"{FormatPercent(pct)}% |";
             }
         );
 
@@ -381,11 +460,12 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "SearchInstitutions")]
     [Description(
-        "Search for institutional investors (fund managers) by name. Returns matching institutions with their SEC CIK number, city, and state/country. Use this to find the correct institution name before calling GetInstitutionPortfolio or to discover which institutions are tracked in the database."
+        "Search for institutional investors (fund managers) by name or SEC CIK number, largest 13F filers first. Returns matching institutions with their SEC CIK number, city, and state/country. Use this to find the correct institution name before calling GetInstitutionPortfolio or to discover which institutions are tracked in the database."
     )]
     public Task<string> SearchInstitutions(
-        [Description("Search query — institution name or partial name")] string query,
-        [Description("Maximum number of results to return (default: 10)")] int maxResults = 10
+        [Description("Search query — institution name, partial name, or CIK")] string query,
+        [Description("Maximum number of results to return (default: 10, clamped to 1-500)")]
+            int maxResults = 10
     )
     {
         return _runner.Execute(
@@ -393,35 +473,50 @@ public class InstitutionalHoldingsTools
             {
                 maxResults = McpLimit.Clamp(maxResults);
 
-                var holders = await _holderRepository
-                    .Search(query)
-                    .OrderBy(h => h.Name)
-                    .Take(maxResults)
-                    .ToListAsync();
+                var totalMatches = await _holderRepository.SearchNameOrCik(query).CountAsync();
+                if (totalMatches == 0)
+                    return $"No institutions found matching '{query}'.";
 
-                return MarkdownTable.Render(
+                var holders = await _holderRepository.SearchNameOrCikLargestFirst(
+                    query,
+                    maxResults
+                );
+
+                var table = MarkdownTable.Render(
                     holders,
                     $"No institutions found matching '{query}'.",
-                    $"Institutions matching '{query}':",
+                    $"Institutions matching '{query}' (largest 13F filers first):",
                     "| Institution | CIK | City | State/Country |",
                     "|------------|-----|------|--------------|",
-                    h => $"| {h.Name} | {h.Cik} | {h.City ?? "—"} | {h.StateOrCountry ?? "—"} |"
+                    h =>
+                        $"| {h.Name} | {h.Cik} | {OrDash(h.City)} | {OrDash(EdgarStateCodes.Decode(h.StateOrCountry))} |"
                 );
+
+                var truncation = McpOutput.TruncationNote(holders.Count, totalMatches);
+                return truncation.Length == 0 ? table : $"{table}\n{truncation}";
             },
             "SearchInstitutions",
             $"query: {query}"
         );
     }
 
+    // Empty strings occur in the location columns alongside NULLs (importer stores what EDGAR
+    // sends), so a bare null-coalesce still rendered blank cells instead of the placeholder.
+    private static string OrDash(string value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+
     [McpServerTool(Name = "GetTopBuyersSellers")]
     [Description(
-        "Get the institutions that moved the needle the most on a stock this quarter — biggest absolute share additions (Top Buyers) and biggest absolute share reductions (Top Sellers) versus the previous 13F report date. Includes new positions (Δ = full position) and sold-out positions (Δ = −prior position). Returns a markdown table with two sections. Use this to surface the most actionable quarterly signal from 13F filings."
+        "Get the institutions that moved the needle the most on a stock this quarter — biggest absolute share additions (Top Buyers) and biggest absolute share reductions (Top Sellers) versus the previous 13F report date. Includes new positions (Δ = full position) and sold-out positions (Δ = −prior position); a previous holder counts as a seller only if it filed a 13F for the target quarter, so a fund that stopped filing (CIK migration, deregistration) is not shown as a mass seller. While the newest quarter's filing window is open, results cover only the funds that have already filed (noted in the output). Returns a markdown table with two sections. Use this to surface the most actionable quarterly signal from 13F filings."
     )]
     public Task<string> GetTopBuyersSellers(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
-        [Description("Report date in YYYY-MM-DD format (defaults to latest available)")]
+        [Description(
+            "Quarter-end 13F report date in YYYY-MM-DD format, e.g. 2026-03-31 (defaults to the latest available; an off-quarter date snaps to the nearest report on or before it)"
+        )]
             string reportDate = null,
-        [Description("Maximum number of buyers and sellers to return per section (default: 10)")]
+        [Description(
+            "Maximum number of buyers and sellers to return per section (default: 10, clamped to 1-500)"
+        )]
             int maxResults = 10
     )
     {
@@ -437,12 +532,15 @@ public class InstitutionalHoldingsTools
                 var reportDates = await _holdingRepository
                     .Get13FReportDatesByStock(stock)
                     .ToListAsync();
-
-                var targetDate = TryParseReportDate(reportDate, out var parsed)
-                    ? parsed
-                    : reportDates.FirstOrDefault();
-                if (targetDate == default)
+                if (reportDates.Count == 0)
                     return $"No institutional holdings data available for {ticker}.";
+
+                var (targetDate, dateNote, dateError) = ResolveReportDateStrict(
+                    reportDate,
+                    reportDates
+                );
+                if (dateError != null)
+                    return dateError;
 
                 var previousDate = GetPriorReportDate(reportDates, targetDate);
 
@@ -477,16 +575,19 @@ public class InstitutionalHoldingsTools
                 var currentByHolder = AggregateByHolder(currentHoldings);
                 var previousByHolder = AggregateByHolder(previousHoldings);
 
-                // While the target quarter's filing window is open, funds that simply have not
-                // filed yet would read as full sellers (previous position → 0). Restrict the
-                // comparison to REPORTERS: the quarter's filers plus previous holders who filed
-                // elsewhere (proven exits). Carried non-filers are excluded.
+                // A previous holder with no current row only PROVES an exit when it filed a
+                // 13F for the target quarter elsewhere. While the filing window is open the
+                // missing row usually means "hasn't filed yet"; on closed quarters it usually
+                // means the filer stopped filing under that CIK (entity migration,
+                // deregistration) — Vanguard's CIK move would otherwise rank as a 2.3B-share
+                // NVDA seller. Both cases restrict the comparison to REPORTERS: the quarter's
+                // filers plus previous holders who filed elsewhere (proven exits).
                 var windowOpen =
                     previousDate.HasValue
                     && targetDate == reportDates[0]
                     && CombinedQuarterHelper.IsFilingWindowOpen(targetDate);
                 HashSet<Guid> filedPreviousHolders = null;
-                if (windowOpen)
+                if (previousDate.HasValue)
                 {
                     filedPreviousHolders = (
                         await _holdingRepository
@@ -526,6 +627,7 @@ public class InstitutionalHoldingsTools
                             previousFactor
                         );
                         return (
+                            Id: id,
                             Name: c?.Name ?? p?.Name ?? "Unknown",
                             CurrentShares: currentShares,
                             PreviousShares: previousShares,
@@ -549,17 +651,62 @@ public class InstitutionalHoldingsTools
                 if (topBuyers.Count == 0 && topSellers.Count == 0)
                     return $"No quarter-over-quarter movement found for {stock.Name} ({ticker}) as of {FormatDate(targetDate)}.";
 
+                // Flag first-time filers among whole-position buyers: a filer whose FIRST 13F
+                // is the target quarter shows its entire book as "new positions", which is
+                // often the receiving entity of a CIK migration rather than fresh buying.
+                var firstTimeFilerIds = new HashSet<Guid>();
+                var newPositionBuyerIds = topBuyers
+                    .Where(m => m.PreviousShares == 0)
+                    .Select(m => m.Id)
+                    .ToList();
+                if (newPositionBuyerIds.Count > 0)
+                {
+                    firstTimeFilerIds = (
+                        await _holdingRepository
+                            .GetEarliest13FReportDates(newPositionBuyerIds)
+                            .ToListAsync()
+                    )
+                        .Where(kv => kv.Value == targetDate)
+                        .Select(kv => kv.Key)
+                        .ToHashSet();
+                }
+
+                var buyerRows = topBuyers
+                    .Select(m =>
+                        (
+                            firstTimeFilerIds.Contains(m.Id)
+                                ? $"{m.Name} (first 13F this quarter)"
+                                : m.Name,
+                            m.CurrentShares,
+                            m.PreviousShares,
+                            m.DeltaShares,
+                            m.DeltaValue
+                        )
+                    )
+                    .ToList();
+                var sellerRows = topSellers
+                    .Select(m =>
+                        (m.Name, m.CurrentShares, m.PreviousShares, m.DeltaShares, m.DeltaValue)
+                    )
+                    .ToList();
+
+                var comparisonNote =
+                    windowOpen
+                        ? $"Note: the {FormatDate(targetDate)} filing window is still open — "
+                            + "movement is computed only across funds that have already filed."
+                    : previousDate.HasValue
+                        ? $"Note: sellers are counted only among funds that filed a 13F for {FormatDate(targetDate)} — "
+                            + "funds that stopped filing under this CIK (migrations, deregistrations) are excluded."
+                    : null;
+
                 return RenderBuyersSellersTable(
                     stock,
                     ticker,
                     targetDate,
                     previousDate,
-                    topBuyers,
-                    topSellers,
-                    windowOpen
-                        ? $"Note: the {FormatDate(targetDate)} filing window is still open — "
-                            + "movement is computed only across funds that have already filed."
-                        : null
+                    buyerRows,
+                    sellerRows,
+                    JoinNotes(dateNote, comparisonNote)
                 );
             },
             "GetTopBuyersSellers",
@@ -603,6 +750,11 @@ public class InstitutionalHoldingsTools
         result.AppendLine();
         AppendMoverSection(result, "## Top Sellers", "_No sellers this quarter._", topSellers);
 
+        result.AppendLine();
+        result.AppendLine(
+            "_Δ Position Value is the change in reported market value and includes price movement — a seller can show a positive Δ when the stock rose during the quarter._"
+        );
+
         return result.ToString();
 
         static void AppendMoverSection(
@@ -625,7 +777,7 @@ public class InstitutionalHoldingsTools
                 return;
             }
             sb.AppendNumberedTable(
-                "| # | Institution | Δ Shares | Δ Value ($M) | Prior → New Shares |",
+                "| # | Institution | Δ Shares | Δ Position Value ($M) | Prior → New Shares |",
                 "|---|-------------|---------|-------------|------------------|",
                 rows,
                 (rank, m) =>
@@ -641,9 +793,12 @@ public class InstitutionalHoldingsTools
     public Task<string> GetMarketWide13FActivity(
         [Description("Bucket: top-buys, top-sells, new-positions, or sold-out-positions")]
             string bucket,
-        [Description("Report date in YYYY-MM-DD format (defaults to latest available)")]
+        [Description(
+            "Quarter-end 13F report date in YYYY-MM-DD format, e.g. 2026-03-31 (defaults to the latest available 13F quarter; an off-quarter date snaps to the nearest report on or before it)"
+        )]
             string reportDate = null,
-        [Description("Maximum number of stocks to return (default: 20)")] int maxResults = 20
+        [Description("Maximum number of stocks to return (default: 20, clamped to 1-500)")]
+            int maxResults = 20
     )
     {
         return _runner.Execute(
@@ -655,7 +810,7 @@ public class InstitutionalHoldingsTools
 
                 maxResults = McpLimit.Clamp(maxResults);
 
-                var (targetDate, previousDate, windowOpen, error) =
+                var (targetDate, previousDate, windowOpen, dateNote, error) =
                     await ResolveMarketActivityDates(reportDate);
                 if (error != null)
                     return error;
@@ -666,6 +821,8 @@ public class InstitutionalHoldingsTools
                     $"Market-wide 13F **{normalizedBucket}** for {FormatDate(targetDate)}"
                 );
                 result.AppendLine(PriorQuarterSubtitle(previousDate));
+                if (dateNote != null)
+                    result.AppendLine(dateNote);
                 if (windowOpen)
                     result.AppendLine(
                         $"Note: the {FormatDate(targetDate)} filing window is still open — "
@@ -705,38 +862,47 @@ public class InstitutionalHoldingsTools
         DateOnly Target,
         DateOnly Previous,
         bool WindowOpen,
+        string Note,
         string Error
     )> ResolveMarketActivityDates(string reportDate)
     {
         // 13F-only: the prior entry must be the prior QUARTER. The all-filings list now
         // carries daily 13D/G event dates, which would make "previous" the prior day and
-        // compare a quarter-end portfolio against a single-day stake.
-        var reportDates = await _holdingRepository.Get13FAvailableReportDates().ToListAsync();
+        // compare a quarter-end portfolio against a single-day stake. Served from the
+        // repository's process-wide cache — the live DISTINCT scan measures ~28s against a
+        // 30s command timeout, so resolving off it cold timed out every first call.
+        var reportDates = await _holdingRepository.Get13FAvailableReportDatesCached();
         if (reportDates.Count == 0)
-            return (default, default, false, "No 13F holdings data available.");
+            return (default, default, false, null, "No 13F holdings data available.");
 
-        var targetDate = TryParseReportDate(reportDate, out var parsed) ? parsed : reportDates[0];
-        var targetIndex = reportDates.IndexOf(targetDate);
-        if (targetIndex < 0)
-            return (
-                default,
-                default,
-                false,
-                $"Report date {FormatDate(targetDate)} not found. Available dates: {string.Join(", ", reportDates.Take(5).Select(d => FormatDate(d)))}{(reportDates.Count > 5 ? "…" : "")}."
-            );
+        var (targetDate, note, error) = ResolveReportDateStrict(reportDate, reportDates);
+        if (error != null)
+            return (default, default, false, null, error);
 
+        var targetIndex = IndexOfDate(reportDates, targetDate);
         if (targetIndex >= reportDates.Count - 1)
             return (
                 default,
                 default,
                 false,
+                null,
                 $"No prior quarter to compare against for {FormatDate(targetDate)}."
             );
 
         // While the newest quarter's filing window is open its leaderboards must use the
         // combined queries, or every fund that has not filed yet reads as a mass seller.
         var windowOpen = targetIndex == 0 && CombinedQuarterHelper.IsFilingWindowOpen(targetDate);
-        return (targetDate, reportDates[targetIndex + 1], windowOpen, null);
+        return (targetDate, reportDates[targetIndex + 1], windowOpen, note, null);
+    }
+
+    private static int IndexOfDate(IReadOnlyList<DateOnly> dates, DateOnly target)
+    {
+        for (var i = 0; i < dates.Count; i++)
+        {
+            if (dates[i] == target)
+                return i;
+        }
+        return -1;
     }
 
     private async Task<string> RenderMarketActivityMovers(
@@ -829,16 +995,19 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "GetMostHeldStocks")]
     [Description(
-        "Get the cross-sectional ranking of stocks by institutional 13F breadth for a given quarter. Returns the stocks ranked by number of 13F filers reporting them as a holding (default), or by quarter-over-quarter change in filer count (warming / cooling heat map), or by total reported dollar value. Includes Δ filers vs the prior quarter, total value, Δ value, and the stock's share of the 13F universe. Use this to answer 'which stocks are most owned by institutions right now, and is breadth expanding or contracting?'"
+        "Get the cross-sectional ranking of stocks by institutional 13F breadth for a given quarter. Returns the stocks ranked by number of 13F filers reporting them as a holding (default), by quarter-over-quarter change in filer count (warming names — 'filersDelta' — or cooling names — 'filersDeltaAsc'), or by total reported dollar value. Includes Δ filers vs the prior quarter, total value, Δ value, and the stock's share of the 13F universe. Only currently-held stocks rank; fully-sold-out names live in GetMarketWide13FActivity's sold-out-positions bucket. While the newest quarter's filing window is open, funds that have not filed yet are carried at their prior-quarter positions (noted in the output). Use this to answer 'which stocks are most owned by institutions right now, and is breadth expanding or contracting?'"
     )]
     public Task<string> GetMostHeldStocks(
-        [Description("Report date in YYYY-MM-DD format (defaults to latest available)")]
+        [Description(
+            "Quarter-end 13F report date in YYYY-MM-DD format, e.g. 2026-03-31 (defaults to the latest available 13F quarter; an off-quarter date snaps to the nearest report on or before it)"
+        )]
             string reportDate = null,
         [Description(
-            "Sort by: 'filers' (default, # of 13F filers desc), 'filersDelta' (QoQ filer-count delta desc — heat map of warming names), or 'value' (current total reported $ value desc)"
+            "Sort by: 'filers' (default, # of 13F filers desc), 'filersDelta' (QoQ filer-count delta desc — warming names), 'filersDeltaAsc' (QoQ filer-count delta asc — cooling names), or 'value' (current total reported $ value desc)"
         )]
             string sort = "filers",
-        [Description("Maximum number of stocks to return (default: 25)")] int maxResults = 25
+        [Description("Maximum number of stocks to return (default: 25, clamped to 1-500)")]
+            int maxResults = 25
     )
     {
         return _runner.Execute(
@@ -846,9 +1015,13 @@ public class InstitutionalHoldingsTools
             {
                 var normalizedSort = (sort ?? "filers").Trim().ToLowerInvariant();
                 if (!ValidMostHeldSorts.Contains(normalizedSort))
-                    return $"Unknown sort. Use one of: {string.Join(", ", ValidMostHeldSorts)}.";
+                    return McpOutput.InvalidArgument(
+                        "sort",
+                        sort,
+                        string.Join(", ", ValidMostHeldSorts)
+                    );
 
-                var (targetDate, previousDate, windowOpen, error) =
+                var (targetDate, previousDate, windowOpen, dateNote, error) =
                     await ResolveMarketActivityDates(reportDate);
                 if (error != null)
                     return error;
@@ -862,6 +1035,9 @@ public class InstitutionalHoldingsTools
                 {
                     "filersdelta" => ranking
                         .OrderByDescending(a => a.CurrentFilerCount - a.PreviousFilerCount)
+                        .ThenByDescending(a => a.CurrentFilerCount),
+                    "filersdeltaasc" => ranking
+                        .OrderBy(a => a.CurrentFilerCount - a.PreviousFilerCount)
                         .ThenByDescending(a => a.CurrentFilerCount),
                     "value" => ranking
                         .OrderByDescending(a => a.CurrentValue)
@@ -889,10 +1065,14 @@ public class InstitutionalHoldingsTools
                     rows,
                     stocks
                 );
-                return windowOpen
-                    ? $"{table}\nNote: the {FormatDate(targetDate)} filing window is still open — "
-                        + "funds that have not filed yet carry their prior-quarter positions."
-                    : table;
+                var trailingNotes = JoinNotes(
+                    dateNote,
+                    windowOpen
+                        ? $"Note: the {FormatDate(targetDate)} filing window is still open — "
+                            + "funds that have not filed yet carry their prior-quarter positions."
+                        : null
+                );
+                return trailingNotes == null ? table : $"{table}\n{trailingNotes}";
             },
             "GetMostHeldStocks",
             $"sort: {sort}, max: {maxResults}"
@@ -932,22 +1112,22 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "GetInstitutionSummary")]
     [Description(
-        "Get the portfolio summary header for an institutional 13F filer — Reported AUM, position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters reported. Use this to answer 'how big and how concentrated is this fund?' or to compare two funds at a glance. Search resolves by institution name (closest match)."
+        "Get the portfolio summary header for an institutional 13F filer — 13F reported value (long U.S. positions only, not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database. Use this to answer 'how big and how concentrated is this fund?' or to compare two funds at a glance. Search resolves by institution name or CIK (largest 13F filer wins on ambiguous names)."
     )]
     public Task<string> GetInstitutionSummary(
-        [Description("Institution name (partial or full — first match wins)")]
+        [Description("Institution name or CIK (partial names resolve to the largest 13F filer)")]
             string institutionName,
-        [Description("Report date in YYYY-MM-DD format (defaults to the holder's latest)")]
+        [Description(
+            "Quarter-end 13F report date in YYYY-MM-DD format (defaults to the holder's latest; an off-quarter date snaps to the nearest report on or before it)"
+        )]
             string reportDate = null
     )
     {
         return _runner.Execute(
             async () =>
             {
-                var (holder, reportDates, targetDate, error) = await ResolveHolderAndTargetDate(
-                    institutionName,
-                    reportDate
-                );
+                var (holder, reportDates, targetDate, notes, error) =
+                    await ResolveHolderAndTargetDate(institutionName, reportDate);
                 if (error != null)
                     return error;
 
@@ -969,7 +1149,7 @@ public class InstitutionalHoldingsTools
                     previousDate
                 );
 
-                return RenderInstitutionSummary(holder, targetDate, previousDate, summary);
+                return RenderInstitutionSummary(holder, targetDate, previousDate, summary, notes);
             },
             "GetInstitutionSummary",
             $"institution: {institutionName}"
@@ -980,13 +1160,16 @@ public class InstitutionalHoldingsTools
         InstitutionalHolder holder,
         DateOnly targetDate,
         DateOnly? previousDate,
-        InstitutionPortfolioSummary summary
+        InstitutionPortfolioSummary summary,
+        string notes = null
     )
     {
         var result = new StringBuilder();
         result.AppendLine($"Portfolio summary — **{holder.Name}** as of {FormatDate(targetDate)}");
         if (previousDate.HasValue)
             result.AppendLine(PriorQuarterSubtitle(previousDate.Value));
+        if (notes != null)
+            result.AppendLine(notes);
         result.AppendLine();
         result.AppendLine("| Metric | Value |");
         result.AppendLine("|--------|-------|");
@@ -999,8 +1182,14 @@ public class InstitutionalHoldingsTools
             $"| Top 25 concentration | {FormatPercent(summary.Top25ConcentrationPercent)}% |"
         );
         result.AppendLine($"| QoQ turnover | {FormatPercent(summary.QoQTurnoverPercent)}% |");
-        result.AppendLine($"| Quarters reported | {summary.QuartersReported} |");
+        result.AppendLine($"| Quarters tracked | {summary.QuartersReported} |");
         result.AppendLine();
+        result.AppendLine(
+            "_Reported AUM = total value of 13F-reportable long U.S. positions only — it excludes cash, bonds, non-U.S. holdings, and shorts, and is NOT the firm's total assets under management._"
+        );
+        result.AppendLine(
+            "_Quarters tracked counts the 13F quarters in this database, not the filer's full filing history._"
+        );
         result.AppendLine(
             "_QoQ turnover = (Σ |Δ shares × current price proxy|) / (2 × AUM), where the per-share price proxy is the current quarter's Value / Shares._"
         );
@@ -1019,11 +1208,15 @@ public class InstitutionalHoldingsTools
     private static string RenderSectorAllocationTable(
         InstitutionalHolder holder,
         DateOnly targetDate,
-        List<IndustryAllocationSlice> slices
+        List<IndustryAllocationSlice> slices,
+        string groupLabel = "Industry",
+        string notes = null
     )
     {
         var result = new StringBuilder();
         result.AppendLine($"Sector allocation — **{holder.Name}** as of {FormatDate(targetDate)}");
+        if (notes != null)
+            result.AppendLine(notes);
         result.AppendLine();
         if (slices.Count == 0)
         {
@@ -1032,30 +1225,56 @@ public class InstitutionalHoldingsTools
         }
 
         result.AppendNumberedTable(
-            "| # | Industry | # Positions | Value ($M) | % of Portfolio |",
+            $"| # | {groupLabel} | # Positions | Value ($M) | % of Portfolio |",
             "|---|----------|-------------|------------|----------------|",
             slices,
             (rank, s) =>
                 $"| {rank} | {s.IndustryName} | {McpFormat.WholeNumber(s.PositionCount)} | {FormatMillions(s.TotalValue)} | {FormatPercent(s.PercentOfPortfolio)}% |"
         );
+
+        result.AppendLine();
+        result.AppendLine(
+            $"Total: {McpFormat.WholeNumber(slices.Sum(s => s.PositionCount))} positions, "
+                + $"${FormatMillions(slices.Sum(s => s.TotalValue))}M 13F value. "
+                + "_Percentages are of the 13F-reported (long U.S. equity) book only._"
+        );
+
+        if (holder.ConfidentialTreatmentRequested)
+        {
+            result.AppendLine();
+            result.AppendLine(
+                "⚠️ **Confidential Treatment** — This manager has requested confidential treatment for one or more investments in the most recent 13F filing. The allocation shown may be incomplete."
+            );
+        }
+
         return result.ToString();
     }
 
     [McpServerTool(Name = "GetInstitutionSectorAllocation")]
     [Description(
-        "Get an institution's portfolio allocation grouped by industry / sector for its latest 13F report. Returns a markdown table sorted by % of portfolio descending, with stocks lacking an industry classification collapsed into a single 'Unclassified' row at the end. Use this to answer 'is this fund concentrated in tech / energy / generalist?'"
+        "Get an institution's 13F portfolio allocation for a given report quarter (defaults to the latest), grouped by fine-grained industry (default) or rolled up by sector via `groupBy`. Returns a markdown table sorted by % of portfolio descending, with stocks lacking a classification collapsed into a single 'Unclassified' row at the end. Ambiguous names resolve to the largest matching 13F filer — use SearchInstitutions to disambiguate. Use this to answer 'is this fund concentrated in tech / energy / generalist?'"
     )]
     public Task<string> GetInstitutionSectorAllocation(
-        [Description("Institution name (partial or full — first match wins)")]
+        [Description("Institution name or CIK (partial names resolve to the largest 13F filer)")]
             string institutionName,
-        [Description("Report date in YYYY-MM-DD format (defaults to the holder's latest)")]
-            string reportDate = null
+        [Description(
+            "Quarter-end 13F report date in YYYY-MM-DD format (defaults to the holder's latest; an off-quarter date snaps to the nearest report on or before it)"
+        )]
+            string reportDate = null,
+        [Description(
+            "Grouping level: 'industry' (default, fine-grained) or 'sector' (broad rollup)"
+        )]
+            string groupBy = "industry"
     )
     {
         return _runner.Execute(
             async () =>
             {
-                var (holder, _, targetDate, error) = await ResolveHolderAndTargetDate(
+                var normalizedGroupBy = (groupBy ?? "industry").Trim().ToLowerInvariant();
+                if (normalizedGroupBy is not ("industry" or "sector"))
+                    return McpOutput.InvalidArgument("groupBy", groupBy, "industry, sector");
+
+                var (holder, _, targetDate, notes, error) = await ResolveHolderAndTargetDate(
                     institutionName,
                     reportDate
                 );
@@ -1066,10 +1285,20 @@ public class InstitutionalHoldingsTools
                     .Get13FByHolder(holder, targetDate)
                     .Include(h => h.CommonStock)
                         .ThenInclude(s => s.Industry)
+                            .ThenInclude(i => i.Sector)
                     .ToListAsync();
-                var slices = IndustryAllocationCalculator.Calculate(holdings);
+                var slices =
+                    normalizedGroupBy == "sector"
+                        ? IndustryAllocationCalculator.CalculateBySector(holdings)
+                        : IndustryAllocationCalculator.Calculate(holdings);
 
-                return RenderSectorAllocationTable(holder, targetDate, slices);
+                return RenderSectorAllocationTable(
+                    holder,
+                    targetDate,
+                    slices,
+                    normalizedGroupBy == "sector" ? "Sector" : "Industry",
+                    notes
+                );
             },
             "GetInstitutionSectorAllocation",
             $"institution: {institutionName}"
@@ -1078,18 +1307,22 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "GetInstitutionQuarterlyActivity")]
     [Description(
-        "Get an institution's quarterly position-change activity — Initiated / Increased / Reduced / Exited stocks diffed against the immediately prior quarter. Returns the buckets as one markdown section per bucket, sorted by absolute Δ value desc. Use `bucket` to filter to a single bucket. Use this to answer 'what did this fund do this quarter?'"
+        "Get an institution's quarterly position-change activity — Initiated / Increased / Reduced / Exited stocks diffed against the immediately prior quarter. Returns the buckets as one markdown section per bucket, sorted by absolute Δ market-value desc (Δ Value includes price movement, not just trading). Use `bucket` to filter to a single bucket. Use this to answer 'what did this fund do this quarter?'"
     )]
     public Task<string> GetInstitutionQuarterlyActivity(
-        [Description("Institution name (partial or full — first match wins)")]
+        [Description("Institution name or CIK (partial names resolve to the largest 13F filer)")]
             string institutionName,
-        [Description("Report date in YYYY-MM-DD format (defaults to the holder's latest)")]
+        [Description(
+            "Quarter-end 13F report date in YYYY-MM-DD format (defaults to the holder's latest; an off-quarter date snaps to the nearest report on or before it)"
+        )]
             string reportDate = null,
         [Description(
             "Filter to a single bucket: initiated, increased, reduced, exited (omit for all four)"
         )]
             string bucket = null,
-        [Description("Maximum number of stocks to return per bucket (default: 20)")]
+        [Description(
+            "Maximum number of stocks to return per bucket (default: 20, clamped to 1-500)"
+        )]
             int maxResults = 20
     )
     {
@@ -1103,7 +1336,9 @@ public class InstitutionalHoldingsTools
                 )
                     return "Unknown bucket. Use one of: initiated, increased, reduced, exited (or omit).";
 
-                var (holder, holderError) = await ResolveHolderByName(institutionName);
+                maxResults = McpLimit.Clamp(maxResults);
+
+                var (holder, matchNote, holderError) = await ResolveHolderByName(institutionName);
                 if (holderError != null)
                     return holderError;
 
@@ -1113,7 +1348,12 @@ public class InstitutionalHoldingsTools
                 if (reportDates.Count < 2)
                     return $"{holder.Name} has fewer than two reported quarters — no diff available.";
 
-                var targetDate = ResolveReportDate(reportDate, reportDates);
+                var (targetDate, dateNote, dateError) = ResolveReportDateStrict(
+                    reportDate,
+                    reportDates
+                );
+                if (dateError != null)
+                    return dateError;
                 var priorDate = GetPriorReportDate(reportDates, targetDate);
                 if (priorDate == null)
                     return $"{FormatDate(targetDate)} is the oldest reported quarter for {holder.Name} — no prior to compare against.";
@@ -1139,7 +1379,8 @@ public class InstitutionalHoldingsTools
                     priorDate.Value,
                     grouped,
                     normalizedBucket,
-                    maxResults
+                    maxResults,
+                    JoinNotes(matchNote, dateNote)
                 );
             },
             "GetInstitutionQuarterlyActivity",
@@ -1153,7 +1394,8 @@ public class InstitutionalHoldingsTools
         DateOnly priorDate,
         Dictionary<StockPositionChangeType, List<StockPositionChange>> grouped,
         string normalizedBucket,
-        int maxResults
+        int maxResults,
+        string notes = null
     )
     {
         var sections = new (StockPositionChangeType Type, string Label)[]
@@ -1167,6 +1409,8 @@ public class InstitutionalHoldingsTools
         var result = new StringBuilder();
         result.AppendLine($"Quarterly activity — **{holder.Name}** as of {FormatDate(targetDate)}");
         result.AppendLine(PriorQuarterSubtitle(priorDate));
+        if (notes != null)
+            result.AppendLine(notes);
         result.AppendLine();
 
         var rendered = 0;
@@ -1175,26 +1419,41 @@ public class InstitutionalHoldingsTools
         );
         foreach (var section in selectedSections)
         {
-            var rows = grouped[section.Type]
+            var bucketRows = grouped[section.Type];
+            var rows = bucketRows
                 .OrderByDescending(r => Math.Abs(r.DeltaValue))
                 .Take(maxResults)
                 .ToList();
-            if (AppendActivitySection(result, section.Label, rows))
+            if (AppendActivitySection(result, section.Label, rows, bucketRows.Count))
                 rendered++;
         }
 
         if (rendered == 0)
+        {
             result.AppendLine("_No matching buckets._");
+            return result.ToString();
+        }
+
+        result.AppendLine(
+            "_Δ Value is the change in reported market value and includes price movement, not just trading — it also drives the per-bucket ordering._"
+        );
         return result.ToString();
     }
 
     private static bool AppendActivitySection(
         StringBuilder result,
         string label,
-        List<StockPositionChange> rows
+        List<StockPositionChange> rows,
+        int bucketTotal
     )
     {
-        result.AppendLine($"## {label}");
+        // The heading carries the bucket's real size when maxResults trims it, so a capped
+        // list is never mistaken for "the fund initiated exactly N positions".
+        result.AppendLine(
+            rows.Count < bucketTotal
+                ? $"## {label} (top {rows.Count} of {bucketTotal} by |Δ value|)"
+                : $"## {label}"
+        );
         if (rows.Count == 0)
         {
             result.AppendLine("_No stocks in this bucket this quarter._");
@@ -1214,29 +1473,46 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "GetFundOverlap")]
     [Description(
-        "Get the 13F portfolio overlap between two institutions for their latest common report date — Jaccard similarity, dollar-weighted overlap, and a side-by-side table of stocks with per-fund shares + percent of portfolio. Use this to answer 'do these two funds own the same stocks?' or 'where do their portfolios diverge?'"
+        "Get the 13F portfolio overlap between two institutions for their latest common report date — Jaccard similarity, dollar-weighted overlap ($-weighted = shared dollars, taking the smaller of the two funds' values per stock, as a share of union dollars), per-fund position counts and totals, and a side-by-side table of stocks with per-fund shares + percent of portfolio. Covers 13F institutional managers only — find names with SearchInstitutions; for mutual-fund/ETF (NPORT) portfolios use GetFundHoldings. Use this to answer 'do these two funds own the same stocks?' or 'where do their portfolios diverge?'"
     )]
     public Task<string> GetFundOverlap(
-        [Description("First institution name (partial or full — first match wins)")]
+        [Description(
+            "First institution name or CIK (partial names resolve to the largest 13F filer)"
+        )]
             string institutionName1,
-        [Description("Second institution name (partial or full — first match wins)")]
+        [Description(
+            "Second institution name or CIK (partial names resolve to the largest 13F filer)"
+        )]
             string institutionName2,
-        [Description("Report date in YYYY-MM-DD format (defaults to latest common quarter)")]
+        [Description(
+            "Quarter-end 13F report date in YYYY-MM-DD format (defaults to the latest common quarter; an off-quarter date snaps to the nearest common report on or before it)"
+        )]
             string reportDate = null,
-        [Description("Maximum number of stocks to return (default: 30)")] int maxResults = 30
+        [Description("Maximum number of stocks to return (default: 30, clamped to 1-500)")]
+            int maxResults = 30
     )
     {
         return _runner.Execute(
             async () =>
             {
-                var (holder1, holder1Error) = await ResolveHolderByName(institutionName1);
+                maxResults = McpLimit.Clamp(maxResults);
+
+                var (holder1, matchNote1, holder1Error) = await ResolveHolderByName(
+                    institutionName1
+                );
                 if (holder1Error != null)
                     return holder1Error;
-                var (holder2, holder2Error) = await ResolveHolderByName(institutionName2);
+                var (holder2, matchNote2, holder2Error) = await ResolveHolderByName(
+                    institutionName2
+                );
                 if (holder2Error != null)
                     return holder2Error;
 
-                var (selected, error) = await ResolveCommonReportDate(holder1, holder2, reportDate);
+                var (selected, dateNote, error) = await ResolveCommonReportDate(
+                    holder1,
+                    holder2,
+                    reportDate
+                );
                 if (error != null)
                     return error;
 
@@ -1250,14 +1526,21 @@ public class InstitutionalHoldingsTools
                     selected
                 );
 
-                return RenderOverlapTable(holder1, holder2, selected, overlap, maxResults);
+                return RenderOverlapTable(
+                    holder1,
+                    holder2,
+                    selected,
+                    overlap,
+                    maxResults,
+                    JoinNotes(matchNote1, matchNote2, dateNote)
+                );
             },
             "GetFundOverlap",
             $"funds: {institutionName1}, {institutionName2}"
         );
     }
 
-    private async Task<(DateOnly Selected, string Error)> ResolveCommonReportDate(
+    private async Task<(DateOnly Selected, string Note, string Error)> ResolveCommonReportDate(
         InstitutionalHolder holder1,
         InstitutionalHolder holder2,
         string reportDate
@@ -1265,9 +1548,13 @@ public class InstitutionalHoldingsTools
     {
         var common = await ComputeCommonReportDates([holder1, holder2]);
         if (common.Count == 0)
-            return (default, $"{holder1.Name} and {holder2.Name} share no common report dates.");
+            return (
+                default,
+                null,
+                $"{holder1.Name} and {holder2.Name} share no common report dates."
+            );
 
-        return (ResolveReportDate(reportDate, common), null);
+        return ResolveReportDateStrict(reportDate, common);
     }
 
     private async Task<List<DateOnly>> ComputeCommonReportDates(IList<InstitutionalHolder> holders)
@@ -1288,14 +1575,24 @@ public class InstitutionalHoldingsTools
         InstitutionalHolder holder2,
         DateOnly selected,
         FundOverlapResult overlap,
-        int maxResults
+        int maxResults,
+        string notes = null
     )
     {
-        var result = MarkdownTable.Start(
-            $"Portfolio overlap — **{holder1.Name}** vs **{holder2.Name}** as of {FormatDate(selected)}",
-            "| Metric | Value |",
-            "|--------|-------|"
-        );
+        var title =
+            $"Portfolio overlap — **{holder1.Name}** vs **{holder2.Name}** as of {FormatDate(selected)}";
+        if (notes != null)
+            title = $"{title}\n{notes}";
+        var result = MarkdownTable.Start(title, "| Metric | Value |", "|--------|-------|");
+        // Per-fund position counts + totals make a gross size mismatch (or a wrong-entity
+        // match) legible before the reader interprets a near-zero overlap percentage.
+        for (var i = 0; i < overlap.Funds.Count; i++)
+        {
+            var fund = overlap.Funds[i];
+            result.AppendLine(
+                $"| {(char)('A' + i)}: {fund.HolderName} | {McpFormat.WholeNumber(fund.PositionCount)} positions, ${FormatMillions(fund.TotalValue)}M |"
+            );
+        }
         result.AppendLine(
             $"| Union positions | {McpFormat.WholeNumber(overlap.UnionPositionCount)} |"
         );
@@ -1328,6 +1625,15 @@ public class InstitutionalHoldingsTools
                 return $"| {rank} | {row.Ticker} | {row.Name} | {(a.Shares > 0 ? McpFormat.WholeNumber(a.Shares) : "—")} | {(a.Value > 0 ? FormatPercent(a.PercentOfPortfolio) + "%" : "—")} | {(b.Shares > 0 ? McpFormat.WholeNumber(b.Shares) : "—")} | {(b.Value > 0 ? FormatPercent(b.PercentOfPortfolio) + "%" : "—")} | {FormatMillions(row.CombinedValue)} |";
             }
         );
+
+        result.AppendLine();
+        result.AppendLine(
+            "_$-weighted overlap = shared dollars (the smaller of the two funds' values per stock) as a share of union dollars (the larger per stock)._"
+        );
+        var truncation = McpOutput.TruncationNote(rendered.Count, overlap.Rows.Count);
+        if (truncation.Length > 0)
+            result.AppendLine(truncation);
+
         return result.ToString();
     }
 
@@ -1337,14 +1643,19 @@ public class InstitutionalHoldingsTools
     )]
     public Task<string> GetConsensusHoldings(
         [Description(
-            "Comma- or semicolon-separated institution names (partial or full — first match wins per name). 2-25 names."
+            "Comma- or semicolon-separated institution names or CIKs (partial names resolve to the largest matching 13F filer). 2-25 names."
         )]
             string institutionNames,
-        [Description("Report date in YYYY-MM-DD format (defaults to latest common quarter)")]
+        [Description(
+            "Quarter-end 13F report date in YYYY-MM-DD format (defaults to the latest common quarter; an off-quarter date snaps to the nearest common report on or before it)"
+        )]
             string reportDate = null,
-        [Description("Minimum number of funds a stock must be held by to appear (default: 1)")]
+        [Description(
+            "Minimum number of funds a stock must be held by to appear (default: 1 — note that 1 also includes stocks held by a single fund; set 2+ for true consensus)"
+        )]
             int minFunds = 1,
-        [Description("Maximum number of stocks to return (default: 30)")] int maxResults = 30
+        [Description("Maximum number of stocks to return (default: 30, clamped to 1-500)")]
+            int maxResults = 30
     )
     {
         return _runner.Execute(
@@ -1379,7 +1690,11 @@ public class InstitutionalHoldingsTools
                 if (common.Count == 0)
                     return "The selected institutions share no common report dates.";
 
-                var selected = ResolveReportDate(reportDate, common);
+                var (selected, dateNote, dateError) = ResolveReportDateStrict(reportDate, common);
+                if (dateError != null)
+                    return dateError;
+
+                maxResults = McpLimit.Clamp(maxResults);
 
                 var perFund =
                     new List<(
@@ -1393,15 +1708,22 @@ public class InstitutionalHoldingsTools
                 }
                 var overlap = FundOverlapCalculator.Calculate(perFund, selected);
 
-                var rowsWithConsensus = overlap
+                var matchingRows = overlap
                     .Rows.Select(r => (Row: r, HeldBy: r.Slices.Count(s => s.Value > 0)))
                     .Where(x => x.HeldBy >= Math.Max(1, minFunds))
                     .OrderByDescending(x => x.HeldBy)
                     .ThenByDescending(x => x.Row.CombinedValue)
-                    .Take(maxResults)
                     .ToList();
+                var rowsWithConsensus = matchingRows.Take(maxResults).ToList();
 
-                return RenderConsensusHoldingsTable(holders, missing, selected, rowsWithConsensus);
+                return RenderConsensusHoldingsTable(
+                    holders,
+                    missing,
+                    selected,
+                    rowsWithConsensus,
+                    matchingRows.Count,
+                    dateNote
+                );
             },
             "GetConsensusHoldings",
             $"names: {institutionNames}"
@@ -1412,7 +1734,9 @@ public class InstitutionalHoldingsTools
         List<InstitutionalHolder> holders,
         List<string> missing,
         DateOnly selected,
-        List<(FundOverlapRow Row, int HeldBy)> rowsWithConsensus
+        List<(FundOverlapRow Row, int HeldBy)> rowsWithConsensus,
+        int totalMatchingRows = -1,
+        string notes = null
     )
     {
         var result = new StringBuilder();
@@ -1421,6 +1745,8 @@ public class InstitutionalHoldingsTools
         );
         if (missing.Count > 0)
             result.AppendLine($"_Could not resolve: {string.Join(", ", missing)}._");
+        if (notes != null)
+            result.AppendLine(notes);
         result.AppendLine();
         result.AppendLine("Funds:");
         foreach (var h in holders)
@@ -1437,22 +1763,46 @@ public class InstitutionalHoldingsTools
             (rank, x) =>
                 $"| {rank} | {x.Row.Ticker} | {x.Row.Name} | {x.HeldBy}/{holders.Count} | {McpFormat.Invariant(x.Row.CombinedValue / 1_000_000m, "N1")} |"
         );
+
+        var truncation = McpOutput.TruncationNote(
+            rowsWithConsensus.Count,
+            totalMatchingRows < 0 ? rowsWithConsensus.Count : totalMatchingRows
+        );
+        if (truncation.Length > 0)
+        {
+            result.AppendLine();
+            result.AppendLine(truncation);
+        }
         return result.ToString();
     }
 
-    private Task<InstitutionalHolder> FindHolderByName(string name) =>
-        _holderRepository
-            .Search(name ?? string.Empty)
-            .OrderBy(h => h.Name.Length)
-            .ThenBy(h => h.Name)
-            .FirstOrDefaultAsync();
-
-    private async Task<(InstitutionalHolder Holder, string Error)> ResolveHolderByName(string name)
+    // Best single match for a name or CIK: the largest 13F filer among the matches. The old
+    // shortest-name-wins ordering silently resolved famous names to the wrong firm
+    // ("Bridgewater" → Bridgewater Advisors Inc., a small RIA, instead of Bridgewater
+    // Associates, LP) and the whole output would read as the wrong fund's portfolio.
+    private async Task<InstitutionalHolder> FindHolderByName(string name)
     {
-        var holder = await FindHolderByName(name);
-        if (holder == null)
-            return (null, $"No institution found matching '{name}'.");
-        return (holder, null);
+        var matches = await _holderRepository.SearchNameOrCikLargestFirst(name ?? string.Empty, 1);
+        return matches.Count == 0 ? null : matches[0];
+    }
+
+    private async Task<(
+        InstitutionalHolder Holder,
+        string MatchNote,
+        string Error
+    )> ResolveHolderByName(string name)
+    {
+        var matches = await _holderRepository.SearchNameOrCikLargestFirst(name ?? string.Empty, 4);
+        if (matches.Count == 0)
+            return (null, null, $"No institution found matching '{name}'.");
+
+        var holder = matches[0];
+        var matchNote =
+            matches.Count > 1
+                ? $"Note: '{name}' matched {holder.Name} (CIK {holder.Cik}, largest 13F filer of the matches); other matches: "
+                    + $"{string.Join(", ", matches.Skip(1).Select(m => m.Name))} — pass a CIK or use SearchInstitutions to disambiguate."
+                : null;
+        return (holder, matchNote, null);
     }
 
     private Task<List<InstitutionalHolding>> LoadHoldingsByHolderWithStock(
@@ -1604,18 +1954,23 @@ public class InstitutionalHoldingsTools
         InstitutionalHolder Holder,
         List<DateOnly> ReportDates,
         DateOnly TargetDate,
+        string Notes,
         string Error
     )> ResolveHolderAndTargetDate(string institutionName, string reportDate)
     {
-        var (holder, holderError) = await ResolveHolderByName(institutionName);
+        var (holder, matchNote, holderError) = await ResolveHolderByName(institutionName);
         if (holderError != null)
-            return (null, null, default, holderError);
+            return (null, null, default, null, holderError);
 
         var reportDates = await _holdingRepository.Get13FReportDatesByHolder(holder).ToListAsync();
         if (reportDates.Count == 0)
-            return (holder, null, default, $"No 13F holdings reported by {holder.Name}.");
+            return (holder, null, default, null, $"No 13F holdings reported by {holder.Name}.");
 
-        return (holder, reportDates, ResolveReportDate(reportDate, reportDates), null);
+        var (targetDate, dateNote, dateError) = ResolveReportDateStrict(reportDate, reportDates);
+        if (dateError != null)
+            return (holder, reportDates, default, null, dateError);
+
+        return (holder, reportDates, targetDate, JoinNotes(matchNote, dateNote), null);
     }
 
     private static bool TryParseReportDate(string input, out DateOnly result)
@@ -1630,10 +1985,54 @@ public class InstitutionalHoldingsTools
             );
     }
 
-    private static DateOnly ResolveReportDate(string input, IReadOnlyList<DateOnly> validDates) =>
-        TryParseReportDate(input, out var parsed) && validDates.Contains(parsed)
-            ? parsed
-            : validDates[0];
+    // Strict report-date resolution shared by every reportDate-taking holdings tool. The old
+    // helper fell back to validDates[0] (the latest quarter) for ANY bad input, so an LLM
+    // asking for a historical quarter could receive current data and present it as historical
+    // with no tell beyond the as-of header. Contract (validDates is newest-first):
+    // - null/blank         → the latest date, no note (the documented default);
+    // - exact match        → that date;
+    // - parseable off-list → the nearest report date at or before it (standard as-of
+    //                        semantics), with a Note stating the substitution;
+    // - unparseable, or a date older than the tracked history → a one-line Error listing the
+    //                        available dates. Never a silent fallback.
+    private static (DateOnly Date, string Note, string Error) ResolveReportDateStrict(
+        string input,
+        IReadOnlyList<DateOnly> validDates
+    )
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return (validDates[0], null, null);
+
+        if (!TryParseReportDate(input, out var parsed))
+            return (
+                default,
+                null,
+                $"Could not parse reportDate '{input}'. Use YYYY-MM-DD; available report dates: {FormatAvailableDates(validDates)}."
+            );
+
+        if (validDates.Contains(parsed))
+            return (parsed, null, null);
+
+        foreach (var candidate in validDates)
+        {
+            if (candidate <= parsed)
+                return (
+                    candidate,
+                    $"Note: {FormatDate(parsed)} is not a 13F report date — showing the nearest report on or before it, {FormatDate(candidate)}. Available: {FormatAvailableDates(validDates)}.",
+                    null
+                );
+        }
+
+        return (
+            default,
+            null,
+            $"No 13F report on or before {FormatDate(parsed)}. Available report dates: {FormatAvailableDates(validDates)}."
+        );
+    }
+
+    private static string FormatAvailableDates(IReadOnlyList<DateOnly> validDates) =>
+        string.Join(", ", validDates.Take(5).Select(FormatDate))
+        + (validDates.Count > 5 ? ", …" : "");
 
     // Report-date lists are newest-first, so the prior quarter sits at the next index.
     // Returns null when the target is absent from the list or is already the oldest quarter.
@@ -1643,18 +2042,6 @@ public class InstitutionalHoldingsTools
         if (index < 0 || index >= reportDates.Count - 1)
             return null;
         return reportDates[index + 1];
-    }
-
-    private static async Task<(DateOnly Date, bool Found)> TryResolveLatestReportDate(
-        string input,
-        IQueryable<DateOnly> dateSource
-    )
-    {
-        if (TryParseReportDate(input, out var parsed))
-            return (parsed, true);
-
-        var latest = await dateSource.FirstOrDefaultAsync();
-        return (latest, latest != default);
     }
 
     private class HolderAggregate

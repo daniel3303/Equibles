@@ -4,34 +4,58 @@ using Equibles.Holdings.Mcp.Tools;
 namespace Equibles.UnitTests.Holdings;
 
 /// <summary>
-/// Pins the fallback contract of ResolveReportDate — the helper just extracted
-/// in #1301 to collapse four duplicated parse-and-validate ternaries across
-/// the holdings MCP tool. When the input string is malformed or doesn't match
-/// any of the holder's report dates, the helper returns validDates[0]. Every
-/// caller passes a list ordered OrderByDescending(d => d), so [0] is the most
-/// recent date — the established "default to the current quarter" semantics.
-/// A regression returning validDates[^1] (the oldest) would silently swap
-/// every defaulting MCP call to point at the oldest report instead.
+/// Pins the strict-resolution contract of ResolveReportDateStrict, which replaced the old
+/// silent-fallback ResolveReportDate (any bad input → validDates[0]) after the MCP audit
+/// showed an LLM asking for a historical quarter could receive the LATEST quarter's data and
+/// present it as historical. Contract (validDates is newest-first): a null/blank input keeps
+/// the documented "defaults to latest" behavior with no note; an unparseable input returns a
+/// one-line error naming the format and listing the available dates — never a date.
 /// </summary>
 public class InstitutionalHoldingsToolsResolveReportDateFallbackTests
 {
+    private static readonly MethodInfo Method = typeof(InstitutionalHoldingsTools).GetMethod(
+        "ResolveReportDateStrict",
+        BindingFlags.NonPublic | BindingFlags.Static
+    )!;
+
+    private static readonly IReadOnlyList<DateOnly> ValidDates =
+    [
+        new DateOnly(2024, 9, 30),
+        new DateOnly(2024, 6, 30),
+        new DateOnly(2024, 3, 31),
+    ];
+
+    private static (DateOnly Date, string Note, string Error) Resolve(string input) =>
+        ((DateOnly, string, string))Method.Invoke(null, [input, ValidDates])!;
+
     [Fact]
-    public void ResolveReportDate_InputNotInValidDates_FallsBackToMostRecentFirstEntry()
+    public void ResolveReportDateStrict_NullInput_ReturnsMostRecentDateWithoutNote()
     {
-        var method = typeof(InstitutionalHoldingsTools).GetMethod(
-            "ResolveReportDate",
-            BindingFlags.NonPublic | BindingFlags.Static
-        )!;
+        var (date, note, error) = Resolve(null);
 
-        IReadOnlyList<DateOnly> validDates =
-        [
-            new DateOnly(2024, 9, 30),
-            new DateOnly(2024, 6, 30),
-            new DateOnly(2024, 3, 31),
-        ];
+        date.Should().Be(new DateOnly(2024, 9, 30));
+        note.Should().BeNull();
+        error.Should().BeNull();
+    }
 
-        var result = (DateOnly)method.Invoke(null, ["not-a-date", validDates])!;
+    [Fact]
+    public void ResolveReportDateStrict_ExactMatch_ReturnsThatDateWithoutNote()
+    {
+        var (date, note, error) = Resolve("2024-06-30");
 
-        result.Should().Be(new DateOnly(2024, 9, 30));
+        date.Should().Be(new DateOnly(2024, 6, 30));
+        note.Should().BeNull();
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public void ResolveReportDateStrict_UnparseableInput_ReturnsErrorListingAvailableDates()
+    {
+        var (_, note, error) = Resolve("not-a-date");
+
+        note.Should().BeNull();
+        error.Should().Contain("Could not parse reportDate 'not-a-date'");
+        error.Should().Contain("YYYY-MM-DD");
+        error.Should().Contain("2024-09-30");
     }
 }

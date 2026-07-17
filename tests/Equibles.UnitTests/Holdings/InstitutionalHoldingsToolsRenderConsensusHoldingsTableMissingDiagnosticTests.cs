@@ -35,7 +35,7 @@ public class InstitutionalHoldingsToolsRenderConsensusHoldingsTableMissingDiagno
         var rendered = (string)
             RenderConsensusHoldingsTableMethod.Invoke(
                 null,
-                [holders, missing, selected, rowsWithConsensus]
+                [holders, missing, selected, rowsWithConsensus, -1, null]
             );
 
         rendered.Should().Contain("FAKE FUND, ANOTHER FAKE");

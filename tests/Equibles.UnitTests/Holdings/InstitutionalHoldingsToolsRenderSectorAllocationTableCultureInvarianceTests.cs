@@ -38,7 +38,7 @@ public class InstitutionalHoldingsToolsRenderSectorAllocationTableCultureInvaria
                 PercentOfPortfolio = 42.34,
             },
         };
-        object[] args = [holder, targetDate, slices];
+        object[] args = [holder, targetDate, slices, "Industry", null];
 
         var original = CultureInfo.CurrentCulture;
         string invariantOutput;
