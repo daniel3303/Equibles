@@ -32,6 +32,8 @@ public class RagSearchToolsListCompanyDocumentsCultureInvarianceTests : ParadeDb
         return new RagSearchTools(
             ragManager,
             secDocumentService,
+            new CommonStockRepository(DbContext),
+            new DocumentRepository(DbContext),
             ErrorManager,
             NullLogger<RagSearchTools>()
         );
