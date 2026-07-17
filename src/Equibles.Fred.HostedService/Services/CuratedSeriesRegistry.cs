@@ -55,7 +55,9 @@ public static class CuratedSeriesRegistry
         new("SP500", FredSeriesCategory.Market),
         new("VIXCLS", FredSeriesCategory.Market),
         new("NFCI", FredSeriesCategory.Market),
-        new("STLFSI2", FredSeriesCategory.Market),
+        // STLFSI4 supersedes the discontinued STLFSI2 (frozen at 2022-01-07), whose
+        // stale value polluted the "current macro conditions" snapshot.
+        new("STLFSI4", FredSeriesCategory.Market),
     ];
 }
 

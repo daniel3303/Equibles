@@ -82,6 +82,17 @@ public class CuratedSeriesRegistryTests
     }
 
     [Fact]
+    public void Series_TracksStlfsi4NotTheDiscontinuedStlfsi2()
+    {
+        // STLFSI2 was discontinued by FRED (frozen at 2022-01-07); its stale value
+        // polluted the "current macro conditions" snapshot. STLFSI4 supersedes it.
+        CuratedSeriesRegistry
+            .Series.Should()
+            .Contain(s => s.SeriesId == "STLFSI4" && s.Category == FredSeriesCategory.Market);
+        CuratedSeriesRegistry.Series.Should().NotContain(s => s.SeriesId == "STLFSI2");
+    }
+
+    [Fact]
     public void AllCategories_HaveAtLeastOneSeries()
     {
         var allCategories = Enum.GetValues<FredSeriesCategory>();

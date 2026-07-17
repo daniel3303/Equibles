@@ -5,6 +5,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Fred.Data.Models;
 using Equibles.Fred.Repositories;
 using Equibles.Integrations.Fred.Contracts;
+using Equibles.Integrations.Fred.Models;
 using Equibles.Worker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -171,25 +172,49 @@ public class FredReleaseCalendarImportService : IImporter
             return;
         }
 
-        var records = await _fredClient.GetReleaseDates();
+        // One cheap per-release call per tracked release instead of paging the global
+        // /fred/releases/dates feed: FRED reliably 504s that feed at offset >= 1000, and
+        // a single failed page aborted the whole cycle — the calendar then froze at its
+        // last successful import. The per-release endpoint answers instantly, and a
+        // failing release only skips that release, never the cycle. realtimeStart mirrors
+        // the global feed's default window (first day of the current month onward);
+        // without it the per-release endpoint returns all history back to 1776.
+        var utcToday = DateTime.UtcNow;
+        var realtimeStart = new DateOnly(utcToday.Year, utcToday.Month, 1);
 
-        // The endpoint returns dates for every FRED release; keep only the ones
-        // belonging to releases our series actually link to.
         var parsed = new List<(Guid ReleaseId, DateOnly Date)>();
-        foreach (var record in records)
+        foreach (var (fredReleaseId, releaseId) in trackedReleases.OrderBy(r => r.Key))
         {
-            if (!trackedReleases.TryGetValue(record.ReleaseId, out var releaseId))
+            cancellationToken.ThrowIfCancellationRequested();
+
+            List<FredReleaseDateRecord> records;
+            try
+            {
+                records = await _fredClient.GetReleaseDates(fredReleaseId, realtimeStart);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to fetch FRED release dates for release {ReleaseId}, skipping it this cycle",
+                    fredReleaseId
+                );
                 continue;
-            if (
-                !DateOnly.TryParse(
-                    record.Date,
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.None,
-                    out var date
+            }
+
+            foreach (var record in records)
+            {
+                if (
+                    !DateOnly.TryParse(
+                        record.Date,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None,
+                        out var date
+                    )
                 )
-            )
-                continue;
-            parsed.Add((releaseId, date));
+                    continue;
+                parsed.Add((releaseId, date));
+            }
         }
 
         if (parsed.Count == 0)

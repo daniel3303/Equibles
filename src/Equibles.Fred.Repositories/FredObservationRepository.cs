@@ -36,4 +36,18 @@ public class FredObservationRepository : BaseRepository<FredObservation>
             .GroupBy(o => o.FredSeriesId)
             .Select(g => g.OrderByDescending(o => o.Date).First());
     }
+
+    // The observation immediately before the latest one, per series — the "previous"
+    // column of the latest-data snapshot. The Count() > 1 guard is load-bearing:
+    // without it EF materializes a NULL element for every single-observation series
+    // (LEFT JOIN LATERAL with an empty OFFSET 1 subquery), which would NRE any
+    // ToDictionary over the results.
+    public IQueryable<FredObservation> GetPreviousPerSeries()
+    {
+        return GetAll()
+            .Where(o => o.Value != null)
+            .GroupBy(o => o.FredSeriesId)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.OrderByDescending(o => o.Date).Skip(1).First());
+    }
 }

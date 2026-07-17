@@ -216,6 +216,66 @@ public class FredToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task GetEconomicIndicator_MalformedStartDate_ReturnsExplicitError()
+    {
+        var result = await Sut().GetEconomicIndicator("FEDFUNDS", "01/15/2025");
+
+        result.Should().Contain("Unknown startDate '01/15/2025'");
+        result.Should().Contain("yyyy-MM-dd");
+        result.Should().NotContain("| 2025-", "a rejected date must not silently return data");
+    }
+
+    [Fact]
+    public async Task GetEconomicIndicator_MalformedEndDate_ReturnsExplicitError()
+    {
+        var result = await Sut().GetEconomicIndicator("FEDFUNDS", "2025-01-01", "last year");
+
+        result.Should().Contain("Unknown endDate 'last year'");
+        result.Should().Contain("yyyy-MM-dd");
+    }
+
+    [Fact]
+    public async Task GetEconomicIndicator_InvertedRange_NamesTheUserError()
+    {
+        var result = await Sut().GetEconomicIndicator("FEDFUNDS", "2025-12-31", "2025-01-01");
+
+        result.Should().Contain("startDate (2025-12-31) is after endDate (2025-01-01)");
+        result
+            .Should()
+            .NotContain("No observations found", "the error is the swap, not a data gap");
+    }
+
+    [Fact]
+    public async Task GetEconomicIndicator_EndDateOnly_DefaultsStartRelativeToEnd()
+    {
+        // endDate alone must mean "the year up to then", not an empty range against
+        // a start defaulted off today.
+        var result = await Sut().GetEconomicIndicator("FEDFUNDS", endDate: "2025-03-31");
+
+        result.Should().Contain("2025-01-01");
+        result.Should().Contain("2025-03-01");
+        result.Should().NotContain("2025-06-01");
+    }
+
+    [Fact]
+    public async Task GetEconomicIndicator_TruncatedRange_AppendsNewestKeptNote()
+    {
+        var result = await Sut()
+            .GetEconomicIndicator("FEDFUNDS", "2025-01-01", "2025-12-31", maxResults: 2);
+
+        result.Should().Contain("Showing the newest 2 of 5 observations");
+        result.Should().Contain("raise maxResults");
+    }
+
+    [Fact]
+    public async Task GetEconomicIndicator_CompleteRange_HasNoTruncationNote()
+    {
+        var result = await Sut().GetEconomicIndicator("FEDFUNDS", "2025-01-01", "2025-12-31");
+
+        result.Should().NotContain("Showing the newest");
+    }
+
+    [Fact]
     public async Task GetEconomicIndicator_ObservationsOrderedByDateAscending()
     {
         var result = await Sut().GetEconomicIndicator("FEDFUNDS", "2025-01-01", "2025-12-31");
@@ -298,13 +358,25 @@ public class FredToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetLatestEconomicData_InvalidCategory_ReturnsAllSeries()
+    public async Task GetLatestEconomicData_InvalidCategory_ReturnsExplicitErrorNotEverything()
     {
+        // A failed filter must surface, not silently return the unfiltered snapshot.
         var result = await Sut().GetLatestEconomicData("InvalidCategory");
 
-        result.Should().Contain("FEDFUNDS");
-        result.Should().Contain("CPIAUCSL");
-        result.Should().Contain("GDP");
+        result.Should().Contain("Unknown category 'InvalidCategory'");
+        result.Should().Contain("InterestRates");
+        result.Should().Contain("Inflation");
+        result.Should().NotContain("FEDFUNDS");
+    }
+
+    [Fact]
+    public async Task GetLatestEconomicData_NumericCategory_IsRejectedNotParsedByOrdinal()
+    {
+        // Enum.TryParse would accept "5" as an ordinal; the tool must reject it.
+        var result = await Sut().GetLatestEconomicData("5");
+
+        result.Should().Contain("Unknown category '5'");
+        result.Should().NotContain("FEDFUNDS");
     }
 
     [Fact]
@@ -312,8 +384,24 @@ public class FredToolsTests : ParadeDbMcpTestBase
     {
         var result = await Sut().GetLatestEconomicData();
 
-        result.Should().Contain("| Series | Title | Latest Date | Value | Units |");
-        result.Should().Contain("|--------|-------|-------------|-------|-------|");
+        result
+            .Should()
+            .Contain("| Series | Title | Latest Date | Value | Previous | Change | Units |");
+        result
+            .Should()
+            .Contain("|--------|-------|-------------|-------|----------|--------|-------|");
+    }
+
+    [Fact]
+    public async Task GetLatestEconomicData_ShowsPreviousValueAndChange()
+    {
+        var result = await Sut().GetLatestEconomicData();
+
+        // FEDFUNDS: latest 4.00 (2025-09-01), previous 4.25 (2025-06-01) → -0.25.
+        result.Should().Contain("-0.25");
+        result.Should().Contain("4.25");
+        // GDP: latest 28800 (2025-04-01), previous 28500 → positive change carries a sign.
+        result.Should().Contain("+300");
     }
 
     [Fact]
@@ -357,12 +445,58 @@ public class FredToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task SearchEconomicIndicators_NoMatches_ReturnsNotFoundMessage()
+    public async Task SearchEconomicIndicators_NoMatches_ExplainsCuratedScope()
     {
         var result = await Sut().SearchEconomicIndicators("zzzznonexistent");
 
-        result.Should().Contain("No series found matching");
+        result.Should().Contain("No tracked series match");
         result.Should().Contain("zzzznonexistent");
+        result
+            .Should()
+            .Contain(
+                "curated",
+                "the empty state must say the universe is curated, not all of FRED"
+            );
+    }
+
+    [Fact]
+    public async Task SearchEconomicIndicators_CategoryNameQuery_ReturnsWholeCategory()
+    {
+        // "inflation" appears in neither the CPI series id nor its title — only the
+        // category match can surface it. This is the audit's headline recall gap.
+        var result = await Sut().SearchEconomicIndicators("inflation");
+
+        result.Should().Contain("CPIAUCSL");
+        result.Should().NotContain("FEDFUNDS");
+        result.Should().NotContain("| GDP |");
+    }
+
+    [Fact]
+    public async Task SearchEconomicIndicators_EmptyQuery_ListsAllTrackedSeries()
+    {
+        var result = await Sut().SearchEconomicIndicators("");
+
+        result.Should().Contain("All tracked economic indicator series:");
+        result.Should().Contain("FEDFUNDS");
+        result.Should().Contain("CPIAUCSL");
+        result.Should().Contain("GDP");
+    }
+
+    [Fact]
+    public async Task SearchEconomicIndicators_Truncated_AppendsTruncationNote()
+    {
+        var result = await Sut().SearchEconomicIndicators("", maxResults: 1);
+
+        result.Should().Contain("Showing first 1 of 3 results");
+        result.Should().Contain("raise maxResults");
+    }
+
+    [Fact]
+    public async Task SearchEconomicIndicators_CompleteResult_HasNoTruncationNote()
+    {
+        var result = await Sut().SearchEconomicIndicators("FEDFUNDS");
+
+        result.Should().NotContain("Showing first");
     }
 
     [Fact]
