@@ -35,6 +35,11 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
         return GetAll().Where(t => t.InsiderOwnerId == owner.Id);
     }
 
+    public IQueryable<InsiderTransaction> GetByOwnerIds(IEnumerable<Guid> ownerIds)
+    {
+        return GetAll().Where(t => ownerIds.Contains(t.InsiderOwnerId));
+    }
+
     public IQueryable<InsiderTransaction> GetHistoryByStock(CommonStock stock)
     {
         return GetAll().Where(t => t.CommonStockId == stock.Id);
