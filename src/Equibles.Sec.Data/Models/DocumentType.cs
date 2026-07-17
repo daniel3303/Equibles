@@ -9,10 +9,21 @@ public sealed class DocumentType
     public string Value { get; }
     public string DisplayName { get; }
 
-    public DocumentType(string value, string displayName = null)
+    /// <summary>
+    /// When true, documents of this type are excluded from unfiltered document listings
+    /// (filings lists and filing-type pickers) — they still surface through search and can
+    /// be listed by requesting the type explicitly. Meant for registered types that are not
+    /// SEC filings (e.g. investor-relations news), which would otherwise crowd real filings
+    /// out of "recent documents" lists. Defaults to false, so registering a type without
+    /// setting it changes nothing.
+    /// </summary>
+    public bool HiddenFromFilingLists { get; }
+
+    public DocumentType(string value, string displayName = null, bool hiddenFromFilingLists = false)
     {
         Value = value;
         DisplayName = displayName ?? value;
+        HiddenFromFilingLists = hiddenFromFilingLists;
     }
 
     public static readonly DocumentType TenK = new("TenK", "10-K");
