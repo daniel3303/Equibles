@@ -27,3 +27,8 @@ nd
 # "currentY" — the running Y-coordinate cursor when reconstructing the House PTR
 # table from PDF word geometry. codespell suggests "currently".
 currenty
+
+# "IHS" — IHS Markit, the vendor whose US Short Squeeze Model the squeeze-score
+# construction follows (doc comment in ShortSqueezeScoreManager). codespell
+# suggests "HIS".
+ihs
