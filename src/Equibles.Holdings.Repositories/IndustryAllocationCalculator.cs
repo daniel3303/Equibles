@@ -10,6 +10,31 @@ public static class IndustryAllocationCalculator
     // only reads the loaded references, never triggers lazy loads.
     public static List<IndustryAllocationSlice> Calculate(
         IReadOnlyList<InstitutionalHolding> currentQuarterHoldings
+    ) =>
+        Calculate(
+            currentQuarterHoldings,
+            h => h.CommonStock?.IndustryId,
+            h => h.CommonStock?.Industry?.Name
+        );
+
+    // Broad-sector rollup of the same allocation: groups by the industry's Sector instead of
+    // the fine industry taxonomy, so "is this fund concentrated in tech?" is answered in one
+    // ~10-row table instead of summing dozens of industries. Requires the query site to also
+    // populate CommonStock.Industry.Sector (ThenInclude at the call site). The slice reuses
+    // the IndustryAllocationSlice shape — IndustryId/IndustryName carry the sector id/name.
+    public static List<IndustryAllocationSlice> CalculateBySector(
+        IReadOnlyList<InstitutionalHolding> currentQuarterHoldings
+    ) =>
+        Calculate(
+            currentQuarterHoldings,
+            h => h.CommonStock?.Industry?.SectorId,
+            h => h.CommonStock?.Industry?.Sector?.Name
+        );
+
+    private static List<IndustryAllocationSlice> Calculate(
+        IReadOnlyList<InstitutionalHolding> currentQuarterHoldings,
+        Func<InstitutionalHolding, Guid?> groupKey,
+        Func<InstitutionalHolding, string> groupName
     )
     {
         if (currentQuarterHoldings.Count == 0)
@@ -17,29 +42,29 @@ public static class IndustryAllocationCalculator
 
         var totalValue = currentQuarterHoldings.Sum(h => h.Value);
 
-        // Group by industry id (null collapses into one bucket); the per-stock aggregation
+        // Group by taxonomy id (null collapses into one bucket); the per-stock aggregation
         // below ensures a holder reporting the same stock across multiple discretion rows
         // is counted as ONE position in the allocation, not multiple.
-        var byIndustry = currentQuarterHoldings
-            .GroupBy(h => h.CommonStock?.IndustryId)
-            .Select(industryGroup =>
+        var slices = currentQuarterHoldings
+            .GroupBy(groupKey)
+            .Select(group =>
             {
-                var industryId = industryGroup.Key;
-                var industryName =
-                    industryGroup.FirstOrDefault()?.CommonStock?.Industry?.Name
+                var groupId = group.Key;
+                var name =
+                    group.Select(groupName).FirstOrDefault(n => n != null)
                     ?? IndustryAllocationSlice.UnclassifiedName;
-                var perStock = industryGroup
+                var perStock = group
                     .GroupBy(h => h.CommonStockId)
                     .Select(stockGroup => new { Value = stockGroup.Sum(h => h.Value) })
                     .ToList();
-                var industryValue = perStock.Sum(p => p.Value);
+                var groupValue = perStock.Sum(p => p.Value);
                 return new IndustryAllocationSlice
                 {
-                    IndustryId = industryId,
-                    IndustryName = industryName,
+                    IndustryId = groupId,
+                    IndustryName = name,
                     PositionCount = perStock.Count,
-                    TotalValue = industryValue,
-                    PercentOfPortfolio = Percentage.Of(industryValue, totalValue),
+                    TotalValue = groupValue,
+                    PercentOfPortfolio = Percentage.Of(groupValue, totalValue),
                 };
             })
             // Unclassified always last, even if its value would otherwise rank it higher.
@@ -47,6 +72,6 @@ public static class IndustryAllocationCalculator
             .ThenByDescending(s => s.TotalValue)
             .ToList();
 
-        return byIndustry;
+        return slices;
     }
 }
