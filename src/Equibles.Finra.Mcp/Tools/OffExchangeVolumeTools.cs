@@ -35,9 +35,10 @@ public class OffExchangeVolumeTools
     [McpServerTool(Name = "GetOffExchangeVolume")]
     [Description(
         "Get weekly off-exchange (dark pool / OTC) trading volume for a stock from the FINRA OTC/ATS Transparency data. "
-            + "Each week shows ATS (alternating trading system / dark pool) volume and trade count, non-ATS OTC volume and trade count, "
+            + "Each week shows ATS (alternative trading system / dark pool) volume and trade count, non-ATS OTC volume and trade count, "
             + "and the total off-exchange volume (ATS + non-ATS OTC). The FINRA file does not include consolidated tape volume, so the "
-            + "off-exchange share of total market volume is not reported here; compute that share elsewhere against a consolidated-volume source."
+            + "off-exchange share of total market volume is not reported here; compute that share elsewhere against a consolidated-volume source. "
+            + "FINRA publishes each week on a delay (2 weeks for Tier 1 NMS stocks, longer for other tiers), so the latest week lags today."
     )]
     public Task<string> GetOffExchangeVolume(
         [Description("Stock ticker symbol (e.g., AAPL, GME, TSLA)")] string ticker,
@@ -45,7 +46,9 @@ public class OffExchangeVolumeTools
             string startDate = null,
         [Description("End date in YYYY-MM-DD format (defaults to latest available)")]
             string endDate = null,
-        [Description("Maximum number of weeks to return (default: 26, newest first)")]
+        [Description(
+            "Maximum number of weeks to return — keeps the most recent N weeks in the range, displayed oldest to newest (default: 26, max: 500)"
+        )]
             int maxResults = 26
     )
     {
@@ -56,25 +59,27 @@ public class OffExchangeVolumeTools
                 if (stockError != null)
                     return stockError;
 
-                var (start, end) = McpToolExecutor.ParseDateRange(
+                var (startWeek, endWeek, rangeError) = ParseStrictDateRange(
                     startDate,
                     endDate,
                     McpToolExecutor.UtcMonthsAgo(6)
                 );
-
-                var startWeek = DateOnly.FromDateTime(start.ToDateTime(TimeOnly.MinValue));
-                var endWeek = DateOnly.FromDateTime(end.ToDateTime(TimeOnly.MinValue));
+                if (rangeError != null)
+                    return rangeError;
 
                 maxResults = McpLimit.Clamp(maxResults);
 
-                var records = await _offExchangeVolumeRepository
+                var query = _offExchangeVolumeRepository
                     .GetHistoryByStock(stock)
-                    .Where(d => d.WeekStartDate >= startWeek && d.WeekStartDate <= endWeek)
+                    .Where(d => d.WeekStartDate >= startWeek && d.WeekStartDate <= endWeek);
+
+                var total = await query.CountAsync();
+                var records = await query
                     .OrderByDescending(d => d.WeekStartDate)
                     .Take(maxResults)
                     .ToListAsync();
 
-                return MarkdownTable.Render(
+                var table = MarkdownTable.Render(
                     records.OrderBy(r => r.WeekStartDate).ToList(),
                     $"No off-exchange volume data found for {stock.Ticker} in the specified date range.",
                     $"Weekly off-exchange (dark pool / OTC) volume for {stock.Ticker} ({stock.Name}):",
@@ -82,11 +87,70 @@ public class OffExchangeVolumeTools
                     "|------------|-----------|-----------|-------------------|-------------------|--------------------------|",
                     r => RenderOffExchangeRow($"{r.WeekStartDate:yyyy-MM-dd}", r)
                 );
+
+                return AppendNote(table, NewestKeptNote(records.Count, total, "weeks"));
             },
             "GetOffExchangeVolume",
             $"ticker: {ticker}"
         );
     }
+
+    // Strict replacement for McpToolExecutor.ParseDateRange: a supplied date must be ISO
+    // yyyy-MM-dd (no silent fallback onto the default window) and the range must not be
+    // inverted — a caller typo must never silently answer for a window it did not ask about,
+    // and an inverted range must never masquerade as a factual "no data" claim.
+    private static (DateOnly Start, DateOnly End, string Error) ParseStrictDateRange(
+        string startDate,
+        string endDate,
+        DateOnly defaultStart
+    )
+    {
+        var start = defaultStart;
+        if (!string.IsNullOrWhiteSpace(startDate))
+        {
+            if (!McpOutput.TryParseDate(startDate, out var parsedStart))
+                return (
+                    default,
+                    default,
+                    McpOutput.InvalidArgument("startDate", startDate, "yyyy-MM-dd")
+                );
+            start = DateOnly.FromDateTime(parsedStart);
+        }
+
+        var end = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (!string.IsNullOrWhiteSpace(endDate))
+        {
+            if (!McpOutput.TryParseDate(endDate, out var parsedEnd))
+                return (
+                    default,
+                    default,
+                    McpOutput.InvalidArgument("endDate", endDate, "yyyy-MM-dd")
+                );
+            end = DateOnly.FromDateTime(parsedEnd);
+        }
+
+        if (start > end)
+            return (
+                default,
+                default,
+                $"startDate {start:yyyy-MM-dd} is after endDate {end:yyyy-MM-dd} — startDate must be on or before endDate."
+            );
+
+        return (start, end, null);
+    }
+
+    // Sibling of McpOutput.TruncationNote for a table that KEEPS the newest N weeks but
+    // DISPLAYS them oldest-first: "first N" would read as the oldest N, so the note names
+    // the kept end explicitly. Empty when nothing was cut.
+    private static string NewestKeptNote(int shown, int total, string unit) =>
+        shown >= total
+            ? string.Empty
+            : $"_Showing the newest {shown} of {total} {unit} in the range — raise maxResults (max {McpLimit.MaxResults}) or narrow the date range to see earlier ones._";
+
+    // Appends a note line under a rendered table (blank line first so strict CommonMark
+    // renderers keep the table intact); a no-op for the empty note or an empty-state message.
+    private static string AppendNote(string table, string note) =>
+        note.Length == 0 ? table : $"{table}\n{note}\n";
 
     // Render with InvariantCulture so the MCP markdown does not fork the separators by host
     // locale (e.g. de-DE would render 5.000.000 instead of 5,000,000). Total off-exchange
