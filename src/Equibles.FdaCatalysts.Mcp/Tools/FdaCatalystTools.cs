@@ -29,7 +29,7 @@ public class FdaCatalystTools
 
     [McpServerTool(Name = "GetFdaCatalysts")]
     [Description(
-        "Get scheduled FDA advisory-committee (AdComm) meetings — the regulatory catalyst dates that move biotech and pharma stocks. Sourced from the FDA.gov advisory-committee calendar. Defaults to meetings in the next 90 days; pass a date range to look further ahead or back."
+        "Get scheduled FDA advisory-committee (AdComm) meetings, sourced from the FDA.gov advisory-committee calendar, each with a link to its FDA meeting page. Defaults to meetings in the next 90 days; pass a date range to look further ahead. This is a forward-looking calendar of announced meetings, not a historical archive — coverage starts in late 2025 — and entries are the FDA's own listings, not linked to stock tickers."
     )]
     public Task<string> GetFdaCatalysts(
         [Description("Start date in YYYY-MM-DD format (defaults to today)")]
@@ -44,33 +44,69 @@ public class FdaCatalystTools
             async () =>
             {
                 var today = DateOnly.FromDateTime(DateTime.UtcNow);
-                var start = McpToolExecutor.ParseDateOr(startDate, today);
-                var end = McpToolExecutor.ParseDateOr(endDate, start.AddDays(90));
+                var start = today;
+                if (!string.IsNullOrWhiteSpace(startDate))
+                {
+                    if (!McpOutput.TryParseDate(startDate, out var parsedStart))
+                        return McpOutput.InvalidArgument("startDate", startDate, "YYYY-MM-DD");
+                    start = DateOnly.FromDateTime(parsedStart);
+                }
+
+                var end = start.AddDays(90);
+                if (!string.IsNullOrWhiteSpace(endDate))
+                {
+                    if (!McpOutput.TryParseDate(endDate, out var parsedEnd))
+                        return McpOutput.InvalidArgument("endDate", endDate, "YYYY-MM-DD");
+                    end = DateOnly.FromDateTime(parsedEnd);
+                }
+
+                // An inverted range is a caller mistake — clamping it silently searched a
+                // different window than requested and reported a misleading "no meetings".
                 if (end < start)
-                    end = start;
+                    return $"Invalid date range: endDate {end:yyyy-MM-dd} is before startDate {start:yyyy-MM-dd}.";
 
                 maxResults = McpLimit.Clamp(maxResults);
 
-                var records = await _repository
-                    .GetByDateRange(start, end)
+                var range = _repository.GetByDateRange(start, end);
+                var total = await range.CountAsync();
+                var records = await range
                     .OrderBy(c => c.MeetingDate)
                     .ThenBy(c => c.Title)
                     .Take(maxResults)
                     .ToListAsync();
 
-                return MarkdownTable.Render(
+                if (records.Count == 0)
+                    return await EmptyRangeMessage(start, end);
+
+                var result = MarkdownTable.Render(
                     records,
-                    "No FDA advisory-committee meetings found in the specified date range.",
-                    "FDA Catalyst Calendar (advisory-committee meetings):",
-                    "| Date | Meeting | Center | Type | Through |",
-                    "|------|---------|--------|------|---------|",
+                    string.Empty,
+                    $"FDA Catalyst Calendar (advisory-committee meetings, {start:yyyy-MM-dd} to {end:yyyy-MM-dd}):",
+                    "| Date | Meeting | Center | Type | Through | Details |",
+                    "|------|---------|--------|------|---------|---------|",
                     c =>
-                        $"| {c.MeetingDate:yyyy-MM-dd} | {Clean(c.Title)} | {Clean(c.Center)} | {c.CatalystType.NameForHumans()} | {(c.EndDate.HasValue ? c.EndDate.Value.ToString("yyyy-MM-dd") : "—")} |"
+                        $"| {c.MeetingDate:yyyy-MM-dd} | {Clean(c.Title)} | {Clean(c.Center)} | {c.CatalystType.NameForHumans()} | {(c.EndDate.HasValue ? c.EndDate.Value.ToString("yyyy-MM-dd") : "—")} | {(string.IsNullOrEmpty(c.SourceUrl) ? "—" : c.SourceUrl)} |"
                 );
+                var truncation = McpOutput.TruncationNote(records.Count, total);
+                return truncation.Length == 0 ? result : result + "\n" + truncation + "\n";
             },
             "GetFdaCatalysts",
             $"startDate: {startDate}"
         );
+    }
+
+    // Reports the searched window plus the calendar's actual coverage, so a query
+    // outside the covered span reads as a coverage boundary, never as "no meetings".
+    private async Task<string> EmptyRangeMessage(DateOnly start, DateOnly end)
+    {
+        var oldest = await _repository.GetAll().MinAsync(c => (DateOnly?)c.MeetingDate);
+        var newest = await _repository.GetAll().MaxAsync(c => (DateOnly?)c.MeetingDate);
+        var message =
+            $"No FDA advisory-committee meetings found between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.";
+        return oldest == null || newest == null
+            ? message
+            : message
+                + $" The calendar currently covers {oldest:yyyy-MM-dd} to {newest:yyyy-MM-dd} — meetings outside that span have not been announced or predate coverage.";
     }
 
     // Free-text columns can contain pipes or newlines that would break the markdown row.
