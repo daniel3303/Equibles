@@ -11,7 +11,10 @@ public class CongressMemberRepository : BaseRepository<CongressMember>
 
     public async Task<CongressMember> GetByName(string name)
     {
-        return await GetAll().FirstOrDefaultAsync(m => m.Name == name);
+        // Case-insensitive exact match (same pattern as CommonStockRepository.GetByName):
+        // the name arrives as caller-typed input, and == is case-sensitive in PostgreSQL,
+        // so 'nancy pelosi' would miss 'Nancy Pelosi'.
+        return await GetAll().FirstOrDefaultAsync(m => m.Name.ToLower() == name.ToLower());
     }
 
     public IQueryable<CongressMember> Search(string search)
