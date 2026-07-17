@@ -256,5 +256,4 @@ public class NportTools
     private static string FormatAmount(decimal value) => McpFormat.Invariant(value, "N2");
 
     private static string FormatPercent(decimal value) => McpFormat.Invariant(value, "N2") + "%";
-
 }
