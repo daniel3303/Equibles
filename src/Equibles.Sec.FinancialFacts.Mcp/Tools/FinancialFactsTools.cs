@@ -52,7 +52,9 @@ public class FinancialFactsTools
         "Get a single financial concept (e.g. revenue, net income, diluted EPS, total "
             + "assets, operating cash flow) over time for a company, sourced from SEC "
             + "Company Facts (structured XBRL). Returns a time series, one row per fiscal "
-            + "period, using the latest restated value unless asOriginallyReported is set."
+            + "period, using the latest restated value unless asOriginallyReported is set. "
+            + "Fiscal years/quarters follow the company's own fiscal calendar. For a full "
+            + "statement use GetFinancialStatement; to compare peers use CompareFinancialFact."
     )]
     public Task<string> GetFinancialFact(
         [Description("Stock ticker symbol (e.g., AAPL, MSFT)")] string ticker,
@@ -70,7 +72,13 @@ public class FinancialFactsTools
             "When true, show the value as originally filed (earliest filing) instead of "
                 + "the latest restatement. Default false."
         )]
-            bool asOriginallyReported = false
+            bool asOriginallyReported = false,
+        [Description(
+            "Optional fiscal-period filter: 'FY' (annual only) or 'Q1'..'Q4'. Note that "
+                + "discrete Q4 rows exist only where the filer reported a discrete fourth "
+                + "quarter (most large filers stopped after ~2021)."
+        )]
+            string fiscalPeriod = null
     )
     {
         return _runner.Execute(
@@ -102,6 +110,18 @@ public class FinancialFactsTools
                 if (!TryParseBound(toDate, out var toBound))
                     return $"Unknown date '{toDate}'. Use YYYY-MM-DD.";
 
+                SecFiscalPeriod? periodFilter = null;
+                if (!string.IsNullOrWhiteSpace(fiscalPeriod))
+                {
+                    if (!FactArgs.TryParsePeriod(fiscalPeriod, out var parsedPeriod))
+                        return McpOutput.InvalidArgument(
+                            "fiscalPeriod",
+                            fiscalPeriod,
+                            "'FY' or 'Q1'..'Q4'"
+                        );
+                    periodFilter = parsedPeriod;
+                }
+
                 // conceptId → alias priority (0 = the alias's primary tag). Used
                 // to break ties deterministically when one period carries facts
                 // under several of the alias's tags (the ASC 606 transition).
@@ -120,13 +140,16 @@ public class FinancialFactsTools
                 // ReportedQuarterPromotion; a full-year total can never qualify).
                 var allFacts = ReportedQuarterPromotion.WithPromotedFourthQuarters(facts);
 
-                // Form / period-end filtering in memory: a single concept's
-                // history is small, and DocumentType is a value-converted type
-                // so equality is kept off the SQL side for provider safety.
+                // Form / period-end / fiscal-period filtering in memory: a
+                // single concept's history is small, and DocumentType is a
+                // value-converted type so equality is kept off the SQL side
+                // for provider safety. The fiscal-period filter runs after
+                // promotion so a Q4 request sees the promoted rows.
                 var filtered = allFacts.Where(f =>
                     (formFilter == null || f.Form == formFilter)
                     && (fromBound == null || f.PeriodEnd >= fromBound.Value)
                     && (toBound == null || f.PeriodEnd <= toBound.Value)
+                    && (periodFilter == null || f.FiscalPeriod == periodFilter.Value)
                 );
 
                 // One row per fiscal period. The alias may span several tags and
@@ -134,31 +157,62 @@ public class FinancialFactsTools
                 // (the ASC 606 transition year tags both Revenues and the new
                 // concept). Pick deterministically: the alias's primary tag
                 // wins, then the latest filing — or the earliest, when the
-                // caller wants the figure as originally reported.
-                var perPeriod = filtered
-                    .GroupBy(f => (f.FiscalYear, f.FiscalPeriod))
-                    .Select(g => PickBestFact(g, conceptPriority, asOriginallyReported))
+                // caller wants the figure as originally reported. The picked
+                // rows are then deduped by actual reporting span, because a
+                // date window can degenerate a fiscal group to a comparative
+                // re-report of an earlier period (see DedupeByReportingSpan).
+                var perPeriod = DedupeByReportingSpan(
+                        filtered
+                            .GroupBy(f => (f.FiscalYear, f.FiscalPeriod))
+                            .Select(g => PickBestFact(g, conceptPriority, asOriginallyReported))
+                    )
                     .OrderByDescending(f => f.PeriodEnd)
-                    .Take(Math.Clamp(maxResults, 1, MaxResultsCap))
                     .ToList();
 
-                if (perPeriod.Count == 0)
+                var shown = perPeriod.Take(Math.Clamp(maxResults, 1, MaxResultsCap)).ToList();
+
+                if (shown.Count == 0)
                     return $"No '{concept}' data found for {stock.Ticker} with the given filters.";
 
-                return RenderFactHistoryTable(concept, stock, asOriginallyReported, perPeriod);
+                return RenderFactHistoryTable(
+                    concept,
+                    stock,
+                    asOriginallyReported,
+                    shown,
+                    perPeriod.Count
+                );
             },
             "GetFinancialFact",
             $"ticker: {FactMarkdown.Clean(ticker)}, concept: {FactMarkdown.Clean(concept)}, "
-                + $"form: {FactMarkdown.Clean(form)}"
+                + $"form: {FactMarkdown.Clean(form)}, "
+                + $"fiscalPeriod: {FactMarkdown.Clean(fiscalPeriod)}"
         );
     }
+
+    // A fromDate/toDate window can exclude a fiscal year's own period end while
+    // keeping a comparative re-report of an EARLIER period — a filing re-reports
+    // prior periods under its own fiscal identity, so that group degenerates to
+    // the comparative alone and its pick duplicates a period end another group
+    // already covers, under the wrong fiscal-year label (NVDA's FY2026 10-K
+    // re-reporting FY2025 EPS surfaced as a second "FY 2026" row when toDate
+    // excluded 2026-01-25). One row per actual reporting span: the smallest
+    // fiscal-year stamp is the period's own identity, because comparative
+    // re-filings always re-stamp the same span under the filing's LATER year
+    // (same rule as ReportedQuarterPromotion's anchor).
+    internal static List<FinancialFact> DedupeByReportingSpan(IEnumerable<FinancialFact> picked) =>
+        picked
+            .GroupBy(f => (f.PeriodStart, f.PeriodEnd, f.PeriodType))
+            .Select(g => g.OrderBy(f => f.FiscalYear).ThenBy(f => f.FiscalPeriod).First())
+            .ToList();
 
     [McpServerTool(Name = "CompareFinancialFact")]
     [Description(
         "Compare one financial concept across several companies for the same fiscal "
             + "period — peer comparison. Returns one row per ticker with the "
             + "latest-restated value; tickers with no data for the period are listed "
-            + "separately."
+            + "separately. Fiscal year/period follow each company's OWN fiscal calendar "
+            + "(e.g. NVDA's fiscal 2025 ended January 2025), so peer rows can cover very "
+            + "different calendar months — check the Period End column."
     )]
     public Task<string> CompareFinancialFact(
         [Description("Comma-separated tickers, e.g. 'AAPL,MSFT,GOOGL' (max 25)")] string tickers,
@@ -275,7 +329,8 @@ public class FinancialFactsTools
         string concept,
         CommonStock stock,
         bool asOriginallyReported,
-        List<FinancialFact> perPeriod
+        List<FinancialFact> perPeriod,
+        int totalPeriods
     )
     {
         var basis = asOriginallyReported ? "as originally reported" : "latest restated";
@@ -296,6 +351,14 @@ public class FinancialFactsTools
                 + $"{FactMarkdown.Cell(f.AccessionNumber)} |"
         );
 
+        // Rows are newest first, so "first N" reads correctly; a no-op empty
+        // line when nothing was cut off.
+        if (perPeriod.Count < totalPeriods)
+        {
+            result.AppendLine();
+            result.AppendLine(McpOutput.TruncationNote(perPeriod.Count, totalPeriods));
+        }
+
         return result.ToString();
     }
 
@@ -310,6 +373,10 @@ public class FinancialFactsTools
     {
         var rows = new List<(string Ticker, string Name, FinancialFact Fact)>();
         var skipped = new List<string>();
+        // A company's primary and secondary tickers (GOOGL/GOOG) resolve to the
+        // same stock; a second request string for a stock already in the table
+        // would duplicate its row, so it is reported instead of re-added.
+        var rowTickerByStockId = new Dictionary<Guid, string>();
         foreach (var ticker in requested)
         {
             if (!stockByTicker.TryGetValue(ticker, out var stock))
@@ -317,15 +384,30 @@ public class FinancialFactsTools
                 skipped.Add($"{FactMarkdown.Cell(ticker)} (not found)");
                 continue;
             }
+            if (rowTickerByStockId.TryGetValue(stock.Id, out var firstTicker))
+            {
+                skipped.Add($"{FactMarkdown.Cell(ticker)} (same company as {firstTicker})");
+                continue;
+            }
+            rowTickerByStockId.Add(stock.Id, ticker);
             if (!bestByStock.TryGetValue(stock.Id, out var best))
             {
                 skipped.Add($"{FactMarkdown.Cell(ticker)} (no data)");
                 continue;
             }
-            rows.Add((stock.Ticker, stock.Name, best));
+            // The row stays traceable to the caller's input: a secondary-ticker
+            // request shows that ticker, with the primary in parentheses.
+            var label = ticker == stock.Ticker ? stock.Ticker : $"{ticker} ({stock.Ticker})";
+            rows.Add((label, stock.Name, best));
         }
         return (rows, skipped);
     }
+
+    // Peer period ends further apart than one calendar quarter mean the rows
+    // cover materially different calendar months (NVDA's fiscal Q2 2025 ended
+    // July 2024; AMD's ended June 2025) — flag it so the comparison is never
+    // read as same-calendar-period.
+    private const int MaxAlignedPeriodEndSpreadDays = 92;
 
     private static string RenderComparisonTable(
         string concept,
@@ -337,8 +419,8 @@ public class FinancialFactsTools
     {
         var result = MarkdownTable.Start(
             $"{concept} — {fiscalYear} {period.NameForHumans()} peer comparison:",
-            "| Ticker | Company | Value | Unit | Form | Filed |",
-            "|--------|---------|------:|------|------|-------|"
+            "| Ticker | Company | Value | Unit | Period End | Form | Filed |",
+            "|--------|---------|------:|------|-----------|------|-------|"
         );
         result.AppendRows(
             rows,
@@ -346,6 +428,7 @@ public class FinancialFactsTools
                 $"| {FactMarkdown.Cell(r.Ticker)} | {FactMarkdown.Cell(r.Name)} | "
                 + $"{FactMarkdown.Value(r.Fact.Value, r.Fact.Unit)} | "
                 + $"{FactMarkdown.Cell(r.Fact.Unit)} | "
+                + $"{r.Fact.PeriodEnd:yyyy-MM-dd} | "
                 + $"{FactMarkdown.Cell(r.Fact.Form?.DisplayName)} | "
                 + $"{r.Fact.FiledDate:yyyy-MM-dd} |"
         );
@@ -355,6 +438,18 @@ public class FinancialFactsTools
                 $"\n_No company reported '{concept}' for {fiscalYear} "
                     + $"{period.NameForHumans()}._"
             );
+
+        if (rows.Count > 1)
+        {
+            var earliest = rows.Min(r => r.Fact.PeriodEnd);
+            var latest = rows.Max(r => r.Fact.PeriodEnd);
+            if (latest.DayNumber - earliest.DayNumber > MaxAlignedPeriodEndSpreadDays)
+                result.AppendLine(
+                    $"\n_Note: fiscal calendars differ across these companies — period ends "
+                        + $"span {earliest:yyyy-MM-dd} to {latest:yyyy-MM-dd}. Each row covers "
+                        + "that company's own fiscal period, not the same calendar months._"
+                );
+        }
 
         if (skipped.Count > 0)
             result.AppendLine($"\n_Skipped: {string.Join(", ", skipped)}._");
