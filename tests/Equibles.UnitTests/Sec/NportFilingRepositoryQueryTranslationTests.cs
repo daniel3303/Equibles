@@ -44,9 +44,7 @@ public class NportFilingRepositoryQueryTranslationTests
         var repository = new NportFilingRepository(ctx);
 
         var sql = repository
-            .GetHoldingsByStockCusip(
-                new CommonStock { Id = Guid.NewGuid(), Cusip = "037833100" }
-            )
+            .GetHoldingsByStockCusip(new CommonStock { Id = Guid.NewGuid(), Cusip = "037833100" })
             .ToQueryString();
 
         // The current CUSIP must ride inside the alias subquery (UNION), never as a separate
@@ -65,10 +63,7 @@ public class NportFilingRepositoryQueryTranslationTests
         var flat = System.Text.RegularExpressions.Regex.Replace(sql, @"\s+", " ");
 
         // One branch per registrant population, concatenated — never one OR-ed identity.
-        System.Text.RegularExpressions.Regex
-            .Matches(flat, "UNION ALL")
-            .Count.Should()
-            .Be(2);
+        System.Text.RegularExpressions.Regex.Matches(flat, "UNION ALL").Count.Should().Be(2);
 
         // The trust branch's anti-join must keep a bare RegistrantCik equality: EF null
         // compensation ("= OR both-null") would strip the anti-join of its hash key and
