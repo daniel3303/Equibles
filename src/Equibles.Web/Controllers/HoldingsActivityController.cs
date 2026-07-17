@@ -407,7 +407,7 @@ public class HoldingsActivityController : BaseController
     // holding, so the default selection (and the quarter-over-quarter compare)
     // silently degrades to quarter-vs-single-day.
     private Task<List<DateOnly>> LoadAvailableReportDates() =>
-        _holdingRepository.Get13FAvailableReportDates().ToListAsync();
+        _holdingRepository.Get13FAvailableReportDatesCached();
 
     private Task<Dictionary<Guid, StockLabel>> LoadStockLabels(List<Guid> stockIds) =>
         _commonStockRepository
