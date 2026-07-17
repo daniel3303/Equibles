@@ -36,6 +36,7 @@ public class UsaSpendingClient : IUsaSpendingClient
         "Total Outlays",
         "Awarding Agency",
         "Contract Award Type",
+        "Base Obligation Date",
         "Start Date",
         "End Date",
         "Last Modified Date",

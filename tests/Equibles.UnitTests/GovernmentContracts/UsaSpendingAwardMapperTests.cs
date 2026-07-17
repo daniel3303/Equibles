@@ -19,6 +19,7 @@ public class UsaSpendingAwardMapperTests
             TotalOutlays = 500_000m,
             AwardingAgency = "Department of Defense",
             ContractAwardType = "DEFINITIVE CONTRACT",
+            BaseObligationDate = "2024-02-20",
             StartDate = "2024-03-15",
             EndDate = "2027-03-14",
             LastModifiedDate = "2024-04-01",
@@ -42,7 +43,7 @@ public class UsaSpendingAwardMapperTests
         entity.AwardType.Should().Be(GovernmentContractAwardType.DefinitiveContract);
         entity.Amount.Should().Be(1_234_567.89m);
         entity.TotalOutlays.Should().Be(500_000m);
-        entity.ActionDate.Should().Be(new DateOnly(2024, 3, 15));
+        entity.ActionDate.Should().Be(new DateOnly(2024, 2, 20));
         entity.EndDate.Should().Be(new DateOnly(2027, 3, 14));
         entity.LastModifiedDate.Should().Be(new DateOnly(2024, 4, 1));
         entity.NaicsCode.Should().Be("336411");
@@ -70,6 +71,45 @@ public class UsaSpendingAwardMapperTests
         record.AwardId = null;
 
         UsaSpendingAwardMapper.Map(record, Guid.NewGuid()).Should().BeNull();
+    }
+
+    [Fact]
+    public void Map_takes_action_date_from_base_obligation_date_not_performance_start()
+    {
+        // Regression (prod incident): mapping the period-of-performance start into
+        // ActionDate stores future dates (PoP starts reach 2028+), and the incremental
+        // import cursor (max(ActionDate)+1) then overshoots today and freezes ingestion.
+        var record = SampleRecord();
+        record.BaseObligationDate = "2024-02-20";
+        record.StartDate = "2028-12-31"; // future PoP start must never become ActionDate
+
+        var entity = UsaSpendingAwardMapper.Map(record, Guid.NewGuid());
+
+        entity.ActionDate.Should().Be(new DateOnly(2024, 2, 20));
+    }
+
+    [Fact]
+    public void Map_parses_the_timestamped_last_modified_date_wire_format()
+    {
+        // USAspending sends Last Modified Date with a time component
+        // ("2026-07-07 17:57:06"); a strict yyyy-MM-dd parse nulled it on every row.
+        var record = SampleRecord();
+        record.LastModifiedDate = "2026-07-07 17:57:06";
+
+        var entity = UsaSpendingAwardMapper.Map(record, Guid.NewGuid());
+
+        entity.LastModifiedDate.Should().Be(new DateOnly(2026, 7, 7));
+    }
+
+    [Fact]
+    public void Map_leaves_action_date_null_when_base_obligation_date_is_missing()
+    {
+        var record = SampleRecord();
+        record.BaseObligationDate = null;
+
+        var entity = UsaSpendingAwardMapper.Map(record, Guid.NewGuid());
+
+        entity.ActionDate.Should().BeNull();
     }
 
     [Theory]
