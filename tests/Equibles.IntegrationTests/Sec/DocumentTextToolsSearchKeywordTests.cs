@@ -72,7 +72,7 @@ public class DocumentTextToolsSearchKeywordTests : ParadeDbMcpTestBase
         // search — a regression to OrdinalCase would return "No matches found".
         var output = await sut.SearchDocumentKeyword(document.Id, "revenue");
 
-        output.Should().Contain("1 matches found");
+        output.Should().Contain("1 matching line(s)");
         output.Should().Contain("**Revenue**"); // preserves original casing inside markers
         output.Should().Contain("First line of the filing."); // line before
         output.Should().Contain("Operating expenses remained stable."); // line after

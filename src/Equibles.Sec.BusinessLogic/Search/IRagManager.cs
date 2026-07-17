@@ -30,7 +30,12 @@ public interface IRagManager
     public Task<List<Chunk>> SearchRelevantChunksByDocument(
         string query,
         Guid documentId,
-        int maxResults = 5
+        int maxResults = 5,
+        bool broadenSparseResults = false
     );
-    public Task<string> BuildContext(List<Chunk> chunks);
+    public Task<string> BuildContext(
+        List<Chunk> chunks,
+        bool includeDocumentIds = false,
+        int maxExcerptChars = 0
+    );
 }

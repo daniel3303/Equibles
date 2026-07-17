@@ -59,6 +59,7 @@ public class HybridChunkSearcher
         int maxResultsPerCompany = 0,
         DateOnly? startDate = null,
         DateOnly? endDate = null,
+        bool disjunctiveFallback = false,
         CancellationToken cancellationToken = default
     )
     {
@@ -84,8 +85,31 @@ public class HybridChunkSearcher
             documentTypes,
             startDate,
             endDate,
-            cancellationToken
+            cancellationToken: cancellationToken
         );
+
+        // Opt-in recall fallback: BM25 ANDs every query token, so a wordy natural-language
+        // query where a single token has no match ("drivers" vs the filing's "driven")
+        // excludes every on-point chunk. When the conjunctive pass can't fill the request,
+        // top up from a disjunctive (any-token) pass — conjunctive hits keep their rank and
+        // the broader hits only append after them, so precise matches never lose position.
+        if (disjunctiveFallback && bm25.Count < maxResults)
+        {
+            var disjunctive = await _chunkRepository.HybridSearch(
+                query,
+                bm25Limit,
+                ticker,
+                excludeTickers,
+                documentId,
+                documentTypes,
+                startDate,
+                endDate,
+                conjunctive: false,
+                cancellationToken: cancellationToken
+            );
+            var seen = bm25.Select(chunk => chunk.Id).ToHashSet();
+            bm25 = bm25.Concat(disjunctive.Where(chunk => !seen.Contains(chunk.Id))).ToList();
+        }
 
         if (!semanticActive || bm25.Count == 0)
             return ApplyPoolControls(bm25, excludeTickers, documentTypes, maxResultsPerCompany)
