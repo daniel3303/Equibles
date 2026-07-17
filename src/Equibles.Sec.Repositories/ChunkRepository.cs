@@ -27,6 +27,7 @@ public class ChunkRepository : BaseRepository<Chunk>
         IReadOnlyCollection<DocumentType> documentTypes = null,
         DateOnly? startDate = null,
         DateOnly? endDate = null,
+        bool conjunctive = true,
         CancellationToken cancellationToken = default
     )
     {
@@ -35,9 +36,13 @@ public class ChunkRepository : BaseRepository<Chunk>
         // Layering them as SQL .Where(...) predicates instead made Postgres score every
         // text match first and post-filter the result on the heap (heap_filter) — for a
         // high-coverage ticker that scored set is enormous and blew the 5s budget (#2157).
+        //
+        // conjunctive: true ANDs every query token (the precise default); false ORs them —
+        // used as a recall fallback when the conjunctive pass starves (natural-language
+        // queries where one non-matching word excludes every on-point chunk).
         var clauses = new List<ParadeDbJsonQuery>
         {
-            ParadeDbJsonQuery.Parse(searchText, lenient: true, conjunctionMode: true),
+            ParadeDbJsonQuery.Parse(searchText, lenient: true, conjunctionMode: conjunctive),
         };
 
         // Ticker (raw tokenizer) and DocumentType (single-token enum values) are stored
