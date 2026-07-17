@@ -154,8 +154,73 @@ public class FredToolsGetEconomicCalendarTests : ParadeDbMcpTestBase
         var result = await Sut()
             .GetEconomicCalendar("2026-06-01", "2026-06-30", minImportance: "critical");
 
-        result.Should().Contain("Invalid minImportance 'critical'");
+        result.Should().Contain("Unknown minImportance 'critical'");
+        result.Should().Contain("low, medium, high");
         result.Should().NotContain("Consumer Price Index");
+    }
+
+    [Fact]
+    public async Task GetEconomicCalendar_NumericMinImportance_IsRejectedNotParsedByOrdinal()
+    {
+        // Enum.TryParse accepts "5", yielding an undefined tier that filters out
+        // everything and would read as a factual "no releases" answer.
+        var result = await Sut()
+            .GetEconomicCalendar("2026-06-01", "2026-06-30", minImportance: "5");
+
+        result.Should().Contain("Unknown minImportance '5'");
+        result.Should().NotContain("No economic releases");
+    }
+
+    [Fact]
+    public async Task GetEconomicCalendar_MalformedStartDate_ReturnsExplicitError()
+    {
+        // The old behavior silently swapped an unparseable date for the default
+        // window and answered as if that was what the caller asked for.
+        var result = await Sut().GetEconomicCalendar("next week");
+
+        result.Should().Contain("Unknown startDate 'next week'");
+        result.Should().Contain("yyyy-MM-dd");
+    }
+
+    [Fact]
+    public async Task GetEconomicCalendar_MalformedEndDate_ReturnsExplicitError()
+    {
+        var result = await Sut().GetEconomicCalendar("2026-06-01", "06/30/2026");
+
+        result.Should().Contain("Unknown endDate '06/30/2026'");
+        result.Should().Contain("yyyy-MM-dd");
+    }
+
+    [Fact]
+    public async Task GetEconomicCalendar_InvertedRange_NamesTheUserError()
+    {
+        var result = await Sut().GetEconomicCalendar("2026-08-01", "2026-07-01");
+
+        result.Should().Contain("startDate (2026-08-01) is after endDate (2026-07-01)");
+        result.Should().NotContain("No economic releases", "the error is the swap, not a data gap");
+    }
+
+    [Fact]
+    public async Task GetEconomicCalendar_Truncated_HeaderNamesCoveredRangeAndFooterNotes()
+    {
+        // Three rows in June; a cap of 2 cuts the SOFR row. The header must not
+        // claim the full requested range as covered, and the footer must say how
+        // to see the rest — otherwise the tail silently reads as "nothing scheduled".
+        var result = await Sut().GetEconomicCalendar("2026-06-01", "2026-06-30", maxResults: 2);
+
+        result.Should().Contain("truncated at 2 rows, shown only through 2026-06-11");
+        result.Should().Contain("Showing first 2 of 3 results");
+        result.Should().NotContain("Secured Overnight Financing Rate Data");
+    }
+
+    [Fact]
+    public async Task GetEconomicCalendar_NotTruncated_HeaderClaimsFullRangeWithoutNotes()
+    {
+        var result = await Sut().GetEconomicCalendar("2026-06-01", "2026-06-30");
+
+        result.Should().Contain("Economic release calendar (2026-06-01 to 2026-06-30):");
+        result.Should().NotContain("truncated");
+        result.Should().NotContain("Showing first");
     }
 
     [Fact]

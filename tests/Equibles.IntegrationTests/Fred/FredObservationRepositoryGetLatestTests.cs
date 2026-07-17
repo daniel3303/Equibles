@@ -84,4 +84,63 @@ public class FredObservationRepositoryGetLatestTests : ParadeDbMcpTestBase
         latest[seriesB.Id].Date.Should().Be(new DateOnly(2024, 12, 1));
         latest[seriesB.Id].Value.Should().Be(4.2m);
     }
+
+    [Fact]
+    public async Task GetPreviousPerSeries_SkipsNullsAndSingleObservationSeries_ReturnsSecondNewest()
+    {
+        var seriesA = new FredSeries { SeriesId = "DGS10", Title = "10-Year Treasury" };
+        var seriesB = new FredSeries { SeriesId = "UNRATE", Title = "Unemployment Rate" };
+        DbContext.Add(seriesA);
+        DbContext.Add(seriesB);
+
+        // seriesA: three rows — newest is null (FRED "."), so "previous" must be
+        // the second-newest REAL value, counting only non-null rows.
+        DbContext.Add(
+            new FredObservation
+            {
+                FredSeriesId = seriesA.Id,
+                Date = new DateOnly(2024, 11, 1),
+                Value = 4.0m,
+            }
+        );
+        DbContext.Add(
+            new FredObservation
+            {
+                FredSeriesId = seriesA.Id,
+                Date = new DateOnly(2024, 12, 1),
+                Value = 4.25m,
+            }
+        );
+        DbContext.Add(
+            new FredObservation
+            {
+                FredSeriesId = seriesA.Id,
+                Date = new DateOnly(2024, 12, 8),
+                Value = null,
+            }
+        );
+
+        // seriesB: a single observation — no previous row must be produced for it.
+        DbContext.Add(
+            new FredObservation
+            {
+                FredSeriesId = seriesB.Id,
+                Date = new DateOnly(2024, 12, 1),
+                Value = 4.2m,
+            }
+        );
+
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new FredObservationRepository(verify);
+
+        var previous = await sut.GetPreviousPerSeries().AsNoTracking().ToListAsync();
+
+        previous.Should().ContainSingle();
+        previous[0].FredSeriesId.Should().Be(seriesA.Id);
+        previous[0].Date.Should().Be(new DateOnly(2024, 11, 1));
+        previous[0].Value.Should().Be(4.0m);
+    }
 }
