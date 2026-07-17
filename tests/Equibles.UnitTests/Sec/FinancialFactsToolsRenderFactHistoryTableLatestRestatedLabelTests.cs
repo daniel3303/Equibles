@@ -57,7 +57,7 @@ public class FinancialFactsToolsRenderFactHistoryTableLatestRestatedLabelTests
         var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
         var perPeriod = new List<FinancialFact>();
 
-        var result = (string)method.Invoke(null, ["Revenues", stock, false, perPeriod]);
+        var result = (string)method.Invoke(null, ["Revenues", stock, false, perPeriod, 0]);
 
         result.Should().Contain("latest restated");
         result.Should().NotContain("as originally reported");
