@@ -55,4 +55,41 @@ public class CuratedContractRegistryTests
         contract.Should().NotBeNull();
         contract!.DisplayName.Should().Be("E-mini S&P 500 (CME)");
     }
+
+    [Theory]
+    // Every pair below was verified against the CFTC public reporting API
+    // (publicreporting.cftc.gov dataset 6dca-aqww, cftc_contract_market_code →
+    // market_and_exchange_names) on 2026-07-17. An earlier registry revision had
+    // exactly these ten codes mislabeled — three pairwise swaps (Platinum/Palladium,
+    // 2Y/5Y T-Notes, plus the cattle rows) and a shifted currency chain (the code
+    // labeled "Japanese Yen" was really British Pound, "British Pound" really Swiss
+    // Franc, "Swiss Franc" really Mexican Peso) — which served one market's real COT
+    // data under another market's name. Pin code → name so a future edit can't
+    // reintroduce a swap: the code is the identity the importer filters by, and a
+    // wrong name here mislabels genuine data everywhere downstream.
+    [InlineData("057642", "Live Cattle (CME)")]
+    [InlineData("061641", "Feeder Cattle (CME)")]
+    [InlineData("054642", "Lean Hogs (CME)")]
+    [InlineData("073732", "Cocoa (ICE)")]
+    [InlineData("033661", "Cotton No. 2 (ICE)")]
+    [InlineData("076651", "Platinum (NYMEX)")]
+    [InlineData("075651", "Palladium (NYMEX)")]
+    [InlineData("042601", "2-Year T-Notes (CBOT)")]
+    [InlineData("044601", "5-Year T-Notes (CBOT)")]
+    [InlineData("096742", "British Pound (CME)")]
+    [InlineData("092741", "Swiss Franc (CME)")]
+    [InlineData("095741", "Mexican Peso (CME)")]
+    [InlineData("097741", "Japanese Yen (CME)")]
+    public void Contracts_MarketCode_CarriesCftcVerifiedDisplayName(
+        string marketCode,
+        string expectedDisplayName
+    )
+    {
+        var contract = CuratedContractRegistry.Contracts.SingleOrDefault(c =>
+            c.MarketCode == marketCode
+        );
+
+        contract.Should().NotBeNull();
+        contract!.DisplayName.Should().Be(expectedDisplayName);
+    }
 }
