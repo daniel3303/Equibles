@@ -1686,6 +1686,14 @@ public class InstitutionalHoldingsTools
                 if (holders.Count < 2)
                     return $"Could not resolve enough institutions. Missing: {string.Join(", ", missing)}.";
 
+                // Two spellings can resolve to the same filer (partial names funnel to the
+                // largest match). Combining the duplicate doubles every combined value and
+                // lets a single real fund satisfy minFunds as a fake consensus, so the
+                // resolved set is deduped by holder identity.
+                holders = holders.DistinctBy(h => h.Id).ToList();
+                if (holders.Count < 2)
+                    return $"The supplied names all resolve to the same institution — {holders[0].Name} (CIK {holders[0].Cik}). Pass at least two distinct institutions.";
+
                 var common = await ComputeCommonReportDates(holders);
                 if (common.Count == 0)
                     return "The selected institutions share no common report dates.";
@@ -1805,10 +1813,14 @@ public class InstitutionalHoldingsTools
         return (holder, matchNote, null);
     }
 
+    // 13F-only: a Schedule 13D/G stake whose event date coincides with a 13F quarter end
+    // shares the holdings table and would double-count the position in every per-holder
+    // portfolio composition built on this load (consensus, overlap, quarterly activity) —
+    // the holder-side twin of GH-4449.
     private Task<List<InstitutionalHolding>> LoadHoldingsByHolderWithStock(
         InstitutionalHolder holder,
         DateOnly reportDate
-    ) => _holdingRepository.GetByHolderWithStock(holder, reportDate).ToListAsync();
+    ) => _holdingRepository.Get13FByHolderWithStock(holder, reportDate).ToListAsync();
 
     private Task<Dictionary<Guid, CommonStock>> LoadStocksByIds(List<Guid> stockIds) =>
         _commonStockRepository.GetByIds(stockIds).ToDictionaryAsync(s => s.Id);
