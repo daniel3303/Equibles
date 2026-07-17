@@ -70,15 +70,18 @@ public class CongressMemberRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task GetByName_CaseSensitive_ReturnsNullForWrongCase()
+    public async Task GetByName_WrongCase_StillReturnsMember()
     {
+        // Case-insensitive on purpose: the name arrives as caller-typed input (MCP tools),
+        // and a case mismatch is purely cosmetic — 'nancy pelosi' must find 'Nancy Pelosi'.
         var member = CreateMember("Nancy Pelosi");
         _dbContext.Set<CongressMember>().Add(member);
         await _dbContext.SaveChangesAsync();
 
         var result = await _repository.GetByName("nancy pelosi");
 
-        result.Should().BeNull();
+        result.Should().NotBeNull();
+        result.Id.Should().Be(member.Id);
     }
 
     [Fact]

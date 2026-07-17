@@ -4,63 +4,77 @@ using Equibles.Congress.Mcp.Tools;
 
 namespace Equibles.UnitTests.Mcp;
 
+/// <summary>
+/// Pins <c>ParseTransactionTypeArgument</c>, the strict transaction-type parser shared by
+/// GetCongressionalTrades and GetMemberTrades. The contract: case-insensitive Purchase/Sale
+/// plus the Buy/Sell synonyms an LLM naturally reaches for; anything else — including numeric
+/// enum strings, which <c>Enum.TryParse</c> would happily accept as undefined values — must
+/// produce an explicit error naming the accepted values, never a silently unfiltered result
+/// (the previous behavior returned ALL trades for "Buy", which callers misread as purchases).
+/// </summary>
 public class CongressToolsApplyTransactionTypeFilterCaseInsensitiveTests
 {
-    // ApplyTransactionTypeFilter is unpinned. Its body:
-    //     Enum.TryParse<CongressTransactionType>(transactionType, true, out var parsedType)
-    // — the `true` argument enables CASE-INSENSITIVE parsing. The
-    // GetMemberTrades MCP tool routes its `transactionType` parameter
-    // through this helper, and LLM clients produce user-natural casings
-    // ("purchase", "Sale", "SALE") far more often than the canonical
-    // "Purchase"/"Sale" form.
-    //
-    // The risks this pin uniquely catches:
-    //
-    //   • Drop-the-true regression — `Enum.TryParse<CongressTransactionType>
-    //     (transactionType, out var parsedType)` (someone "simplifies"
-    //     the overload set) would compile, default to case-SENSITIVE
-    //     parsing, and silently REJECT every lowercase user input —
-    //     falling through to "return query unchanged" and rendering
-    //     UNFILTERED results when the user asked for "purchase only".
-    //     The MCP response would include sales too, confusing the LLM's
-    //     downstream analysis.
-    //
-    //   • Drop-the-filter regression — `return query;` instead of
-    //     `return query.Where(...)` (the happy-path filter arm) —
-    //     would return all rows for every recognised type. Caught
-    //     by this pin's "filter applied" count assertion.
-    //
-    //   • Wrong-enum-value regression — parsing succeeds but matches
-    //     the wrong variant (e.g. "purchase" → Sale). Caught by
-    //     this pin's distinct-value assertion (the surviving trade
-    //     must be the Purchase one).
-    //
-    // Adversarial input: lowercase "purchase" against a two-trade
-    // IQueryable (one Purchase, one Sale). Working code: returns 1
-    // trade (the Purchase). Drop-the-true: returns 2 trades (filter
-    // skipped because parse failed). Wrong-enum: returns 1 trade
-    // but it's the Sale.
-    [Fact]
-    public void ApplyTransactionTypeFilter_LowercasePurchase_FiltersToPurchaseTradesViaCaseInsensitiveParse()
+    private static (CongressTransactionType? Type, string Error) Parse(string transactionType)
     {
         var method = typeof(CongressTools).GetMethod(
-            "ApplyTransactionTypeFilter",
+            "ParseTransactionTypeArgument",
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-        var purchaseId = Guid.NewGuid();
-        var saleId = Guid.NewGuid();
-        var trades = new List<CongressionalTrade>
-        {
-            new() { Id = purchaseId, TransactionType = CongressTransactionType.Purchase },
-            new() { Id = saleId, TransactionType = CongressTransactionType.Sale },
-        }.AsQueryable();
+        return ((CongressTransactionType? Type, string Error))
+            method!.Invoke(null, [transactionType])!;
+    }
 
-        var filtered = (IQueryable<CongressionalTrade>)method!.Invoke(null, [trades, "purchase"]);
+    [Theory]
+    [InlineData("Purchase", CongressTransactionType.Purchase)]
+    [InlineData("purchase", CongressTransactionType.Purchase)]
+    [InlineData("PURCHASE", CongressTransactionType.Purchase)]
+    [InlineData("Buy", CongressTransactionType.Purchase)]
+    [InlineData("buy", CongressTransactionType.Purchase)]
+    [InlineData("Sale", CongressTransactionType.Sale)]
+    [InlineData("sale", CongressTransactionType.Sale)]
+    [InlineData("Sell", CongressTransactionType.Sale)]
+    [InlineData("SELL", CongressTransactionType.Sale)]
+    [InlineData(" Sale ", CongressTransactionType.Sale)]
+    public void ParseTransactionTypeArgument_KnownValueAnyCase_ParsesWithoutError(
+        string input,
+        CongressTransactionType expected
+    )
+    {
+        var (type, error) = Parse(input);
 
-        var results = filtered.ToList();
-        results.Should().ContainSingle();
-        results[0].TransactionType.Should().Be(CongressTransactionType.Purchase);
-        results[0].Id.Should().Be(purchaseId);
+        error.Should().BeNull();
+        type.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ParseTransactionTypeArgument_Blank_MeansNoFilter(string input)
+    {
+        var (type, error) = Parse(input);
+
+        error.Should().BeNull();
+        type.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("banana")]
+    [InlineData("Exchange")]
+    // Enum.TryParse would accept a numeric string as an undefined enum value that filters
+    // every row out; the strict parser must reject it like any other unknown value.
+    [InlineData("2")]
+    [InlineData("0")]
+    public void ParseTransactionTypeArgument_UnknownValue_ErrorsListingAcceptedValues(string input)
+    {
+        var (type, error) = Parse(input);
+
+        type.Should().BeNull();
+        error
+            .Should()
+            .Be(
+                $"Unknown transactionType '{input}'. Accepted: Purchase or Sale (synonyms: Buy, Sell)."
+            );
     }
 }
