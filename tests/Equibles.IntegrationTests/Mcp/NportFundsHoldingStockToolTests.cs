@@ -60,7 +60,7 @@ public class NportFundsHoldingStockToolTests : IDisposable
         SeedStock("AAPL", HeldCusip);
         var fund = SeedStock("VOO", cusip: null, cik: "0000036405");
 
-        var filing = MakeFiling(fund.Id, "acc-current", new DateOnly(2025, 1, 31));
+        var filing = MakeFiling(fund.Id, "acc-current", RecentFilingDate);
         filing.Holdings.Add(MakeHolding(HeldCusip, 5_000_000m));
         _dbContext.Set<NportFiling>().Add(filing);
         await _dbContext.SaveChangesAsync();
@@ -80,11 +80,11 @@ public class NportFundsHoldingStockToolTests : IDisposable
         SeedStock("AAPL", HeldCusip);
         var fund = SeedStock("VOO", cusip: null, cik: "0000036405");
 
-        var older = MakeFiling(fund.Id, "acc-older", new DateOnly(2024, 6, 30));
+        var older = MakeFiling(fund.Id, "acc-older", RecentFilingDate.AddMonths(-7));
         older.Holdings.Add(MakeHolding(HeldCusip, 5_000_000m));
         _dbContext.Set<NportFiling>().Add(older);
 
-        var latest = MakeFiling(fund.Id, "acc-latest", new DateOnly(2025, 1, 31));
+        var latest = MakeFiling(fund.Id, "acc-latest", RecentFilingDate);
         latest.Holdings.Add(MakeHolding("XXXXXXXXX", 1_000_000m));
         _dbContext.Set<NportFiling>().Add(latest);
         await _dbContext.SaveChangesAsync();
@@ -109,7 +109,7 @@ public class NportFundsHoldingStockToolTests : IDisposable
         _dbContext.SaveChanges();
 
         var fund = SeedStock("VOO", cusip: null, cik: "0000036405");
-        var filing = MakeFiling(fund.Id, "acc-current", new DateOnly(2025, 1, 31));
+        var filing = MakeFiling(fund.Id, "acc-current", RecentFilingDate);
         filing.Holdings.Add(MakeHolding("11259V106", 5_000_000m));
         _dbContext.Set<NportFiling>().Add(filing);
         await _dbContext.SaveChangesAsync();
@@ -134,6 +134,11 @@ public class NportFundsHoldingStockToolTests : IDisposable
         _dbContext.SaveChanges();
         return stock;
     }
+
+    // Recent relative date: GetFundsHoldingStock now applies an 18-month recency floor
+    // to "current" holders, so seeded reports must stay inside it as time passes.
+    private static DateOnly RecentFilingDate =>
+        DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(-2);
 
     private static NportFiling MakeFiling(Guid stockId, string accession, DateOnly filingDate)
     {

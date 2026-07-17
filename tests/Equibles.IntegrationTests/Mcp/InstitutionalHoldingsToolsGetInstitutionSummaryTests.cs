@@ -90,7 +90,7 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
         output.Should().Contain("Top 10 concentration");
         output.Should().Contain("Top 25 concentration");
         output.Should().Contain("QoQ turnover");
-        output.Should().Contain("Quarters reported");
+        output.Should().Contain("Quarters tracked");
         output.Should().Contain("_QoQ turnover = (");
     }
 
@@ -123,14 +123,39 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
     }
 
     [Fact]
-    public async Task GetInstitutionSummary_AmbiguousName_PrefersShortestMatch()
+    public async Task GetInstitutionSummary_AmbiguousName_PrefersLargest13FFiler()
     {
-        // "BlackRock" matches both "BlackRock, Inc." (parent) and
-        // "BlackRock Advisors LLC" (subsidiary). The parent is the intended
-        // match — it has the shorter name and is the primary 13F filer.
+        // "Bridgewater" matches both Bridgewater Advisors Inc. (a small RIA with the SHORTER
+        // name) and Bridgewater Associates, LP (the flagship hedge fund). Ranking must follow
+        // 13F size (the InstitutionalFiling rollup's TotalValue), not name length — the old
+        // shortest-name-wins ordering served the small RIA's numbers as "Bridgewater's"
+        // (MCP audit 2026-07).
+        var smallRia = new InstitutionalHolder { Cik = "00080001", Name = "Bridgewater Adv." };
+        var flagship = new InstitutionalHolder
+        {
+            Cik = "00080002",
+            Name = "Bridgewater Associates, LP",
+        };
+        DbContext.AddRange(smallRia, flagship);
         DbContext.AddRange(
-            new InstitutionalHolder { Cik = "00080001", Name = "BlackRock Advisors LLC" },
-            new InstitutionalHolder { Cik = "00080002", Name = "BlackRock, Inc." }
+            new InstitutionalFiling
+            {
+                AccessionNumber = "acc-ria-1",
+                InstitutionalHolderId = smallRia.Id,
+                FilingDate = new DateOnly(2025, 2, 14),
+                ReportDate = new DateOnly(2024, 12, 31),
+                PositionCount = 30,
+                TotalValue = 500_000_000L,
+            },
+            new InstitutionalFiling
+            {
+                AccessionNumber = "acc-flagship-1",
+                InstitutionalHolderId = flagship.Id,
+                FilingDate = new DateOnly(2025, 2, 14),
+                ReportDate = new DateOnly(2024, 12, 31),
+                PositionCount = 300,
+                TotalValue = 20_000_000_000L,
+            }
         );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -138,10 +163,11 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.GetInstitutionSummary("BlackRock");
+        var output = await sut.GetInstitutionSummary("Bridgewater");
 
-        output.Should().Contain("BlackRock, Inc.");
-        output.Should().NotContain("BlackRock Advisors");
+        // No holdings are seeded, so the tool reports "no 13F holdings" — for the flagship
+        // filer, proving the larger fund won the resolution despite its longer name.
+        output.Should().Contain("No 13F holdings reported by Bridgewater Associates, LP");
     }
 
     [Fact]

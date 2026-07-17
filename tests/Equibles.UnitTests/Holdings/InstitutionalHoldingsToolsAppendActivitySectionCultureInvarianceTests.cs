@@ -39,7 +39,7 @@ public class InstitutionalHoldingsToolsAppendActivitySectionCultureInvarianceTes
             },
         };
         var sb = new StringBuilder();
-        object[] args = [sb, "Initiated", rows];
+        object[] args = [sb, "Initiated", rows, rows.Count];
 
         var original = CultureInfo.CurrentCulture;
         try

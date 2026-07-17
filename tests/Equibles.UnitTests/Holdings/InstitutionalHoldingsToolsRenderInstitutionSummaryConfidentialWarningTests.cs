@@ -41,7 +41,13 @@ public class InstitutionalHoldingsToolsRenderInstitutionSummaryConfidentialWarni
         var rendered = (string)
             method.Invoke(
                 null,
-                [holder, new DateOnly(2024, 9, 30), (DateOnly?)new DateOnly(2024, 6, 30), summary]
+                [
+                    holder,
+                    new DateOnly(2024, 9, 30),
+                    (DateOnly?)new DateOnly(2024, 6, 30),
+                    summary,
+                    null,
+                ]
             );
 
         rendered.Should().Contain("Confidential Treatment");

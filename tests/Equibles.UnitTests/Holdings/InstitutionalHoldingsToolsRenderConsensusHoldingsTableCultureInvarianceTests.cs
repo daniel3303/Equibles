@@ -42,7 +42,7 @@ public class InstitutionalHoldingsToolsRenderConsensusHoldingsTableCultureInvari
                 1
             ),
         };
-        object[] args = [holders, missing, selected, rowsWithConsensus];
+        object[] args = [holders, missing, selected, rowsWithConsensus, -1, null];
 
         var original = CultureInfo.CurrentCulture;
         string invariantOutput;

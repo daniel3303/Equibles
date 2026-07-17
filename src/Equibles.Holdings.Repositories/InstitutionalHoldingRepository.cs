@@ -86,6 +86,16 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return GetByHolder(holder, reportDate).Where(Is13F);
     }
 
+    // Same holder/date 13F-only filter as Get13FByHolder, with the CommonStock navigation
+    // eagerly loaded for callers that render stock fields (ticker/name) per position.
+    public IQueryable<InstitutionalHolding> Get13FByHolderWithStock(
+        InstitutionalHolder holder,
+        DateOnly reportDate
+    )
+    {
+        return Get13FByHolder(holder, reportDate).Include(h => h.CommonStock);
+    }
+
     public IQueryable<InstitutionalHolding> GetLatestByStock(CommonStock stock)
     {
         var latestDates = GetAll()
@@ -144,6 +154,69 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     public IQueryable<DateOnly> Get13FAvailableReportDates() =>
         GetAll().Where(Is13F).DistinctReportDatesDescending();
 
+    // The DISTINCT behind Get13FAvailableReportDates scans the whole holdings index (~32M
+    // entries) to produce fewer than a hundred quarter-end dates and measures ~28s warm —
+    // right at the 30s command timeout, so every surface that resolves its comparison
+    // window off the live list (market-wide MCP leaderboards, the activity / export /
+    // screener pages) fails on a cold cache. The list gains at most one date per filing
+    // day, so a short-lived process-wide cache removes the scan from every request except
+    // the first after boot / expiry. Keyed by connection string so parallel databases
+    // (test fixtures) never see each other's lists; a null connection string (e.g. the
+    // EF InMemory provider) bypasses the cache entirely.
+    private static readonly TimeSpan ReportDatesCacheTtl = TimeSpan.FromHours(1);
+    private static readonly object ReportDatesCacheLock = new();
+    private static readonly Dictionary<
+        string,
+        (List<DateOnly> Dates, DateTime LoadedUtc)
+    > Cached13FReportDates = new();
+
+    // Drops every cached 13F report-date list. Test fixtures that truncate and re-seed the
+    // SAME database between tests (Respawn) must call this from their reset, or a list cached
+    // by one test leaks into the next.
+    public static void ResetProcessWideCaches()
+    {
+        lock (ReportDatesCacheLock)
+        {
+            Cached13FReportDates.Clear();
+        }
+    }
+
+    // Returns a defensive copy so no caller can mutate a shared cached list.
+    public async Task<List<DateOnly>> Get13FAvailableReportDatesCached(
+        CancellationToken cancellationToken = default
+    )
+    {
+        // GetConnectionString throws on non-relational providers (the EF InMemory tests),
+        // which also want no cross-instance caching — so they bypass the cache entirely.
+        var cacheKey = DbContext.Database.IsRelational()
+            ? DbContext.Database.GetConnectionString()
+            : null;
+        if (cacheKey != null)
+        {
+            lock (ReportDatesCacheLock)
+            {
+                if (
+                    Cached13FReportDates.TryGetValue(cacheKey, out var entry)
+                    && DateTime.UtcNow - entry.LoadedUtc < ReportDatesCacheTtl
+                )
+                    return new List<DateOnly>(entry.Dates);
+            }
+        }
+
+        var dates = await Get13FAvailableReportDates().ToListAsync(cancellationToken);
+
+        // An empty list is not cached: it only occurs before the first 13F import, and
+        // caching it would blank the market-wide surfaces for a full TTL after data lands.
+        if (cacheKey == null || dates.Count == 0)
+            return dates;
+
+        lock (ReportDatesCacheLock)
+        {
+            Cached13FReportDates[cacheKey] = (new List<DateOnly>(dates), DateTime.UtcNow);
+        }
+        return dates;
+    }
+
     // Latest dates first — see GetAvailableReportDates for the ordering contract.
     public IQueryable<DateOnly> GetReportDatesByStock(CommonStock stock) =>
         GetHistoryByStock(stock).DistinctReportDatesDescending();
@@ -170,9 +243,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
 
     // The two-quarter comparison window shared by every per-stock activity / churn /
     // double-down aggregate: both report dates are pulled in a single round trip and
-    // each caller applies its own GROUP BY downstream.
+    // each caller applies its own GROUP BY downstream. 13F-only: a Schedule 13D/G event
+    // row whose date coincides with a quarter end would otherwise inflate the quarter's
+    // totals and double-count the filer (GH-4449).
     private IQueryable<InstitutionalHolding> BothQuarters(DateOnly current, DateOnly previous) =>
-        GetAll().Where(h => h.ReportDate == current || h.ReportDate == previous);
+        GetAll().Where(Is13F).Where(h => h.ReportDate == current || h.ReportDate == previous);
 
     // Per-stock aggregation of 13F activity across two quarters: totals, filer counts,
     // and the derived deltas drive the Top Buys / Top Sells leaderboards. New /
@@ -216,13 +291,32 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         GetQuarterlyActivity(current, previous).Where(a => a.CurrentFilerCount > 0);
 
     // Total distinct 13F filers reporting on a given quarter — the denominator
-    // for the "% of 13F universe" column on the most-held page.
+    // for the "% of 13F universe" column on the most-held page. 13F-only: a filer whose
+    // only row on the quarter end is a Schedule 13D/G event is not part of the 13F
+    // universe and must not inflate the denominator (GH-4449).
     public IQueryable<Guid> GetUniqueFilerIds(DateOnly reportDate)
     {
         return GetAll()
+            .Where(Is13F)
             .Where(h => h.ReportDate == reportDate)
             .Select(h => h.InstitutionalHolderId)
             .Distinct();
+    }
+
+    // Earliest 13F quarter each of the given holders appears on — the "is this the
+    // filer's first 13F?" test behind the new-filer annotation on the buyers/sellers
+    // table. A brand-new filer entity (often a CIK migration of an existing manager)
+    // shows its whole book as a "buy"; flagging first-time filers lets the consumer
+    // tell a genuinely new position from a filer-identity artifact.
+    public IQueryable<KeyValuePair<Guid, DateOnly>> GetEarliest13FReportDates(
+        IReadOnlyCollection<Guid> holderIds
+    )
+    {
+        return GetAll()
+            .Where(Is13F)
+            .Where(h => holderIds.Contains(h.InstitutionalHolderId))
+            .GroupBy(h => h.InstitutionalHolderId)
+            .Select(g => new KeyValuePair<Guid, DateOnly>(g.Key, g.Min(h => h.ReportDate)));
     }
 
     // Per-stock churn between two 13F quarters: how many filers initiated a position
@@ -245,6 +339,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                             .Set<InstitutionalHolding>()
                             .Any(p =>
                                 p.ReportDate == previous
+                                && p.FilingType == FilingType.Form13F
                                 && p.CommonStockId == h.CommonStockId
                                 && p.InstitutionalHolderId == h.InstitutionalHolderId
                             )
@@ -258,6 +353,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                             .Set<InstitutionalHolding>()
                             .Any(c =>
                                 c.ReportDate == current
+                                && c.FilingType == FilingType.Form13F
                                 && c.CommonStockId == h.CommonStockId
                                 && c.InstitutionalHolderId == h.InstitutionalHolderId
                             )
@@ -404,6 +500,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                             .Set<InstitutionalHolding>()
                             .Any(p =>
                                 p.ReportDate == previous
+                                && p.FilingType == FilingType.Form13F
                                 && p.CommonStockId == h.CommonStockId
                                 && p.InstitutionalHolderId == h.InstitutionalHolderId
                             )
@@ -417,6 +514,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                             .Set<InstitutionalHolding>()
                             .Any(c =>
                                 c.ReportDate == current
+                                && c.FilingType == FilingType.Form13F
                                 && c.CommonStockId == h.CommonStockId
                                 && c.InstitutionalHolderId == h.InstitutionalHolderId
                             )
@@ -555,9 +653,14 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // "Current combined" quarter: best-available holdings per holder. Uses current-
     // quarter data for holders who already filed, falls back to the previous quarter
     // for holders who haven't. The NOT EXISTS subquery identifies non-filers.
+    // 13F-only on BOTH sides, mirroring GetCombinedQuarterByStock: a Schedule 13G/D
+    // event row landing on the current quarter end must not count as "already filed" —
+    // it would drop the holder's entire carried-forward 13F book from the combined view
+    // and read as a mass liquidation while the filing window is open (GH-4449).
     public IQueryable<InstitutionalHolding> GetCombinedQuarter(DateOnly current, DateOnly previous)
     {
         return GetAll()
+            .Where(Is13F)
             .Where(h =>
                 h.ReportDate == current
                 || (
@@ -566,6 +669,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                         .Set<InstitutionalHolding>()
                         .Any(c =>
                             c.ReportDate == current
+                            && c.FilingType == FilingType.Form13F
                             && c.InstitutionalHolderId == h.InstitutionalHolderId
                         )
                 )
@@ -650,6 +754,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                                     .Set<InstitutionalHolding>()
                                     .Any(c =>
                                         c.ReportDate == current
+                                        && c.FilingType == FilingType.Form13F
                                         && c.InstitutionalHolderId == h.InstitutionalHolderId
                                     )
                             )
@@ -666,6 +771,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                                     .Set<InstitutionalHolding>()
                                     .Any(c =>
                                         c.ReportDate == current
+                                        && c.FilingType == FilingType.Form13F
                                         && c.InstitutionalHolderId == h.InstitutionalHolderId
                                     )
                             )
@@ -681,6 +787,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                                 .Set<InstitutionalHolding>()
                                 .Any(c =>
                                     c.ReportDate == current
+                                    && c.FilingType == FilingType.Form13F
                                     && c.InstitutionalHolderId == h.InstitutionalHolderId
                                 )
                         )
@@ -728,6 +835,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                             .Set<InstitutionalHolding>()
                             .Any(p =>
                                 p.ReportDate == previous
+                                && p.FilingType == FilingType.Form13F
                                 && p.CommonStockId == h.CommonStockId
                                 && p.InstitutionalHolderId == h.InstitutionalHolderId
                             )
@@ -744,12 +852,14 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                             .Set<InstitutionalHolding>()
                             .Any(c =>
                                 c.ReportDate == current
+                                && c.FilingType == FilingType.Form13F
                                 && c.InstitutionalHolderId == h.InstitutionalHolderId
                             )
                         && !DbContext
                             .Set<InstitutionalHolding>()
                             .Any(c =>
                                 c.ReportDate == current
+                                && c.FilingType == FilingType.Form13F
                                 && c.CommonStockId == h.CommonStockId
                                 && c.InstitutionalHolderId == h.InstitutionalHolderId
                             )
@@ -781,6 +891,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                                     .Set<InstitutionalHolding>()
                                     .Any(c =>
                                         c.ReportDate == current
+                                        && c.FilingType == FilingType.Form13F
                                         && c.InstitutionalHolderId == h.InstitutionalHolderId
                                     )
                             )
@@ -797,6 +908,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                                     .Set<InstitutionalHolding>()
                                     .Any(c =>
                                         c.ReportDate == current
+                                        && c.FilingType == FilingType.Form13F
                                         && c.InstitutionalHolderId == h.InstitutionalHolderId
                                     )
                             )

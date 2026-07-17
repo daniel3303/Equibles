@@ -1,4 +1,5 @@
 using Equibles.Data;
+using Equibles.Holdings.Repositories;
 using Equibles.ParadeDB.EntityFrameworkCore;
 using Equibles.Web;
 using Microsoft.AspNetCore.Builder;
@@ -159,6 +160,12 @@ public class WebHostFixture : IAsyncLifetime
             await resetConnection.OpenAsync();
             await _respawner.ResetAsync(resetConnection);
         }
+
+        // The web host runs in this same process against this same database, so its
+        // process-wide 13F report-date cache must be dropped with the truncated data or a
+        // list cached by one test leaks into the next (the export/screener "fewer than two
+        // quarters" 404 tests would see a previous test's multi-quarter list).
+        InstitutionalHoldingRepository.ResetProcessWideCaches();
 
         if (seed is null)
             return;

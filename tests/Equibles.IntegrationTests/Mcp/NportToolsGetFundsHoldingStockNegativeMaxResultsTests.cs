@@ -38,7 +38,7 @@ public class NportToolsGetFundsHoldingStockNegativeMaxResultsTests : ParadeDbMcp
         SeedStock("AAPL", HeldCusip);
         var fund = SeedStock("VOO", cusip: null, cik: "0000036405");
 
-        var filing = MakeFiling(fund.Id, "acc-current", new DateOnly(2025, 1, 31));
+        var filing = MakeFiling(fund.Id, "acc-current", RecentFilingDate);
         filing.Holdings.Add(MakeHolding(HeldCusip, 5_000_000m));
         DbContext.Set<NportFiling>().Add(filing);
         await DbContext.SaveChangesAsync();
@@ -67,6 +67,11 @@ public class NportToolsGetFundsHoldingStockNegativeMaxResultsTests : ParadeDbMcp
         DbContext.SaveChanges();
         return stock;
     }
+
+    // Recent relative date: GetFundsHoldingStock now applies an 18-month recency floor
+    // to "current" holders, so seeded reports must stay inside it as time passes.
+    private static DateOnly RecentFilingDate =>
+        DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(-2);
 
     private static NportFiling MakeFiling(Guid stockId, string accession, DateOnly filingDate) =>
         new()

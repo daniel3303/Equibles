@@ -10,6 +10,7 @@ using Equibles.Finra.Data;
 using Equibles.Fred.Data;
 using Equibles.GovernmentContracts.Data;
 using Equibles.Holdings.Data;
+using Equibles.Holdings.Repositories;
 using Equibles.InsiderTrading.Data;
 using Equibles.Media.Data;
 using Equibles.Messaging;
@@ -145,12 +146,15 @@ public class ParadeDbFixture : IAsyncLifetime
     /// <summary>
     /// Truncates every user table in <c>public</c> while keeping the schema and migration
     /// history intact. Call from a test's <c>InitializeAsync</c> so each test starts from
-    /// an empty database without paying the migration cost again.
+    /// an empty database without paying the migration cost again. Also drops the holdings
+    /// repository's process-wide report-date cache — every test shares this one database
+    /// (same connection string), so a list cached by one test would leak into the next.
     /// </summary>
     public async Task ResetAsync()
     {
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.OpenAsync();
         await _respawner.ResetAsync(connection);
+        InstitutionalHoldingRepository.ResetProcessWideCaches();
     }
 }

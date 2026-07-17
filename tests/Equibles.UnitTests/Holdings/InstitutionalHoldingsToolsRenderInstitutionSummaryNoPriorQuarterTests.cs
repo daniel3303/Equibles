@@ -37,7 +37,7 @@ public class InstitutionalHoldingsToolsRenderInstitutionSummaryNoPriorQuarterTes
         var rendered = (string)
             RenderInstitutionSummaryMethod.Invoke(
                 null,
-                [holder, targetDate, (DateOnly?)null, summary]
+                [holder, targetDate, (DateOnly?)null, summary, null]
             );
 
         rendered.Should().Contain("Portfolio summary — **Test Fund** as of 2024-09-30");

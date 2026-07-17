@@ -93,6 +93,7 @@ public class InstitutionalHoldingsToolsRenderQuarterlyActivityBucketFilterTests
                     grouped,
                     "reduced",
                     20,
+                    null,
                 ]
             );
 

@@ -160,6 +160,11 @@ public class McpServerAppFixture : IAsyncLifetime
             await _respawner.ResetAsync(resetConnection);
         }
 
+        // The server runs in this same process against this same database, so its
+        // process-wide 13F report-date cache must be dropped with the truncated data or a
+        // list cached by one test leaks into the next.
+        Equibles.Holdings.Repositories.InstitutionalHoldingRepository.ResetProcessWideCaches();
+
         if (seed is null)
             return;
 

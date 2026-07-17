@@ -63,7 +63,7 @@ public class InstitutionalHoldingsToolsRenderOverlapTableCultureInvarianceTests
                 },
             },
         };
-        object[] args = [holder1, holder2, selected, overlap, 30];
+        object[] args = [holder1, holder2, selected, overlap, 30, null];
 
         var original = CultureInfo.CurrentCulture;
         string invariantOutput;

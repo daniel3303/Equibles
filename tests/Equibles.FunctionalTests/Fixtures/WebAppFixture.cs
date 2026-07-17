@@ -149,6 +149,12 @@ public class WebAppFixture : IAsyncLifetime
             await _respawner.ResetAsync(resetConnection);
         }
 
+        // The web app runs in this same process against this same database, so its
+        // process-wide 13F report-date cache must be dropped with the truncated data or a
+        // list cached by one test leaks into the next (the export 404 test would see a
+        // previous test's two-quarter list and serve a CSV instead).
+        Equibles.Holdings.Repositories.InstitutionalHoldingRepository.ResetProcessWideCaches();
+
         if (seed is null)
             return;
 

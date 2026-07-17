@@ -55,7 +55,16 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioCultureInvarian
         // No splits for this stock → shares render as reported; the pin is about culture, not
         // split adjustment (RenderInstitutionPortfolio gained a splits-by-stock parameter).
         var splitsByStock = new Dictionary<Guid, List<StockSplit>>();
-        object[] args = [holder, targetDate, holdings, splitsByStock];
+        object[] args =
+        [
+            holder,
+            targetDate,
+            holdings,
+            splitsByStock,
+            holdings.Count,
+            holdings.Sum(h => h.Value),
+            null,
+        ];
 
         var original = CultureInfo.CurrentCulture;
         string invariantOutput;

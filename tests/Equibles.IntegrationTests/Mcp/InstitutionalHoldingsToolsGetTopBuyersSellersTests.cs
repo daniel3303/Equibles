@@ -59,6 +59,18 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
         DbContext.Add(MakeHolding(stock, reducer, latest, shares: 800));
         DbContext.Add(MakeHolding(stock, newcomer, latest, shares: 2_000));
         DbContext.Add(MakeHolding(stock, steady, latest, shares: 1_000));
+
+        // Sold-Out Capital still FILED a 13F for the latest quarter (another position) — a
+        // previous holder only counts as a seller when its current-quarter filing proves the
+        // exit; a fund that just stopped filing (CIK migration/deregistration) is excluded.
+        var otherStock = new CommonStock
+        {
+            Ticker = "MSFT",
+            Name = "Microsoft Corp.",
+            Cik = "0000789019",
+        };
+        DbContext.Add(otherStock);
+        DbContext.Add(MakeHolding(otherStock, soldOut, latest, shares: 10));
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
