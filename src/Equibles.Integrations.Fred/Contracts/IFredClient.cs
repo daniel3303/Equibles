@@ -8,5 +8,8 @@ public interface IFredClient
     Task<FredSeriesRecord> GetSeriesMetadata(string seriesId);
     Task<List<FredObservationRecord>> GetObservations(string seriesId, DateOnly? startDate = null);
     Task<FredReleaseRecord> GetSeriesRelease(string seriesId);
-    Task<List<FredReleaseDateRecord>> GetReleaseDates(DateOnly? realtimeStart = null);
+    Task<List<FredReleaseDateRecord>> GetReleaseDates(
+        int releaseId,
+        DateOnly? realtimeStart = null
+    );
 }

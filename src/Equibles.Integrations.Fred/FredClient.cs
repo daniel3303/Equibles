@@ -18,7 +18,8 @@ public class FredClient : IFredClient
     private const int MaxRetries = 3;
     private const int MaxObservationsPerRequest = 100000;
 
-    // The /fred/releases/dates endpoint caps its page size at 1000.
+    // Page size for /fred/release/dates. A month-forward per-release window is a
+    // handful of rows, so one page normally suffices; the loop below is a safety net.
     private const int MaxReleaseDatesPerRequest = 1000;
 
     // FRED allows 120 requests/minute — use 100 to stay safely under
@@ -121,20 +122,32 @@ public class FredClient : IFredClient
         return response?.Releases?.FirstOrDefault();
     }
 
-    public async Task<List<FredReleaseDateRecord>> GetReleaseDates(DateOnly? realtimeStart = null)
+    public async Task<List<FredReleaseDateRecord>> GetReleaseDates(
+        int releaseId,
+        DateOnly? realtimeStart = null
+    )
     {
-        _logger.LogDebug("Fetching FRED release dates from {RealtimeStart}", realtimeStart);
+        _logger.LogDebug(
+            "Fetching FRED release dates for release {ReleaseId} from {RealtimeStart}",
+            releaseId,
+            realtimeStart
+        );
 
         var allReleaseDates = new List<FredReleaseDateRecord>();
         var offset = 0;
 
         while (true)
         {
+            // Per-release endpoint on purpose: the global /fred/releases/dates feed
+            // reliably 504s at offset >= 1000, so paging it aborts the whole import.
             // include_release_dates_with_no_data=true is what surfaces future scheduled
             // dates from the FRED release calendar — without it only realized dates return.
+            // NOTE: this endpoint defaults realtime_start to 1776-07-04 (all history);
+            // callers should pass realtimeStart to bound the window.
             var url =
-                $"{ApiBaseUrl}/fred/releases/dates"
-                + $"?api_key={_options.ApiKey}"
+                $"{ApiBaseUrl}/fred/release/dates"
+                + $"?release_id={releaseId}"
+                + $"&api_key={_options.ApiKey}"
                 + $"&file_type=json"
                 + $"&include_release_dates_with_no_data=true"
                 + $"&sort_order=asc"
@@ -159,7 +172,11 @@ public class FredClient : IFredClient
             offset += response.ReleaseDates.Count;
         }
 
-        _logger.LogDebug("Fetched {Count} FRED release dates", allReleaseDates.Count);
+        _logger.LogDebug(
+            "Fetched {Count} FRED release dates for release {ReleaseId}",
+            allReleaseDates.Count,
+            releaseId
+        );
         return allReleaseDates;
     }
 

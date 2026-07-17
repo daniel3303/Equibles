@@ -55,6 +55,18 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
 
     public void Dispose() => _dbContext.Dispose();
 
+    // The importer fetches dates per tracked release (the global feed 504s under
+    // paging); the substitute answers each per-release call with the matching
+    // subset, mirroring the real endpoint's release_id scoping.
+    private void SetupReleaseDates(params FredReleaseDateRecord[] records)
+    {
+        _fredClient
+            .GetReleaseDates(Arg.Any<int>(), Arg.Any<DateOnly?>())
+            .Returns(ci =>
+                Task.FromResult(records.Where(r => r.ReleaseId == ci.Arg<int>()).ToList())
+            );
+    }
+
     [Fact]
     public async Task Import_TwoSeriesSharingARelease_CreatesOneReleaseAndKeepsOnlyTrackedDates()
     {
@@ -71,43 +83,41 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
         };
         _fredClient.GetSeriesRelease("CPIAUCSL").Returns(Task.FromResult(cpiRelease));
         _fredClient.GetSeriesRelease("CPILFESL").Returns(Task.FromResult(cpiRelease));
-        _fredClient
-            .GetReleaseDates(Arg.Any<DateOnly?>())
-            .Returns(
-                Task.FromResult(
-                    new List<FredReleaseDateRecord>
-                    {
-                        new()
-                        {
-                            ReleaseId = 10,
-                            ReleaseName = "Consumer Price Index",
-                            Date = "2026-06-11",
-                        },
-                        new()
-                        {
-                            ReleaseId = 10,
-                            ReleaseName = "Consumer Price Index",
-                            Date = "2026-07-14",
-                        },
-                        // Untracked release — no series of ours links to it.
-                        new()
-                        {
-                            ReleaseId = 99,
-                            ReleaseName = "Some Other Release",
-                            Date = "2026-06-12",
-                        },
-                        // Malformed date — must be skipped, not crash the cycle.
-                        new()
-                        {
-                            ReleaseId = 10,
-                            ReleaseName = "Consumer Price Index",
-                            Date = "not-a-date",
-                        },
-                    }
-                )
-            );
+        SetupReleaseDates(
+            new FredReleaseDateRecord
+            {
+                ReleaseId = 10,
+                ReleaseName = "Consumer Price Index",
+                Date = "2026-06-11",
+            },
+            new FredReleaseDateRecord
+            {
+                ReleaseId = 10,
+                ReleaseName = "Consumer Price Index",
+                Date = "2026-07-14",
+            },
+            // Untracked release — no series of ours links to it, so the importer
+            // must never even request it.
+            new FredReleaseDateRecord
+            {
+                ReleaseId = 99,
+                ReleaseName = "Some Other Release",
+                Date = "2026-06-12",
+            },
+            // Malformed date — must be skipped, not crash the cycle.
+            new FredReleaseDateRecord
+            {
+                ReleaseId = 10,
+                ReleaseName = "Consumer Price Index",
+                Date = "not-a-date",
+            }
+        );
 
         await _sut.Import(CancellationToken.None);
+
+        // Per-release fetching only ever requests tracked releases.
+        await _fredClient.Received(1).GetReleaseDates(10, Arg.Any<DateOnly?>());
+        await _fredClient.DidNotReceive().GetReleaseDates(99, Arg.Any<DateOnly?>());
 
         var releases = _releaseRepo.GetAll().ToList();
         releases.Should().HaveCount(1, "both series share FRED release 10");
@@ -157,22 +167,15 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
         };
         _fredClient.GetSeriesRelease("DFEDTARU").Returns(Task.FromResult(fomcRelease));
         _fredClient.GetSeriesRelease("CPIAUCSL").Returns(Task.FromResult(cpiRelease));
-        _fredClient
-            .GetReleaseDates(Arg.Any<DateOnly?>())
-            .Returns(
-                Task.FromResult(
-                    new List<FredReleaseDateRecord>
-                    {
-                        // FOMC carried forward every day, incl. a Sat (20th) and Sun (21st).
-                        new() { ReleaseId = 101, Date = "2026-06-19" }, // Fri
-                        new() { ReleaseId = 101, Date = "2026-06-20" }, // Sat
-                        new() { ReleaseId = 101, Date = "2026-06-21" }, // Sun
-                        new() { ReleaseId = 101, Date = "2026-06-22" }, // Mon
-                        // Genuine CPI print on one real weekday date.
-                        new() { ReleaseId = 10, Date = "2026-06-11" },
-                    }
-                )
-            );
+        SetupReleaseDates(
+            // FOMC carried forward every day, incl. a Sat (20th) and Sun (21st).
+            new FredReleaseDateRecord { ReleaseId = 101, Date = "2026-06-19" }, // Fri
+            new FredReleaseDateRecord { ReleaseId = 101, Date = "2026-06-20" }, // Sat
+            new FredReleaseDateRecord { ReleaseId = 101, Date = "2026-06-21" }, // Sun
+            new FredReleaseDateRecord { ReleaseId = 101, Date = "2026-06-22" }, // Mon
+            // Genuine CPI print on one real weekday date.
+            new FredReleaseDateRecord { ReleaseId = 10, Date = "2026-06-11" }
+        );
 
         await _sut.Import(CancellationToken.None);
 
@@ -216,27 +219,20 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
         _dateRepo.Add(new FredReleaseDate { FredReleaseId = release.Id, Date = new(2026, 6, 11) });
         await _dateRepo.SaveChanges();
 
-        _fredClient
-            .GetReleaseDates(Arg.Any<DateOnly?>())
-            .Returns(
-                Task.FromResult(
-                    new List<FredReleaseDateRecord>
-                    {
-                        new()
-                        {
-                            ReleaseId = 10,
-                            ReleaseName = "Consumer Price Index",
-                            Date = "2026-06-11",
-                        },
-                        new()
-                        {
-                            ReleaseId = 10,
-                            ReleaseName = "Consumer Price Index",
-                            Date = "2026-07-14",
-                        },
-                    }
-                )
-            );
+        SetupReleaseDates(
+            new FredReleaseDateRecord
+            {
+                ReleaseId = 10,
+                ReleaseName = "Consumer Price Index",
+                Date = "2026-06-11",
+            },
+            new FredReleaseDateRecord
+            {
+                ReleaseId = 10,
+                ReleaseName = "Consumer Price Index",
+                Date = "2026-07-14",
+            }
+        );
 
         await _sut.Import(CancellationToken.None);
 
@@ -285,18 +281,11 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
         _dateRepo.Add(new FredReleaseDate { FredReleaseId = cpi.Id, Date = new(2026, 6, 11) });
         await _dateRepo.SaveChanges();
 
-        _fredClient
-            .GetReleaseDates(Arg.Any<DateOnly?>())
-            .Returns(
-                Task.FromResult(
-                    new List<FredReleaseDateRecord>
-                    {
-                        new() { ReleaseId = 101, Date = "2026-06-19" }, // Fri
-                        new() { ReleaseId = 101, Date = "2026-06-20" }, // Sat — carry-forward tell
-                        new() { ReleaseId = 10, Date = "2026-07-14" },
-                    }
-                )
-            );
+        SetupReleaseDates(
+            new FredReleaseDateRecord { ReleaseId = 101, Date = "2026-06-19" }, // Fri
+            new FredReleaseDateRecord { ReleaseId = 101, Date = "2026-06-20" }, // Sat — carry-forward tell
+            new FredReleaseDateRecord { ReleaseId = 10, Date = "2026-07-14" }
+        );
 
         await _sut.Import(CancellationToken.None);
 
@@ -337,9 +326,7 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
         );
         await _seriesRepo.SaveChanges();
 
-        _fredClient
-            .GetReleaseDates(Arg.Any<DateOnly?>())
-            .Returns(Task.FromResult(new List<FredReleaseDateRecord>()));
+        SetupReleaseDates();
 
         await _sut.Import(CancellationToken.None);
 
@@ -348,6 +335,59 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
             .Single(r => r.ReleaseId == 10)
             .Importance.Should()
             .Be(FredReleaseImportance.High);
+    }
+
+    [Fact]
+    public async Task Import_OneReleaseFetchFails_OtherReleasesStillImport()
+    {
+        // The production freeze root cause: one failed fetch aborted the whole
+        // cycle, so NOTHING imported for weeks. A failing release must only skip
+        // itself — every other tracked release still lands its dates.
+        var ppi = new FredRelease { ReleaseId = 46, Name = "Producer Price Index" };
+        var cpi = new FredRelease { ReleaseId = 10, Name = "Consumer Price Index" };
+        _releaseRepo.Add(ppi);
+        _releaseRepo.Add(cpi);
+        await _releaseRepo.SaveChanges();
+        _seriesRepo.Add(
+            new FredSeries
+            {
+                SeriesId = "PPIFIS",
+                Title = "PPI Final Demand",
+                FredReleaseId = ppi.Id,
+            }
+        );
+        _seriesRepo.Add(
+            new FredSeries
+            {
+                SeriesId = "CPIAUCSL",
+                Title = "CPI All Items",
+                FredReleaseId = cpi.Id,
+            }
+        );
+        await _seriesRepo.SaveChanges();
+
+        _fredClient
+            .GetReleaseDates(46, Arg.Any<DateOnly?>())
+            .Returns<Task<List<FredReleaseDateRecord>>>(_ =>
+                throw new HttpRequestException("FRED 504")
+            );
+        _fredClient
+            .GetReleaseDates(10, Arg.Any<DateOnly?>())
+            .Returns(
+                Task.FromResult(
+                    new List<FredReleaseDateRecord>
+                    {
+                        new() { ReleaseId = 10, Date = "2026-07-14" },
+                    }
+                )
+            );
+
+        await _sut.Import(CancellationToken.None);
+
+        var dates = _dateRepo.GetAll().ToList();
+        dates.Should().ContainSingle("the CPI date must land even though the PPI fetch failed");
+        dates[0].FredReleaseId.Should().Be(cpi.Id);
+        dates[0].Date.Should().Be(new DateOnly(2026, 7, 14));
     }
 
     [Fact]
@@ -367,18 +407,11 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
             PressRelease = true,
         };
         _fredClient.GetSeriesRelease("DFEDTARU").Returns(Task.FromResult(fomcRelease));
-        _fredClient
-            .GetReleaseDates(Arg.Any<DateOnly?>())
-            .Returns(
-                Task.FromResult(
-                    new List<FredReleaseDateRecord>
-                    {
-                        new() { ReleaseId = 101, Date = "2026-06-19" }, // Fri
-                        new() { ReleaseId = 101, Date = "2026-06-20" }, // Sat
-                        new() { ReleaseId = 101, Date = "2026-06-22" }, // Mon
-                    }
-                )
-            );
+        SetupReleaseDates(
+            new FredReleaseDateRecord { ReleaseId = 101, Date = "2026-06-19" }, // Fri
+            new FredReleaseDateRecord { ReleaseId = 101, Date = "2026-06-20" }, // Sat
+            new FredReleaseDateRecord { ReleaseId = 101, Date = "2026-06-22" } // Mon
+        );
 
         var import = async () => await _sut.Import(CancellationToken.None);
 
