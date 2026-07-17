@@ -1,4 +1,5 @@
 using Equibles.Data;
+using Equibles.Holdings.Repositories;
 using Equibles.ParadeDB.EntityFrameworkCore;
 using Equibles.Web;
 using Microsoft.AspNetCore.Builder;
