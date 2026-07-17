@@ -272,11 +272,27 @@ public partial class HouseDisclosureClient
     // first token of the asset text — member-owned holdings leave it blank,
     // which the original owner-code-anchored parser silently dropped.
     internal static List<DisclosureTransaction> ParseTransactionLines(
-        IReadOnlyList<string> lines,
+        IReadOnlyList<string> rawLines,
         string memberName,
         DateOnly filingDate
     )
     {
+        // Scrub the reprinted column-header block from every line first. The word clustering
+        // can merge the page-break header into a row's own visual line (or into a wrapped
+        // continuation), where the line-level IsTableHeaderFragment guard never sees it —
+        // production stored 707 asset names carrying the verbatim "ID Owner Asset Transaction
+        // Date Notification Amount Cap. Type Date Gains >" block, and its "$200?" threshold
+        // corrupted amount ranges into impossible brackets. Lines the scrub empties entirely
+        // are dropped, so a row's wrapped remainder on the next page keeps flowing into it
+        // instead of being cut off at the header.
+        var lines = new List<string>(rawLines.Count);
+        foreach (var rawLine in rawLines)
+        {
+            var line = StripReprintedHeader(rawLine);
+            if (!string.IsNullOrWhiteSpace(line))
+                lines.Add(line);
+        }
+
         var transactions = new List<DisclosureTransaction>();
 
         for (var i = 0; i < lines.Count; i++)
@@ -378,6 +394,14 @@ public partial class HouseDisclosureClient
             return null;
 
         assetText = assetText.Trim();
+
+        // Newer House PTR layouts print a numeric filing ID at the start of each row; when
+        // the clustering glues it onto the row text it lands in front of the owner code,
+        // defeating the ^-anchored owner regex and polluting the stored asset name
+        // ("2000080040 JT Williams-Sonoma ..."). A real asset name never starts with a bare
+        // 7+ digit token followed by whitespace.
+        assetText = LeadingFilingIdRegex().Replace(assetText, "");
+
         string owner = null;
         var ownerMatch = OwnerCodeRegex().Match(assetText);
         if (ownerMatch.Success)
@@ -463,6 +487,23 @@ public partial class HouseDisclosureClient
     // (Dependent Child). Member-owned holdings leave the column blank.
     [GeneratedRegex(@"^(SP|JT|DC)\b", RegexOptions.IgnoreCase)]
     private static partial Regex OwnerCodeRegex();
+
+    private static string StripReprintedHeader(string line) =>
+        ReprintedHeaderBlockRegex().Replace(line, " ").Trim();
+
+    // The reprinted page-break column-header block as the word clustering renders it —
+    // observed verbatim in every polluted production row. Optional leading "ID" (older
+    // layouts have no ID column) and optional trailing "$200?" (the cap-gains threshold can
+    // cluster onto a separate line) cover the variants.
+    [GeneratedRegex(
+        @"\s*(?:ID\s+)?Owner Asset Transaction Date Notification Amount Cap\. Type Date Gains >(?:\s*\$200\?)?\s*"
+    )]
+    private static partial Regex ReprintedHeaderBlockRegex();
+
+    // A row-leading numeric filing ID glued onto the row text ("2000080040 JT ..."), see
+    // BuildTransaction. Bounded to 7+ digits so a real leading number ("3M Company") survives.
+    [GeneratedRegex(@"^\d{7,}\s+")]
+    private static partial Regex LeadingFilingIdRegex();
 
     // The transaction-type marker (P, S, S (partial), S (full)) immediately
     // followed by its transaction date — the anchor identifying the line that

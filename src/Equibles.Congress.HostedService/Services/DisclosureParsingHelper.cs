@@ -374,11 +374,13 @@ public static partial class DisclosureParsingHelper
         {
             var from = ParseAmount(matches[0]);
             var to = ParseAmount(matches[1]);
-            // A range whose upper bound parsed BELOW its lower bound is corrupt source text (an
-            // unrecoverable mid-number break). The honest representation is the module's own
-            // open-ended convention — "at least $from", i.e. (from, from) — never the corrupt
+            // A range whose upper bound parsed BELOW its lower bound is corrupt source text
+            // (an unrecoverable mid-number break, or header residue like the "$200?" cap-gains
+            // threshold). When the lower bound is a standard disclosure-bracket floor its
+            // ceiling is unambiguous — re-derive it; otherwise fall back to the module's own
+            // open-ended convention, "at least $from" = (from, from) — never the corrupt
             // pair, which downstream reads as a real (and impossible) bracket.
-            return to < from ? (from, from) : (from, to);
+            return to < from ? (from, BracketCeilingFor(from)) : (from, to);
         }
 
         if (matches.Count == 1)
@@ -386,15 +388,42 @@ public static partial class DisclosureParsingHelper
             var val = ParseAmount(matches[0]);
             // A single amount is an open-ended lower bound when phrased as
             // "Over $X" or the House top bracket "$X +" (>= $X) — both map to
-            // (val, val). Otherwise it is an upper bound, e.g. "Under $X".
+            // (val, val).
             var isOpenTopBracket =
                 amount.Contains("Over", StringComparison.OrdinalIgnoreCase)
                 || amount.TrimEnd().EndsWith('+');
-            return isOpenTopBracket ? (val, val) : (0, val);
+            if (isOpenTopBracket)
+                return (val, val);
+            // A trailing '-' marks a lower bound whose upper bound was lost to a line/page
+            // break ("$50,001 -"): re-derive the bracket ceiling instead of misreading the
+            // value as an upper bound. Otherwise a single amount is an upper bound ("Under $X").
+            if (amount.TrimEnd().EndsWith('-'))
+                return (val, BracketCeilingFor(val));
+            return (0, val);
         }
 
         return (0, 0);
     }
+
+    // The standard congressional disclosure brackets (shared by House PTRs and Senate
+    // filings): a lower bound that is a bracket floor uniquely identifies its ceiling. Values
+    // that are not a floor (exact amounts, open-ended top brackets like "Over $50,000,000")
+    // stay on the (from, from) open-ended convention.
+    private static readonly Dictionary<long, long> DisclosureBracketCeilings = new()
+    {
+        [1_001] = 15_000,
+        [15_001] = 50_000,
+        [50_001] = 100_000,
+        [100_001] = 250_000,
+        [250_001] = 500_000,
+        [500_001] = 1_000_000,
+        [1_000_001] = 5_000_000,
+        [5_000_001] = 25_000_000,
+        [25_000_001] = 50_000_000,
+    };
+
+    private static long BracketCeilingFor(long from) =>
+        DisclosureBracketCeilings.TryGetValue(from, out var ceiling) ? ceiling : from;
 
     private static long ParseAmount(Match match)
     {
