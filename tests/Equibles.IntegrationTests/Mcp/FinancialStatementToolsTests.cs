@@ -121,9 +121,12 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("Income Statement for AAPL (Apple Inc.) — FY2023 FY:");
         result.Should().Contain("| Revenue | $400,000,000,000 | USD |");
         result.Should().NotContain("$383,000,000,000", "the latest-filed restatement wins");
-        // A curated concept the company never reported still renders as a
-        // placeholder row so the statement keeps its shape.
-        result.Should().Contain("| Net Income | — |");
+        // Curated concepts the company never reported are omitted (dash-only
+        // template rows are token noise), with one note flagging the omission.
+        result.Should().NotContain("| Net Income |");
+        result
+            .Should()
+            .Contain("_Line items the filer did not report for this period are omitted._");
     }
 
     private async Task SeedRevenue(
@@ -186,7 +189,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
         var result = await Sut()
             .GetFinancialStatement("AAPL", statement: "income", year: 2023, period: "Q2");
 
-        result.Should().Contain("has no data for 2023 Q2");
+        result.Should().Contain("has no income statement data for 2023 Q2");
         result.Should().Contain("Latest available: FY2023 FY");
         result
             .Should()
