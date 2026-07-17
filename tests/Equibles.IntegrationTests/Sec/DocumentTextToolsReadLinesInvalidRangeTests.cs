@@ -14,12 +14,11 @@ using File = Equibles.Media.Data.Models.File;
 namespace Equibles.IntegrationTests.Sec;
 
 /// <summary>
-/// Contract: ReadDocumentLines clamps the requested window (startLine to ≥1, endLine
-/// to ≤totalLines); when a start beyond the document makes the clamped range empty
-/// (startLine > endLine), it must return a clear "Invalid line range" message naming
-/// the clamped bounds and total — never throw IndexOutOfRange or emit an empty table.
-/// Sibling tests pin the clamp-and-return path; this pins the invalid-range branch.
-/// Oracle derived from the clamping contract before reading the body.
+/// Contract: ReadDocumentLines validates the ORIGINAL arguments before clamping; a start
+/// beyond the document must be named as such ("startLine N is beyond the end") quoting
+/// the caller's own values — the earlier clamp-then-validate order produced "Invalid
+/// line range: 5 to 3" for a request of 5 to 10, quoting a bound the caller never sent.
+/// Never throws IndexOutOfRange or emits an empty table.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class DocumentTextToolsReadLinesInvalidRangeTests : ParadeDbMcpTestBase
@@ -63,10 +62,10 @@ public class DocumentTextToolsReadLinesInvalidRangeTests : ParadeDbMcpTestBase
             Substitute.For<ILogger<DocumentTextTools>>()
         );
 
-        // Request lines 5-10 in a 3-line doc: startLine (5) clamps to 5, endLine (10)
-        // clamps to 3, so 5 > 3 — the window is empty and the tool must say so.
+        // Request lines 5-10 in a 3-line doc: the whole window is past the end, and the
+        // error must quote the caller's startLine, not a clamped endLine they never sent.
         var output = await sut.ReadDocumentLines(document.Id, startLine: 5, endLine: 10);
 
-        output.Should().Be("Invalid line range: 5 to 3 (document has 3 lines).");
+        output.Should().Be("startLine 5 is beyond the end of the document (3 lines).");
     }
 }

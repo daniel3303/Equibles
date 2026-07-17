@@ -35,11 +35,11 @@ public class NCenTools
 
     [McpServerTool(Name = "GetFundOperations")]
     [Description(
-        "Get operational data for a registered investment company (mutual fund, ETF or closed-end fund) from its SEC Form N-CEN annual reports. Each N-CEN shows the registrant's classification (e.g. N-1A open-end, N-2 closed-end), Investment Company Act file number, reporting period, and whether it was the fund's first or last filing, followed by the fund's named service providers — investment advisers, sub-advisers, custodians, transfer agents, administrators, auditors and underwriters. Use this to see who runs and services a fund. Only registered funds file N-CEN; operating companies will return no data."
+        "Get operational data for a registered investment company from its SEC Form N-CEN annual reports. Resolves exchange-listed tickers only — ETFs, closed-end funds and unit investment trusts; an unlisted mutual-fund share-class ticker (e.g. VFIAX) will not resolve, so find that fund via SearchFunds/GetFundProfile instead. Each N-CEN shows the registrant's classification (e.g. N-1A open-end, N-2 closed-end, S-6 unit investment trust), Investment Company Act file number, reporting period, and whether it was the fund's first or last filing, followed by the service providers named on the most recent report only — investment advisers, sub-advisers, custodians, transfer agents, administrators, auditors and underwriters. Use this to see who runs and services a fund. Only registered funds file N-CEN; operating companies will return no data."
     )]
     public Task<string> GetFundOperations(
         [Description("Fund or ETF ticker symbol (e.g., MXF, SPY)")] string ticker,
-        [Description("Maximum number of annual reports to return (default: 10)")]
+        [Description("Maximum number of annual reports to return (default: 10, max: 500)")]
             int maxResults = 10
     )
     {
@@ -69,7 +69,7 @@ public class NCenTools
                 result.AppendRows(
                     filings,
                     f =>
-                        $"| {f.FilingDate:yyyy-MM-dd} | {f.ReportEndingPeriod:yyyy-MM-dd} | {f.InvestmentCompanyType ?? "-"} | {f.InvestmentCompanyFileNumber ?? "-"} | {(f.IsAmendment ? "Yes" : "No")} | {(f.IsFirstFiling ? "Yes" : "No")} | {(f.IsLastFiling ? "Yes" : "No")} |"
+                        $"| {f.FilingDate:yyyy-MM-dd} | {f.ReportEndingPeriod:yyyy-MM-dd} | {FundCodes.RegistrationType(f.InvestmentCompanyType)} | {f.InvestmentCompanyFileNumber ?? "-"} | {(f.IsAmendment ? "Yes" : "No")} | {(f.IsFirstFiling ? "Yes" : "No")} | {(f.IsLastFiling ? "Yes" : "No")} |"
                 );
 
                 AppendServiceProviders(result, filings[0]);
@@ -83,8 +83,17 @@ public class NCenTools
 
     private static void AppendServiceProviders(System.Text.StringBuilder result, NCenFiling latest)
     {
+        // Providers are always sourced from the newest report only; say so explicitly when it
+        // names none, or a consumer reads the missing section as "no providers on record" even
+        // though an older report in the same response may list them.
         if (latest.ServiceProviders.Count == 0)
+        {
+            result.AppendLine();
+            result.AppendLine(
+                $"The latest report (filed {latest.FilingDate:yyyy-MM-dd}) names no service providers."
+            );
             return;
+        }
 
         result.AppendLine();
         result.AppendLine(

@@ -35,14 +35,38 @@ public class DisclosureParsingHelperBrokenAmountTests
     }
 
     [Fact]
-    public void ParseAmountRange_CorruptInvertedBracket_FallsBackToOpenEndedLowerBound()
+    public void ParseAmountRange_CorruptInvertedBracketOnBracketFloor_RederivesCeiling()
     {
-        // An upper bound that parsed below the lower bound is unrecoverable source corruption —
-        // "at least $from" is the honest read, never the impossible pair.
+        // An upper bound that parsed below the lower bound is source corruption (a mid-number
+        // break, or page-break header residue like the "$200?" cap-gains threshold). $50,001
+        // is a standard disclosure-bracket floor, so its ceiling is unambiguous — production
+        // held 49 rows stored as the impossible ($50,001, $50,001)-style band this way.
         var (from, to) = DisclosureParsingHelper.ParseAmountRange("$50,001 - $200junk000");
 
         Assert.Equal(50001, from);
-        Assert.Equal(50001, to);
+        Assert.Equal(100000, to);
+    }
+
+    [Fact]
+    public void ParseAmountRange_CorruptInvertedBracketOffBracketFloor_FallsBackToOpenEndedLowerBound()
+    {
+        // A lower bound that is NOT a standard bracket floor has no derivable ceiling —
+        // "at least $from" stays the honest read, never the impossible pair.
+        var (from, to) = DisclosureParsingHelper.ParseAmountRange("$1,234 - $200junk000");
+
+        Assert.Equal(1234, from);
+        Assert.Equal(1234, to);
+    }
+
+    [Fact]
+    public void ParseAmountRange_LoneLowerBoundWithTrailingDash_RederivesCeiling()
+    {
+        // "$50,001 -" is a range whose upper bound was lost to a line/page break: the value
+        // is a LOWER bound, and reading it as "up to $50,001" inverts the disclosure.
+        var (from, to) = DisclosureParsingHelper.ParseAmountRange("$50,001 -");
+
+        Assert.Equal(50001, from);
+        Assert.Equal(100000, to);
     }
 
     [Fact]

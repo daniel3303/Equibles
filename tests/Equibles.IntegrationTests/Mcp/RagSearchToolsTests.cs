@@ -46,6 +46,8 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
         return new RagSearchTools(
             ragManager,
             secDocumentService,
+            new CommonStockRepository(DbContext),
+            new DocumentRepository(DbContext),
             ErrorManager,
             NullLogger<RagSearchTools>()
         );
@@ -265,18 +267,66 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task SearchCompanyDocuments_UnknownTicker_StillReturnsEmptyMessage()
+    public async Task SearchCompanyDocuments_UnknownTicker_ReturnsStockNotFound()
     {
         await SeedDocumentWithChunks(
             ticker: "AAPL",
             chunkContents: new[] { "Cloud revenue increased." }
         );
 
-        // ResolvePrimaryTicker falls back to the input ticker on miss; BM25 then finds zero rows
-        // because no chunk has Ticker = "ZZZZ".
+        // A mistyped ticker must be distinguishable from "this company's filings say
+        // nothing about the topic": the tool checks the stock exists before searching.
         var result = await Sut().SearchCompanyDocuments("cloud revenue", "ZZZZ");
 
-        result.Should().Be("No relevant financial documents found.");
+        result.Should().Be("Stock 'ZZZZ' not found.");
+    }
+
+    [Fact]
+    public async Task SearchCompanyDocuments_UnknownDocumentType_ReturnsAcceptedValues()
+    {
+        await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            chunkContents: new[] { "Cloud revenue increased." }
+        );
+
+        // A near-miss type ('10K', 'Transcript') must not silently search unfiltered —
+        // the caller would present mixed-type results as filtered ones.
+        var result = await Sut()
+            .SearchCompanyDocuments("cloud revenue", "AAPL", documentType: "10K");
+
+        result.Should().StartWith("Unknown documentType '10K'.");
+        result.Should().Contain("'TenK' (10-K)");
+    }
+
+    [Fact]
+    public async Task SearchDocuments_InvertedDateRange_ReturnsExplicitError()
+    {
+        await SeedDocumentWithChunks(chunkContents: new[] { "Revenue increased." });
+
+        // start > end must not collapse into the generic empty-result message — the
+        // caller would conclude no such documents exist.
+        var result = await Sut()
+            .SearchDocuments(
+                "revenue",
+                startDate: new DateTime(2026, 1, 1),
+                endDate: new DateTime(2020, 1, 1)
+            );
+
+        result.Should().Be("startDate 2026-01-01 is after endDate 2020-01-01 — swap the values.");
+    }
+
+    [Fact]
+    public async Task SearchDocuments_ResultHeaders_IncludeDocumentId()
+    {
+        var (_, document, _) = await SeedDocumentWithChunks(
+            chunkContents: new[] { "Services segment revenue grew strongly." }
+        );
+
+        var result = await Sut().SearchDocuments("services segment revenue");
+
+        // The ID feeds SearchDocument/ReadDocumentLines directly — without it the caller
+        // must re-derive it from ListCompanyDocuments by fuzzy type+date matching.
+        result.Should().Contain($"(ID: {document.Id})");
     }
 
     // ── SearchDocument ──────────────────────────────────────────────────
@@ -301,23 +351,193 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task SearchDocument_UnknownDocumentId_ReturnsEmptyMessage()
+    public async Task SearchDocument_UnknownDocumentId_ReturnsDocumentNotFound()
     {
         await SeedDocumentWithChunks(chunkContents: new[] { "Some content." });
 
-        var result = await Sut().SearchDocument("anything", Guid.NewGuid());
+        var missingId = Guid.NewGuid();
+        var result = await Sut().SearchDocument("anything", missingId);
 
-        result.Should().Be("No relevant financial documents found.");
+        // A stale or mistyped ID must not read as "this filing says nothing about the
+        // topic" — the caller needs to know the ID itself is wrong.
+        result
+            .Should()
+            .Be(
+                $"Document {missingId} not found — obtain a valid document ID from ListCompanyDocuments."
+            );
+    }
+
+    [Fact]
+    public async Task SearchDocument_ExistingDocumentNoMatches_ReturnsNoExcerptsMessage()
+    {
+        var (_, document, _) = await SeedDocumentWithChunks(
+            chunkContents: new[] { "Consumer electronics revenue." }
+        );
+
+        var result = await Sut().SearchDocument("blockchain cryptocurrency mining", document.Id);
+
+        // Same empty outcome, different cause: the document exists but has no matching
+        // content — distinguishable from the bad-ID case above.
+        result.Should().StartWith("No matching excerpts found in this document");
+        result.Should().Contain("10-K");
+    }
+
+    [Fact]
+    public async Task SearchDocument_WordyQueryWithOneNonMatchingToken_StillReturnsExcerpts()
+    {
+        // Conjunctive BM25 ANDs every token: "drivers" appears nowhere in the chunk, so
+        // the strict pass returns nothing. The document-scoped tool opts into the
+        // disjunctive fallback, which must recover the on-point chunk.
+        var (_, document, _) = await SeedDocumentWithChunks(
+            chunkContents: new[]
+            {
+                "Revenue from Data Center computing grew 59% driven by demand.",
+                "Gaming revenue was flat compared to the prior year.",
+            }
+        );
+
+        var result = await Sut().SearchDocument("data center revenue growth drivers", document.Id);
+
+        result.Should().Contain("Data Center computing grew");
     }
 
     // ── ListCompanyDocuments ────────────────────────────────────────────
 
     [Fact]
-    public async Task ListCompanyDocuments_UnknownTicker_ReturnsNotFoundMessage()
+    public async Task ListCompanyDocuments_UnknownTicker_ReturnsStockNotFound()
     {
         var result = await Sut().ListCompanyDocuments("ZZZZ");
 
-        result.Should().Contain("No documents found for ticker ZZZZ");
+        // An unknown ticker is not the same empty state as "known company, nothing
+        // ingested" — the caller must be told the ticker itself missed.
+        result.Should().Be("Stock 'ZZZZ' not found.");
+    }
+
+    [Fact]
+    public async Task ListCompanyDocuments_KnownTickerNoDocuments_ReturnsNoDocumentsMessage()
+    {
+        DbContext
+            .Set<CommonStock>()
+            .Add(
+                new CommonStock
+                {
+                    Ticker = "NODOC",
+                    Name = "Empty Corp",
+                    Cik = Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString(),
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().ListCompanyDocuments("NODOC");
+
+        result.Should().Contain("No documents found for ticker NODOC");
+    }
+
+    [Fact]
+    public async Task ListCompanyDocuments_FiltersExcludeEverything_SaysDocumentsExistWithoutThem()
+    {
+        await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            documentType: DocumentType.TenK,
+            reportingDate: new DateOnly(2026, 3, 15),
+            chunkContents: new[] { "Annual report content." }
+        );
+
+        var result = await Sut()
+            .ListCompanyDocuments(
+                "AAPL",
+                startDate: new DateTime(1990, 1, 1),
+                endDate: new DateTime(1990, 12, 31)
+            );
+
+        // Distinguish "the filters excluded everything" from "nothing is ingested".
+        result.Should().Contain("No documents match the given filters for AAPL");
+        result.Should().Contain("1 document(s) exist without them");
+    }
+
+    [Fact]
+    public async Task ListCompanyDocuments_UnknownDocumentType_ReturnsAcceptedValues()
+    {
+        await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            chunkContents: new[] { "Annual report content." }
+        );
+
+        // The old lenient behavior returned an UNFILTERED list for a near-miss like
+        // 'AnnualReport' — indistinguishable from a correctly filtered one.
+        var result = await Sut().ListCompanyDocuments("AAPL", documentType: "AnnualReport");
+
+        result.Should().StartWith("Unknown documentType 'AnnualReport'.");
+        result.Should().Contain("'TenK' (10-K)");
+    }
+
+    [Fact]
+    public async Task ListCompanyDocuments_PageZero_ReturnsExplicitError()
+    {
+        await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            chunkContents: new[] { "Annual report content." }
+        );
+
+        // page=0 used to flow into Skip(-maxItems) — a negative OFFSET PostgreSQL rejects,
+        // surfacing as the generic internal-error sentinel.
+        var result = await Sut().ListCompanyDocuments("AAPL", page: 0);
+
+        result.Should().Be("Invalid page 0 — pages are numbered from 1.");
+    }
+
+    [Fact]
+    public async Task ListCompanyDocuments_PagePastEnd_ReturnsOutOfRangeMessage()
+    {
+        await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            chunkContents: new[] { "Annual report content." }
+        );
+
+        // Paging past the end used to return "No documents found for ticker AAPL" even
+        // though documents plainly exist — the caller would conclude the company has none.
+        var result = await Sut().ListCompanyDocuments("AAPL", page: 5);
+
+        result.Should().Contain("Page 5 is out of range");
+        result.Should().Contain("1 matching document(s)");
+    }
+
+    [Fact]
+    public async Task ListCompanyDocuments_HiddenDocumentType_ExcludedUnlessExplicitlyRequested()
+    {
+        // Registration is process-global and idempotent (TryAdd); the type is test-only
+        // and no other test filters on it.
+        var hiddenType = new DocumentType(
+            "TestHiddenNews",
+            "Test Hidden News",
+            hiddenFromFilingLists: true
+        );
+        DocumentType.Register(hiddenType);
+
+        await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            documentType: DocumentType.TenK,
+            reportingDate: new DateOnly(2026, 3, 15),
+            chunkContents: new[] { "Annual report content." }
+        );
+        await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            documentType: hiddenType,
+            reportingDate: new DateOnly(2026, 4, 1),
+            chunkContents: new[] { "News item content." }
+        );
+
+        var unfiltered = await Sut().ListCompanyDocuments("AAPL");
+        var explicitlyRequested = await Sut()
+            .ListCompanyDocuments("AAPL", documentType: "TestHiddenNews");
+
+        // Hidden types are news, not filings: they must not crowd the unfiltered list,
+        // but an explicit request for the type still returns them.
+        unfiltered.Should().Contain("10-K");
+        unfiltered.Should().NotContain("Test Hidden News");
+        unfiltered.Should().Contain("(1 documents)");
+        explicitlyRequested.Should().Contain("Test Hidden News");
+        explicitlyRequested.Should().NotContain("10-K");
     }
 
     [Fact]

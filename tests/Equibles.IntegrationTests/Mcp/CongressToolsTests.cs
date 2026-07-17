@@ -45,7 +45,8 @@ public class CongressToolsTests : ParadeDbMcpTestBase
         CongressTransactionType type = CongressTransactionType.Purchase,
         long amountFrom = 1_000,
         long amountTo = 15_000,
-        string assetName = "Common Stock"
+        string assetName = "Common Stock",
+        string ownerType = "Self"
     ) =>
         new()
         {
@@ -56,7 +57,7 @@ public class CongressToolsTests : ParadeDbMcpTestBase
             TransactionDate = transactionDate,
             FilingDate = transactionDate.AddDays(30),
             TransactionType = type,
-            OwnerType = "Self",
+            OwnerType = ownerType,
             AssetName = assetName,
             AmountFrom = amountFrom,
             AmountTo = amountTo,
@@ -297,5 +298,239 @@ public class CongressToolsTests : ParadeDbMcpTestBase
         var result = await Sut().SearchCongressMembers("pelosi");
 
         result.Should().Contain("Nancy Pelosi");
+    }
+
+    [Fact]
+    public async Task SearchCongressMembers_MoreMatchesThanMaxResults_AppendsTruncationNote()
+    {
+        DbContext
+            .Set<CongressMember>()
+            .AddRange(
+                new CongressMember
+                {
+                    Name = "Dan Crenshaw",
+                    Position = CongressPosition.Representative,
+                },
+                new CongressMember
+                {
+                    Name = "Daniel Goldman",
+                    Position = CongressPosition.Representative,
+                },
+                new CongressMember
+                {
+                    Name = "Daniel Meuser",
+                    Position = CongressPosition.Representative,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().SearchCongressMembers("Dan", maxResults: 2);
+
+        // Alphabetical order means later-alphabet members are cut; the caller must be told.
+        result.Should().Contain("Showing first 2 of 3 results - raise maxResults to see more.");
+        result.Should().NotContain("Daniel Meuser");
+    }
+
+    [Fact]
+    public async Task SearchCongressMembers_PositionFilter_ReturnsOnlyThatChamber()
+    {
+        DbContext
+            .Set<CongressMember>()
+            .AddRange(
+                new CongressMember { Name = "Rick Scott", Position = CongressPosition.Senator },
+                new CongressMember
+                {
+                    Name = "Austin Scott",
+                    Position = CongressPosition.Representative,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().SearchCongressMembers("Scott", position: "Senator");
+
+        result.Should().Contain("Rick Scott");
+        result.Should().NotContain("Austin Scott");
+    }
+
+    [Fact]
+    public async Task SearchCongressMembers_UnknownPosition_ErrorsListingAcceptedValues()
+    {
+        var result = await Sut().SearchCongressMembers("Scott", position: "Governor");
+
+        result.Should().Be("Unknown position 'Governor'. Accepted: Senator or Representative.");
+    }
+
+    // ── strict arguments and result framing ──────────────────────────────
+
+    [Fact]
+    public async Task GetCongressionalTrades_MalformedStartDate_ErrorsWithAcceptedFormat()
+    {
+        DbContext.Set<CommonStock>().Add(NvdaStock());
+        await DbContext.SaveChangesAsync();
+
+        // US-style dates must correct the caller, never silently fall back to the default
+        // 1-year window (the caller could not tell which range was applied).
+        var result = await Sut().GetCongressionalTrades("NVDA", startDate: "06/01/2026");
+
+        result.Should().Be("Unknown startDate '06/01/2026'. Accepted: yyyy-MM-dd.");
+    }
+
+    [Fact]
+    public async Task GetMemberTrades_InvertedDateRange_ErrorsExplicitly()
+    {
+        DbContext.Set<CongressMember>().Add(PelosiMember());
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetMemberTrades("Nancy Pelosi", startDate: "2026-01-01", endDate: "2025-01-01");
+
+        result.Should().Be("Invalid date range: startDate 2026-01-01 is after endDate 2025-01-01.");
+    }
+
+    [Fact]
+    public async Task GetCongressionalTrades_TitleEchoesEffectiveDateWindow()
+    {
+        var stock = NvdaStock();
+        var pelosi = PelosiMember();
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<CongressMember>().Add(pelosi);
+        DbContext.Set<CongressionalTrade>().Add(TradeFor(pelosi, stock, new DateOnly(2026, 3, 15)));
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetCongressionalTrades("NVDA", startDate: "2026-01-01", endDate: "2026-04-30");
+
+        // The applied window must be visible: a default-window result is otherwise
+        // indistinguishable from an all-time history.
+        result
+            .Should()
+            .Contain(
+                "Congressional trades for NVDA (NVIDIA Corporation), 2026-01-01 to 2026-04-30:"
+            );
+    }
+
+    [Fact]
+    public async Task GetCongressionalTrades_MoreTradesThanMaxResults_AppendsTruncationNote()
+    {
+        var stock = NvdaStock();
+        var pelosi = PelosiMember();
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<CongressMember>().Add(pelosi);
+        DbContext
+            .Set<CongressionalTrade>()
+            .AddRange(
+                TradeFor(pelosi, stock, new DateOnly(2026, 3, 10), assetName: "First"),
+                TradeFor(pelosi, stock, new DateOnly(2026, 3, 11), assetName: "Second"),
+                TradeFor(pelosi, stock, new DateOnly(2026, 3, 12), assetName: "Third")
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetCongressionalTrades(
+                "NVDA",
+                startDate: "2026-01-01",
+                endDate: "2026-04-30",
+                maxResults: 2
+            );
+
+        result.Should().Contain("Showing first 2 of 3 results - raise maxResults to see more.");
+    }
+
+    [Fact]
+    public async Task GetCongressionalTrades_HouseOwnerCode_RenderedAsSenateLabel()
+    {
+        var stock = NvdaStock();
+        var pelosi = PelosiMember();
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<CongressMember>().Add(pelosi);
+        DbContext
+            .Set<CongressionalTrade>()
+            .Add(TradeFor(pelosi, stock, new DateOnly(2026, 3, 15), ownerType: "SP"));
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetCongressionalTrades("NVDA", startDate: "2026-01-01", endDate: "2026-04-30");
+
+        // One vocabulary: the raw House code renders as the Senate label.
+        result.Should().Contain("| Spouse |");
+        result.Should().NotContain("| SP |");
+    }
+
+    [Fact]
+    public async Task GetMemberTrades_RendersFilingDateColumn()
+    {
+        var stock = NvdaStock();
+        var pelosi = PelosiMember();
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<CongressMember>().Add(pelosi);
+        // Filed 30 days after the trade: STOCK Act disclosures lag, so the date the market
+        // learned of the trade must be visible next to the transaction date.
+        DbContext
+            .Set<CongressionalTrade>()
+            .Add(TradeFor(pelosi, stock, new DateOnly(2026, 3, 15)));
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetMemberTrades("Nancy Pelosi", startDate: "2026-01-01", endDate: "2026-04-30");
+
+        result.Should().Contain("| Date | Filed |");
+        result.Should().Contain("| 2026-03-15 | 2026-04-14 |");
+    }
+
+    // ── member resolution ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetMemberTrades_MemberNameWrongCase_StillResolves()
+    {
+        var stock = NvdaStock();
+        var pelosi = PelosiMember();
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<CongressMember>().Add(pelosi);
+        DbContext.Set<CongressionalTrade>().Add(TradeFor(pelosi, stock, new DateOnly(2026, 3, 15)));
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetMemberTrades("nancy pelosi", startDate: "2026-01-01", endDate: "2026-04-30");
+
+        result.Should().Contain("Trades by Nancy Pelosi (Representative)");
+    }
+
+    [Fact]
+    public async Task GetMemberTrades_UniquePartialName_ResolvesUnambiguously()
+    {
+        var stock = NvdaStock();
+        var pelosi = PelosiMember();
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<CongressMember>().AddRange(pelosi, CrenshawMember());
+        DbContext.Set<CongressionalTrade>().Add(TradeFor(pelosi, stock, new DateOnly(2026, 3, 15)));
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetMemberTrades("Pelosi", startDate: "2026-01-01", endDate: "2026-04-30");
+
+        result.Should().Contain("Trades by Nancy Pelosi (Representative)");
+    }
+
+    [Fact]
+    public async Task GetMemberTrades_AmbiguousPartialName_StaysNotFound()
+    {
+        DbContext
+            .Set<CongressMember>()
+            .AddRange(
+                new CongressMember { Name = "Rick Scott", Position = CongressPosition.Senator },
+                new CongressMember
+                {
+                    Name = "Austin Scott",
+                    Position = CongressPosition.Representative,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        // Two members match: guessing either would silently answer about the wrong person.
+        var result = await Sut().GetMemberTrades("Scott");
+
+        result
+            .Should()
+            .Be("Member 'Scott' not found. Use SearchCongressMembers to find the exact name.");
     }
 }

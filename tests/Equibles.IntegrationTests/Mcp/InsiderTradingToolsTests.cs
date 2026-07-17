@@ -381,7 +381,9 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
 
         result
             .Should()
-            .Contain("| Date | Insider | Role | Type | Shares | Price | Value | Owned After |");
+            .Contain(
+                "| Date | Insider | Role | Type | Shares | Price | Value | Owned After | Security | Ownership | 10b5-1 |"
+            );
     }
 
     // ══════════════════════════════════════════════════════════════════
@@ -506,6 +508,44 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task GetInsiderTransactions_InsiderNameFilter_LimitsToMatchingInsiders()
+    {
+        // The insiderName filter is the pivot SearchInsiders points at: it matches the
+        // SEC-filed name with the same case-insensitive token-AND contract (ILike, so
+        // Postgres-only). Rows by other insiders must not leak through.
+        var stock = CreateStock("NVDA", "NVIDIA Corp");
+        var huang = CreateOwner(cik: "0000111001", name: "HUANG JEN HSUN");
+        var kress = CreateOwner(cik: "0000111002", name: "Kress Colette");
+        await SeedStock(stock);
+        await SeedOwner(huang);
+        await SeedOwner(kress);
+        await SeedTransaction(CreateTransaction(stock, huang, accessionNumber: "0001-24-110001"));
+        await SeedTransaction(CreateTransaction(stock, kress, accessionNumber: "0001-24-110002"));
+
+        var result = await Sut().GetInsiderTransactions("NVDA", insiderName: "huang");
+
+        result.Should().Contain("HUANG JEN HSUN");
+        result.Should().NotContain("Kress Colette");
+    }
+
+    [Fact]
+    public async Task GetInsiderTransactions_InsiderNameFilter_NoMatch_SaysFiltersMatchedNothing()
+    {
+        // A filtered empty result must not read like "this stock has no insider data".
+        var stock = CreateStock("NVDA", "NVIDIA Corp");
+        var owner = CreateOwner(cik: "0000111003", name: "Kress Colette");
+        await SeedStock(stock);
+        await SeedOwner(owner);
+        await SeedTransaction(CreateTransaction(stock, owner, accessionNumber: "0001-24-110003"));
+
+        var result = await Sut().GetInsiderTransactions("NVDA", insiderName: "Nonexistent");
+
+        result
+            .Should()
+            .Contain("No insider transactions found for NVDA matching the given filters.");
+    }
+
+    [Fact]
     public async Task SearchInsiders_NoRoleFlags_ShowsInsiderFallback()
     {
         // Some SEC filings create an InsiderOwner with all role flags false and
@@ -528,5 +568,124 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
 
         result.Should().Contain("Unclassified Person");
         result.Should().Contain("Insider");
+    }
+
+    [Fact]
+    public async Task SearchInsiders_ShowsCompanyOfMostRecentFiling()
+    {
+        // The company column is the disambiguator for common surnames and carries the
+        // ticker the sibling (ticker-keyed) tools need. It comes from the owner's most
+        // recent transaction issuer.
+        var older = CreateStock("INTC", "Intel Corp");
+        var newer = CreateStock("NVDA", "NVIDIA Corp");
+        var owner = CreateOwner(cik: "0000222001", name: "HUANG JEN HSUN");
+        await SeedStock(older);
+        await SeedStock(newer);
+        await SeedOwner(owner);
+        await SeedTransaction(
+            CreateTransaction(
+                older,
+                owner,
+                transactionDate: new DateOnly(2020, 1, 10),
+                accessionNumber: "0001-24-220001"
+            )
+        );
+        await SeedTransaction(
+            CreateTransaction(
+                newer,
+                owner,
+                transactionDate: new DateOnly(2024, 6, 20),
+                accessionNumber: "0001-24-220002"
+            )
+        );
+
+        var result = await Sut().SearchInsiders("Huang");
+
+        result.Should().Contain("| Name | CIK | Role | Company (latest filing) | Location |");
+        result.Should().Contain("NVIDIA Corp (NVDA)");
+        result.Should().NotContain("Intel Corp (INTC)");
+    }
+
+    [Fact]
+    public async Task SearchInsiders_OwnerWithoutTransactions_ShowsDashForCompany()
+    {
+        await SeedOwner(CreateOwner(cik: "0000222002", name: "Dormant Person"));
+
+        var result = await Sut().SearchInsiders("Dormant");
+
+        result.Should().Contain("Dormant Person");
+        result.Should().Contain("| - |");
+    }
+
+    [Fact]
+    public async Task SearchInsiders_OrdersByMostRecentFilingActivity()
+    {
+        // Without an ORDER BY, Postgres returns an arbitrary subset/order for common
+        // surnames. The contract is: most recently active filers first, never-filed
+        // owners last (the DESC NULLS FIRST trap), name as tie-breaker.
+        var stock = CreateStock("AAPL", "Apple Inc.");
+        var stale = CreateOwner(cik: "0000333001", name: "Smith Stale");
+        var active = CreateOwner(cik: "0000333002", name: "Smith Active");
+        var neverFiled = CreateOwner(cik: "0000333003", name: "Smith Neverfiled");
+        await SeedStock(stock);
+        await SeedOwner(stale);
+        await SeedOwner(active);
+        await SeedOwner(neverFiled);
+        await SeedTransaction(
+            CreateTransaction(
+                stock,
+                stale,
+                transactionDate: new DateOnly(2020, 1, 10),
+                accessionNumber: "0001-24-330001"
+            )
+        );
+        await SeedTransaction(
+            CreateTransaction(
+                stock,
+                active,
+                transactionDate: new DateOnly(2024, 6, 20),
+                accessionNumber: "0001-24-330002"
+            )
+        );
+
+        var result = await Sut().SearchInsiders("Smith");
+
+        var activeAt = result.IndexOf("Smith Active", StringComparison.Ordinal);
+        var staleAt = result.IndexOf("Smith Stale", StringComparison.Ordinal);
+        var neverAt = result.IndexOf("Smith Neverfiled", StringComparison.Ordinal);
+        activeAt.Should().BePositive();
+        activeAt.Should().BeLessThan(staleAt);
+        staleAt.Should().BeLessThan(neverAt);
+    }
+
+    [Fact]
+    public async Task SearchInsiders_Truncated_AppendsTruncationNote()
+    {
+        DbContext
+            .Set<InsiderOwner>()
+            .AddRange(
+                CreateOwner(cik: "0000444001", name: "Trunc One"),
+                CreateOwner(cik: "0000444002", name: "Trunc Two"),
+                CreateOwner(cik: "0000444003", name: "Trunc Three")
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().SearchInsiders("Trunc", maxResults: 2);
+
+        result.Should().Contain("Showing first 2 of 3 results - raise maxResults to see more.");
+    }
+
+    [Fact]
+    public async Task SearchInsiders_NaturalNameMiss_ExplainsFiledNameMatching()
+    {
+        // 'Jensen Huang' finds nothing because the SEC-filed legal name is
+        // 'HUANG JEN HSUN' and every query token must appear in the name. The
+        // empty state must teach the retry (surname alone), not read as "no data".
+        await SeedOwner(CreateOwner(cik: "0000555001", name: "HUANG JEN HSUN"));
+
+        var result = await Sut().SearchInsiders("Jensen Huang");
+
+        result.Should().Contain("No insiders found matching 'Jensen Huang'");
+        result.Should().Contain("retry with the surname alone");
     }
 }

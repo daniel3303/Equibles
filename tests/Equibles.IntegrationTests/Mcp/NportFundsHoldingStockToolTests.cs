@@ -26,6 +26,7 @@ public class NportFundsHoldingStockToolTests : IDisposable
         _tools = new NportTools(
             new NportFilingRepository(_dbContext),
             new CommonStockRepository(_dbContext),
+            new FundSeriesRepository(_dbContext),
             errorManager: null,
             NullLogger<NportTools>.Instance
         );

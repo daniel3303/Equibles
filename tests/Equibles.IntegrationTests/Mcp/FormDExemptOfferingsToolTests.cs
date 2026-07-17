@@ -115,6 +115,86 @@ public class FormDExemptOfferingsToolTests : IDisposable
         var result = await _tools.GetExemptOfferings("AAPL", maxResults: 2);
 
         result.Should().Contain("showing 2 most recent notices");
+        result.Should().Contain("Showing first 2 of 5 results");
+    }
+
+    [Fact]
+    public async Task GetExemptOfferings_RendersOfferingIdentityColumns()
+    {
+        var stock = SeedStock();
+        var filing = MakeFiling(stock.Id, "0001213900-25-000001", new DateOnly(2025, 3, 1));
+        filing.DateOfFirstSale = new DateOnly(2024, 11, 20);
+        filing.TotalRemaining = 123_456;
+        _dbContext.Set<FormDFiling>().Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetExemptOfferings("AAPL");
+
+        // The chain anchor (first-sale date), the remaining amount, and the accession number
+        // are what lets a consumer group D/A restatements of the same offering.
+        result.Should().Contain("First Sale").And.Contain("2024-11-20");
+        result.Should().Contain("Remaining").And.Contain("$123,456");
+        result.Should().Contain("Accession").And.Contain("0001213900-25-000001");
+    }
+
+    [Fact]
+    public async Task GetExemptOfferings_WithAmendment_AppendsChainGroupingNote()
+    {
+        var stock = SeedStock();
+        var amendment = MakeFiling(stock.Id, "acc-a", new DateOnly(2025, 3, 1));
+        amendment.IsAmendment = true;
+        _dbContext.Set<FormDFiling>().Add(amendment);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetExemptOfferings("AAPL");
+
+        result.Should().Contain("restate a prior notice");
+        result.Should().Contain("do not sum Sold across a chain");
+    }
+
+    [Fact]
+    public async Task GetExemptOfferings_WithoutAmendments_OmitsChainGroupingNote()
+    {
+        var stock = SeedStock();
+        _dbContext.Set<FormDFiling>().Add(MakeFiling(stock.Id, "acc", new DateOnly(2025, 3, 1)));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetExemptOfferings("AAPL");
+
+        result.Should().NotContain("restate a prior notice");
+    }
+
+    [Fact]
+    public async Task GetExemptOfferings_DateRange_FiltersByFilingDate()
+    {
+        var stock = SeedStock();
+        _dbContext
+            .Set<FormDFiling>()
+            .Add(MakeFiling(stock.Id, "early", new DateOnly(2025, 1, 10), offeringAmount: 111_000));
+        _dbContext
+            .Set<FormDFiling>()
+            .Add(MakeFiling(stock.Id, "late", new DateOnly(2025, 6, 10), offeringAmount: 250_000));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetExemptOfferings(
+            "AAPL",
+            fromDate: "2025-03-01",
+            toDate: "2025-12-31"
+        );
+
+        result.Should().Contain("250,000");
+        result.Should().NotContain("111,000");
+    }
+
+    [Fact]
+    public async Task GetExemptOfferings_MalformedDate_ReturnsAcceptedFormatError()
+    {
+        SeedStock();
+
+        var result = await _tools.GetExemptOfferings("AAPL", fromDate: "01/13/2025");
+
+        result.Should().Contain("Unknown fromDate '01/13/2025'");
+        result.Should().Contain("yyyy-MM-dd");
     }
 
     private static FormDFiling MakeFiling(

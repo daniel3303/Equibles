@@ -274,6 +274,21 @@ public static class FinancialConceptAliases
                 "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsPeriodIncreaseDecreaseExcludingExchangeRateEffect"
             ),
         ],
+
+        // ── Risk disclosures ────────────────────────────────────────────────
+        // Concentration-risk percentage (ASC 275/280): the share of revenue or
+        // receivables attributable to a filer's largest customer(s), as a
+        // fraction (0.31 = 31%). Filers usually tag it per customer/benchmark
+        // (dimensioned), so the consolidated-only fact tools surface it only
+        // where an entity-level figure is tagged; both taxonomy spellings are
+        // listed because issuers file the element under us-gaap and srt.
+        ["customer-concentration"] =
+        [
+            G("ConcentrationRiskPercentage1"),
+            G("ConcentrationRiskPercentage"),
+            new(FactTaxonomy.Srt, "ConcentrationRiskPercentage1"),
+            new(FactTaxonomy.Srt, "ConcentrationRiskPercentage"),
+        ],
     };
 
     // Spelt-out synonyms normalise onto a canonical key so callers can use
@@ -310,6 +325,8 @@ public static class FinancialConceptAliases
         ["pp&e"] = "property-plant-and-equipment",
         ["aoci"] = "accumulated-oci",
         ["apic"] = "additional-paid-in-capital",
+        ["concentration-risk"] = "customer-concentration",
+        ["customer-concentration-risk"] = "customer-concentration",
     };
 
     public static IReadOnlyCollection<string> SupportedAliases => Map.Keys;

@@ -47,19 +47,26 @@ public class FinancialStatementTools
             + "given fiscal year and period, sourced from SEC Company Facts (structured XBRL). "
             + "Returns the standard line items (e.g. revenue, net income, total assets, "
             + "operating cash flow) with the latest-restated value for the period. "
-            + "Company-specific dimensional facts (e.g. product-segment revenue) are not included."
+            + "Company-specific dimensional facts (e.g. product-segment revenue) are not "
+            + "included — use GetRevenueBreakdown for segment/geographic revenue, and "
+            + "GetFinancialFact or CompareFinancialFact for one line item across periods "
+            + "or across companies."
     )]
     public Task<string> GetFinancialStatement(
         [Description("Stock ticker symbol (e.g., AAPL, MSFT, GME)")] string ticker,
         [Description(
             "Statement: 'income' (income statement), 'balance' (balance sheet), or "
-                + "'cashflow' (cash-flow statement). Defaults to income."
+                + "'cashflow' (cash-flow statement); the aliases 'is'/'p&l', 'bs' and 'cf' "
+                + "also work. Defaults to income."
         )]
             string statement = "income",
         [Description("Fiscal year, e.g. 2023. Defaults to the latest reported year.")]
             int? year = null,
         [Description(
-            "Fiscal period: 'FY' (annual) or 'Q1'..'Q4'. Defaults to the latest reported period."
+            "Fiscal period: 'FY' (annual) or 'Q1'..'Q4'. Defaults to the latest reported "
+                + "period. Most filers report no discrete Q4 income/cash-flow facts in XBRL "
+                + "(the fourth quarter is embedded in the full-year figure) — use 'FY' for "
+                + "annual figures."
         )]
             string period = null
     )
@@ -88,14 +95,6 @@ public class FinancialStatementTools
                     requestedPeriod = parsedPeriod;
                 }
 
-                var (selectedYear, selectedPeriod, periodError) = await ResolveStatementPeriod(
-                    stock,
-                    year,
-                    requestedPeriod
-                );
-                if (periodError != null)
-                    return periodError;
-
                 var statementLines = FinancialStatementConcepts.For(statementType);
                 var (taxonomies, tags) = StatementLineFacts.CollectConceptPairs(statementLines);
 
@@ -110,6 +109,20 @@ public class FinancialStatementTools
                     .ToListAsync();
                 var conceptIdByKey = concepts.ToDictionary(c => (c.Taxonomy, c.Tag), c => c.Id);
                 var conceptIds = concepts.Select(c => c.Id).ToHashSet();
+
+                // Period availability is scoped to the requested statement's
+                // concepts: a (year, Q4) that only exists via balance-sheet
+                // instants must not validate an income-statement request and
+                // then render an empty table.
+                var (selectedYear, selectedPeriod, periodError) = await ResolveStatementPeriod(
+                    stock,
+                    statementType,
+                    year,
+                    requestedPeriod,
+                    conceptIds
+                );
+                if (periodError != null)
+                    return periodError;
 
                 var facts = await _financialFactRepository
                     .GetConsolidatedByStock(stock)
@@ -168,12 +181,18 @@ public class FinancialStatementTools
         );
 
         var rendered = 0;
+        var omitted = 0;
+        DateOnly? earliestFiled = null;
+        DateOnly? latestFiled = null;
         foreach (var line in statementLines)
         {
             var fact = StatementLineFacts.PickFact(line, conceptIdByKey, latestByConcept);
             if (fact == null)
             {
-                result.AppendLine($"| {FactMarkdown.Cell(line.Label)} | — | | | | |");
+                // The template carries industry-specific lines (bank/insurer/
+                // REIT top lines) most filers never report — dash-only rows
+                // are noise, so unreported lines are omitted and counted.
+                omitted++;
                 continue;
             }
 
@@ -186,10 +205,30 @@ public class FinancialStatementTools
                     + $"{fact.FiledDate:yyyy-MM-dd} |"
             );
             rendered++;
+            if (earliestFiled == null || fact.FiledDate < earliestFiled)
+                earliestFiled = fact.FiledDate;
+            if (latestFiled == null || fact.FiledDate > latestFiled)
+                latestFiled = fact.FiledDate;
         }
 
         if (rendered == 0)
-            result.AppendLine($"\n_No line items of this statement were reported for the period._");
+            return $"No {statementType.NameForHumans().ToLowerInvariant()} line items were "
+                + $"reported by {stock.Ticker} for FY{selectedYear} "
+                + $"{selectedPeriod.NameForHumans()}.";
+
+        if (omitted > 0)
+            result.AppendLine(
+                "\n_Line items the filer did not report for this period are omitted._"
+            );
+
+        // Each line independently takes its latest restatement, so one
+        // statement can mix filing vintages — flag it so a partially restated
+        // total that disagrees with non-restated components is explainable.
+        if (earliestFiled != latestFiled)
+            result.AppendLine(
+                $"\n_Values reflect the latest restatement per line; source filings span "
+                    + $"{earliestFiled:yyyy-MM-dd} to {latestFiled:yyyy-MM-dd} — see the Filed column._"
+            );
 
         return result.ToString();
     }
@@ -198,20 +237,37 @@ public class FinancialStatementTools
         int FiscalYear,
         SecFiscalPeriod FiscalPeriod,
         string Error
-    )> ResolveStatementPeriod(CommonStock stock, int? year, SecFiscalPeriod? requestedPeriod)
+    )> ResolveStatementPeriod(
+        CommonStock stock,
+        FinancialStatementType statementType,
+        int? year,
+        SecFiscalPeriod? requestedPeriod,
+        IReadOnlySet<Guid> statementConceptIds
+    )
     {
+        var statementName = statementType.NameForHumans().ToLowerInvariant();
         var availablePeriods = await _financialFactRepository
             .GetConsolidatedByStock(stock)
+            .Where(f => statementConceptIds.Contains(f.FinancialConceptId))
             .Select(f => new { f.FiscalYear, f.FiscalPeriod })
             .Distinct()
             .ToListAsync();
 
         if (availablePeriods.Count == 0)
+        {
+            // Distinguish "nothing ingested at all" from "nothing for THIS
+            // statement" so the caller isn't told a covered company is absent.
+            var hasAnyFacts = await _financialFactRepository
+                .GetConsolidatedByStock(stock)
+                .AnyAsync();
             return (
                 default,
                 default,
-                $"No structured financial facts have been ingested for {stock.Ticker}."
+                hasAnyFacts
+                    ? $"No {statementName} line items have been ingested for {stock.Ticker}."
+                    : $"No structured financial facts have been ingested for {stock.Ticker}."
             );
+        }
 
         var ordered = availablePeriods
             .OrderByDescending(p => p.FiscalYear)
@@ -232,12 +288,23 @@ public class FinancialStatementTools
             var wanted =
                 $"{(year?.ToString() ?? "the latest year")} "
                 + $"{(requestedPeriod?.NameForHumans() ?? "period")}";
-            return (
-                default,
-                default,
-                $"{stock.Ticker} has no data for {wanted}. Latest available: "
-                    + $"FY{latest.FiscalYear} {latest.FiscalPeriod.NameForHumans()}."
-            );
+            var message =
+                $"{stock.Ticker} has no {statementName} data for {wanted}. Latest available: "
+                + $"FY{latest.FiscalYear} {latest.FiscalPeriod.NameForHumans()}.";
+            // The Q4-under-FY trap: SEC Company Facts embeds the fourth
+            // quarter's flow facts in the full-year duration, so a Q4
+            // income/cash-flow request usually has nothing to find — that is
+            // an XBRL filing convention, not a gap in the company's reporting.
+            if (
+                requestedPeriod == SecFiscalPeriod.Q4
+                && statementType != FinancialStatementType.BalanceSheet
+            )
+                message +=
+                    " Most filers report no discrete fourth-quarter flow facts in XBRL — "
+                    + "the fourth quarter is embedded in the full-year figure. Use period "
+                    + "'FY' for annual figures, or GetFinancialFact for a single concept "
+                    + "(it surfaces reported discrete Q4 rows where they exist).";
+            return (default, default, message);
         }
 
         return (selected.FiscalYear, selected.FiscalPeriod, null);

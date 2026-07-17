@@ -84,7 +84,7 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase
         var result = await Sut().SearchDocumentKeyword(doc.Id, "Revenue");
 
         result.Should().Contain("Revenue");
-        result.Should().Contain("2 matches found");
+        result.Should().Contain("2 matching line(s)");
         result.Should().Contain("**Revenue**");
     }
 
@@ -95,7 +95,7 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase
 
         var result = await Sut().SearchDocumentKeyword(doc.Id, "revenue");
 
-        result.Should().Contain("1 matches found");
+        result.Should().Contain("1 matching line(s)");
         result.Should().Contain("**REVENUE**");
     }
 
@@ -121,14 +121,72 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task SearchDocumentKeyword_MaxResultsRespected_LimitsMatches()
+    public async Task SearchDocumentKeyword_MaxResultsRespected_ReportsTrueTotalAndTruncation()
     {
         var lines = Enumerable.Range(1, 50).Select(i => $"Revenue line {i}").ToArray();
         var doc = await SeedDocument(string.Join("\n", lines));
 
         var result = await Sut().SearchDocumentKeyword(doc.Id, "Revenue", maxResults: 3);
 
-        result.Should().Contain("3 matches found");
+        // The header must report the TRUE total, not the capped count: "3 matches found"
+        // for a keyword that appears 50 times makes the caller state a wrong count.
+        result.Should().Contain("50 matching line(s)");
+        result.Should().Contain("Showing first 3 of 50");
+        result.Should().NotContain("Revenue line 5\n".TrimEnd());
+    }
+
+    [Fact]
+    public async Task SearchDocumentKeyword_TypographicApostropheInDocument_MatchesAsciiKeyword()
+    {
+        // Stored filings carry smart punctuation (U+2019); callers type ASCII. Without
+        // the typography fold this search silently returns "No matches found" for text
+        // the document visibly contains.
+        var doc = await SeedDocument("First line\nThe world’s largest supplier\nLast line");
+
+        var result = await Sut().SearchDocumentKeyword(doc.Id, "world's largest");
+
+        result.Should().Contain("1 matching line(s)");
+        result.Should().Contain("**world’s largest**");
+    }
+
+    [Fact]
+    public async Task SearchDocumentKeyword_AdjacentMatches_DoNotRepeatContextLines()
+    {
+        // Two consecutive matching lines used to print two overlapping 3-line blocks,
+        // duplicating the shared lines; merged blocks print each line at most once.
+        var doc = await SeedDocument("Alpha\nRevenue one\nRevenue two\nOmega");
+
+        var result = await Sut().SearchDocumentKeyword(doc.Id, "Revenue");
+
+        CountOccurrences(result, "Alpha").Should().Be(1);
+        CountOccurrences(result, "Omega").Should().Be(1);
+        CountOccurrences(result, "**Revenue** one").Should().Be(1);
+        CountOccurrences(result, "**Revenue** two").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SearchDocumentKeyword_NonPositiveMaxResults_StillReturnsAMatch()
+    {
+        // maxResults=0 used to Take(0) every real match and then claim "No matches
+        // found" — a factually wrong message. The clamp floors it at 1.
+        var doc = await SeedDocument("Revenue line\nOther line");
+
+        var result = await Sut().SearchDocumentKeyword(doc.Id, "Revenue", maxResults: 0);
+
+        result.Should().NotContain("No matches found");
+        result.Should().Contain("**Revenue**");
+    }
+
+    private static int CountOccurrences(string text, string value)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+        return count;
     }
 
     [Fact]
@@ -268,5 +326,32 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("lines 2 to 2 of 3");
         result.Should().NotContain("Line 1");
         result.Should().NotContain("Line 3");
+    }
+
+    [Fact]
+    public async Task ReadDocumentLines_RangeBeyondCap_TruncatesWithContinuationNote()
+    {
+        // Prod documents reach 500k+ lines; an uncapped range request would return the
+        // whole document in one MCP response. The cap must be honest and self-describing.
+        var lines = Enumerable.Range(1, 2050).Select(i => $"Row {i}").ToArray();
+        var doc = await SeedDocument(string.Join("\n", lines));
+
+        var result = await Sut().ReadDocumentLines(doc.Id, 1, 999_999);
+
+        result.Should().Contain("lines 1 to 2,000 of 2,050");
+        result.Should().Contain("Row 2000");
+        result.Should().NotContain("Row 2001\n".TrimEnd());
+        result.Should().Contain("continue with startLine=2,001");
+    }
+
+    [Fact]
+    public async Task ReadDocumentLines_InvertedRange_QuotesOriginalArguments()
+    {
+        var doc = await SeedDocument("Line 1\nLine 2\nLine 3");
+
+        var result = await Sut().ReadDocumentLines(doc.Id, 50, 10);
+
+        // The message must quote the caller's own values, not clamped ones.
+        result.Should().Be("Invalid line range: 50 to 10 — startLine is after endLine.");
     }
 }
