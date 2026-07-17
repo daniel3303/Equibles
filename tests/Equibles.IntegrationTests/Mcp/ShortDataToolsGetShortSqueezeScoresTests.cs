@@ -201,4 +201,144 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
 
         result.Should().Contain("No scored stocks clear the requested liquidity floor");
     }
+
+    // The single-ticker lookup answers "does MY stock look squeeze-prone": the score,
+    // its rank within the scored universe, and the factor breakdown — data the board
+    // only exposes for the top of the ranking.
+    [Fact]
+    public async Task GetShortSqueezeScores_Ticker_RendersScoreCardWithUniverseRank()
+    {
+        var settlement = new DateOnly(2026, 4, 15);
+        var hot = new CommonStock
+        {
+            Ticker = "HOT",
+            Name = "Hot Corp",
+            Cik = "0000000301",
+            SharesOutStanding = 1_000_000,
+        };
+        var cold = new CommonStock
+        {
+            Ticker = "COLD",
+            Name = "Cold Corp",
+            Cik = "0000000302",
+            SharesOutStanding = 1_000_000,
+        };
+        DbContext.Set<CommonStock>().AddRange(hot, cold);
+        DbContext
+            .Set<ShortInterest>()
+            .AddRange(
+                new ShortInterest
+                {
+                    CommonStockId = hot.Id,
+                    SettlementDate = settlement,
+                    CurrentShortPosition = 300_000,
+                    DaysToCover = 8m,
+                },
+                new ShortInterest
+                {
+                    CommonStockId = cold.Id,
+                    SettlementDate = settlement,
+                    CurrentShortPosition = 50_000,
+                    DaysToCover = 1m,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetShortSqueezeScores(ticker: "cold");
+
+        result.Should().Contain("Short-squeeze score — COLD (Cold Corp)");
+        result.Should().Contain("rank 2 of 2 scored stocks");
+        // Invariant "P1" renders a space before the percent sign.
+        result.Should().Contain("Short interest: 5.0 % of shares outstanding");
+        result.Should().Contain("settlement 2026-04-15");
+    }
+
+    [Fact]
+    public async Task GetShortSqueezeScores_TickerNotScored_ExplainsWhy()
+    {
+        var settlement = new DateOnly(2026, 4, 15);
+        var scored = new CommonStock
+        {
+            Ticker = "HOT",
+            Name = "Hot Corp",
+            Cik = "0000000303",
+            SharesOutStanding = 1_000_000,
+        };
+        var unscored = new CommonStock
+        {
+            Ticker = "QUIET",
+            Name = "Quiet Corp",
+            Cik = "0000000304",
+            SharesOutStanding = 1_000_000,
+        };
+        DbContext.Set<CommonStock>().AddRange(scored, unscored);
+        DbContext
+            .Set<ShortInterest>()
+            .Add(
+                new ShortInterest
+                {
+                    CommonStockId = scored.Id,
+                    SettlementDate = settlement,
+                    CurrentShortPosition = 300_000,
+                    DaysToCover = 8m,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetShortSqueezeScores(ticker: "QUIET");
+
+        result.Should().Contain("QUIET is not in the scored universe at settlement 2026-04-15");
+    }
+
+    // A SIC-6221 commodity/currency trust registers "units" on its 12(b) cover exactly
+    // like an MLP, but its creatable units cannot be squeezed — the authoritative
+    // (Units, SIC 6221) pair must keep it off the board while the MLP stays ranked.
+    [Fact]
+    public async Task GetShortSqueezeScores_CommodityTrustUnits_ExcludedWhileMlpUnitsRank()
+    {
+        var settlement = new DateOnly(2026, 4, 15);
+        var mlp = new CommonStock
+        {
+            Ticker = "MLP",
+            Name = "Pipeline Partners LP",
+            Cik = "0000000305",
+            SharesOutStanding = 1_000_000,
+            ListedSecurityType = ListedSecurityType.Units,
+            Sic = "4922",
+        };
+        var trust = new CommonStock
+        {
+            Ticker = "FXZ",
+            Name = "CurrencyShares Test Trust",
+            Cik = "0000000306",
+            SharesOutStanding = 1_000_000,
+            ListedSecurityType = ListedSecurityType.Units,
+            Sic = "6221",
+        };
+        DbContext.Set<CommonStock>().AddRange(mlp, trust);
+        DbContext
+            .Set<ShortInterest>()
+            .AddRange(
+                new ShortInterest
+                {
+                    CommonStockId = mlp.Id,
+                    SettlementDate = settlement,
+                    CurrentShortPosition = 200_000,
+                    DaysToCover = 5m,
+                },
+                new ShortInterest
+                {
+                    CommonStockId = trust.Id,
+                    SettlementDate = settlement,
+                    CurrentShortPosition = 300_000,
+                    DaysToCover = 9m,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetShortSqueezeScores();
+
+        result.Should().Contain("MLP", "MLP common units are genuine operating equity");
+        result.Should().NotContain("FXZ", "trust units are created/redeemed at NAV — no squeeze");
+    }
 }

@@ -581,7 +581,7 @@ public class ShortDataTools
 
     [McpServerTool(Name = "GetShortSqueezeScores")]
     [Description(
-        "Get the stocks with the highest composite short-squeeze score — a peer-relative 0-100 rank built as the weighted mean of six factor percentiles across every stock reporting short interest at the latest FINRA settlement date (short interest % of shares 30%, days to cover 20%, price vs trailing VWAP — how far shorts are underwater — 15%, short-volume trend 15%, change in short interest 10%, fails-to-deliver pressure 10%), plus catalyst boosts (+10 for a statistically extreme weekly price spike, +10 for abnormal dollar volume on a positive move, +10 when a scheduled earnings event is within a few weekdays — squeezes cluster around earnings — capped at +20, clamped to 100). Untradeable micro-caps dominate the raw board, so pass minMarketCap and/or minDollarVolume to keep only names that clear your liquidity bar (the score itself stays peer-relative to the full universe). Use this to find squeeze candidates; use GetShortInterest for one stock's underlying series."
+        "Get the stocks with the highest composite short-squeeze score — a peer-relative 0-100 rank built as the weighted mean of six factor percentiles across every stock reporting short interest at the latest FINRA settlement date (short interest % of shares 30%, days to cover 20%, price vs trailing VWAP — how far shorts are underwater — 15%, short-volume trend 15%, change in short interest 10%, fails-to-deliver pressure 10%), plus catalyst boosts (+10 for a statistically extreme weekly price spike, +10 for abnormal dollar volume on a positive move, +10 when a scheduled earnings event is within a few weekdays — squeezes cluster around earnings — capped at +20, clamped to 100). Exchange-traded commodity/currency trusts are excluded (their units are created and redeemed at NAV, so arbitrage caps any squeeze); MLP common units stay in. Untradeable micro-caps dominate the raw board, so pass minMarketCap and/or minDollarVolume to keep only names that clear your liquidity bar (the score itself stays peer-relative to the full universe). Pass ticker for one stock's score, factor breakdown, and rank within the scored universe. Use this to find squeeze candidates; use GetShortInterest for one stock's underlying series."
     )]
     public Task<string> GetShortSqueezeScores(
         [Description(
@@ -592,8 +592,14 @@ public class ShortDataTools
             "Minimum average daily dollar volume in US dollars, approximated as the FINRA average daily share volume times the market-cap-implied share price (e.g. 5000000 = $5M/day; default 0 = no floor). Stocks with unknown volume or market cap are excluded when set."
         )]
             double minDollarVolume = 0,
-        [Description("Maximum number of stocks to return (default: 25, highest score first)")]
-            int maxResults = 25
+        [Description(
+            "Maximum number of stocks to return (default: 25, highest score first; clamped to 1-200)."
+        )]
+            int maxResults = 25,
+        [Description(
+            "Optional stock ticker (e.g. GME): returns that one stock's score, factor breakdown, and rank within the scored universe instead of the board. The liquidity floors do not apply to a single-ticker lookup."
+        )]
+            string ticker = null
     )
     {
         return _runner.Execute(
@@ -604,6 +610,9 @@ public class ShortDataTools
                     return "No short-squeeze scores available — no short interest data on file.";
 
                 var settlementDate = scores[0].SettlementDate;
+
+                if (!string.IsNullOrWhiteSpace(ticker))
+                    return await RenderSingleSqueezeScore(ticker, scores, settlementDate);
 
                 // Liquidity gates are a view over the scored universe, applied after the
                 // peer-relative percentiles so a stock's score never depends on the
@@ -625,7 +634,7 @@ public class ShortDataTools
                 );
                 sb.AppendLine();
                 sb.AppendLine(
-                    "Score = weighted mean of the available factor percentiles (0-100, peer-relative) plus catalyst boosts (price spike / volume surge, capped at +20). Avg $ Volume is approximate (FINRA share volume × market-cap-implied price)."
+                    "Score = weighted mean of the available factor percentiles (0-100, peer-relative) plus catalyst boosts (price spike / volume surge / earnings within a few weekdays, capped at +20). Avg $ Volume is approximate (FINRA share volume × market-cap-implied price)."
                 );
                 sb.AppendLine();
                 sb.AppendLine(
@@ -634,6 +643,7 @@ public class ShortDataTools
                 sb.AppendLine(
                     "|---|--------|-------|-------------------|---------------|--------------------|------------------|-------------|---------------|-----------|------------|--------------|"
                 );
+                var shown = Math.Min(take, filtered.Count);
                 sb.AppendNumberedRows(
                     filtered.Take(take).ToList(),
                     (rank, score) =>
@@ -649,13 +659,86 @@ public class ShortDataTools
                     }
                 );
 
-                if (filtered.Count > take)
-                    sb.AppendLine($"\n({filtered.Count - take} more scored stocks not shown.)");
+                if (shown < filtered.Count)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine(McpOutput.TruncationNote(shown, filtered.Count));
+                }
 
                 return sb.ToString();
             },
             "GetShortSqueezeScores",
-            $"minMarketCap: {minMarketCap}, minDollarVolume: {minDollarVolume}, maxResults: {maxResults}"
+            $"minMarketCap: {minMarketCap}, minDollarVolume: {minDollarVolume}, maxResults: {maxResults}, ticker: {ticker}"
         );
     }
+
+    // One stock's score card: composite, rank in the score-descending universe, and the
+    // factor breakdown (raw reading + universe percentile per factor). The board answers
+    // "what looks squeeze-prone"; this answers "does MY stock look squeeze-prone".
+    private async Task<string> RenderSingleSqueezeScore(
+        string ticker,
+        IReadOnlyList<ShortSqueezeScore> scores,
+        DateOnly settlementDate
+    )
+    {
+        var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+        if (stockError != null)
+            return stockError;
+
+        var index = -1;
+        for (var i = 0; i < scores.Count; i++)
+        {
+            if (scores[i].CommonStockId == stock.Id)
+            {
+                index = i;
+                break;
+            }
+        }
+
+        if (index < 0)
+            return $"{stock.Ticker} is not in the scored universe at settlement {settlementDate:yyyy-MM-dd} ({scores.Count} stocks scored) — it reported no FINRA short interest, has no usable share count, an implausible short-interest ratio, or a non-equity/trust listing. Use GetShortInterest for its raw series.";
+
+        var score = scores[index];
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(
+            $"# Short-squeeze score — {score.Ticker} ({stock.Name}) — settlement {settlementDate:yyyy-MM-dd}"
+        );
+        sb.AppendLine();
+        sb.AppendLine(
+            $"- Score: {score.Score.ToString("0", CultureInfo.InvariantCulture)} — rank {index + 1} of {scores.Count} scored stocks (base {score.BaseScore.ToString("0", CultureInfo.InvariantCulture)} + catalyst boost {score.CatalystBoost.ToString("0", CultureInfo.InvariantCulture)})"
+        );
+        sb.AppendLine(
+            $"- Short interest: {score.ShortInterestPercentOfShares.ToString("P1", CultureInfo.InvariantCulture)} of shares outstanding{Percentile(score.ShortInterestPercentile)}"
+        );
+        sb.AppendLine(
+            $"- Days to cover: {score.DaysToCover?.ToString("0.0", CultureInfo.InvariantCulture) ?? "-"}{Percentile(score.DaysToCoverPercentile)}"
+        );
+        sb.AppendLine(
+            $"- Short-volume trend: {FormatSignedPercent(score.ShortVolumeShareTrend)}{Percentile(score.ShortVolumeTrendPercentile)}"
+        );
+        sb.AppendLine(
+            $"- Δ short interest vs prior report: {FormatSignedPercent(score.ShortInterestChangePercent)}{Percentile(score.ShortInterestChangePercentile)}"
+        );
+        sb.AppendLine(
+            $"- Worst FTD % of shares: {McpFormat.OrDash(score.FailsToDeliverPercentOfShares, "P2")}{Percentile(score.FailsToDeliverPercentile)}"
+        );
+        sb.AppendLine(
+            $"- Price vs trailing VWAP: {FormatSignedPercent(score.PriceAboveVwap)}{Percentile(score.PriceAboveVwapPercentile)}"
+        );
+        sb.AppendLine($"- Catalysts: {FormatCatalysts(score)}");
+        sb.AppendLine(
+            $"- Market cap: {McpFormat.CompactUsd(score.MarketCapitalization)}; avg $ volume ≈ {McpFormat.CompactUsd(score.AverageDailyDollarVolume)}/day"
+        );
+        sb.AppendLine();
+        sb.AppendLine(
+            "Score = weighted mean of the available factor percentiles (0-100, peer-relative; a dash means the factor had no data and dropped out) plus catalyst boosts (price spike / volume surge / earnings within a few weekdays, capped at +20). Use GetShortInterest for the underlying series."
+        );
+        return sb.ToString();
+    }
+
+    // A factor's universe percentile as a suffix; empty when the factor dropped out.
+    private static string Percentile(double? percentile) =>
+        percentile == null
+            ? string.Empty
+            : $" (percentile {percentile.Value.ToString("0", CultureInfo.InvariantCulture)})";
 }

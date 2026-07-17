@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
@@ -111,7 +112,8 @@ public class ShortSqueezeScoreManager
     /// Classified from the SEC 12(b) cover-page title (see
     /// <see cref="ListedSecurityType"/>); Unknown/Other/Units stay in — MLP
     /// common units are genuine operating equity, and exclusion requires
-    /// positive evidence.
+    /// positive evidence. The one Units carve-out with positive evidence is
+    /// <see cref="CommodityTrustSic"/> (see <see cref="SqueezeCandidateListing"/>).
     /// </summary>
     private static readonly ListedSecurityType[] NonEquityListingTypes =
     [
@@ -120,6 +122,31 @@ public class ShortSqueezeScoreManager
         ListedSecurityType.Warrants,
         ListedSecurityType.Rights,
     ];
+
+    /// <summary>
+    /// SEC SIC 6221 (commodity contracts brokers and dealers) — the standard
+    /// industry classification of exchange-traded physical commodity and
+    /// currency trusts (CurrencyShares, Invesco DB funds, Sprott physical
+    /// trusts). Their 12(b) covers register "units" exactly like MLP common
+    /// units, but trust units are created and redeemed at NAV, so arbitrage
+    /// caps any squeeze — they are structural noise at the top of the board.
+    /// The SIC is the authoritative separator: verified against the live
+    /// universe, every SIC-6221 Units listing is such a trust and no operating
+    /// partnership carries it (MLPs file under their industry SIC; the SEC
+    /// submissions entityType does NOT separate them — the CurrencyShares
+    /// trusts report "operating").
+    /// </summary>
+    public const string CommodityTrustSic = "6221";
+
+    /// <summary>
+    /// The listing-type gate for the scored universe, as a composable query
+    /// filter: the unambiguously non-equity kinds are out, and Units are kept
+    /// (MLPs) EXCEPT the SIC-classified commodity/currency trusts, whose
+    /// creatable units cannot be squeezed. Public so tests pin the gate.
+    /// </summary>
+    public static readonly Expression<Func<CommonStock, bool>> SqueezeCandidateListing = s =>
+        !NonEquityListingTypes.Contains(s.ListedSecurityType)
+        && !(s.ListedSecurityType == ListedSecurityType.Units && s.Sic == CommodityTrustSic);
 
     /// <summary>
     /// Highest short-interest-to-shares-outstanding ratio accepted as a real measurement. No
@@ -195,11 +222,8 @@ public class ShortSqueezeScoreManager
         var stockIds = shortInterests.Select(s => s.CommonStockId).Distinct().ToList();
         var stocks = await _commonStockRepository
             .GetAll()
-            .Where(s =>
-                stockIds.Contains(s.Id)
-                && s.SharesOutStanding > 0
-                && !NonEquityListingTypes.Contains(s.ListedSecurityType)
-            )
+            .Where(s => stockIds.Contains(s.Id) && s.SharesOutStanding > 0)
+            .Where(SqueezeCandidateListing)
             .Select(s => new
             {
                 s.Id,
