@@ -13,6 +13,11 @@ public static class CuratedSeriesRegistry
         new("DFEDTARL", FredSeriesCategory.InterestRates),
         new("DPRIME", FredSeriesCategory.InterestRates),
         new("SOFR", FredSeriesCategory.InterestRates),
+        // Treasury constant-maturity yields — the most-watched rates on FRED, and the
+        // inputs behind the T10Y2Y/T10Y3M spreads already curated below.
+        new("DGS2", FredSeriesCategory.InterestRates),
+        new("DGS10", FredSeriesCategory.InterestRates),
+        new("DGS30", FredSeriesCategory.InterestRates),
         // Yield Spreads
         new("T10Y2Y", FredSeriesCategory.YieldSpreads),
         new("T10Y3M", FredSeriesCategory.YieldSpreads),
