@@ -52,16 +52,32 @@ public class NportFilingRepository : BaseRepository<NportFiling>
     /// CUSIP change a fund keeps reporting the position under the old CUSIP — a laggard filer for a
     /// quarter or two, and every historical report forever — so the reverse lookup must match the
     /// alias too, mirroring the 13F import-time alias union, or the fund reads as having exited.
+    ///
+    /// The current CUSIP is unioned into the alias subquery (read off the stock's own row) rather
+    /// than OR-ed as a separate predicate: <c>Cusip = $1 OR Cusip IN (subquery)</c> defeats the
+    /// CUSIP index and degrades to a full scan of the holdings table, while a single
+    /// <c>Cusip IN (subquery)</c> plans as an index semi-join. Stocks without a CUSIP have no
+    /// NPORT identity, so the lookup is empty for them (callers guard, and a NULL never matches
+    /// an IN) — cusip-less holding rows (bonds, foreign instruments) are never swept in.
     /// </summary>
     public IQueryable<NportHolding> GetHoldingsByStockCusip(CommonStock stock)
     {
+        // The explicit not-null filters on both legs let EF's nullability analysis emit the
+        // membership test as a plain equality semi-join instead of null-compensating it into
+        // "= OR both-null", which would defeat the CUSIP index the same way the OR did.
         var cusips = DbContext
             .Set<CommonStockCusipAlias>()
             .Where(a => a.CommonStockId == stock.Id)
-            .Select(a => a.Cusip);
+            .Select(a => a.Cusip)
+            .Union(
+                DbContext
+                    .Set<CommonStock>()
+                    .Where(s => s.Id == stock.Id && s.Cusip != null)
+                    .Select(s => s.Cusip)
+            );
         return DbContext
             .Set<NportHolding>()
-            .Where(h => h.Cusip == stock.Cusip || cusips.Contains(h.Cusip));
+            .Where(h => h.Cusip != null && cusips.Contains(h.Cusip));
     }
 
     /// <summary>
@@ -104,36 +120,106 @@ public class NportFilingRepository : BaseRepository<NportFiling>
     ///
     /// The latest report is the one with the greatest report period, breaking ties by filing date
     /// and then accession number so amendments and re-filings of the same period win.
+    ///
+    /// The supersedes check is split into three registrant-population branches (tracked-stock
+    /// filings, CIK-scoped trust filings, identity-less filings) concatenated with UNION ALL,
+    /// rather than one anti-join whose identity condition ORs the populations together: a filing
+    /// only ever competes with filings of its own population, and the OR form gives the anti-join
+    /// no hashable key, degrading it to an O(N²) nested loop over every pair of filings (observed
+    /// at ~8 s per call). Each branch leads with a plain equality on its population's key, so the
+    /// planner hash-partitions the anti-join and the whole dedup runs in milliseconds. The series
+    /// wildcard and newer-report conditions are identical in every branch.
     /// </summary>
     public IQueryable<NportFiling> GetLatestPerSeries(DateOnly floor)
     {
         var filings = GetAll().Where(f => f.ReportPeriodDate >= floor);
-        return filings.Where(f =>
-            !filings.Any(f2 =>
-                (
-                    (f.CommonStockId != null && f2.CommonStockId == f.CommonStockId)
-                    || (
-                        f.CommonStockId == null
-                        && f2.CommonStockId == null
-                        && f2.RegistrantCik == f.RegistrantCik
+
+        // Tracked funds: scoped by CommonStockId.
+        var trackedFunds = filings
+            .Where(f => f.CommonStockId != null)
+            .Where(f =>
+                !filings.Any(f2 =>
+                    f2.CommonStockId == f.CommonStockId
+                    && (
+                        f2.SeriesId == f.SeriesId
+                        || string.IsNullOrEmpty(f.SeriesId)
+                        || string.IsNullOrEmpty(f2.SeriesId)
+                    )
+                    && (
+                        f2.ReportPeriodDate > f.ReportPeriodDate
+                        || (
+                            f2.ReportPeriodDate == f.ReportPeriodDate
+                            && f2.FilingDate > f.FilingDate
+                        )
+                        || (
+                            f2.ReportPeriodDate == f.ReportPeriodDate
+                            && f2.FilingDate == f.FilingDate
+                            && string.Compare(f2.AccessionNumber, f.AccessionNumber) > 0
+                        )
                     )
                 )
-                && (
-                    f2.SeriesId == f.SeriesId
-                    || string.IsNullOrEmpty(f.SeriesId)
-                    || string.IsNullOrEmpty(f2.SeriesId)
-                )
-                && (
-                    f2.ReportPeriodDate > f.ReportPeriodDate
-                    || (f2.ReportPeriodDate == f.ReportPeriodDate && f2.FilingDate > f.FilingDate)
-                    || (
-                        f2.ReportPeriodDate == f.ReportPeriodDate
-                        && f2.FilingDate == f.FilingDate
-                        && string.Compare(f2.AccessionNumber, f.AccessionNumber) > 0
+            );
+
+        // Sweep-discovered trusts: stock-less, scoped by RegistrantCik. The redundant
+        // f.RegistrantCik != null inside the anti-join lambda lets EF's nullability analysis
+        // emit a plain (hashable) equality instead of null-compensating it into
+        // "= OR both-null" — which would give the anti-join no hash key again.
+        var trustSeries = filings
+            .Where(f => f.CommonStockId == null && f.RegistrantCik != null)
+            .Where(f =>
+                !filings.Any(f2 =>
+                    f2.CommonStockId == null
+                    && f.RegistrantCik != null
+                    && f2.RegistrantCik == f.RegistrantCik
+                    && (
+                        f2.SeriesId == f.SeriesId
+                        || string.IsNullOrEmpty(f.SeriesId)
+                        || string.IsNullOrEmpty(f2.SeriesId)
+                    )
+                    && (
+                        f2.ReportPeriodDate > f.ReportPeriodDate
+                        || (
+                            f2.ReportPeriodDate == f.ReportPeriodDate
+                            && f2.FilingDate > f.FilingDate
+                        )
+                        || (
+                            f2.ReportPeriodDate == f.ReportPeriodDate
+                            && f2.FilingDate == f.FilingDate
+                            && string.Compare(f2.AccessionNumber, f.AccessionNumber) > 0
+                        )
                     )
                 )
-            )
-        );
+            );
+
+        // Identity-less filings (no stock, no CIK): they all share one identity, mirroring the
+        // original OR form's null-equals-null arm. Empty in practice, kept for equivalence.
+        var identityless = filings
+            .Where(f => f.CommonStockId == null && f.RegistrantCik == null)
+            .Where(f =>
+                !filings.Any(f2 =>
+                    f2.CommonStockId == null
+                    && f2.RegistrantCik == null
+                    && (
+                        f2.SeriesId == f.SeriesId
+                        || string.IsNullOrEmpty(f.SeriesId)
+                        || string.IsNullOrEmpty(f2.SeriesId)
+                    )
+                    && (
+                        f2.ReportPeriodDate > f.ReportPeriodDate
+                        || (
+                            f2.ReportPeriodDate == f.ReportPeriodDate
+                            && f2.FilingDate > f.FilingDate
+                        )
+                        || (
+                            f2.ReportPeriodDate == f.ReportPeriodDate
+                            && f2.FilingDate == f.FilingDate
+                            && string.Compare(f2.AccessionNumber, f.AccessionNumber) > 0
+                        )
+                    )
+                )
+            );
+
+        return trackedFunds.Concat(trustSeries).Concat(identityless);
     }
 
     /// <summary>
