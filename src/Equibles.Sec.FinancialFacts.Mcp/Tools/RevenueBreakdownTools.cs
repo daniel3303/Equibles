@@ -80,7 +80,11 @@ public class RevenueBreakdownTools
         "Get a company's revenue disaggregated by business segment, geography and "
             + "product/service, from the dimensional XBRL facts the issuer tags in its own "
             + "filings. Annual fiscal years only, latest restated values, one table per axis "
-            + "the company reports; values are as-reported and never estimated."
+            + "the company reports; values are as-reported and never estimated. Rows within "
+            + "one table can OVERLAP when the issuer tags several granularities on the same "
+            + "axis (a parent segment alongside its components), so never sum rows to derive "
+            + "total revenue — use the consolidated total row each table carries. For "
+            + "consolidated figures use GetFinancialStatement or GetFinancialFact."
     )]
     public Task<string> GetRevenueBreakdown(
         [Description("Stock ticker symbol (e.g., AAPL, MSFT)")] string ticker,
@@ -103,10 +107,25 @@ public class RevenueBreakdownTools
 
                 var taxonomies = conceptRefs.Select(r => r.Taxonomy).Distinct().ToList();
                 var tags = conceptRefs.Select(r => r.Tag).ToList();
-                var conceptIds = await _financialConceptRepository
+                // conceptId → position of its tag in the alias's ordered list;
+                // the alias's primary tag wins when picking the consolidated
+                // total to display (same rule as GetFinancialFact's pick).
+                var priorityByPair = new Dictionary<(FactTaxonomy, string), int>();
+                for (var i = 0; i < conceptRefs.Count; i++)
+                    priorityByPair.TryAdd((conceptRefs[i].Taxonomy, conceptRefs[i].Tag), i);
+                var conceptRows = await _financialConceptRepository
                     .GetMatching(taxonomies, tags)
-                    .Select(c => c.Id)
+                    .Select(c => new
+                    {
+                        c.Id,
+                        c.Taxonomy,
+                        c.Tag,
+                    })
                     .ToListAsync();
+                var priorityById = conceptRows
+                    .Where(c => priorityByPair.ContainsKey((c.Taxonomy, c.Tag)))
+                    .ToDictionary(c => c.Id, c => priorityByPair[(c.Taxonomy, c.Tag)]);
+                var conceptIds = priorityById.Keys.ToList();
                 if (conceptIds.Count == 0)
                     return $"No revenue data has been ingested for {stock.Ticker}.";
 
@@ -180,15 +199,50 @@ public class RevenueBreakdownTools
                                     .ToList()
                     );
 
+                // One display figure per (period, unit) for the tables' total
+                // row: the alias's primary tag wins, then the latest filing —
+                // mirroring GetFinancialFact's deterministic pick.
+                var displayTotals = consolidated
+                    .GroupBy(f => (f.PeriodEnd, f.Unit))
+                    .ToDictionary(
+                        g => g.Key,
+                        g =>
+                            g.OrderBy(f => priorityById[f.FinancialConceptId])
+                                .ThenByDescending(f => f.FiledDate)
+                                .First()
+                                .Value
+                    );
+
                 var years = Math.Clamp(maxYears, 1, MaxYearsCap);
                 var result = new StringBuilder();
                 result.AppendLine(
                     $"Revenue breakdown for {stock.Ticker} ({FactMarkdown.Cell(stock.Name)}) — "
                         + "annual fiscal years, latest restated values:"
                 );
-                AppendAxis(result, "By segment", rows, SegmentAxes, years, totals);
-                AppendAxis(result, "By geography", rows, GeographyAxes, years, totals);
-                AppendAxis(result, "By product & service", rows, ProductAxes, years, totals);
+                result.AppendLine(
+                    "_Components are shown exactly as the issuer tags them: a renamed member "
+                        + "appears as a new row, so '—' gaps can reflect renames or "
+                        + "reclassifications rather than zero revenue._"
+                );
+                AppendAxis(result, "By segment", rows, SegmentAxes, years, totals, displayTotals);
+                AppendAxis(
+                    result,
+                    "By geography",
+                    rows,
+                    GeographyAxes,
+                    years,
+                    totals,
+                    displayTotals
+                );
+                AppendAxis(
+                    result,
+                    "By product & service",
+                    rows,
+                    ProductAxes,
+                    years,
+                    totals,
+                    displayTotals
+                );
                 return result.ToString();
             },
             "GetRevenueBreakdown",
@@ -196,13 +250,20 @@ public class RevenueBreakdownTools
         );
     }
 
+    // How far above the consolidated total a period's member sum must land before the
+    // axis is flagged as carrying overlapping granularities. Looser than
+    // ReconciliationTolerance so per-member rounding can never trip it; a genuine
+    // parent-plus-components overlap overshoots by the whole parent.
+    private const decimal OverlapNoteTolerance = 0.02m;
+
     private static void AppendAxis(
         StringBuilder result,
         string title,
         List<DimensionalRevenueRow> rows,
         string[] axes,
         int maxYears,
-        IReadOnlyDictionary<(DateOnly PeriodEnd, string Unit), IReadOnlyList<decimal>> totals
+        IReadOnlyDictionary<(DateOnly PeriodEnd, string Unit), IReadOnlyList<decimal>> totals,
+        IReadOnlyDictionary<(DateOnly PeriodEnd, string Unit), decimal> displayTotals
     )
     {
         var (unit, periodEnds, members) = BuildAxisSeries(rows, axes, maxYears, totals);
@@ -225,6 +286,57 @@ public class RevenueBreakdownTools
                 $"| {FactMarkdown.Cell(member.Label)} | " + string.Join(" | ", cells) + " |"
             );
         }
+
+        // The consolidated figure the members must be read against — lets a
+        // consumer compute revenue shares and spot overlapping rows without a
+        // second tool call. Costs nothing: the totals are already loaded.
+        var totalCells = periodEnds
+            .Select(p =>
+                displayTotals.TryGetValue((p, unit), out var total)
+                    ? FactMarkdown.Value(total, unit)
+                    : "—"
+            )
+            .ToList();
+        if (totalCells.Any(c => c != "—"))
+            result.AppendLine(
+                "| **Total revenue (consolidated)** | " + string.Join(" | ", totalCells) + " |"
+            );
+
+        // An issuer can tag a parent level alongside its components on the same
+        // axis (AAPL's Product/Service next to iPhone/Mac/iPad; NVDA's Data
+        // Center next to Compute/Networking). Those rows survive the disjoint-
+        // scheme collapse because the schemes share or nest members, so the
+        // column sums to well over consolidated revenue — say so rather than
+        // let a consumer double-count.
+        var overlaps = false;
+        for (var i = 0; i < periodEnds.Count && !overlaps; i++)
+        {
+            if (!displayTotals.TryGetValue((periodEnds[i], unit), out var total) || total == 0m)
+                continue;
+            var memberSum = members.Sum(m => m.Values[i] ?? 0m);
+            overlaps = memberSum - total > Math.Abs(total) * OverlapNoteTolerance;
+        }
+        if (overlaps)
+            result.AppendLine(
+                "\n_Rows on this axis overlap: the issuer tags more than one granularity "
+                    + "(a parent component alongside its parts), so rows must NOT be summed — "
+                    + "reconcile against the consolidated total row._"
+            );
+
+        // Older fiscal years beyond maxYears exist — say so instead of letting
+        // the series read as the full history.
+        var availableYears = rows.Where(r => axes.Contains(r.Axis) && r.Unit == unit)
+            .Select(r => r.PeriodEnd)
+            .Distinct()
+            .Count();
+        if (availableYears > periodEnds.Count)
+            result.AppendLine(
+                periodEnds.Count >= MaxYearsCap
+                    ? $"\n_Showing the latest {periodEnds.Count} of {availableYears} fiscal "
+                        + "years (the tool's maximum)._"
+                    : $"\n_Showing the latest {periodEnds.Count} of {availableYears} fiscal "
+                        + $"years — raise maxYears (max {MaxYearsCap}) to see more._"
+            );
     }
 
     // Resolve the surviving (member, period) facts for one axis, one row per cell — all in a
@@ -551,7 +663,14 @@ public class RevenueBreakdownTools
 
         if (local.EndsWith("Member", StringComparison.Ordinal) && local.Length > "Member".Length)
             local = local[..^"Member".Length];
-        return Regex.Replace(local, "(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " ");
+        // The (?<!^[A-Z]) guard keeps a lone leading capital attached to the word
+        // that follows: Apple's IPhoneMember reads "IPhone", never "I Phone".
+        // Boundaries deeper in the name still split ("USSegment" → "US Segment").
+        return Regex.Replace(
+            local,
+            "(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?<!^[A-Z])(?=[A-Z][a-z])",
+            " "
+        );
     }
 
     internal sealed record DimensionalRevenueRow(
