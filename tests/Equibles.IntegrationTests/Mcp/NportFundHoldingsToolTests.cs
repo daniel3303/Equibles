@@ -24,6 +24,7 @@ public class NportFundHoldingsToolTests : IDisposable
         _tools = new NportTools(
             new NportFilingRepository(_dbContext),
             new CommonStockRepository(_dbContext),
+            new FundSeriesRepository(_dbContext),
             errorManager: null,
             NullLogger<NportTools>.Instance
         );
@@ -103,6 +104,131 @@ public class NportFundHoldingsToolTests : IDisposable
         var result = await _tools.GetFundHoldings("VOO", maxResults: 2);
 
         result.Should().Contain("showing the largest 2");
+        result.Should().Contain("Showing first 2 of 5 results");
+    }
+
+    [Fact]
+    public async Task GetFundHoldings_LateFiledAmendmentOfOlderPeriod_DoesNotShadowNewestPeriod()
+    {
+        var stock = SeedStock();
+
+        var current = MakeFiling(stock.Id, "current", new DateOnly(2025, 3, 15));
+        current.ReportPeriodDate = new DateOnly(2025, 2, 28);
+        current.Holdings.Add(MakeHolding("CURRENT CO", 1_000_000m));
+        _dbContext.Set<NportFiling>().Add(current);
+
+        // Amendment of an OLDER period filed AFTER the current period's report: picking by
+        // filing date alone would surface this stale-period portfolio as "most recent".
+        var amendment = MakeFiling(stock.Id, "amendment", new DateOnly(2025, 4, 1));
+        amendment.ReportPeriodDate = new DateOnly(2024, 12, 31);
+        amendment.IsAmendment = true;
+        amendment.Holdings.Add(MakeHolding("AMENDED CO", 2_000_000m));
+        _dbContext.Set<NportFiling>().Add(amendment);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundHoldings("VOO");
+
+        result.Should().Contain("CURRENT CO");
+        result.Should().Contain("2025-02-28");
+        result.Should().NotContain("AMENDED CO");
+    }
+
+    [Fact]
+    public async Task GetFundHoldings_GlossesUnitAndCategoryCodesAndDropsWholeShareDecimals()
+    {
+        var stock = SeedStock();
+        var filing = MakeFiling(stock.Id, "acc", new DateOnly(2025, 1, 31));
+        filing.Holdings.Add(MakeHolding("BIG CO", 5_000_000m));
+        _dbContext.Set<NportFiling>().Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundHoldings("VOO");
+
+        result.Should().Contain("NS (shares)");
+        result.Should().Contain("EC (equity-common)");
+        result.Should().Contain("| 5,000,000 |", "whole share balances carry no .00 noise");
+        result.Should().NotContain("| 5,000,000.00 |");
+    }
+
+    [Fact]
+    public async Task GetFundHoldings_TickerlessTrustSeries_ResolvesThroughFundDirectorySlug()
+    {
+        SeedTrustSeries();
+        _dbContext.Set<NportFiling>().Add(MakeTrustFiling("acc-1", new DateOnly(2026, 5, 15)));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundHoldings("vanguard-500-index-fund-s000002839");
+
+        result.Should().Contain("VANGUARD 500 INDEX FUND");
+        result.Should().Contain("TRACKED CO");
+    }
+
+    [Fact]
+    public async Task GetFundHoldings_SeriesLevelTicker_ResolvesThroughFundDirectory()
+    {
+        SeedTrustSeries(ticker: "VFV");
+        _dbContext.Set<NportFiling>().Add(MakeTrustFiling("acc-1", new DateOnly(2026, 5, 15)));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundHoldings("vfv");
+
+        result.Should().Contain("VANGUARD 500 INDEX FUND");
+        result.Should().Contain("TRACKED CO");
+    }
+
+    [Fact]
+    public async Task GetFundHoldings_UnknownIdentifier_PointsAtSearchFunds()
+    {
+        var result = await _tools.GetFundHoldings("VOO");
+
+        result.Should().Contain("No fund or ETF found for 'VOO'");
+        result.Should().Contain("SearchFunds");
+    }
+
+    private void SeedTrustSeries(string ticker = null)
+    {
+        _dbContext
+            .Set<FundSeries>()
+            .Add(
+                new FundSeries
+                {
+                    IdentityKey = "rc:0000102909:S000002839",
+                    Slug = "vanguard-500-index-fund-s000002839",
+                    RegistrantCik = "0000102909",
+                    SeriesId = "S000002839",
+                    SeriesName = "VANGUARD 500 INDEX FUND",
+                    RegistrantName = "VANGUARD INDEX FUNDS",
+                    Ticker = ticker,
+                    LatestReportPeriodDate = new DateOnly(2026, 3, 31),
+                    LatestFilingDate = new DateOnly(2026, 5, 15),
+                    NetAssets = 1_400_000_000_000m,
+                    TotalAssets = 1_450_000_000_000m,
+                    PositionCount = 1,
+                }
+            );
+        _dbContext.SaveChanges();
+    }
+
+    private static NportFiling MakeTrustFiling(string accession, DateOnly filingDate)
+    {
+        var filing = new NportFiling
+        {
+            CommonStockId = null,
+            RegistrantCik = "0000102909",
+            AccessionNumber = accession,
+            FilingDate = filingDate,
+            IsAmendment = false,
+            RegistrantName = "VANGUARD INDEX FUNDS",
+            SeriesName = "VANGUARD 500 INDEX FUND",
+            SeriesId = "S000002839",
+            ReportPeriodDate = new DateOnly(2026, 3, 31),
+            ReportPeriodEnd = filingDate,
+            TotalAssets = 1_450_000_000_000m,
+            TotalLiabilities = 50_000_000_000m,
+            NetAssets = 1_400_000_000_000m,
+        };
+        filing.Holdings.Add(MakeHolding("TRACKED CO", 10_000_000m));
+        return filing;
     }
 
     private static NportFiling MakeFiling(Guid stockId, string accession, DateOnly filingDate)

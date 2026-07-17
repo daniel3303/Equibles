@@ -348,14 +348,22 @@ public class InsiderTradingTools
 
     [McpServerTool(Name = "GetProposedSales")]
     [Description(
-        "Get recent proposed insider sales for a stock from SEC Form 144 notices. Each Form 144 is an affiliate's declaration of intent to sell restricted or control securities, showing the seller, their relationship to the company, the number of shares and aggregate market value to be sold, the approximate sale date, and the broker. Use this to anticipate upcoming insider selling before it shows up as an executed Form 4."
+        "Get recent proposed insider sales for a stock from SEC Form 144 notices. Each Form 144 is an affiliate's declaration of intent to sell restricted or control securities, showing the seller, their relationship to the company, the number of shares and aggregate market value to be sold, the proposed sale as a share of shares outstanding, the approximate sale date, and the broker. Results are the most recent notices first and a note flags when more exist than were returned; use fromDate/toDate to scope a period (heavy 10b5-1 filers can flood the recency window with small daily notices). Use this to anticipate upcoming insider selling before it shows up as an executed Form 4."
     )]
     public Task<string> GetProposedSales(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
         [Description(
             "Maximum number of notices to return (default: 50, max: 500; values outside 1-500 are clamped)"
         )]
-            int maxResults = 50
+            int maxResults = 50,
+        [Description(
+            "Optional earliest filing date to include, ISO format yyyy-MM-dd (e.g., 2025-01-01)"
+        )]
+            string fromDate = null,
+        [Description(
+            "Optional latest filing date to include, ISO format yyyy-MM-dd (e.g., 2025-12-31)"
+        )]
+            string toDate = null
     )
     {
         return _runner.Execute(
@@ -365,8 +373,29 @@ public class InsiderTradingTools
                 if (stockError != null)
                     return stockError;
 
-                var filings = await _form144Repository
-                    .GetByStock(stock)
+                var query = _form144Repository.GetByStock(stock);
+
+                if (!string.IsNullOrWhiteSpace(fromDate))
+                {
+                    if (!McpOutput.TryParseDate(fromDate, out var from))
+                        return McpOutput.InvalidArgument("fromDate", fromDate, "yyyy-MM-dd");
+                    var fromDay = DateOnly.FromDateTime(from);
+                    query = query.Where(f => f.FilingDate >= fromDay);
+                }
+
+                if (!string.IsNullOrWhiteSpace(toDate))
+                {
+                    if (!McpOutput.TryParseDate(toDate, out var to))
+                        return McpOutput.InvalidArgument("toDate", toDate, "yyyy-MM-dd");
+                    var toDay = DateOnly.FromDateTime(to);
+                    query = query.Where(f => f.FilingDate <= toDay);
+                }
+
+                var totalCount = await query.CountAsync();
+                if (totalCount == 0)
+                    return $"No Form 144 proposed sales found for {stock.Ticker}.";
+
+                var filings = await query
                     .OrderByDescending(f => f.FilingDate)
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
@@ -374,26 +403,48 @@ public class InsiderTradingTools
                 // Each Form 144 is an as-filed notice: the proposed Shares pair with the
                 // notice's own Aggregate Market Value, so both stay exactly as reported. The
                 // list is ordered by filing date, not by an adjusted quantity, so a filed share
-                // count is never compared across a split here.
-                return MarkdownTable.Render(
-                    filings,
-                    $"No Form 144 proposed sales found for {stock.Ticker}.",
+                // count is never compared across a split here. % Outstanding likewise divides
+                // two figures reported on the same notice, so it is split-consistent per row.
+                var result = MarkdownTable.Start(
                     $"Recent proposed sales (Form 144) for {stock.Name} ({stock.Ticker}):",
-                    $"Showing {filings.Count} most recent notices",
-                    "| Filed | Seller | Relationship | Shares | Market Value | Approx. Sale Date | Broker |",
-                    "|-------|--------|--------------|--------|--------------|-------------------|--------|",
+                    $"Showing {filings.Count} of {totalCount} most recent notices",
+                    "| Filed | Seller | Relationship | Shares | Market Value | % Outstanding | Approx. Sale Date | Broker |",
+                    "|-------|--------|--------------|--------|--------------|---------------|-------------------|--------|"
+                );
+
+                result.AppendRows(
+                    filings,
                     f =>
                     {
                         var approxSaleDate =
                             f.ApproxSaleDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
                             ?? "-";
-                        return $"| {f.FilingDate:yyyy-MM-dd} | {f.SellerName} | {f.RelationshipToIssuer} | {McpFormat.WholeNumber(f.SharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {approxSaleDate} | {f.BrokerName} |";
+                        return $"| {f.FilingDate:yyyy-MM-dd} | {f.SellerName} | {f.RelationshipToIssuer} | {McpFormat.WholeNumber(f.SharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {FormatPercentOfOutstanding(f.SharesToBeSold, f.SharesOutstanding)} | {approxSaleDate} | {f.BrokerName} |";
                     }
                 );
+
+                var note = McpOutput.TruncationNote(filings.Count, totalCount);
+                if (note.Length > 0)
+                {
+                    result.AppendLine();
+                    result.AppendLine(note);
+                }
+
+                return result.ToString();
             },
             "GetProposedSales",
             $"ticker: {ticker}"
         );
+    }
+
+    // The standard Form 144 materiality signal: the proposed sale as a share of the notice's own
+    // reported shares outstanding. "-" when the filing reported no share count.
+    private static string FormatPercentOfOutstanding(long sharesToBeSold, long sharesOutstanding)
+    {
+        if (sharesOutstanding <= 0)
+            return "-";
+        var percent = sharesToBeSold / (decimal)sharesOutstanding * 100m;
+        return McpFormat.Invariant(percent, "0.####") + "%";
     }
 
     [McpServerTool(Name = "SearchInsiders")]

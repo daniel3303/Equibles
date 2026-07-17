@@ -20,6 +20,7 @@ public class NportToolsGetFundsHoldingStockNegativeMaxResultsTests : ParadeDbMcp
         new(
             new NportFilingRepository(DbContext),
             new CommonStockRepository(DbContext),
+            new FundSeriesRepository(DbContext),
             ErrorManager,
             NullLogger<NportTools>()
         );

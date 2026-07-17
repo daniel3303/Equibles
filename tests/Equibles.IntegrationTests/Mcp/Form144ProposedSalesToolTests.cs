@@ -117,7 +117,87 @@ public class Form144ProposedSalesToolTests : IDisposable
 
         var result = await _tools.GetProposedSales("AAPL", maxResults: 2);
 
-        result.Should().Contain("Showing 2 most recent notices");
+        result.Should().Contain("Showing 2 of 5 most recent notices");
+        result.Should().Contain("Showing first 2 of 5 results");
+    }
+
+    [Fact]
+    public async Task GetProposedSales_AllNoticesShown_OmitsTruncationNote()
+    {
+        var stock = SeedStock();
+        _dbContext
+            .Set<Form144Filing>()
+            .Add(MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetProposedSales("AAPL");
+
+        result.Should().Contain("Showing 1 of 1 most recent notices");
+        result.Should().NotContain("raise maxResults");
+    }
+
+    [Fact]
+    public async Task GetProposedSales_DateRange_FiltersByFilingDate()
+    {
+        var stock = SeedStock();
+        _dbContext
+            .Set<Form144Filing>()
+            .Add(MakeFiling(stock.Id, "early", new DateOnly(2026, 1, 10), "EARLY SELLER", 1000));
+        _dbContext
+            .Set<Form144Filing>()
+            .Add(MakeFiling(stock.Id, "late", new DateOnly(2026, 6, 10), "LATE SELLER", 2000));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetProposedSales(
+            "AAPL",
+            fromDate: "2026-03-01",
+            toDate: "2026-12-31"
+        );
+
+        result.Should().Contain("LATE SELLER");
+        result.Should().NotContain("EARLY SELLER");
+        result.Should().Contain("Showing 1 of 1 most recent notices");
+    }
+
+    [Fact]
+    public async Task GetProposedSales_MalformedDate_ReturnsAcceptedFormatError()
+    {
+        SeedStock();
+
+        var result = await _tools.GetProposedSales("AAPL", toDate: "June 2026");
+
+        result.Should().Contain("Unknown toDate 'June 2026'");
+        result.Should().Contain("yyyy-MM-dd");
+    }
+
+    [Fact]
+    public async Task GetProposedSales_RendersPercentOfSharesOutstanding()
+    {
+        var stock = SeedStock();
+        var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1_000_000);
+        filing.SharesOutstanding = 2_000_000_000;
+        _dbContext.Set<Form144Filing>().Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetProposedSales("AAPL");
+
+        // 1,000,000 / 2,000,000,000 = 0.05% — the notice's own share base, as filed.
+        result.Should().Contain("% Outstanding");
+        result.Should().Contain("| 0.05% |");
+    }
+
+    [Fact]
+    public async Task GetProposedSales_NoSharesOutstandingOnNotice_RendersDash()
+    {
+        var stock = SeedStock();
+        var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000);
+        filing.SharesOutstanding = 0;
+        _dbContext.Set<Form144Filing>().Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetProposedSales("AAPL");
+
+        result.Should().Contain("| - |");
     }
 
     private static Form144Filing MakeFiling(

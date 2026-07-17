@@ -112,6 +112,18 @@ public class NCenFundOperationsToolTests : IDisposable
         result.Should().Contain("showing 2 most recent");
     }
 
+    [Fact]
+    public async Task GetFundOperations_GlossesRegistrationTypeCode()
+    {
+        var stock = SeedStock();
+        _dbContext.Set<NCenFiling>().Add(MakeFiling(stock.Id, "acc", new DateOnly(2025, 1, 15)));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundOperations("MXF");
+
+        result.Should().Contain("N-2 (closed-end fund)");
+    }
+
     private static NCenFiling MakeFiling(Guid stockId, string accession, DateOnly filingDate)
     {
         return new NCenFiling

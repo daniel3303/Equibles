@@ -12,10 +12,10 @@ namespace Equibles.IntegrationTests.Mcp;
 
 /// <summary>
 /// Adversarial cover for <c>GetFundOperations</c>'s service-provider section, which the helper
-/// sources from the latest report only. When the newest filing reports no service providers, no
-/// "Service providers" section should render — and an older filing's providers must not leak in.
-/// Existing tests only seed providers on the newest filing, leaving both the empty-on-newest early
-/// return and the newest-filing selection unexercised.
+/// sources from the latest report only. When the newest filing reports no service providers, an
+/// explicit "names no service providers" note must render — and an older filing's providers must
+/// not leak in. Existing tests only seed providers on the newest filing, leaving both the
+/// empty-on-newest note and the newest-filing selection unexercised.
 /// </summary>
 public class NCenFundOperationsToolNewestFilingProvidersTests : IDisposable
 {
@@ -39,7 +39,7 @@ public class NCenFundOperationsToolNewestFilingProvidersTests : IDisposable
     public void Dispose() => _dbContext.Dispose();
 
     [Fact]
-    public async Task GetFundOperations_NewestFilingHasNoProviders_OmitsServiceProvidersSection()
+    public async Task GetFundOperations_NewestFilingHasNoProviders_EmitsNoteWithoutLeakingOlderProviders()
     {
         var stock = new CommonStock
         {
@@ -67,9 +67,12 @@ public class NCenFundOperationsToolNewestFilingProvidersTests : IDisposable
 
         var result = await _tools.GetFundOperations("MXF");
 
-        // The section reflects only the latest report, which has no providers — so it is omitted,
-        // and the older filing's provider must not leak in.
-        result.Should().NotContain("Service providers");
+        // The section reflects only the latest report, which has no providers — so an explicit
+        // note renders instead of a silently missing section, and the older filing's provider
+        // must not leak in.
+        result.Should().Contain("names no service providers");
+        result.Should().Contain("2025-01-15");
+        result.Should().NotContain("Service providers reported");
         result.Should().NotContain("OLD ADVISER FIRM");
     }
 
