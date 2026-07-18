@@ -244,6 +244,108 @@ In OpenClaw, add an MCP server with the URL `http://localhost:8081/mcp` (HTTP tr
 
 Any MCP-compatible client can connect to `http://localhost:8081/mcp` (HTTP transport).
 
+## Tools
+
+This self-hosted build exposes 62 tools over MCP; the hosted server at `https://mcp.equibles.com/mcp` adds 28 more commercial tools — see [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server) for the full catalog and client setup.
+
+**13F institutional holdings**
+
+- GetFundCloneBacktest — backtest cloning a filer's 13F portfolio vs a benchmark
+- GetTopHolders — top institutional holders of a stock (13F-HR)
+- GetOwnershipHistory — institutional ownership trend across quarters
+- GetInstitutionPortfolio — an institution's 13F portfolio
+- SearchInstitutions — search institutions by name or CIK
+- GetTopBuyersSellers — biggest adds/reductions on a stock this quarter
+- GetMarketWide13FActivity — market-wide 13F leaderboards
+- GetMostHeldStocks — stocks by institutional breadth
+- GetInstitutionSummary — filer summary (value, concentration, turnover)
+- GetInstitutionSectorAllocation — allocation by sector
+- GetInstitutionQuarterlyActivity — initiated/increased/reduced/exited vs prior quarter
+- GetFundOverlap — portfolio overlap between two institutions
+- GetConsensusHoldings — consensus portfolio of 2–25 institutions
+
+**Insider trading**
+
+- GetInsiderTransactions — insider transactions from Form 3/4/5
+- GetInsiderOwnership — insider ownership ranked by shares
+- GetProposedSales — proposed sales from Form 144
+- SearchInsiders — search insiders by name
+
+**SEC filings search**
+
+- SearchDocuments — hybrid keyword+semantic search across all filings
+- SearchCompanyDocuments — one company's filings by ticker
+- SearchDocument — search within a single filing
+- ListCompanyDocuments — browse a company's filings
+- SearchDocumentKeyword — keyword search in one filing
+- ReadDocumentLines — read a line range from a filing
+
+**Funds, ETFs & advisers**
+
+- SearchInvestmentAdvisers — search advisers (Form ADV)
+- GetInvestmentAdviser — ADV profile by CRD
+- GetFundOperations — fund ops from N-CEN
+- GetFundHoldings — fund holdings from NPORT-P
+- GetFundsHoldingStock — funds holding a stock
+- GetExemptOfferings — private placements (Form D)
+- GetFailsToDeliver — SEC FTD data
+- SearchFunds — search registered funds/ETFs
+- GetFundProfile — fund profile + largest holdings
+
+**Fundamentals (XBRL)**
+
+- GetFinancialStatement — income/balance/cash-flow statement by period
+- GetFinancialFact — one concept over time
+- CompareFinancialFact — a concept across companies
+- GetRevenueBreakdown — revenue by segment/geography/product
+
+**Economic data (FRED)**
+
+- GetEconomicIndicator — a FRED series
+- GetLatestEconomicData — latest values by category
+- SearchEconomicIndicators — search curated series
+- GetEconomicCalendar — US macro release calendar
+
+**Futures (CFTC COT)**
+
+- GetCftcPositioning — COT positioning for a contract
+- GetLatestCftcData — latest COT snapshot
+- SearchCftcMarkets — search tracked contracts
+
+**Volatility (CBOE)**
+
+- GetPutCallRatios — put/call ratios
+- GetVixHistory — VIX daily OHLC
+
+**FDA calendar**
+
+- GetFdaCatalysts — scheduled FDA advisory-committee meetings
+
+**Congressional trading**
+
+- GetCongressionalTrades — trades for a ticker
+- GetMemberTrades — a member's trades
+- GetMemberNetWorth — member net worth history
+- SearchCongressMembers — search members
+
+**Short data (FINRA)**
+
+- GetShortVolume — daily short volume
+- GetShortInterest — bi-monthly short interest
+- GetShortInterestSnapshot — market-wide snapshot
+- GetLargestShortVolume — largest daily short volume
+- GetShortSqueezeScores — composite squeeze scores
+- GetOffExchangeVolume — dark-pool/OTC volume
+
+**Stock prices**
+
+- GetStockPrices — daily OHLCV (split-adjusted)
+- GetLatestPrices — latest close/change/volume
+- GetStochasticOscillator — stochastic oscillator (%K/%D)
+- GetAverageTrueRange — average true range (ATR)
+- GetOnBalanceVolume — on-balance volume (OBV)
+- GetBollingerBands — Bollinger Bands
+
 ## Vector Embeddings (advanced, opt-in)
 
 Vector embeddings enable semantic search over SEC filings (e.g., "find revenue growth discussion in Apple's 10-K"). This requires downloading the Ollama runtime (~2GB) and the Qwen3-Embedding-0.6B model (~640MB).
