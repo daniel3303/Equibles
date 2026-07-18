@@ -9,6 +9,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.Integrations.Yahoo.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Worker;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.HostedService.Services;
@@ -54,6 +55,10 @@ public class YahooPriceImportServiceCompanyProfileBlankSectorTests : IDisposable
             (typeof(CommonStockRepository), _stockRepo),
             (typeof(IndustryRepository), _industryRepo),
             (typeof(SectorRepository), _sectorRepo),
+            // SyncKeyStatistics resolves the EDGAR shares provider even when Yahoo has no
+            // stats (#4155); a bare substitute (null shares) keeps the "no EDGAR anchor
+            // writes nothing" path so the profile sync still runs.
+            (typeof(ISharesOutstandingProvider), Substitute.For<ISharesOutstandingProvider>()),
             (
                 typeof(SplitPriceReconciliationManager),
                 new SplitPriceReconciliationManager(splitRepo)
