@@ -17,7 +17,14 @@ namespace Equibles.Integrations.GovernmentContracts;
 public class UsaSpendingClient : IUsaSpendingClient
 {
     private const string SearchUrl = "https://api.usaspending.gov/api/v2/search/spending_by_award/";
-    private const int MaxRetries = 3;
+
+    // USAspending's search endpoint has intermittent bad spells lasting minutes —
+    // the gateway resets heavy queries mid-flight, which surfaces as an
+    // HttpRequestException on an otherwise healthy API. Three retries rode ~30s of
+    // backoff (2+4+8+16s) and kept losing whole import windows to spells barely
+    // longer than that; six retries back off ~2min (…+32+64s), long enough to
+    // outlast the spell while a genuine outage still fails the window promptly.
+    private const int MaxRetries = 6;
 
     // The API returns at most 100 rows/page and refuses to paginate past the
     // 10,000th record, so 100 pages is the hard ceiling for a single window.
