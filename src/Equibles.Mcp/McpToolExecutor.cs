@@ -41,7 +41,7 @@ public static class McpToolExecutor
         ILogger logger,
         string toolName,
         string context,
-        Func<string, string, string, string, Task> reportError,
+        Func<string, Exception, string, Task> reportError,
         string errorMessage = null
     )
     {
@@ -52,11 +52,18 @@ public static class McpToolExecutor
         catch (Exception ex)
         {
             logger.LogError(ex, "{ToolName} failed — {Context}", toolName, context);
-            try
+            // A cancellation (host shutdown winding down an in-flight call, an aborted
+            // client) is not a fault worth an Errors row — same drop-by-type policy as
+            // ErrorReporter. The reporter receives the exception itself so the recorded
+            // row carries the flattened inner chain, not a wrapper's message.
+            if (ex is not OperationCanceledException)
             {
-                await reportError(toolName, ex.Message, ex.StackTrace, context);
+                try
+                {
+                    await reportError(toolName, ex, context);
+                }
+                catch { }
             }
-            catch { }
             return errorMessage
                 ?? $"An error occurred while executing {toolName}. Please try again.";
         }

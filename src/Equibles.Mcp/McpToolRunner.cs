@@ -5,9 +5,9 @@ namespace Equibles.Mcp;
 public class McpToolRunner
 {
     private readonly ILogger _logger;
-    private readonly Func<string, string, string, string, Task> _reportError;
+    private readonly Func<string, Exception, string, Task> _reportError;
 
-    public McpToolRunner(ILogger logger, Func<string, string, string, string, Task> reportError)
+    public McpToolRunner(ILogger logger, Func<string, Exception, string, Task> reportError)
     {
         _logger = logger;
         _reportError = reportError;
