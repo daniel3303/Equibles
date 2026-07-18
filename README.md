@@ -15,6 +15,8 @@ Powers [equibles.com](https://equibles.com).
 
 See [`docs/`](docs/README.md) for the user guide and technical documentation.
 
+> **Prefer not to self-host?** The MCP server also runs as a managed service at `https://mcp.equibles.com/mcp` with a free tier (100 requests/day). Per-client setup guides live at [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
+
 ## What's Included
 
 | Domain | Data Source | Description |
