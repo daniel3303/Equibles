@@ -404,6 +404,16 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     public IQueryable<StockQuarterlyActivity> GetStockActivitySnapshots(DateOnly reportDate) =>
         DbContext.Set<StockQuarterlyActivity>().Where(s => s.ReportDate == reportDate);
 
+    // Combined-lane twin for the open filing window: the same per-stock figures with
+    // non-filers carried forward at their prior-quarter positions, materialised by
+    // HoldingsAggregateRefreshService while the window is open and deleted when it
+    // closes. May be EMPTY during the transition (window just opened, first rebuild
+    // not yet drained) — consumers must fall back to the live combined aggregation
+    // when no rows match.
+    public IQueryable<StockQuarterlyActivityCombined> GetStockActivitySnapshotsCombined(
+        DateOnly reportDate
+    ) => DbContext.Set<StockQuarterlyActivityCombined>().Where(s => s.ReportDate == reportDate);
+
     // Double-down report: per-(holder, stock) positions where the share-count
     // increase from the prior quarter exceeds a given percentage threshold,
     // ranked by conviction (largest % increase first). Joins holder + stock
