@@ -122,8 +122,7 @@ public class YahooPriceImportService
                 await _errorReporter.Report(
                     ErrorSource.YahooPriceScraper,
                     $"ImportTicker({ticker})",
-                    ex.Message,
-                    ex.StackTrace
+                    ex
                 );
             }
         }

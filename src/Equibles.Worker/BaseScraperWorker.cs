@@ -219,19 +219,21 @@ public abstract class BaseScraperWorker : BackgroundService
                 // a brief, self-healing blip on a worker that opts into a higher threshold — we
                 // log a warning and let the backoff retry, keeping transient restarts out of the
                 // Errors page operators watch for real defects. A clean cycle resets the streak.
-                if (_consecutiveFailures >= ErrorReportThreshold && !_errorReportedForStreak)
+                // A cancellation must not consume the once-per-streak flag: ErrorReporter
+                // drops OperationCanceledException by type, so "reporting" it would write
+                // nothing yet still mask a later genuine fault in the same streak.
+                if (
+                    _consecutiveFailures >= ErrorReportThreshold
+                    && !_errorReportedForStreak
+                    && ex is not OperationCanceledException
+                )
                 {
                     _errorReportedForStreak = true;
                     Logger.LogCritical(ex, "Critical error in {Worker}", WorkerName);
                     // ErrorReporter publishes its own ScraperActivity with the same
                     // source + the error message, so the activity feed gets a row
                     // without double-emitting here.
-                    await ErrorReporter.Report(
-                        ErrorSource,
-                        $"{WorkerName}.DoWork",
-                        ex.Message,
-                        ex.StackTrace
-                    );
+                    await ErrorReporter.Report(ErrorSource, $"{WorkerName}.DoWork", ex);
                 }
                 else
                 {

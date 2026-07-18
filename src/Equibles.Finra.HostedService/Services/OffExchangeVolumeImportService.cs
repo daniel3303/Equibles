@@ -158,8 +158,7 @@ public class OffExchangeVolumeImportService
             await _errorReporter.Report(
                 ErrorSource.FinraScraper,
                 "OffExchangeVolume.ImportWeek",
-                ex.Message,
-                ex.StackTrace,
+                ex,
                 $"week: {weekStartDate}"
             );
         }

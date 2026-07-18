@@ -176,8 +176,7 @@ public class ShortVolumeImportService
             await _errorReporter.Report(
                 ErrorSource.FinraScraper,
                 "ShortVolume.ImportDate",
-                ex.Message,
-                ex.StackTrace,
+                ex,
                 $"date: {date}"
             );
         }

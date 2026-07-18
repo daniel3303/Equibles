@@ -82,8 +82,7 @@ public class CftcImportService : IImporter
                 await _errorReporter.Report(
                     ErrorSource.CftcScraper,
                     "CftcImport.ImportYear",
-                    ex.Message,
-                    ex.StackTrace,
+                    ex,
                     $"year: {year}"
                 );
             }

@@ -144,8 +144,7 @@ public class CboeImportService : IImporter
                 await _errorReporter.Report(
                     ErrorSource.CboeScraper,
                     "CboeImport.ImportPutCallRatio",
-                    ex.Message,
-                    ex.StackTrace,
+                    ex,
                     $"date: {date}"
                 );
                 break;
@@ -268,12 +267,7 @@ public class CboeImportService : IImporter
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error importing CBOE VIX history");
-            await _errorReporter.Report(
-                ErrorSource.CboeScraper,
-                "CboeImport.ImportVixHistory",
-                ex.Message,
-                ex.StackTrace
-            );
+            await _errorReporter.Report(ErrorSource.CboeScraper, "CboeImport.ImportVixHistory", ex);
         }
     }
 }

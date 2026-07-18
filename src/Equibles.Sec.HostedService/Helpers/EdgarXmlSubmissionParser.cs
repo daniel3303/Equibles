@@ -87,8 +87,7 @@ internal static class EdgarXmlSubmissionParser
             await errorReporter.Report(
                 ErrorSource.DocumentScraper,
                 errorContext,
-                ex.Message,
-                ex.StackTrace,
+                ex,
                 $"ticker: {companyTicker}, accession: {filing.AccessionNumber}"
             );
             return null;

@@ -1122,8 +1122,7 @@ public class DocumentScraper : IDocumentScraper
         _errorReporter.Report(
             ErrorSource.DocumentScraper,
             $"DocumentScraper.{operation}",
-            ex.Message,
-            ex.StackTrace,
+            ex,
             requestSummary
         );
 

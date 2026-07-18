@@ -65,8 +65,7 @@ public class FredImportService : IImporter
                 await _errorReporter.Report(
                     ErrorSource.FredScraper,
                     "FredImport.ImportSeries",
-                    ex.Message,
-                    ex.StackTrace,
+                    ex,
                     $"seriesId: {curated.SeriesId}"
                 );
             }
