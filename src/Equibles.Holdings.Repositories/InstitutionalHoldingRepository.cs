@@ -203,6 +203,12 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             }
         }
 
+        // The DISTINCT scan behind this list measures ~28s warm and can cross Npgsql's
+        // default 30s command timeout cold — verified in production: the first
+        // market-activity request after a container recreate (or a cache-TTL expiry)
+        // 500s here before any aggregate even runs. Same headroom as the market-wide
+        // aggregates, so a cold resolve becomes a slow success instead of a failure.
+        ExtendCommandTimeoutForMarketWideAggregates();
         var dates = await Get13FAvailableReportDates().ToListAsync(cancellationToken);
 
         // An empty list is not cached: it only occurs before the first 13F import, and
