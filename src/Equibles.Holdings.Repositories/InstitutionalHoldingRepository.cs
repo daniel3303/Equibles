@@ -241,13 +241,41 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return GetAll().Where(h => h.AccessionNumber == accessionNumber);
     }
 
+    // The market-wide two-quarter aggregates built on BothQuarters / GetCombinedQuarter
+    // cost up to ~30s cold — the GROUP BY scans two quarters of holdings (~3.4M rows)
+    // and the churn / combined forms add correlated NOT-EXISTS probes — which sits
+    // exactly at Npgsql's default 30s command timeout, so a cache miss intermittently
+    // dies mid-stream with "Timeout during reading attempt". Closed quarters read the
+    // StockQuarterlyActivity snapshot instead, but the open filing window has no
+    // materialised view yet, so its combined lane must run these live. Raising the
+    // scope's timeout when such a query is composed gives that lane headroom; the
+    // DbContext is scoped, so the raise lives and dies with the current request / tool
+    // call, and an already-higher caller value (e.g. the snapshot rebuild worker's) is
+    // kept.
+    private static readonly TimeSpan MarketWideAggregateCommandTimeout = TimeSpan.FromSeconds(120);
+
+    private void ExtendCommandTimeoutForMarketWideAggregates()
+    {
+        // Non-relational providers (the EF InMemory tests) have no command timeout.
+        if (!DbContext.Database.IsRelational())
+            return;
+        var current = DbContext.Database.GetCommandTimeout();
+        if (current == null || current < MarketWideAggregateCommandTimeout.TotalSeconds)
+            DbContext.Database.SetCommandTimeout(MarketWideAggregateCommandTimeout);
+    }
+
     // The two-quarter comparison window shared by every per-stock activity / churn /
     // double-down aggregate: both report dates are pulled in a single round trip and
     // each caller applies its own GROUP BY downstream. 13F-only: a Schedule 13D/G event
     // row whose date coincides with a quarter end would otherwise inflate the quarter's
     // totals and double-count the filer (GH-4449).
-    private IQueryable<InstitutionalHolding> BothQuarters(DateOnly current, DateOnly previous) =>
-        GetAll().Where(Is13F).Where(h => h.ReportDate == current || h.ReportDate == previous);
+    private IQueryable<InstitutionalHolding> BothQuarters(DateOnly current, DateOnly previous)
+    {
+        ExtendCommandTimeoutForMarketWideAggregates();
+        return GetAll()
+            .Where(Is13F)
+            .Where(h => h.ReportDate == current || h.ReportDate == previous);
+    }
 
     // Per-stock aggregation of 13F activity across two quarters: totals, filer counts,
     // and the derived deltas drive the Top Buys / Top Sells leaderboards. New /
@@ -809,6 +837,10 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
 
     public IQueryable<Guid> GetUniqueFilerIdsCombined(DateOnly current, DateOnly previous)
     {
+        // Full-quarter DISTINCT over the combined view (incl. its NOT-EXISTS probe) —
+        // the one market-wide aggregate not built on BothQuarters, so it opts into the
+        // extended timeout itself.
+        ExtendCommandTimeoutForMarketWideAggregates();
         return GetCombinedQuarter(current, previous)
             .Select(h => h.InstitutionalHolderId)
             .Distinct();
