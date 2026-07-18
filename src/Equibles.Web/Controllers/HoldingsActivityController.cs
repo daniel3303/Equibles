@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Extensions;
+using Equibles.Holdings.Repositories.Models;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.Extensions;
 using Equibles.Web.ViewModels.Holdings;
@@ -52,32 +53,29 @@ public class HoldingsActivityController : BaseController
         var selectedDate = viewModel.SelectedDate;
         var previousDate = viewModel.PreviousDate.Value;
 
-        var movers = _holdingRepository
-            .GetQuarterlyActivity(selectedDate, previousDate, viewModel.IsCombinedSelected)
-            .Where(a => a.CurrentShares != a.PreviousShares);
-
-        var topBuysAgg = await movers
-            .TopBuyers()
-            .Take(HoldingsActivityViewModel.RowCap)
-            .ToListAsync();
-        var topSellsAgg = await movers
-            .TopSellers()
-            .Take(HoldingsActivityViewModel.RowCap)
-            .ToListAsync();
-
-        var churn = _holdingRepository.GetQuarterlyNewSoldOutPositions(
+        // Snapshot-first: the plain per-quarter snapshot for a closed quarter, the
+        // materialised combined lane while the filing window is open — the live
+        // two-quarter aggregation (~30s cold for the churn/combined shapes) only runs
+        // when the matching snapshot has no rows yet. Buckets and caps then apply in
+        // memory over the ~6k mapped rows, keeping the shared bucket definitions.
+        var (activityRows, churnRows) = await LoadActivityAndChurn(
             selectedDate,
             previousDate,
             viewModel.IsCombinedSelected
         );
-        var newPositionsAgg = await churn
+        var movers = activityRows.Where(a => a.CurrentShares != a.PreviousShares);
+
+        var topBuysAgg = movers.TopBuyers().Take(HoldingsActivityViewModel.RowCap).ToList();
+        var topSellsAgg = movers.TopSellers().Take(HoldingsActivityViewModel.RowCap).ToList();
+
+        var newPositionsAgg = churnRows
             .NewPositions()
             .Take(HoldingsActivityViewModel.RowCap)
-            .ToListAsync();
-        var soldOutPositionsAgg = await churn
+            .ToList();
+        var soldOutPositionsAgg = churnRows
             .SoldOutPositions()
             .Take(HoldingsActivityViewModel.RowCap)
-            .ToListAsync();
+            .ToList();
 
         var stockIds = topBuysAgg
             .Concat(topSellsAgg)
@@ -96,6 +94,52 @@ public class HoldingsActivityController : BaseController
             .ToList();
 
         return View(viewModel);
+    }
+
+    // Snapshot-first load shared by the activity page: plain snapshot for closed
+    // quarters, the combined lane for the open window, live aggregation only when the
+    // matching snapshot is empty (historical gap, or the window just opened and the
+    // first combined drain has not landed).
+    private async Task<(
+        List<MarketWideStockActivity> Activity,
+        List<MarketWideStockChurn> Churn
+    )> LoadActivityAndChurn(DateOnly selectedDate, DateOnly previousDate, bool combined)
+    {
+        if (combined)
+        {
+            var lane = await _holdingRepository
+                .GetStockActivitySnapshotsCombined(selectedDate)
+                .ToListAsync();
+            if (lane.Count > 0)
+            {
+                return (
+                    lane.Select(s => s.ToActivity()).ToList(),
+                    lane.Select(s => s.ToChurn()).ToList()
+                );
+            }
+        }
+        else
+        {
+            var snapshot = await _holdingRepository
+                .GetStockActivitySnapshots(selectedDate)
+                .ToListAsync();
+            if (snapshot.Count > 0)
+            {
+                return (
+                    snapshot.Select(s => s.ToActivity()).ToList(),
+                    snapshot.Select(s => s.ToChurn()).ToList()
+                );
+            }
+        }
+
+        return (
+            await _holdingRepository
+                .GetQuarterlyActivity(selectedDate, previousDate, combined)
+                .ToListAsync(),
+            await _holdingRepository
+                .GetQuarterlyNewSoldOutPositions(selectedDate, previousDate, combined)
+                .ToListAsync()
+        );
     }
 
     [HttpGet("~/holdings/latest-13f-filings")]
@@ -357,19 +401,35 @@ public class HoldingsActivityController : BaseController
         List<HeatMapPoint> points;
         if (viewModel.IsCombinedSelected)
         {
-            // The combined view spans the still-open quarter plus a prior-quarter
-            // fallback for non-filers, which the per-quarter snapshot below does not
-            // materialise — derive it live for this case only.
-            var activity = await _holdingRepository
-                .GetQuarterlyActivity(selectedDate, previousDate, combined: true)
+            // The combined view (still-open quarter + prior-quarter carry-forward for
+            // non-filers) reads its materialised lane, kept fresh by the same drain
+            // that maintains the plain snapshot. Live derivation remains only as the
+            // fallback for an empty lane — the window just opened and the first
+            // combined rebuild has not drained yet.
+            var combinedSnapshot = await _holdingRepository
+                .GetStockActivitySnapshotsCombined(selectedDate)
                 .Where(a => a.CurrentFilerCount >= MinHeatMapFilers)
                 .ToListAsync();
 
-            var churnLookup = (
-                await _holdingRepository
-                    .GetQuarterlyNewSoldOutPositions(selectedDate, previousDate, combined: true)
-                    .ToListAsync()
-            ).ToDictionary(c => c.CommonStockId);
+            List<MarketWideStockActivity> activity;
+            Dictionary<Guid, MarketWideStockChurn> churnLookup;
+            if (combinedSnapshot.Count > 0)
+            {
+                activity = combinedSnapshot.Select(s => s.ToActivity()).ToList();
+                churnLookup = combinedSnapshot.ToDictionary(s => s.CommonStockId, s => s.ToChurn());
+            }
+            else
+            {
+                activity = await _holdingRepository
+                    .GetQuarterlyActivity(selectedDate, previousDate, combined: true)
+                    .Where(a => a.CurrentFilerCount >= MinHeatMapFilers)
+                    .ToListAsync();
+                churnLookup = (
+                    await _holdingRepository
+                        .GetQuarterlyNewSoldOutPositions(selectedDate, previousDate, combined: true)
+                        .ToListAsync()
+                ).ToDictionary(c => c.CommonStockId);
+            }
 
             var stocks = await LoadStockLabels(activity.Select(a => a.CommonStockId).ToList());
             points = activity

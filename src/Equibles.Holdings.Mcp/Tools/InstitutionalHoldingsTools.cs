@@ -905,6 +905,54 @@ public class InstitutionalHoldingsTools
         return -1;
     }
 
+    // Snapshot-first loads for the market-wide surfaces: a closed quarter reads the
+    // plain StockQuarterlyActivity snapshot, the open filing window reads the
+    // materialised combined lane — either is ~6k pre-aggregated rows instead of the
+    // live two-quarter scan (+ correlated NOT-EXISTS probes for churn/combined) that
+    // measured ~30s cold. The live aggregation remains only as a fallback for an
+    // empty snapshot: a historical gap before the first-boot backfill, or the window
+    // just opened and the first combined drain has not landed yet.
+    private async Task<List<MarketWideStockActivity>> LoadMarketActivity(
+        DateOnly targetDate,
+        DateOnly previousDate,
+        bool windowOpen
+    )
+    {
+        var snapshot = windowOpen
+            ? (await _holdingRepository.GetStockActivitySnapshotsCombined(targetDate).ToListAsync())
+                .Select(s => s.ToActivity())
+                .ToList()
+            : (await _holdingRepository.GetStockActivitySnapshots(targetDate).ToListAsync())
+                .Select(s => s.ToActivity())
+                .ToList();
+        if (snapshot.Count > 0)
+            return snapshot;
+        return await _holdingRepository
+            .GetQuarterlyActivity(targetDate, previousDate, windowOpen)
+            .ToListAsync();
+    }
+
+    // Churn twin of LoadMarketActivity — same lanes, same empty-snapshot fallback.
+    private async Task<List<MarketWideStockChurn>> LoadMarketChurn(
+        DateOnly targetDate,
+        DateOnly previousDate,
+        bool windowOpen
+    )
+    {
+        var snapshot = windowOpen
+            ? (await _holdingRepository.GetStockActivitySnapshotsCombined(targetDate).ToListAsync())
+                .Select(s => s.ToChurn())
+                .ToList()
+            : (await _holdingRepository.GetStockActivitySnapshots(targetDate).ToListAsync())
+                .Select(s => s.ToChurn())
+                .ToList();
+        if (snapshot.Count > 0)
+            return snapshot;
+        return await _holdingRepository
+            .GetQuarterlyNewSoldOutPositions(targetDate, previousDate, windowOpen)
+            .ToListAsync();
+    }
+
     private async Task<string> RenderMarketActivityMovers(
         string normalizedBucket,
         DateOnly targetDate,
@@ -921,11 +969,7 @@ public class InstitutionalHoldingsTools
         // drives the ordering). The restatement is per-stock, so it cannot translate to SQL.
         // While the filing window is open the combined variant carries non-filers forward at a
         // zero delta, so only real reported moves rank.
-        var activity = await (
-            windowOpen
-                ? _holdingRepository.GetQuarterlyActivityCombined(targetDate, previousDate)
-                : _holdingRepository.GetQuarterlyActivity(targetDate, previousDate)
-        ).ToListAsync();
+        var activity = await LoadMarketActivity(targetDate, previousDate, windowOpen);
         await RestateActivitySharesToTodaysBasis(activity, targetDate, previousDate);
 
         var movers = activity.Where(a => a.CurrentShares != a.PreviousShares);
@@ -962,13 +1006,12 @@ public class InstitutionalHoldingsTools
     {
         // Combined while the window is open: the plain variant counts every fund that has not
         // filed yet as "exited", so sold-out-positions would rank by non-filers, not exits.
-        var churn = windowOpen
-            ? _holdingRepository.GetQuarterlyNewSoldOutPositionsCombined(targetDate, previousDate)
-            : _holdingRepository.GetQuarterlyNewSoldOutPositions(targetDate, previousDate);
-        var rows =
+        var churn = await LoadMarketChurn(targetDate, previousDate, windowOpen);
+        var rows = (
             normalizedBucket == "new-positions"
-                ? await churn.NewPositions().Take(maxResults).ToListAsync()
-                : await churn.SoldOutPositions().Take(maxResults).ToListAsync();
+                ? churn.NewPositions().Take(maxResults)
+                : churn.SoldOutPositions().Take(maxResults)
+        ).ToList();
         if (rows.Count == 0)
             return result + "_No stocks in this bucket this quarter._";
 
@@ -1027,10 +1070,12 @@ public class InstitutionalHoldingsTools
                     return error;
 
                 // Combined while the window is open — the as-filed ranking would order the
-                // whole market by which funds happened to file early.
-                var ranking = windowOpen
-                    ? _holdingRepository.GetMostHeldCombined(targetDate, previousDate)
-                    : _holdingRepository.GetMostHeld(targetDate, previousDate);
+                // whole market by which funds happened to file early. Snapshot-first like
+                // the movers/churn buckets; GetMostHeld's CurrentFilerCount > 0 filter and
+                // the sort run in memory over the ~6k mapped rows.
+                var ranking = (
+                    await LoadMarketActivity(targetDate, previousDate, windowOpen)
+                ).Where(a => a.CurrentFilerCount > 0);
                 ranking = normalizedSort switch
                 {
                     "filersdelta" => ranking
@@ -1046,7 +1091,7 @@ public class InstitutionalHoldingsTools
                         .OrderByDescending(a => a.CurrentFilerCount)
                         .ThenByDescending(a => a.CurrentValue),
                 };
-                var rows = await ranking.Take(McpLimit.Clamp(maxResults)).ToListAsync();
+                var rows = ranking.Take(McpLimit.Clamp(maxResults)).ToList();
                 if (rows.Count == 0)
                     return $"No stocks were held by 13F filers as of {FormatDate(targetDate)}.";
 
