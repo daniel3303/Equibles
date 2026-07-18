@@ -108,8 +108,7 @@ public class GovernmentContractsImportService : IImporter
                 await _errorReporter.Report(
                     ErrorSource.GovernmentContractsScraper,
                     "GovernmentContractsImport.ImportWindow",
-                    ex.Message,
-                    ex.StackTrace,
+                    ex,
                     $"window: {windowStart}..{windowEnd}"
                 );
 

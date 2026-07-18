@@ -63,8 +63,7 @@ public class FredReleaseCalendarImportService : IImporter
             await _errorReporter.Report(
                 ErrorSource.FredScraper,
                 "FredReleaseCalendarImport.Import",
-                ex.Message,
-                ex.StackTrace
+                ex
             );
         }
     }

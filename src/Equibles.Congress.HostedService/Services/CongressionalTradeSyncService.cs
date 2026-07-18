@@ -109,12 +109,7 @@ public class CongressionalTradeSyncService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to fetch {Source} disclosure data", sourceLabel);
-            await _errorReporter.Report(
-                ErrorSource.CongressScraper,
-                errorContext,
-                ex.Message,
-                ex.StackTrace
-            );
+            await _errorReporter.Report(ErrorSource.CongressScraper, errorContext, ex);
         }
     }
 

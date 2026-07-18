@@ -768,13 +768,7 @@ public class CompanySyncService : ICompanySyncService
     }
 
     private Task ReportError(string operation, Exception ex, string context) =>
-        _errorReporter.Report(
-            ErrorSource.DocumentScraper,
-            operation,
-            ex.Message,
-            ex.StackTrace,
-            context
-        );
+        _errorReporter.Report(ErrorSource.DocumentScraper, operation, ex, context);
 
     private class StockSyncState
     {

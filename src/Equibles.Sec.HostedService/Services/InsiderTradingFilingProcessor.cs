@@ -587,8 +587,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             await _errorReporter.Report(
                 ErrorSource.DocumentScraper,
                 "InsiderTrading.ParseXml",
-                ex.Message,
-                ex.StackTrace,
+                ex,
                 $"ticker: {companyTicker}, accession: {filing.AccessionNumber}"
             );
             return (null, null);

@@ -226,12 +226,7 @@ public abstract class BaseScraperWorker : BackgroundService
                     // ErrorReporter publishes its own ScraperActivity with the same
                     // source + the error message, so the activity feed gets a row
                     // without double-emitting here.
-                    await ErrorReporter.Report(
-                        ErrorSource,
-                        $"{WorkerName}.DoWork",
-                        ex.Message,
-                        ex.StackTrace
-                    );
+                    await ErrorReporter.Report(ErrorSource, $"{WorkerName}.DoWork", ex);
                 }
                 else
                 {

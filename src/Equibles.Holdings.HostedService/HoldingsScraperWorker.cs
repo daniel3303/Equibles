@@ -379,8 +379,7 @@ public class HoldingsScraperWorker : BaseScraperWorker
                 await ErrorReporter.Report(
                     ErrorSource,
                     "Holdings.ProcessDataSet",
-                    ex.Message,
-                    ex.StackTrace,
+                    ex,
                     $"file: {fileName}"
                 );
                 return false;

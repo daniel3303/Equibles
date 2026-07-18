@@ -114,8 +114,7 @@ public class WebsiteDiscoveryService : IImporter
                 await _errorReporter.Report(
                     ErrorSource.WebsiteDiscovery,
                     $"FindWebsites({source.Name})",
-                    ex.Message,
-                    ex.StackTrace
+                    ex
                 );
                 continue;
             }

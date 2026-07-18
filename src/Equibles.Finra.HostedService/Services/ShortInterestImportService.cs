@@ -111,8 +111,7 @@ public class ShortInterestImportService
             await _errorReporter.Report(
                 ErrorSource.FinraScraper,
                 "ShortInterest.DiscoverDates",
-                ex.Message,
-                ex.StackTrace
+                ex
             );
             return;
         }
@@ -247,8 +246,7 @@ public class ShortInterestImportService
             await _errorReporter.Report(
                 ErrorSource.FinraScraper,
                 "ShortInterest.ImportDate",
-                ex.Message,
-                ex.StackTrace,
+                ex,
                 $"date: {date}"
             );
             return 0;

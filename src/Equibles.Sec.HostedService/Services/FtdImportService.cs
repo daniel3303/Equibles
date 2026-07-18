@@ -119,8 +119,7 @@ public class FtdImportService
                 await _errorReporter.Report(
                     ErrorSource.FtdScraper,
                     "FtdImport.ProcessFile",
-                    ex.Message,
-                    ex.StackTrace,
+                    ex,
                     $"file: {fileName}"
                 );
             }
