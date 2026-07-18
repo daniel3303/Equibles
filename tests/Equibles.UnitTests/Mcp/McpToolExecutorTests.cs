@@ -8,12 +8,12 @@ namespace Equibles.UnitTests.Mcp;
 public class McpToolExecutorTests
 {
     private readonly ILogger _logger;
-    private readonly Func<string, string, string, string, Task> _reportError;
+    private readonly Func<string, Exception, string, Task> _reportError;
 
     public McpToolExecutorTests()
     {
         _logger = Substitute.For<ILogger>();
-        _reportError = Substitute.For<Func<string, string, string, string, Task>>();
+        _reportError = Substitute.For<Func<string, Exception, string, Task>>();
     }
 
     [Fact]
@@ -57,9 +57,7 @@ public class McpToolExecutorTests
             _reportError
         );
 
-        await _reportError
-            .Received(1)
-            .Invoke("TestTool", "boom", Arg.Is<string>(s => s != null), "ticker=AAPL");
+        await _reportError.Received(1).Invoke("TestTool", exception, "ticker=AAPL");
     }
 
     [Fact]
@@ -107,7 +105,7 @@ public class McpToolExecutorTests
     public async Task Execute_ReportErrorThrows_ExceptionIsSwallowed()
     {
         _reportError
-            .Invoke(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+            .Invoke(Arg.Any<string>(), Arg.Any<Exception>(), Arg.Any<string>())
             .ThrowsAsync(new Exception("reporting failed"));
 
         var result = await McpToolExecutor.Execute(
@@ -119,5 +117,23 @@ public class McpToolExecutorTests
         );
 
         result.Should().Be("An error occurred while executing TestTool. Please try again.");
+    }
+
+    [Fact]
+    public async Task Execute_ActionThrowsCancellation_ReturnsMessageWithoutReporting()
+    {
+        var result = await McpToolExecutor.Execute(
+            () => throw new OperationCanceledException("call aborted"),
+            _logger,
+            "TestTool",
+            "ticker=AAPL",
+            _reportError
+        );
+
+        // A wound-down call still answers, but no Errors row: cancellations are noise.
+        result.Should().Be("An error occurred while executing TestTool. Please try again.");
+        await _reportError
+            .DidNotReceive()
+            .Invoke(Arg.Any<string>(), Arg.Any<Exception>(), Arg.Any<string>());
     }
 }
