@@ -127,6 +127,11 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         // is needed beyond registering it.
         builder.Entity<StockQuarterlyActivity>();
 
+        // Combined-lane twin for the open filing window (carry-forward view); same
+        // attribute-declared composite key and index. See the entity for why it is
+        // a separate table rather than a lane column.
+        builder.Entity<StockQuarterlyActivityCombined>();
+
         // HolderQuarterlySnapshot likewise declares its composite
         // (InstitutionalHolderId, ReportDate) key and ReportDate index as
         // attributes.

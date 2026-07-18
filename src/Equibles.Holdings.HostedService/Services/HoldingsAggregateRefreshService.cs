@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models.Taxonomies;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
@@ -210,6 +211,139 @@ public class HoldingsAggregateRefreshService
         await UpsertSectorSnapshots(dbContext, reportDate, cancellationToken);
         await UpsertStockActivitySnapshots(dbContext, reportDate, cancellationToken);
         await UpsertHolderSnapshots(dbContext, reportDate, cancellationToken);
+        await RefreshCombinedLane(dbContext, reportDate, cancellationToken);
+    }
+
+    // Maintains the open filing window's combined-lane snapshot
+    // (StockQuarterlyActivityCombined). While the newest quarter's 45-day window is
+    // open its market-wide view must carry non-filers forward at their prior-quarter
+    // positions; the live combined aggregation costs ~30s+ (GROUP BY over two quarters
+    // plus correlated NOT-EXISTS probes), so it runs HERE — once per dirty-quarter
+    // drain — and consumers read the materialised rows. Rebuilt when either side of
+    // the comparison changes (the open quarter's own rebuild, or the prior quarter's —
+    // the carry-forward reads prior-quarter rows, so an amendment there shifts the
+    // combined view too). When the window is closed the lane is retired outright: the
+    // plain snapshot is authoritative and a stale carry-forward row must never
+    // survive into the closed quarter (the daily safety net rebuilds the newest
+    // quarters, giving retirement a reliable trigger).
+    private async Task RefreshCombinedLane(
+        EquiblesFinancialDbContext dbContext,
+        DateOnly rebuiltReportDate,
+        CancellationToken cancellationToken
+    )
+    {
+        var latest = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h => h.FilingType == FilingType.Form13F)
+            .Select(h => h.ReportDate)
+            .OrderByDescending(d => d)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (latest == default)
+        {
+            return;
+        }
+
+        if (!CombinedQuarterHelper.IsFilingWindowOpen(latest))
+        {
+            await dbContext
+                .Set<StockQuarterlyActivityCombined>()
+                .ExecuteDeleteAsync(cancellationToken);
+            return;
+        }
+
+        var previous = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h => h.ReportDate < latest && h.FilingType == FilingType.Form13F)
+            .Select(h => h.ReportDate)
+            .OrderByDescending(d => d)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (previous == default)
+        {
+            // First quarter on record: there is nothing to carry forward, so the
+            // combined view degenerates to the plain snapshot — leave the lane empty
+            // and let consumers fall back.
+            return;
+        }
+
+        // Only the two quarters feeding the comparison affect the combined rows; a
+        // historical quarter's rebuild (backfill, old amendment) must not re-run the
+        // expensive lane.
+        if (rebuiltReportDate != latest && rebuiltReportDate != previous)
+        {
+            return;
+        }
+
+        // The repository owns the combined query shapes (and raises this scope's
+        // command timeout when composing them); constructed directly over the scoped
+        // context — not resolved from DI, so test harnesses that stub the scope with
+        // only a DbContext keep working — it reuses the exact semantics the live lane
+        // serves, so materialised and live figures can never drift apart.
+        var repository = new InstitutionalHoldingRepository(dbContext);
+        var activity = await repository
+            .GetQuarterlyActivityCombined(latest, previous)
+            .ToListAsync(cancellationToken);
+        var churn = (
+            await repository
+                .GetQuarterlyNewSoldOutPositionsCombined(latest, previous)
+                .ToListAsync(cancellationToken)
+        ).ToDictionary(c => c.CommonStockId);
+
+        var computedAt = DateTime.UtcNow;
+        var rows = activity
+            .Select(a =>
+            {
+                churn.TryGetValue(a.CommonStockId, out var c);
+                return new StockQuarterlyActivityCombined
+                {
+                    CommonStockId = a.CommonStockId,
+                    ReportDate = latest,
+                    PreviousReportDate = previous,
+                    CurrentShares = a.CurrentShares,
+                    PreviousShares = a.PreviousShares,
+                    CurrentValue = a.CurrentValue,
+                    PreviousValue = a.PreviousValue,
+                    CurrentFilerCount = a.CurrentFilerCount,
+                    PreviousFilerCount = a.PreviousFilerCount,
+                    NewFilerCount = c?.NewFilerCount ?? 0,
+                    SoldOutFilerCount = c?.SoldOutFilerCount ?? 0,
+                    ComputedAt = computedAt,
+                };
+            })
+            .ToList();
+
+        if (rows.Count > 0)
+        {
+            await dbContext
+                .Set<StockQuarterlyActivityCombined>()
+                .UpsertRange(rows)
+                .On(a => new { a.CommonStockId, a.ReportDate })
+                .WhenMatched(
+                    (_, incoming) =>
+                        new StockQuarterlyActivityCombined
+                        {
+                            PreviousReportDate = incoming.PreviousReportDate,
+                            CurrentShares = incoming.CurrentShares,
+                            PreviousShares = incoming.PreviousShares,
+                            CurrentValue = incoming.CurrentValue,
+                            PreviousValue = incoming.PreviousValue,
+                            CurrentFilerCount = incoming.CurrentFilerCount,
+                            PreviousFilerCount = incoming.PreviousFilerCount,
+                            NewFilerCount = incoming.NewFilerCount,
+                            SoldOutFilerCount = incoming.SoldOutFilerCount,
+                            ComputedAt = incoming.ComputedAt,
+                        }
+                )
+                .RunAsync(cancellationToken);
+        }
+
+        // Rows for stocks no longer in the combined view, and any stale rows from a
+        // PREVIOUS window's quarter (a new quarter opened before the old lane was
+        // retired): one delete covers both.
+        var currentStockIds = rows.Select(r => r.CommonStockId).ToList();
+        await dbContext
+            .Set<StockQuarterlyActivityCombined>()
+            .Where(s => s.ReportDate != latest || !currentStockIds.Contains(s.CommonStockId))
+            .ExecuteDeleteAsync(cancellationToken);
     }
 
     // Per-(holder, quarter) AUM aggregates for the institutions browse ranking
