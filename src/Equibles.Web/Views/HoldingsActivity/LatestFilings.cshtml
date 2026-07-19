@@ -23,7 +23,6 @@
                         <th scope="col" class="text-right hidden md:table-cell">Value ($M)</th>
                         <th scope="col" class="hidden lg:table-cell">Report Date</th>
                         <th scope="col" class="hidden xl:table-cell">Filed</th>
-                        <th scope="col" class="hidden lg:table-cell">Imported</th>
                         <th scope="col" class="w-8"><span class="sr-only">Open</span></th>
                     </tr>
                 </thead>
@@ -47,14 +46,13 @@
                             <td class="text-right font-mono hidden md:table-cell">@((filing.TotalValue / 1_000_000m).ToString("N1"))</td>
                             <td class="hidden lg:table-cell text-sm text-base-content/60">@filing.ReportDate.ToString("MMM dd, yyyy")</td>
                             <td class="hidden xl:table-cell text-sm text-base-content/60">@filing.FilingDate.ToString("MMM dd, yyyy")</td>
-                            <td class="hidden lg:table-cell text-sm text-base-content/60">@filing.ImportedAt.ToString("MMM dd, yyyy HH:mm")</td>
                             <td class="text-base-content/30">
                                 <icon name="chevron-right" size="4" />
                             </td>
                         </tr>
                     }
                     @if (Model.Filings.Count == 0) {
-                        <empty-row colspan="8">
+                        <empty-row colspan="7">
                             No 13F filings have been imported yet. The feed populates once the worker finishes its first 13F cycle.
                         </empty-row>
                     }
