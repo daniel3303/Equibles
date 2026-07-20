@@ -28,7 +28,11 @@ public class InvestmentAdviserTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "SearchInvestmentAdvisers")]
+    [McpServerTool(
+        Name = "SearchInvestmentAdvisers",
+        Title = "Search Investment Advisers",
+        ReadOnly = true
+    )]
     [Description(
         "Search SEC-registered investment advisers (Form ADV) by firm name. Returns matching advisory firms with their CRD number, main office location, regulatory assets under management, employee count and the as-of date of their latest Form ADV data, largest by assets first. Use the CRD number with GetInvestmentAdviser for full detail."
     )]
@@ -95,7 +99,11 @@ public class InvestmentAdviserTools
             : legal;
     }
 
-    [McpServerTool(Name = "GetInvestmentAdviser")]
+    [McpServerTool(
+        Name = "GetInvestmentAdviser",
+        Title = "Investment Adviser Profile (Form ADV)",
+        ReadOnly = true
+    )]
     [Description(
         "Get the full Form ADV profile for a single SEC-registered investment adviser by its Organization CRD number: legal and business names, SEC file number, main office, website, regulatory assets under management (discretionary, non-discretionary and total), employee count, and how the firm is compensated (fee structure). Find CRD numbers with SearchInvestmentAdvisers."
     )]

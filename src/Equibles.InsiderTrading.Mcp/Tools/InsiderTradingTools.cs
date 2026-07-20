@@ -78,7 +78,11 @@ public class InsiderTradingTools
     private const string AcceptedTransactionTypes =
         "Buy, Sell, Award, Conversion, Exercise, TaxPayment, Expiration, Gift, Inheritance, Discretionary, Other";
 
-    [McpServerTool(Name = "GetInsiderTransactions")]
+    [McpServerTool(
+        Name = "GetInsiderTransactions",
+        Title = "Insider Transactions (Form 4)",
+        ReadOnly = true
+    )]
     [Description(
         "Get recent insider trading transactions for a stock from SEC Form 3/4/5 filings, newest first. The Type column carries the SEC transaction code meaning: 'Buy'/'Sell' are open-market purchases/sales only, while Award, Conversion, Exercise, Tax Payment, Expiration, Gift, Inheritance, Discretionary and Other are compensation or derivative mechanics — not conviction trades. The 10b5-1 column marks trades made under a pre-arranged Rule 10b5-1 plan ('-' = filing predates the 2023 checkbox). Per-row Shares/Price/Value are as filed; Owned After is the post-transaction balance restated onto today's split basis, tracked per security kind and ownership form. Supports optional date-range, transaction-type and insider-name filters to reach history beyond the newest rows. Use this to understand insider buying/selling activity."
     )]
@@ -248,7 +252,11 @@ public class InsiderTradingTools
         );
     }
 
-    [McpServerTool(Name = "GetInsiderOwnership")]
+    [McpServerTool(
+        Name = "GetInsiderOwnership",
+        Title = "Insider Ownership Summary",
+        ReadOnly = true
+    )]
     [Description(
         "Get a summary of insider ownership for a stock, ranked by shares held. Each row is as-of that insider's most recent SEC Form 3/4/5 filing (former insiders may linger with stale dates or zero shares), and share counts are restated onto today's split basis, so they can differ from the raw figures in older filings. Returns at most maxResults insiders (default 30). Use this to understand the insider ownership structure of a company; use GetInsiderTransactions for the underlying trades."
     )]
@@ -346,7 +354,11 @@ public class InsiderTradingTools
         );
     }
 
-    [McpServerTool(Name = "GetProposedSales")]
+    [McpServerTool(
+        Name = "GetProposedSales",
+        Title = "Proposed Insider Sales (Form 144)",
+        ReadOnly = true
+    )]
     [Description(
         "Get recent proposed insider sales for a stock from SEC Form 144 notices. Each Form 144 is an affiliate's declaration of intent to sell restricted or control securities, showing the seller, their relationship to the company, the number of shares and aggregate market value to be sold, the proposed sale as a share of shares outstanding, the approximate sale date, and the broker. Results are the most recent notices first and a note flags when more exist than were returned; use fromDate/toDate to scope a period (heavy 10b5-1 filers can flood the recency window with small daily notices). Use this to anticipate upcoming insider selling before it shows up as an executed Form 4."
     )]
@@ -447,7 +459,7 @@ public class InsiderTradingTools
         return McpFormat.Invariant(percent, "0.####") + "%";
     }
 
-    [McpServerTool(Name = "SearchInsiders")]
+    [McpServerTool(Name = "SearchInsiders", Title = "Search Corporate Insiders", ReadOnly = true)]
     [Description(
         "Search for corporate insiders (directors, officers, 10% owners) by name. Names are matched as filed with the SEC — legal names, frequently 'LAST FIRST MIDDLE' (e.g. Jensen Huang is filed as 'HUANG JEN HSUN') — and every word of the query must appear in the name, so retry with the surname alone when a full name misses. Returns matching insiders with their CIK, role, the company of their most recent filing, and location, ordered by most recent filing activity. Pivot to the sibling ticker-keyed tools with the returned company ticker (e.g. GetInsiderTransactions with its insiderName filter) to see a person's trades."
     )]

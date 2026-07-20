@@ -27,7 +27,11 @@ public class FdaCatalystTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetFdaCatalysts")]
+    [McpServerTool(
+        Name = "GetFdaCatalysts",
+        Title = "FDA Advisory Committee Calendar",
+        ReadOnly = true
+    )]
     [Description(
         "Get scheduled FDA advisory-committee (AdComm) meetings, sourced from the FDA.gov advisory-committee calendar, each with a link to its FDA meeting page. Defaults to meetings in the next 90 days; pass a date range to look further ahead. This is a forward-looking calendar of announced meetings, not a historical archive — coverage starts in late 2025 — and entries are the FDA's own listings, not linked to stock tickers."
     )]

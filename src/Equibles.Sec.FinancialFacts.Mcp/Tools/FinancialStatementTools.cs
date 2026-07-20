@@ -41,7 +41,7 @@ public class FinancialStatementTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetFinancialStatement")]
+    [McpServerTool(Name = "GetFinancialStatement", Title = "Financial Statements", ReadOnly = true)]
     [Description(
         "Get a company's income statement, balance sheet, or cash-flow statement for a "
             + "given fiscal year and period, sourced from SEC Company Facts (structured XBRL). "

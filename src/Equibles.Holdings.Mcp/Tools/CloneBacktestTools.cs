@@ -37,7 +37,11 @@ public class CloneBacktestTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetFundCloneBacktest")]
+    [McpServerTool(
+        Name = "GetFundCloneBacktest",
+        Title = "13F Portfolio Clone Backtest",
+        ReadOnly = true
+    )]
     [Description(
         "Backtest how cloning an institutional filer's reported 13F portfolio would have performed against a market benchmark, either over a trailing window (windowYears) or an explicit fromDate/toDate range. Reconstructs the filer's portfolio at each quarterly 13F snapshot, rebalances on the SEC filing lag (so the simulation uses only information available at the time), and values it forward against the benchmark. Returns total return, annualized return (CAGR), and max drawdown for both the cloned portfolio and the benchmark, plus the alpha between them. Use this to answer 'how would cloning fund X have performed against the market'."
     )]

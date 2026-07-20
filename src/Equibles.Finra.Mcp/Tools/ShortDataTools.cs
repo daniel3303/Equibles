@@ -54,7 +54,7 @@ public class ShortDataTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetShortVolume")]
+    [McpServerTool(Name = "GetShortVolume", Title = "Daily Short Sale Volume", ReadOnly = true)]
     [Description(
         "Get daily short sale volume history for a stock from FINRA's short sale volume files. Shows short volume, short-exempt volume, total volume, and short volume percentage per trading day. Volumes cover trades reported to FINRA facilities (off-exchange/TRF) only — NOT consolidated tape volume — and a 40-50% Short % is the normal baseline from market-maker liquidity provision, so it must not be quoted as a share of the stock's total traded volume. This daily flow metric is distinct from bi-monthly short interest positions: use GetShortInterest for positions, GetLargestShortVolume for a market-wide single-day ranking, and GetShortSqueezeScores for squeeze candidates."
     )]
@@ -141,7 +141,7 @@ public class ShortDataTools
         );
     }
 
-    [McpServerTool(Name = "GetShortInterest")]
+    [McpServerTool(Name = "GetShortInterest", Title = "Short Interest History", ReadOnly = true)]
     [Description(
         "Get bi-monthly short interest history for a stock from FINRA. Shows the reported short position, change from the previous settlement, average daily volume, and days to cover per settlement date. Share counts are restated onto today's split basis so the series stays continuous across stock splits; days to cover is as reported (FINRA caps it at 999.99). High days-to-cover (>5) suggests a potential short squeeze — for short interest as a % of shares outstanding and an actual squeeze-candidate ranking use GetShortSqueezeScores; for the market-wide latest settlement use GetShortInterestSnapshot."
     )]
@@ -242,7 +242,11 @@ public class ShortDataTools
         );
     }
 
-    [McpServerTool(Name = "GetShortInterestSnapshot")]
+    [McpServerTool(
+        Name = "GetShortInterestSnapshot",
+        Title = "Market-Wide Short Interest Snapshot",
+        ReadOnly = true
+    )]
     [Description(
         "Market-wide snapshot of the latest FINRA bi-monthly short interest settlement — one row per stock, sorted by days to cover (descending) by default. FINRA caps days to cover at 999.99: capped rows are a sentinel (almost always illiquid names with a tiny average-daily-volume denominator) and are ranked after real readings; pass minAvgDailyVolume (e.g. 100000) to drop illiquid names entirely. This is the raw FINRA snapshot — for genuine short-squeeze candidate ranking use GetShortSqueezeScores; for one stock's history use GetShortInterest; for daily short-sale flow use GetShortVolume/GetLargestShortVolume."
     )]
@@ -347,7 +351,11 @@ public class ShortDataTools
         );
     }
 
-    [McpServerTool(Name = "GetLargestShortVolume")]
+    [McpServerTool(
+        Name = "GetLargestShortVolume",
+        Title = "Largest Short Volume by Day",
+        ReadOnly = true
+    )]
     [Description(
         "Get the stocks with the largest daily short sale volume for a single trading day (defaults to the latest available), from FINRA's daily short sale volume files, sorted by short volume descending. Short % is the share of that day's FINRA-facility (off-exchange/TRF) volume sold short — 40-50% is a normal market-making baseline — NOT short interest (the open short position; use GetShortInterest/GetShortInterestSnapshot for positions and GetShortSqueezeScores for squeeze candidates; use GetShortVolume for one stock's daily history). Pass sortBy=shortPercent with a minTotalVolume floor to rank by short intensity instead of raw size."
     )]
@@ -579,7 +587,7 @@ public class ShortDataTools
     private Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker) =>
         _commonStockRepository.ResolveByTicker(ticker);
 
-    [McpServerTool(Name = "GetShortSqueezeScores")]
+    [McpServerTool(Name = "GetShortSqueezeScores", Title = "Short Squeeze Scores", ReadOnly = true)]
     [Description(
         "Get the stocks with the highest composite short-squeeze score — a peer-relative 0-100 rank built as the weighted mean of six factor percentiles across every stock reporting short interest at the latest FINRA settlement date (short interest % of shares 30%, days to cover 20%, price vs trailing VWAP — how far shorts are underwater — 15%, short-volume trend 15%, change in short interest 10%, fails-to-deliver pressure 10%), plus catalyst boosts (+10 for a statistically extreme weekly price spike, +10 for abnormal dollar volume on a positive move, +10 when a scheduled earnings event is within a few weekdays — squeezes cluster around earnings — capped at +20, clamped to 100). Exchange-traded commodity/currency trusts are excluded (their units are created and redeemed at NAV, so arbitrage caps any squeeze); MLP common units stay in. Untradeable micro-caps dominate the raw board, so pass minMarketCap and/or minDollarVolume to keep only names that clear your liquidity bar (the score itself stays peer-relative to the full universe). Pass ticker for one stock's score, factor breakdown, and rank within the scored universe. Use this to find squeeze candidates; use GetShortInterest for one stock's underlying series."
     )]
