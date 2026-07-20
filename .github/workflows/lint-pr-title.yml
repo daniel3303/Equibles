@@ -31,7 +31,11 @@ jobs:
             ci
             revert
           # Subject must start lowercase to stay consistent with the rest of git log.
-          subjectPattern: ^[a-z].+$
+          # Dependabot is exempt: it titles its PRs "build: Bump X from 1 to 2"
+          # and the capitalisation isn't configurable, so enforcing lowercase
+          # there just means hand-editing every dependency PR before it can
+          # merge. The type prefix is still enforced for bot PRs.
+          subjectPattern: ${{ github.event.pull_request.user.login == 'dependabot[bot]' && '^[A-Za-z].+$' || '^[a-z].+$' }}
           subjectPatternError: |
             The PR title subject must start with a lowercase letter.
             Got: "{subject}"
