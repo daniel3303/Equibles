@@ -48,7 +48,6 @@ public class AsFiledHtmlBackfillService
 
     public async Task<AsFiledHtmlBackfillResult> Backfill(
         int batchSize,
-        DateOnly? minReportingDate,
         CancellationToken cancellationToken = default
     )
     {
@@ -58,12 +57,11 @@ public class AsFiledHtmlBackfillService
             return result;
         }
 
+        // GetPendingAsFiledHtml is the single definition of the work-set, shared with the
+        // backoffice "pending" metric. It is used unnarrowed on purpose: any extra filter here
+        // (a reporting-date floor was the one that bit us) strands the excluded rows as pending
+        // forever, because nothing else ever advances their attempt count.
         var query = _documentRepository.GetPendingAsFiledHtml();
-
-        if (minReportingDate.HasValue)
-        {
-            query = query.Where(d => d.ReportingDate >= minReportingDate.Value);
-        }
 
         // Ids only: each document is loaded fresh inside the loop, so a failed capture's
         // half-applied change-tracker state can be discarded wholesale without detaching
