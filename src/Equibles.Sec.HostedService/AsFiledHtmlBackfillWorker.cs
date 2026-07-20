@@ -1,4 +1,3 @@
-using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Sec.HostedService.Configuration;
@@ -23,7 +22,6 @@ public class AsFiledHtmlBackfillWorker : BaseScraperWorker
 {
     private readonly IConfiguration _configuration;
     private readonly AsFiledHtmlCaptureOptions _captureOptions;
-    private readonly WorkerOptions _workerOptions;
 
     protected override string WorkerName => "As-filed HTML backfill";
 
@@ -46,13 +44,11 @@ public class AsFiledHtmlBackfillWorker : BaseScraperWorker
         IServiceScopeFactory scopeFactory,
         ErrorReporter errorReporter,
         IOptions<AsFiledHtmlCaptureOptions> captureOptions,
-        IOptions<WorkerOptions> workerOptions,
         IConfiguration configuration
     )
         : base(logger, scopeFactory, errorReporter)
     {
         _captureOptions = captureOptions.Value;
-        _workerOptions = workerOptions.Value;
         _configuration = configuration;
     }
 
@@ -71,15 +67,16 @@ public class AsFiledHtmlBackfillWorker : BaseScraperWorker
             return;
         }
 
-        var minReportingDate = _workerOptions.MinSyncDate.HasValue
-            ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
-            : (DateOnly?)null;
-
+        // No reporting-date floor: this is a historical sweep that must drain every 8-K still
+        // below the current builder version. The live-scraper MinSyncDate floor (shared with the
+        // SEC/Holdings/Congress scrapers and the public-site history clamp) is deliberately not
+        // applied here — bounding the backfill by it permanently stranded the pre-floor backlog as
+        // pending-but-never-selected, which is exactly what the dashboard's "pending" metric counts.
         var batchSize = _captureOptions.BackfillBatchSize;
         await using var scope = ScopeFactory.CreateAsyncScope();
         var backfillService =
             scope.ServiceProvider.GetRequiredService<AsFiledHtmlBackfillService>();
-        var result = await backfillService.Backfill(batchSize, minReportingDate, stoppingToken);
+        var result = await backfillService.Backfill(batchSize, stoppingToken);
 
         // A full batch that made forward progress means the newest-first queue still has
         // selectable documents, so drain the next batch after the short ContinuationInterval.
