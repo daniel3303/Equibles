@@ -36,7 +36,7 @@ public class NportTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetFundHoldings")]
+    [McpServerTool(Name = "GetFundHoldings", Title = "Fund Portfolio Holdings", ReadOnly = true)]
     [Description(
         "Get the portfolio holdings of a registered investment company (mutual fund or ETF) from its most recent SEC Form NPORT-P monthly report. Accepts the fund's own ticker or a fund profile id from SearchFunds, so it also reaches the many fund series that have no ticker of their own. Returns the fund's series, reporting period and net assets, followed by its largest holdings — issuer name, CUSIP, position size, U.S.-dollar value and share of net assets, with the asset category. Use SearchFunds to discover funds, GetFundProfile for the same view with the fund's registrant and total assets, and GetFundsHoldingStock for the inverse question (which funds own a stock). Only registered funds file NPORT-P; operating companies will return no data. Share-class tickers of multi-class mutual funds (e.g. VOO, VFIAX) do not resolve — find those funds by name via SearchFunds."
     )]
@@ -154,7 +154,7 @@ public class NportTools
             : (latest, series.SeriesName ?? series.RegistrantName, null);
     }
 
-    [McpServerTool(Name = "GetFundsHoldingStock")]
+    [McpServerTool(Name = "GetFundsHoldingStock", Title = "Funds Holding a Stock", ReadOnly = true)]
     [Description(
         "Get the registered investment companies (mutual funds and ETFs) holding a given stock, from SEC Form NPORT-P portfolio reports. The stock's CUSIP is matched against the holding rows on each fund series' most recent report (series that stopped filing more than 18 months ago are excluded), so an exited position never shows as current. Returns the fund's registrant and series, the reporting period, the position size, its U.S.-dollar value, its share of the fund's net assets and the payoff profile (Long/Short), largest positions first. Report dates differ per fund series (each files on its own fiscal quarter), so values are as of each row's report date and cross-row totals mix as-of dates. Use this to see which funds and ETFs own a stock and how concentrated each position is."
     )]

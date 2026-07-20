@@ -39,7 +39,11 @@ public class GovernmentContractsTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetGovernmentContracts")]
+    [McpServerTool(
+        Name = "GetGovernmentContracts",
+        Title = "Federal Contracts by Company",
+        ReadOnly = true
+    )]
     [Description(
         "Get federal government contract awards (from USAspending.gov) won by a specific public company. "
             + "Shows the award (action) date, awarding agency, total value (obligated dollars plus "
@@ -123,7 +127,11 @@ public class GovernmentContractsTools
         );
     }
 
-    [McpServerTool(Name = "GetTopGovernmentContractors")]
+    [McpServerTool(
+        Name = "GetTopGovernmentContractors",
+        Title = "Top Federal Contractors",
+        ReadOnly = true
+    )]
     [Description(
         "Rank public companies by total federal contract dollars awarded over a date range (from "
             + "USAspending.gov). Sums the total award value (obligated dollars plus unexercised ceiling) of "

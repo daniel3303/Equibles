@@ -32,7 +32,7 @@ public class FailToDeliverTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetFailsToDeliver")]
+    [McpServerTool(Name = "GetFailsToDeliver", Title = "Fails-to-Deliver Data", ReadOnly = true)]
     [Description(
         "Get fails-to-deliver (FTD) data for a stock from the SEC's twice-monthly FTD files. Quantity is the aggregate net fail-to-deliver position OUTSTANDING on each settlement date — a balance, not that day's new fails, so never sum Quantity across dates. Price is the previous trading day's closing price (SEC file convention, not a settlement price) and Value = Quantity × Price. Dates absent from the table had no reported fails; the SEC publishes each half-month batch with roughly a two-week lag, so the newest rows trail today. High or persistent FTD balances may indicate naked short selling or settlement issues."
     )]

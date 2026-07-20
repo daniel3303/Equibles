@@ -75,7 +75,11 @@ public class RevenueBreakdownTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetRevenueBreakdown")]
+    [McpServerTool(
+        Name = "GetRevenueBreakdown",
+        Title = "Revenue Breakdown by Segment",
+        ReadOnly = true
+    )]
     [Description(
         "Get a company's revenue disaggregated by business segment, geography and "
             + "product/service, from the dimensional XBRL facts the issuer tags in its own "

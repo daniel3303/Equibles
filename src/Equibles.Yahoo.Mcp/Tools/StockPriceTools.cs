@@ -35,7 +35,7 @@ public class StockPriceTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetStockPrices")]
+    [McpServerTool(Name = "GetStockPrices", Title = "Daily Price History", ReadOnly = true)]
     [Description(
         "Get daily OHLCV (Open, High, Low, Close, Volume) price history for a stock. Useful for "
             + "technical analysis, charting, and price trend analysis. Prices are in USD and "
@@ -107,7 +107,7 @@ public class StockPriceTools
         );
     }
 
-    [McpServerTool(Name = "GetLatestPrices")]
+    [McpServerTool(Name = "GetLatestPrices", Title = "Latest Prices", ReadOnly = true)]
     [Description(
         "Get the most recent closing price (USD), daily change, and volume for one or more "
             + "stocks. Useful for quick price checks across a portfolio or watchlist."
@@ -191,7 +191,11 @@ public class StockPriceTools
         );
     }
 
-    [McpServerTool(Name = "GetStochasticOscillator")]
+    [McpServerTool(
+        Name = "GetStochasticOscillator",
+        Title = "Stochastic Oscillator",
+        ReadOnly = true
+    )]
     [Description(
         "Stochastic Oscillator (%K and %D) for a stock. %K measures the close relative to "
             + "the high/low range over the lookback window; %D is the smoothed signal line "
@@ -265,7 +269,11 @@ public class StockPriceTools
         );
     }
 
-    [McpServerTool(Name = "GetAverageTrueRange")]
+    [McpServerTool(
+        Name = "GetAverageTrueRange",
+        Title = "Average True Range (ATR)",
+        ReadOnly = true
+    )]
     [Description(
         "Average True Range (ATR) for a stock. Wilder's volatility measure built from "
             + "the True Range (max of high-low, |high-prev_close|, |low-prev_close|) and "
@@ -333,7 +341,7 @@ public class StockPriceTools
         );
     }
 
-    [McpServerTool(Name = "GetOnBalanceVolume")]
+    [McpServerTool(Name = "GetOnBalanceVolume", Title = "On-Balance Volume (OBV)", ReadOnly = true)]
     [Description(
         "On-Balance Volume (OBV) for a stock. Running cumulative volume that adds the "
             + "bar's volume on up-closes, subtracts on down-closes, and stays flat on "
@@ -394,7 +402,7 @@ public class StockPriceTools
         );
     }
 
-    [McpServerTool(Name = "GetBollingerBands")]
+    [McpServerTool(Name = "GetBollingerBands", Title = "Bollinger Bands", ReadOnly = true)]
     [Description(
         "Bollinger Bands for a stock. A middle band (simple moving average of close) with "
             + "upper and lower bands set a number of standard deviations above and below it. "

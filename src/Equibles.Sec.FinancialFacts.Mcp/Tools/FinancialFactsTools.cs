@@ -47,7 +47,7 @@ public class FinancialFactsTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetFinancialFact")]
+    [McpServerTool(Name = "GetFinancialFact", Title = "Financial Concept Lookup", ReadOnly = true)]
     [Description(
         "Get a single financial concept (e.g. revenue, net income, diluted EPS, total "
             + "assets, operating cash flow) over time for a company, sourced from SEC "
@@ -205,7 +205,11 @@ public class FinancialFactsTools
             .Select(g => g.OrderBy(f => f.FiscalYear).ThenBy(f => f.FiscalPeriod).First())
             .ToList();
 
-    [McpServerTool(Name = "CompareFinancialFact")]
+    [McpServerTool(
+        Name = "CompareFinancialFact",
+        Title = "Compare Financials Across Companies",
+        ReadOnly = true
+    )]
     [Description(
         "Compare one financial concept across several companies for the same fiscal "
             + "period — peer comparison. Returns one row per ticker with the "

@@ -33,7 +33,7 @@ public class CboeTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetPutCallRatios")]
+    [McpServerTool(Name = "GetPutCallRatios", Title = "CBOE Put/Call Ratios", ReadOnly = true)]
     [Description(
         "Get CBOE put/call ratio data showing market sentiment. Available types: Total (all "
             + "exchange), Equity, Index, Vix, Etp. High ratios (>1.0) indicate bearish sentiment; "
@@ -105,7 +105,7 @@ public class CboeTools
         );
     }
 
-    [McpServerTool(Name = "GetVixHistory")]
+    [McpServerTool(Name = "GetVixHistory", Title = "VIX Volatility Index History", ReadOnly = true)]
     [Description(
         "Get CBOE Volatility Index (VIX) historical daily OHLC data. VIX measures expected "
             + "30-day S&P 500 volatility. Below 15 = low volatility/complacency, above 30 = "
