@@ -95,8 +95,7 @@ public class AsFiledHtmlBackfillServiceReportingDateTests : IDisposable
                 DocumentType = DocumentType.EightK,
                 ReportingDate = reportingDate,
                 AccessionNumber = accessionNumber,
-                SourceUrl =
-                    $"https://www.sec.gov/Archives/edgar/data/320193/{accessionNumber}.txt",
+                SourceUrl = $"https://www.sec.gov/Archives/edgar/data/320193/{accessionNumber}.txt",
                 AsFiledHtmlVersion = 0,
                 AsFiledHtmlAttempts = 0,
             }
