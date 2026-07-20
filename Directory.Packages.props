@@ -68,7 +68,7 @@
     />
     <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.10" />
     <!-- Logging -->
-    <PackageVersion Include="Serilog" Version="4.3.1" />
+    <PackageVersion Include="Serilog" Version="4.4.0" />
     <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageVersion Include="Serilog.Exceptions" Version="8.4.0" />
     <PackageVersion Include="Serilog.Exceptions.EntityFrameworkCore" Version="8.4.0" />
