@@ -77,7 +77,7 @@ public class InstitutionalHoldingsTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetTopHolders")]
+    [McpServerTool(Name = "GetTopHolders", Title = "Top Institutional Holders", ReadOnly = true)]
     [Description(
         "Get the top institutional holders (fund managers) of a stock from SEC 13F-HR filings. Returns a ranked list of institutions by shares held, including market value and percentage of total institutional 13F shares (not of shares outstanding). Data is sourced from quarterly 13F filings that large investment managers are required to file with the SEC; while the newest quarter's filing window is open, funds that have not filed yet are carried at their prior-quarter positions (noted in the output). Use this to understand who the major institutional investors in a company are."
     )]
@@ -232,7 +232,11 @@ public class InstitutionalHoldingsTools
         return result.ToString();
     }
 
-    [McpServerTool(Name = "GetOwnershipHistory")]
+    [McpServerTool(
+        Name = "GetOwnershipHistory",
+        Title = "Institutional Ownership History",
+        ReadOnly = true
+    )]
     [Description(
         "Get the historical trend of institutional ownership for a stock across multiple quarters. Shows how total institutional shares, market value, and number of institutional holders have changed over time based on SEC 13F-HR filings. While the newest quarter's 13F filing window is open, that quarter is a provisional combined view (funds that have not filed yet carry their prior-quarter positions — flagged in the output). Use this to understand whether institutional interest in a company is growing or declining."
     )]
@@ -344,7 +348,11 @@ public class InstitutionalHoldingsTools
             ? $"{McpFormat.Invariant((double)(totalShares - previousShares) / previousShares * 100, "+0.0;-0.0;0.0")}%"
             : "—";
 
-    [McpServerTool(Name = "GetInstitutionPortfolio")]
+    [McpServerTool(
+        Name = "GetInstitutionPortfolio",
+        Title = "Institution Portfolio (13F)",
+        ReadOnly = true
+    )]
     [Description(
         "View the stock portfolio of a specific institutional investor (fund manager) from their SEC 13F-HR filing. Shows the institution's largest tracked holdings by market value (default 20, max 500) with share counts, market values, and percent of the 13F-reported portfolio, plus the portfolio's total value and position count. Use this to understand what stocks a particular fund manager or institution is investing in; use SearchInstitutions first when the name is ambiguous."
     )]
@@ -458,7 +466,11 @@ public class InstitutionalHoldingsTools
         return result.ToString();
     }
 
-    [McpServerTool(Name = "SearchInstitutions")]
+    [McpServerTool(
+        Name = "SearchInstitutions",
+        Title = "Search Institutional Investors",
+        ReadOnly = true
+    )]
     [Description(
         "Search for institutional investors (fund managers) by name or SEC CIK number, largest 13F filers first. Returns matching institutions with their SEC CIK number, city, and state/country. Use this to find the correct institution name before calling GetInstitutionPortfolio or to discover which institutions are tracked in the database."
     )]
@@ -504,7 +516,11 @@ public class InstitutionalHoldingsTools
     // sends), so a bare null-coalesce still rendered blank cells instead of the placeholder.
     private static string OrDash(string value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
 
-    [McpServerTool(Name = "GetTopBuyersSellers")]
+    [McpServerTool(
+        Name = "GetTopBuyersSellers",
+        Title = "Top Institutional Buyers and Sellers",
+        ReadOnly = true
+    )]
     [Description(
         "Get the institutions that moved the needle the most on a stock this quarter — biggest absolute share additions (Top Buyers) and biggest absolute share reductions (Top Sellers) versus the previous 13F report date. Includes new positions (Δ = full position) and sold-out positions (Δ = −prior position); a previous holder counts as a seller only if it filed a 13F for the target quarter, so a fund that stopped filing (CIK migration, deregistration) is not shown as a mass seller. While the newest quarter's filing window is open, results cover only the funds that have already filed (noted in the output). Returns a markdown table with two sections. Use this to surface the most actionable quarterly signal from 13F filings."
     )]
@@ -786,7 +802,11 @@ public class InstitutionalHoldingsTools
         }
     }
 
-    [McpServerTool(Name = "GetMarketWide13FActivity")]
+    [McpServerTool(
+        Name = "GetMarketWide13FActivity",
+        Title = "Market-Wide 13F Activity",
+        ReadOnly = true
+    )]
     [Description(
         "Get the market-wide 13F leaderboards for a given quarter — which stocks were most bought, most sold, most initiated, or most exited across all 13F filers vs the prior quarter. The `bucket` argument selects one of: top-buys (Δ shares > 0 ranked by Δ value desc), top-sells (Δ shares < 0 ranked by Δ value asc), new-positions (stocks ranked by count of filers initiating a position), sold-out-positions (stocks ranked by count of filers exiting). Use this to answer 'what's the consensus 13F move this quarter?'"
     )]
@@ -1036,7 +1056,7 @@ public class InstitutionalHoldingsTools
         return result.ToString();
     }
 
-    [McpServerTool(Name = "GetMostHeldStocks")]
+    [McpServerTool(Name = "GetMostHeldStocks", Title = "Most Widely Held Stocks", ReadOnly = true)]
     [Description(
         "Get the cross-sectional ranking of stocks by institutional 13F breadth for a given quarter. Returns the stocks ranked by number of 13F filers reporting them as a holding (default), by quarter-over-quarter change in filer count (warming names — 'filersDelta' — or cooling names — 'filersDeltaAsc'), or by total reported dollar value. Includes Δ filers vs the prior quarter, total value, Δ value, and the stock's share of the 13F universe. Only currently-held stocks rank; fully-sold-out names live in GetMarketWide13FActivity's sold-out-positions bucket. While the newest quarter's filing window is open, funds that have not filed yet are carried at their prior-quarter positions (noted in the output). Use this to answer 'which stocks are most owned by institutions right now, and is breadth expanding or contracting?'"
     )]
@@ -1155,7 +1175,11 @@ public class InstitutionalHoldingsTools
         return result.ToString();
     }
 
-    [McpServerTool(Name = "GetInstitutionSummary")]
+    [McpServerTool(
+        Name = "GetInstitutionSummary",
+        Title = "Institution Portfolio Summary",
+        ReadOnly = true
+    )]
     [Description(
         "Get the portfolio summary header for an institutional 13F filer — 13F reported value (long U.S. positions only, not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database. Use this to answer 'how big and how concentrated is this fund?' or to compare two funds at a glance. Search resolves by institution name or CIK (largest 13F filer wins on ambiguous names)."
     )]
@@ -1295,7 +1319,11 @@ public class InstitutionalHoldingsTools
         return result.ToString();
     }
 
-    [McpServerTool(Name = "GetInstitutionSectorAllocation")]
+    [McpServerTool(
+        Name = "GetInstitutionSectorAllocation",
+        Title = "Institution Sector Allocation",
+        ReadOnly = true
+    )]
     [Description(
         "Get an institution's 13F portfolio allocation for a given report quarter (defaults to the latest), grouped by fine-grained industry (default) or rolled up by sector via `groupBy`. Returns a markdown table sorted by % of portfolio descending, with stocks lacking a classification collapsed into a single 'Unclassified' row at the end. Ambiguous names resolve to the largest matching 13F filer — use SearchInstitutions to disambiguate. Use this to answer 'is this fund concentrated in tech / energy / generalist?'"
     )]
@@ -1350,7 +1378,11 @@ public class InstitutionalHoldingsTools
         );
     }
 
-    [McpServerTool(Name = "GetInstitutionQuarterlyActivity")]
+    [McpServerTool(
+        Name = "GetInstitutionQuarterlyActivity",
+        Title = "Institution Quarterly Activity",
+        ReadOnly = true
+    )]
     [Description(
         "Get an institution's quarterly position-change activity — Initiated / Increased / Reduced / Exited stocks diffed against the immediately prior quarter. Returns the buckets as one markdown section per bucket, sorted by absolute Δ market-value desc (Δ Value includes price movement, not just trading). Use `bucket` to filter to a single bucket. Use this to answer 'what did this fund do this quarter?'"
     )]
@@ -1516,7 +1548,11 @@ public class InstitutionalHoldingsTools
         return true;
     }
 
-    [McpServerTool(Name = "GetFundOverlap")]
+    [McpServerTool(
+        Name = "GetFundOverlap",
+        Title = "Portfolio Overlap Between Institutions",
+        ReadOnly = true
+    )]
     [Description(
         "Get the 13F portfolio overlap between two institutions for their latest common report date — Jaccard similarity, dollar-weighted overlap ($-weighted = shared dollars, taking the smaller of the two funds' values per stock, as a share of union dollars), per-fund position counts and totals, and a side-by-side table of stocks with per-fund shares + percent of portfolio. Covers 13F institutional managers only — find names with SearchInstitutions; for mutual-fund/ETF (NPORT) portfolios use GetFundHoldings. Use this to answer 'do these two funds own the same stocks?' or 'where do their portfolios diverge?'"
     )]
@@ -1682,7 +1718,11 @@ public class InstitutionalHoldingsTools
         return result.ToString();
     }
 
-    [McpServerTool(Name = "GetConsensusHoldings")]
+    [McpServerTool(
+        Name = "GetConsensusHoldings",
+        Title = "Consensus Holdings Across Institutions",
+        ReadOnly = true
+    )]
     [Description(
         "Get the consensus / combined portfolio of 2-25 institutions for their latest common report date. Returns stocks ranked by how many of the supplied funds hold them (descending), then by combined value. Filter by `minFunds` to only show stocks held by at least that many funds. Use this to answer 'what do these funds agree on?' or 'show me the top picks across these N investors combined.'"
     )]

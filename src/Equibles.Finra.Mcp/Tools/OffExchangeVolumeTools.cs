@@ -32,7 +32,11 @@ public class OffExchangeVolumeTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetOffExchangeVolume")]
+    [McpServerTool(
+        Name = "GetOffExchangeVolume",
+        Title = "Off-Exchange (Dark Pool) Volume",
+        ReadOnly = true
+    )]
     [Description(
         "Get weekly off-exchange (dark pool / OTC) trading volume for a stock from the FINRA OTC/ATS Transparency data. "
             + "Each week shows ATS (alternative trading system / dark pool) volume and trade count, non-ATS OTC volume and trade count, "

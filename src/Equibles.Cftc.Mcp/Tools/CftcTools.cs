@@ -35,7 +35,11 @@ public class CftcTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetCftcPositioning")]
+    [McpServerTool(
+        Name = "GetCftcPositioning",
+        Title = "CFTC Futures Positioning (COT)",
+        ReadOnly = true
+    )]
     [Description(
         "Get Commitments of Traders (COT) positioning data for a specific futures contract. "
             + "Shows commercial and non-commercial positions over time. Values are contract "
@@ -109,7 +113,11 @@ public class CftcTools
         );
     }
 
-    [McpServerTool(Name = "GetLatestCftcData")]
+    [McpServerTool(
+        Name = "GetLatestCftcData",
+        Title = "Latest CFTC Positioning Snapshot",
+        ReadOnly = true
+    )]
     [Description(
         "Get the latest COT positioning snapshot across all tracked futures contracts, grouped "
             + "by category (Agriculture, Energy, Metals, Equity Indices, Interest Rates, "
@@ -202,7 +210,11 @@ public class CftcTools
         );
     }
 
-    [McpServerTool(Name = "SearchCftcMarkets")]
+    [McpServerTool(
+        Name = "SearchCftcMarkets",
+        Title = "Search CFTC Futures Contracts",
+        ReadOnly = true
+    )]
     [Description(
         "Search the tracked CFTC futures contracts by name or market code, or omit the query "
             + "to list every tracked contract. Coverage is a curated set of ~35 major contracts "

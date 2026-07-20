@@ -35,7 +35,7 @@ public class FundDirectoryTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "SearchFunds")]
+    [McpServerTool(Name = "SearchFunds", Title = "Search Funds and ETFs", ReadOnly = true)]
     [Description(
         "Search the directory of registered investment companies (mutual funds and ETFs) that file SEC Form NPORT-P, by fund name, ticker or registrant. Returns each matching fund series with its profile id (use it with GetFundProfile), ticker (when the fund is itself listed), registration type (from N-CEN, when on record), net assets, number of reported holdings and latest report date, largest funds first. Covers the large multi-series trusts (iShares, Vanguard, Fidelity) that have no ticker of their own. Only a fund's own series-level ticker matches (e.g. IWM, SPY); share-class tickers of multi-class mutual funds (e.g. VOO, VFIAX) are not indexed — search those by fund name instead (e.g. 'Vanguard 500')."
     )]
@@ -95,7 +95,11 @@ public class FundDirectoryTools
         );
     }
 
-    [McpServerTool(Name = "GetFundProfile")]
+    [McpServerTool(
+        Name = "GetFundProfile",
+        Title = "Fund Profile and Top Holdings",
+        ReadOnly = true
+    )]
     [Description(
         "Get a registered fund's profile and largest holdings from its most recent SEC Form NPORT-P report. Accepts a fund profile id from SearchFunds or a fund's own ticker. Returns the fund's registrant and series, reporting period, net and total assets, then its largest holdings — issuer name, CUSIP, position size, U.S.-dollar value, share of net assets and asset category. Prefer this after SearchFunds: the profile id reaches the many fund series that have no ticker of their own; GetFundHoldings is the equivalent view, and GetFundsHoldingStock answers the inverse question (which funds own a stock). For the large multi-series trusts only positions in tracked stocks are stored, so the holdings shown are the fund's tracked-stock positions; the net-asset totals are the fund's real totals."
     )]

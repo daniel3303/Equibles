@@ -40,7 +40,11 @@ public class CongressTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetCongressionalTrades")]
+    [McpServerTool(
+        Name = "GetCongressionalTrades",
+        Title = "Congressional Trades by Stock",
+        ReadOnly = true
+    )]
     [Description(
         "Get congressional stock trades for a specific ticker (newest first, last year by default). Shows which members of Congress bought or sold shares, with transaction and filing dates; amounts are the disclosed ranges, not exact values. Use GetMemberTrades for one member's trades across all tickers."
     )]
@@ -106,7 +110,7 @@ public class CongressTools
         );
     }
 
-    [McpServerTool(Name = "GetMemberTrades")]
+    [McpServerTool(Name = "GetMemberTrades", Title = "Trades by Congress Member", ReadOnly = true)]
     [Description(
         "Get a congress member's disclosed stock trades (newest first, last year by default). Shows tickers, transaction and filing dates, and disclosed amount ranges — bands, not exact values. Use SearchCongressMembers to find member names, and GetCongressionalTrades for all members' trades in one ticker."
     )]
@@ -176,7 +180,11 @@ public class CongressTools
         );
     }
 
-    [McpServerTool(Name = "GetMemberNetWorth")]
+    [McpServerTool(
+        Name = "GetMemberNetWorth",
+        Title = "Congress Member Net Worth",
+        ReadOnly = true
+    )]
     [Description(
         "Get a congress member's net worth history from their annual financial disclosures. Disclosed values are ranges, so every year is a band (minimum-maximum), never a point estimate. Only electronically filed reports are read: a missing year means no electronic filing, not zero net worth. Use SearchCongressMembers to find member names."
     )]
@@ -237,7 +245,11 @@ public class CongressTools
     private static string FormatSignedAmount(long value) =>
         value < 0 ? $"-${McpFormat.WholeNumber(-value)}" : $"${McpFormat.WholeNumber(value)}";
 
-    [McpServerTool(Name = "SearchCongressMembers")]
+    [McpServerTool(
+        Name = "SearchCongressMembers",
+        Title = "Search Congress Members",
+        ReadOnly = true
+    )]
     [Description(
         "Search for members of Congress by name. Returns matching members with their position (Senator/Representative). Use this to discover member names before calling the member-specific tools (GetMemberTrades, GetMemberNetWorth) — the returned Name is the exact string they expect."
     )]

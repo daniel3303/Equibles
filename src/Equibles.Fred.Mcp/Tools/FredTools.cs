@@ -34,7 +34,11 @@ public class FredTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetEconomicIndicator")]
+    [McpServerTool(
+        Name = "GetEconomicIndicator",
+        Title = "Economic Indicator History",
+        ReadOnly = true
+    )]
     [Description(
         "Get time series data for a FRED economic indicator. Returns historical observations for indicators like FEDFUNDS (fed funds rate), CPIAUCSL (CPI inflation), UNRATE (unemployment), GDP, T10Y2Y (yield spread), VIXCLS (VIX), SP500, MORTGAGE30US, M2SL (money supply), and more. Covers the curated ~40-series set Equibles tracks, not the full FRED catalog — use SearchEconomicIndicators to find available series."
     )]
@@ -130,7 +134,11 @@ public class FredTools
         );
     }
 
-    [McpServerTool(Name = "GetLatestEconomicData")]
+    [McpServerTool(
+        Name = "GetLatestEconomicData",
+        Title = "Latest Economic Indicators",
+        ReadOnly = true
+    )]
     [Description(
         "Get the latest values for key economic indicators across categories: interest rates, yield spreads, inflation, employment, GDP, money supply, sentiment, housing, exchange rates, and market indicators. Each row shows a series' latest stored observation with its date, plus the previous observation and the change between them for direction — check the Latest Date column for freshness. Returns a snapshot of current macro conditions."
     )]
@@ -237,7 +245,11 @@ public class FredTools
         );
     }
 
-    [McpServerTool(Name = "SearchEconomicIndicators")]
+    [McpServerTool(
+        Name = "SearchEconomicIndicators",
+        Title = "Search Economic Indicators",
+        ReadOnly = true
+    )]
     [Description(
         "Search the curated set of ~40 US macro FRED series Equibles tracks (rates, inflation, employment, GDP, housing, market indicators) — not the full FRED catalog. Matches series ID, title, and category name: a category query like 'inflation' returns that whole category (CPI, PCE, PPI, breakevens), and an empty query lists every tracked series. Use this to discover what economic data is available before calling GetEconomicIndicator."
     )]
@@ -289,7 +301,11 @@ public class FredTools
         );
     }
 
-    [McpServerTool(Name = "GetEconomicCalendar")]
+    [McpServerTool(
+        Name = "GetEconomicCalendar",
+        Title = "Economic Release Calendar",
+        ReadOnly = true
+    )]
     [Description(
         "Get the economic release calendar — scheduled (upcoming) and recent publication dates of US macro data releases, with the FRED series each release updates and an importance tier per release (High = the tier-1 scheduled market movers: CPI, PPI, Employment Situation, GDP, PCE, retail sales; Medium = other genuine scheduled prints; Low = daily rate/market levels like SOFR or VIX). FOMC meetings are NOT included — FRED's release feed has no real FOMC meeting dates; use the Federal Reserve's published meeting calendar for those. Defaults to the next 30 days. Use minImportance=high to see only the market movers, and GetEconomicIndicator to fetch a series' data after it prints."
     )]
