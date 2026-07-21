@@ -138,6 +138,46 @@ public class UsaSpendingClientAmountCursorTests
             );
     }
 
+    [Fact]
+    public async Task GetContractAwards_CentValuedAmounts_SendsWholeDollarBoundsAndLosesNothing()
+    {
+        // Real award amounts carry cents (the first production cycle died on
+        // upper_bound=532543287.51 — the API 422s any fractional bound). The cursor
+        // must round its bound UP to a whole dollar; the inclusive band then
+        // re-covers everything between the true floor and the ceiling, deduplicated
+        // by id, so completeness still holds.
+        var awards = Enumerable
+            .Range(0, 130)
+            .Select(i => new FakeAward($"CENTS_{i}", 1_000_000m + (130 - i) * 997.13m))
+            .ToList();
+        var handler = new BandAwareHandler(awards, pageSize: 5);
+        var sut = new UsaSpendingClient(
+            new HttpClient(handler),
+            Substitute.For<ILogger<UsaSpendingClient>>()
+        );
+
+        var result = await sut.GetContractAwards(
+            new DateOnly(2022, 1, 2),
+            new DateOnly(2022, 1, 8),
+            minimumAmount: 1_000_000m
+        );
+
+        result
+            .Select(r => r.GeneratedInternalId)
+            .Should()
+            .BeEquivalentTo(
+                awards.Select(a => a.Id),
+                "rounding the bound up must widen the band, never narrow it — no award may be lost"
+            );
+        handler
+            .UpperBoundsSeen.Should()
+            .OnlyContain(
+                u => decimal.Ceiling(u) == u,
+                "the API rejects fractional amount bounds with a 422"
+            );
+        handler.MaxPageRequested.Should().BeLessThanOrEqualTo(MaxPagesPerBand);
+    }
+
     private sealed record FakeAward(string Id, decimal Amount);
 
     /// <summary>
@@ -172,7 +212,25 @@ public class UsaSpendingClientAmountCursorTests
 
             MaxPageRequested = Math.Max(MaxPageRequested, page);
             if (upper.HasValue)
+            {
                 UpperBoundsSeen.Add(upper.Value);
+                // The real API's award_amounts validator only accepts whole-dollar
+                // values; a fractional bound is a 422. Mirror that so the cursor can
+                // never regress to sending cents (the bug that froze the first
+                // production cycle of the cursor rollout).
+                if (decimal.Ceiling(upper.Value) != upper.Value)
+                {
+                    return Task.FromResult(
+                        new HttpResponseMessage(HttpStatusCode.UnprocessableEntity)
+                        {
+                            Content = new StringContent(
+                                $"{{\"detail\": \"Invalid value in 'filters|award_amounts'. "
+                                    + $"'{upper.Value}' is not a valid type (dictionary).\"}}"
+                            ),
+                        }
+                    );
+                }
+            }
 
             var band = _sorted
                 .Where(a => a.Amount >= lower && (!upper.HasValue || a.Amount <= upper.Value))
