@@ -34,31 +34,42 @@ public class SenateDisclosureClient : IAsyncDisposable
         _logger = logger;
     }
 
-    public async Task<List<DisclosureTransaction>> GetRecentTransactions(
+    public async Task<DisclosureFetchResult> GetRecentTransactions(
         DateOnly fromDate,
         DateOnly toDate,
+        IReadOnlySet<string> processedSourceIds,
         CancellationToken ct
     )
     {
         await _session.EnsureAuthenticated(ct);
 
         var reports = await SearchPtrReports(fromDate, toDate, ct);
+        var newReports = reports
+            .Where(r => !processedSourceIds.Contains(ExtractReportId(r.ReportUrl)))
+            .ToList();
         _logger.LogInformation(
-            "Found {Count} Senate PTR reports between {From} and {To}",
+            "Found {Count} Senate PTR reports between {From} and {To} ({New} not yet ingested)",
             reports.Count,
             fromDate,
-            toDate
+            toDate,
+            newReports.Count
         );
 
-        var transactions = new List<DisclosureTransaction>();
+        var result = new DisclosureFetchResult();
 
-        foreach (var report in reports)
+        foreach (var report in newReports)
         {
             try
             {
                 ct.ThrowIfCancellationRequested();
+                var reportId = ExtractReportId(report.ReportUrl);
                 var reportTxns = await FetchAndParseReport(report, ct);
-                transactions.AddRange(reportTxns);
+                foreach (var txn in reportTxns)
+                    txn.SourceId = reportId;
+                result.Transactions.AddRange(reportTxns);
+                result.ProcessedFilings.Add(
+                    new ProcessedFiling(reportId, report.DateSubmitted, reportTxns.Count)
+                );
             }
             catch (OperationCanceledException)
             {
@@ -66,6 +77,7 @@ public class SenateDisclosureClient : IAsyncDisposable
             }
             catch (Exception ex)
             {
+                // Not recorded as processed — the report retries next cycle.
                 _logger.LogWarning(
                     ex,
                     "Failed to parse Senate report for {Member} at {Url}",
@@ -76,11 +88,11 @@ public class SenateDisclosureClient : IAsyncDisposable
         }
 
         _logger.LogInformation(
-            "Parsed {Count} transactions from {ReportCount} Senate PTR reports",
-            transactions.Count,
-            reports.Count
+            "Parsed {Count} transactions from {ReportCount} new Senate PTR reports",
+            result.Transactions.Count,
+            newReports.Count
         );
-        return transactions;
+        return result;
     }
 
     private async Task<List<SenateReport>> SearchPtrReports(

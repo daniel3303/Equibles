@@ -40,7 +40,15 @@ public class CongressSyncServiceTests
             Substitute.For<ILogger<ErrorReporter>>()
         );
 
-        return new CongressionalTradeSyncService(scopeFactory, options, logger, errorReporter);
+        var filingLedger = Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null);
+
+        return new CongressionalTradeSyncService(
+            scopeFactory,
+            options,
+            logger,
+            errorReporter,
+            filingLedger
+        );
     }
 
     private static List<CongressionalTrade> InvokeBuildTrades(

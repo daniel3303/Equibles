@@ -20,22 +20,32 @@ public class CongressionalTradeSyncService
     private readonly ILogger<CongressionalTradeSyncService> _logger;
     private readonly WorkerOptions _workerOptions;
     private readonly ErrorReporter _errorReporter;
+    private readonly CongressionalFilingLedger _filingLedger;
 
     public CongressionalTradeSyncService(
         IServiceScopeFactory scopeFactory,
         IOptions<WorkerOptions> workerOptions,
         ILogger<CongressionalTradeSyncService> logger,
-        ErrorReporter errorReporter
+        ErrorReporter errorReporter,
+        CongressionalFilingLedger filingLedger
     )
     {
         _scopeFactory = scopeFactory;
         _workerOptions = workerOptions.Value;
         _logger = logger;
         _errorReporter = errorReporter;
+        _filingLedger = filingLedger;
     }
 
     // Congressional trade disclosures are available from 2012 (STOCK Act).
     private static readonly DateOnly EarliestAvailableDate = new(2012, 4, 1);
+
+    // A filing with a transaction whose ticker is not (yet) a tracked stock
+    // keeps re-fetching until the filing is this old, so a listing-lag gap
+    // (e.g. an IPO disclosed before the stock enters CommonStock) is
+    // back-matched on a later cycle. Older than this, the ticker is a
+    // genuinely untracked asset and the filing is retired.
+    private const int UnmatchedTickerRetryWindowDays = 30;
 
     public async Task SyncAll(CancellationToken ct)
     {
@@ -53,54 +63,110 @@ public class CongressionalTradeSyncService
             toDate
         );
 
-        var allTransactions = new List<DisclosureTransaction>();
+        var senateProcessedIds = await _filingLedger.GetProcessedSourceIds(
+            CongressionalFilingKind.SenatePeriodicTransactionReport,
+            ct
+        );
+        var houseProcessedIds = await _filingLedger.GetProcessedSourceIds(
+            CongressionalFilingKind.HousePeriodicTransactionReport,
+            ct
+        );
 
-        await FetchDisclosureTransactions(
-            allTransactions,
+        var senateResult = await FetchDisclosureTransactions(
             "Senate",
             "CongressTrades.SyncSenate",
             sp =>
                 sp.GetRequiredService<SenateDisclosureClient>()
-                    .GetRecentTransactions(fromDate, toDate, ct),
+                    .GetRecentTransactions(fromDate, toDate, senateProcessedIds, ct),
             ct
         );
-        await FetchDisclosureTransactions(
-            allTransactions,
+        var houseResult = await FetchDisclosureTransactions(
             "House",
             "CongressTrades.SyncHouse",
             sp =>
                 sp.GetRequiredService<HouseDisclosureClient>()
-                    .GetRecentTransactions(fromDate, toDate, ct),
+                    .GetRecentTransactions(fromDate, toDate, houseProcessedIds, ct),
             ct
         );
 
+        var allTransactions = senateResult.Transactions.Concat(houseResult.Transactions).ToList();
+
+        var outcome = TradePersistOutcome.Empty;
         if (allTransactions.Count == 0)
         {
             _logger.LogInformation("No congressional transactions found");
-            return;
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Fetched {Count} total congressional transactions, matching to tracked stocks",
+                allTransactions.Count
+            );
+
+            outcome = await ProcessTransactions(allTransactions, ct);
         }
 
-        _logger.LogInformation(
-            "Fetched {Count} total congressional transactions, matching to tracked stocks",
-            allTransactions.Count
+        // Only after the transactions are committed: a failed persist above
+        // throws before this point, so unrecorded filings re-fetch next cycle
+        // instead of being lost.
+        var unmatchedRetryCutoff = toDate.AddDays(-UnmatchedTickerRetryWindowDays);
+        await _filingLedger.RecordProcessed(
+            CongressionalFilingKind.SenatePeriodicTransactionReport,
+            FilterRecordable(senateResult.ProcessedFilings, outcome, unmatchedRetryCutoff),
+            ct
         );
-
-        await ProcessTransactions(allTransactions, ct);
+        await _filingLedger.RecordProcessed(
+            CongressionalFilingKind.HousePeriodicTransactionReport,
+            FilterRecordable(houseResult.ProcessedFilings, outcome, unmatchedRetryCutoff),
+            ct
+        );
     }
 
-    private async Task FetchDisclosureTransactions(
-        List<DisclosureTransaction> target,
+    // A filing is only retired once everything it disclosed is accounted for:
+    // rows that hit the member-not-found guard were parsed but never stored,
+    // so their filing must keep retrying; a filing with an unmatched ticker
+    // retries until it ages past the listing-lag window (see
+    // UnmatchedTickerRetryWindowDays).
+    internal static List<ProcessedFiling> FilterRecordable(
+        List<ProcessedFiling> filings,
+        TradePersistOutcome outcome,
+        DateOnly unmatchedRetryCutoff
+    ) =>
+        filings
+            .Where(f => !outcome.UnpersistedSourceIds.Contains(f.SourceId))
+            .Where(f =>
+                !outcome.UnmatchedTickerSourceIds.Contains(f.SourceId)
+                || f.FilingDate <= unmatchedRetryCutoff
+            )
+            .ToList();
+
+    /// <summary>
+    /// The persistence outcome of one sync cycle: filings named here had
+    /// transactions that were parsed but not stored, so they must not (yet)
+    /// be recorded as ingested.
+    /// </summary>
+    internal sealed record TradePersistOutcome(
+        IReadOnlySet<string> UnmatchedTickerSourceIds,
+        IReadOnlySet<string> UnpersistedSourceIds
+    )
+    {
+        public static readonly TradePersistOutcome Empty = new(
+            new HashSet<string>(),
+            new HashSet<string>()
+        );
+    }
+
+    private async Task<DisclosureFetchResult> FetchDisclosureTransactions(
         string sourceLabel,
         string errorContext,
-        Func<IServiceProvider, Task<List<DisclosureTransaction>>> fetch,
+        Func<IServiceProvider, Task<DisclosureFetchResult>> fetch,
         CancellationToken ct
     )
     {
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
-            var txns = await fetch(scope.ServiceProvider);
-            target.AddRange(txns);
+            return await fetch(scope.ServiceProvider);
         }
         catch (OperationCanceledException)
         {
@@ -110,10 +176,11 @@ public class CongressionalTradeSyncService
         {
             _logger.LogWarning(ex, "Failed to fetch {Source} disclosure data", sourceLabel);
             await _errorReporter.Report(ErrorSource.CongressScraper, errorContext, ex);
+            return new DisclosureFetchResult();
         }
     }
 
-    private async Task ProcessTransactions(
+    private async Task<TradePersistOutcome> ProcessTransactions(
         List<DisclosureTransaction> transactions,
         CancellationToken ct
     )
@@ -133,6 +200,17 @@ public class CongressionalTradeSyncService
             .AsNoTracking()
             .ToDictionaryAsync(s => s.Ticker, s => s, StringComparer.OrdinalIgnoreCase, ct);
 
+        // Tickered transactions whose stock is not tracked (yet): their
+        // filings stay retryable inside the listing-lag window.
+        var unmatchedTickerSourceIds = transactions
+            .Where(t =>
+                t.SourceId != null
+                && !string.IsNullOrEmpty(t.Ticker)
+                && !stocks.ContainsKey(t.Ticker)
+            )
+            .Select(t => t.SourceId)
+            .ToHashSet();
+
         var matched = transactions
             .Where(t => !string.IsNullOrEmpty(t.Ticker) && stocks.ContainsKey(t.Ticker))
             .ToList();
@@ -144,11 +222,24 @@ public class CongressionalTradeSyncService
         );
 
         if (matched.Count == 0)
-            return;
+            return new TradePersistOutcome(unmatchedTickerSourceIds, new HashSet<string>());
 
         var members = await UpsertCongressMembers(matched, dbContext, memberRepository, ct);
+
+        // Mirrors BuildTrades' member-not-found guard: those rows are parsed
+        // but never stored, so their filings must not be recorded as ingested.
+        var unpersistedSourceIds = matched
+            .Where(t =>
+                t.SourceId != null
+                && !members.ContainsKey(DisclosureParsingHelper.NormalizeMemberName(t.MemberName))
+            )
+            .Select(t => t.SourceId)
+            .ToHashSet();
+
         var trades = BuildTrades(matched, members, stocks);
         await PersistTrades(trades, dbContext, ct);
+
+        return new TradePersistOutcome(unmatchedTickerSourceIds, unpersistedSourceIds);
     }
 
     private async Task<Dictionary<string, CongressMember>> UpsertCongressMembers(

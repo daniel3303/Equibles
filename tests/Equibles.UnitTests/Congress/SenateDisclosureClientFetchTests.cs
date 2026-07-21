@@ -73,6 +73,7 @@ public class SenateDisclosureClientFetchTests
             .GetRecentTransactions(
                 new DateOnly(2024, 1, 1),
                 new DateOnly(2024, 1, 31),
+                new HashSet<string>(),
                 CancellationToken.None
             );
 
@@ -107,6 +108,7 @@ public class SenateDisclosureClientFetchTests
             .GetRecentTransactions(
                 new DateOnly(2024, 1, 1),
                 new DateOnly(2024, 1, 31),
+                new HashSet<string>(),
                 CancellationToken.None
             );
 
@@ -127,6 +129,7 @@ public class SenateDisclosureClientFetchTests
             .GetRecentTransactions(
                 new DateOnly(2024, 1, 1),
                 new DateOnly(2024, 1, 31),
+                new HashSet<string>(),
                 CancellationToken.None
             );
 
@@ -151,6 +154,7 @@ public class SenateDisclosureClientFetchTests
             .GetRecentTransactions(
                 new DateOnly(2024, 1, 1),
                 new DateOnly(2024, 1, 31),
+                new HashSet<string>(),
                 CancellationToken.None
             );
 
@@ -170,6 +174,7 @@ public class SenateDisclosureClientFetchTests
                 .GetRecentTransactions(
                     new DateOnly(2024, 1, 1),
                     new DateOnly(2024, 1, 31),
+                    new HashSet<string>(),
                     CancellationToken.None
                 );
 
@@ -206,6 +211,7 @@ public class SenateDisclosureClientFetchTests
                 .GetRecentTransactions(
                     new DateOnly(2024, 1, 1),
                     new DateOnly(2024, 1, 31),
+                    new HashSet<string>(),
                     CancellationToken.None
                 );
 
@@ -227,10 +233,13 @@ public class SenateDisclosureClientFetchTests
             .GetRecentTransactions(
                 new DateOnly(2024, 1, 1),
                 new DateOnly(2024, 1, 31),
+                new HashSet<string>(),
                 CancellationToken.None
             );
 
-        result.Should().BeEmpty("the only report failed to fetch, but the run completed");
+        result
+            .Transactions.Should()
+            .BeEmpty("the only report failed to fetch, but the run completed");
         session.FetchedUrls.Should().Contain(ReportUrl);
     }
 
@@ -249,6 +258,7 @@ public class SenateDisclosureClientFetchTests
                 .GetRecentTransactions(
                     new DateOnly(2024, 1, 1),
                     new DateOnly(2024, 1, 31),
+                    new HashSet<string>(),
                     CancellationToken.None
                 );
 

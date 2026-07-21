@@ -28,6 +28,7 @@ public class CongressionalAnnualDisclosureSyncService
     private readonly ILogger<CongressionalAnnualDisclosureSyncService> _logger;
     private readonly WorkerOptions _workerOptions;
     private readonly ErrorReporter _errorReporter;
+    private readonly CongressionalFilingLedger _filingLedger;
 
     // Electronic filing of congressional disclosures dates to the STOCK Act.
     private const int EarliestCoverageYear = 2012;
@@ -41,13 +42,15 @@ public class CongressionalAnnualDisclosureSyncService
         IServiceScopeFactory scopeFactory,
         IOptions<WorkerOptions> workerOptions,
         ILogger<CongressionalAnnualDisclosureSyncService> logger,
-        ErrorReporter errorReporter
+        ErrorReporter errorReporter,
+        CongressionalFilingLedger filingLedger
     )
     {
         _scopeFactory = scopeFactory;
         _workerOptions = workerOptions.Value;
         _logger = logger;
         _errorReporter = errorReporter;
+        _filingLedger = filingLedger;
     }
 
     public async Task SyncAll(CancellationToken ct)
@@ -64,18 +67,28 @@ public class CongressionalAnnualDisclosureSyncService
             currentYear
         );
 
-        var reports = new List<AnnualDisclosureReport>();
+        var houseProcessedIds = await _filingLedger.GetProcessedSourceIds(
+            CongressionalFilingKind.HouseAnnualReport,
+            ct
+        );
+        var senateProcessedIds = await _filingLedger.GetProcessedSourceIds(
+            CongressionalFilingKind.SenateAnnualReport,
+            ct
+        );
 
-        await FetchReports(
-            reports,
+        var houseResult = await FetchReports(
             "House",
             "CongressAnnual.SyncHouse",
             async sp =>
             {
                 var client = sp.GetRequiredService<HouseAnnualReportClient>();
-                var fetched = new List<AnnualDisclosureReport>();
+                var fetched = new AnnualReportFetchResult();
                 for (var year = fromYear; year <= currentYear; year++)
-                    fetched.AddRange(await client.GetAnnualReports(year, ct));
+                {
+                    var yearResult = await client.GetAnnualReports(year, houseProcessedIds, ct);
+                    fetched.Reports.AddRange(yearResult.Reports);
+                    fetched.ProcessedFilings.AddRange(yearResult.ProcessedFilings);
+                }
                 return fetched;
             },
             ct
@@ -84,8 +97,7 @@ public class CongressionalAnnualDisclosureSyncService
         // Senate reports are searched by submitted date; reports covering year
         // Y are filed from Y+1 onwards, and any late amendment of an older
         // year inside the window still updates that year.
-        await FetchReports(
-            reports,
+        var senateResult = await FetchReports(
             "Senate",
             "CongressAnnual.SyncSenate",
             sp =>
@@ -93,33 +105,51 @@ public class CongressionalAnnualDisclosureSyncService
                     .GetAnnualReports(
                         new DateOnly(fromYear + 1, 1, 1),
                         DateOnly.FromDateTime(DateTime.UtcNow),
+                        senateProcessedIds,
                         ct
                     ),
             ct
         );
 
-        if (reports.Count == 0)
-        {
-            _logger.LogInformation("No congressional annual disclosure reports found");
-            return;
-        }
+        var reports = houseResult.Reports.Concat(senateResult.Reports).ToList();
 
-        await ProcessReports(reports, ct);
+        IReadOnlySet<string> unpersistedReportIds = new HashSet<string>();
+        if (reports.Count == 0)
+            _logger.LogInformation("No congressional annual disclosure reports found");
+        else
+            unpersistedReportIds = await ProcessReports(reports, ct);
+
+        // Only after the reports are committed: a failed persist above throws
+        // before this point, so unrecorded filings re-fetch next cycle instead
+        // of being lost. Reports that were parsed but not stored (the
+        // member-not-found guard) stay unrecorded so they keep retrying.
+        await _filingLedger.RecordProcessed(
+            CongressionalFilingKind.HouseAnnualReport,
+            houseResult
+                .ProcessedFilings.Where(f => !unpersistedReportIds.Contains(f.SourceId))
+                .ToList(),
+            ct
+        );
+        await _filingLedger.RecordProcessed(
+            CongressionalFilingKind.SenateAnnualReport,
+            senateResult
+                .ProcessedFilings.Where(f => !unpersistedReportIds.Contains(f.SourceId))
+                .ToList(),
+            ct
+        );
     }
 
-    private async Task FetchReports(
-        List<AnnualDisclosureReport> target,
+    private async Task<AnnualReportFetchResult> FetchReports(
         string sourceLabel,
         string errorContext,
-        Func<IServiceProvider, Task<List<AnnualDisclosureReport>>> fetch,
+        Func<IServiceProvider, Task<AnnualReportFetchResult>> fetch,
         CancellationToken ct
     )
     {
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
-            var reports = await fetch(scope.ServiceProvider);
-            target.AddRange(reports);
+            return await fetch(scope.ServiceProvider);
         }
         catch (OperationCanceledException)
         {
@@ -129,10 +159,16 @@ public class CongressionalAnnualDisclosureSyncService
         {
             _logger.LogWarning(ex, "Failed to fetch {Source} annual disclosure data", sourceLabel);
             await _errorReporter.Report(ErrorSource.CongressScraper, errorContext, ex);
+            return new AnnualReportFetchResult();
         }
     }
 
-    private async Task ProcessReports(List<AnnualDisclosureReport> reports, CancellationToken ct)
+    // Returns the source report ids that were parsed but not stored (the
+    // member-not-found guard) so the caller leaves their filings unrecorded.
+    private async Task<IReadOnlySet<string>> ProcessReports(
+        List<AnnualDisclosureReport> reports,
+        CancellationToken ct
+    )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
@@ -143,6 +179,7 @@ public class CongressionalAnnualDisclosureSyncService
         var latest = SelectLatestReports(reports);
         var members = await UpsertCongressMembers(latest, dbContext, memberRepository, ct);
 
+        var unpersistedReportIds = new HashSet<string>();
         int added = 0,
             replaced = 0,
             unchanged = 0;
@@ -155,6 +192,8 @@ public class CongressionalAnnualDisclosureSyncService
             if (!members.TryGetValue(memberName, out var member))
             {
                 _logger.LogWarning("Congress member not found after upsert: {Name}", memberName);
+                if (report.ReportId != null)
+                    unpersistedReportIds.Add(report.ReportId);
                 continue;
             }
 
@@ -189,6 +228,8 @@ public class CongressionalAnnualDisclosureSyncService
             replaced,
             unchanged
         );
+
+        return unpersistedReportIds;
     }
 
     private async Task<Dictionary<string, CongressMember>> UpsertCongressMembers(

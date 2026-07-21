@@ -123,7 +123,7 @@ public class SenateAnnualReportClientTests
             .Be(
                 "https://efdsearch.senate.gov/search/view/annual/8c41ca4c-ccda-483e-99ed-d7f27f8a5c8f/"
             );
-        SenateAnnualReportClient
+        DisclosureParsingHelper
             .ExtractReportId(filing.ReportUrl)
             .Should()
             .Be("8c41ca4c-ccda-483e-99ed-d7f27f8a5c8f");
@@ -201,10 +201,11 @@ public class SenateAnnualReportClientTests
         var result = await sut.GetAnnualReports(
             new DateOnly(2025, 1, 1),
             new DateOnly(2025, 12, 31),
+            new HashSet<string>(),
             CancellationToken.None
         );
 
-        var report = result.Should().ContainSingle().Subject;
+        var report = result.Reports.Should().ContainSingle().Subject;
         report.MemberName.Should().Be("Jane Doe");
         report.Position.Should().Be(CongressPosition.Senator);
         report.Year.Should().Be(2024);

@@ -59,10 +59,11 @@ public class SenateAnnualReportClientRetryTests
         var result = await sut.GetAnnualReports(
             new DateOnly(2025, 1, 1),
             new DateOnly(2025, 12, 31),
+            new HashSet<string>(),
             CancellationToken.None
         );
 
-        result.Should().ContainSingle().Which.MemberName.Should().Be("Jane Doe");
+        result.Reports.Should().ContainSingle().Which.MemberName.Should().Be("Jane Doe");
         await session
             .Received(2)
             .Fetch(

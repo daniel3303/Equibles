@@ -49,10 +49,13 @@ public class HouseDisclosureClientGetRecentCatchTests
         ).GetRecentTransactions(
             new DateOnly(2024, 1, 1),
             new DateOnly(2024, 12, 31),
+            new HashSet<string>(),
             CancellationToken.None
         );
 
-        transactions.Should().BeEmpty("the corrupt index is caught and the run completes");
+        transactions
+            .Transactions.Should()
+            .BeEmpty("the corrupt index is caught and the run completes");
     }
 
     [Fact]
@@ -81,10 +84,11 @@ public class HouseDisclosureClientGetRecentCatchTests
         ).GetRecentTransactions(
             new DateOnly(2024, 1, 1),
             new DateOnly(2024, 12, 31),
+            new HashSet<string>(),
             CancellationToken.None
         );
 
-        transactions.Should().BeEmpty("the forbidden PTR fetch is caught per-filing");
+        transactions.Transactions.Should().BeEmpty("the forbidden PTR fetch is caught per-filing");
         handler.PtrRequested.Should().BeTrue("the inner loop must have attempted the PTR fetch");
     }
 

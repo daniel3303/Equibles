@@ -70,7 +70,8 @@ public class CongressionalTradeScraperWorkerDoWorkTests
             innerScope,
             Options.Create(new WorkerOptions()),
             Substitute.For<ILogger<CongressionalTradeSyncService>>(),
-            errorReporter
+            errorReporter,
+            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null)
         );
 
         var workerScope = ServiceScopeSubstitute.Create(

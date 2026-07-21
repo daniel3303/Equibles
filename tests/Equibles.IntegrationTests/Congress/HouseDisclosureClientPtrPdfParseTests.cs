@@ -37,12 +37,13 @@ public class HouseDisclosureClientPtrPdfParseTests
         var transactions = await sut.GetRecentTransactions(
             new DateOnly(2024, 1, 1),
             new DateOnly(2024, 12, 31),
+            new HashSet<string>(),
             CancellationToken.None
         );
 
         // The PDF is unparseable, so no transactions — but the year completed
         // (the corrupt-PDF catch swallowed it) and the PDF was actually fetched.
-        transactions.Should().BeEmpty();
+        transactions.Transactions.Should().BeEmpty();
         handler.PdfFetched.Should().BeTrue("the post-NotFound parse path must have run");
     }
 

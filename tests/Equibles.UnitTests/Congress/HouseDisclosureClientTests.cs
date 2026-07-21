@@ -1,7 +1,6 @@
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
-using System.Reflection;
 using Equibles.Congress.Data.Models;
 using Equibles.Congress.HostedService.Models;
 using Equibles.Congress.HostedService.Services;
@@ -196,10 +195,11 @@ public class HouseDisclosureClientTests
         var result = await sut.GetRecentTransactions(
             new DateOnly(2025, 1, 1),
             new DateOnly(2025, 12, 31),
+            new HashSet<string>(),
             CancellationToken.None
         );
 
-        result.Should().BeEmpty();
+        result.Transactions.Should().BeEmpty();
         handler
             .Requests.Should()
             .ContainSingle(
@@ -224,10 +224,11 @@ public class HouseDisclosureClientTests
         var result = await sut.GetRecentTransactions(
             new DateOnly(2025, 1, 1),
             new DateOnly(2025, 12, 31),
+            new HashSet<string>(),
             CancellationToken.None
         );
 
-        result.Should().BeEmpty();
+        result.Transactions.Should().BeEmpty();
         handler
             .Requests.Should()
             .ContainSingle(
@@ -237,34 +238,50 @@ public class HouseDisclosureClientTests
     }
 
     [Fact]
-    public void ParsePtrPdf_MalformedPdfBytes_ReturnsEmptyListWithoutThrowing()
+    public async Task GetRecentTransactions_MalformedPtrPdfBytes_SkipsFilingWithoutThrowing()
     {
-        // The per-filing ParsePtrPdf(byte[], HouseFiling) wrapper scopes a bad
-        // PDF (truncated CDN response, corrupt upload) to a single skipped
-        // filing instead of letting PdfDocument.Open's exception abort the
-        // remaining year of filings in GetRecentTransactions.
-        var parsePtrPdfMethod = typeof(HouseDisclosureClient).GetMethod(
-            "ParsePtrPdf",
-            BindingFlags.NonPublic | BindingFlags.Instance
-        );
-        var houseFilingType = typeof(HouseDisclosureClient).GetNestedType(
-            "HouseFiling",
-            BindingFlags.NonPublic
-        );
-        var filing = houseFilingType
-            .GetConstructors()[0]
-            .Invoke(["Jane Doe", "20251234", new DateOnly(2025, 2, 1), "CA01"]);
-        using var httpClient = new HttpClient();
-        var client = new HouseDisclosureClient(
+        // The per-filing catch in GetRecentTransactions scopes a bad PDF
+        // (truncated CDN response, corrupt upload) to a single skipped filing
+        // instead of letting PdfDocument.Open's exception abort the remaining
+        // year of filings.
+        const int year = 2025;
+        const string docId = "20251234";
+        var xml = $"""
+            <FinancialDisclosures>
+              <Member>
+                <Prefix>Hon.</Prefix>
+                <First>Jane</First>
+                <Last>Doe</Last>
+                <FilingType>P</FilingType>
+                <StateDst>CA01</StateDst>
+                <Year>{year}</Year>
+                <FilingDate>2/1/{year}</FilingDate>
+                <DocID>{docId}</DocID>
+              </Member>
+            </FinancialDisclosures>
+            """;
+        var zipBytes = BuildZipWithSingleEntry($"{year}FD.xml", xml);
+        var handler = new UrlRoutingHandler(zipBytes, pdfBytes: [0x00, 0x01, 0x02, 0x03, 0x04]);
+        using var httpClient = new HttpClient(handler);
+        var sut = new HouseDisclosureClient(
             httpClient,
             Substitute.For<ILogger<HouseDisclosureClient>>()
         );
-        var malformedBytes = new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04 };
 
-        var result =
-            (List<DisclosureTransaction>)parsePtrPdfMethod.Invoke(client, [malformedBytes, filing]);
+        var result = await sut.GetRecentTransactions(
+            new DateOnly(year, 1, 1),
+            new DateOnly(year, 12, 31),
+            new HashSet<string>(),
+            CancellationToken.None
+        );
 
-        result.Should().BeEmpty();
+        result.Transactions.Should().BeEmpty();
+        handler
+            .Requests.Should()
+            .Contain(
+                r => r.Contains($"ptr-pdfs/{year}/{docId}.pdf"),
+                "the corrupt PDF must have been fetched before its parse failure was scoped"
+            );
     }
 
     [Fact]
@@ -297,10 +314,11 @@ public class HouseDisclosureClientTests
         var result = await sut.GetRecentTransactions(
             new DateOnly(year, 1, 1),
             new DateOnly(year, 12, 31),
+            new HashSet<string>(),
             CancellationToken.None
         );
 
-        result.Should().BeEmpty();
+        result.Transactions.Should().BeEmpty();
         handler
             .Requests.Should()
             .HaveCount(
@@ -370,9 +388,14 @@ public class HouseDisclosureClientTests
     private sealed class UrlRoutingHandler : HttpMessageHandler
     {
         private readonly byte[] _zipBytes;
+        private readonly byte[] _pdfBytes;
         public List<string> Requests { get; } = new();
 
-        public UrlRoutingHandler(byte[] zipBytes) => _zipBytes = zipBytes;
+        public UrlRoutingHandler(byte[] zipBytes, byte[] pdfBytes = null)
+        {
+            _zipBytes = zipBytes;
+            _pdfBytes = pdfBytes;
+        }
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -393,7 +416,19 @@ public class HouseDisclosureClientTests
             }
 
             if (url.Contains("/ptr-pdfs/"))
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+            {
+                if (_pdfBytes == null)
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+
+                var pdfResponse = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(_pdfBytes),
+                };
+                pdfResponse.Content.Headers.ContentType = new MediaTypeHeaderValue(
+                    "application/pdf"
+                );
+                return Task.FromResult(pdfResponse);
+            }
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
         }

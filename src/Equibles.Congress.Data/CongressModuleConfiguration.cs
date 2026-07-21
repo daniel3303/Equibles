@@ -21,5 +21,6 @@ public class CongressModuleConfiguration : Equibles.Data.IFinancialModule
             .ValueGeneratedNever();
         builder.Entity<CongressionalAnnualDisclosure>();
         builder.Entity<CongressionalDisclosureLine>();
+        builder.Entity<CongressionalFilingRecord>();
     }
 }

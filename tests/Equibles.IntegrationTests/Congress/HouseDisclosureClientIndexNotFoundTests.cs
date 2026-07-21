@@ -28,10 +28,11 @@ public class HouseDisclosureClientIndexNotFoundTests
         var transactions = await sut.GetRecentTransactions(
             new DateOnly(2024, 1, 1),
             new DateOnly(2024, 12, 31),
+            new HashSet<string>(),
             CancellationToken.None
         );
 
-        transactions.Should().BeEmpty();
+        transactions.Transactions.Should().BeEmpty();
         handler.RequestCount.Should().Be(1);
         // PDF fetches must never start when the index ZIP itself is 404 — a regression
         // that fell through to DownloadAndParsePtrPdf with an empty filings list would

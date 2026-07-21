@@ -39,13 +39,14 @@ public partial class HouseDisclosureClient
         _logger = logger;
     }
 
-    public async Task<List<DisclosureTransaction>> GetRecentTransactions(
+    public async Task<DisclosureFetchResult> GetRecentTransactions(
         DateOnly fromDate,
         DateOnly toDate,
+        IReadOnlySet<string> processedSourceIds,
         CancellationToken ct
     )
     {
-        var transactions = new List<DisclosureTransaction>();
+        var result = new DisclosureFetchResult();
         var years = Enumerable.Range(fromDate.Year, toDate.Year - fromDate.Year + 1);
 
         foreach (var year in years)
@@ -54,19 +55,33 @@ public partial class HouseDisclosureClient
             try
             {
                 var filings = await DownloadAndParseFilingIndex(year, fromDate, toDate, ct);
+                var newFilings = filings.Where(f => !processedSourceIds.Contains(f.DocId)).ToList();
                 _logger.LogInformation(
-                    "Found {Count} House PTR filings for year {Year}",
+                    "Found {Count} House PTR filings for year {Year} ({New} not yet ingested)",
                     filings.Count,
-                    year
+                    year,
+                    newFilings.Count
                 );
 
-                foreach (var filing in filings)
+                foreach (var filing in newFilings)
                 {
                     try
                     {
                         ct.ThrowIfCancellationRequested();
                         var txns = await DownloadAndParsePtrPdf(filing, year, ct);
-                        transactions.AddRange(txns);
+
+                        // A missing PDF is not handled: leave the filing
+                        // unrecorded so it retries once the file appears.
+                        if (txns == null)
+                            continue;
+
+                        foreach (var txn in txns)
+                            txn.SourceId = filing.DocId;
+
+                        result.Transactions.AddRange(txns);
+                        result.ProcessedFilings.Add(
+                            new ProcessedFiling(filing.DocId, filing.FilingDate, txns.Count)
+                        );
                     }
                     catch (OperationCanceledException)
                     {
@@ -74,6 +89,7 @@ public partial class HouseDisclosureClient
                     }
                     catch (Exception ex)
                     {
+                        // Not recorded as processed — the filing retries next cycle.
                         _logger.LogWarning(
                             ex,
                             "Failed to parse House PTR PDF for {Member} (DocID {DocId})",
@@ -99,9 +115,9 @@ public partial class HouseDisclosureClient
 
         _logger.LogInformation(
             "Parsed {Count} transactions from House PTR filings",
-            transactions.Count
+            result.Transactions.Count
         );
-        return transactions;
+        return result;
     }
 
     private async Task<List<HouseFiling>> DownloadAndParseFilingIndex(
@@ -167,6 +183,10 @@ public partial class HouseDisclosureClient
             .ToList();
     }
 
+    // Returns null when the PDF is missing (404) so the caller can tell "not
+    // yet available" apart from "parsed with zero transactions"; a parse
+    // failure throws to the caller's per-filing handler. Both leave the filing
+    // unrecorded so it is retried on a later cycle.
     private async Task<List<DisclosureTransaction>> DownloadAndParsePtrPdf(
         HouseFiling filing,
         int year,
@@ -181,31 +201,13 @@ public partial class HouseDisclosureClient
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             _logger.LogDebug("House PTR PDF not found: {Url}", pdfUrl);
-            return [];
+            return null;
         }
 
         response.EnsureSuccessStatusCode();
 
         var pdfBytes = await response.Content.ReadAsByteArrayAsync(ct);
-        return ParsePtrPdf(pdfBytes, filing);
-    }
-
-    private List<DisclosureTransaction> ParsePtrPdf(byte[] pdfBytes, HouseFiling filing)
-    {
-        try
-        {
-            return ParsePtrPdf(pdfBytes, filing.MemberName, filing.FilingDate);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Failed to read House PTR PDF for {Member} (DocID {DocId})",
-                filing.MemberName,
-                filing.DocId
-            );
-            return [];
-        }
+        return ParsePtrPdf(pdfBytes, filing.MemberName, filing.FilingDate);
     }
 
     // PdfPig's page.Text concatenates glyphs with no line breaks, so the PTR
