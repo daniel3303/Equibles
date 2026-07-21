@@ -52,7 +52,12 @@ public class GovernmentContractsImportServiceWindowContinueTests
 
         var client = Substitute.For<IUsaSpendingClient>();
         client
-            .GetContractAwards(Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<decimal>())
+            .GetContractAwards(
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<decimal>(),
+                Arg.Any<CancellationToken>()
+            )
             .ThrowsAsync(new InvalidOperationException("window-specific parse failure"));
 
         // Empty GovernmentContract table -> DetermineStartDate falls back to MinSyncDate.
