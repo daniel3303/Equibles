@@ -38,6 +38,15 @@ public static class FinancialConceptAliases
         ["revenue"] =
         [
             G("Revenues"),
+            // Financial-sector headline top line ("Total net revenue"): banks and
+            // fintechs report interest income OUTSIDE the ASC 606 contract tags,
+            // so for a filer without Revenues the contract tag is only the FEE
+            // slice (SoFi FY2025: contract revenue $0.62B vs total net revenue
+            // $3.61B — the chart understated revenue ~6x). Placed after Revenues
+            // (filers tagging both keep their current series) and before the
+            // contract tags (fee revenue must never outrank the headline).
+            // Nonfinancial filers never tag it, so they are unaffected.
+            G("RevenuesNetOfInterestExpense"),
             G("RevenueFromContractWithCustomerExcludingAssessedTax"),
             // Some filers (REITs like ARE) tag their total-revenue line with the
             // assessed-tax-inclusive ASC 606 variant and never file the excluding
