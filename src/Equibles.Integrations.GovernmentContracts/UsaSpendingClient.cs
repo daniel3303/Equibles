@@ -26,9 +26,24 @@ public class UsaSpendingClient : IUsaSpendingClient
     // outlast the spell while a genuine outage still fails the window promptly.
     private const int MaxRetries = 6;
 
-    // The API returns at most 100 rows/page and refuses to paginate past the
-    // 10,000th record, so 100 pages is the hard ceiling for a single window.
+    // The API returns at most 100 rows/page.
     private const int PageSize = 100;
+
+    // Offset pagination degrades sharply with depth (measured against the live API:
+    // page 1 ≈ 1.5s, page 25 ≈ 41s, page 50 ≈ 55s, page 90 drops the connection
+    // mid-body — a deterministic "response ended prematurely", not a blip). Results
+    // are sorted by award amount descending, so instead of paging deep the client
+    // pages at most this many pages, then tightens the band's upper amount bound to
+    // the smallest amount fetched and restarts from page 1 — every request stays
+    // shallow. A fresh band costs one slow query (~45–60s while the server builds
+    // its filter cache) and then ~1–2s per page, well inside the request timeout.
+    private const int MaxPagesPerBand = 10;
+
+    // Hard per-band ceiling — the API refuses to paginate past the 10,000th record.
+    // The cursor only pages past MaxPagesPerBand while stuck on a run of awards tied
+    // at the exact same amount (the upper bound can't tighten), so reaching this
+    // means 10,000+ same-amount awards in the window; FetchWindow then bisects the
+    // date range so the tie run lands in smaller windows.
     private const int MaxPages = 100;
 
     // Federal procurement contract award types (excludes grants/loans/other assistance).
@@ -69,58 +84,175 @@ public class UsaSpendingClient : IUsaSpendingClient
     public async Task<List<UsaSpendingAwardRecord>> GetContractAwards(
         DateOnly startDate,
         DateOnly endDate,
-        decimal minimumAmount
+        decimal minimumAmount,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var results = new List<UsaSpendingAwardRecord>();
+        // Amount-band resets re-fetch awards tied at the boundary amount (the upper
+        // bound is inclusive), so duplicates are dropped here by the award's
+        // globally-unique id rather than surfacing to callers.
+        var seenIds = new HashSet<string>(StringComparer.Ordinal);
+        await FetchWindow(
+            startDate,
+            endDate,
+            minimumAmount,
+            initialUpperBound: null,
+            results,
+            seenIds,
+            cancellationToken
+        );
+        return results;
+    }
+
+    /// <summary>
+    /// Fetches every award in the window with amount in [<paramref name="minimumAmount"/>,
+    /// <paramref name="initialUpperBound"/>] using an amount-descending cursor: page at most
+    /// <see cref="MaxPagesPerBand"/> shallow pages, then restart from page 1 with the upper
+    /// bound tightened to the smallest amount fetched. Completeness holds by induction —
+    /// results sort by amount descending, so everything above the new bound is already
+    /// fetched, and the inclusive bound re-covers ties at the boundary (deduplicated by id).
+    /// The cursor only pages deeper while stalled on a same-amount tie run; a run too long
+    /// even for that (<see cref="MaxPages"/>) bisects the date range instead.
+    /// </summary>
+    private async Task FetchWindow(
+        DateOnly startDate,
+        DateOnly endDate,
+        decimal minimumAmount,
+        decimal? initialUpperBound,
+        List<UsaSpendingAwardRecord> results,
+        HashSet<string> seenIds,
+        CancellationToken cancellationToken
     )
     {
         var startStr = FormatDate(startDate);
         var endStr = FormatDate(endDate);
-        var results = new List<UsaSpendingAwardRecord>();
+        var upperBound = initialUpperBound;
 
-        for (var page = 1; page <= MaxPages; page++)
+        for (var page = 1; ; page++)
         {
-            var body = BuildRequestBody(startStr, endStr, minimumAmount, page);
-            var response = await PostQuery(body);
-            if (response.Results.Count > 0)
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var body = BuildRequestBody(startStr, endStr, minimumAmount, upperBound, page);
+            var response = await PostQuery(body, cancellationToken);
+
+            foreach (var record in response.Results)
             {
-                results.AddRange(response.Results);
+                if (record.GeneratedInternalId == null || seenIds.Add(record.GeneratedInternalId))
+                {
+                    results.Add(record);
+                }
             }
 
             if (response.PageMetadata is not { HasNext: true })
             {
-                return results;
+                return;
             }
 
-            if (page == MaxPages)
+            if (response.Results.Count == 0)
             {
+                // hasNext on an empty page is a server contradiction; stop rather
+                // than loop on it forever.
                 _logger.LogWarning(
-                    "USAspending window {Start}..{End} (>= ${Min}) exceeded {MaxPages} pages "
-                        + "({Count} awards fetched) and has more results — narrow the window or raise the floor",
+                    "USAspending window {Start}..{End} returned an empty page {Page} with hasNext=true; stopping",
                     startStr,
                     endStr,
+                    page
+                );
+                return;
+            }
+
+            // Sorted by amount descending, so the last row carries the smallest
+            // amount fetched so far — the cursor's next inclusive upper bound.
+            var floor = response.Results[^1].Amount;
+
+            if (
+                page >= MaxPagesPerBand
+                && floor.HasValue
+                && floor.Value < (upperBound ?? decimal.MaxValue)
+            )
+            {
+                upperBound = floor.Value;
+                page = 0; // restart the band shallow; the for-loop increments to 1
+                continue;
+            }
+
+            if (page >= MaxPages)
+            {
+                if (startDate < endDate)
+                {
+                    // 10,000+ awards tied at one amount (or amount-less rows) in this
+                    // window — the cursor can't advance, so split the dates and let each
+                    // half re-cover the tie run; overlap is deduplicated by award id.
+                    var mid = startDate.AddDays((endDate.DayNumber - startDate.DayNumber) / 2);
+                    _logger.LogInformation(
+                        "USAspending window {Start}..{End} has an unpageable tie run at <= {Upper}; "
+                            + "bisecting at {Mid}",
+                        startStr,
+                        endStr,
+                        upperBound,
+                        FormatDate(mid)
+                    );
+                    await FetchWindow(
+                        startDate,
+                        mid,
+                        minimumAmount,
+                        upperBound,
+                        results,
+                        seenIds,
+                        cancellationToken
+                    );
+                    await FetchWindow(
+                        mid.AddDays(1),
+                        endDate,
+                        minimumAmount,
+                        upperBound,
+                        results,
+                        seenIds,
+                        cancellationToken
+                    );
+                    return;
+                }
+
+                // A single day with 10,000+ awards at the exact same amount cannot be
+                // enumerated through this endpoint at all; log the truncation loudly.
+                _logger.LogWarning(
+                    "USAspending single-day window {Start} (>= ${Min}) still has results after "
+                        + "{MaxPages} pages tied at <= {Upper} ({Count} awards fetched so far); "
+                        + "remaining ties are unreachable through this endpoint",
+                    startStr,
                     minimumAmount,
                     MaxPages,
+                    upperBound,
                     results.Count
                 );
+                return;
             }
         }
-
-        return results;
     }
 
     private static object BuildRequestBody(
         string startDate,
         string endDate,
         decimal minimumAmount,
+        decimal? maximumAmount,
         int page
     )
     {
+        // Both amount bounds are INCLUSIVE (verified against the live API: the counts of
+        // [a,b] and [b,∞) overlap by exactly the count of [b,b]) — the amount cursor
+        // relies on that to re-cover awards tied at the boundary instead of losing them.
+        object[] awardAmounts = maximumAmount.HasValue
+            ? [new { lower_bound = minimumAmount, upper_bound = maximumAmount.Value }]
+            : [new { lower_bound = minimumAmount }];
+
         return new
         {
             filters = new
             {
                 award_type_codes = ContractAwardTypeCodes,
                 time_period = new[] { new { start_date = startDate, end_date = endDate } },
-                award_amounts = new[] { new { lower_bound = minimumAmount } },
+                award_amounts = awardAmounts,
             },
             fields = RequestFields,
             page,
@@ -131,16 +263,22 @@ public class UsaSpendingClient : IUsaSpendingClient
         };
     }
 
-    private async Task<UsaSpendingAwardResponse> PostQuery(object body)
+    private async Task<UsaSpendingAwardResponse> PostQuery(
+        object body,
+        CancellationToken cancellationToken
+    )
     {
         var json = JsonConvert.SerializeObject(body);
-        var content = await SendWithRetry(async () =>
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Post, SearchUrl);
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            request.Content = new StringContent(json, Encoding.UTF8, "application/json");
-            return await _httpClient.SendAsync(request);
-        });
+        var content = await SendWithRetry(
+            async () =>
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post, SearchUrl);
+                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+                return await _httpClient.SendAsync(request, cancellationToken);
+            },
+            cancellationToken
+        );
 
         var response =
             JsonConvert.DeserializeObject<UsaSpendingAwardResponse>(content)
@@ -151,11 +289,14 @@ public class UsaSpendingClient : IUsaSpendingClient
         return response;
     }
 
-    private async Task<string> SendWithRetry(Func<Task<HttpResponseMessage>> sendRequest)
+    private async Task<string> SendWithRetry(
+        Func<Task<HttpResponseMessage>> sendRequest,
+        CancellationToken cancellationToken
+    )
     {
         for (var attempt = 0; attempt <= MaxRetries; attempt++)
         {
-            await RateLimiter.WaitAsync();
+            await RateLimiter.WaitAsync(cancellationToken);
 
             HttpResponseMessage response;
             try
@@ -163,7 +304,10 @@ public class UsaSpendingClient : IUsaSpendingClient
                 response = await sendRequest();
             }
             catch (Exception ex)
-                when (ex is HttpRequestException or TaskCanceledException && attempt < MaxRetries)
+                when (ex is HttpRequestException or TaskCanceledException
+                    && attempt < MaxRetries
+                    && !cancellationToken.IsCancellationRequested
+                )
             {
                 // A transport-level failure — connection reset, DNS blip, TLS error or a request
                 // timeout — throws here and never reaches the status-code checks below. Without this
@@ -178,7 +322,7 @@ public class UsaSpendingClient : IUsaSpendingClient
                     attempt + 1,
                     MaxRetries
                 );
-                await Task.Delay(delay);
+                await Task.Delay(delay, cancellationToken);
                 continue;
             }
 
@@ -193,7 +337,7 @@ public class UsaSpendingClient : IUsaSpendingClient
                         attempt + 1,
                         MaxRetries
                     );
-                    await Task.Delay(delay);
+                    await Task.Delay(delay, cancellationToken);
                     continue;
                 }
 
@@ -207,12 +351,12 @@ public class UsaSpendingClient : IUsaSpendingClient
                         attempt + 1,
                         MaxRetries
                     );
-                    await Task.Delay(delay);
+                    await Task.Delay(delay, cancellationToken);
                     continue;
                 }
 
                 response.EnsureSuccessStatusCode();
-                return await response.Content.ReadAsStringAsync();
+                return await response.Content.ReadAsStringAsync(cancellationToken);
             }
         }
 
