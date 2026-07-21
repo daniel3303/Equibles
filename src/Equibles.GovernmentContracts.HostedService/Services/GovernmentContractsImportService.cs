@@ -105,26 +105,29 @@ public class GovernmentContractsImportService : IImporter
                     windowStart,
                     windowEnd
                 );
-                await _errorReporter.Report(
-                    ErrorSource.GovernmentContractsScraper,
-                    "GovernmentContractsImport.ImportWindow",
-                    ex,
-                    $"window: {windowStart}..{windowEnd}"
-                );
 
                 // A transport-level failure (the API is unreachable, even after the client's retries)
-                // is systemic: every remaining window would fail identically and record its own error,
-                // turning one outage into hundreds of duplicate rows. Stop the cycle after reporting
-                // once; the next run resumes from the same start date once the API is reachable again.
-                // Other (window-specific) failures fall through and the scan continues.
+                // is systemic: every remaining window would fail identically. Rethrow so the worker's
+                // consecutive-failure streak owns the reporting — it records ONE Error row per outage
+                // (once the streak reaches its threshold) and backs off, instead of this loop writing
+                // a fresh row every cycle for the same unreachable API. The next cycle resumes from
+                // the same start date. Window-specific failures are reported here and the scan
+                // continues to the remaining windows.
                 if (ex is HttpRequestException)
                 {
                     _logger.LogWarning(
                         "Government contracts import: aborting this cycle after a transport failure; "
                             + "remaining windows will be retried on the next run"
                     );
-                    break;
+                    throw;
                 }
+
+                await _errorReporter.Report(
+                    ErrorSource.GovernmentContractsScraper,
+                    "GovernmentContractsImport.ImportWindow",
+                    ex,
+                    $"window: {windowStart}..{windowEnd}"
+                );
             }
         }
 
@@ -144,7 +147,8 @@ public class GovernmentContractsImportService : IImporter
         var awards = await _client.GetContractAwards(
             windowStart,
             windowEnd,
-            _options.MinimumAwardAmount
+            _options.MinimumAwardAmount,
+            cancellationToken
         );
         if (awards.Count == 0)
             return 0;

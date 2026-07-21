@@ -30,10 +30,13 @@ public class GovernmentContractsImportServiceHttpAbortTests
         // Contract (from Import's window-loop comment): a transport-level failure —
         // HttpRequestException, the API unreachable even after the client's own retries —
         // is systemic, so every remaining window would fail identically. The cycle must
-        // STOP after reporting once rather than hammer the API once per window and record
-        // a duplicate error each time. With a multi-day scan split into one-day windows,
-        // the first window failing with HttpRequestException must therefore leave every
-        // later window un-fetched: the client is called exactly once, not once per window.
+        // STOP and RETHROW rather than hammer the API once per window: the worker's
+        // consecutive-failure streak owns reporting (one Error row per outage), so the
+        // service must not write its own row per cycle — that's exactly the flood that
+        // put 13 identical rows on the Errors page in one day. With a multi-day scan
+        // split into one-day windows, the first window failing with HttpRequestException
+        // must propagate and leave every later window un-fetched: the client is called
+        // exactly once, not once per window.
         var options = NewDbOptions();
         using (var seed = NewContext(options))
         {
@@ -53,7 +56,12 @@ public class GovernmentContractsImportServiceHttpAbortTests
 
         var client = Substitute.For<IUsaSpendingClient>();
         client
-            .GetContractAwards(Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<decimal>())
+            .GetContractAwards(
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<decimal>(),
+                Arg.Any<CancellationToken>()
+            )
             .ThrowsAsync(new HttpRequestException("USAspending unreachable"));
 
         // Empty GovernmentContract table -> DetermineStartDate falls back to MinSyncDate.
@@ -80,11 +88,19 @@ public class GovernmentContractsImportServiceHttpAbortTests
             new ErrorReporter(scopeFactory, NullLogger<ErrorReporter>.Instance)
         );
 
-        await service.Import(CancellationToken.None);
+        var act = () => service.Import(CancellationToken.None);
 
+        // The transport failure must propagate (the worker's streak reporting depends on
+        // seeing the throw) after exactly one client call — no later window is scanned.
+        await act.Should().ThrowAsync<HttpRequestException>();
         await client
             .Received(1)
-            .GetContractAwards(Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<decimal>());
+            .GetContractAwards(
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<decimal>(),
+                Arg.Any<CancellationToken>()
+            );
     }
 
     private static DbContextOptions<EquiblesFinancialDbContext> NewDbOptions() =>
