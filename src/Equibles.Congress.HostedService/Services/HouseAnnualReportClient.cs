@@ -57,9 +57,13 @@ public partial class HouseAnnualReportClient
         _logger = logger;
     }
 
-    public async Task<List<AnnualDisclosureReport>> GetAnnualReports(int year, CancellationToken ct)
+    public async Task<AnnualReportFetchResult> GetAnnualReports(
+        int year,
+        IReadOnlySet<string> processedSourceIds,
+        CancellationToken ct
+    )
     {
-        var reports = new List<AnnualDisclosureReport>();
+        var result = new AnnualReportFetchResult();
 
         List<AnnualFiling> filings;
         try
@@ -73,23 +77,33 @@ public partial class HouseAnnualReportClient
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to download House FD index for year {Year}", year);
-            return reports;
+            return result;
         }
 
+        var newFilings = filings.Where(f => !processedSourceIds.Contains(f.DocId)).ToList();
         _logger.LogInformation(
-            "Found {Count} House annual report filings for year {Year}",
+            "Found {Count} House annual report filings for year {Year} ({New} not yet ingested)",
             filings.Count,
-            year
+            year,
+            newFilings.Count
         );
 
-        foreach (var filing in filings)
+        foreach (var filing in newFilings)
         {
             ct.ThrowIfCancellationRequested();
             try
             {
-                var report = await DownloadAndParseAnnualPdf(filing, year, ct);
+                var (report, handled) = await DownloadAndParseAnnualPdf(filing, year, ct);
                 if (report != null)
-                    reports.Add(report);
+                    result.Reports.Add(report);
+                if (handled)
+                    result.ProcessedFilings.Add(
+                        new ProcessedFiling(
+                            filing.DocId,
+                            filing.FilingDate,
+                            report?.Lines.Count ?? 0
+                        )
+                    );
             }
             catch (OperationCanceledException)
             {
@@ -97,6 +111,7 @@ public partial class HouseAnnualReportClient
             }
             catch (Exception ex)
             {
+                // Not recorded as processed — the filing retries next cycle.
                 _logger.LogWarning(
                     ex,
                     "Failed to parse House annual report PDF for {Member} (DocID {DocId})",
@@ -107,12 +122,12 @@ public partial class HouseAnnualReportClient
         }
 
         _logger.LogInformation(
-            "Parsed {Parsed} electronic House annual reports out of {Total} filings for year {Year}",
-            reports.Count,
-            filings.Count,
+            "Parsed {Parsed} electronic House annual reports out of {Total} new filings for year {Year}",
+            result.Reports.Count,
+            newFilings.Count,
             year
         );
-        return reports;
+        return result;
     }
 
     private async Task<List<AnnualFiling>> DownloadAndParseFilingIndex(
@@ -177,7 +192,11 @@ public partial class HouseAnnualReportClient
             .ToList();
     }
 
-    private async Task<AnnualDisclosureReport> DownloadAndParseAnnualPdf(
+    // Handled=true marks the filing as fully ingested (parsed, or skipped by a
+    // deterministic policy: scanned paper filing, non-member report). A
+    // missing PDF or a parse failure returns Handled=false so the filing is
+    // retried on a later cycle.
+    private async Task<(AnnualDisclosureReport Report, bool Handled)> DownloadAndParseAnnualPdf(
         AnnualFiling filing,
         int year,
         CancellationToken ct
@@ -189,7 +208,7 @@ public partial class HouseAnnualReportClient
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             _logger.LogDebug("House annual report PDF not found: {Url}", pdfUrl);
-            return null;
+            return (null, false);
         }
 
         response.EnsureSuccessStatusCode();
@@ -209,7 +228,7 @@ public partial class HouseAnnualReportClient
                 filing.MemberName,
                 filing.DocId
             );
-            return null;
+            return (null, false);
         }
 
         if (content == null)
@@ -221,7 +240,7 @@ public partial class HouseAnnualReportClient
                 filing.DocId,
                 filing.MemberName
             );
-            return null;
+            return (null, true);
         }
 
         if (!IsMemberFilerStatus(content.FilerStatus))
@@ -235,20 +254,23 @@ public partial class HouseAnnualReportClient
                 filing.MemberName,
                 content.FilerStatus
             );
-            return null;
+            return (null, true);
         }
 
-        return new AnnualDisclosureReport
-        {
-            MemberName = filing.MemberName,
-            Position = CongressPosition.Representative,
-            StateDistrict = filing.StateDistrict,
-            Year = year,
-            FiledDate = filing.FilingDate,
-            ReportId = filing.DocId,
-            IsAmendment = filing.IsAmendment,
-            Lines = content.Lines,
-        };
+        return (
+            new AnnualDisclosureReport
+            {
+                MemberName = filing.MemberName,
+                Position = CongressPosition.Representative,
+                StateDistrict = filing.StateDistrict,
+                Year = year,
+                FiledDate = filing.FilingDate,
+                ReportId = filing.DocId,
+                IsAmendment = filing.IsAmendment,
+                Lines = content.Lines,
+            },
+            true
+        );
     }
 
     // Member and member-elect reports stay; anything else ("Congressional

@@ -273,6 +273,10 @@ public static partial class DisclosureParsingHelper
     public static string GetCell(List<string> cells, int index) =>
         index >= 0 && index < cells.Count ? cells[index] : null;
 
+    // The eFD report id is the GUID path segment of the report URL:
+    // /search/view/{ptr|annual}/{id}/.
+    public static string ExtractReportId(string reportUrl) => reportUrl.TrimEnd('/').Split('/')[^1];
+
     public static string CleanSentinel(string value) =>
         string.IsNullOrEmpty(value) || value == EmptySentinel ? null : value;
 

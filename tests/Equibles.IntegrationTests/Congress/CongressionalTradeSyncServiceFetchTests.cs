@@ -65,7 +65,8 @@ public class CongressionalTradeSyncServiceFetchTests
             new ErrorReporter(
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
-            )
+            ),
+            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null)
         );
 
         // Both fetch helpers run their success path; with no transactions the

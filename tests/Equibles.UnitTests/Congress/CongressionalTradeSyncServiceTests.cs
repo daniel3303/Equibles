@@ -42,12 +42,14 @@ public class CongressionalTradeSyncServiceTests
         var workerOptions = Options.Create(
             new WorkerOptions { MinSyncDate = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc) }
         );
+        var filingLedger = Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null);
 
         var sut = new CongressionalTradeSyncService(
             scopeFactory,
             workerOptions,
             logger,
-            errorReporter
+            errorReporter,
+            filingLedger
         );
 
         await sut.SyncAll(CancellationToken.None);
@@ -108,6 +110,7 @@ public class CongressionalTradeSyncServiceTests
             Substitute.For<ILogger<ErrorReporter>>()
         );
         var workerOptions = Options.Create(new WorkerOptions { MinSyncDate = null });
+        var filingLedger = Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null);
 
         var expectedFromUpper = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
         var expectedFromLower = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-91));
@@ -116,7 +119,8 @@ public class CongressionalTradeSyncServiceTests
             scopeFactory,
             workerOptions,
             logger,
-            errorReporter
+            errorReporter,
+            filingLedger
         );
 
         await sut.SyncAll(CancellationToken.None);

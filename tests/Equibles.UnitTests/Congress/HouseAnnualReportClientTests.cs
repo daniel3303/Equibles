@@ -257,9 +257,13 @@ public class HouseAnnualReportClientTests
             Substitute.For<ILogger<HouseAnnualReportClient>>()
         );
 
-        var result = await sut.GetAnnualReports(2024, CancellationToken.None);
+        var result = await sut.GetAnnualReports(
+            2024,
+            new HashSet<string>(),
+            CancellationToken.None
+        );
 
-        result.Should().BeEmpty();
+        result.Reports.Should().BeEmpty();
         handler
             .Requests.Should()
             .ContainSingle("a 404 FD ZIP must not cascade into per-filing PDF downloads");
@@ -288,9 +292,13 @@ public class HouseAnnualReportClientTests
             Substitute.For<ILogger<HouseAnnualReportClient>>()
         );
 
-        var result = await sut.GetAnnualReports(year, CancellationToken.None);
+        var result = await sut.GetAnnualReports(
+            year,
+            new HashSet<string>(),
+            CancellationToken.None
+        );
 
-        result.Should().BeEmpty("every annual PDF request 404s in this setup");
+        result.Reports.Should().BeEmpty("every annual PDF request 404s in this setup");
         var pdfRequests = handler.Requests.Where(r => r.EndsWith(".pdf")).ToList();
         pdfRequests
             .Should()
@@ -320,9 +328,13 @@ public class HouseAnnualReportClientTests
             Substitute.For<ILogger<HouseAnnualReportClient>>()
         );
 
-        var result = await sut.GetAnnualReports(year, CancellationToken.None);
+        var result = await sut.GetAnnualReports(
+            year,
+            new HashSet<string>(),
+            CancellationToken.None
+        );
 
-        var report = result.Should().ContainSingle().Subject;
+        var report = result.Reports.Should().ContainSingle().Subject;
         report.MemberName.Should().Be("Jane Q. Doe", "the honorific prefix is stripped");
         report.Position.Should().Be(CongressPosition.Representative);
         report.StateDistrict.Should().Be("NY14");
@@ -352,10 +364,14 @@ public class HouseAnnualReportClientTests
             Substitute.For<ILogger<HouseAnnualReportClient>>()
         );
 
-        var result = await sut.GetAnnualReports(year, CancellationToken.None);
+        var result = await sut.GetAnnualReports(
+            year,
+            new HashSet<string>(),
+            CancellationToken.None
+        );
 
         result
-            .Should()
+            .Reports.Should()
             .BeEmpty("an image-only PDF has no schedules and is not an electronic filing");
         handler.Requests.Should().HaveCount(2, "the ZIP and the single PDF");
     }

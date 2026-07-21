@@ -50,32 +50,45 @@ public partial class SenateAnnualReportClient
     /// the window. Originals and amendments both appear; the caller keeps the
     /// latest filed report per member-year.
     /// </summary>
-    public async Task<List<AnnualDisclosureReport>> GetAnnualReports(
+    public async Task<AnnualReportFetchResult> GetAnnualReports(
         DateOnly submittedFrom,
         DateOnly submittedTo,
+        IReadOnlySet<string> processedSourceIds,
         CancellationToken ct
     )
     {
         await _session.EnsureAuthenticated(ct);
 
         var filings = await SearchAnnualReports(submittedFrom, submittedTo, ct);
+        var newFilings = filings
+            .Where(f => !processedSourceIds.Contains(ExtractReportId(f.ReportUrl)))
+            .ToList();
         _logger.LogInformation(
-            "Found {Count} Senate annual report filings submitted between {From} and {To}",
+            "Found {Count} Senate annual report filings submitted between {From} and {To} ({New} not yet ingested)",
             filings.Count,
             submittedFrom,
-            submittedTo
+            submittedTo,
+            newFilings.Count
         );
 
-        var reports = new List<AnnualDisclosureReport>();
+        var result = new AnnualReportFetchResult();
 
-        foreach (var filing in filings)
+        foreach (var filing in newFilings)
         {
             ct.ThrowIfCancellationRequested();
             try
             {
                 var report = await FetchAndParseReport(filing, ct);
-                if (report != null)
-                    reports.Add(report);
+
+                // A null report is an unrecognized page layout: leave the
+                // filing unrecorded so it retries once the parser handles it.
+                if (report == null)
+                    continue;
+
+                result.Reports.Add(report);
+                result.ProcessedFilings.Add(
+                    new ProcessedFiling(report.ReportId, filing.DateSubmitted, report.Lines.Count)
+                );
             }
             catch (OperationCanceledException)
             {
@@ -83,6 +96,7 @@ public partial class SenateAnnualReportClient
             }
             catch (Exception ex)
             {
+                // Not recorded as processed — the filing retries next cycle.
                 _logger.LogWarning(
                     ex,
                     "Failed to parse Senate annual report for {Member} at {Url}",
@@ -93,11 +107,11 @@ public partial class SenateAnnualReportClient
         }
 
         _logger.LogInformation(
-            "Parsed {Parsed} electronic Senate annual reports out of {Total} filings",
-            reports.Count,
-            filings.Count
+            "Parsed {Parsed} electronic Senate annual reports out of {Total} new filings",
+            result.Reports.Count,
+            newFilings.Count
         );
-        return reports;
+        return result;
     }
 
     private async Task<List<SenateAnnualFiling>> SearchAnnualReports(
@@ -237,10 +251,6 @@ public partial class SenateAnnualReportClient
             Lines = lines,
         };
     }
-
-    // The eFD report id is the GUID path segment: /search/view/annual/{id}/.
-    internal static string ExtractReportId(string reportUrl) =>
-        reportUrl.TrimEnd('/').Split('/')[^1];
 
     /// <summary>
     /// Parses the Part 3 (assets) and Part 7 (liabilities) tables out of an

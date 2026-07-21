@@ -23,7 +23,8 @@ public class CongressionalTradeSyncServiceBuildTradesFutureDateTests
             Substitute.For<ErrorReporter>(
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
-            )
+            ),
+            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null)
         );
 
     private static List<CongressionalTrade> InvokeBuildTrades(

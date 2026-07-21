@@ -41,6 +41,7 @@ public class SenateAnnualReportClientSearchDateCultureTests
             await sut.GetAnnualReports(
                 new DateOnly(2025, 1, 1),
                 new DateOnly(2025, 12, 31),
+                new HashSet<string>(),
                 CancellationToken.None
             );
 

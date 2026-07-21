@@ -42,13 +42,14 @@ public class HouseDisclosureClientIndexParsedTests
         var transactions = await sut.GetRecentTransactions(
             new DateOnly(2024, 1, 1),
             new DateOnly(2024, 12, 31),
+            new HashSet<string>(),
             CancellationToken.None
         );
 
         // The PTR PDF 404s, so no transactions are produced — but the index
         // ZIP must have been read and the PTR filing's PDF must have been
         // requested (proving the parse + per-filing loop ran).
-        transactions.Should().BeEmpty();
+        transactions.Transactions.Should().BeEmpty();
         handler.IndexRequested.Should().BeTrue("the {year}FD.zip index must be fetched");
         handler
             .PdfRequestedDocId.Should()

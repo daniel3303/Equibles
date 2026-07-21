@@ -4,6 +4,11 @@ namespace Equibles.Congress.HostedService.Models;
 
 public class DisclosureTransaction
 {
+    // The filing this transaction came from (House DocID / Senate report
+    // GUID) — lets the sync tie persistence outcomes back to the filing when
+    // deciding whether to mark it as ingested.
+    public string SourceId { get; set; }
+
     public required string MemberName { get; init; }
     public CongressPosition Position { get; init; }
     public string Ticker { get; init; }
