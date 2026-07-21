@@ -325,6 +325,19 @@ public class UsaSpendingClient : IUsaSpendingClient
                 await Task.Delay(delay, cancellationToken);
                 continue;
             }
+            catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                // Only reachable once the retry filter above stops matching, i.e. on the
+                // final attempt: an HttpClient timeout (not our token) surfaces as
+                // TaskCanceledException, which the import loop and the worker's report
+                // gate both treat as shutdown — a persistent-timeout outage would back
+                // off silently forever and never reach the Errors page. Map it to the
+                // transport failure it actually is.
+                throw new HttpRequestException(
+                    "USAspending request timed out after exhausting retries",
+                    ex
+                );
+            }
 
             using (response)
             {
