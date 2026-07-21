@@ -163,16 +163,24 @@ public class UsaSpendingClient : IUsaSpendingClient
             }
 
             // Sorted by amount descending, so the last row carries the smallest
-            // amount fetched so far — the cursor's next inclusive upper bound.
+            // amount fetched so far. The API's award_amounts validator only accepts
+            // whole-dollar values — any fractional bound is a 422 ("'x.51' is not a
+            // valid type (dictionary)") — so the cursor's next inclusive upper bound
+            // is the floor rounded UP to a whole dollar: everything between the floor
+            // and its ceiling is re-covered by the next band and deduplicated, so
+            // nothing is lost. The reset requires the CEILED value to strictly
+            // decrease — a run of awards within the same dollar rides the tie-run
+            // continuation below instead of looping on an unchanged bound.
             var floor = response.Results[^1].Amount;
+            var nextUpperBound = floor.HasValue ? decimal.Ceiling(floor.Value) : (decimal?)null;
 
             if (
                 page >= MaxPagesPerBand
-                && floor.HasValue
-                && floor.Value < (upperBound ?? decimal.MaxValue)
+                && nextUpperBound.HasValue
+                && nextUpperBound.Value < (upperBound ?? decimal.MaxValue)
             )
             {
-                upperBound = floor.Value;
+                upperBound = nextUpperBound.Value;
                 page = 0; // restart the band shallow; the for-loop increments to 1
                 continue;
             }
