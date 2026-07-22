@@ -2,11 +2,13 @@ using System.Globalization;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.BusinessLogic.Search;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Mcp.Tools;
 using Equibles.Sec.Repositories;
+using NSubstitute;
 using Xunit;
 using File = Equibles.Media.Data.Models.File;
 
@@ -34,6 +36,7 @@ public class RagSearchToolsListCompanyDocumentsCultureInvarianceTests : ParadeDb
             secDocumentService,
             new CommonStockRepository(DbContext),
             new DocumentRepository(DbContext),
+            Substitute.For<IFileManager>(),
             ErrorManager,
             NullLogger<RagSearchTools>()
         );

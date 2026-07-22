@@ -49,8 +49,8 @@ public class DocumentTextToolsFormatLineTests
     [Fact]
     public void FormatLine_SmallLineNumber_RightAlignsToWidthSixWithBoxSeparator()
     {
-        var method = typeof(DocumentTextTools).GetMethod(
-            "FormatLine",
+        var method = typeof(DocumentTextFormat).GetMethod(
+            "Line",
             BindingFlags.NonPublic | BindingFlags.Static
         );
 

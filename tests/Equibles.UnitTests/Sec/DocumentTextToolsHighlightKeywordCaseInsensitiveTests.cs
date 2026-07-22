@@ -19,7 +19,7 @@ public class DocumentTextToolsHighlightKeywordCaseInsensitiveTests
         // markers go around the SOURCE substring, not the search query.
         // Existing pins cover no-match and the empty-keyword DoS guard; this
         // closes the case-insensitivity contract.
-        var method = typeof(DocumentTextTools).GetMethod(
+        var method = typeof(DocumentKeywordScan).GetMethod(
             "HighlightKeyword",
             BindingFlags.NonPublic | BindingFlags.Static
         );

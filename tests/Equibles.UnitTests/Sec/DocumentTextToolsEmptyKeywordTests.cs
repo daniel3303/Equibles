@@ -5,10 +5,11 @@ namespace Equibles.UnitTests.Sec;
 
 public class DocumentTextToolsEmptyKeywordTests
 {
-    private static readonly MethodInfo HighlightKeywordMethod = typeof(DocumentTextTools).GetMethod(
-        "HighlightKeyword",
-        BindingFlags.NonPublic | BindingFlags.Static
-    );
+    private static readonly MethodInfo HighlightKeywordMethod =
+        typeof(DocumentKeywordScan).GetMethod(
+            "HighlightKeyword",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
     // Contract: HighlightKeyword wraps every occurrence of `keyword` in a line.
     // An empty keyword has no meaningful occurrence, so the only safe behaviour

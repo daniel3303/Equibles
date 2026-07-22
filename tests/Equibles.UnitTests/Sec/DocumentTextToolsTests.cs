@@ -11,10 +11,11 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class DocumentTextToolsTests
 {
-    private static readonly MethodInfo HighlightKeywordMethod = typeof(DocumentTextTools).GetMethod(
-        "HighlightKeyword",
-        BindingFlags.NonPublic | BindingFlags.Static
-    );
+    private static readonly MethodInfo HighlightKeywordMethod =
+        typeof(DocumentKeywordScan).GetMethod(
+            "HighlightKeyword",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
     [Fact]
     public void HighlightKeyword_KeywordOccursWithDifferentCasing_HighlightsAllOccurrencesPreservingOriginalCase()

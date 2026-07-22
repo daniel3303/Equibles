@@ -18,7 +18,7 @@ public class DocumentTextToolsHighlightKeywordMultiMatchTests
         // ticker AAPL appears multiple times in one risk-factor paragraph
         // would show only the first as bolded, misleading the LLM into
         // thinking the other occurrences are not the same entity).
-        var method = typeof(DocumentTextTools).GetMethod(
+        var method = typeof(DocumentKeywordScan).GetMethod(
             "HighlightKeyword",
             BindingFlags.NonPublic | BindingFlags.Static
         );

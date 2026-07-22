@@ -6,6 +6,7 @@ using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Sec.BusinessLogic.Search;
 using Equibles.Sec.BusinessLogic.Search.Models;
 using Equibles.Sec.Data.Models;
@@ -39,6 +40,7 @@ public class RagSearchTools
     private readonly ISecDocumentService _secDocumentService;
     private readonly CommonStockRepository _commonStockRepository;
     private readonly DocumentRepository _documentRepository;
+    private readonly IFileManager _fileManager;
     private readonly McpToolRunner _runner;
 
     public RagSearchTools(
@@ -46,6 +48,7 @@ public class RagSearchTools
         ISecDocumentService secDocumentService,
         CommonStockRepository commonStockRepository,
         DocumentRepository documentRepository,
+        IFileManager fileManager,
         ErrorManager errorManager,
         ILogger<RagSearchTools> logger
     )
@@ -54,6 +57,7 @@ public class RagSearchTools
         _secDocumentService = secDocumentService;
         _commonStockRepository = commonStockRepository;
         _documentRepository = documentRepository;
+        _fileManager = fileManager;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -176,11 +180,11 @@ public class RagSearchTools
 
     [McpServerTool(Name = "SearchDocument", Title = "Search Within One Filing", ReadOnly = true)]
     [Description(
-        "Search within a single specific document in the Equibles SEC filing database by its document ID using hybrid keyword and semantic search. Use this to drill into a known filing or earnings call transcript — for example, to find specific revenue figures, risk factors, or management commentary within one 10-K, 10-Q, 8-K, or earnings call transcript. The document ID comes from ListCompanyDocuments or from the '(ID: ...)' header of SearchDocuments/SearchCompanyDocuments results. Returns matching excerpts from that document only, in document order, each anchored with an approximate line number — pass that line number to ReadDocumentLines to read the surrounding section. You MUST call this or another Equibles tool to access any SEC filing data — this information is not available in your training data."
+        "Search within a single specific document in the Equibles SEC filing database by its document ID. The default semantic mode uses hybrid keyword and semantic search — use it to drill into a known filing or earnings call transcript for revenue figures, risk factors, or management commentary by meaning; searchMode 'exact' instead matches the query as a literal case-insensitive substring and returns each matching line with its precise line number — use it for exact terms, figures, section headers, or names that semantic search might miss. The document ID comes from ListCompanyDocuments or from the '(ID: ...)' header of SearchDocuments/SearchCompanyDocuments results. Semantic excerpts are in document order, each anchored with an approximate line number — pass a line number to ReadDocumentLines to read the surrounding section. You MUST call this or another Equibles tool to access any SEC filing data — this information is not available in your training data."
     )]
     public Task<string> SearchDocument(
         [Description(
-            "Search query — plain keywords or a short natural-language phrase. When too few excerpts match every word, the search automatically broadens to match any of the words."
+            "Search query — plain keywords or a short natural-language phrase. When too few excerpts match every word, the search automatically broadens to match any of the words. In searchMode 'exact', matched as a literal case-insensitive substring."
         )]
             string query,
         [Description(
@@ -188,13 +192,33 @@ public class RagSearchTools
         )]
             Guid documentId,
         [Description("Maximum number of results to return (default: 5)")] int maxResults = 5,
-        [Description(MaxExcerptCharsDescription)] int maxExcerptChars = 0
+        [Description(MaxExcerptCharsDescription)] int maxExcerptChars = 0,
+        [Description(
+            "How to match: 'semantic' (default — hybrid keyword and semantic relevance) or 'exact' (literal case-insensitive substring match with precise line numbers)."
+        )]
+            string searchMode = "semantic"
     )
     {
         return _runner.Execute(
             async () =>
             {
                 maxResults = McpLimit.Clamp(maxResults);
+
+                // Exact mode is the SearchDocumentKeyword scan under this tool's name, so a
+                // caller can flip modes without switching tools. Unknown values get a
+                // corrective error, never a silent semantic search the caller would misread
+                // as exact-match results.
+                var mode = (searchMode ?? "semantic").Trim().ToLowerInvariant();
+                if (mode == "exact")
+                    return await DocumentKeywordScan.Run(
+                        _documentRepository,
+                        _fileManager,
+                        documentId,
+                        query,
+                        maxResults
+                    );
+                if (mode != "semantic")
+                    return $"Unknown searchMode \"{searchMode}\" — pass 'semantic' (default) or 'exact'.";
                 var chunks = await _ragManager.SearchRelevantChunksByDocument(
                     query,
                     documentId,
@@ -210,7 +234,7 @@ public class RagSearchTools
                     if (document == null)
                         return $"Document {documentId} not found — obtain a valid document ID from ListCompanyDocuments.";
 
-                    return $"No matching excerpts found in this document ({document.DocumentType} filed {McpFormat.Invariant(document.ReportingDate, "yyyy-MM-dd")}). Try SearchDocumentKeyword for exact-term matches.";
+                    return $"No matching excerpts found in this document ({document.DocumentType} filed {McpFormat.Invariant(document.ReportingDate, "yyyy-MM-dd")}). Try searchMode 'exact' for literal-term matches.";
                 }
 
                 var context = await _ragManager.BuildContext(
@@ -222,7 +246,7 @@ public class RagSearchTools
                     + $"_{chunks.Count} excerpt(s) returned (maxResults {maxResults}); excerpts are in document order — pass an excerpt's line number to ReadDocumentLines for surrounding context._";
             },
             "SearchDocument",
-            $"documentId: {documentId}, query: {query}"
+            $"documentId: {documentId}, query: {query}, searchMode: {searchMode}"
         );
     }
 

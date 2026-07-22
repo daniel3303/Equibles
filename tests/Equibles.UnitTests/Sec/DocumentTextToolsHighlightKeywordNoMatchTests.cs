@@ -51,7 +51,7 @@ public class DocumentTextToolsHighlightKeywordNoMatchTests
     [Fact]
     public void HighlightKeyword_KeywordDoesNotOccurInLine_ReturnsLineUnchanged()
     {
-        var method = typeof(DocumentTextTools).GetMethod(
+        var method = typeof(DocumentKeywordScan).GetMethod(
             "HighlightKeyword",
             BindingFlags.NonPublic | BindingFlags.Static
         );

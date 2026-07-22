@@ -2,6 +2,7 @@ using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.BusinessLogic.Search;
 using Equibles.Sec.Data.Models;
@@ -9,6 +10,7 @@ using Equibles.Sec.Data.Models.Chunks;
 using Equibles.Sec.Mcp.Tools;
 using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
 using Xunit;
 using File = Equibles.Media.Data.Models.File;
 
@@ -43,11 +45,16 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
             new DocumentRepository(DbContext),
             NullLogger<SecDocumentService>()
         );
+        // Exact mode reads the document text through IFileManager; serve the seeded
+        // FileContent bytes so searchMode "exact" scans the same content the DB holds.
+        var fileManager = Substitute.For<IFileManager>();
+        fileManager.GetContent(Arg.Any<File>()).Returns(ci => ((File)ci[0]).FileContent.Bytes);
         return new RagSearchTools(
             ragManager,
             secDocumentService,
             new CommonStockRepository(DbContext),
             new DocumentRepository(DbContext),
+            fileManager,
             ErrorManager,
             NullLogger<RagSearchTools>()
         );
@@ -399,6 +406,60 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
         var result = await Sut().SearchDocument("data center revenue growth drivers", document.Id);
 
         result.Should().Contain("Data Center computing grew");
+    }
+
+    [Fact]
+    public async Task SearchDocument_ExactMode_ReturnsLinePreciseKeywordMatches()
+    {
+        // Exact mode must run the SearchDocumentKeyword scan over the document TEXT (via
+        // IFileManager), not the chunk index — precise line numbers, literal substring.
+        var (_, document, _) = await SeedDocumentWithChunks(
+            chunkContents: new[] { "irrelevant chunk" }
+        );
+        document.Content.FileContent.Bytes = Encoding.UTF8.GetBytes(
+            "First line of the filing.\nTotal revenue was $6.62 billion.\nClosing remarks."
+        );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().SearchDocument("Total revenue", document.Id, searchMode: "exact");
+
+        result.Should().Contain("Keyword search for \"Total revenue\"");
+        result.Should().Contain("1 matching line(s)");
+        // The scan's line format: width-6 right-aligned number + box-drawing bar.
+        result.Should().Contain("     2 │ **Total revenue** was $6.62 billion.");
+    }
+
+    [Fact]
+    public async Task SearchDocument_ExactModeNoMatches_ReturnsKeywordNoMatchMessage()
+    {
+        var (_, document, _) = await SeedDocumentWithChunks(
+            chunkContents: new[] { "Consumer electronics revenue." }
+        );
+        document.Content.FileContent.Bytes = Encoding.UTF8.GetBytes("Nothing relevant here.");
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .SearchDocument("Digital Media ARR", document.Id, searchMode: "exact");
+
+        // The exact-mode empty outcome is the keyword scan's message, not the semantic
+        // "no matching excerpts" one — the caller can tell which mode actually ran.
+        result.Should().StartWith("No matches found for \"Digital Media ARR\"");
+    }
+
+    [Fact]
+    public async Task SearchDocument_UnknownSearchMode_ReturnsCorrectiveError()
+    {
+        var (_, document, _) = await SeedDocumentWithChunks(
+            chunkContents: new[] { "Some content." }
+        );
+
+        var result = await Sut().SearchDocument("anything", document.Id, searchMode: "fuzzy");
+
+        // An unknown mode must never silently fall back to semantic search — the caller
+        // would misread relevance-ranked excerpts as exact-match results.
+        result
+            .Should()
+            .Be("Unknown searchMode \"fuzzy\" — pass 'semantic' (default) or 'exact'.");
     }
 
     // ── ListCompanyDocuments ────────────────────────────────────────────
