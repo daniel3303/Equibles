@@ -25,8 +25,8 @@ public class DocumentTextToolsFormatDocumentHeaderCalendarTests
             ReportingDate = new DateOnly(2026, 5, 27),
         };
 
-        var method = typeof(DocumentTextTools).GetMethod(
-            "FormatDocumentHeader",
+        var method = typeof(DocumentTextFormat).GetMethod(
+            "Header",
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
