@@ -103,7 +103,11 @@ public class RagSearchTools
                     ToDateOnly(startDate),
                     ToDateOnly(endDate),
                     ParseTickers(excludeTickers),
-                    Math.Max(maxResultsPerCompany, 0)
+                    Math.Max(maxResultsPerCompany, 0),
+                    // BM25 ANDs every query token, so one non-matching word in a wordy
+                    // natural-language query hides fully indexed filings; top up with
+                    // any-token matches (conjunctive hits keep their rank).
+                    broadenSparseResults: true
                 );
                 var context = await _ragManager.BuildContext(
                     chunks,
@@ -164,7 +168,9 @@ public class RagSearchTools
                     maxResults,
                     parsedTypes,
                     ToDateOnly(startDate),
-                    ToDateOnly(endDate)
+                    ToDateOnly(endDate),
+                    // Same recall top-up as SearchDocuments — see the note there.
+                    broadenSparseResults: true
                 );
                 var context = await _ragManager.BuildContext(
                     chunks,

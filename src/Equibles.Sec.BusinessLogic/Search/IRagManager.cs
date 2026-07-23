@@ -12,7 +12,8 @@ public interface IRagManager
         DateOnly? startDate = null,
         DateOnly? endDate = null,
         IReadOnlyCollection<string> excludeTickers = null,
-        int maxResultsPerCompany = 0
+        int maxResultsPerCompany = 0,
+        bool broadenSparseResults = false
     );
     public Task<List<Chunk>> SearchRelevantChunksByCompany(
         string query,
@@ -20,7 +21,8 @@ public interface IRagManager
         int maxResults = 5,
         IReadOnlyCollection<DocumentType> documentTypes = null,
         DateOnly? startDate = null,
-        DateOnly? endDate = null
+        DateOnly? endDate = null,
+        bool broadenSparseResults = false
     );
     public Task<List<Chunk>> SearchRelevantChunksByDocumentType(
         string query,
