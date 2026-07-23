@@ -15,6 +15,9 @@ public enum VectorSource
     /// surface a chunk BM25 never retrieved). Fast — one query embed plus an indexed by-id vector
     /// lookup, no ANN index — and scales with backfill coverage: pooled chunks without a vector yet
     /// just keep their BM25 rank. This is the production form of the bake-off's validated re-rank.
+    /// Exception: a DOCUMENT-scoped search always uses the exhaustive in-document vector ranking
+    /// instead — one document's chunks are a bounded set served by btree indexes, no ANN index
+    /// needed — so a purely semantic query can find passages BM25 missed within that document.
     /// </summary>
     Pool,
 

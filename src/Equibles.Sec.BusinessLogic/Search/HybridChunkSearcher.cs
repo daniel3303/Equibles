@@ -70,6 +70,16 @@ public class HybridChunkSearcher
             _options.Enabled
             && _options.VectorSource != VectorSource.Off
             && _embeddingClient.IsEnabled;
+
+        // The corpus vector arm ranks stored vectors directly, so it can surface chunks BM25
+        // never retrieved — but corpus-WIDE it needs an ANN index to stay inside the query
+        // budget, so it only runs when configured (VectorSource.Table). A DOCUMENT-scoped
+        // search is the exception: one document's chunks are a bounded set served by the
+        // existing btree indexes, so the exhaustive in-document ranking is always safe — and
+        // it is what makes a purely semantic question (zero token overlap with the filing's
+        // wording) findable at all.
+        var corpusArmSafe =
+            semanticActive && (_options.VectorSource == VectorSource.Table || documentId.HasValue);
         var bm25Limit = maxResults;
         if (semanticActive)
             bm25Limit = Math.Max(bm25Limit, _options.CandidatePoolSize);
@@ -111,7 +121,10 @@ public class HybridChunkSearcher
             bm25 = bm25.Concat(disjunctive.Where(chunk => !seen.Contains(chunk.Id))).ToList();
         }
 
-        if (!semanticActive || bm25.Count == 0)
+        // With only the pool re-rank available, an empty BM25 pool leaves the semantic arm
+        // nothing to work on; with the corpus arm safe (Table mode, or any document-scoped
+        // search) the vector ranking can carry the result alone.
+        if (!semanticActive || (bm25.Count == 0 && !corpusArmSafe))
             return ApplyPoolControls(bm25, excludeTickers, documentTypes, maxResultsPerCompany)
                 .Take(maxResults)
                 .ToList();
@@ -127,6 +140,7 @@ public class HybridChunkSearcher
         var vectorIds = await RankSemantically(
             query,
             bm25,
+            corpusArmSafe,
             ticker,
             documentId,
             documentTypes is { Count: 1 } ? documentTypes.First() : null,
@@ -195,10 +209,13 @@ public class HybridChunkSearcher
     }
 
     // Produces a semantic ranking of chunk ids, swallowing any embedding-server failure into an
-    // empty list so retrieval degrades to BM25 rather than erroring.
+    // empty list so retrieval degrades to BM25 rather than erroring. The corpus arm wins over
+    // the pool re-rank whenever it is safe (Table mode, or a document-scoped search) — it can
+    // surface chunks BM25 never retrieved, which the pool re-rank by construction cannot.
     private async Task<List<Guid>> RankSemantically(
         string query,
         IReadOnlyList<Chunk> bm25Pool,
+        bool corpusArmSafe,
         string ticker,
         Guid? documentId,
         DocumentType documentType,
@@ -209,10 +226,8 @@ public class HybridChunkSearcher
     {
         try
         {
-            return _options.VectorSource switch
-            {
-                VectorSource.Pool => await RankPool(query, bm25Pool, cancellationToken),
-                VectorSource.Table => await RankCorpus(
+            return corpusArmSafe
+                ? await RankCorpus(
                     query,
                     ticker,
                     documentId,
@@ -220,9 +235,8 @@ public class HybridChunkSearcher
                     startDate,
                     endDate,
                     cancellationToken
-                ),
-                _ => [],
-            };
+                )
+                : await RankPool(query, bm25Pool, cancellationToken);
         }
         catch (Exception exception)
         {
