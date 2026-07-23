@@ -15,4 +15,14 @@ public class GovernmentContractsScraperOptions : ScraperOptions
     /// stay under USAspending's 10,000-record deep-pagination ceiling for a window.
     /// </summary>
     public int WindowDays { get; set; } = 7;
+
+    /// <summary>
+    /// Once the scan has caught up to today, how many trailing days it re-covers each cycle.
+    /// USAspending publishes awards days-to-weeks after their action date, so a strict
+    /// resume-after-the-frontier cursor would permanently skip any award that lands inside a
+    /// window already passed. Re-scanning a trailing window each cycle picks those up; the
+    /// rescan is cheap and idempotent (deduplicated by AwardUniqueKey on insert). Defaults to
+    /// one window's width.
+    /// </summary>
+    public int RescanLookbackDays { get; set; } = 7;
 }

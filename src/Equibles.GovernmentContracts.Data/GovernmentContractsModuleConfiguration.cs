@@ -8,5 +8,6 @@ public class GovernmentContractsModuleConfiguration : Equibles.Data.IFinancialMo
     public void ConfigureEntities(ModelBuilder builder)
     {
         builder.Entity<GovernmentContract>();
+        builder.Entity<GovernmentContractsScanState>();
     }
 }
