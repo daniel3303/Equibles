@@ -18,13 +18,15 @@ public class UsaSpendingClient : IUsaSpendingClient
 {
     private const string SearchUrl = "https://api.usaspending.gov/api/v2/search/spending_by_award/";
 
-    // USAspending's search endpoint has intermittent bad spells lasting minutes —
-    // the gateway resets heavy queries mid-flight, which surfaces as an
-    // HttpRequestException on an otherwise healthy API. Three retries rode ~30s of
-    // backoff (2+4+8+16s) and kept losing whole import windows to spells barely
-    // longer than that; six retries back off ~2min (…+32+64s), long enough to
-    // outlast the spell while a genuine outage still fails the window promptly.
-    private const int MaxRetries = 6;
+    // USAspending's search endpoint has intermittent bad spells lasting minutes — the
+    // gateway resets heavy queries mid-flight, which surfaces as an HttpRequestException on
+    // an otherwise healthy API. Each extra retry roughly doubles the patience
+    // (2+4+8+16+32+64+128+256s): six retries (~2min) still lost whole windows to spells that
+    // outlasted them in prod, so eight retries back off ~8.5min — long enough to ride out the
+    // longer spells while a genuine outage still aborts in bounded time (a window fails on the
+    // first page whose retries exhaust, not once per page). The scan checkpoint keeps every
+    // window that completes, so patience here buys durable forward progress.
+    private const int MaxRetries = 8;
 
     // The API returns at most 100 rows/page.
     private const int PageSize = 100;
