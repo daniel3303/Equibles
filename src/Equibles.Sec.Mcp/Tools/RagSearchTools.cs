@@ -67,7 +67,7 @@ public class RagSearchTools
     )]
     public Task<string> SearchDocuments(
         [Description(
-            "Search query. Every word must match (AND semantics on the keyword arm), so prefer concise, filing-phrased terms (e.g. 'Data Center revenue') over long natural-language questions."
+            "Search query — plain keywords or a short natural-language phrase. When too few excerpts match every word, the search automatically broadens to match any of the words; concise, filing-phrased terms (e.g. 'Data Center revenue') still rank best."
         )]
             string query,
         [Description("Maximum number of results to return (default: 5)")] int maxResults = 5,
@@ -131,7 +131,7 @@ public class RagSearchTools
     )]
     public Task<string> SearchCompanyDocuments(
         [Description(
-            "Search query. Every word must match (AND semantics on the keyword arm), so prefer concise, filing-phrased terms (e.g. 'Data Center revenue') over long natural-language questions."
+            "Search query — plain keywords or a short natural-language phrase. When too few excerpts match every word, the search automatically broadens to match any of the words; concise, filing-phrased terms (e.g. 'Data Center revenue') still rank best."
         )]
             string query,
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
