@@ -19,6 +19,9 @@ public class GovernmentContractsImportService : IImporter
 {
     private const int InsertBatchSize = 1000;
 
+    // Single well-known row that persists the forward award scan's resume point.
+    private const string ScanStateName = "award-scan";
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<GovernmentContractsImportService> _logger;
     private readonly IUsaSpendingClient _client;
@@ -96,6 +99,12 @@ public class GovernmentContractsImportService : IImporter
                     recipientLookup,
                     cancellationToken
                 );
+
+                // The window completed — advance the resumable checkpoint even when it
+                // inserted nothing, so an empty or all-non-public window (and, above all, a
+                // later transport abort in this same cycle) can't rewind the scan to here.
+                // This is decoupled from MAX(ActionDate), which only moves on an insert.
+                await AdvanceCheckpoint(windowEnd);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -211,8 +220,10 @@ public class GovernmentContractsImportService : IImporter
     {
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<GovernmentContractRepository>();
+        var scanStateRepository =
+            scope.ServiceProvider.GetRequiredService<GovernmentContractsScanStateRepository>();
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        // Future action dates are excluded from the cursor: a single mis-dated row would
+        // Future action dates are excluded from the watermark: a single mis-dated row would
         // otherwise push the resume point past today and freeze the import forever (this
         // happened in prod when period-of-performance starts were stored as ActionDate).
         var latest = await repository
@@ -220,23 +231,98 @@ public class GovernmentContractsImportService : IImporter
             .Where(c => c.ActionDate != null && c.ActionDate <= today)
             .MaxAsync(c => c.ActionDate, cancellationToken);
 
-        return ResolveStartDate(latest, today, _workerOptions);
+        var checkpoint = await scanStateRepository.GetByName(ScanStateName);
+
+        return ResolveStartDate(
+            latest,
+            checkpoint?.LastCompletedWindowEnd,
+            today,
+            _options.RescanLookbackDays,
+            _workerOptions
+        );
     }
 
     /// <summary>
-    /// Resume the day after the newest credible action date, clamped to today so an
-    /// outlier can never push the incremental cursor into the future. Pure so the
-    /// cursor policy is unit-testable.
+    /// Resolve the date the next scan cycle starts from. Pure so the cursor policy is
+    /// unit-testable.
+    ///
+    /// With no persisted checkpoint (the first run after this ships, or a fresh install) the
+    /// cursor falls back to the data-derived watermark exactly as before: the day after the
+    /// newest credible action date, or the configured floor when the table is empty.
+    ///
+    /// Once a checkpoint exists it owns the cursor. The scan resumes the day after the
+    /// furthest window it has fully completed — never behind data already ingested — but
+    /// never later than a trailing <paramref name="rescanLookbackDays"/> window, so awards
+    /// USAspending publishes late (dated inside a window already passed) are still re-covered
+    /// and deduplicated by AwardUniqueKey on insert. A consequence is that once caught up the
+    /// scan no longer reports "already up to date"; it re-scans the trailing window each cycle.
     /// </summary>
     public static DateOnly ResolveStartDate(
         DateOnly? latestActionDate,
+        DateOnly? checkpointEnd,
         DateOnly today,
+        int rescanLookbackDays,
         WorkerOptions workerOptions
     )
     {
         if (latestActionDate > today)
             latestActionDate = today;
 
-        return SyncDateResolver.Resolve(latestActionDate ?? default, workerOptions);
+        if (checkpointEnd == null)
+            return SyncDateResolver.Resolve(latestActionDate ?? default, workerOptions);
+
+        // Resume after the furthest point we have fully scanned, but never behind data
+        // already ingested (defensive — the checkpoint should always lead the watermark).
+        var frontier = checkpointEnd.Value;
+        if (latestActionDate.HasValue && latestActionDate.Value > frontier)
+            frontier = latestActionDate.Value;
+
+        var afterFrontier = frontier.AddDays(1);
+        var lookbackFloor = today.AddDays(-(Math.Max(1, rescanLookbackDays) - 1));
+        return afterFrontier < lookbackFloor ? afterFrontier : lookbackFloor;
+    }
+
+    /// <summary>
+    /// Advance the persisted scan checkpoint to <paramref name="windowEnd"/>. Best-effort by
+    /// design — a persist failure must never fail the scan; the window is simply re-scanned
+    /// next cycle and deduplicated by AwardUniqueKey. The write is monotonic so a trailing
+    /// lookback rescan (which re-completes earlier windows) can never rewind the frontier.
+    /// </summary>
+    private async Task AdvanceCheckpoint(DateOnly windowEnd)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var repository =
+                scope.ServiceProvider.GetRequiredService<GovernmentContractsScanStateRepository>();
+
+            var state = await repository.GetByName(ScanStateName);
+            var isNew = state == null;
+            if (isNew)
+            {
+                state = new GovernmentContractsScanState { Name = ScanStateName };
+            }
+            else if (state.LastCompletedWindowEnd >= windowEnd)
+            {
+                return;
+            }
+
+            state.LastCompletedWindowEnd = windowEnd;
+            state.UpdatedAt = DateTime.UtcNow;
+            if (isNew)
+                repository.Add(state);
+            else
+                repository.Update(state);
+            await repository.SaveChanges();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Government contracts import: failed to persist scan checkpoint at {WindowEnd}; "
+                    + "the window will be re-scanned next cycle",
+                windowEnd
+            );
+        }
     }
 }

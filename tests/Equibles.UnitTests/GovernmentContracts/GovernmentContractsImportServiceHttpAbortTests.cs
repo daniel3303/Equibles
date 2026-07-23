@@ -133,6 +133,7 @@ public class GovernmentContractsImportServiceHttpAbortTests
         services.AddScoped(_ => NewContext(options));
         services.AddScoped<CommonStockRepository>();
         services.AddScoped<GovernmentContractRepository>();
+        services.AddScoped<GovernmentContractsScanStateRepository>();
         return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
     }
 }

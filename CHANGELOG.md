@@ -7,6 +7,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+
+- Government contracts — the backfill no longer freezes when USAspending has one of its intermittent bad spells. The import now persists a resumable scan checkpoint (the last fully-completed action-date window) instead of resuming from `MAX(ActionDate)`, so a transport failure that aborts a cycle resumes where it left off rather than restarting the whole range and re-flooding the error log; once caught up it re-scans a trailing lookback window each cycle so late-published awards are not permanently skipped. PR #4213.
+
 ## [1.4.0] — 2026-07-03
 
 ### Added
