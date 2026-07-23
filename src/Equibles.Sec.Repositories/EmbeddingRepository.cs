@@ -54,7 +54,8 @@ public class EmbeddingRepository : BaseRepository<Embedding>
     /// arm, scoped through the Chunk navigation to the same ticker/document/type/date filters BM25
     /// applies so the two arms rank over the same universe. Returns chunk ids in similarity order.
     /// </summary>
-    public async Task<List<Guid>> SearchSimilarChunks(
+    // virtual: unit tests stub the vector seam by subclassing (no pgvector in a unit run).
+    public virtual async Task<List<Guid>> SearchSimilarChunks(
         float[] queryEmbedding,
         string model,
         int maxResults,

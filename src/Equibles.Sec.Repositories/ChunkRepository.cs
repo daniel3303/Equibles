@@ -18,7 +18,8 @@ public class ChunkRepository : BaseRepository<Chunk>
     public ChunkRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
-    public async Task<List<Chunk>> HybridSearch(
+    // virtual: unit tests stub the search seam by subclassing (no BM25 index in a unit run).
+    public virtual async Task<List<Chunk>> HybridSearch(
         string searchText,
         int maxResults,
         string ticker = null,
