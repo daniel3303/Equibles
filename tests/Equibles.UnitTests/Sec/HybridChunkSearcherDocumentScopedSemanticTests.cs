@@ -143,7 +143,10 @@ public class HybridChunkSearcherDocumentScopedSemanticTests
 
     // Minimal in-memory IQueryable implementing EF Core's async query surface, so the
     // fused-id materialization runs over a plain list.
-    private sealed class TestAsyncEnumerable<T> : EnumerableQuery<T>, IAsyncEnumerable<T>, IQueryable<T>
+    private sealed class TestAsyncEnumerable<T>
+        : EnumerableQuery<T>,
+            IAsyncEnumerable<T>,
+            IQueryable<T>
     {
         public TestAsyncEnumerable(IEnumerable<T> enumerable)
             : base(enumerable) { }
@@ -172,7 +175,8 @@ public class HybridChunkSearcherDocumentScopedSemanticTests
 
         public object Execute(Expression expression) => _inner.Execute(expression);
 
-        public TResult Execute<TResult>(Expression expression) => _inner.Execute<TResult>(expression);
+        public TResult Execute<TResult>(Expression expression) =>
+            _inner.Execute<TResult>(expression);
 
         public TResult ExecuteAsync<TResult>(
             Expression expression,
