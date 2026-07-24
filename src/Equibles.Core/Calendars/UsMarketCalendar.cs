@@ -20,6 +20,14 @@ public static class UsMarketCalendar
     public static DateTimeOffset ToEastern(DateTimeOffset instant) =>
         TimeZoneInfo.ConvertTime(instant, EasternTimeZone);
 
+    /// <summary>
+    /// The calendar date <paramref name="instant"/> falls on in US Eastern time — the market
+    /// calendar's own time zone. Callers must not use the UTC date: from 20:00 ET onwards it
+    /// has already rolled over to tomorrow.
+    /// </summary>
+    public static DateOnly EasternDate(DateTimeOffset instant) =>
+        DateOnly.FromDateTime(ToEastern(instant).DateTime);
+
     /// <summary>True for any weekday that is not an observed NYSE holiday.</summary>
     public static bool IsTradingDay(DateOnly date)
     {
