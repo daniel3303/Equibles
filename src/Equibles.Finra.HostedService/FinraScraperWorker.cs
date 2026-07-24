@@ -65,24 +65,23 @@ public class FinraScraperWorker : BaseScraperWorker
         await RunShortVolumeImport(stoppingToken);
         var shortVolumeOutstanding = await ShortVolumeOutstanding(stoppingToken);
 
-        // On one of the ~24 publication evenings a year, the short-interest file is the thing
-        // we are waiting for, so its import runs even while short volume is still outstanding —
-        // otherwise a late daily file would starve the very import being polled for. On every
-        // other cycle short interest keeps its slow cadence and yields to the short-volume poll.
+        // On one of the ~24 publication evenings a year, the semi-monthly short-interest file is
+        // what we are waiting for, so it is imported even while today's short-volume file is
+        // still outstanding — otherwise a late daily file would starve the very import being
+        // polled for. Checking the store BEFORE importing matters: once the settlement date has
+        // landed the poll is satisfied, and short interest must drop back to its slow cadence
+        // instead of re-running every minute until short volume catches up.
         var publishingCycle = PublishingCycleInWindow();
-        var shortInterestOutstanding = false;
-        if (publishingCycle != null)
-        {
+        var awaitingPublication =
+            publishingCycle != null
+            && !await SettlementDateStored(publishingCycle.SettlementDate, stoppingToken);
+
+        if (awaitingPublication || !shortVolumeOutstanding)
             await RunShortInterestImport(stoppingToken);
-            shortInterestOutstanding = !await SettlementDateStored(
-                publishingCycle.SettlementDate,
-                stoppingToken
-            );
-        }
-        else if (!shortVolumeOutstanding)
-        {
-            await RunShortInterestImport(stoppingToken);
-        }
+
+        var shortInterestOutstanding =
+            awaitingPublication
+            && !await SettlementDateStored(publishingCycle.SettlementDate, stoppingToken);
 
         if (shortVolumeOutstanding || shortInterestOutstanding)
         {
@@ -90,8 +89,8 @@ public class FinraScraperWorker : BaseScraperWorker
                 "FINRA has not published {Pending} yet; polling again in {Minutes} min",
                 PendingDescription(
                     shortVolumeOutstanding,
-                    publishingCycle,
-                    shortInterestOutstanding
+                    shortInterestOutstanding,
+                    publishingCycle
                 ),
                 _options.ShortVolumePollIntervalMinutes
             );
@@ -104,10 +103,12 @@ public class FinraScraperWorker : BaseScraperWorker
         await RunOffExchangeVolumeImport(stoppingToken);
     }
 
+    // What the poll is still waiting on, for the log line. shortInterestOutstanding implies a
+    // non-null cycle — it is only ever set from one.
     private static string PendingDescription(
         bool shortVolumeOutstanding,
-        ShortInterestReportingCycle publishingCycle,
-        bool shortInterestOutstanding
+        bool shortInterestOutstanding,
+        ShortInterestReportingCycle publishingCycle
     )
     {
         var pending = new List<string>(2);

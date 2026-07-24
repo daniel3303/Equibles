@@ -311,6 +311,11 @@ public class FinraScraperWorkerPollingTests : IDisposable
         // Short interest has landed but today's short-volume file has not, so the poll stays
         // armed and off-exchange is still deferred.
         await _finraClient.DidNotReceive().GetWeeklyOffExchangeVolume(Arg.Any<DateOnly>());
+        // ...and short interest must NOT re-import on every one of those minute-polls: its file
+        // is already in, so it drops back to the slow cadence while short volume catches up.
+        await _finraClient
+            .DidNotReceive()
+            .GetShortInterestSettlementDatesAfter(Arg.Any<DateOnly>());
     }
 
     [Fact]
