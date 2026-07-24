@@ -12,7 +12,18 @@ public class FinraScraperOptions : ScraperOptions
     /// </summary>
     public bool EveningPollEnabled { get; set; } = true;
 
-    /// <summary>How often to re-check for the file while inside the post-close poll window.</summary>
+    /// <summary>
+    /// When true (default), the worker also minute-polls for the semi-monthly short INTEREST
+    /// file during the same post-close window, on the ~24 days a year FINRA's reporting
+    /// calendar publishes one (see <c>ShortInterestCalendar</c>). Polling stops as soon as that
+    /// cycle's settlement date is stored. Requires <see cref="EveningPollEnabled"/>.
+    /// </summary>
+    public bool ShortInterestPublicationPollEnabled { get; set; } = true;
+
+    /// <summary>
+    /// How often to re-check for a file while inside the post-close poll window. Governs both
+    /// the daily short-volume poll and the publication-day short-interest poll.
+    /// </summary>
     public int ShortVolumePollIntervalMinutes { get; set; } = 1;
 
     /// <summary>Poll-window start, ET hour (16 = 16:00, regular market close).</summary>

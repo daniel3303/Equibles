@@ -1,6 +1,6 @@
-using Equibles.Worker;
+using Equibles.Core.Calendars;
 
-namespace Equibles.UnitTests.Worker;
+namespace Equibles.UnitTests.Core.Calendars;
 
 public class UsMarketCalendarTests
 {

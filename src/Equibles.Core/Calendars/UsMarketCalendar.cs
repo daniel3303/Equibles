@@ -1,4 +1,4 @@
-namespace Equibles.Worker;
+namespace Equibles.Core.Calendars;
 
 /// <summary>
 /// NYSE trading-day calendar plus US Eastern time helpers. Pure and deterministic so the
@@ -26,6 +26,37 @@ public static class UsMarketCalendar
         if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
             return false;
         return !IsNyseHoliday(date);
+    }
+
+    /// <summary>
+    /// <paramref name="date"/> itself when it is a trading day, otherwise the nearest
+    /// trading day before it. Models the "roll back to the prior business day" convention
+    /// regulatory calendars use for a fixed date that lands on a weekend or holiday.
+    /// </summary>
+    public static DateOnly PreviousOrSameTradingDay(DateOnly date)
+    {
+        while (!IsTradingDay(date))
+            date = date.AddDays(-1);
+        return date;
+    }
+
+    /// <summary>
+    /// The date <paramref name="count"/> trading days after <paramref name="date"/>, skipping
+    /// weekends and NYSE holidays. <paramref name="date"/> itself is not counted, so
+    /// <c>AddTradingDays(friday, 1)</c> is the following Monday.
+    /// </summary>
+    public static DateOnly AddTradingDays(DateOnly date, int count)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+
+        for (var remaining = count; remaining > 0; remaining--)
+        {
+            do
+            {
+                date = date.AddDays(1);
+            } while (!IsTradingDay(date));
+        }
+        return date;
     }
 
     public static bool IsNyseHoliday(DateOnly date)
