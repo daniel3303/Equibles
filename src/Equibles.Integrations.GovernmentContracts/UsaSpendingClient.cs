@@ -18,15 +18,17 @@ public class UsaSpendingClient : IUsaSpendingClient
 {
     private const string SearchUrl = "https://api.usaspending.gov/api/v2/search/spending_by_award/";
 
-    // USAspending's search endpoint has intermittent bad spells lasting minutes — the
-    // gateway resets heavy queries mid-flight, which surfaces as an HttpRequestException on
-    // an otherwise healthy API. Each extra retry roughly doubles the patience
-    // (2+4+8+16+32+64+128+256s): six retries (~2min) still lost whole windows to spells that
-    // outlasted them in prod, so eight retries back off ~8.5min — long enough to ride out the
-    // longer spells while a genuine outage still aborts in bounded time (a window fails on the
-    // first page whose retries exhaust, not once per page). The scan checkpoint keeps every
-    // window that completes, so patience here buys durable forward progress.
-    private const int MaxRetries = 8;
+    // USAspending's front-end intermittently accepts a connection and then closes it without
+    // a response ("empty reply", surfaced by .NET as "the response ended prematurely") — in a
+    // measured prod episode 40–60% of requests on the IPv4 path died this way while the
+    // IPv6 path was clean, so it's per-BACKEND roulette behind their load balancer, not a
+    // sick API. Requests here go out on a fresh connection each time (see PostQuery), which
+    // makes every attempt an independent re-roll: at even 50% backend loss, six retries take a
+    // page's failure odds to under 1%, so patience beyond that buys little — while during a
+    // total-loss spell a shorter ladder (~2min: 2+4+8+16+32+64s) fails the cycle promptly and
+    // lets the worker's own backoff re-enter. The scan checkpoint keeps every completed
+    // window, so nothing re-runs after a mid-cycle abort.
+    private const int MaxRetries = 6;
 
     // The API returns at most 100 rows/page.
     private const int PageSize = 100;
@@ -81,6 +83,11 @@ public class UsaSpendingClient : IUsaSpendingClient
     {
         _httpClient = httpClient;
         _logger = logger;
+        // .NET sends no User-Agent by default; identify ourselves to the federal API like
+        // every other integration does (SEC EDGAR outright bans anonymous clients).
+        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
+            "Equibles/1.0 (+https://equibles.com)"
+        );
     }
 
     public async Task<List<UsaSpendingAwardRecord>> GetContractAwards(
@@ -284,6 +291,15 @@ public class UsaSpendingClient : IUsaSpendingClient
             {
                 using var request = new HttpRequestMessage(HttpMethod.Post, SearchUrl);
                 request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                // One fresh connection per request, never a pooled one. Some backends behind
+                // USAspending's IPv4 load balancer accept a connection and then close it on
+                // the first request ("empty reply"); a pooled connection pins us to whichever
+                // backend we drew, so once the pool holds a sick one every retry dies the same
+                // way — measured in prod as a whole retry ladder failing while fresh-connection
+                // probes of the identical query passed ~50%. Closing per request makes each
+                // attempt an independent draw, which is what makes the retry ladder above
+                // effective. The TLS handshake cost is noise at this client's request rate.
+                request.Headers.ConnectionClose = true;
                 request.Content = new StringContent(json, Encoding.UTF8, "application/json");
                 return await _httpClient.SendAsync(request, cancellationToken);
             },
