@@ -84,17 +84,14 @@ public static class ShortInterestCalendar
         // horizon is bounded by count, and a year yields 24 cycles, so this is a short scan.
         for (var year = asOf.AddMonths(-1).Year; upcoming.Count < count; year++)
         {
-            foreach (var cycle in CyclesInYear(year))
-            {
-                if (cycle.PublicationDate < asOf)
-                    continue;
-                if (afterSettlementDate is { } floor && cycle.SettlementDate <= floor)
-                    continue;
-
-                upcoming.Add(cycle);
-                if (upcoming.Count == count)
-                    break;
-            }
+            upcoming.AddRange(
+                CyclesInYear(year)
+                    .Where(cycle =>
+                        cycle.PublicationDate >= asOf
+                        && (afterSettlementDate is not { } floor || cycle.SettlementDate > floor)
+                    )
+                    .Take(count - upcoming.Count)
+            );
         }
         return upcoming;
     }
