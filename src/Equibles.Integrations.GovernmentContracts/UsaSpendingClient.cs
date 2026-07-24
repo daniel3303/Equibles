@@ -268,7 +268,22 @@ public class UsaSpendingClient : IUsaSpendingClient
             filters = new
             {
                 award_type_codes = ContractAwardTypeCodes,
-                time_period = new[] { new { start_date = startDate, end_date = endDate } },
+                // date_type is NOT optional. Omit it and USAspending defaults the window to
+                // period-of-performance OVERLAP — every contract merely IN FORCE on those dates —
+                // which is neither what the scan means nor a size it can enumerate: measured
+                // against the live API, a single day at the $1M floor returned 118,159 awards
+                // (~1,180 pages, and near-identical for every date tried, the tell that the
+                // window wasn't filtering at all) versus 169 with action_date. The scan's cursor
+                // and checkpoint are both keyed on the award ACTION date, so say so explicitly.
+                time_period = new[]
+                {
+                    new
+                    {
+                        start_date = startDate,
+                        end_date = endDate,
+                        date_type = "action_date",
+                    },
+                },
                 award_amounts = awardAmounts,
             },
             fields = RequestFields,
