@@ -20,15 +20,16 @@ public class GovernmentContractsScraperOptions : ScraperOptions
     public decimal MinimumAwardAmount { get; set; } = 1_000_000m;
 
     /// <summary>
-    /// Width (in days) of each action-date window fetched per API call. Kept as small as is
-    /// practical (1 day): a 7-day window fired ~250 requests (deep amount-cursor paging at the
-    /// $1M floor), and during one of USAspending's intermittent bad spells the odds every one
-    /// of those survives is near zero, so the whole window — the whole cycle — aborts. A 1-day
-    /// window is a fraction of the requests, so it can finish inside a brief healthy stretch;
-    /// paired with the client's raised retry patience, a flaky page usually rides out the spell
-    /// rather than failing the window. The scan checkpoint makes the extra window count free
-    /// (each completed window is durable). The amount-cursor still handles the per-window
-    /// deep-pagination ceiling.
+    /// Width (in days) of each action-date window fetched per API call. A day of federal
+    /// contract actions at the $1M floor is only a few hundred awards (~2–5 pages), so a
+    /// 1-day window is the cheapest useful unit of work and stays small enough to finish
+    /// inside a brief healthy stretch of a flaky API. Windows are not free to lose — a
+    /// window aborts as a whole — so narrow beats wide: the scan checkpoint banks every
+    /// completed window, making the higher window count essentially free.
+    ///
+    /// The earlier "a 7-day window fires ~250 requests" tuning note measured a broken
+    /// query, not real volume: the client was omitting the window's date_type, so
+    /// USAspending was returning every contract in force rather than those actioned.
     /// </summary>
     public int WindowDays { get; set; } = 1;
 
