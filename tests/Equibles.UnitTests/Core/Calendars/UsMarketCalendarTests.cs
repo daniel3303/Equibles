@@ -1,6 +1,6 @@
-using Equibles.Worker;
+using Equibles.Core.Calendars;
 
-namespace Equibles.UnitTests.Worker;
+namespace Equibles.UnitTests.Core.Calendars;
 
 public class UsMarketCalendarTests
 {
@@ -49,6 +49,27 @@ public class UsMarketCalendarTests
     )
     {
         UsMarketCalendar.IsTradingDay(new DateOnly(year, month, day)).Should().Be(expectedOpen);
+    }
+
+    [Theory]
+    // 23:30 ET on New Year's Eve is already Jan 1 in UTC, so a caller reading the UTC date
+    // would be a day ahead of the market calendar.
+    [InlineData(2025, 12, 31, 23, 30, "2025-12-31")]
+    [InlineData(2026, 7, 15, 0, 30, "2026-07-15")]
+    [InlineData(2026, 7, 15, 16, 30, "2026-07-15")]
+    public void EasternDate_ReturnsTheEasternCalendarDate_NotTheUtcOne(
+        int year,
+        int month,
+        int day,
+        int hour,
+        int minute,
+        string expected
+    )
+    {
+        UsMarketCalendar
+            .EasternDate(Et(year, month, day, hour, minute))
+            .Should()
+            .Be(DateOnly.Parse(expected));
     }
 
     [Fact]

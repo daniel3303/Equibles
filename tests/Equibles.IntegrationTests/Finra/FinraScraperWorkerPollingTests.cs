@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.Core.Calendars;
 using Equibles.Core.Configuration;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
@@ -26,7 +27,13 @@ namespace Equibles.IntegrationTests.Finra;
 /// post-close ET window on a trading day, while today's short-volume file is still
 /// unpublished, the worker re-runs only the short-volume import (and requests a fast retry)
 /// while skipping the slow-cadence short-interest and off-exchange imports. Outside that
-/// condition all three run. Which imports ran is observed through the shared FINRA client.
+/// condition all three run.
+///
+/// The exception is one of the ~24 short-interest publication evenings a year, where the
+/// semi-monthly file is the thing being polled for: there short interest runs alongside the
+/// short-volume poll and keeps the poll armed until its settlement date lands.
+///
+/// Which imports ran is observed through the shared FINRA client.
 /// </summary>
 public class FinraScraperWorkerPollingTests : IDisposable
 {
@@ -45,7 +52,16 @@ public class FinraScraperWorkerPollingTests : IDisposable
         _finraClient
             .GetDailyShortVolume(Arg.Any<DateOnly>())
             .Returns(new List<ShortVolumeRecord>());
+        // Discovery has three entry points — empty store, forward-from-newest, and backfill —
+        // and the importer picks between them by what is already stored, so all three are
+        // stubbed and the tests observe whichever one their seed data selects.
         _finraClient.GetShortInterestSettlementDates().Returns(new List<DateOnly>());
+        _finraClient
+            .GetShortInterestSettlementDatesAfter(Arg.Any<DateOnly>())
+            .Returns(new List<DateOnly>());
+        _finraClient
+            .GetShortInterestSettlementDatesBetween(Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new List<DateOnly>());
         _finraClient
             .GetWeeklyOffExchangeVolume(Arg.Any<DateOnly>())
             .Returns(new List<OffExchangeWeeklyRecord>());
@@ -142,12 +158,13 @@ public class FinraScraperWorkerPollingTests : IDisposable
             workerOptions
         );
 
-        // The worker resolves the three import services + the repo used by ShouldPollForToday.
+        // The worker resolves the three import services + the two repos its poll gates read.
         var workerScopeFactory = ServiceScopeSubstitute.Create(
             (typeof(ShortVolumeImportService), shortVolume),
             (typeof(ShortInterestImportService), shortInterest),
             (typeof(OffExchangeVolumeImportService), offExchange),
-            (typeof(DailyShortVolumeRepository), new DailyShortVolumeRepository(_dbContext))
+            (typeof(DailyShortVolumeRepository), new DailyShortVolumeRepository(_dbContext)),
+            (typeof(ShortInterestRepository), new ShortInterestRepository(_dbContext))
         );
 
         return new TestableFinraScraperWorker(
@@ -229,6 +246,100 @@ public class FinraScraperWorkerPollingTests : IDisposable
 
         await _finraClient.Received().GetShortInterestSettlementDates();
         await _finraClient.Received().GetWeeklyOffExchangeVolume(Arg.Any<DateOnly>());
+    }
+
+    // Tuesday 2025-03-11 is a FINRA short-interest publication date (the 2025-02-28 settlement);
+    // 16:30 ET puts it inside the default post-close window.
+    private static DateTimeOffset PublicationEvening() => Et(2025, 3, 11, 16, 30);
+
+    private static readonly DateOnly PublishedSettlementDate = new(2025, 2, 28);
+
+    private async Task SeedShortInterest(DateOnly settlementDate)
+    {
+        var stockId = _stockRepo.GetAll().Select(s => s.Id).First();
+        _dbContext
+            .Set<ShortInterest>()
+            .Add(
+                new ShortInterest
+                {
+                    CommonStockId = stockId,
+                    SettlementDate = settlementDate,
+                    CurrentShortPosition = 1,
+                }
+            );
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+    }
+
+    [Fact]
+    public async Task DoWork_PublicationEveningWithFileMissing_RunsShortInterestAndKeepsPolling()
+    {
+        await SeedStock();
+
+        await BuildWorker(PublicationEvening()).RunCycle(CancellationToken.None);
+
+        // Short interest runs even though today's short-volume file is also still missing —
+        // otherwise a late daily file would starve the import we are actually polling for.
+        await _finraClient.Received().GetShortInterestSettlementDates();
+        // Still minute-polling, so the slow-cadence off-exchange import is skipped.
+        await _finraClient.DidNotReceive().GetWeeklyOffExchangeVolume(Arg.Any<DateOnly>());
+    }
+
+    [Fact]
+    public async Task DoWork_PublicationEveningWithFileLanded_StopsPolling()
+    {
+        await SeedStock();
+        await SeedShortVolume(new DateOnly(2025, 3, 11));
+        await SeedShortInterest(PublishedSettlementDate);
+
+        await BuildWorker(PublicationEvening()).RunCycle(CancellationToken.None);
+
+        // The settlement date is stored, so nothing is outstanding and the cycle completes
+        // through to the slow-cadence import instead of re-arming the poll.
+        await _finraClient.Received().GetShortInterestSettlementDatesAfter(Arg.Any<DateOnly>());
+        await _finraClient.Received().GetWeeklyOffExchangeVolume(Arg.Any<DateOnly>());
+    }
+
+    [Fact]
+    public async Task DoWork_PublicationEveningWithShortVolumeStillMissing_KeepsPolling()
+    {
+        await SeedStock();
+        await SeedShortInterest(PublishedSettlementDate);
+
+        await BuildWorker(PublicationEvening()).RunCycle(CancellationToken.None);
+
+        // Short interest has landed but today's short-volume file has not, so the poll stays
+        // armed and off-exchange is still deferred.
+        await _finraClient.DidNotReceive().GetWeeklyOffExchangeVolume(Arg.Any<DateOnly>());
+        // ...and short interest must NOT re-import on every one of those minute-polls: its file
+        // is already in, so it drops back to the slow cadence while short volume catches up.
+        await _finraClient
+            .DidNotReceive()
+            .GetShortInterestSettlementDatesAfter(Arg.Any<DateOnly>());
+    }
+
+    [Fact]
+    public async Task DoWork_PublicationPollDisabled_LeavesShortInterestOnItsSlowCadence()
+    {
+        await SeedStock();
+
+        var options = new FinraScraperOptions { ShortInterestPublicationPollEnabled = false };
+        await BuildWorker(PublicationEvening(), options).RunCycle(CancellationToken.None);
+
+        // Back to the short-volume-only poll: short interest yields to it as before.
+        await _finraClient.DidNotReceive().GetShortInterestSettlementDates();
+        await _finraClient.DidNotReceive().GetWeeklyOffExchangeVolume(Arg.Any<DateOnly>());
+    }
+
+    [Fact]
+    public async Task DoWork_NonPublicationEvening_LeavesShortInterestOnItsSlowCadence()
+    {
+        await SeedStock();
+
+        // Wednesday 2025-03-12 publishes nothing, so the short-volume poll wins as before.
+        await BuildWorker(InWindowTradingDay()).RunCycle(CancellationToken.None);
+
+        await _finraClient.DidNotReceive().GetShortInterestSettlementDates();
     }
 
     [Fact]
