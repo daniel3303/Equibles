@@ -29,8 +29,16 @@ public class YahooPriceImportServiceGapHealTests
     private static readonly DateOnly Today = new(2026, 7, 27);
     private static readonly DateOnly WindowStart = new(2026, 7, 17);
 
+    // hasHistoryBeforeWindow = true models the common case: an established stock whose bars
+    // predate the window, so a missing session anywhere in it — including the leading edge — is a
+    // real hole. The new-listing case passes false explicitly.
     private static DateOnly? FindGap(params DateOnly[] storedDates) =>
-        (DateOnly?)FindEarliestGapMethod.Invoke(null, [storedDates.ToList(), WindowStart, Today]);
+        (DateOnly?)
+            FindEarliestGapMethod.Invoke(null, [storedDates.ToList(), WindowStart, Today, true]);
+
+    private static DateOnly? FindGapForNewListing(params DateOnly[] storedDates) =>
+        (DateOnly?)
+            FindEarliestGapMethod.Invoke(null, [storedDates.ToList(), WindowStart, Today, false]);
 
     private static DateOnly D(int day) => new(2026, 7, day);
 
@@ -70,7 +78,18 @@ public class YahooPriceImportServiceGapHealTests
     {
         // A stock whose history starts inside the window has no bars before its listing date; those
         // are not holes, and scanning from windowStart would re-request them every cycle.
-        FindGap(D(23), D(24)).Should().BeNull();
+        FindGapForNewListing(D(23), D(24)).Should().BeNull();
+    }
+
+    [Fact]
+    public void AnEstablishedStock_MissingTheWindowsLeadingEdge_IsAGap()
+    {
+        // The opposite of the new-listing case, and indistinguishable from it by the in-window
+        // dates alone: bars stored for every session EXCEPT the window's first. For a stock with
+        // history before the window that first session is a real hole — scanning from the earliest
+        // in-window bar would silently shorten the heal window as an outage day slid toward its
+        // edge, making the 10-day promise quietly non-uniform.
+        FindGap(D(20), D(21), D(22), D(23), D(24)).Should().Be(D(17));
     }
 
     [Fact]
