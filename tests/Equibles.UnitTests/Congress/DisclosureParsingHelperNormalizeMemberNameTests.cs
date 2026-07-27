@@ -25,6 +25,12 @@ public class DisclosureParsingHelperNormalizeMemberNameTests
     [InlineData("Matt Mr Rosendale", "Matt Rosendale")]
     [InlineData("Mr Matt Rosendale", "Matt Rosendale")]
     [InlineData("Hon. Mr. Smith", "Smith")]
+    // "Hon" is also filed unabbreviated; without it this stood as a second record beside
+    // "Donald Sternoff Beyer" in production.
+    [InlineData("Donald Sternoff Honorable Beyer", "Donald Sternoff Beyer")]
+    [InlineData("Honorable Donald Beyer", "Donald Beyer")]
+    // A surname that merely begins with the same letters is whole-token matched, so it stays.
+    [InlineData("Grace Honorables", "Grace Honorables")]
     // Doubled first name emitted by the parser.
     [InlineData("Scott Scott Franklin", "Scott Franklin")]
     // Stray whitespace collapses.
