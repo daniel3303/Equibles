@@ -109,6 +109,8 @@ public class YahooPriceImportService
     )
     {
         var totalInserted = 0;
+        var fetched = 0;
+        var fetchedWithNothingNew = 0;
 
         foreach (var (ticker, commonStockId) in crawlOrder)
         {
@@ -122,12 +124,14 @@ public class YahooPriceImportService
 
             try
             {
-                totalInserted += await ImportTicker(
-                    ticker,
-                    commonStockId,
-                    today,
-                    cancellationToken
-                );
+                var result = await ImportTicker(ticker, commonStockId, today, cancellationToken);
+                totalInserted += result.Inserted;
+                if (result.Fetched)
+                {
+                    fetched++;
+                    if (result.Inserted == 0)
+                        fetchedWithNothingNew++;
+                }
             }
             catch (HttpRequestException ex)
             {
@@ -150,8 +154,44 @@ public class YahooPriceImportService
             }
         }
 
+        WarnIfUpstreamServedNothing(fetched, fetchedWithNothingNew);
         return totalInserted;
     }
+
+    // A stock is only fetched when a settled session is genuinely missing for it, so a fetch that
+    // returns nothing new is the upstream feed failing to serve a bar it should have. One or two of
+    // those is ordinary (a stock that did not trade); the whole crawl doing it is an outage.
+    //
+    // This exists because that outage is otherwise INVISIBLE. On 2026-07-24 Yahoo served the entire
+    // session's daily bars with null OHLC; the importer correctly refused to store them, so the lane
+    // ran flat out — thousands of successful HTTP 200s — and wrote nothing, with every log line at
+    // Information saying the cycle had started and completed normally. The per-fetch detail that
+    // would have shown it is at Debug, which production does not emit.
+    private void WarnIfUpstreamServedNothing(int fetched, int fetchedWithNothingNew)
+    {
+        if (fetched < MinFetchesForUpstreamWarning)
+            return;
+
+        var barrenRatio = (double)fetchedWithNothingNew / fetched;
+        if (barrenRatio < BarrenFetchWarningRatio)
+            return;
+
+        _logger.LogWarning(
+            "Yahoo served no new settled bars for {Barren} of {Fetched} stocks that needed one "
+                + "({Percent:P0}). The price feed is likely publishing incomplete bars upstream; "
+                + "stored prices will stay stale until it recovers.",
+            fetchedWithNothingNew,
+            fetched,
+            barrenRatio
+        );
+    }
+
+    // Small crawls (a weekend no-op, a tiny configured universe) are not evidence of anything.
+    private const int MinFetchesForUpstreamWarning = 200;
+
+    // Deliberately high: a normal catch-up cycle inserts for nearly every stock it fetches, so this
+    // only trips when the feed is broadly refusing to serve usable bars.
+    private const double BarrenFetchWarningRatio = 0.9;
 
     // Pass 2 — key statistics + company profile. Two extra Yahoo calls per stock and the bulk of a
     // cycle's traffic, which is why it runs on its own slower cadence AND strictly after prices.
@@ -529,16 +569,37 @@ public class YahooPriceImportService
         return false;
     }
 
-    private async Task<int> ImportTicker(
+    // How far back a hole in the stored series is still worth re-requesting. The sync start date is
+    // forward-only (last stored + 1), which is what keeps cycles cheap but also means any session
+    // the upstream feed failed to serve is lost the moment a LATER bar lands and moves the start
+    // date past it. On 2026-07-24 Yahoo served that whole session's daily bars with null OHLC, so
+    // ~5,484 stocks were about to keep a permanent one-session hole once Monday's bar settled.
+    //
+    // Re-asking for a missing recent session costs nothing extra: it widens the SAME single chart
+    // request the stock was already going to make, and PersistPrices is insert-only so re-served
+    // bars that are already stored are discarded. The window is deliberately short — a session the
+    // feed genuinely has no bar for (a halt, or a stock that simply did not trade) would otherwise
+    // be re-requested forever, exactly the "hopeless work every cycle" pathology that the crawl
+    // ordering had to be fixed for. After GapHealWindowDays the hole ages out and is left alone.
+    private const int GapHealWindowDays = 10;
+
+    // Outcome of one stock's price import. The Fetched flag is what distinguishes "already current,
+    // no call made" from "called Yahoo and it gave us nothing usable" — indistinguishable from an
+    // insert count alone, and the difference between a healthy cycle and a silent upstream outage.
+    private readonly record struct TickerImportResult(bool Fetched, int Inserted);
+
+    private static readonly TickerImportResult NoFetchNeeded = new(Fetched: false, Inserted: 0);
+
+    private async Task<TickerImportResult> ImportTicker(
         string ticker,
         Guid commonStockId,
         DateOnly today,
         CancellationToken cancellationToken
     )
     {
-        var startDate = await GetSyncStartDate(commonStockId, cancellationToken);
+        var startDate = await ResolveStartDate(commonStockId, today, cancellationToken);
         if (!HasSettledTradingDay(startDate, today))
-            return 0;
+            return NoFetchNeeded;
 
         // One chart fetch yields the price bars plus any split and dividend
         // events for the window — capture both off the same response, no extra
@@ -556,7 +617,7 @@ public class YahooPriceImportService
         await CaptureSplits(commonStockId, chartData.Splits);
         await CaptureDividends(commonStockId, chartData.Dividends);
 
-        return inserted;
+        return new TickerImportResult(Fetched: true, Inserted: inserted);
     }
 
     private async Task<int> PersistPrices(
@@ -983,6 +1044,70 @@ public class YahooPriceImportService
         industryRepo.Add(industry);
         await industryRepo.SaveChanges();
         return industry;
+    }
+
+    // The forward-only start date, pulled back to cover a recent settled session that is missing
+    // from the stored series (see GapHealWindowDays). Only a stock that actually has a hole widens
+    // its window, so an up-to-date stock still costs zero Yahoo calls — the property the whole
+    // cheap-cycle design rests on.
+    private async Task<DateOnly> ResolveStartDate(
+        Guid commonStockId,
+        DateOnly today,
+        CancellationToken cancellationToken
+    )
+    {
+        var forwardOnly = await GetSyncStartDate(commonStockId, cancellationToken);
+
+        var windowStart = today.AddDays(-GapHealWindowDays);
+        // Already reaching back past the window (a never-synced stock, or one mid-backfill) — it is
+        // going to re-request those sessions anyway, so there is nothing to widen.
+        if (forwardOnly <= windowStart)
+            return forwardOnly;
+
+        List<DateOnly> storedDates;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+            storedDates = await repo.GetAll()
+                .Where(p =>
+                    p.CommonStockId == commonStockId && p.Date >= windowStart && p.Date < today
+                )
+                .Select(p => p.Date)
+                .ToListAsync(cancellationToken);
+        }
+
+        var earliestGap = FindEarliestGap(storedDates, windowStart, today);
+        return earliestGap is { } gap && gap < forwardOnly ? gap : forwardOnly;
+    }
+
+    // The earliest settled trading day in [windowStart, today) with no stored bar, or null when the
+    // window is complete. Pure so the rule is pinnable without a database.
+    //
+    // A stock whose history simply starts inside the window (a new listing) must not read as a hole
+    // for every day before its first bar, so the scan begins at the earliest stored date rather than
+    // at windowStart. A stock with nothing stored in the window at all has no gap to speak of — it
+    // is plain staleness, which the forward-only start date already covers.
+    private static DateOnly? FindEarliestGap(
+        List<DateOnly> storedDates,
+        DateOnly windowStart,
+        DateOnly today
+    )
+    {
+        if (storedDates.Count == 0)
+            return null;
+
+        var stored = storedDates.ToHashSet();
+        var scanFrom = storedDates.Min();
+        if (scanFrom < windowStart)
+            scanFrom = windowStart;
+
+        for (var date = scanFrom; date < today; date = date.AddDays(1))
+        {
+            if (UsMarketCalendar.IsTradingDay(date) && !stored.Contains(date))
+                return date;
+        }
+
+        return null;
     }
 
     private async Task<DateOnly> GetSyncStartDate(
