@@ -60,20 +60,27 @@ public class ImageManager : IImageManager
         // maxWidth/maxHeight are a *maximum* — only resize when the source
         // actually exceeds them. A source already within bounds must not be
         // enlarged (wastes storage and blurs the image).
+        // A null or non-positive bound is unconstrained, matching the doc — checking it here
+        // (not just at the Size below) also keeps a "0 = no cap" configuration from ever
+        // producing a Size(0, 0), which ImageSharp rejects.
         var exceedsMaxBounds =
-            (maxWidth != null && imageProcessor.Width > maxWidth)
-            || (maxHeight != null && imageProcessor.Height > maxHeight);
+            (maxWidth is > 0 && imageProcessor.Width > maxWidth)
+            || (maxHeight is > 0 && imageProcessor.Height > maxHeight);
         if (exceedsMaxBounds)
         {
-            // ResizeMode.Max fits the image INSIDE the bounds, preserving the aspect ratio.
-            // The plain Resize(width, height) overload stretches to the exact box when both
-            // bounds are set, which distorted every source whose aspect differed from the
-            // bounds (a 2408x1648 upload was recorded as 2400x2400).
+            // The bounds are a bounding BOX: ResizeMode.Max fits the image inside them and
+            // preserves the aspect ratio. The previous Resize(width, height) overload resolved
+            // to ResizeMode.Crop, which recorded an exact centre-cropped box (a 2408x1648
+            // upload became 2400x2400) — invisible on screen only because the ORIGINAL bytes
+            // were stored, so the recorded dimensions lied instead.
             imageProcessor.Mutate(i =>
                 i.Resize(
                     new ResizeOptions
                     {
-                        Size = new SixLabors.ImageSharp.Size(maxWidth ?? 0, maxHeight ?? 0),
+                        Size = new SixLabors.ImageSharp.Size(
+                            maxWidth is > 0 ? maxWidth.Value : 0,
+                            maxHeight is > 0 ? maxHeight.Value : 0
+                        ),
                         Mode = ResizeMode.Max,
                         Sampler = new BicubicResampler(),
                     }

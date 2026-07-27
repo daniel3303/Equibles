@@ -118,4 +118,89 @@ public class ImageManagerSaveImageMaxBoundsTests
         format.Name.Should().Be("JPEG");
         image.ContentType.Should().Be("image/jpeg");
     }
+
+    // The doc says a null or 0 bound is unconstrained. A 0 alongside a real bound must
+    // therefore behave exactly like null — derived from the aspect ratio, never a
+    // Size(0, 0) the resizer would reject.
+    [Fact]
+    public async Task SaveImage_ZeroBound_IsUnconstrained()
+    {
+        var content = CreateMinimalPng(100, 50);
+
+        var image = await _sut.SaveImage(content, "wide.png", 0, 40);
+
+        image.Width.Should().Be(80);
+        image.Height.Should().Be(40);
+    }
+
+    // Both bounds 0 = no cap at all: the original bytes are stored untouched. Guards the
+    // "MaxDimension=0 to disable" configuration a caller can reasonably write.
+    [Fact]
+    public async Task SaveImage_AllBoundsZero_StoresTheOriginalUntouched()
+    {
+        var content = CreateMinimalPng(100, 50);
+
+        var image = await _sut.SaveImage(content, "wide.png", 0, 0);
+
+        image.Width.Should().Be(100);
+        image.Height.Should().Be(50);
+        image.FileContent.Bytes.Should().Equal(content);
+    }
+
+    // The re-encode runs the whole image through the format's encoder, so a multi-frame
+    // GIF must come out with every frame — a silent collapse to the first frame would
+    // turn an animation into a still.
+    [Fact]
+    public async Task SaveImage_AnimatedGif_KeepsItsFramesWhenResized()
+    {
+        using var animation = new Image<Rgba32>(100, 50);
+        using var second = new Image<Rgba32>(100, 50);
+        using var third = new Image<Rgba32>(100, 50);
+        animation.Frames.AddFrame(second.Frames.RootFrame);
+        animation.Frames.AddFrame(third.Frames.RootFrame);
+        using var stream = new MemoryStream();
+        animation.SaveAsGif(stream);
+
+        var image = await _sut.SaveImage(stream.ToArray(), "anim.gif", 40, 40);
+
+        using var stored = SixLabors.ImageSharp.Image.Load(image.FileContent.Bytes);
+        stored.Frames.Count.Should().Be(3);
+        stored.Width.Should().Be(40);
+        stored.Height.Should().Be(20);
+    }
+
+    // Production runs the filesystem store, not the database one — the resized bytes must
+    // reach that write path too, not just the FileContent row the other tests read.
+    [Fact]
+    public async Task SaveImage_FilesystemStore_WritesTheResizedBytesToDisk()
+    {
+        var root = Directory.CreateTempSubdirectory("equibles-imagemanager-test").FullName;
+        try
+        {
+            var context = TestDbContextFactory.Create(new MediaModuleConfiguration());
+            var sut = new ImageManager(
+                new ImageRepository(context),
+                FileStorageRouterTestFactory.Create(
+                    new Equibles.Media.BusinessLogic.Configuration.FileStorageOptions
+                    {
+                        Enabled = true,
+                        RootPath = root,
+                    }
+                )
+            );
+
+            var image = await sut.SaveImage(CreateMinimalPng(100, 50), "wide.png", 40, 40);
+
+            image.RelativePath.Should().NotBeNullOrEmpty();
+            using var stored = SixLabors.ImageSharp.Image.Load(
+                Path.Combine(root, image.RelativePath)
+            );
+            stored.Width.Should().Be(40);
+            stored.Height.Should().Be(20);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }
