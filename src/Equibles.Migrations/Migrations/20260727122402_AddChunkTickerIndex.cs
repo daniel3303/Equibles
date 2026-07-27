@@ -16,6 +16,16 @@ namespace Equibles.Migrations.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // A failed CONCURRENTLY build leaves an INVALID index behind, which IF NOT EXISTS
+            // would then treat as "exists" forever — drop such a leftover first (an invalid
+            // index serves no queries, so the plain drop's brief lock is free), then build.
+            migrationBuilder.Sql(
+                "DO $$ BEGIN "
+                    + "IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid "
+                    + "WHERE c.relname = 'IX_Chunk_Ticker' AND NOT i.indisvalid) THEN "
+                    + "EXECUTE 'DROP INDEX \"IX_Chunk_Ticker\"'; END IF; END $$;",
+                suppressTransaction: true
+            );
             migrationBuilder.Sql(
                 "CREATE INDEX CONCURRENTLY IF NOT EXISTS \"IX_Chunk_Ticker\" "
                     + "ON \"Chunk\" (\"Ticker\");",

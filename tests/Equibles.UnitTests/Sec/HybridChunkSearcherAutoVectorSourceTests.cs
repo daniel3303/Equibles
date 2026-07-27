@@ -70,6 +70,77 @@ public class HybridChunkSearcherAutoVectorSourceTests
     }
 
     [Fact]
+    public async Task DocumentScoped_AutoMode_EmptyBm25_ReturnsSemanticallyRankedChunks()
+    {
+        // The shipped default must keep the document-scoped exhaustive ranking the Pool-mode
+        // tests pin — a purely semantic in-document question stays answerable under Auto.
+        var documentId = Guid.NewGuid();
+        var chunk = new Chunk
+        {
+            Id = Guid.NewGuid(),
+            DocumentId = documentId,
+            Content = "management discussed operational headwinds",
+        };
+        var chunkRepository = new StubChunkRepository(bm25Results: [], allChunks: [chunk]);
+        var embeddingRepository = new StubEmbeddingRepository(similarChunkIds: [chunk.Id]);
+        var searcher = NewSearcher(chunkRepository, embeddingRepository);
+
+        var results = await searcher.Search(
+            "what challenges did leadership acknowledge",
+            5,
+            documentId: documentId
+        );
+
+        Assert.Single(results);
+        Assert.True(embeddingRepository.SearchSimilarChunksCalled);
+    }
+
+    [Fact]
+    public async Task TickerScoped_AutoMode_CorpusArmFailure_FallsBackToThePoolReRank()
+    {
+        // A failed corpus arm (missing index, slow distance sort) must not rank WORSE than the
+        // old Pool default did: the pool re-rank over the BM25 candidates still runs.
+        var rankedByVector = new Chunk
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Content = "second by keywords, first semantically",
+        };
+        var keywordOnly = new Chunk
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Content = "first by keywords, no stored vector",
+        };
+        var chunkRepository = new StubChunkRepository(
+            bm25Results: [keywordOnly, rankedByVector],
+            allChunks: [keywordOnly, rankedByVector]
+        );
+        var embeddingRepository = new StubEmbeddingRepository(
+            similarChunkIds: [],
+            throwOnCorpusSearch: true,
+            storedEmbeddings:
+            [
+                new Embedding
+                {
+                    ChunkId = rankedByVector.Id,
+                    Model = "test-model",
+                    Vector = new Pgvector.Vector(new float[] { 0.1f, 0.2f }),
+                },
+            ]
+        );
+        var searcher = NewSearcher(chunkRepository, embeddingRepository);
+
+        var results = await searcher.Search("semantic question", 5, ticker: "AAPL");
+
+        Assert.True(embeddingRepository.SearchSimilarChunksCalled);
+        Assert.Equal(2, results.Count);
+        // RRF: the vector-scored chunk collects a rank from both arms and overtakes the
+        // BM25 leader — proof the pool re-rank ran after the corpus arm failed.
+        Assert.Equal(rankedByVector.Id, results[0].Id);
+    }
+
+    [Fact]
     public void Auto_IsTheDefaultVectorSource()
     {
         Assert.Equal(VectorSource.Auto, new HybridSearchOptions().VectorSource);

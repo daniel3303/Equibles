@@ -23,7 +23,8 @@ public class EmbeddingRepository : BaseRepository<Embedding>
         return await GetAll().FirstOrDefaultAsync(e => e.ChunkId == chunk.Id);
     }
 
-    public IQueryable<Embedding> GetByChunks(IEnumerable<Chunk> chunks)
+    // virtual: unit tests stub the pool re-rank's stored-vector seam by subclassing.
+    public virtual IQueryable<Embedding> GetByChunks(IEnumerable<Chunk> chunks)
     {
         var chunkIds = chunks.Select(c => c.Id).ToList();
         return GetAll().Where(e => chunkIds.Contains(e.ChunkId));

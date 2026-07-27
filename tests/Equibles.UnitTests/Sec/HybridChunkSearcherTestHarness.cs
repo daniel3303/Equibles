@@ -44,15 +44,23 @@ internal sealed class StubChunkRepository : ChunkRepository
 internal sealed class StubEmbeddingRepository : EmbeddingRepository
 {
     private readonly List<Guid> _similarChunkIds;
+    private readonly bool _throwOnCorpusSearch;
+    private readonly List<Embedding> _storedEmbeddings;
 
     public bool SearchSimilarChunksCalled { get; private set; }
 
     public string SearchSimilarChunksTicker { get; private set; }
 
-    public StubEmbeddingRepository(List<Guid> similarChunkIds)
+    public StubEmbeddingRepository(
+        List<Guid> similarChunkIds,
+        bool throwOnCorpusSearch = false,
+        List<Embedding> storedEmbeddings = null
+    )
         : base(null)
     {
         _similarChunkIds = similarChunkIds;
+        _throwOnCorpusSearch = throwOnCorpusSearch;
+        _storedEmbeddings = storedEmbeddings ?? [];
     }
 
     public override Task<List<Guid>> SearchSimilarChunks(
@@ -69,7 +77,19 @@ internal sealed class StubEmbeddingRepository : EmbeddingRepository
     {
         SearchSimilarChunksCalled = true;
         SearchSimilarChunksTicker = ticker;
+        if (_throwOnCorpusSearch)
+            throw new InvalidOperationException("corpus vector arm unavailable");
         return Task.FromResult(_similarChunkIds);
+    }
+
+    // The pool re-rank's stored-vector lookup, served from the in-memory list so the
+    // corpus-arm fallback path is exercisable without a database.
+    public override IQueryable<Embedding> GetByChunks(IEnumerable<Chunk> chunks)
+    {
+        var ids = chunks.Select(chunk => chunk.Id).ToHashSet();
+        return new TestAsyncEnumerable<Embedding>(
+            _storedEmbeddings.Where(embedding => ids.Contains(embedding.ChunkId))
+        );
     }
 }
 
