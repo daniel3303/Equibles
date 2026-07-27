@@ -78,14 +78,37 @@ public class YahooPriceImportService
         // those stocks' full, fully-adjusted history and overwrite the stored rows (#2879).
         await ReconcilePendingSplits(DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
 
-        var totalInserted = 0;
+        // Crawl the recently-active stocks first, stalest-first within them, and the long-dormant
+        // tail afterwards (see OrderByCrawlPriority for why the plain stalest-first order starved
+        // the daily lane).
+        var crawlOrder = await OrderByCrawlPriority(tickerMap, cancellationToken);
 
-        // Crawl stalest-first: the ticker map's DB order is stable across cycles, so with a
-        // multi-hour crawl any interruption (deploy, crash, rate-limit stall) starves the same
-        // tail stocks for days while head stocks re-sync every cycle. Ordering by each stock's
-        // last stored price date spends every partial cycle on the most out-of-date stocks;
-        // never-synced stocks lead.
-        var crawlOrder = await OrderByStalestPrice(tickerMap, cancellationToken);
+        // Prices for the WHOLE universe first, enrichment only afterwards. The two used to be
+        // interleaved per ticker, which made every stock cost three Yahoo calls instead of one and
+        // stretched a full pass to hours — and since an interrupted cycle simply restarts from the
+        // top, a worker that restarts more often than a pass takes (a deploy, say) would keep
+        // re-walking the head and never reach the stocks missing yesterday's bar. Prices are the
+        // time-critical half and are nearly free once a stock is current (the settled-trading-day
+        // gate makes an up-to-date stock cost zero calls), so they must never queue behind
+        // enrichment traffic for the stock in front.
+        var totalInserted = await ImportPrices(crawlOrder, cancellationToken);
+
+        _logger.LogInformation(
+            "Yahoo price sync complete. Inserted {Count} new price records",
+            totalInserted
+        );
+
+        if (includeEnrichment)
+            await ImportEnrichment(crawlOrder, cancellationToken);
+    }
+
+    // Pass 1 — the settled daily bars. One Yahoo call per stock that actually needs one.
+    private async Task<int> ImportPrices(
+        List<KeyValuePair<string, Guid>> crawlOrder,
+        CancellationToken cancellationToken
+    )
+    {
+        var totalInserted = 0;
 
         foreach (var (ticker, commonStockId) in crawlOrder)
         {
@@ -99,17 +122,16 @@ public class YahooPriceImportService
 
             try
             {
-                var inserted = await ImportTicker(ticker, commonStockId, today, cancellationToken);
-                totalInserted += inserted;
-                if (includeEnrichment)
-                {
-                    await SyncKeyStatistics(ticker, commonStockId, cancellationToken);
-                    await SyncCompanyProfile(ticker, commonStockId, cancellationToken);
-                }
+                totalInserted += await ImportTicker(
+                    ticker,
+                    commonStockId,
+                    today,
+                    cancellationToken
+                );
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogWarning(ex, "Failed to fetch data for {Ticker}, skipping", ticker);
+                _logger.LogWarning(ex, "Failed to fetch prices for {Ticker}, skipping", ticker);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -119,7 +141,7 @@ public class YahooPriceImportService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error importing data for {Ticker}", ticker);
+                _logger.LogError(ex, "Error importing prices for {Ticker}", ticker);
                 await _errorReporter.Report(
                     ErrorSource.YahooPriceScraper,
                     $"ImportTicker({ticker})",
@@ -128,15 +150,63 @@ public class YahooPriceImportService
             }
         }
 
-        _logger.LogInformation(
-            "Yahoo price sync complete. Inserted {Count} new price records",
-            totalInserted
-        );
+        return totalInserted;
     }
 
-    // Orders the ticker map by each stock's most recent stored price date, oldest first (stocks
-    // with no prices at all lead). One grouped MAX(Date) query over the price table per cycle.
-    private async Task<List<KeyValuePair<string, Guid>>> OrderByStalestPrice(
+    // Pass 2 — key statistics + company profile. Two extra Yahoo calls per stock and the bulk of a
+    // cycle's traffic, which is why it runs on its own slower cadence AND strictly after prices.
+    private async Task ImportEnrichment(
+        List<KeyValuePair<string, Guid>> crawlOrder,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var (ticker, commonStockId) in crawlOrder)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                await SyncKeyStatistics(ticker, commonStockId, cancellationToken);
+                await SyncCompanyProfile(ticker, commonStockId, cancellationToken);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogWarning(ex, "Failed to fetch enrichment for {Ticker}, skipping", ticker);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error enriching {Ticker}", ticker);
+                await _errorReporter.Report(ErrorSource.YahooPriceScraper, $"Enrich({ticker})", ex);
+            }
+        }
+    }
+
+    // A stock whose newest stored bar is within this many calendar days is treated as actively
+    // trading and belongs to the daily working set. Comfortably clears a long weekend plus a
+    // holiday, so a healthy stock can never fall out of the set just because the market was shut.
+    private const int ActivelyTradedWindowDays = 10;
+
+    // Orders the crawl: actively-traded stocks first (stalest of them leading), long-dormant and
+    // never-synced stocks after them, stalest-first within each group. One grouped MAX(Date) query
+    // over the price table per cycle.
+    //
+    // Plain stalest-first is the obvious order and it was actively harmful. Sorting the whole
+    // universe by last stored date puts the stocks that will never return data — delisted tickers,
+    // bankruptcy-suffixed symbols, expired warrants, foreign OTC lines Yahoo does not serve — at
+    // the front of EVERY cycle, because "no data for months" sorts as "stalest". They cost a call
+    // each, yield nothing, and are re-paid on the next cycle: in production 617 such stocks sat
+    // ahead of the 5,484 that were merely missing the previous session's bar, so the lane spent its
+    // first ~23 minutes on hopeless work while the whole site showed a stale close.
+    //
+    // Splitting on recency fixes that without reintroducing starvation, which is what stalest-first
+    // was guarding against. The dormant tail still runs every cycle, just second — and once the
+    // working set is current it costs nearly nothing to walk (the settled-trading-day gate skips an
+    // up-to-date stock without any Yahoo call), so the tail gets almost the entire cycle anyway.
+    private async Task<List<KeyValuePair<string, Guid>>> OrderByCrawlPriority(
         Dictionary<string, Guid> tickerMap,
         CancellationToken cancellationToken
     )
@@ -149,10 +219,30 @@ public class YahooPriceImportService
             .Select(g => new { StockId = g.Key, LastDate = g.Max(p => p.Date) })
             .ToDictionaryAsync(x => x.StockId, x => x.LastDate, cancellationToken);
 
+        return BuildCrawlOrder(tickerMap, lastDates, DateOnly.FromDateTime(DateTime.UtcNow));
+    }
+
+    // Pure so the priority rule is pinnable in tests without a database.
+    private static List<KeyValuePair<string, Guid>> BuildCrawlOrder(
+        Dictionary<string, Guid> tickerMap,
+        IReadOnlyDictionary<Guid, DateOnly> lastDates,
+        DateOnly today
+    )
+    {
+        var activeSince = today.AddDays(-ActivelyTradedWindowDays);
+
         return tickerMap
-            .OrderBy(kv =>
-                lastDates.TryGetValue(kv.Value, out var lastDate) ? lastDate : DateOnly.MinValue
-            )
+            .Select(kv => new
+            {
+                Entry = kv,
+                LastDate = lastDates.TryGetValue(kv.Value, out var lastDate)
+                    ? lastDate
+                    : DateOnly.MinValue,
+            })
+            // false (0) sorts before true (1), so the actively-traded group leads.
+            .OrderBy(x => x.LastDate < activeSince)
+            .ThenBy(x => x.LastDate)
+            .Select(x => x.Entry)
             .ToList();
     }
 
