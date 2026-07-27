@@ -77,9 +77,17 @@ public class HybridChunkSearcher
         // search is the exception: one document's chunks are a bounded set served by the
         // existing btree indexes, so the exhaustive in-document ranking is always safe — and
         // it is what makes a purely semantic question (zero token overlap with the filing's
-        // wording) findable at all.
+        // wording) findable at all. Under Auto (the default) a TICKER-scoped search takes the
+        // same exhaustive path: a company's chunks are a bounded set reached through the Chunk
+        // ticker btree index (measured ~250ms for a large filer vs 85s corpus-wide), and the
+        // SemanticTimeoutSeconds budget still bounds an outlier company.
         var corpusArmSafe =
-            semanticActive && (_options.VectorSource == VectorSource.Table || documentId.HasValue);
+            semanticActive
+            && (
+                _options.VectorSource == VectorSource.Table
+                || documentId.HasValue
+                || (_options.VectorSource == VectorSource.Auto && ticker != null)
+            );
         var bm25Limit = maxResults;
         if (semanticActive)
             bm25Limit = Math.Max(bm25Limit, _options.CandidatePoolSize);

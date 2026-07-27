@@ -27,4 +27,14 @@ public enum VectorSource
     /// complete and an ANN (HNSW) index on the vector column to stay inside the query budget.
     /// </summary>
     Table,
+
+    /// <summary>
+    /// Scope-dependent (the default): a ticker- or document-scoped search uses the exhaustive
+    /// vector ranking over that scope — a company's chunks are a bounded set reached through the
+    /// Chunk ticker btree index (one document's through the document index), so no ANN index is
+    /// needed and a purely semantic query can surface chunks BM25 never retrieved. An unscoped
+    /// (market-wide) search falls back to the <see cref="Pool"/> re-rank, because corpus-wide
+    /// nearest neighbours without an ANN index would scan the whole Embedding table.
+    /// </summary>
+    Auto,
 }
