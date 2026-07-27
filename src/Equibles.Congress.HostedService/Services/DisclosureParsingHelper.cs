@@ -22,6 +22,10 @@ public static partial class DisclosureParsingHelper
         "Ms",
         "Dr",
         "Hon",
+        // "Hon" is also filed unabbreviated. Without this entry "Donald Sternoff Honorable
+        // Beyer" survives normalisation and stands as a second record beside "Donald Sternoff
+        // Beyer" — the exact fragmentation the abbreviated token already prevents.
+        "Honorable",
     };
 
     /// <summary>
