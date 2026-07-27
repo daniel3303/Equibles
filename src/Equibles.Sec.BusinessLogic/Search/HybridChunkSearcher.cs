@@ -77,9 +77,19 @@ public class HybridChunkSearcher
         // search is the exception: one document's chunks are a bounded set served by the
         // existing btree indexes, so the exhaustive in-document ranking is always safe — and
         // it is what makes a purely semantic question (zero token overlap with the filing's
-        // wording) findable at all.
+        // wording) findable at all. Under Auto (the default) a TICKER-scoped search takes the
+        // same exhaustive path: a company's chunks are a bounded set reached through the Chunk
+        // ticker btree index (measured ~250ms for a large filer vs 85s corpus-wide), and the
+        // SemanticTimeoutSeconds budget still bounds an outlier company.
         var corpusArmSafe =
-            semanticActive && (_options.VectorSource == VectorSource.Table || documentId.HasValue);
+            semanticActive
+            && (
+                _options.VectorSource == VectorSource.Table
+                || documentId.HasValue
+                || (
+                    _options.VectorSource == VectorSource.Auto && !string.IsNullOrWhiteSpace(ticker)
+                )
+            );
         var bm25Limit = maxResults;
         if (semanticActive)
             bm25Limit = Math.Max(bm25Limit, _options.CandidatePoolSize);
@@ -122,8 +132,8 @@ public class HybridChunkSearcher
         }
 
         // With only the pool re-rank available, an empty BM25 pool leaves the semantic arm
-        // nothing to work on; with the corpus arm safe (Table mode, or any document-scoped
-        // search) the vector ranking can carry the result alone.
+        // nothing to work on; with the corpus arm safe (Table mode, any document scope, or
+        // Auto + ticker scope) the vector ranking can carry the result alone.
         if (!semanticActive || (bm25.Count == 0 && !corpusArmSafe))
             return ApplyPoolControls(bm25, excludeTickers, documentTypes, maxResultsPerCompany)
                 .Take(maxResults)
@@ -210,8 +220,12 @@ public class HybridChunkSearcher
 
     // Produces a semantic ranking of chunk ids, swallowing any embedding-server failure into an
     // empty list so retrieval degrades to BM25 rather than erroring. The corpus arm wins over
-    // the pool re-rank whenever it is safe (Table mode, or a document-scoped search) — it can
-    // surface chunks BM25 never retrieved, which the pool re-rank by construction cannot.
+    // the pool re-rank whenever it is safe (Table mode, a document scope, or Auto + ticker
+    // scope) — it can surface chunks BM25 never retrieved, which the pool re-rank by
+    // construction cannot. A FAILED or empty corpus arm falls back to the pool re-rank over
+    // whatever BM25 found before giving up: the pool path is a by-id lookup that still works in
+    // exactly the cases that kill the corpus arm (a slow distance sort, a missing index), so an
+    // outlier scope must never end up WORSE ranked than it was under plain Pool mode.
     private async Task<List<Guid>> RankSemantically(
         string query,
         IReadOnlyList<Chunk> bm25Pool,
@@ -224,10 +238,11 @@ public class HybridChunkSearcher
         CancellationToken cancellationToken
     )
     {
-        try
+        if (corpusArmSafe)
         {
-            return corpusArmSafe
-                ? await RankCorpus(
+            try
+            {
+                var corpus = await RankCorpus(
                     query,
                     ticker,
                     documentId,
@@ -235,8 +250,22 @@ public class HybridChunkSearcher
                     startDate,
                     endDate,
                     cancellationToken
-                )
-                : await RankPool(query, bm25Pool, cancellationToken);
+                );
+                if (corpus.Count > 0)
+                    return corpus;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Corpus vector arm failed or timed out; falling back to the pool re-rank"
+                );
+            }
+        }
+
+        try
+        {
+            return await RankPool(query, bm25Pool, cancellationToken);
         }
         catch (Exception exception)
         {

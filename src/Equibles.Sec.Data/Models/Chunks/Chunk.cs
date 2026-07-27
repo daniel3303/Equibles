@@ -7,6 +7,11 @@ namespace Equibles.Sec.Data.Models.Chunks;
 [Index(nameof(DocumentId), nameof(Index), IsUnique = true)]
 [Index(nameof(DocumentType), IsUnique = false)]
 [Index(nameof(CreationTime))]
+// Btree on Ticker: the hybrid searcher's ticker-scoped vector arm reaches a company's
+// embeddings through this index (Chunk by ticker → Embedding by ChunkId) — without it the
+// planner distance-sorts the whole Embedding table before the join filters it. The BM25 index
+// below also carries Ticker, but only for Tantivy term filters, not SQL equality.
+[Index(nameof(Ticker))]
 [Bm25Index(
     nameof(Id),
     nameof(Content),

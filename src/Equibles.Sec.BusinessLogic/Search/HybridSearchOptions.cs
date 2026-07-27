@@ -10,8 +10,12 @@ public class HybridSearchOptions
     /// <summary>Master switch for the semantic arm. When false the searcher is pure BM25.</summary>
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Where the semantic ranking comes from. See <see cref="Search.VectorSource"/>.</summary>
-    public VectorSource VectorSource { get; set; } = VectorSource.Pool;
+    /// <summary>
+    /// Where the semantic ranking comes from. See <see cref="Search.VectorSource"/>. Auto gives
+    /// ticker- and document-scoped searches genuine semantic retrieval over their bounded scope
+    /// while unscoped searches keep the pool re-rank — the safe default with no ANN index.
+    /// </summary>
+    public VectorSource VectorSource { get; set; } = VectorSource.Auto;
 
     /// <summary>
     /// How many BM25 hits feed the vector arm before fusion. The re-rank reads the pool's STORED

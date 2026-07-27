@@ -23,7 +23,8 @@ public class EmbeddingRepository : BaseRepository<Embedding>
         return await GetAll().FirstOrDefaultAsync(e => e.ChunkId == chunk.Id);
     }
 
-    public IQueryable<Embedding> GetByChunks(IEnumerable<Chunk> chunks)
+    // virtual: unit tests stub the pool re-rank's stored-vector seam by subclassing.
+    public virtual IQueryable<Embedding> GetByChunks(IEnumerable<Chunk> chunks)
     {
         var chunkIds = chunks.Select(c => c.Id).ToList();
         return GetAll().Where(e => chunkIds.Contains(e.ChunkId));
@@ -72,10 +73,14 @@ public class EmbeddingRepository : BaseRepository<Embedding>
 
         if (ticker != null)
         {
-            var loweredTicker = ticker.ToLowerInvariant();
-            query = query.Where(e =>
-                e.Chunk.Ticker != null && e.Chunk.Ticker.ToLower() == loweredTicker
-            );
+            // Equality on the stored (uppercase) form, NOT lower() on the column: the wrapped
+            // comparison defeated the Chunk ticker btree index, and the planner then answered a
+            // ticker-scoped query by distance-sorting the ENTIRE Embedding table before the join
+            // filtered it (85s on the production corpus vs ~250ms through the index). Tickers are
+            // stored uppercase by the chunker; normalizing the parameter is a mechanical case
+            // conversion, not classification.
+            var normalizedTicker = ticker.ToUpperInvariant();
+            query = query.Where(e => e.Chunk.Ticker == normalizedTicker);
         }
 
         if (documentId.HasValue)

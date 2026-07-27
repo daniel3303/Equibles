@@ -203,7 +203,11 @@ public class DocumentProcessor : IDocumentProcessor
             {
                 Document = document,
                 DocumentType = document.DocumentType,
-                Ticker = document.CommonStock.Ticker,
+                // Upper-invariant at the write: the vector arm's ticker filter is an EXACT
+                // equality against the Chunk ticker btree index (EmbeddingRepository), so the
+                // stored case must be an invariant, not a convention. Mechanical case
+                // normalization only — the symbol itself is authoritative.
+                Ticker = document.CommonStock.Ticker?.ToUpperInvariant(),
                 ReportingDate = DateTime.SpecifyKind(
                     document.ReportingDate.ToDateTime(TimeOnly.MinValue),
                     DateTimeKind.Utc
