@@ -4,6 +4,7 @@ using Equibles.Media.Data.Models;
 using Equibles.Media.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using MimeTypes;
+using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
 
@@ -28,8 +29,8 @@ public class ImageManager : IImageManager
      * </summary>
      * <param name="content">The image content.</param>
      * <param name="fileName">The file name.</param>
-     * <param name="maxWidth">The maximum width of the image. 0 to keep the aspect ratio.</param>
-     * <param name="maxHeight">The maximum height of the image. 0 to keep the aspect ratio.</param>
+     * <param name="maxWidth">The maximum width of the image. Null or 0 leaves it unbounded.</param>
+     * <param name="maxHeight">The maximum height of the image. Null or 0 leaves it unbounded.</param>
      * <returns>The saved image object.</returns>
      */
     public async Task<Image> SaveImage(
@@ -64,9 +65,36 @@ public class ImageManager : IImageManager
             || (maxHeight != null && imageProcessor.Height > maxHeight);
         if (exceedsMaxBounds)
         {
+            // ResizeMode.Max fits the image INSIDE the bounds, preserving the aspect ratio.
+            // The plain Resize(width, height) overload stretches to the exact box when both
+            // bounds are set, which distorted every source whose aspect differed from the
+            // bounds (a 2408x1648 upload was recorded as 2400x2400).
             imageProcessor.Mutate(i =>
-                i.Resize(maxWidth ?? 0, maxHeight ?? 0, new BicubicResampler())
+                i.Resize(
+                    new ResizeOptions
+                    {
+                        Size = new SixLabors.ImageSharp.Size(maxWidth ?? 0, maxHeight ?? 0),
+                        Mode = ResizeMode.Max,
+                        Sampler = new BicubicResampler(),
+                    }
+                )
             );
+
+            // The stored bytes must BE the resized image. Storing the original while the row
+            // records the resized dimensions shipped blobs that disagreed with their metadata
+            // — and meant the cap never actually shrank anything on disk. Re-encode in the
+            // format the bytes arrived in; JPEG gets an explicit quality because the encoder
+            // default (75) visibly degrades a photo that was only meant to be scaled down.
+            var format =
+                imageProcessor.Metadata.DecodedImageFormat
+                ?? throw new InvalidOperationException("The decoded image reports no format.");
+            var encoder =
+                format is JpegFormat
+                    ? new JpegEncoder { Quality = 90 }
+                    : imageProcessor.Configuration.ImageFormatsManager.GetEncoder(format);
+            using var resizedStream = new MemoryStream();
+            await imageProcessor.SaveAsync(resizedStream, encoder);
+            content = resizedStream.ToArray();
         }
 
         var image = new Image()
