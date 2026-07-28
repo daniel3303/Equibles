@@ -1,5 +1,6 @@
 using Equibles.Core.Configuration;
 using Equibles.Core.Contracts;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.Data.Models;
@@ -27,7 +28,10 @@ public class HoldingsImportServiceCoverPageClampTests : IDisposable
 
     public HoldingsImportServiceCoverPageClampTests()
     {
-        _dbContext = TestDbContextFactory.Create(new HoldingsModuleConfiguration());
+        _dbContext = TestDbContextFactory.Create(
+            new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration()
+        );
     }
 
     public void Dispose() => _dbContext.Dispose();

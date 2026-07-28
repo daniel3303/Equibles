@@ -8,6 +8,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Data;
 using Equibles.Congress.Data.Models;
 using Equibles.Congress.Repositories;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Fred.Data;
 using Equibles.Fred.Data.Models;
@@ -45,6 +46,7 @@ public class DataCountServiceTests : IDisposable
             new InsiderTradingModuleConfiguration(),
             new CongressModuleConfiguration(),
             new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration(),
             new FredModuleConfiguration(),
             new YahooModuleConfiguration(),
             new CftcModuleConfiguration(),

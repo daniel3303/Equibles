@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.Contracts;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.Data.Models;
@@ -19,6 +20,7 @@ public class HoldingsValueRecalculatorTests : IDisposable
     [
         new CommonStocksModuleConfiguration(),
         new HoldingsModuleConfiguration(),
+        new CorporateActionsModuleConfiguration(),
     ];
 
     private readonly string _dbName = Guid.NewGuid().ToString();

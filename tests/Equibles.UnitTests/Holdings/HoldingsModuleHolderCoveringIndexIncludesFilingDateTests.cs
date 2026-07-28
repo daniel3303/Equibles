@@ -1,3 +1,4 @@
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.Data.Models;
@@ -27,7 +28,11 @@ public class HoldingsModuleHolderCoveringIndexIncludesFilingDateTests
             .Options;
         return new EquiblesFinancialDbContext(
             options,
-            new IModuleConfiguration[] { new HoldingsModuleConfiguration() }
+            new IModuleConfiguration[]
+            {
+                new HoldingsModuleConfiguration(),
+                new CorporateActionsModuleConfiguration(),
+            }
         );
     }
 

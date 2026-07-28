@@ -2,6 +2,7 @@ using System.Reflection;
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Holdings.BusinessLogic;
@@ -29,7 +30,8 @@ public class InstitutionalHoldingsToolsResolveStockByTickerNormalizationTests : 
     {
         _dbContext = TestDbContextFactory.Create(
             new CommonStocksModuleConfiguration(),
-            new HoldingsModuleConfiguration()
+            new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration()
         );
         _dbContext.Set<CommonStock>().Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc" });
         _dbContext.SaveChanges();

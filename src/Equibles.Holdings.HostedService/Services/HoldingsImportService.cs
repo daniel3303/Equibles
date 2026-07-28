@@ -6,7 +6,7 @@ using Equibles.Core.Configuration;
 using Equibles.Core.Contracts;
 using Equibles.Core.Extensions;
 using Equibles.CorporateActions.Data;
-using Equibles.CorporateActions.Repositories;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
@@ -504,10 +504,10 @@ public class HoldingsImportService
         var stockIds = context.CusipMapping.Values.Distinct().ToList();
 
         using var scope = _scopeFactory.CreateScope();
-        var splitRepository = scope.ServiceProvider.GetRequiredService<StockSplitRepository>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
-        var splits = await splitRepository
-            .GetAll()
+        var splits = await dbContext
+            .Set<StockSplit>()
             .Where(s => stockIds.Contains(s.CommonStockId))
             .ToListAsync(cancellationToken);
 

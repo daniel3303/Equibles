@@ -11,6 +11,7 @@ using Equibles.CommonStocks.Data.Models.Taxonomies;
 using Equibles.Congress.Data;
 using Equibles.Congress.Data.Extensions;
 using Equibles.Congress.Data.Models;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Data.Extensions;
 using Equibles.Errors.Data;
@@ -363,7 +364,11 @@ public class ModuleConfigurationTests : IDisposable
     public void HoldingsModuleConfiguration_ConfigureEntities_DoesNotThrow()
     {
         var act = () =>
-            CreateContext(new CommonStocksModuleConfiguration(), new HoldingsModuleConfiguration());
+            CreateContext(
+                new CommonStocksModuleConfiguration(),
+                new HoldingsModuleConfiguration(),
+                new CorporateActionsModuleConfiguration()
+            );
 
         act.Should().NotThrow();
     }
@@ -373,7 +378,8 @@ public class ModuleConfigurationTests : IDisposable
     {
         var context = CreateContext(
             new CommonStocksModuleConfiguration(),
-            new HoldingsModuleConfiguration()
+            new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration()
         );
 
         context.Set<InstitutionalHolder>().Should().NotBeNull();
@@ -573,6 +579,7 @@ public class ModuleConfigurationTests : IDisposable
             CreateContext(
                 new CommonStocksModuleConfiguration(),
                 new HoldingsModuleConfiguration(),
+                new CorporateActionsModuleConfiguration(),
                 new InsiderTradingModuleConfiguration(),
                 new CongressModuleConfiguration(),
                 new SecTestModuleConfiguration(),
@@ -594,6 +601,7 @@ public class ModuleConfigurationTests : IDisposable
         var context = CreateContext(
             new CommonStocksModuleConfiguration(),
             new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration(),
             new InsiderTradingModuleConfiguration(),
             new CongressModuleConfiguration(),
             new SecTestModuleConfiguration(),

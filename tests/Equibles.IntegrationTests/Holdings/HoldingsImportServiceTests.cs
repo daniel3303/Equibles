@@ -5,6 +5,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Core.Contracts;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.HostedService.Models;
@@ -152,6 +153,7 @@ public class HoldingsImportServiceTests
     [
         new CommonStocksModuleConfiguration(),
         new HoldingsModuleConfiguration(),
+        new CorporateActionsModuleConfiguration(),
     ];
 
     private static EquiblesFinancialDbContext CreateDb() => TestDbContextFactory.Create(Modules);

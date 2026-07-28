@@ -1,3 +1,4 @@
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.Data.Models;
@@ -13,7 +14,10 @@ public class FundScoreRepositoryTests : IDisposable
 
     public FundScoreRepositoryTests()
     {
-        _dbContext = TestDbContextFactory.Create(new HoldingsModuleConfiguration());
+        _dbContext = TestDbContextFactory.Create(
+            new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration()
+        );
         _repository = new FundScoreRepository(_dbContext);
     }
 

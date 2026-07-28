@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.Data.Models;
@@ -17,7 +18,8 @@ public class InstitutionalHoldingRepositoryReportDatesByHolderTests : IDisposabl
     {
         _dbContext = TestDbContextFactory.Create(
             new CommonStocksModuleConfiguration(),
-            new HoldingsModuleConfiguration()
+            new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration()
         );
         _repository = new InstitutionalHoldingRepository(_dbContext);
     }

@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
@@ -35,7 +36,8 @@ public class StocksControllerShowHolderUnknownCikTests
             new CommonStocksModuleConfiguration(),
             new MediaModuleConfiguration(),
             new SecTestModuleConfiguration(),
-            new HoldingsModuleConfiguration()
+            new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration()
         );
 
         ctx.Set<CommonStock>()

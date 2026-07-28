@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data;
@@ -38,6 +39,7 @@ public class FundScoringWorkerTests : IDisposable
     {
         _dbContext = TestDbContextFactory.Create(
             new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration(),
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
@@ -118,21 +120,31 @@ public class FundScoringWorkerTests : IDisposable
 
         var holder = new InstitutionalHolder { Cik = "0001234567", Name = "Doubler Capital" };
         _dbContext.Set<InstitutionalHolder>().Add(holder);
-        // Rebalance (ReportDate + 45 days) lands before the window start, so the portfolio is
-        // held from day one of the window through to today.
-        _dbContext
-            .Set<InstitutionalHolding>()
-            .Add(
-                new InstitutionalHolding
-                {
-                    InstitutionalHolderId = holder.Id,
-                    CommonStockId = held.Id,
-                    ReportDate = WindowFrom.AddDays(-60),
-                    FilingDate = WindowFrom.AddDays(-15),
-                    Shares = 1000,
-                    Value = 100_000,
-                }
-            );
+        // The first report's rebalance (ReportDate + 45 days) lands before the window start, so the
+        // portfolio is held from day one of the window; the filer then keeps reporting the same
+        // position quarterly through today, as a filer that still exists does. The repetition is
+        // load-bearing: the simulation stops 150 days after a filer's last rebalance, so a lone
+        // filing would be scored as a filer that deregistered and the window would end early.
+        for (
+            var reportDate = WindowFrom.AddDays(-60);
+            reportDate <= Today;
+            reportDate = reportDate.AddMonths(3)
+        )
+        {
+            _dbContext
+                .Set<InstitutionalHolding>()
+                .Add(
+                    new InstitutionalHolding
+                    {
+                        InstitutionalHolderId = holder.Id,
+                        CommonStockId = held.Id,
+                        ReportDate = reportDate,
+                        FilingDate = reportDate.AddDays(45),
+                        Shares = 1000,
+                        Value = 100_000,
+                    }
+                );
+        }
 
         _dbContext.SaveChanges();
         return holder;
