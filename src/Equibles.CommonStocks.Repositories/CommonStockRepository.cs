@@ -144,4 +144,26 @@ public class CommonStockRepository : BaseRepository<CommonStock>
         DbContext.Set<CommonStockCusipAlias>().Add(alias);
         return alias;
     }
+
+    /// <summary>
+    /// Retired primary tickers recorded when the SEC sync renamed a stock's symbol.
+    /// Same aggregate reasoning as the CUSIP aliases: no independent lifecycle, so
+    /// access lives here rather than in a dedicated repository. Consulted only on
+    /// the miss path — a live ticker always resolves before any alias is looked at.
+    /// </summary>
+    public IQueryable<CommonStockTickerAlias> GetTickerAliases()
+    {
+        return DbContext.Set<CommonStockTickerAlias>().AsQueryable();
+    }
+
+    public CommonStockTickerAlias AddTickerAlias(CommonStockTickerAlias alias)
+    {
+        DbContext.Set<CommonStockTickerAlias>().Add(alias);
+        return alias;
+    }
+
+    public void DeleteTickerAlias(CommonStockTickerAlias alias)
+    {
+        DbContext.Set<CommonStockTickerAlias>().Remove(alias);
+    }
 }

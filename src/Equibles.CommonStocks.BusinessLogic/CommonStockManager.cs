@@ -87,6 +87,71 @@ public class CommonStockManager
     }
 
     /// <summary>
+    /// Stages a <see cref="CommonStockTickerAlias"/> for a primary ticker the stock is
+    /// abandoning, so URLs published under the old symbol can 301 to the current one.
+    /// Stages only — no SaveChanges: the caller is the SEC sync mid-rename, and the alias
+    /// must commit (or roll back) atomically with the rename itself.
+    /// <para>
+    /// Semantics differ from the CUSIP alias on purpose. A CUSIP identifies one security
+    /// forever, so the first owner keeps a retired CUSIP; tickers are recycled across
+    /// unrelated issuers, so redirects are last-writer-wins:
+    /// an alias equal to any LIVE primary or secondary ticker is never recorded (the live
+    /// symbol would shadow it anyway — recording it would only seed a stale row for the
+    /// day the live holder renames); and recording a symbol another stock retired earlier
+    /// deletes that stale alias first — the most recent holder owns the redirect.
+    /// </para>
+    /// Returns the staged entity, or null when nothing was staged, so the caller can
+    /// detach it if the surrounding update is rolled back.
+    /// </summary>
+    public async Task<CommonStockTickerAlias> RecordTickerAlias(
+        CommonStock commonStock,
+        string retiredTicker
+    )
+    {
+        ArgumentNullException.ThrowIfNull(commonStock);
+
+        if (
+            string.IsNullOrWhiteSpace(retiredTicker)
+            || string.Equals(retiredTicker, commonStock.Ticker, StringComparison.OrdinalIgnoreCase)
+        )
+        {
+            return null;
+        }
+
+        var normalized = retiredTicker.ToUpperInvariant();
+
+        // Never shadow a live symbol: if any stock currently lists it (primary or
+        // secondary), the live resolution wins on every lookup and the alias would only
+        // linger as a wrong redirect after that holder eventually renames.
+        var liveHolder = await _commonStockRepository
+            .GetAll()
+            .AnyAsync(cs => cs.Ticker == normalized || cs.SecondaryTickers.Contains(normalized));
+        if (liveHolder)
+        {
+            return null;
+        }
+
+        // Last-writer-wins: a symbol another stock retired earlier now belongs to this
+        // stock's history — delete the stale alias so the unique index accepts the new
+        // row (also covers this stock re-retiring a symbol it held twice).
+        var existing = await _commonStockRepository
+            .GetTickerAliases()
+            .FirstOrDefaultAsync(a => a.Ticker == normalized);
+        if (existing != null)
+        {
+            if (existing.CommonStockId == commonStock.Id)
+            {
+                return null;
+            }
+            _commonStockRepository.DeleteTickerAlias(existing);
+        }
+
+        return _commonStockRepository.AddTickerAlias(
+            new CommonStockTickerAlias { CommonStockId = commonStock.Id, Ticker = normalized }
+        );
+    }
+
+    /// <summary>
     /// Sets the company's fiscal year-end (month 1-12, optional day 1-31),
     /// sourced from SEC EDGAR's submissions <c>fiscalYearEnd</c> field. A
     /// no-op change persists nothing. Saves directly via the repository — like

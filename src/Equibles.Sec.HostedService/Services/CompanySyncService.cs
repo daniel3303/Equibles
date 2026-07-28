@@ -235,6 +235,12 @@ public class CompanySyncService : ICompanySyncService
             )
                 return;
 
+            // A ticker change orphans every URL published under the old symbol — record it
+            // as a redirect alias BEFORE the manager's save so alias and rename commit in
+            // the same unit of work. Staged only; the catch below unwinds it on rollback.
+            if (oldTicker != primaryTicker)
+                await state.CommonStockManager.RecordTickerAlias(existingStock, oldTicker);
+
             await state.CommonStockManager.Update(existingStock);
 
             if (oldTicker != primaryTicker)
@@ -259,6 +265,24 @@ public class CompanySyncService : ICompanySyncService
             existingStock.SecondaryTickers = oldSecondaryTickers;
             existingStock.Website = oldWebsite;
             state.DbContext.Entry(existingStock).State = EntityState.Unchanged;
+            // Unwind any alias changes RecordTickerAlias staged for this failed rename — a
+            // pending insert (the new alias) or delete (the last-writer-wins reclaim of a
+            // stale one) would otherwise ride along on the NEXT SaveChanges of this
+            // long-lived sync context, recording a redirect for a rename that never landed.
+            // Earlier stocks in the batch already committed theirs (Update saves per stock),
+            // so only this rename's pending entries can be in these states.
+            foreach (
+                var aliasEntry in state
+                    .DbContext.ChangeTracker.Entries<CommonStockTickerAlias>()
+                    .Where(e => e.State is EntityState.Added or EntityState.Deleted)
+                    .ToList()
+            )
+            {
+                aliasEntry.State =
+                    aliasEntry.State == EntityState.Added
+                        ? EntityState.Detached
+                        : EntityState.Unchanged;
+            }
             _logger.LogError(
                 ex,
                 "Error updating company {Ticker} - {Name} (CIK: {Cik})",
