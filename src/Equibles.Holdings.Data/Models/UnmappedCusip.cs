@@ -50,7 +50,7 @@ public class UnmappedCusip
     /// </summary>
     public long FiledValue { get; set; }
 
+    /// <summary>When this row was last written. The import replaces a quarter's rows wholesale,
+    /// so it doubles as "still unmapped as of".</summary>
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
-
-    public DateTime LastSeenTime { get; set; } = DateTime.UtcNow;
 }

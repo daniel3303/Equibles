@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.Holdings.HostedService.Services;
 
 namespace Equibles.Holdings.HostedService.Models;
@@ -32,4 +33,20 @@ public class ImportContext
     // reject a position larger than the company it is in (ImpossiblePositionGuard); a stock
     // missing here is simply not judged.
     public Dictionary<Guid, IssuerSize> IssuerSizes { get; set; } = [];
+
+    // Splits per stock, needed to restate an as-filed share count onto the basis the stored price
+    // series uses before the two are multiplied (see HoldingValueBasis). A stock missing here has
+    // never split, so its count and price already share a basis.
+    public Dictionary<Guid, List<StockSplit>> StockSplits { get; set; } = [];
+
+    // Tally of derived-vs-filed value disagreements across this import. Advisory only — it changes
+    // nothing that is stored, it just makes a units error loud instead of silent.
+    public ValueBasisAudit ValueBasisAudit { get; } = new();
+
+    // Positions the import had to leave out because their CUSIP matches no tracked stock,
+    // accumulated per (CUSIP, quarter) so the whole data set is counted before anything is written.
+    public Dictionary<
+        (string Cusip, DateOnly ReportDate),
+        UnmappedCusipTally
+    > UnmappedCusips { get; } = [];
 }
