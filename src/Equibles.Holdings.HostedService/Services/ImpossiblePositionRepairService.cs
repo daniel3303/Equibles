@@ -107,6 +107,84 @@ public class ImpossiblePositionRepairService
             );
         }
 
+        var realigned = await RealignFilingTotals(dbContext, cancellationToken);
+        if (realigned > 0)
+        {
+            _logger.LogWarning(
+                "Re-summed {Realigned} filing rollup(s) still carrying a withdrawn position's value",
+                realigned
+            );
+        }
+
         return repaired;
+    }
+
+    /// <summary>
+    /// Re-sums the per-accession rollup of any filing holding a position whose value was withdrawn.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>InstitutionalFiling.TotalValue</c> is a stored total written once at import, so
+    /// withdrawing a holding's value leaves the rollup carrying it — and the rollup is what the AUM
+    /// surfaces rank on, which is exactly where the wrong figure shows. Marking the positions alone
+    /// left the homepage strip still advertising a $100.8B portfolio while every position behind it
+    /// read zero.
+    /// </para>
+    /// <para>
+    /// Driven off the marked positions rather than off what this pass just changed, so it also
+    /// heals filings whose positions were marked by an earlier run — and re-running it is free once
+    /// the totals agree.
+    /// </para>
+    /// </remarks>
+    private static async Task<int> RealignFilingTotals(
+        EquiblesFinancialDbContext dbContext,
+        CancellationToken cancellationToken
+    )
+    {
+        var accessionNumbers = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h => h.ValueUnavailable && h.AccessionNumber != null)
+            .Select(h => h.AccessionNumber)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (accessionNumbers.Count == 0)
+        {
+            return 0;
+        }
+
+        var totals = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h => accessionNumbers.Contains(h.AccessionNumber))
+            .GroupBy(h => h.AccessionNumber)
+            .Select(g => new { AccessionNumber = g.Key, TotalValue = g.Sum(h => h.Value) })
+            .ToListAsync(cancellationToken);
+
+        var totalByAccession = totals.ToDictionary(t => t.AccessionNumber, t => t.TotalValue);
+
+        var filings = await dbContext
+            .Set<InstitutionalFiling>()
+            .Where(f => accessionNumbers.Contains(f.AccessionNumber))
+            .ToListAsync(cancellationToken);
+
+        var realigned = 0;
+        foreach (var filing in filings)
+        {
+            if (
+                totalByAccession.TryGetValue(filing.AccessionNumber, out var total)
+                && filing.TotalValue != total
+            )
+            {
+                filing.TotalValue = total;
+                realigned++;
+            }
+        }
+
+        if (realigned > 0)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return realigned;
     }
 }
