@@ -83,10 +83,7 @@ public class ImpossiblePositionRepairService
         // basis before the two are comparable. Without this, a holder of a few percent of a company
         // that later ran a 1:50 reverse split reads as owning fifty times the issuer, and its
         // perfectly good value is withdrawn.
-        var candidateStockIds = candidates
-            .Select(c => c.Holding.CommonStockId)
-            .Distinct()
-            .ToList();
+        var candidateStockIds = candidates.Select(c => c.Holding.CommonStockId).Distinct().ToList();
         var splitsByStock = (
             await dbContext
                 .Set<StockSplit>()
