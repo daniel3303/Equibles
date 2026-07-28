@@ -75,20 +75,75 @@ public class HoldingsBacktestCalculatorTests
     [Fact]
     public void Calculate_HorizonExceedsMaxYears_ClampsEndDate()
     {
-        var snapshot = SingleStockSnapshot(new DateOnly(2024, 3, 31), StockA, 1_000_000);
+        // The filer keeps filing right through the requested 25 years, so nothing goes stale and
+        // the only thing bounding the simulation is the MaxYears horizon. Seeding the full history
+        // matters: with a single snapshot the stale-tail cut would bind first and this would stop
+        // testing the horizon clamp at all.
         var from = new DateOnly(2024, 5, 15);
-        var requestedTo = from.AddYears(25);
+        var snapshots = new List<BacktestQuarterSnapshot>();
+        for (var quarter = 0; quarter < 100; quarter++)
+        {
+            snapshots.Add(
+                SingleStockSnapshot(
+                    new DateOnly(2024, 3, 31).AddMonths(quarter * 3),
+                    StockA,
+                    1_000_000
+                )
+            );
+        }
 
         var result = HoldingsBacktestCalculator.Calculate(
-            [snapshot],
+            snapshots,
             from: from,
-            to: requestedTo,
+            to: from.AddYears(25),
             priceOf: (_, _) => 100m,
             benchmarkPriceOf: _ => 100m
         );
 
         result.EndDate.Should().Be(from.AddYears(HoldingsBacktestCalculator.MaxYears));
         result.Points.Last().Date.Should().BeOnOrBefore(result.EndDate);
+    }
+
+    [Fact]
+    public void Calculate_FilerStoppedFiling_StopsAtTheStaleTailInsteadOfMarkingAFrozenBookForward()
+    {
+        // Scion filed its last 13F for 2025-09-30, which matured on 2025-11-14, and then
+        // deregistered. A trailing three-year window still runs to today, so the simulation kept
+        // trading that final three-stock snapshot for another eight months and reported the result
+        // as the manager's track record. A filer that is still filing rebalances every ~91 days, so
+        // a gap of 150 says the filings stopped rather than that this is still their portfolio.
+        var lastReport = new DateOnly(2025, 9, 30);
+        var lastRebalance = HoldingsBacktestCalculator.RebalanceDateOf(lastReport);
+
+        var result = HoldingsBacktestCalculator.Calculate(
+            [SingleStockSnapshot(lastReport, StockA, 1_000_000)],
+            from: new DateOnly(2025, 11, 20),
+            to: new DateOnly(2026, 7, 28),
+            priceOf: (_, _) => 100m,
+            benchmarkPriceOf: _ => 100m
+        );
+
+        var staleAfter = lastRebalance.AddDays(HoldingsBacktestCalculator.StaleTailDays);
+        result.TruncatedAt.Should().Be(staleAfter);
+        result.EndDate.Should().Be(staleAfter);
+        result.Points.Last().Date.Should().Be(staleAfter);
+    }
+
+    [Fact]
+    public void Calculate_FilerStillCurrent_DoesNotTruncate()
+    {
+        // The common case must be untouched: a filer whose latest filing has matured inside the
+        // normal quarterly cadence keeps the window it was asked for, and reports no truncation.
+        var result = HoldingsBacktestCalculator.Calculate(
+            [SingleStockSnapshot(new DateOnly(2026, 3, 31), StockA, 1_000_000)],
+            from: new DateOnly(2026, 5, 20),
+            to: new DateOnly(2026, 7, 28),
+            priceOf: (_, _) => 100m,
+            benchmarkPriceOf: _ => 100m
+        );
+
+        result.TruncatedAt.Should().BeNull();
+        result.EndDate.Should().Be(new DateOnly(2026, 7, 28));
     }
 
     [Fact]

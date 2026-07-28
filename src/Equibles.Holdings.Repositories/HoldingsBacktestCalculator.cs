@@ -17,6 +17,15 @@ public static class HoldingsBacktestCalculator
     // +8.75% reads as a "448% CAGR"); below this window length no CAGR is reported at all.
     public const int MinAnnualizationDays = 90;
 
+    // How long past its last rebalance a portfolio is still treated as this filer's. A filer that
+    // is still filing rebalances every ~91 days (a quarter's report, 45 days later), so a gap this
+    // wide means the filings stopped — the filer deregistered, was acquired, or fell under the
+    // reporting threshold. Simulating past it does not extend the manager's track record, it just
+    // marks a frozen snapshot to market and credits the manager with it: Scion's last filing
+    // matured on 2025-11-14, and the three-year window kept trading those three stocks for another
+    // eight months as though they were still his book.
+    public const int StaleTailDays = 150;
+
     // Shift a 13F ReportDate forward to its rebalance date (+RebalanceDelayDays). A ReportDate
     // within RebalanceDelayDays of DateOnly.MaxValue would overflow the calendar, so cap the
     // shift at MaxValue instead of throwing — a far-future date then reads as out-of-window.
@@ -60,6 +69,20 @@ public static class HoldingsBacktestCalculator
             .Select(s => (Snapshot: s, RebalanceDate: RebalanceDateOf(s.ReportDate)))
             .OrderBy(x => x.RebalanceDate)
             .ToList();
+
+        // Stop where the filer's portfolio stopped being current, so the tail of a window is never
+        // a dead filer's frozen book presented as a live track record.
+        var lastRebalance = ordered[^1].RebalanceDate;
+        var staleAfter =
+            lastRebalance.DayNumber > DateOnly.MaxValue.DayNumber - StaleTailDays
+                ? DateOnly.MaxValue
+                : lastRebalance.AddDays(StaleTailDays);
+        if (to > staleAfter)
+        {
+            to = staleAfter;
+            result.EndDate = to;
+            result.TruncatedAt = staleAfter;
+        }
 
         // The snapshot active at `from`: the latest whose rebalance date is on or before
         // `from`, so the simulation opens at `from` with the portfolio that had actually
@@ -126,6 +149,10 @@ public static class HoldingsBacktestCalculator
             result.BenchmarkSummary = ComputeSummary(result.Points.Select(p => p.BenchmarkValue));
         }
 
+        // Measured over the snapshots the simulation actually rebalanced on, not every snapshot
+        // handed in — a quarter outside the window says nothing about what this result covers.
+        result.Coverage = ComputeCoverage(ordered.Take(snapshotIdx + 1).Select(x => x.Snapshot));
+
         return result;
     }
 
@@ -181,6 +208,44 @@ public static class HoldingsBacktestCalculator
             sum += shares * price.Value;
         }
         return sum > 0 ? sum : fallback;
+    }
+
+    /// <summary>
+    /// The share of each snapshot's reported value that the long-only clone could actually hold.
+    /// Options are counted in the denominator precisely because they are what the clone drops:
+    /// leaving them out would report 100% coverage for a filer whose book is all puts.
+    /// </summary>
+    private static BacktestCoverage ComputeCoverage(IEnumerable<BacktestQuarterSnapshot> snapshots)
+    {
+        var coverage = new BacktestCoverage();
+        var shares = new List<decimal>();
+
+        foreach (var snapshot in snapshots)
+        {
+            decimal total = 0;
+            decimal longValue = 0;
+            foreach (var position in snapshot.Positions)
+            {
+                if (position.Value <= 0)
+                    continue;
+                total += position.Value;
+                if (!position.IsOption)
+                    longValue += position.Value;
+            }
+
+            if (total <= 0)
+                continue;
+
+            shares.Add(longValue / total * 100m);
+        }
+
+        if (shares.Count == 0)
+            return coverage;
+
+        coverage.QuartersMeasured = shares.Count;
+        coverage.AverageLongPercent = Math.Round(shares.Sum() / shares.Count, 2);
+        coverage.MinimumLongPercent = Math.Round(shares.Min(), 2);
+        return coverage;
     }
 
     private static BacktestStrategySummary ComputeSummary(IEnumerable<decimal> series)
