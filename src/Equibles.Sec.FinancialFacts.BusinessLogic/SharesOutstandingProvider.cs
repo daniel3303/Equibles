@@ -35,14 +35,22 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         "ifrs-full:ClassesOfOrdinarySharesAxis",
     ];
 
-    // A cover-page count this many times smaller than BOTH the issuer's previous cover-page count
+    // A cover-page count this many times smaller than BOTH the issuer's recent cover-page history
     // and the same filing's balance-sheet count is treated as a filing artifact (see
-    // IsCollapsedCoverPageCount). Observed artifacts are 10x-1000x off (a dropped digit or a
+    // TryResolveCollapseCorrection). Observed artifacts are 10x-1000x off (a dropped digit or a
     // thousands-scaled entry). A genuine reduction this large in one filing window (a reverse
     // split, going private) resolves safely either way: a balance sheet stated on the new share
     // basis agrees with the reduced cover page and the count is kept, while a contradicted one
-    // abstains and the price feed's listed-security count stands.
+    // is replaced by the balance-sheet count that contradicted it.
     private const decimal CoverPageCollapseFactor = 5m;
+
+    // How far back the collapse check's history anchor looks. The anchor asks whether the issuer
+    // was RECENTLY much bigger, and it must survive the artifact being repeated (Air Lease filed
+    // 200 on two consecutive cover pages, so "the previous fact" was the artifact itself) — hence
+    // the maximum over a window rather than the single most recent fact. Two years spans an
+    // annual filer with a missed year while keeping some ancient mis-scaled fact from posing as
+    // recent history.
+    private const int CollapseHistoryWindowDays = 730;
 
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
@@ -112,9 +120,10 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     // most recent filing wins; a same-filing tie keeps the consolidated total, which is the entity
     // figure directly (#5158).
     //
-    // Null when nothing is on record, or when the latest cover-page count is a filing artifact
-    // (see IsCollapsedCoverPageCount): EDGAR abstains rather than propagate a count its own filing
-    // contradicts, and the caller's fallback source (the price feed's listed-security count) stands.
+    // When the latest cover-page count is a filing artifact (see TryResolveCollapseCorrection),
+    // the same filing's balance-sheet count — the figure that proved the artifact — is returned in
+    // its place, so a repeated artifact cannot pin the stored count to garbage while every other
+    // statement in the filing carries the real figure. Null when nothing is on record.
     public async Task<long?> GetCurrentSharesOutstanding(
         CommonStock stock,
         CancellationToken cancellationToken = default
@@ -179,13 +188,13 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
 
         if (consolidated != null)
         {
-            var collapsed = await IsCollapsedCoverPageCount(
+            var correction = await TryResolveCollapseCorrection(
                 stock,
                 consolidated,
                 coverPageConceptIds,
                 cancellationToken
             );
-            return collapsed ? null : consolidated;
+            return correction ?? consolidated;
         }
 
         // No dei cover-page fact on record — fall back to the balance-sheet consolidated count,
@@ -194,17 +203,29 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         return await GetLatestConsolidated(stock, fallbackConceptIds, cancellationToken);
     }
 
-    // True when the latest consolidated cover-page count is contradicted as a collapse artifact by
-    // BOTH of the filer's own other statements of the same measure: the previous cover-page count
-    // (an earlier filing) and the same filing's us-gaap balance-sheet count, each at least
-    // CoverPageCollapseFactor times larger. Real filings show this exact shape when the filer drops
-    // a digit or types the count in thousands (observed: 36,710 vs 36.4M; 161,489 vs 17.0M;
-    // 8,294,933 vs 82.9M) — the artifact then poisons every downstream ratio until the next filing.
+    // The corrected share count when the latest consolidated cover-page count is contradicted as
+    // a collapse artifact by BOTH of the filer's own other statements of the same measure: the
+    // issuer's recent cover-page history and the same filing's us-gaap balance-sheet count, each
+    // at least CoverPageCollapseFactor times larger. Real filings show this exact shape when the
+    // filer drops a digit or types the count in thousands (observed: 36,710 vs 36.4M; 161,489 vs
+    // 17.0M; 8,294,933 vs 82.9M; Air Lease's flat 200 vs 112.4M) — the artifact then poisons every
+    // downstream ratio until the filer corrects it. Null when the cover-page count stands.
+    //
     // Requiring both anchors keeps the check one-sided and conservative: a garbage-LARGE
     // balance-sheet figure alone (the mis-scaled inverse artifact) does not fire because history
     // still confirms the cover-page count, and a genuinely tiny issuer (e.g. a wholly-owned
-    // subsidiary with 1 share) has a tiny prior count, so it does not fire either.
-    private async Task<bool> IsCollapsedCoverPageCount(
+    // subsidiary with 1 share) has a tiny history, so it does not fire either. Two subtleties,
+    // both paid for in production by Air Lease sticking at 200 shares against a $7.28B market cap:
+    //
+    //   - the history anchor is the MAXIMUM over a recent window, not the single previous fact —
+    //     AL filed the artifact on two consecutive cover pages (a 10-K/A then a 10-Q), so "the
+    //     previous fact" was the artifact itself and the old check could never fire again;
+    //   - when the two anchors prove the artifact, the balance-sheet count that proved it is
+    //     RETURNED rather than abstained from. Abstention hands the decision to the price feed's
+    //     listed-security count, and an issuer the feed carries no share base for then keeps the
+    //     garbage forever. Believing the filer's two agreeing statements over its one contradicted
+    //     one is the same judgment the detection already makes.
+    private async Task<SharesFact> TryResolveCollapseCorrection(
         CommonStock stock,
         SharesFact latest,
         IReadOnlyCollection<Guid> coverPageConceptIds,
@@ -212,44 +233,106 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     )
     {
         var collapseThreshold = latest.Shares * CoverPageCollapseFactor;
+        var historyWindowStart = latest.Filed.AddDays(-CollapseHistoryWindowDays);
 
-        var priorCoverPage = await _financialFactRepository
+        var priorCoverPageMax = await _financialFactRepository
             .GetConsolidatedByStock(stock)
             .Where(f =>
                 coverPageConceptIds.Contains(f.FinancialConceptId)
                 && f.Unit == SharesUnit
                 && f.FiledDate < latest.Filed
+                && f.FiledDate >= historyWindowStart
                 && f.Value > 0
             )
-            .OrderByDescending(f => f.FiledDate)
-            .ThenByDescending(f => f.PeriodEnd)
-            .Select(f => (decimal?)f.Value)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (priorCoverPage == null || priorCoverPage < collapseThreshold)
-            return false;
+            .MaxAsync(f => (decimal?)f.Value, cancellationToken);
+        if (priorCoverPageMax == null || priorCoverPageMax < collapseThreshold)
+            return null;
 
-        // The same filing's balance-sheet count at its most recent as-of date. Same-accession so a
-        // later filing can never masquerade as the corroborating anchor.
+        var sameFilingBalanceSheet = await GetSameFilingBalanceSheetCount(
+            stock,
+            latest.AccessionNumber,
+            cancellationToken
+        );
+        if (sameFilingBalanceSheet == null || sameFilingBalanceSheet < collapseThreshold)
+            return null;
+
+        // The corroborating figure becomes the answer. Same range-check as every other
+        // decimal->long cast here; an unrepresentable count degrades to "cover page stands".
+        return sameFilingBalanceSheet <= long.MaxValue
+            ? new SharesFact(
+                (long)sameFilingBalanceSheet.Value,
+                latest.Filed,
+                latest.Form,
+                latest.AccessionNumber
+            )
+            : null;
+    }
+
+    // The filing's own balance-sheet share count at its most recent as-of date: the consolidated
+    // (classless) fact when the filer states one, otherwise the sum of its single-dimension
+    // per-class facts on a class-of-stock axis — mirroring the consolidated-then-per-class shape
+    // of the cover-page resolution, because filers split the balance-sheet count the same way (Air
+    // Lease states it only on us-gaap:StatementClassOfStockAxis, so a consolidated-only read is
+    // blind to its real figure). Same-accession so a later filing can never masquerade as the
+    // corroborating anchor. Null when the filing states no balance-sheet count at all.
+    private async Task<decimal?> GetSameFilingBalanceSheetCount(
+        CommonStock stock,
+        string accessionNumber,
+        CancellationToken cancellationToken
+    )
+    {
         var balanceSheetConceptIds = await ResolveConceptIds(
             cancellationToken,
             FactTaxonomy.UsGaap
         );
         if (balanceSheetConceptIds.Count == 0)
-            return false;
+            return null;
 
-        var sameFilingBalanceSheet = await _financialFactRepository
+        var consolidated = await _financialFactRepository
             .GetConsolidatedByStock(stock)
             .Where(f =>
                 balanceSheetConceptIds.Contains(f.FinancialConceptId)
                 && f.Unit == SharesUnit
-                && f.AccessionNumber == latest.AccessionNumber
+                && f.AccessionNumber == accessionNumber
                 && f.Value > 0
             )
             .OrderByDescending(f => f.PeriodEnd)
             .Select(f => (decimal?)f.Value)
             .FirstOrDefaultAsync(cancellationToken);
+        if (consolidated != null)
+            return consolidated;
 
-        return sameFilingBalanceSheet != null && sameFilingBalanceSheet >= collapseThreshold;
+        // Per-class facts, pinned the way GetLatestPerClass pins the cover-page sum: one axis and
+        // one as-of date within the accession, grouped by class member so a restated row never
+        // double-counts a class. Zero-valued members (a class with nothing outstanding) are kept —
+        // they simply add nothing.
+        var perClassFacts = await _financialFactRepository
+            .GetByStock(stock)
+            .Where(f =>
+                balanceSheetConceptIds.Contains(f.FinancialConceptId)
+                && f.Unit == SharesUnit
+                && f.AccessionNumber == accessionNumber
+                && f.Dimensions.Count == 1
+                && f.Dimensions.Any(d => ClassOfStockAxes.Contains(d.Axis))
+            )
+            .Include(f => f.Dimensions)
+            .ToListAsync(cancellationToken);
+        if (perClassFacts.Count == 0)
+            return null;
+
+        var latest = perClassFacts
+            .OrderByDescending(f => f.PeriodEnd)
+            .ThenBy(f => Array.IndexOf(ClassOfStockAxes, f.Dimensions[0].Axis))
+            .First();
+
+        var total = perClassFacts
+            .Where(f =>
+                f.PeriodEnd == latest.PeriodEnd && f.Dimensions[0].Axis == latest.Dimensions[0].Axis
+            )
+            .GroupBy(f => f.Dimensions[0].Member)
+            .Sum(g => g.First().Value);
+
+        return total > 0 ? total : null;
     }
 
     // The latest-filed consolidated (classless) cover-page count and the filing it came from, or
