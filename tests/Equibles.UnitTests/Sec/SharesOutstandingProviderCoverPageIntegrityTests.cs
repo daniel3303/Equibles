@@ -20,11 +20,14 @@ namespace Equibles.UnitTests.Sec;
 //   because its per-class facts were invisible and a stale consolidated fact won);
 // - IsForeignPrivateIssuer keys off the SAME fact GetCurrentSharesOutstanding picks, so a
 //   multi-class 20-F filer with no current consolidated fact is still recognized;
-// - a cover-page count contradicted as a collapse by BOTH the issuer's previous cover-page count
+// - a cover-page count contradicted as a collapse by BOTH the issuer's recent cover-page history
 //   and the same filing's balance-sheet count is a filing artifact (a dropped digit or a
 //   thousands-scaled entry: Armata 36,710 vs 36.4M; FB Bancorp 161,489 vs 17.0M; PTC Therapeutics
-//   8,294,933 vs 82.9M) — the provider abstains (null) so the price feed's listed-security count
-//   stands, instead of poisoning market cap and short-interest ratios until the next filing.
+//   8,294,933 vs 82.9M; Air Lease a flat 200 vs 112.4M) — the provider returns the balance-sheet
+//   count that proved the artifact, instead of poisoning market cap and short-interest ratios
+//   until the filer corrects itself. The history anchor is the maximum over a recent window, not
+//   the single previous fact: Air Lease filed the artifact on two consecutive cover pages, so the
+//   previous fact WAS the artifact and a most-recent-prior check could never fire again.
 public class SharesOutstandingProviderCoverPageIntegrityTests
 {
     private const string IfrsClassAxis = "ifrs-full:ClassesOfShareCapitalAxis";
@@ -206,12 +209,13 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
     }
 
     [Fact]
-    public async Task GetCurrentSharesOutstanding_ThousandsScaledCoverPage_ReturnsNull()
+    public async Task GetCurrentSharesOutstanding_ThousandsScaledCoverPage_ReturnsTheBalanceSheetCount()
     {
         await using var db = NewDb();
         // Armata: the latest 10-Q cover page says 36,710 — the count typed in thousands — while
         // the previous cover-page fact says 36,632,775 and the SAME filing's balance sheet says
-        // 36,431,444. Both anchors contradict the collapse, so the provider must abstain.
+        // 36,431,444. Both anchors contradict the collapse, so the provider returns the
+        // balance-sheet count that proved it.
         var stock = Stock("ARMP");
         var coverPage = CoverPageConcept();
         var balanceSheet = BalanceSheetConcept();
@@ -234,11 +238,13 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
 
         var shares = await NewProvider(db).GetCurrentSharesOutstanding(stock);
 
-        shares.Should().BeNull("a cover-page count both anchors contradict is a filing artifact");
+        shares
+            .Should()
+            .Be(36_431_444, "a cover-page count both anchors contradict is a filing artifact");
     }
 
     [Fact]
-    public async Task GetCurrentSharesOutstanding_DroppedDigitJustUnderTenfold_ReturnsNull()
+    public async Task GetCurrentSharesOutstanding_DroppedDigitJustUnderTenfold_IsCorrected()
     {
         await using var db = NewDb();
         // PTC Therapeutics: the filer dropped a digit — 8,294,933 against 82,882,024 on the same
@@ -266,7 +272,109 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
 
         var shares = await NewProvider(db).GetCurrentSharesOutstanding(stock);
 
-        shares.Should().BeNull();
+        shares.Should().Be(82_882_024);
+    }
+
+    [Fact]
+    public async Task GetCurrentSharesOutstanding_ArtifactRepeatedAcrossFilings_IsStillCorrected()
+    {
+        await using var db = NewDb();
+        // Air Lease: the cover page says 200 on TWO consecutive filings (a 10-K/A, then the 10-Q),
+        // so the immediately-prior cover-page fact is the artifact itself and a most-recent-prior
+        // anchor can never fire. The window's maximum still sees the real 112.0M from February.
+        // The filing states no consolidated balance-sheet count — only a per-class fact on the
+        // class-of-stock axis (Class A 112,415,671, an empty preferred class at 0) — so the
+        // corroboration must sum the classes, and their sum is the corrected answer.
+        var stock = Stock("AL");
+        var coverPage = CoverPageConcept();
+        var balanceSheet = BalanceSheetConcept();
+        db.AddRange(stock, coverPage, balanceSheet);
+        db.Add(
+            Fact(
+                stock,
+                coverPage,
+                112_035_408m,
+                new(2026, 2, 12),
+                new(2026, 2, 10),
+                "0000950170-26-000001",
+                DocumentType.TenK
+            )
+        );
+        db.Add(
+            Fact(
+                stock,
+                coverPage,
+                200m,
+                new(2026, 4, 30),
+                new(2026, 4, 30),
+                "0000950170-26-000002",
+                DocumentType.TenK
+            )
+        );
+        const string acc = "0000950170-26-000003";
+        db.Add(Fact(stock, coverPage, 200m, new(2026, 5, 7), new(2026, 5, 5), acc));
+        db.Add(
+            ClassFact(
+                stock,
+                balanceSheet,
+                112_415_671m,
+                new(2026, 5, 7),
+                new(2026, 3, 31),
+                acc,
+                "us-gaap:CommonClassAMember",
+                "us-gaap:StatementClassOfStockAxis"
+            )
+        );
+        db.Add(
+            ClassFact(
+                stock,
+                balanceSheet,
+                0m,
+                new(2026, 5, 7),
+                new(2026, 3, 31),
+                acc,
+                "us-gaap:SeriesAPreferredStockMember",
+                "us-gaap:StatementClassOfStockAxis"
+            )
+        );
+        await db.SaveChangesAsync();
+
+        var shares = await NewProvider(db).GetCurrentSharesOutstanding(stock);
+
+        shares.Should().Be(112_415_671);
+    }
+
+    [Fact]
+    public async Task GetCurrentSharesOutstanding_LargeHistoryOutsideTheWindow_KeepsTheCoverPageCount()
+    {
+        await using var db = NewDb();
+        // The history anchor asks whether the issuer was RECENTLY much bigger. A count from years
+        // before the window opened is not recent history — an issuer that genuinely shrank long
+        // ago must not have its current cover page second-guessed by its distant past, even when
+        // a same-filing balance-sheet figure happens to be mis-scaled large.
+        var stock = Stock("TINY");
+        var coverPage = CoverPageConcept();
+        var balanceSheet = BalanceSheetConcept();
+        db.AddRange(stock, coverPage, balanceSheet);
+        db.Add(
+            Fact(
+                stock,
+                coverPage,
+                50_000_000m,
+                new(2022, 3, 1),
+                new(2022, 2, 25),
+                "0000950170-22-000001",
+                DocumentType.TenK
+            )
+        );
+        const string acc = "0000950170-26-000009";
+        db.Add(Fact(stock, coverPage, 40_000m, new(2026, 5, 7), new(2026, 5, 5), acc));
+        db.Add(Fact(stock, balanceSheet, 40_000_000m, new(2026, 5, 7), new(2026, 3, 31), acc));
+        await db.SaveChangesAsync();
+
+        var shares = await NewProvider(db).GetCurrentSharesOutstanding(stock);
+
+        shares.Should().Be(40_000);
     }
 
     [Fact]
