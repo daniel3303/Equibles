@@ -409,6 +409,11 @@ public class HoldingsImportService
         }
 
         context.CusipMapping = cusipMapping;
+        context.IssuerSizes = await LoadIssuerSizes(
+            stockRepo,
+            cusipMapping.Values.Distinct().ToList(),
+            cancellationToken
+        );
 
         foreach (var (accession, cusips) in scheduleCusipsByAccession)
         {
@@ -422,6 +427,34 @@ public class HoldingsImportService
         }
 
         return CusipMappingOutcome.Mapped;
+    }
+
+    /// <summary>
+    /// Loads how big each mapped issuer is, so a position can be checked against the company it
+    /// claims to be part of (see <see cref="ImpossiblePositionGuard"/>). One query over the stocks
+    /// this data set actually references.
+    /// </summary>
+    private static async Task<Dictionary<Guid, IssuerSize>> LoadIssuerSizes(
+        CommonStockRepository stockRepo,
+        List<Guid> stockIds,
+        CancellationToken cancellationToken
+    )
+    {
+        var sizes = await stockRepo
+            .GetAll()
+            .Where(cs => stockIds.Contains(cs.Id))
+            .Select(cs => new
+            {
+                cs.Id,
+                cs.SharesOutStanding,
+                cs.MarketCapitalization,
+            })
+            .ToListAsync(cancellationToken);
+
+        return sizes.ToDictionary(
+            s => s.Id,
+            s => new IssuerSize(s.SharesOutStanding, s.MarketCapitalization)
+        );
     }
 
     /// <summary>
@@ -962,6 +995,9 @@ public class HoldingsImportService
             existing.VotingAuthSole += holding.VotingAuthSole;
             existing.VotingAuthShared += holding.VotingAuthShared;
             existing.VotingAuthNone += holding.VotingAuthNone;
+            // One unpriceable leg makes the merged position unpriceable: the surviving legs would
+            // otherwise sum to a value that silently omits part of the holding.
+            existing.ValueUnavailable |= holding.ValueUnavailable;
             existing.ManagerEntries.Add(managerEntry);
             return false;
         }
@@ -1017,6 +1053,28 @@ public class HoldingsImportService
             hasPrice && product >= long.MinValue && product <= long.MaxValue ? (long)product : 0L;
         var valuePending = !hasPrice;
 
+        // A count bigger than the whole issuer is not a position we can price: the shares are in
+        // different units from the price (a depositary-share issuer whose filer reports the
+        // underlying ordinary shares), and multiplying them together states a holding worth many
+        // times the company. Keep the filer's share count, withhold the valuation, and stop the
+        // repricing lane from re-deriving the same wrong figure later.
+        var issuerSize = context.IssuerSizes != null
+            && context.IssuerSizes.TryGetValue(commonStockId, out var size)
+                ? size
+                : null;
+        var valueUnavailable =
+            issuerSize != null
+            && ImpossiblePositionGuard.ExceedsTheIssuer(
+                shares,
+                issuerSize.SharesOutstanding,
+                issuerSize.MarketCapitalization
+            );
+        if (valueUnavailable)
+        {
+            value = 0L;
+            valuePending = false;
+        }
+
         var otherManagerNumber = ParseNullableInt(GetValue(row, "OTHERMANAGER"));
         var discretion = ParseInvestmentDiscretion(GetValue(row, "INVESTMENTDISCRETION"));
 
@@ -1060,6 +1118,7 @@ public class HoldingsImportService
             Cusip = cusip,
             AccessionNumber = accession,
             IsAmendment = isAmendment,
+            ValueUnavailable = valueUnavailable,
             ValuePending = valuePending,
         };
 
@@ -1110,6 +1169,7 @@ public class HoldingsImportService
                         Cusip = incoming.Cusip,
                         IsAmendment = incoming.IsAmendment,
                         ValuePending = incoming.ValuePending,
+                        ValueUnavailable = incoming.ValueUnavailable,
                     }
             )
             .RunAsync(cancellationToken);
